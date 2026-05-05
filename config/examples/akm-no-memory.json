@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": { "id": "akm-no-memory-smoke", "outputDir": "runs/akm-no-memory-smoke", "maxConcurrency": 1, "timeoutMs": 1800000 },
+  "packs": [{ "id": "terminal-bench-smoke", "adapter": "terminal-bench", "enabled": true, "config": {} }],
+  "variants": [{ "id": "akm-no-memory", "agent": { "provider": "opencode", "model": "gpt-4.1-mini" }, "akm": { "enabled": true, "command": "akm" }, "memory": { "backend": "none" } }],
+  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

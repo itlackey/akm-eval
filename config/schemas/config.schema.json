@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akm-eval.local/config.schema.json",
+  "type": "object",
+  "required": ["version", "runs"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "outputDir": { "type": "string" },
+        "memoryBackend": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["pack", "variant"],
+        "properties": {
+          "id": { "type": "string" },
+          "pack": { "type": "string" },
+          "variant": { "type": "string" },
+          "memoryBackend": { "type": "string" },
+          "outputDir": { "type": "string" },
+          "memoryDocuments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "text"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "metadata": { "type": "object" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "retrieval": {
+            "type": "object",
+            "properties": {
+              "query": { "type": "string" },
+              "relevantIds": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "topK": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": true
+          },
+          "answer": {
+            "type": "object",
+            "properties": {
+              "expected": { "type": "string" },
+              "actual": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
