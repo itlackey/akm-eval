@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "akm.eval.config.v1",
+  "type": "object",
+  "required": ["schemaVersion", "run", "packs", "variants"],
+  "properties": {
+    "schemaVersion": { "const": "akm.eval.config.v1" },
+    "run": {
+      "type": "object",
+      "required": ["id", "outputDir"],
+      "properties": {
+        "id": { "type": "string" },
+        "outputDir": { "type": "string" },
+        "maxConcurrency": { "type": "integer", "minimum": 1 },
+        "timeoutMs": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "packs": { "type": "array", "minItems": 1 },
+    "variants": { "type": "array", "minItems": 1 },
+    "judging": { "type": "object" },
+    "telemetry": { "type": "object" }
+  },
+  "additionalProperties": false
+}

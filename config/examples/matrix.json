@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "defaults": {
+    "outputDir": "../../runs"
+  },
+  "runs": [
+    { "id": "akm-fast", "pack": "akm-bench", "variant": "mock-fast", "memoryBackend": "none" },
+    { "id": "akm-quality", "pack": "akm-bench", "variant": "mock-judge", "memoryBackend": "raw-vector" },
+    { "id": "terminal-fast", "pack": "terminal-bench", "variant": "local-default", "memoryBackend": "none" }
+  ]
+}
