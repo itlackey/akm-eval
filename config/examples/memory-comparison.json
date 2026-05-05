@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "memory-comparison-smoke",
+    "outputDir": "runs/memory-comparison-smoke",
+    "maxConcurrency": 1,
+    "timeoutMs": 1800000
+  },
+  "packs": [
+    {
+      "id": "longmemeval-smoke",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "datasetPath": "./datasets/longmemeval",
+        "maxQuestions": 100,
+        "questionCategories": ["single-session", "multi-session", "temporal", "preference"]
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "akm-memory",
+      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": true, "command": "akm" },
+      "memory": { "backend": "akm", "config": { "command": "akm memory" } }
+    },
+    {
+      "id": "mem0-oss",
+      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "mem0", "config": { "mode": "oss" } }
+    },
+    {
+      "id": "raw-vector",
+      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "raw-vector" }
+    }
+  ],
+  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}
