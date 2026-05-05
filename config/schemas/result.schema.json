@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akm-eval.local/result.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "pack", "variant", "status", "metrics", "telemetry", "artifacts"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "runId": { "type": "string" },
+    "pack": { "type": "string" },
+    "variant": { "type": "string" },
+    "status": { "type": "string", "enum": ["passed", "failed", "warning"] },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "metrics": {
+      "type": "object",
+      "required": ["retrieval", "answer", "aggregate"],
+      "properties": {
+        "retrieval": { "type": "object" },
+        "answer": { "type": "object" },
+        "aggregate": {
+          "type": "object",
+          "required": ["score"],
+          "properties": { "score": { "type": "number" } },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "telemetry": { "type": "object" },
+    "artifacts": { "type": "object" }
+  },
+  "additionalProperties": true
+}

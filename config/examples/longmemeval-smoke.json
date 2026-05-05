@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-smoke",
+    "outputDir": "runs/longmemeval-smoke",
+    "maxConcurrency": 1,
+    "timeoutMs": 1800000
+  },
+  "packs": [
+    {
+      "id": "longmemeval-smoke",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "datasetPath": "./datasets/longmemeval",
+        "maxQuestions": 5,
+        "questionCategories": ["single-session"]
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "raw-vector",
+      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "raw-vector" }
+    }
+  ],
+  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

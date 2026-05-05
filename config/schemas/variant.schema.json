@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "akm.eval.variant.v1",
+  "type": "object",
+  "required": ["id", "agent", "akm", "memory"],
+  "properties": {
+    "id": { "type": "string" },
+    "label": { "type": "string" },
+    "agent": { "type": "object" },
+    "akm": { "type": "object" },
+    "memory": { "type": "object" },
+    "limits": { "type": "object" }
+  },
+  "additionalProperties": true
+}

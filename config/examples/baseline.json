@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": { "id": "baseline-smoke", "outputDir": "runs/baseline-smoke", "maxConcurrency": 1, "timeoutMs": 1800000 },
+  "packs": [{ "id": "akm-bench-smoke", "adapter": "akm-bench", "enabled": true, "config": {} }],
+  "variants": [{ "id": "baseline", "agent": { "provider": "opencode", "model": "gpt-4.1-mini" }, "akm": { "enabled": false }, "memory": { "backend": "none" } }],
+  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaults": {
+    "outputDir": "../../runs",
+    "memoryBackend": "raw-vector"
+  },
+  "runs": [
+    {
+      "id": "demo-akm-bench",
+      "pack": "akm-bench",
+      "variant": "mock-fast",
+      "memoryBackend": "raw-vector",
+      "memoryDocuments": [
+        { "id": "doc-1", "text": "AKM uses adapter boundaries for optional integrations." },
+        { "id": "doc-2", "text": "Raw vector search is deterministic in this skeleton." }
+      ],
+      "retrieval": {
+        "query": "deterministic raw vector search",
+        "relevantIds": ["doc-2"],
+        "topK": 2
+      },
+      "answer": {
+        "expected": "raw vector search is deterministic",
+        "actual": "Raw vector search is deterministic."
+      }
+    }
+  ]
+}
