@@ -30,7 +30,7 @@ Runnable packs in the current repo:
 
 - `locomo`: official LoCoMo dataset plus bundled authoritative evaluator wrapper
 - `longmemeval`: official dataset plus external official evaluator command
-- `beam`: official upstream BEAM repo plus upstream evaluation pipeline
+- `beam`: official upstream BEAM repo plus upstream evaluation pipeline, with repo-side preflight/bootstrap support but no committed end-to-end reference run yet
 - `terminal-bench`: official `tb run` harness
 - `swe-bench`: official `swebench` Docker harness
 - `tau-bench`: official upstream Python benchmark wrapper
@@ -39,13 +39,17 @@ Blocked pack:
 
 - `akm-bench`: intentionally blocked until it can normalize authoritative external artifacts instead of local proxy scoring
 
+Blocked memory-backend comparison paths:
+
+- `akm`, `mem0`, `zep`, and `openviking` currently fail explicitly instead of pretending to provide evaluated retrieval behavior in benchmark runs
+
 ## Runner support
 
 | Pack | `opencode` | `openai-compatible` | Notes |
 |---|---|---|---|
 | `locomo` | Yes | Yes | Both runner paths work for answer generation. |
 | `longmemeval` | Partial | Yes | Prefer `openai-compatible`; `opencode` can fail on large prompts because prompt transport goes through CLI argv. |
-| `beam` | Yes | Yes | Both runners can generate answers; evaluation still happens through BEAM's own upstream judge flow. |
+| `beam` | Yes | Yes | Both runners can generate answers; evaluation still depends on upstream dataset prep and judge/runtime prerequisites. |
 | `swe-bench` | Yes | Yes | OpenAI-compatible smoke/reference config targets Verified; current opencode smoke path still targets Lite. |
 | `tau-bench` | No | Yes | Current integration maps `openai-compatible` configs to upstream `openai` provider mode. |
 | `terminal-bench` | Yes | No | This repo's Terminal-Bench integration currently depends on the official opencode installed-agent path. |
@@ -63,8 +67,8 @@ Blocked pack:
 
 | Pack | Variant | Run ID | Date | Status | Score | Model | Runner | Benchmark | Version | Repo commit | Result |
 |---|---|---|---|---|---:|---|---|---|---|---|---|
-| `locomo` | `baseline` | `locomo-smoke-baseline` | `2026-05-06` | `passed` | 0.390 | `gpt_4o_mini` | `openai-compatible` | `locomo10` | `-` | `-` | `runs/reference/locomo/baseline/result.json` |
-| `longmemeval` | `baseline` | `longmemeval-baseline` | `2026-05-06` | `passed` | 0.800 | `-` | `openai-compatible` | `longmemeval_s_cleaned` | `-` | `-` | `runs/reference/longmemeval/baseline/result.json` |
+| `locomo` | `baseline` | `locomo-smoke-baseline` | `2026-05-06` | `passed` | 0.390 | `gpt_4o_mini` | `openai-compatible` | `locomo10` | `-` | `2f4e8299bee542a379e569f2395a420be7b7df5b` | `runs/reference/locomo/baseline/result.json` |
+| `longmemeval` | `baseline` | `longmemeval-baseline` | `2026-05-06` | `passed` | 0.800 | `-` | `openai-compatible` | `longmemeval_s_cleaned` | `-` | `2f4e8299bee542a379e569f2395a420be7b7df5b` | `runs/reference/longmemeval/baseline/result.json` |
 | `swe-bench` | `baseline` | `swe-bench-baseline` | `2026-05-06` | `warning` | 0.000 | `gpt-4o-mini` | `openai-compatible` | `SWE-bench/SWE-bench_Verified` | `-` | `-` | `runs/reference/swe-bench/baseline/result.json` |
 | `tau-bench` | `baseline` | `tau-bench-baseline` | `2026-05-06` | `failed` | 0.000 | `gpt-4o-mini` | `openai-compatible` | `retail` | `-` | `-` | `runs/reference/tau-bench/baseline/result.json` |
 | `terminal-bench` | `baseline` | `terminal-bench-baseline` | `2026-05-06` | `warning` | 0.000 | `opencode/gpt-4.1-mini` | `opencode` | `terminal-bench-core` | `0.1.1` | `2f4e8299bee542a379e569f2395a420be7b7df5b` | `runs/reference/terminal-bench/baseline/result.json` |
@@ -117,9 +121,13 @@ For the current pinned local runtime bootstrap:
 - upstream source expectation is `mohammadtavakoli78/BEAM` at commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`
 - install/check script: `bash scripts/setup-beam-runtime.sh`
 - pinned Python requirements snapshot: `requirements-beam.txt`
+- optional env overrides: `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, `BEAM_PYTHON_BIN`
+- optional container scaffold: `tools/beam/Dockerfile` and `tools/beam/run-in-container.sh`
 - detailed notes and limits: `docs/beam-runtime.md`
 
 The setup/check script verifies that commit when the BEAM checkout is a git repo. Without git metadata it falls back to file-layout plus pinned-requirements checks only.
+
+It now also fails early when the prepared dataset path is missing, and it can require judge credentials during preflight with `--require-judge`.
 
 This only pins the Python-side bootstrap needed to unblock later execution work. It does not claim BEAM is fully reproducible end to end yet.
 
@@ -131,4 +139,4 @@ This only pins the Python-side bootstrap needed to unblock later execution work.
 - Ensure `Docker` and `python3` are available in `PATH`.
 - Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
 - For AKM variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
-- `src/memory/backends/akm.ts` is still a stub, so committed AKM comparison artifacts and repo-level AKM benchmark claims remain blocked today.
+- `src/memory/backends/akm.ts` now reports AKM CLI/runtime metadata and fails explicitly when retrieval is requested; it still does not implement a truthful evaluated AKM retrieval path, so committed AKM comparison artifacts and repo-level AKM benchmark claims remain blocked today.

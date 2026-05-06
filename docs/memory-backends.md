@@ -1,3 +1,14 @@
 # Memory backends
 
-The repository defines none, akm, raw-vector, mem0, openviking, and zep backends.
+The repository defines `none`, `raw-vector`, `akm`, `mem0`, `openviking`, and `zep` backend IDs.
+
+Current runnable/truthful status:
+
+- `none`: runnable
+- `raw-vector`: runnable deterministic baseline backend
+- `akm`: blocked for evaluated benchmark retrieval; fails explicitly with runtime detail
+- `mem0`: blocked; currently an explicit unavailable external-backend stub
+- `openviking`: blocked; currently an explicit unavailable external-backend stub
+- `zep`: blocked; currently an explicit unavailable external-backend stub
+
+The blocked external backends are kept as IDs for planned integration work, but they should not be treated as truthful benchmark comparison paths today.

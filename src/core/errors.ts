@@ -35,6 +35,12 @@ export class UnknownMemoryBackendError extends AkmEvalError {
   }
 }
 
+export class MemoryBackendUnavailableError extends AkmEvalError {
+  constructor(backendId: string, detail: string) {
+    super(`Memory backend \"${backendId}\" is unavailable: ${detail}`, 'MEMORY_BACKEND_UNAVAILABLE');
+  }
+}
+
 export class BenchmarkRuntimeError extends AkmEvalError {
   constructor(message: string) {
     super(message, 'BENCHMARK_RUNTIME_ERROR');

@@ -15,6 +15,13 @@ Requirements:
 - `OPENAI_API_KEY` available for the upstream BEAM judge path
 - pinned upstream/runtime notes live in `docs/beam-runtime.md`
 
+Optional preflight env overrides:
+
+- `BEAM_REPO_PATH`
+- `BEAM_DATASET_PATH`
+- `BEAM_DATASET_10M_PATH`
+- `BEAM_PYTHON_BIN`
+
 Runner support:
 
 - `opencode`: supported for answer generation
@@ -23,4 +30,4 @@ Runner support:
 
 The pack does not use local heuristic scoring. It normalizes only the authoritative BEAM evaluation artifacts.
 
-`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice only records the pinned upstream source, a checked-in requirements snapshot, and a minimal setup/check script for the upstream evaluator environment.
+`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, and runtime preflight checks for prepared datasets plus judge configuration.

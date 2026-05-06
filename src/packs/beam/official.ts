@@ -77,6 +77,11 @@ const CHAT_SIZE_DIRECTORY_NAMES: Record<string, string> = {
   '10M': '10M',
 };
 
+const DEFAULT_BEAM_REPO_ENV = 'BEAM_REPO_PATH';
+const DEFAULT_BEAM_DATASET_ENV = 'BEAM_DATASET_PATH';
+const DEFAULT_BEAM_DATASET_10M_ENV = 'BEAM_DATASET_10M_PATH';
+const DEFAULT_BEAM_PYTHON_ENV = 'BEAM_PYTHON_BIN';
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -89,13 +94,66 @@ function parseJsonFile<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }
 
+function resolveConfiguredPath(rootDir: string, configuredPath?: string, envName?: string): string | null {
+  if (isNonEmptyString(configuredPath)) {
+    return path.resolve(rootDir, configuredPath);
+  }
+
+  const envValue = envName ? process.env[envName] : undefined;
+  return isNonEmptyString(envValue) ? path.resolve(rootDir, envValue) : null;
+}
+
+function resolveBeamPythonBin(packConfig: BeamPackConfig): string {
+  if (isNonEmptyString(packConfig.pythonBin)) {
+    return packConfig.pythonBin;
+  }
+
+  return isNonEmptyString(process.env[DEFAULT_BEAM_PYTHON_ENV]) ? process.env[DEFAULT_BEAM_PYTHON_ENV] : 'python3';
+}
+
 function beamRootCandidates(rootDir: string, packConfig: BeamPackConfig): string[] {
-  const configured = isNonEmptyString(packConfig.repoPath) ? [path.resolve(rootDir, packConfig.repoPath)] : [];
+  const configuredRepoPath = resolveConfiguredPath(rootDir, packConfig.repoPath, DEFAULT_BEAM_REPO_ENV);
+  const configured = configuredRepoPath ? [configuredRepoPath] : [];
   return [...configured, path.resolve(rootDir, 'vendor/BEAM'), path.resolve(rootDir, 'third_party/BEAM')];
 }
 
+function requestedBeamChatSizes(packConfig: BeamPackConfig): string[] {
+  return Array.isArray(packConfig.chatSizes) && packConfig.chatSizes.length > 0 ? packConfig.chatSizes : ['100K'];
+}
+
+function judgeConfigurationError(): string | null {
+  const openAiBaseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+  if (openAiApiKey || openAiBaseUrl !== 'https://api.openai.com/v1') {
+    return null;
+  }
+
+  return 'beam judge credentials are not configured. Set OPENAI_API_KEY for the upstream judge path, or set OPENAI_BASE_URL to an OpenAI-compatible local judge endpoint.';
+}
+
+function datasetCandidates(rootDir: string, repoPath: string, packConfig: BeamPackConfig, type: 'default' | '10m'): string[] {
+  const configuredPath =
+    type === '10m'
+      ? resolveConfiguredPath(rootDir, packConfig.dataset10MPath, DEFAULT_BEAM_DATASET_10M_ENV)
+      : resolveConfiguredPath(rootDir, packConfig.datasetPath, DEFAULT_BEAM_DATASET_ENV);
+  const normalizedNames = type === '10m' ? ['test_chats/10M', 'chats/10M', 'beam_10M_dataset'] : ['test_chats', 'chats', 'beam_dataset'];
+  return [
+    ...(configuredPath ? [configuredPath] : []),
+    ...normalizedNames.map((relativePath) => path.resolve(repoPath, relativePath)),
+  ];
+}
+
+function findBeamDatasetDirectory(
+  rootDir: string,
+  repoPath: string,
+  packConfig: BeamPackConfig,
+  type: 'default' | '10m',
+): string | null {
+  return datasetCandidates(rootDir, repoPath, packConfig, type).find((candidate) => fs.existsSync(candidate)) ?? null;
+}
+
 export function checkBeamRuntime(rootDir: string, packConfig: BeamPackConfig = {}): BeamDoctorStatus {
-  const pythonBin = isNonEmptyString(packConfig.pythonBin) ? packConfig.pythonBin : 'python3';
+  const pythonBin = resolveBeamPythonBin(packConfig);
   const python = runProcess(pythonBin, ['--version'], rootDir);
   if (!python.success) {
     return {
@@ -117,9 +175,39 @@ export function checkBeamRuntime(rootDir: string, packConfig: BeamPackConfig = {
       };
     }
 
+    const datasetPath = findBeamDatasetDirectory(rootDir, candidate, packConfig, 'default');
+    if (!datasetPath) {
+      return {
+        installed: false,
+        detail:
+          `BEAM repo found at ${candidate} but the prepared dataset is missing. ` +
+          `Set pack.config.datasetPath or ${DEFAULT_BEAM_DATASET_ENV}, or run the upstream dataset preparation from ${candidate}.`,
+      };
+    }
+
+    if (requestedBeamChatSizes(packConfig).some((size) => normalizeChatSize(size) === '10M')) {
+      const dataset10MPath = findBeamDatasetDirectory(rootDir, candidate, packConfig, '10m');
+      if (!dataset10MPath) {
+        return {
+          installed: false,
+          detail:
+            `BEAM repo found at ${candidate} but the prepared 10M dataset is missing. ` +
+            `Set pack.config.dataset10MPath or ${DEFAULT_BEAM_DATASET_10M_ENV}, or run the upstream 10M dataset preparation from ${candidate}.`,
+        };
+      }
+    }
+
+    const judgeError = judgeConfigurationError();
+    if (judgeError) {
+      return {
+        installed: false,
+        detail: `${judgeError} Repo: ${candidate}. Dataset: ${datasetPath}.`,
+      };
+    }
+
     return {
       installed: true,
-      detail: `official BEAM repo available at ${candidate}; evaluator and dataset tooling detected`,
+      detail: `official BEAM repo available at ${candidate}; dataset ready at ${datasetPath}; judge configuration detected`,
     };
   }
 
@@ -143,7 +231,7 @@ export function resolveBeamRuntime(rootDir: string, packConfig: BeamPackConfig =
     throw new BenchmarkRuntimeError('beam runtime detection failed unexpectedly.');
   }
 
-  const pythonBin = isNonEmptyString(packConfig.pythonBin) ? packConfig.pythonBin : 'python3';
+  const pythonBin = resolveBeamPythonBin(packConfig);
   const datasetPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, 'default');
   const dataset10MPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, '10m', false);
 
@@ -162,12 +250,7 @@ function resolveBeamDatasetDirectory(
   type: 'default' | '10m',
   required = true,
 ): string | null {
-  const configuredPath = type === '10m' ? packConfig.dataset10MPath : packConfig.datasetPath;
-  const normalizedNames = type === '10m' ? ['test_chats/10M', 'chats/10M', 'beam_10M_dataset'] : ['test_chats', 'chats', 'beam_dataset'];
-  const candidates = [
-    ...(isNonEmptyString(configuredPath) ? [path.resolve(rootDir, configuredPath)] : []),
-    ...normalizedNames.map((relativePath) => path.resolve(repoPath, relativePath)),
-  ];
+  const candidates = datasetCandidates(rootDir, repoPath, packConfig, type);
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
@@ -180,8 +263,8 @@ function resolveBeamDatasetDirectory(
   }
 
   const downloadCommand = type === '10m'
-    ? `${isNonEmptyString(packConfig.pythonBin) ? packConfig.pythonBin : 'python3'} src/beam/download_dataset.py`
-    : `${isNonEmptyString(packConfig.pythonBin) ? packConfig.pythonBin : 'python3'} src/beam/download_dataset.py`;
+    ? `${resolveBeamPythonBin(packConfig)} src/beam/download_dataset.py`
+    : `${resolveBeamPythonBin(packConfig)} src/beam/download_dataset.py`;
   throw new BenchmarkRuntimeError(
     `beam dataset directory is missing. Expected one of: ${candidates.join(', ')}. ` +
       `Run the official BEAM dataset preparation first, for example ${downloadCommand} from ${repoPath}.`,

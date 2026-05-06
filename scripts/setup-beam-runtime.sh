@@ -8,6 +8,9 @@ VENV_PATH="${ROOT_DIR}/.venv-beam"
 PYTHON_BIN="python3.11"
 PINNED_COMMIT="3e12035532eb85768f1a7cd779832b650c4b2ef9"
 CHECK_ONLY=0
+DATASET_PATH="${BEAM_DATASET_PATH:-}"
+DATASET_10M_PATH="${BEAM_DATASET_10M_PATH:-}"
+REQUIRE_JUDGE=0
 
 usage() {
   cat <<'EOF'
@@ -20,7 +23,10 @@ Options:
   --repo PATH      Path to the upstream BEAM checkout.
   --venv PATH      Virtualenv path to create or check.
   --python BIN     Python interpreter to use. Default: python3.11.
+  --dataset PATH   Prepared BEAM dataset root. Also reads BEAM_DATASET_PATH.
+  --dataset10m PATH  Prepared BEAM 10M dataset root. Also reads BEAM_DATASET_10M_PATH.
   --check          Verify repo/layout/runtime expectations without installing.
+  --require-judge  Fail if judge credentials are not configured.
   --help           Show this help text.
 EOF
 }
@@ -39,8 +45,20 @@ while [[ $# -gt 0 ]]; do
       PYTHON_BIN="$2"
       shift 2
       ;;
+    --dataset)
+      DATASET_PATH="$2"
+      shift 2
+      ;;
+    --dataset10m)
+      DATASET_10M_PATH="$2"
+      shift 2
+      ;;
     --check)
       CHECK_ONLY=1
+      shift
+      ;;
+    --require-judge)
+      REQUIRE_JUDGE=1
       shift
       ;;
     --help)
@@ -58,12 +76,47 @@ done
 REPO_PATH="$(realpath "$REPO_PATH")"
 VENV_PATH="$(realpath -m "$VENV_PATH")"
 
+if [[ -n "$DATASET_PATH" ]]; then
+  DATASET_PATH="$(realpath -m "$DATASET_PATH")"
+fi
+
+if [[ -n "$DATASET_10M_PATH" ]]; then
+  DATASET_10M_PATH="$(realpath -m "$DATASET_10M_PATH")"
+fi
+
 require_file() {
   local file_path="$1"
   if [[ ! -f "$file_path" ]]; then
     printf 'Missing required file: %s\n' "$file_path" >&2
     exit 1
   fi
+}
+
+require_directory() {
+  local dir_path="$1"
+  if [[ ! -d "$dir_path" ]]; then
+    printf 'Missing required directory: %s\n' "$dir_path" >&2
+    exit 1
+  fi
+}
+
+resolve_dataset_path() {
+  local configured_path="$1"
+  shift
+  if [[ -n "$configured_path" ]]; then
+    printf '%s\n' "$configured_path"
+    return 0
+  fi
+
+  local candidate
+  for candidate in "$@"; do
+    if [[ -d "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
@@ -80,6 +133,40 @@ require_file "${ROOT_DIR}/requirements-beam.txt"
 require_file "${REPO_PATH}/requirements.txt"
 require_file "${REPO_PATH}/src/evaluation/run_evaluation.py"
 require_file "${REPO_PATH}/src/beam/download_dataset.py"
+
+DEFAULT_DATASET_CANDIDATES=(
+  "${REPO_PATH}/test_chats"
+  "${REPO_PATH}/chats"
+  "${REPO_PATH}/beam_dataset"
+)
+
+DEFAULT_DATASET_10M_CANDIDATES=(
+  "${REPO_PATH}/test_chats/10M"
+  "${REPO_PATH}/chats/10M"
+  "${REPO_PATH}/beam_10M_dataset"
+)
+
+if ! DATASET_PATH="$(resolve_dataset_path "$DATASET_PATH" "${DEFAULT_DATASET_CANDIDATES[@]}")"; then
+  printf 'Prepared BEAM dataset not found. Set --dataset /path/to/dataset, export BEAM_DATASET_PATH, or run the upstream dataset preparation from %s\n' "$REPO_PATH" >&2
+  exit 1
+fi
+
+require_directory "$DATASET_PATH"
+
+if [[ -z "$DATASET_10M_PATH" ]]; then
+  if DATASET_10M_FOUND="$(resolve_dataset_path "" "${DEFAULT_DATASET_10M_CANDIDATES[@]}")"; then
+    DATASET_10M_PATH="$DATASET_10M_FOUND"
+  fi
+fi
+
+if [[ -n "$DATASET_10M_PATH" ]]; then
+  require_directory "$DATASET_10M_PATH"
+fi
+
+if [[ "$REQUIRE_JUDGE" -eq 1 && -z "${OPENAI_API_KEY:-}" && "${OPENAI_BASE_URL:-https://api.openai.com/v1}" = 'https://api.openai.com/v1' ]]; then
+  printf 'Judge credentials missing. Set OPENAI_API_KEY or point OPENAI_BASE_URL at an OpenAI-compatible local judge endpoint.\n' >&2
+  exit 1
+fi
 
 if command -v git >/dev/null 2>&1 && git -C "$REPO_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   REPO_COMMIT="$(git -C "$REPO_PATH" rev-parse HEAD)"
@@ -111,6 +198,15 @@ fi
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   "$PYTHON_BIN" -c 'import sys; major, minor = sys.version_info[:2]; raise SystemExit(0 if (major, minor) == (3, 11) else 1)'
   printf 'BEAM runtime check passed for repo %s using %s\n' "$REPO_PATH" "$PYTHON_BIN"
+  printf 'Dataset: %s\n' "$DATASET_PATH"
+  if [[ -n "$DATASET_10M_PATH" ]]; then
+    printf 'Dataset 10M: %s\n' "$DATASET_10M_PATH"
+  fi
+  if [[ "$REQUIRE_JUDGE" -eq 1 ]]; then
+    printf 'Judge credentials: configured\n'
+  else
+    printf 'Judge credentials: not checked\n'
+  fi
   exit 0
 fi
 

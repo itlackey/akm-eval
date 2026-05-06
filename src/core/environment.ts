@@ -1,4 +1,5 @@
 import { packRegistry } from '../packs/registry/index.ts';
+import { getAkmBackendDoctorDetail } from '../memory/backends/akm.ts';
 import { runProcess } from './process.ts';
 
 export interface DoctorCheck {
@@ -29,6 +30,11 @@ export function runDoctorChecks(): DoctorCheck[] {
       name: 'node',
       status: nodeVersion ? 'ok' : 'warn',
       detail: nodeVersion ? `found ${nodeVersion}` : 'node not found in PATH',
+    },
+    {
+      name: 'memory:akm',
+      status: getAkmBackendDoctorDetail().status,
+      detail: getAkmBackendDoctorDetail().detail,
     },
   ];
 

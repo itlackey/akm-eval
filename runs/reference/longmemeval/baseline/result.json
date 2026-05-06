@@ -57,6 +57,7 @@
     "packId": "longmemeval",
     "adapter": "longmemeval",
     "configRunId": "longmemeval-smoke",
+    "repoCommit": "2f4e8299bee542a379e569f2395a420be7b7df5b",
     "runnerType": "openai-compatible",
     "benchmarkId": "longmemeval_s_cleaned",
     "questionCount": 5,

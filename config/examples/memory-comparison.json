@@ -45,6 +45,10 @@
       "memory": { "backend": "raw-vector" }
     }
   ],
+  "notes": [
+    "This planned comparison config still includes blocked external memory backend variants for future integration work.",
+    "Today only the baseline and raw-vector paths are truthful runnable benchmark choices in this repo."
+  ],
   "providers": {
     "openai-compatible": {
       "type": "openai-compatible",

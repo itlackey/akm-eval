@@ -259,6 +259,7 @@ describe('config loading', () => {
   test('cli smoke paths work for doctor, list, matrix, and run', () => {
     const doctor = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'doctor'], cwd: rootDir });
     expect(doctor.exitCode).toBe(0);
+    expect(doctor.stdout.toString()).toContain('memory:akm');
     expect(doctor.stdout.toString()).toContain('pack:beam');
     expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
 

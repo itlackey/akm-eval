@@ -14,6 +14,7 @@ runs/reference/**/panes/
 runs/reference/**/panes/**
 runs/reference/**/sessions/
 runs/reference/**/sessions/**
+runs/reference/**/tb.lock
 config/opencode.local.json
 config/examples/runs/
 config/opencode.shredder.json
