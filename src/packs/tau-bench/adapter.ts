@@ -257,6 +257,7 @@ export const tauBenchAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        benchmarkId: packConfig.env,
         environment: packConfig.env,
         taskSplit: packConfig.taskSplit,
         model,

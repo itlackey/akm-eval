@@ -30,8 +30,12 @@ export interface BeamDoctorStatus {
 export interface BeamRuntime {
   repoPath: string;
   pythonBin: string;
+  pythonVersion: string | null;
   datasetPath: string;
   dataset10MPath: string | null;
+  repoCommit: string | null;
+  judgeBaseUrl: string;
+  judgeProvider: 'openai' | 'openai-compatible';
 }
 
 export interface BeamQuestion {
@@ -94,6 +98,16 @@ function parseJsonFile<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
 }
 
+function firstNonEmptyLine(value: string): string | null {
+  for (const line of value.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 function resolveConfiguredPath(rootDir: string, configuredPath?: string, envName?: string): string | null {
   if (isNonEmptyString(configuredPath)) {
     return path.resolve(rootDir, configuredPath);
@@ -129,6 +143,32 @@ function judgeConfigurationError(): string | null {
   }
 
   return 'beam judge credentials are not configured. Set OPENAI_API_KEY for the upstream judge path, or set OPENAI_BASE_URL to an OpenAI-compatible local judge endpoint.';
+}
+
+function resolveJudgeRuntime(): Pick<BeamRuntime, 'judgeBaseUrl' | 'judgeProvider'> {
+  const judgeBaseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
+  return {
+    judgeBaseUrl,
+    judgeProvider: judgeBaseUrl === 'https://api.openai.com/v1' ? 'openai' : 'openai-compatible',
+  };
+}
+
+function resolveBeamRepoCommit(repoPath: string): string | null {
+  const result = runProcess('git', ['rev-parse', 'HEAD'], repoPath);
+  if (!result.success) {
+    return null;
+  }
+
+  return firstNonEmptyLine(result.stdout);
+}
+
+function resolveBeamPythonVersion(pythonBin: string, rootDir: string): string | null {
+  const result = runProcess(pythonBin, ['--version'], rootDir);
+  if (!result.success) {
+    return null;
+  }
+
+  return firstNonEmptyLine(`${result.stdout}\n${result.stderr}`);
 }
 
 function datasetCandidates(rootDir: string, repoPath: string, packConfig: BeamPackConfig, type: 'default' | '10m'): string[] {
@@ -232,14 +272,19 @@ export function resolveBeamRuntime(rootDir: string, packConfig: BeamPackConfig =
   }
 
   const pythonBin = resolveBeamPythonBin(packConfig);
+  const judgeRuntime = resolveJudgeRuntime();
   const datasetPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, 'default');
   const dataset10MPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, '10m', false);
 
   return {
     repoPath,
     pythonBin,
+    pythonVersion: resolveBeamPythonVersion(pythonBin, rootDir),
     datasetPath,
     dataset10MPath,
+    repoCommit: resolveBeamRepoCommit(repoPath),
+    judgeBaseUrl: judgeRuntime.judgeBaseUrl,
+    judgeProvider: judgeRuntime.judgeProvider,
   };
 }
 

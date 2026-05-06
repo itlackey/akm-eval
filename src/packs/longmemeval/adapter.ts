@@ -252,6 +252,7 @@ export const longMemEvalAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        benchmarkId: path.basename(datasetPath, path.extname(datasetPath)),
         questionCount: questions.length,
         overallAccuracy: score,
         evaluatorCommand,

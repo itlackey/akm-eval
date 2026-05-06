@@ -58,6 +58,7 @@ export const beamAdapter: PackAdapter = {
       typeof packConfig.evaluatorConcurrency === 'number' && packConfig.evaluatorConcurrency > 0
         ? packConfig.evaluatorConcurrency
         : 1;
+    const requestedChatSizes = [...new Set(conversations.map((conversation) => conversation.chatSize))].sort().join(',');
 
     const totalPromptTokens: number[] = [];
     const totalCompletionTokens: number[] = [];
@@ -171,12 +172,19 @@ export const beamAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        benchmarkId: 'BEAM',
         conversationCount: conversations.length,
         questionCount: scores.questionCount,
         evaluatorModel,
+        beamRepoCommit: runtime.repoCommit,
         beamRepoPath: runtime.repoPath,
+        beamPythonBin: runtime.pythonBin,
+        beamPythonVersion: runtime.pythonVersion,
         beamDatasetPath: runtime.datasetPath,
         beamDataset10MPath: runtime.dataset10MPath,
+        beamJudgeBaseUrl: runtime.judgeBaseUrl,
+        beamJudgeProvider: runtime.judgeProvider,
+        beamChatSizes: requestedChatSizes,
         judgedPassRate: scores.judgedPassRate,
         ...Object.fromEntries(Object.entries(scores.byType).map(([key, value]) => [`score_${key}`, value])),
       },
@@ -185,9 +193,15 @@ export const beamAdapter: PackAdapter = {
     result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
       pack: 'beam',
       evaluatorModel,
+      beamRepoCommit: runtime.repoCommit,
       beamRepoPath: runtime.repoPath,
+      beamPythonBin: runtime.pythonBin,
+      beamPythonVersion: runtime.pythonVersion,
       beamDatasetPath: runtime.datasetPath,
       beamDataset10MPath: runtime.dataset10MPath,
+      beamJudgeBaseUrl: runtime.judgeBaseUrl,
+      beamJudgeProvider: runtime.judgeProvider,
+      beamChatSizes: requestedChatSizes,
       perConversationSummary,
       scores,
       evaluationResults,

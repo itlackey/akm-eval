@@ -465,6 +465,7 @@ export const locomoAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        benchmarkId: path.basename(datasetPath, path.extname(datasetPath)),
         questionCount: parsed.question_count,
         sampleCount: samples.length,
         overallAccuracy: score,

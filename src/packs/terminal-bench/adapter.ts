@@ -506,6 +506,13 @@ function buildHarnessEnvironment(
   return env;
 }
 
+function benchmarkMetadataFromRunMetadata(runMetadata: TerminalBenchRunMetadata): { benchmarkId: string | null; benchmarkVersion: string | null } {
+  return {
+    benchmarkId: runMetadata.dataset_name ?? null,
+    benchmarkVersion: runMetadata.dataset_version ?? null,
+  };
+}
+
 export const terminalBenchAdapter: PackAdapter = {
   id: 'terminal-bench',
   description: 'Official Terminal-Bench harness executed through the `tb` CLI with authoritative result ingestion.',
@@ -572,6 +579,7 @@ export const terminalBenchAdapter: PackAdapter = {
         ? harnessRunDirectory
         : path.resolve(context.outputDir, context.runId);
       const authoritative = parseTerminalBenchArtifacts(realizedRunDirectory);
+      const benchmarkMetadata = benchmarkMetadataFromRunMetadata(authoritative.runMetadata);
       const score = scoreTerminalBenchAdapter(authoritative.benchmarkResults.accuracy ?? 0);
       const totalTrials = authoritative.benchmarkResults.results.length;
       const promptTokens = authoritative.benchmarkResults.results.reduce(
@@ -656,6 +664,8 @@ export const terminalBenchAdapter: PackAdapter = {
         },
         metadata: {
           ...context.run.metadata,
+          benchmarkId: benchmarkMetadata.benchmarkId,
+          benchmarkVersion: benchmarkMetadata.benchmarkVersion,
           datasetName: authoritative.runMetadata.dataset_name ?? null,
           datasetVersion: authoritative.runMetadata.dataset_version ?? null,
           datasetPath: authoritative.runMetadata.dataset_path ?? null,

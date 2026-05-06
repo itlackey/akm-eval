@@ -100,6 +100,8 @@ If the upstream benchmark or dataset does not publish a clear benchmark version 
 
 The cross-run summary derives the displayed date from top-level `startedAt`; it does not require a separate metadata date field.
 
+New runs auto-populate `repoCommit` when the run starts inside a git checkout and auto-populate `runnerType` from the resolved provider config. Packs are still responsible for adding truthful `benchmarkId` and `benchmarkVersion` values when they can be stated from authoritative runtime inputs.
+
 Consumers should not assume a stable cross-pack key set inside `metadata` beyond these optional summary-friendly keys.
 
 ## Stability rules

@@ -22,4 +22,6 @@ Leave `benchmarkVersion` unset when the upstream benchmark or dataset does not p
 
 The reference summary derives the displayed date from top-level `startedAt` instead of a separate metadata field.
 
+New live runs now auto-capture `repoCommit` and `runnerType` when those values can be derived locally, but older committed references may still lack them if the original run artifacts did not preserve that information.
+
 Do not add placeholder scores or fabricated artifacts here.

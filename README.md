@@ -147,5 +147,5 @@ This only pins the Python-side bootstrap needed to unblock later execution work.
 - Install the official harness with `uv tool install terminal-bench` or `pip install terminal-bench`.
 - Ensure `Docker` and `python3` are available in `PATH`.
 - Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
-- For AKM variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
+- For `akm-no-memory` terminal-bench variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
 - `src/memory/backends/akm.ts` now reports AKM CLI/runtime metadata and fails explicitly when retrieval is requested; it still does not implement a truthful evaluated AKM retrieval path, so committed AKM comparison artifacts and repo-level AKM benchmark claims remain blocked today.

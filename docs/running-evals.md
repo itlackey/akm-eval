@@ -25,7 +25,7 @@ Important constraints:
 - `beam` runtime preflight now checks repo layout, prepared dataset presence, and judge configuration before the run proceeds. Use `bash scripts/setup-beam-runtime.sh --check --require-judge`, plus `--require-10m` when the run includes `10M`. `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, and `BEAM_PYTHON_BIN` can be used as env-backed overrides.
 - `tau-bench` requires the official Python package plus real model credentials for both the agent model and user simulator model. In this repo, the first integration path uses `openai-compatible` config values mapped to upstream `openai` mode.
 - `terminal-bench` runs only through the official `tb run` harness. It requires `tb`, Python, Docker, and an opencode-backed provider config. If any requirement is missing, `doctor` and runtime fail clearly.
-- `terminal-bench` AKM comparison runs must set `variants[].akm.configPath` to a real AKM-specific opencode config, but repo-facing AKM comparison claims remain blocked because `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path, so benchmark runs selecting `memory.backend: akm` fail fast before harness execution.
+- `terminal-bench` `akm-no-memory` runs must set `variants[].akm.configPath` to a real AKM-specific opencode config, but repo-facing AKM comparison claims remain blocked because `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path, so benchmark runs selecting `memory.backend: akm` fail fast before harness execution.
 - `akm-bench` still fails fast with an explicit runtime error instead of producing proxy metrics.
 
 See also:

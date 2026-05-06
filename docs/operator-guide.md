@@ -48,4 +48,4 @@ Committed reference artifacts live under `runs/reference/`.
 
 Each reference run should be produced by running directly into its final destination so `result.json` artifact paths match committed files.
 
-When available, store reproduction fields like `repoCommit`, `runnerType`, `benchmarkId`, and `benchmarkVersion` inside `result.json.metadata`. The cross-run summary derives its date column from `startedAt`.
+New runs now auto-capture `repoCommit` and `runnerType` in `result.json.metadata` when the local git checkout and provider config make those values available. Keep storing pack-specific fields like `benchmarkId` and `benchmarkVersion` truthfully, and let unknown values remain unset.

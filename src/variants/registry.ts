@@ -13,22 +13,22 @@ export const variantRegistry: VariantDefinition[] = [
   },
   {
     id: 'akm-memory',
-    description: 'AKM-enabled agent with AKM memory backend.',
+    description: 'Planned AKM memory backend variant; benchmark runs are currently blocked.',
     tags: ['akm', 'memory'],
   },
   {
     id: 'mem0-oss',
-    description: 'External mem0 OSS backend comparison variant.',
+    description: 'Planned external mem0 OSS comparison variant; benchmark runs are currently blocked.',
     tags: ['memory', 'external'],
   },
   {
     id: 'openviking',
-    description: 'External OpenViking memory backend comparison variant.',
+    description: 'Planned external OpenViking comparison variant; benchmark runs are currently blocked.',
     tags: ['memory', 'external'],
   },
   {
     id: 'zep',
-    description: 'External Zep memory backend comparison variant.',
+    description: 'Planned external Zep comparison variant; benchmark runs are currently blocked.',
     tags: ['memory', 'external'],
   },
   {

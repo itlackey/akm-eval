@@ -479,6 +479,7 @@ export const sweBenchAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        benchmarkId: packConfig.datasetName,
         datasetName: packConfig.datasetName,
         split: packConfig.split,
         model: modelName,
