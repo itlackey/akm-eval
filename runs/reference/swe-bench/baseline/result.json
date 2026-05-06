@@ -62,6 +62,8 @@
     "packId": "swe-bench",
     "adapter": "swe-bench",
     "configRunId": "swe-bench-smoke-openai-compatible",
+    "runnerType": "openai-compatible",
+    "benchmarkId": "SWE-bench/SWE-bench_Verified",
     "datasetName": "SWE-bench/SWE-bench_Verified",
     "split": "test",
     "model": "gpt-4o-mini",

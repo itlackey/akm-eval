@@ -32,9 +32,10 @@ bun src/cli.ts run --pack tau-bench --variant baseline --config config/examples/
 
 ```bash
 bun src/cli.ts report --run runs/reference/locomo/baseline
-bun src/cli.ts compare --baseline runs/reference/locomo/baseline --candidate runs/reference/locomo/akm-memory
 bun src/cli.ts summary --runs runs/reference --format markdown
 ```
+
+`compare` works on any two normalized runs, but operator-facing docs should not imply committed AKM reference artifacts exist today. `src/memory/backends/akm.ts` is still a stub, so repo-level baseline-vs-AKM comparison claims remain blocked.
 
 ## CI
 
@@ -43,6 +44,8 @@ bun src/cli.ts summary --runs runs/reference --format markdown
 
 ## Reference runs
 
-Committed real reference artifacts live under `runs/reference/`.
+Committed reference artifacts live under `runs/reference/`.
 
 Each reference run should be produced by running directly into its final destination so `result.json` artifact paths match committed files.
+
+When available, store reproduction fields like `repoCommit`, `runnerType`, `benchmarkId`, and `benchmarkVersion` inside `result.json.metadata`. The cross-run summary derives its date column from `startedAt`.

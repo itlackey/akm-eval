@@ -7,6 +7,13 @@ runs/*
 !runs/.gitkeep
 !runs/reference/
 !runs/reference/**
+runs/reference/**/*.log
+runs/reference/**/*.cast
+runs/reference/**/commands.txt
+runs/reference/**/panes/
+runs/reference/**/panes/**
+runs/reference/**/sessions/
+runs/reference/**/sessions/**
 config/opencode.local.json
 config/examples/runs/
 config/opencode.shredder.json

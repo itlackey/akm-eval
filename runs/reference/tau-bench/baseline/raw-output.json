@@ -9,8 +9,6 @@
   "userModelProvider": "openai",
   "agentStrategy": "tool-calling",
   "userStrategy": "llm",
-  "harnessStdoutPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/tau-bench/baseline/harness-stdout.log",
-  "harnessStderrPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/tau-bench/baseline/harness-stderr.log",
   "parsed": {
     "entries": [
       {

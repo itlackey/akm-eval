@@ -59,6 +59,8 @@
     "packId": "tau-bench",
     "adapter": "tau-bench",
     "configRunId": "tau-bench-smoke",
+    "runnerType": "openai-compatible",
+    "benchmarkId": "retail",
     "environment": "retail",
     "taskSplit": "test",
     "model": "gpt-4o-mini",

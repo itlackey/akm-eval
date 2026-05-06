@@ -7,10 +7,20 @@ export interface RunSummaryEntry {
   pack: string;
   variant: string;
   runId: string;
+  date: string;
   score: number;
   status: string;
   model: string | null;
+  repoCommit: string | null;
+  runnerType: string | null;
+  benchmarkId: string | null;
+  benchmarkVersion: string | null;
   resultPath: string;
+}
+
+function metadataValue(result: NormalizedRunResult, key: string): string | null {
+  const value = result.metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 function collectResultPaths(rootPath: string): string[] {
@@ -44,6 +54,7 @@ export function collectRunSummaries(rootPath: string): RunSummaryEntry[] {
       pack: result.pack,
       variant: result.variant,
       runId: result.runId,
+      date: result.startedAt.split('T')[0] ?? result.startedAt,
       score: result.metrics.aggregate.score,
       status: result.status,
       model:
@@ -52,6 +63,10 @@ export function collectRunSummaries(rootPath: string): RunSummaryEntry[] {
           : typeof result.metadata?.modelKey === 'string'
             ? result.metadata.modelKey
             : null,
+      repoCommit: metadataValue(result, 'repoCommit'),
+      runnerType: metadataValue(result, 'runnerType'),
+      benchmarkId: metadataValue(result, 'benchmarkId'),
+      benchmarkVersion: metadataValue(result, 'benchmarkVersion'),
       resultPath: result.artifacts.resultPath,
     }));
 }
@@ -61,11 +76,11 @@ export function markdownSummaryForRuns(rootPath: string): string {
   const lines = [
     '# Run summary',
     '',
-    '| Pack | Variant | Run ID | Status | Score | Model | Result |',
-    '| --- | --- | --- | --- | ---: | --- | --- |',
+    '| Pack | Variant | Run ID | Date | Status | Score | Model | Runner | Benchmark | Version | Repo commit | Result |',
+    '| --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |',
     ...entries.map(
       (entry) =>
-        `| ${entry.pack} | ${entry.variant} | ${entry.runId} | ${entry.status} | ${entry.score.toFixed(3)} | ${entry.model ?? '-'} | ${entry.resultPath} |`,
+        `| ${entry.pack} | ${entry.variant} | ${entry.runId} | ${entry.date} | ${entry.status} | ${entry.score.toFixed(3)} | ${entry.model ?? '-'} | ${entry.runnerType ?? '-'} | ${entry.benchmarkId ?? '-'} | ${entry.benchmarkVersion ?? '-'} | ${entry.repoCommit ?? '-'} | ${entry.resultPath} |`,
     ),
     '',
   ];

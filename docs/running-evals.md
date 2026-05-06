@@ -14,7 +14,7 @@ Use `akm-eval run` for a single pack/variant and `akm-eval matrix` for a compari
 
 Important constraints:
 
-- Baseline runs for real benchmarks must still use a real model provider. Compare `memory.backend: none` against `memory.backend: akm`; do not use `provider: none`.
+- Baseline runs for real benchmarks must still use a real model provider and `memory.backend: none`; do not use `provider: none`. A real `memory.backend: akm` comparison path is future work while `src/memory/backends/akm.ts` remains a stub.
 - `longmemeval` requires `pack.config.datasetPath` and `pack.config.evaluatorCommand` so scoring comes from the official evaluator flow.
 - `locomo` uses the official `locomo10.json` dataset and the bundled `scripts/locomo-evaluator.py` scorer. If `datasets/locomo/locomo10.json` is absent, akm-eval downloads it from the official Snap Research repository on first run.
 - `locomo` supports `pack.config.maxContextTokens` for baseline conversation truncation and `pack.config.topK` for memory-backed retrieval mode.
@@ -24,7 +24,7 @@ Important constraints:
 - `beam` also requires `OPENAI_API_KEY` for the upstream BEAM judge model and optionally `pack.config.evaluatorModel` to choose that judge.
 - `tau-bench` requires the official Python package plus real model credentials for both the agent model and user simulator model. In this repo, the first integration path uses `openai-compatible` config values mapped to upstream `openai` mode.
 - `terminal-bench` runs only through the official `tb run` harness. It requires `tb`, Python, Docker, and an opencode-backed provider config. If any requirement is missing, `doctor` and runtime fail clearly.
-- `terminal-bench` AKM comparison runs must set `variants[].akm.configPath` to a real AKM-specific opencode config. akm-eval will not silently reuse the baseline config for an AKM run.
+- `terminal-bench` AKM comparison runs must set `variants[].akm.configPath` to a real AKM-specific opencode config, but repo-facing AKM comparison claims remain blocked because `src/memory/backends/akm.ts` is still a stub.
 - `akm-bench` still fails fast with an explicit runtime error instead of producing proxy metrics.
 
 See also:

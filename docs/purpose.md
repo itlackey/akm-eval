@@ -4,7 +4,7 @@ This document captures where `akm-eval` is today, what it's missing relative to 
 
 ## Strategic role
 
-`akm-eval` is the **credibility floor**. Its job is to wrap public, third-party benchmarks so that akm can be measured against the same harnesses everyone else uses. Same model, same dataset, same judge — only the variant changes (baseline vs akm-enabled). The output is "akm performs comparably or better than dedicated systems on benchmarks those systems are optimized for," produced by harnesses outside our control so the answer is hard to argue with.
+`akm-eval` is the **credibility floor**. Its job is to wrap public, third-party benchmarks with the same harnesses everyone else uses. Same model, same dataset, same judge, and normalized outputs. Baseline-vs-AKM comparison claims stay blocked until this repo has a real evaluated AKM execution path instead of the current stub backend.
 
 `akm-eval` is explicitly **not** a place for novel benchmarks, akm-internal measurements, or attribution analysis. Those live in `akm-bench`.
 
@@ -17,7 +17,7 @@ This document captures where `akm-eval` is today, what it's missing relative to 
 **Built and shipped:**
 - TypeScript/Bun project, CLI at `src/cli.ts`
 - "No synthetic fallbacks" trust policy enforced at the framework level — packs must fail clearly when their official harness isn't wired
-- Variant system (`variants[].akm.configPath`) for baseline-vs-akm A/B
+- Variant system (`variants[].akm.configPath`) for future baseline-vs-akm A/B once a real AKM execution path exists
 - Dataset auto-download via `bun run download:datasets`
 - `doctor` command for environment validation
 - `check:boundary` script for architectural enforcement
@@ -34,7 +34,7 @@ This document captures where `akm-eval` is today, what it's missing relative to 
 - `akm-bench` stub present but intentionally blocked until it is backed by authoritative external harness/result artifacts
 
 **Repository status:**
-- `runs/reference/` now contains real reference artifacts for LoCoMo, LongMemEval, Terminal-Bench, SWE-Bench Verified, and `tau-bench`
+- `runs/reference/` now contains committed reference artifacts for baseline runs such as LoCoMo, LongMemEval, Terminal-Bench, SWE-Bench Verified, and `tau-bench`
 - MPL-2.0 license
 - opencode remains the best-supported runner path, but it is no longer the only supported runner
 
@@ -71,7 +71,7 @@ Smaller polish items that don't change the strategic position but reduce frictio
 
 ### Cross-repo gaps (shared with akm-bench)
 
-- No published reference results in either repo
+- No published AKM comparison reference results in either repo
 - partial runner coupling in both
 - Same MPL-2.0 license question
 
@@ -121,7 +121,7 @@ A v1.0 with LoCoMo + LongMemEval + Terminal-Bench + SWE-Bench Verified + `τ-ben
 
 - One full reference run per pack that is claimed as v1-ready, with model + config + commit SHA + date, checked into `runs/reference/<pack>/`
 - Cross-pack reference table documented in the top-level README — table listing each published run with pack, variant, model, score, commit SHA, date, and artifact link
-- For packs with a real AKM execution path, baseline and AKM reference results are regenerated and committed when a new AKM version moves the score by more than 2 percentage points
+- For packs with a real AKM execution path, baseline and AKM reference results are regenerated and committed when a new AKM version moves the score by more than 2 percentage points. This remains future work while `src/memory/backends/akm.ts` is still a stub.
 
 ### Quality gates
 
@@ -161,7 +161,7 @@ This section captures the shared conclusion from a multi-agent critical review o
 - The core harness is already real: the CLI, trust-policy boundary, pack adapters, normalized results, `compare`, and per-run `report` all exist.
 - The repo is not opencode-only anymore. It has both `opencode` and `openai-compatible` runners, but support is uneven by pack and must be documented pack-by-pack.
 - `swe-bench` is wired through the official harness. The committed OpenAI-compatible smoke/reference path now targets SWE-Bench Verified, while the opencode smoke path still targets Lite; docs must keep that split explicit instead of collapsing it into a single repo-wide default claim.
-- The repo now has real reference artifacts and no longer reads like pure scaffolding.
+- The repo now has baseline reference artifacts and no longer reads like pure scaffolding.
 - Cross-run aggregation, containerization, and benchmark expansion are all secondary to publishing evidence from the packs that already work.
 - Two hard blockers remain outside pure documentation work: BEAM still lacks a pinned evaluator runtime in this repo, and the `akm` memory backend is still a stub, so published baseline-vs-AKM comparison tables would currently overclaim what is implemented.
 - The current definition of done is directionally correct, but the practical bar is reproducible score-level results with pinned inputs and clearly documented prerequisites, not literal one-command setup or bit-for-bit output identity.
@@ -175,7 +175,7 @@ This section captures the shared conclusion from a multi-agent critical review o
 - Treat result-schema completion as documentation hardening of an existing implementation, not as invention of a new subsystem.
 - Treat CI for v1.0 as boundary checks, tests, and one cheap automated smoke path, not exhaustive benchmark automation.
 - Treat containerization as optional for v1.0 unless it becomes the simplest way to make reproduction reliable.
-- Treat baseline-vs-AKM published comparisons as blocked until the repo has a non-stub AKM execution path in evaluated packs.
+- Treat baseline-vs-AKM published comparisons as blocked until the repo has a non-stub AKM execution path in evaluated packs. The current `src/memory/backends/akm.ts` backend is only a stub.
 
 ### Consensus principles
 
@@ -219,7 +219,7 @@ Phase 6 result: `τ-bench` was the easier official-harness integration in this r
 
 The simplest path is:
 
-1. Run one memory pack, `terminal-bench`, and `swe-bench` with baseline and AKM variants on one model.
+1. Run one memory pack, `terminal-bench`, and `swe-bench` for baseline reference coverage.
 2. Commit the resulting normalized artifacts under `runs/reference/`.
 3. Add a small README score table that links to those artifacts and the configs that produced them.
 

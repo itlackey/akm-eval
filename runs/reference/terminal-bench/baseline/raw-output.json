@@ -6,7 +6,7 @@
     "--dataset",
     "terminal-bench-core==0.1.1",
     "--output-path",
-    "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+    "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline",
     "--run-id",
     "terminal-bench-baseline",
     "--agent-import-path",
@@ -24,9 +24,7 @@
     "--cleanup",
     "--rebuild"
   ],
-  "harnessRunDirectory": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline",
-  "harnessStdoutPath": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/harness-stdout.log",
-  "harnessStderrPath": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/harness-stderr.log",
+  "harnessRunDirectory": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/terminal-bench-baseline",
   "authoritative": {
     "benchmarkResults": {
       "id": "c05e9e04-389e-4cc8-aeab-9e0070a0821c",
@@ -68,7 +66,7 @@
       "dataset_path": null,
       "dataset_name": "terminal-bench-core",
       "dataset_version": "0.1.1",
-      "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+      "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline",
       "agent_name": "akm-eval-opencode",
       "no_rebuild": false,
       "cleanup": true,
@@ -106,18 +104,10 @@
           "test_hello_file_exists"
         ],
         "trialDirectories": [
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline"
-        ],
-        "commandLogs": [
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/commands.txt"
-        ],
-        "paneLogs": [
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/panes/post-agent.txt",
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/panes/post-test.txt",
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/panes/pre-agent.txt"
+          "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline"
         ],
         "resultFiles": [
-          "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/results.json"
+          "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/terminal-bench-baseline/hello-world/hello-world.1-of-1.terminal-bench-baseline/results.json"
         ]
       }
     ]

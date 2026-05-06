@@ -51,8 +51,6 @@
     "--instance_ids",
     "astropy__astropy-12907"
   ],
-  "harnessStdoutPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/harness-stdout.log",
-  "harnessStderrPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/harness-stderr.log",
   "runReportPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/official-harness/gpt-4o-mini.swe-bench-baseline-1778046275154.json",
   "authoritative": {
     "runReport": {

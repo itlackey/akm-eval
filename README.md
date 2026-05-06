@@ -1,12 +1,12 @@
 # akm-eval
 
-AKM Eval is a benchmark harness for measuring AKM impact on real eval packs.
+AKM Eval is a benchmark harness for running real eval packs with authoritative upstream harnesses and normalized outputs.
 
 Trust policy:
 
 - No benchmark pack should silently fall back to synthetic or heuristic success metrics.
 - If an official harness or evaluator is not wired, the pack must fail clearly.
-- Baseline and AKM variants should both use real model providers; the comparison axis is memory behavior, not fake vs real generation.
+- Baseline and any future AKM variants should both use real model providers; the comparison axis is memory behavior, not fake vs real generation.
 
 ## Quick start
 
@@ -61,13 +61,13 @@ Blocked pack:
 
 ## Reference results
 
-| Pack | Variant | Score | Status | Result |
-|---|---|---:|---|---|
-| `locomo` | `baseline` | 0.390 | `passed` | `runs/reference/locomo/baseline/result.json` |
-| `longmemeval` | `baseline` | 0.800 | `passed` | `runs/reference/longmemeval/baseline/result.json` |
-| `terminal-bench` | `baseline` | 0.000 | `warning` | `runs/reference/terminal-bench/baseline/result.json` |
-| `swe-bench` | `baseline` | 0.000 | `warning` | `runs/reference/swe-bench/baseline/result.json` |
-| `tau-bench` | `baseline` | 0.000 | `failed` | `runs/reference/tau-bench/baseline/result.json` |
+| Pack | Variant | Run ID | Date | Status | Score | Model | Runner | Benchmark | Version | Repo commit | Result |
+|---|---|---|---|---|---:|---|---|---|---|---|---|
+| `locomo` | `baseline` | `locomo-smoke-baseline` | `2026-05-06` | `passed` | 0.390 | `gpt_4o_mini` | `openai-compatible` | `locomo10` | `-` | `-` | `runs/reference/locomo/baseline/result.json` |
+| `longmemeval` | `baseline` | `longmemeval-baseline` | `2026-05-06` | `passed` | 0.800 | `-` | `openai-compatible` | `longmemeval_s_cleaned` | `-` | `-` | `runs/reference/longmemeval/baseline/result.json` |
+| `swe-bench` | `baseline` | `swe-bench-baseline` | `2026-05-06` | `warning` | 0.000 | `gpt-4o-mini` | `openai-compatible` | `SWE-bench/SWE-bench_Verified` | `-` | `-` | `runs/reference/swe-bench/baseline/result.json` |
+| `tau-bench` | `baseline` | `tau-bench-baseline` | `2026-05-06` | `failed` | 0.000 | `gpt-4o-mini` | `openai-compatible` | `retail` | `-` | `-` | `runs/reference/tau-bench/baseline/result.json` |
+| `terminal-bench` | `baseline` | `terminal-bench-baseline` | `2026-05-06` | `warning` | 0.000 | `opencode/gpt-4.1-mini` | `opencode` | `terminal-bench-core` | `0.1.1` | `2f4e8299bee542a379e569f2395a420be7b7df5b` | `runs/reference/terminal-bench/baseline/result.json` |
 
 Generate a cross-run summary from committed artifacts with:
 
@@ -79,7 +79,7 @@ bun src/cli.ts summary --runs runs/reference --format markdown
 
 1. Document the shipped packs and runner limitations accurately.
 2. Expand the normalized result schema documentation into a real public contract.
-3. Publish real reference artifacts for one memory pack, `terminal-bench`, and `swe-bench`.
+3. Publish real reference artifacts for one memory pack, `terminal-bench`, and `swe-bench`; AKM-vs-baseline reference comparisons remain blocked until the AKM backend stops being a stub.
 4. Add CI for `bun test` and `bun run check:boundary`.
 5. Phase 6 completed with `tau-bench` as the chosen non-memory expansion pack.
 
@@ -112,6 +112,17 @@ git clone https://github.com/mohammadtavakoli78/BEAM vendor/BEAM
 
 Alternatively, set `pack.config.repoPath` in your config to point to an existing BEAM checkout.
 
+For the current pinned local runtime bootstrap:
+
+- upstream source expectation is `mohammadtavakoli78/BEAM` at commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`
+- install/check script: `bash scripts/setup-beam-runtime.sh`
+- pinned Python requirements snapshot: `requirements-beam.txt`
+- detailed notes and limits: `docs/beam-runtime.md`
+
+The setup/check script verifies that commit when the BEAM checkout is a git repo. Without git metadata it falls back to file-layout plus pinned-requirements checks only.
+
+This only pins the Python-side bootstrap needed to unblock later execution work. It does not claim BEAM is fully reproducible end to end yet.
+
 ## Terminal-Bench
 
 `terminal-bench` is executed only through the official `tb` harness.
@@ -119,4 +130,5 @@ Alternatively, set `pack.config.repoPath` in your config to point to an existing
 - Install the official harness with `uv tool install terminal-bench` or `pip install terminal-bench`.
 - Ensure `Docker` and `python3` are available in `PATH`.
 - Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
-- For AKM variants, set `variants[].akm.configPath` to an AKM-specific opencode config. The repo fails clearly instead of pretending the baseline config enables AKM.
+- For AKM variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
+- `src/memory/backends/akm.ts` is still a stub, so committed AKM comparison artifacts and repo-level AKM benchmark claims remain blocked today.

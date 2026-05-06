@@ -4,7 +4,7 @@
     "dataset_path": null,
     "dataset_name": "terminal-bench-core",
     "dataset_version": "0.1.1",
-    "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+    "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline",
     "agent_name": "akm-eval-opencode",
     "no_rebuild": false,
     "cleanup": true,

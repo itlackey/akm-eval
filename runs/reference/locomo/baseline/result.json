@@ -59,6 +59,8 @@
     "packId": "locomo-smoke",
     "adapter": "locomo",
     "configRunId": "locomo-smoke",
+    "runnerType": "openai-compatible",
+    "benchmarkId": "locomo10",
     "questionCount": 5,
     "sampleCount": 1,
     "overallAccuracy": 0.39,

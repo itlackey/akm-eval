@@ -28,7 +28,7 @@ The old placeholder artifact list in this file was stale. The current normalized
 - `schemaVersion`: currently always `1.0`
 - `runId`: normalized run identifier
 - `pack`: pack ID such as `locomo`, `beam`, `terminal-bench`, or `swe-bench`
-- `variant`: variant ID such as `baseline` or `akm-memory`
+- `variant`: variant ID such as `baseline` or another configured run variant ID
 - `memoryBackend`: effective memory backend ID such as `none`, `akm`, or `raw-vector`
 - `status`: one of `passed`, `failed`, or `warning`
 - `startedAt`: ISO timestamp for run start
@@ -87,7 +87,18 @@ The old placeholder artifact list in this file was stale. The current normalized
 
 ## `metadata`
 
-`metadata` is optional extension space for pack-specific scalar fields. It is useful for reproduction metadata such as dataset name, harness version, evaluator model, task counts, or dataset paths. Consumers should not assume a stable cross-pack key set inside `metadata`.
+`metadata` is optional extension space for pack-specific scalar fields. It is useful for reproduction metadata such as dataset name, harness version, evaluator model, task counts, or dataset paths.
+
+Cross-run reporting currently looks for these optional metadata keys when present:
+
+- `repoCommit`: repository commit used for the run
+- `runnerType`: runner/provider family such as `openai-compatible` or `opencode`
+- `benchmarkId`: benchmark or dataset identifier such as `SWE-bench/SWE-bench_Verified`
+- `benchmarkVersion`: benchmark version string when the source benchmark publishes one
+
+The cross-run summary derives the displayed date from top-level `startedAt`; it does not require a separate metadata date field.
+
+Consumers should not assume a stable cross-pack key set inside `metadata` beyond these optional summary-friendly keys.
 
 ## Stability rules
 

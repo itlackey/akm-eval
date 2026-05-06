@@ -54,14 +54,18 @@
     ]
   },
   "artifacts": {
-    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/result.json",
-    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/summary.md",
-    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke/raw-output.json"
+    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/result.json",
+    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/summary.md",
+    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/terminal-bench/baseline/raw-output.json"
   },
   "metadata": {
     "packId": "terminal-bench",
     "adapter": "terminal-bench",
     "configRunId": "terminal-bench-smoke",
+    "repoCommit": "2f4e8299bee542a379e569f2395a420be7b7df5b",
+    "runnerType": "opencode",
+    "benchmarkId": "terminal-bench-core",
+    "benchmarkVersion": "0.1.1",
     "datasetName": "terminal-bench-core",
     "datasetVersion": "0.1.1",
     "datasetPath": null,
