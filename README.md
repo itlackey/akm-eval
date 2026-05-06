@@ -33,6 +33,16 @@ bun scripts/download-datasets.ts LoCoMo
 
 Datasets are auto-downloaded on first use if not present, but pre-downloading is recommended.
 
+## BEAM Benchmark
+
+The BEAM pack requires the official BEAM repo. Clone it into `vendor/BEAM`:
+
+```bash
+git clone https://github.com/mohammadtavakoli78/BEAM vendor/BEAM
+```
+
+Alternatively, set `pack.config.repoPath` in your config to point to an existing BEAM checkout.
+
 ## Terminal-Bench
 
 `terminal-bench` is executed only through the official `tb` harness.
