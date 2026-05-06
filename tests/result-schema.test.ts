@@ -18,7 +18,13 @@ describe('normalized result schema', () => {
       runId: 'demo',
       pack: 'akm-bench',
       variant: 'baseline',
+      memoryBackend: 'none',
       status: 'passed',
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      durationMs: 1,
+      warnings: [],
+      notes: [],
       metrics: {
         retrieval: { queryCount: 1, precisionAtK: 1, recallAtK: 1, mrr: 1, ndcgAtK: 1 },
         answer: { exactMatch: 1, tokenF1: 1, containsExpected: 1, judgedPass: 1 },

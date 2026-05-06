@@ -12,6 +12,7 @@ import { toPrettyJson } from './reporting/json.ts';
 import { markdownReportForComparison, markdownReportForResult } from './reporting/markdown.ts';
 import { loadNormalizedResult } from './reporting/normalized-result.ts';
 import { renderRunMatrix } from './reporting/matrix.ts';
+import { collectRunSummaries, markdownSummaryForRuns } from './reporting/summary.ts';
 import { variantRegistry } from './variants/registry.ts';
 import { resolveVariant } from './variants/resolve-variant.ts';
 
@@ -25,6 +26,7 @@ function usage(): string {
     '  bun src/cli.ts matrix --config <path>',
     '  bun src/cli.ts compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
     '  bun src/cli.ts report --run <dir> [--format markdown|json]',
+    '  bun src/cli.ts summary --runs <dir> [--format markdown|json]',
   ].join('\n');
 }
 
@@ -155,6 +157,18 @@ function reportCommand(args: string[]): number {
   return 0;
 }
 
+function summaryCommand(args: string[]): number {
+  const format = valueAfter(args, '--format') ?? 'markdown';
+  const runsPath = valueAfter(args, '--runs') ?? args[0];
+  if (!runsPath) {
+    throw new Error('summary requires a runs directory');
+  }
+
+  const output = format === 'json' ? toPrettyJson(collectRunSummaries(runsPath)) : `${markdownSummaryForRuns(runsPath)}\n`;
+  process.stdout.write(output);
+  return 0;
+}
+
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
   if (args.length === 0) {
@@ -191,6 +205,10 @@ async function main(): Promise<number> {
 
     if (command === 'report') {
       return reportCommand(args.slice(1));
+    }
+
+    if (command === 'summary') {
+      return summaryCommand(args.slice(1));
     }
 
     console.log(usage());

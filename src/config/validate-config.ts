@@ -2,7 +2,7 @@ import type { AgentProviderConfig, EvalConfig, RunDefinition } from '../core/typ
 import type { EvalVariant } from '../variants/types.ts';
 import { ConfigValidationError } from '../core/errors.ts';
 
-const PACKS_REQUIRING_REAL_AGENT = new Set(['longmemeval', 'terminal-bench', 'swe-bench', 'beam', 'locomo', 'akm-bench']);
+const PACKS_REQUIRING_REAL_AGENT = new Set(['longmemeval', 'terminal-bench', 'swe-bench', 'tau-bench', 'beam', 'locomo', 'akm-bench']);
 const OFFICIAL_SWE_BENCH_DATASET_ALIASES = new Set([
   'swe-bench',
   'swebench',

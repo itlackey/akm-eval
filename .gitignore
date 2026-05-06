@@ -5,6 +5,8 @@ dist
 tests/.artifacts
 runs/*
 !runs/.gitkeep
+!runs/reference/
+!runs/reference/**
 config/opencode.local.json
 config/examples/runs/
 config/opencode.shredder.json
@@ -12,3 +14,4 @@ config/opencode.shredder.json
 datasets/longmemeval/dataset.json
 datasets/locomo/locomo10.json
 vendor/
+runs/reference/swe-bench/baseline/official-harness/logs/

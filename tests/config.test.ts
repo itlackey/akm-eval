@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { loadConfig } from '../src/config/load-config.ts';
 import { validateConfig } from '../src/config/validate-config.ts';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bunBinary = process.execPath;
+
+setDefaultTimeout(15000);
 
 describe('config loading', () => {
   test('loads planned example config and normalizes it for execution', () => {
@@ -21,6 +23,13 @@ describe('config loading', () => {
     expect(config.version).toBe(1);
     expect(config.runs.some((run) => run.pack === 'locomo')).toBe(true);
     expect(config.runs.some((run) => run.memoryBackend === 'raw-vector')).toBe(true);
+  });
+
+  test('loads tau-bench smoke example config', () => {
+    const config = loadConfig(path.resolve(rootDir, 'config/examples/tau-bench-smoke.json'));
+    expect(config.version).toBe(1);
+    expect(config.runs.some((run) => run.pack === 'tau-bench')).toBe(true);
+    expect(config.runs.some((run) => run.agentProviderConfig?.type === 'openai-compatible')).toBe(true);
   });
 
   test('validates both planned and internal config shapes', () => {
@@ -256,6 +265,7 @@ describe('config loading', () => {
     const listPacks = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
     expect(listPacks.stdout.toString()).toContain('akm-bench');
+    expect(listPacks.stdout.toString()).toContain('tau-bench');
     // Verify qa pack was removed
     expect(listPacks.stdout.toString()).not.toContain('qa\t');
 

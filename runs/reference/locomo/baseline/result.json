@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "locomo-smoke-baseline",
+  "pack": "locomo",
+  "variant": "baseline",
+  "memoryBackend": "none",
+  "status": "passed",
+  "startedAt": "2026-05-06T05:44:27.239Z",
+  "finishedAt": "2026-05-06T05:44:34.652Z",
+  "durationMs": 7413,
+  "warnings": [],
+  "notes": [
+    "LoCoMo executed 5 question(s) from 1 sample(s).",
+    "Official LoCoMo QA score: 39.0%",
+    "Conversation-only mode with approximate truncation budget 16000 tokens."
+  ],
+  "metrics": {
+    "retrieval": {
+      "queryCount": 0,
+      "precisionAtK": 0,
+      "recallAtK": 0,
+      "mrr": 0,
+      "ndcgAtK": 0
+    },
+    "answer": {
+      "exactMatch": 0,
+      "tokenF1": 0.39,
+      "containsExpected": 0.8,
+      "judgedPass": 0.39
+    },
+    "aggregate": {
+      "score": 0.39,
+      "retrievalWeight": 0,
+      "answerWeight": 1
+    }
+  },
+  "telemetry": {
+    "promptTokens": 71917,
+    "completionTokens": 51,
+    "totalTokens": 71968,
+    "estimatedCostUsd": 0,
+    "latencyMs": 5866,
+    "logs": [
+      "pack=locomo",
+      "variant=baseline",
+      "memory=none",
+      "samples=1",
+      "questions=5",
+      "datasetPath=/home/founder3/code/github/itlackey/akm-eval/datasets/locomo/locomo10.json",
+      "evaluatorCommand=python3 scripts/locomo-evaluator.py"
+    ]
+  },
+  "artifacts": {
+    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/locomo/baseline/result.json",
+    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/locomo/baseline/summary.md",
+    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/locomo/baseline/raw-output.json"
+  },
+  "metadata": {
+    "packId": "locomo-smoke",
+    "adapter": "locomo",
+    "configRunId": "locomo-smoke",
+    "questionCount": 5,
+    "sampleCount": 1,
+    "overallAccuracy": 0.39,
+    "modelKey": "gpt_4o_mini",
+    "predictionKey": "gpt_4o_mini_prediction",
+    "topK": 5,
+    "maxContextTokens": 16000,
+    "datasetPath": "/home/founder3/code/github/itlackey/akm-eval/datasets/locomo/locomo10.json",
+    "predictionsPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/locomo/baseline/locomo-predictions.json",
+    "evaluationOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/locomo/baseline/locomo-evaluation.json",
+    "accuracy_category_1": 0.667,
+    "accuracy_category_2": 0.231,
+    "accuracy_category_3": 0.154,
+    "accuracy_category_4": 0,
+    "accuracy_category_5": 0
+  }
+}

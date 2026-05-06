@@ -13,3 +13,9 @@ Runtime requirements:
 - Docker available in `PATH`
 - opencode-backed provider config in this repo
 - for AKM-enabled variants, `variants[].akm.configPath` must point at an AKM-specific opencode config
+
+Notes:
+
+- dataset selection defaults to `terminal-bench-core==0.1.1` unless overridden in pack config
+- the integration trusts only official `tb run` artifacts such as `results.json` and `run_metadata.json`
+- this pack is currently opencode-only in this repo because it depends on the official opencode installed-agent path

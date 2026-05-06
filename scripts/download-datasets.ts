@@ -10,12 +10,12 @@ interface DatasetSource {
 const DATASETS: DatasetSource[] = [
   {
     name: 'LongMemEval',
-    url: 'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json',
+    url: 'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json',
     targetPath: 'datasets/longmemeval/dataset.json',
   },
   {
     name: 'LoCoMo',
-    url: 'https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json',
+    url: 'https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/data/locomo10.json',
     targetPath: 'datasets/locomo/locomo10.json',
   },
 ];

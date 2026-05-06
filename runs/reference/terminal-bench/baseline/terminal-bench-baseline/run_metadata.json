@@ -1,0 +1,30 @@
+{
+    "run_id": "terminal-bench-baseline",
+    "uuid": "f77bb3d8-b3a7-4d1d-b435-30258b22c1d5",
+    "dataset_path": null,
+    "dataset_name": "terminal-bench-core",
+    "dataset_version": "0.1.1",
+    "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+    "agent_name": "akm-eval-opencode",
+    "no_rebuild": false,
+    "cleanup": true,
+    "log_level": 20,
+    "task_ids": [
+        "hello-world"
+    ],
+    "exclude_task_ids": null,
+    "n_tasks": null,
+    "n_concurrent_trials": 1,
+    "n_attempts": 1,
+    "dataset_size": 1,
+    "accuracy": 0.0,
+    "model_name": "opencode/gpt-4.1-mini",
+    "start_time": "2026-05-06T05:01:00.871977+00:00",
+    "end_time": "2026-05-06T05:01:40.694918+00:00",
+    "commit_hash": "2f4e8299bee542a379e569f2395a420be7b7df5b",
+    "username": "itlackey",
+    "s3_bucket": null,
+    "agent_kwargs": null,
+    "pass_at_k": {},
+    "resumed_at": null
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "tau-bench-smoke",
+    "outputDir": "runs/tau-bench-smoke"
+  },
+  "packs": [
+    {
+      "id": "tau-bench",
+      "adapter": "tau-bench",
+      "enabled": true,
+      "config": {
+        "env": "retail",
+        "smoke": true,
+        "taskSplit": "test",
+        "numTrials": 1,
+        "maxConcurrency": 1,
+        "agentStrategy": "tool-calling",
+        "userStrategy": "llm"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    }
+  ],
+  "providers": {
+    "openai-compatible": {
+      "type": "openai-compatible",
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "{env:OPENAI_API_KEY}",
+      "defaultModel": "gpt-4o-mini"
+    }
+  }
+}

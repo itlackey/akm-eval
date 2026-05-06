@@ -2,31 +2,103 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://akm-eval.local/result.schema.json",
   "type": "object",
-  "required": ["schemaVersion", "runId", "pack", "variant", "status", "metrics", "telemetry", "artifacts"],
+  "required": [
+    "schemaVersion",
+    "runId",
+    "pack",
+    "variant",
+    "memoryBackend",
+    "status",
+    "startedAt",
+    "finishedAt",
+    "durationMs",
+    "warnings",
+    "notes",
+    "metrics",
+    "telemetry",
+    "artifacts"
+  ],
   "properties": {
     "schemaVersion": { "type": "string", "const": "1.0" },
     "runId": { "type": "string" },
     "pack": { "type": "string" },
     "variant": { "type": "string" },
+    "memoryBackend": { "type": "string" },
     "status": { "type": "string", "enum": ["passed", "failed", "warning"] },
+    "startedAt": { "type": "string" },
+    "finishedAt": { "type": "string" },
+    "durationMs": { "type": "number" },
     "warnings": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "array", "items": { "type": "string" } },
     "metrics": {
       "type": "object",
       "required": ["retrieval", "answer", "aggregate"],
       "properties": {
-        "retrieval": { "type": "object" },
-        "answer": { "type": "object" },
+        "retrieval": {
+          "type": "object",
+          "required": ["queryCount", "precisionAtK", "recallAtK", "mrr", "ndcgAtK"],
+          "properties": {
+            "queryCount": { "type": "number" },
+            "precisionAtK": { "type": "number" },
+            "recallAtK": { "type": "number" },
+            "mrr": { "type": "number" },
+            "ndcgAtK": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "answer": {
+          "type": "object",
+          "required": ["exactMatch", "tokenF1", "containsExpected", "judgedPass"],
+          "properties": {
+            "exactMatch": { "type": "number" },
+            "tokenF1": { "type": "number" },
+            "containsExpected": { "type": "number" },
+            "judgedPass": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
         "aggregate": {
           "type": "object",
-          "required": ["score"],
-          "properties": { "score": { "type": "number" } },
-          "additionalProperties": true
+          "required": ["score", "retrievalWeight", "answerWeight"],
+          "properties": {
+            "score": { "type": "number" },
+            "retrievalWeight": { "type": "number" },
+            "answerWeight": { "type": "number" }
+          },
+          "additionalProperties": false
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
-    "telemetry": { "type": "object" },
-    "artifacts": { "type": "object" }
+    "telemetry": {
+      "type": "object",
+      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "latencyMs", "logs"],
+      "properties": {
+        "promptTokens": { "type": "number" },
+        "completionTokens": { "type": "number" },
+        "totalTokens": { "type": "number" },
+        "estimatedCostUsd": { "type": "number" },
+        "latencyMs": { "type": "number" },
+        "logs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["resultPath", "summaryPath"],
+      "properties": {
+        "resultPath": { "type": "string" },
+        "summaryPath": { "type": "string" },
+        "rawOutputPath": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    }
   },
   "additionalProperties": true
 }

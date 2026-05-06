@@ -1,3 +1,117 @@
 # Result schema
 
-Normalized runs write `result.json`, `metrics.json`, `tasks.jsonl`, `trajectory.jsonl`, `raw.log`, and `report.md`.
+`akm-eval` normalizes benchmark output into a run folder that is consumable by `akm-eval report` and `akm-eval compare`.
+
+## Required files
+
+- `result.json`: canonical machine-readable normalized result
+- `summary.md`: canonical human-readable summary for the run
+
+## Optional files
+
+- `raw-output.json`: pack-specific authoritative raw output captured for debugging, traceability, and re-analysis
+- Additional logs referenced from `raw-output.json`, such as harness stdout/stderr files
+
+The old placeholder artifact list in this file was stale. The current normalized contract is centered on `result.json` and `summary.md`.
+
+## Run folder contract
+
+- `akm-eval report --run <dir>` resolves `<dir>/result.json`
+- `result.json` must conform to the normalized result contract below
+- `summary.md` is generated from the normalized result and should be treated as a derived artifact
+- `raw-output.json`, when present, is intentionally pack-specific and not a stable cross-pack schema
+
+## `result.json`
+
+### Required top-level fields
+
+- `schemaVersion`: currently always `1.0`
+- `runId`: normalized run identifier
+- `pack`: pack ID such as `locomo`, `beam`, `terminal-bench`, or `swe-bench`
+- `variant`: variant ID such as `baseline` or `akm-memory`
+- `memoryBackend`: effective memory backend ID such as `none`, `akm`, or `raw-vector`
+- `status`: one of `passed`, `failed`, or `warning`
+- `startedAt`: ISO timestamp for run start
+- `finishedAt`: ISO timestamp for run finish
+- `durationMs`: elapsed wall-clock duration in milliseconds
+- `warnings`: array of pack-authored warning strings
+- `notes`: array of pack-authored summary strings
+- `metrics`: normalized scoring block
+- `telemetry`: normalized runtime/cost block
+- `artifacts`: canonical artifact pointers
+
+### `metrics`
+
+`metrics.retrieval` always contains:
+
+- `queryCount`
+- `precisionAtK`
+- `recallAtK`
+- `mrr`
+- `ndcgAtK`
+
+`metrics.answer` always contains:
+
+- `exactMatch`
+- `tokenF1`
+- `containsExpected`
+- `judgedPass`
+
+`metrics.aggregate` always contains:
+
+- `score`
+- `retrievalWeight`
+- `answerWeight`
+
+## `telemetry`
+
+`telemetry` always contains:
+
+- `promptTokens`
+- `completionTokens`
+- `totalTokens`
+- `estimatedCostUsd`
+- `latencyMs`
+- `logs`
+
+## `artifacts`
+
+`artifacts` always contains:
+
+- `resultPath`
+- `summaryPath`
+
+`artifacts` may also contain:
+
+- `rawOutputPath`
+
+## `metadata`
+
+`metadata` is optional extension space for pack-specific scalar fields. It is useful for reproduction metadata such as dataset name, harness version, evaluator model, task counts, or dataset paths. Consumers should not assume a stable cross-pack key set inside `metadata`.
+
+## Stability rules
+
+Stable across packs:
+
+- top-level normalized fields in `result.json`
+- metric field names under `metrics`
+- telemetry field names under `telemetry`
+- artifact pointer field names under `artifacts`
+
+Pack-specific and not guaranteed stable:
+
+- `raw-output.json`
+- `metadata`
+- `warnings`
+- `notes`
+- exact rules used by a pack to map authoritative outcomes into `status`
+
+## Pack caveats
+
+- `locomo` stores the official evaluator output, prediction file path, and evaluator command in `raw-output.json`
+- `longmemeval` stores evaluator command output, predictions, and per-question judged results in `raw-output.json`
+- `beam` stores upstream evaluation results and per-conversation summaries in `raw-output.json`
+- `swe-bench` stores authoritative harness report references plus harness stdout/stderr paths in `raw-output.json`
+- `terminal-bench` stores authoritative harness payloads plus harness stdout/stderr paths in `raw-output.json`
+
+Consumers should compare normalized fields first and use raw artifacts only for debugging or audit trails.

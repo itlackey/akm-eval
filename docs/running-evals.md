@@ -2,6 +2,16 @@
 
 Use `akm-eval run` for a single pack/variant and `akm-eval matrix` for a comparison matrix.
 
+## Runner support boundaries
+
+- `locomo`: `opencode` and `openai-compatible`
+- `longmemeval`: prefer `openai-compatible`; `opencode` is partial because large prompts are passed through CLI argv
+- `beam`: `opencode` and `openai-compatible`
+- `swe-bench`: `opencode` and `openai-compatible`
+- `tau-bench`: `openai-compatible`
+- `terminal-bench`: `opencode` only in this repo
+- `akm-bench`: blocked
+
 Important constraints:
 
 - Baseline runs for real benchmarks must still use a real model provider. Compare `memory.backend: none` against `memory.backend: akm`; do not use `provider: none`.
@@ -12,6 +22,14 @@ Important constraints:
 - `swe-bench` requires Docker plus the official `swebench` Python package. The adapter generates prediction patches with the configured variant/provider, then runs `python -m swebench.harness.run_evaluation` and trusts only the harness artifacts.
 - `beam` requires a local checkout of the official `mohammadtavakoli78/BEAM` repo plus its prepared official dataset directories. akm-eval generates BEAM answer files with the configured model/provider path, then runs `python -m src.evaluation.run_evaluation` from the upstream repo and trusts only those evaluation artifacts.
 - `beam` also requires `OPENAI_API_KEY` for the upstream BEAM judge model and optionally `pack.config.evaluatorModel` to choose that judge.
+- `tau-bench` requires the official Python package plus real model credentials for both the agent model and user simulator model. In this repo, the first integration path uses `openai-compatible` config values mapped to upstream `openai` mode.
 - `terminal-bench` runs only through the official `tb run` harness. It requires `tb`, Python, Docker, and an opencode-backed provider config. If any requirement is missing, `doctor` and runtime fail clearly.
 - `terminal-bench` AKM comparison runs must set `variants[].akm.configPath` to a real AKM-specific opencode config. akm-eval will not silently reuse the baseline config for an AKM run.
 - `akm-bench` still fails fast with an explicit runtime error instead of producing proxy metrics.
+
+See also:
+
+- `README.md` for the current support matrix
+- `docs/operator-guide.md` for the consolidated operator entrypoint
+- `docs/benchmark-packs.md` for pack-by-pack constraints
+- `src/packs/*/README.md` for pack-local implementation notes

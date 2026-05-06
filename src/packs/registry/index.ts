@@ -6,11 +6,13 @@ import { sweBenchAdapter } from '../swe-bench/adapter.ts';
 import { longMemEvalAdapter } from '../longmemeval/adapter.ts';
 import { beamAdapter } from '../beam/adapter.ts';
 import { locomoAdapter } from '../locomo/adapter.ts';
+import { tauBenchAdapter } from '../tau-bench/adapter.ts';
 
 export const packRegistry: PackAdapter[] = [
   akmBenchAdapter,
   terminalBenchAdapter,
   sweBenchAdapter,
+  tauBenchAdapter,
   longMemEvalAdapter,
   beamAdapter,
   locomoAdapter,

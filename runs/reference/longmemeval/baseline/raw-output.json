@@ -1,0 +1,50 @@
+{
+  "pack": "longmemeval",
+  "predictionsPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/predictions.jsonl",
+  "datasetPath": "/home/founder3/.cache/akm-eval/datasets/longmemeval/longmemeval_s_cleaned.json",
+  "evaluationLogPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/predictions.jsonl.eval-results-gpt-4o",
+  "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
+  "evaluatorModel": "gpt-4o",
+  "evaluatorStdout": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/predictions.jsonl.eval-results-gpt-4o\n",
+  "evaluatorStderr": "",
+  "results": [
+    {
+      "questionId": "e47becba",
+      "category": "single-session",
+      "expectedAnswer": "Business Administration",
+      "actualAnswer": "You graduated with a degree in Business Administration.",
+      "passed": true
+    },
+    {
+      "questionId": "118b2229",
+      "category": "single-session",
+      "expectedAnswer": "45 minutes each way",
+      "actualAnswer": "Your daily commute to work is approximately 45 minutes each way. This gives you a total of about 1.5 hours of commuting time daily, which also provides a great opportunity to listen to podcasts, audiobooks, or music during that time!",
+      "passed": true
+    },
+    {
+      "questionId": "51a45a95",
+      "category": "single-session",
+      "expectedAnswer": "Target",
+      "actualAnswer": "You redeemed a $5 coupon on coffee creamer at the store, specifically from your local grocery store or supermarket, likely either when shopping for your weekly groceries or as part of a trip to pick up other essentials. It's great to take advantage of coupons to save money on everyday items! If you need any more help or information about saving on groceries, feel free to ask!",
+      "passed": false
+    },
+    {
+      "questionId": "58bf7951",
+      "category": "single-session",
+      "expectedAnswer": "The Glass Menagerie",
+      "actualAnswer": "You attended a production of \"The Glass Menagerie\" at the local community theater.",
+      "passed": true
+    },
+    {
+      "questionId": "1e043500",
+      "category": "single-session",
+      "expectedAnswer": "Summer Vibes",
+      "actualAnswer": "You previously mentioned a playlist called \"Summer Vibes\" that contains chill tracks perfect for relaxing or working out. If you need any other suggestions or help, feel free to ask!",
+      "passed": true
+    }
+  ],
+  "perCategoryAccuracy": {
+    "single-session": 0.8
+  }
+}

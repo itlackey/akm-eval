@@ -11,3 +11,10 @@ Requirements:
 - Docker daemon available
 - official `swebench` Python package importable as `python3 -m swebench.harness.run_evaluation` (or `python`)
 - a real model-backed agent provider in the akm-eval variant config
+
+Notes:
+
+- the adapter accepts official dataset identifiers including Lite and Verified
+- the committed OpenAI-compatible smoke/reference config targets `SWE-bench/SWE-bench_Verified`, while the opencode smoke config still targets `SWE-bench/SWE-bench_Lite`
+- `config/examples/swe-bench-smoke.json` also targets Lite today
+- both `opencode` and `openai-compatible` runners can be used for patch generation

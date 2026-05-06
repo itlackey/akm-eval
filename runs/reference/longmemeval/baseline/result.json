@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "longmemeval-baseline",
+  "pack": "longmemeval",
+  "variant": "baseline",
+  "memoryBackend": "none",
+  "status": "passed",
+  "startedAt": "2026-05-06T05:37:50.507Z",
+  "finishedAt": "2026-05-06T05:38:25.843Z",
+  "durationMs": 35336,
+  "warnings": [],
+  "notes": [
+    "LongMemEval executed 5 question(s) and scored them with the official evaluator command.",
+    "Overall accuracy: 80.0%",
+    "Evaluator model: gpt-4o"
+  ],
+  "metrics": {
+    "retrieval": {
+      "queryCount": 5,
+      "precisionAtK": 0,
+      "recallAtK": 0,
+      "mrr": 0,
+      "ndcgAtK": 0
+    },
+    "answer": {
+      "exactMatch": 0,
+      "tokenF1": 0,
+      "containsExpected": 0,
+      "judgedPass": 0.8
+    },
+    "aggregate": {
+      "score": 0.8,
+      "retrievalWeight": 0,
+      "answerWeight": 1
+    }
+  },
+  "telemetry": {
+    "promptTokens": 513695,
+    "completionTokens": 187,
+    "totalTokens": 513882,
+    "estimatedCostUsd": 0,
+    "latencyMs": 25184,
+    "logs": [
+      "pack=longmemeval",
+      "variant=baseline",
+      "memory=none",
+      "questions=5",
+      "evaluatorModel=gpt-4o"
+    ]
+  },
+  "artifacts": {
+    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/result.json",
+    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/summary.md",
+    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/raw-output.json"
+  },
+  "metadata": {
+    "packId": "longmemeval",
+    "adapter": "longmemeval",
+    "configRunId": "longmemeval-smoke",
+    "questionCount": 5,
+    "overallAccuracy": 0.8,
+    "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
+    "evaluatorModel": "gpt-4o",
+    "predictionsPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/predictions.jsonl",
+    "evaluationLogPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval/baseline/predictions.jsonl.eval-results-gpt-4o",
+    "accuracy_single-session": 0.8
+  }
+}

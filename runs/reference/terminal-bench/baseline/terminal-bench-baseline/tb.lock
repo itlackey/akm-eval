@@ -1,0 +1,70 @@
+{
+    "lockfile_version": "1.0",
+    "created_at": "2026-05-06T00:01:00.872398-05:00",
+    "invocation": {
+        "command": "tb",
+        "args": [
+            "run",
+            "--dataset",
+            "terminal-bench-core==0.1.1",
+            "--output-path",
+            "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+            "--run-id",
+            "terminal-bench-baseline",
+            "--agent-import-path",
+            "tools.terminal_bench_agent:AkmEvalOpenCodeAgent",
+            "--model",
+            "opencode/gpt-4.1-mini",
+            "--task-id",
+            "hello-world",
+            "--n-concurrent",
+            "1",
+            "--n-attempts",
+            "1",
+            "--log-level",
+            "info",
+            "--cleanup",
+            "--rebuild"
+        ]
+    },
+    "harness": {
+        "package": "terminal-bench",
+        "version": "0.2.18",
+        "is_editable_installation": false
+    },
+    "agent": {
+        "name": "akm-eval-opencode",
+        "import_path": "tools.terminal_bench_agent:AkmEvalOpenCodeAgent",
+        "model_name": "opencode/gpt-4.1-mini",
+        "extra_kwargs": {
+            "no_rebuild": false,
+            "model_name": "opencode/gpt-4.1-mini"
+        }
+    },
+    "run_config": {
+        "log_level": "info",
+        "livestream": false,
+        "n_concurrent_trials": 1,
+        "n_attempts": 1,
+        "no_rebuild": false,
+        "cleanup": true,
+        "global_timeout_multiplier": 1.0,
+        "global_agent_timeout_sec": null,
+        "global_test_timeout_sec": null
+    },
+    "dataset": {
+        "name": "terminal-bench-core",
+        "version": "0.1.1",
+        "local_path": null,
+        "task_ids": [
+            "hello-world"
+        ],
+        "registry_url": null,
+        "local_registry_path": null
+    },
+    "local_config": {
+        "output_path": "/home/founder3/code/github/itlackey/akm-eval/runs/tmp-terminal-bench-smoke",
+        "run_id": "terminal-bench-baseline",
+        "upload_results": false
+    }
+}

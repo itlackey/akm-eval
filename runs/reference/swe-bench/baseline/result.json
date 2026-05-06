@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "swe-bench-baseline",
+  "pack": "swe-bench",
+  "variant": "baseline",
+  "memoryBackend": "none",
+  "status": "warning",
+  "startedAt": "2026-05-06T05:44:27.350Z",
+  "finishedAt": "2026-05-06T05:45:23.614Z",
+  "durationMs": 56264,
+  "warnings": [
+    "1 instance(s) failed inside the official SWE-bench harness."
+  ],
+  "notes": [
+    "SWE-bench evaluated 1 instance(s) with the official Docker harness.",
+    "Resolved 0/1 instances (0.0%).",
+    "Dataset: SWE-bench/SWE-bench_Verified (test)"
+  ],
+  "metrics": {
+    "retrieval": {
+      "queryCount": 1,
+      "precisionAtK": 0,
+      "recallAtK": 0,
+      "mrr": 0,
+      "ndcgAtK": 0
+    },
+    "answer": {
+      "exactMatch": 0,
+      "tokenF1": 0,
+      "containsExpected": 0,
+      "judgedPass": 0
+    },
+    "aggregate": {
+      "score": 0,
+      "retrievalWeight": 0,
+      "answerWeight": 1
+    }
+  },
+  "telemetry": {
+    "promptTokens": 431,
+    "completionTokens": 242,
+    "totalTokens": 673,
+    "estimatedCostUsd": 0,
+    "latencyMs": 56264,
+    "logs": [
+      "pack=swe-bench",
+      "variant=baseline",
+      "memory=none",
+      "model=gpt-4o-mini",
+      "dataset=SWE-bench/SWE-bench_Verified",
+      "split=test",
+      "runId=swe-bench-baseline-1778046275154",
+      "generationLatencyMs=3389"
+    ]
+  },
+  "artifacts": {
+    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/result.json",
+    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/summary.md",
+    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/swe-bench/baseline/raw-output.json"
+  },
+  "metadata": {
+    "packId": "swe-bench",
+    "adapter": "swe-bench",
+    "configRunId": "swe-bench-smoke-openai-compatible",
+    "datasetName": "SWE-bench/SWE-bench_Verified",
+    "split": "test",
+    "model": "gpt-4o-mini",
+    "harnessPython": "python",
+    "harnessVersion": "4.1.0",
+    "dockerVersion": "29.3.1",
+    "totalInstances": 1,
+    "resolvedInstances": 0,
+    "unresolvedInstances": 0,
+    "errorInstances": 1,
+    "emptyPatchInstances": 0
+  }
+}

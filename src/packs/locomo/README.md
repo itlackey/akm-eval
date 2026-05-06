@@ -12,3 +12,6 @@ Notes:
 - The benchmark uses the official `snap-research/locomo` dataset and QA scoring rules.
 - Answer generation stays inside akm-eval so baseline and memory variants still use the configured real model provider.
 - If the bundled Python evaluator dependencies are missing, the pack fails clearly instead of falling back to proxy scoring.
+- The official dataset URL is `https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json`.
+- The bundled evaluator wrapper lives at `scripts/locomo-evaluator.py`.
+- Both `opencode` and `openai-compatible` runners are supported for answer generation.
