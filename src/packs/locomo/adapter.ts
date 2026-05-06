@@ -1,225 +1,419 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import type { AgentRunner } from '../../agent/types.ts';
 import { ArtifactStore } from '../../core/artifact-store.ts';
+import { BenchmarkRuntimeError } from '../../core/errors.ts';
 import type { RunContext } from '../../core/run-context.ts';
 import type { NormalizedRunResult } from '../../core/types.ts';
-import { scoreAnswer } from '../../memory/answer-metrics.ts';
-import { judgeAnswer } from '../../memory/judge.ts';
 import { scoreRetrieval } from '../../memory/retrieval-metrics.ts';
-import type { MemoryBackend } from '../../memory/types.ts';
+import type { MemoryBackend, MemoryDocument, MemorySearchResult, RetrievalMetrics } from '../../memory/types.ts';
 import { markdownReportForResult } from '../../reporting/markdown.ts';
-import { estimateCostUsd } from '../../telemetry/cost.ts';
-import { summarizeLatencyMs } from '../../telemetry/latency.ts';
-import { createLogBuffer } from '../../telemetry/logs.ts';
-import { computeTokenUsage } from '../../telemetry/tokens.ts';
-import { downloadDataset } from '../utils/dataset-downloader.ts';
 import type { PackAdapter } from '../types.ts';
+import { requireAgentRunner } from '../runtime-requirements.ts';
+import { loadDataset, resolveDatasetFile, type LoCoMoConversationTurn, type LoCoMoQaExample, type LoCoMoSample } from './dataset.ts';
+import { parseLocomoRawOutput } from './parse.ts';
+import { scoreLocomoAdapter } from './scorer.ts';
 
-interface LocomoSession {
-  session_id: string;
-  conversation: Array<{ role: string; content: string }>;
-  questions: Array<{
-    id: string;
-    question: string;
-    answer: string;
-    category?: string;
-  }>;
-}
-
-interface LocomoPackConfig {
+interface LoCoMoPackConfig {
   datasetPath?: string;
-  maxTasks?: number;
   smoke?: boolean;
+  maxSamples?: number;
+  maxQuestions?: number;
+  sampleIds?: string[];
+  topK?: number;
+  maxContextTokens?: number;
+  evaluatorCommand?: string;
+  predictionsPath?: string;
+  evaluationOutputPath?: string;
+  modelKey?: string;
 }
 
-const LOCOMO_DATASET_URL = 'https://huggingface.co/datasets/locuslab/locomo/resolve/main/locomo.json';
-
-async function downloadLocomoDataset(): Promise<string> {
-  try {
-    return await downloadDataset({
-      name: 'locomo',
-      url: LOCOMO_DATASET_URL,
-      targetPath: 'locomo.json',
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to download LoCoMo dataset. ` +
-      `Install instructions: https://github.com/locuslab/locomo ` +
-      `Error: ${message}`,
-    );
-  }
+interface FlattenedTurn extends MemoryDocument {
+  sessionNumber: number;
+  dateTime: string;
 }
 
-function loadDataset(datasetPath: string): LocomoSession[] {
-  if (!fs.existsSync(datasetPath)) {
-    throw new Error(`LoCoMo dataset not found at "${datasetPath}".`);
-  }
-  const raw = fs.readFileSync(datasetPath, 'utf8');
-  const data = JSON.parse(raw) as unknown;
-  if (Array.isArray(data)) {
-    return data as LocomoSession[];
-  }
-  if (isPlainObject(data) && Array.isArray(data.sessions)) {
-    return data.sessions as LocomoSession[];
-  }
-  if (isPlainObject(data) && Array.isArray(data.data)) {
-    return data.data as LocomoSession[];
-  }
-  throw new Error(`LoCoMo dataset at "${datasetPath}" has unexpected format.`);
+const DEFAULT_EVALUATOR_COMMAND = 'python3 scripts/locomo-evaluator.py';
+const DEFAULT_MAX_CONTEXT_TOKENS = 16000;
+const PER_QA_TOKEN_BUDGET = 50;
+const QA_PROMPT =
+  'Based on the above context, write an answer in the form of a short phrase for the following question. ' +
+  'Answer with exact words from the context whenever possible.\n\nQuestion: %s Short answer:';
+const QA_PROMPT_CAT_5 =
+  'Based on the above context, answer the following question.\n\nQuestion: %s Short answer:';
+const CONV_START_PROMPT =
+  'Below is a conversation between two people: %s and %s. ' +
+  'The conversation takes place over multiple days and the date of each conversation is wriiten at the beginning of the conversation.\n\n';
+
+function estimateTokens(value: string): number {
+  return Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function runCommand(command: string, cwd: string): { stdout: string; stderr: string; exitCode: number } {
+  const proc = Bun.spawnSync(['bash', '-lc', command], {
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: process.env,
+  });
+
+  return {
+    stdout: proc.stdout.toString(),
+    stderr: proc.stderr.toString(),
+    exitCode: proc.exitCode,
+  };
+}
+
+function checkPythonDeps(): { ok: boolean; detail: string } {
+  const result = spawnSync('python3', ['-c', 'import numpy, regex, nltk'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (result.status === 0) {
+    return { ok: true, detail: 'python3 with numpy, regex, and nltk available' };
+  }
+
+  const detail = (result.stderr || result.stdout || 'python3 dependency check failed').trim();
+  return { ok: false, detail };
+}
+
+function evaluatorScriptExists(): boolean {
+  return fs.existsSync(path.resolve(process.cwd(), 'scripts/locomo-evaluator.py'));
+}
+
+function getSpeakerNames(sample: LoCoMoSample): [string, string] {
+  const sessionOne = sample.conversation.session_1;
+  if (!Array.isArray(sessionOne) || sessionOne.length === 0) {
+    throw new BenchmarkRuntimeError(`LoCoMo sample ${sample.sample_id} is missing conversation.session_1`);
+  }
+
+  const speakers = [...new Set(sessionOne.map((entry) => (entry as { speaker?: string }).speaker).filter(Boolean))];
+  if (speakers.length < 2) {
+    throw new BenchmarkRuntimeError(`LoCoMo sample ${sample.sample_id} is missing the two expected speakers`);
+  }
+
+  return [String(speakers[0]), String(speakers[1])];
+}
+
+function getSessionNumbers(conversation: Record<string, unknown>): number[] {
+  return Object.keys(conversation)
+    .filter((key) => /^session_\d+$/.test(key))
+    .map((key) => Number(key.split('_')[1]))
+    .sort((left, right) => left - right);
+}
+
+function formatDialogTurn(dialog: LoCoMoConversationTurn): string {
+  let turn = `${dialog.speaker} said, "${dialog.text}"\n`;
+  if (typeof dialog.blip_caption === 'string' && dialog.blip_caption.trim().length > 0) {
+    turn += ` and shared ${dialog.blip_caption}.`;
+  }
+  turn += '\n';
+  return turn;
+}
+
+function flattenConversation(sample: LoCoMoSample): FlattenedTurn[] {
+  const turns: FlattenedTurn[] = [];
+  for (const sessionNumber of getSessionNumbers(sample.conversation)) {
+    const sessionKey = `session_${sessionNumber}`;
+    const dateKey = `session_${sessionNumber}_date_time`;
+    const session = sample.conversation[sessionKey];
+    if (!Array.isArray(session)) {
+      continue;
+    }
+    const dateTime = typeof sample.conversation[dateKey] === 'string' ? String(sample.conversation[dateKey]) : '';
+    for (const rawDialog of session) {
+      const dialog = rawDialog as LoCoMoConversationTurn;
+      turns.push({
+        id: dialog.dia_id,
+        text: `DATE: ${dateTime}\nCONVERSATION:\n${formatDialogTurn(dialog)}`,
+        metadata: {
+          sampleId: sample.sample_id,
+          sessionNumber,
+          dateTime,
+          speaker: dialog.speaker,
+        },
+        sessionNumber,
+        dateTime,
+      });
+    }
+  }
+  return turns;
+}
+
+function buildQuestionText(question: LoCoMoQaExample): string {
+  if (question.category === 2) {
+    return `${question.question} Use DATE of CONVERSATION to answer with an approximate date.`;
+  }
+  if (question.category === 5) {
+    return `${question.question} Select the correct answer: (a) Not mentioned in the conversation (b) ${question.answer}. `;
+  }
+  return question.question;
+}
+
+function normalizeCategoryFiveAnswer(answer: string, question: LoCoMoQaExample): string {
+  const normalized = answer.trim().toLowerCase();
+  if (normalized === 'a' || normalized === '(a)') {
+    return 'Not mentioned in the conversation';
+  }
+  if (normalized === 'b' || normalized === '(b)') {
+    return question.answer;
+  }
+  return answer.trim();
+}
+
+function buildConversationPrompt(sample: LoCoMoSample, question: LoCoMoQaExample, maxContextTokens: number): string {
+  const [speakerA, speakerB] = getSpeakerNames(sample);
+  const startPrompt = CONV_START_PROMPT.replace('%s', speakerA).replace('%s', speakerB);
+  const questionText = buildQuestionText(question);
+  const qaPrompt = (question.category === 5 ? QA_PROMPT_CAT_5 : QA_PROMPT).replace('%s', questionText);
+  const reservedTokens = estimateTokens(startPrompt) + estimateTokens(qaPrompt) + PER_QA_TOKEN_BUDGET;
+
+  let queryConversation = '';
+  let stop = false;
+  for (const sessionNumber of getSessionNumbers(sample.conversation)) {
+    const sessionKey = `session_${sessionNumber}`;
+    const dateKey = `session_${sessionNumber}_date_time`;
+    const session = sample.conversation[sessionKey];
+    if (!Array.isArray(session)) {
+      continue;
+    }
+
+    queryConversation += '\n\n';
+    for (const rawDialog of [...session].reverse()) {
+      const dialog = rawDialog as LoCoMoConversationTurn;
+      const turn = formatDialogTurn(dialog);
+      const candidate = `DATE: ${String(sample.conversation[dateKey] ?? '')}\nCONVERSATION:\n${turn}`;
+      if (estimateTokens(candidate) + estimateTokens(queryConversation) + reservedTokens < maxContextTokens) {
+        queryConversation = turn + queryConversation;
+      } else {
+        stop = true;
+        break;
+      }
+    }
+    queryConversation = `DATE: ${String(sample.conversation[dateKey] ?? '')}\nCONVERSATION:\n${queryConversation}`;
+    if (stop) {
+      break;
+    }
+  }
+
+  return `${startPrompt}${queryConversation}\n\n${qaPrompt}`;
+}
+
+function buildRetrievedPrompt(question: LoCoMoQaExample, retrieved: MemorySearchResult[]): string {
+  const questionText = buildQuestionText(question);
+  const qaPrompt = (question.category === 5 ? QA_PROMPT_CAT_5 : QA_PROMPT).replace('%s', questionText);
+  const context = retrieved.map((entry) => entry.text).join('\n\n');
+  return `${context}\n\n${qaPrompt}`.trim();
+}
+
+function averageRetrieval(metrics: RetrievalMetrics[]): RetrievalMetrics {
+  if (metrics.length === 0) {
+    return {
+      queryCount: 0,
+      precisionAtK: 0,
+      recallAtK: 0,
+      mrr: 0,
+      ndcgAtK: 0,
+    };
+  }
+
+  const sum = metrics.reduce(
+    (acc, entry) => ({
+      queryCount: acc.queryCount + entry.queryCount,
+      precisionAtK: acc.precisionAtK + entry.precisionAtK,
+      recallAtK: acc.recallAtK + entry.recallAtK,
+      mrr: acc.mrr + entry.mrr,
+      ndcgAtK: acc.ndcgAtK + entry.ndcgAtK,
+    }),
+    { queryCount: 0, precisionAtK: 0, recallAtK: 0, mrr: 0, ndcgAtK: 0 },
+  );
+
+  return {
+    queryCount: sum.queryCount,
+    precisionAtK: Number((sum.precisionAtK / metrics.length).toFixed(6)),
+    recallAtK: Number((sum.recallAtK / metrics.length).toFixed(6)),
+    mrr: Number((sum.mrr / metrics.length).toFixed(6)),
+    ndcgAtK: Number((sum.ndcgAtK / metrics.length).toFixed(6)),
+  };
+}
+
+function buildModelKey(input: string): string {
+  const normalized = input.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized.length > 0 ? normalized : 'akm_eval';
 }
 
 export const locomoAdapter: PackAdapter = {
   id: 'locomo',
-  description: 'LoCoMo benchmark for evaluating long-context conversational memory.',
+  description: 'LoCoMo question answering with the official dataset and authoritative QA scoring rules.',
   checkInstalled() {
-    return true;
+    const deps = checkPythonDeps();
+    return deps.ok && evaluatorScriptExists();
+  },
+  getDoctorDetail() {
+    if (!evaluatorScriptExists()) {
+      return {
+        status: 'warn' as const,
+        detail: 'LoCoMo evaluator wrapper missing at scripts/locomo-evaluator.py; pack runs are blocked until it is available.',
+      };
+    }
+
+    const deps = checkPythonDeps();
+    if (!deps.ok) {
+      return {
+        status: 'warn' as const,
+        detail:
+          'LoCoMo requires python3 plus numpy, regex, and nltk for the bundled official-score wrapper. ' +
+          `Current check failed: ${deps.detail}`,
+      };
+    }
+
+    const datasetCached = fs.existsSync(path.resolve(process.cwd(), 'datasets/locomo/locomo10.json'));
+    return {
+      status: 'ok' as const,
+      detail: datasetCached
+        ? 'official LoCoMo evaluator wrapper ready; dataset cache present at datasets/locomo/locomo10.json'
+        : 'official LoCoMo evaluator wrapper ready; dataset will download from snap-research/locomo on first run',
+    };
   },
   async run(context, memory, agent): Promise<NormalizedRunResult> {
+    const resolvedAgent = requireAgentRunner(agent, 'locomo');
     const store = new ArtifactStore(context.outputDir);
     store.ensureDir();
 
-    const packConfig = context.run.packConfig as LocomoPackConfig | undefined;
-    let datasetPath = packConfig?.datasetPath;
-    const maxTasks = packConfig?.maxTasks ?? Number.MAX_SAFE_INTEGER;
-    const smoke = packConfig?.smoke === true;
+    const packConfig = (context.run.packConfig ?? {}) as LoCoMoPackConfig;
+    const datasetPath = await resolveDatasetFile(packConfig.datasetPath);
+    const samples = await loadDataset({
+      datasetPath: packConfig.datasetPath,
+      maxSamples: packConfig.maxSamples,
+      maxQuestions: packConfig.maxQuestions,
+      sampleIds: packConfig.sampleIds,
+      smoke: packConfig.smoke,
+    });
 
-    if (!datasetPath) {
-      datasetPath = await downloadLocomoDataset();
+    const deps = checkPythonDeps();
+    if (!deps.ok) {
+      throw new BenchmarkRuntimeError(
+        'LoCoMo official evaluator wrapper requires python3 with numpy, regex, and nltk. ' +
+          `Dependency check failed: ${deps.detail}`,
+      );
     }
-
-    let sessions = loadDataset(datasetPath);
-
-    if (smoke) {
-      sessions = sessions.slice(0, 2);
+    if (!evaluatorScriptExists()) {
+      throw new BenchmarkRuntimeError(
+        'LoCoMo official evaluator wrapper is missing. Expected scripts/locomo-evaluator.py to exist.',
+      );
     }
-
-    sessions = sessions.slice(0, maxTasks);
 
     await memory.reset();
-    await memory.add(context.run.memoryDocuments ?? []);
 
-    const sessionResults: Array<{
-      sessionId: string;
-      questions: Array<{
-        questionId: string;
-        question: string;
-        expected: string;
-        actual: string;
-        passed: boolean;
-      }>;
-      accuracy: number;
-    }> = [];
+    const topK = typeof packConfig.topK === 'number' && packConfig.topK > 0 ? packConfig.topK : 5;
+    const maxContextTokens =
+      typeof packConfig.maxContextTokens === 'number' && packConfig.maxContextTokens > 0
+        ? packConfig.maxContextTokens
+        : DEFAULT_MAX_CONTEXT_TOKENS;
+    const modelKey =
+      typeof packConfig.modelKey === 'string' && packConfig.modelKey.trim().length > 0
+        ? packConfig.modelKey.trim()
+        : buildModelKey(context.run.agentModel ?? 'akm_eval');
+    const predictionKey = `${modelKey}_prediction`;
 
+    const scoredSamples: Array<Record<string, unknown>> = [];
+    const retrievalMetrics: RetrievalMetrics[] = [];
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
     let totalTokens = 0;
-    let totalAgentLatency = 0;
+    let totalLatencyMs = 0;
     let totalQuestions = 0;
-    let passedCount = 0;
 
-    for (const session of sessions) {
-      const conversationDocs = session.conversation.map((turn, idx) => ({
-        id: `${session.session_id}-turn-${idx}`,
-        text: `${turn.role}: ${turn.content}`,
-        metadata: { sessionId: session.session_id, role: turn.role },
-      }));
-
-      if (memory.id !== 'none') {
-        await memory.add(conversationDocs);
+    for (const sample of samples) {
+      const documents = flattenConversation(sample);
+      if (memory.kind !== 'disabled') {
+        await memory.reset();
+        await memory.add(documents);
       }
 
-      const questionResults: Array<{
-        questionId: string;
-        question: string;
-        expected: string;
-        actual: string;
-        passed: boolean;
-      }> = [];
+      const outputSample: Record<string, unknown> = {
+        sample_id: sample.sample_id,
+        qa: [],
+      };
 
-      for (const q of session.questions) {
-        const start = Date.now();
-        let actual = '';
-        let agentLatency = 0;
+      for (const question of sample.qa) {
+        totalQuestions += 1;
 
-        const topK = context.run.retrieval?.topK ?? 3;
-        let retrieved: string[] = [];
-        if (memory.id !== 'none') {
-          const searchResults = await memory.search({ text: q.question, topK });
-          retrieved = searchResults.map((r) => r.text);
-        }
-
-        const contextText = retrieved.length > 0
-          ? `Conversation context:\n${retrieved.join('\n')}\n\n`
-          : '';
-        const prompt = `${contextText}Question: ${q.question}\nAnswer:`;
-
-        if (agent) {
-          const agentResult = await agent.run({ prompt });
-          actual = agentResult.text;
-          agentLatency = agentResult.latencyMs;
-          if (agentResult.usage) {
-            totalPromptTokens += agentResult.usage.input;
-            totalCompletionTokens += agentResult.usage.output;
-            totalTokens += agentResult.usage.total;
-          }
-          totalAgentLatency += agentLatency;
+        let searchResults: MemorySearchResult[] = [];
+        let prompt: string;
+        if (memory.kind === 'disabled') {
+          prompt = buildConversationPrompt(sample, question, maxContextTokens);
         } else {
-          actual = context.run.answer?.actual ?? 'No agent runner available.';
+          searchResults = await memory.search({ text: question.question, topK });
+          prompt = buildRetrievedPrompt(question, searchResults);
+          retrievalMetrics.push(scoreRetrieval(question.evidence ?? [], searchResults, topK));
         }
 
-        const judge = judgeAnswer(q.answer, actual);
-        const passed = judge.passed;
-        if (passed) passedCount++;
-        totalQuestions++;
+        const agentResult = await resolvedAgent.run({ prompt });
+        if (!agentResult.ok) {
+          throw new BenchmarkRuntimeError(
+            `locomo agent run failed for ${sample.sample_id}: ${question.question}. ${agentResult.error ?? 'unknown error'}`,
+          );
+        }
 
-        questionResults.push({
-          questionId: q.id,
-          question: q.question,
-          expected: q.answer,
-          actual,
-          passed,
-        });
+        totalPromptTokens += agentResult.usage?.input ?? 0;
+        totalCompletionTokens += agentResult.usage?.output ?? 0;
+        totalTokens += agentResult.usage?.total ?? 0;
+        totalLatencyMs += agentResult.latencyMs;
+
+        const prediction = question.category === 5 ? normalizeCategoryFiveAnswer(agentResult.text, question) : agentResult.text.trim();
+        const outputQuestion: Record<string, unknown> = JSON.parse(JSON.stringify(question));
+        outputQuestion[predictionKey] = prediction;
+        if (memory.kind !== 'disabled') {
+          outputQuestion[`${predictionKey}_context`] = searchResults.map((entry) => entry.id);
+        }
+        (outputSample.qa as unknown[]).push(outputQuestion);
       }
 
-      const accuracy = session.questions.length > 0
-        ? questionResults.filter((r) => r.passed).length / session.questions.length
-        : 0;
-
-      sessionResults.push({
-        sessionId: session.session_id,
-        questions: questionResults,
-        accuracy: Number(accuracy.toFixed(4)),
-      });
+      scoredSamples.push(outputSample);
     }
 
-    const successRate = totalQuestions > 0 ? passedCount / totalQuestions : 0;
+    const predictionsPath = path.resolve(
+      context.outputDir,
+      typeof packConfig.predictionsPath === 'string' ? packConfig.predictionsPath : 'locomo-predictions.json',
+    );
+    fs.writeFileSync(predictionsPath, `${JSON.stringify(scoredSamples, null, 2)}\n`, 'utf8');
 
-    const retrievalQuery = context.run.retrieval?.query ?? `${context.run.pack} ${context.run.variant}`;
-    const topK = context.run.retrieval?.topK ?? 3;
-    const searchResults = await memory.search({ text: retrievalQuery, topK });
-    const retrieval = scoreRetrieval(context.run.retrieval?.relevantIds ?? [], searchResults, topK);
+    const evaluationOutputPath = path.resolve(
+      context.outputDir,
+      typeof packConfig.evaluationOutputPath === 'string' ? packConfig.evaluationOutputPath : 'locomo-evaluation.json',
+    );
+    const evaluatorCommand =
+      typeof packConfig.evaluatorCommand === 'string' && packConfig.evaluatorCommand.trim().length > 0
+        ? packConfig.evaluatorCommand.trim()
+        : DEFAULT_EVALUATOR_COMMAND;
+    const evalResult = runCommand(
+      `${evaluatorCommand} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)} ${JSON.stringify(evaluationOutputPath)} ${JSON.stringify(modelKey)} ${JSON.stringify(predictionKey)}`,
+      context.rootDir,
+    );
+    if (evalResult.exitCode !== 0) {
+      throw new BenchmarkRuntimeError(
+        `locomo official evaluator failed with exit code ${evalResult.exitCode}. stderr: ${evalResult.stderr || '(empty)'}`,
+      );
+    }
 
-    const allExpected = sessions.flatMap((s) => s.questions.map((q) => q.answer)).join('\n');
-    const allActual = sessionResults.flatMap((s) => s.questions.map((q) => q.actual)).join('\n');
-    const answer = scoreAnswer(allExpected, allActual);
-    const judge = judgeAnswer(allExpected, allActual);
-    answer.judgedPass = judge.passed ? 1 : 0;
+    if (!fs.existsSync(evaluationOutputPath)) {
+      throw new BenchmarkRuntimeError(
+        `locomo official evaluator did not create the expected output file: ${evaluationOutputPath}`,
+      );
+    }
+
+    const parsed = parseLocomoRawOutput(JSON.parse(fs.readFileSync(evaluationOutputPath, 'utf8')));
+    const answerMetrics = scoreLocomoAdapter(parsed);
+    const retrieval = averageRetrieval(retrievalMetrics);
 
     const startedAt = context.startedAt.toISOString();
     const finishedAt = new Date().toISOString();
     const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
-
-    const fallbackTokenUsage = computeTokenUsage({ prompt: retrievalQuery, completion: allActual });
-
-    const warnings: string[] = [];
-    if (sessions.length === 0) {
-      warnings.push('No sessions loaded from LoCoMo dataset.');
-    }
+    const score = Number(parsed.overall_accuracy.toFixed(6));
 
     const result: NormalizedRunResult = {
       schemaVersion: '1.0',
@@ -227,39 +421,42 @@ export const locomoAdapter: PackAdapter = {
       pack: context.run.pack,
       variant: context.run.variant,
       memoryBackend: memory.id,
-      status: warnings.length > 0 ? 'warning' : passedCount > 0 ? 'passed' : 'failed',
+      status: totalQuestions === 0 ? 'warning' : score > 0 ? 'passed' : 'failed',
       startedAt,
       finishedAt,
       durationMs,
-      warnings,
+      warnings: [],
       notes: [
-        `LoCoMo executed ${sessions.length} session(s) with ${totalQuestions} question(s) from official dataset.`,
-        `Passed: ${passedCount}/${totalQuestions}`,
-        `Agent runner: ${agent ? 'available' : 'none'}`,
+        `LoCoMo executed ${parsed.question_count} question(s) from ${samples.length} sample(s).`,
+        `Official LoCoMo QA score: ${(parsed.overall_accuracy * 100).toFixed(1)}%`,
+        memory.kind === 'disabled'
+          ? `Conversation-only mode with approximate truncation budget ${maxContextTokens} tokens.`
+          : `Memory-backed retrieval mode using topK=${topK}.`,
       ],
       metrics: {
         retrieval,
-        answer,
+        answer: answerMetrics,
         aggregate: {
-          score: Number(successRate.toFixed(6)),
-          retrievalWeight: 0.5,
-          answerWeight: 0.5,
+          score,
+          retrievalWeight: 0,
+          answerWeight: 1,
         },
       },
       telemetry: {
-        promptTokens: agent ? totalPromptTokens : fallbackTokenUsage.promptTokens,
-        completionTokens: agent ? totalCompletionTokens : fallbackTokenUsage.completionTokens,
-        totalTokens: agent ? totalTokens : fallbackTokenUsage.totalTokens,
-        estimatedCostUsd: estimateCostUsd(agent ? totalTokens : fallbackTokenUsage.totalTokens),
-        latencyMs: summarizeLatencyMs(agent ? totalAgentLatency : durationMs),
-        logs: createLogBuffer([
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
+        totalTokens,
+        estimatedCostUsd: 0,
+        latencyMs: totalLatencyMs || durationMs,
+        logs: [
           `pack=${context.run.pack}`,
           `variant=${context.run.variant}`,
           `memory=${memory.id}`,
-          `sessions=${sessions.length}`,
-          `questions=${totalQuestions}`,
-          `passed=${passedCount}`,
-        ]),
+          `samples=${samples.length}`,
+          `questions=${parsed.question_count}`,
+          `datasetPath=${datasetPath}`,
+          `evaluatorCommand=${evaluatorCommand}`,
+        ],
       },
       artifacts: {
         resultPath: '',
@@ -268,26 +465,34 @@ export const locomoAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
-        sessionCount: sessions.length,
-        questionCount: totalQuestions,
-        passedCount,
-        successRate: Number(successRate.toFixed(4)),
-        ...Object.fromEntries(
-          sessionResults.map((s) => [`accuracy_${s.sessionId}`, s.accuracy]),
-        ),
+        questionCount: parsed.question_count,
+        sampleCount: samples.length,
+        overallAccuracy: score,
+        modelKey,
+        predictionKey,
+        topK,
+        maxContextTokens,
+        datasetPath,
+        predictionsPath,
+        evaluationOutputPath,
+        ...Object.fromEntries(Object.entries(parsed.category_accuracy).map(([key, value]) => [`accuracy_category_${key}`, value])),
       },
     };
 
     result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
       pack: 'locomo',
-      memory: memory.id,
-      sessions: sessionResults,
-      searchResults,
-      judge,
+      datasetPath,
+      predictionsPath,
+      evaluationOutputPath,
+      evaluatorCommand,
+      evaluatorStdout: evalResult.stdout,
+      evaluatorStderr: evalResult.stderr,
+      parsed,
     });
-    result.artifacts.resultPath = store.writeJson('result.json', result);
-    result.artifacts.summaryPath = store.writeText('summary.md', markdownReportForResult(result));
-
+    result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
+    result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
+    store.writeJson('result.json', result);
+    store.writeText('summary.md', markdownReportForResult(result));
     return result;
   },
 };

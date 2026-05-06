@@ -1,51 +1,27 @@
 # akm-eval
 
-Evaluate AI memory backends across benchmark packs. Run a pack against a backend, compare results
-across runs, and generate reports — all from the CLI.
+AKM Eval is a benchmark harness for measuring AKM impact on real eval packs.
 
-**Supported packs:** akm-bench, terminal-bench, swe-bench, longmemeval, beam, locomo  
-**Supported backends:** none, akm, raw-vector, mem0, openviking, zep
+Trust policy:
 
-## Install
+- No benchmark pack should silently fall back to synthetic or heuristic success metrics.
+- If an official harness or evaluator is not wired, the pack must fail clearly.
+- Baseline and AKM variants should both use real model providers; the comparison axis is memory behavior, not fake vs real generation.
+
+## Quick start
 
 ```bash
 bun install
-bun src/cli.ts doctor   # verify your environment
+bun test
+bun run check:boundary
+bun src/cli.ts doctor
 ```
 
-## Run an eval
+## Terminal-Bench
 
-```bash
-# single pack + variant
-bun src/cli.ts run --pack <pack-id> --variant <variant-id> --config config/examples/memory-comparison.json
+`terminal-bench` is executed only through the official `tb` harness.
 
-# full comparison matrix from config
-bun src/cli.ts matrix --config config/examples/memory-comparison.json
-```
-
-## Compare and report
-
-```bash
-# compare two result folders
-bun src/cli.ts compare --baseline runs/baseline --candidate runs/candidate
-
-# report on a single result folder
-bun src/cli.ts report --run runs/my-result
-```
-
-## Explore available packs and variants
-
-```bash
-bun src/cli.ts list packs
-bun src/cli.ts list variants
-```
-
-## Development
-
-```bash
-bun test                 # run tests
-bun run check:boundary   # verify import boundaries
-bun run lint             # lint source
-```
-
-See [`docs/`](docs/) for architecture details, result schema, and interpreting results.
+- Install the official harness with `uv tool install terminal-bench` or `pip install terminal-bench`.
+- Ensure `Docker` and `python3` are available in `PATH`.
+- Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
+- For AKM variants, set `variants[].akm.configPath` to an AKM-specific opencode config. The repo fails clearly instead of pretending the baseline config enables AKM.

@@ -1,364 +1,699 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import type { AgentRunner } from '../../agent/types.ts';
 import { ArtifactStore } from '../../core/artifact-store.ts';
+import { BenchmarkRuntimeError } from '../../core/errors.ts';
+import { runProcess } from '../../core/process.ts';
 import type { RunContext } from '../../core/run-context.ts';
 import type { NormalizedRunResult } from '../../core/types.ts';
-import { scoreAnswer } from '../../memory/answer-metrics.ts';
-import { judgeAnswer } from '../../memory/judge.ts';
-import { scoreRetrieval } from '../../memory/retrieval-metrics.ts';
-import type { MemoryBackend } from '../../memory/types.ts';
+import { loadOpencodeConfig, materializeOpencodeConfig, selectProviderForModel } from '../../opencode-config.ts';
 import { markdownReportForResult } from '../../reporting/markdown.ts';
-import { estimateCostUsd } from '../../telemetry/cost.ts';
-import { summarizeLatencyMs } from '../../telemetry/latency.ts';
-import { createLogBuffer } from '../../telemetry/logs.ts';
-import { computeTokenUsage } from '../../telemetry/tokens.ts';
-import { downloadDataset } from '../utils/dataset-downloader.ts';
+import type { MemoryBackend } from '../../memory/types.ts';
 import type { PackAdapter } from '../types.ts';
-
-export interface TerminalBenchTask {
-  id: string;
-  description: string;
-  setup?: string[];
-  expected?: string;
-  verifier?: string;
-  difficulty?: string;
-  category?: string;
-}
+import { parseTerminalBenchRawOutput } from './parse.ts';
+import { scoreTerminalBenchAdapter } from './scorer.ts';
 
 interface TerminalBenchPackConfig {
+  dataset?: string;
+  datasetName?: string;
+  datasetVersion?: string;
   datasetPath?: string;
+  datasetConfig?: string;
+  localRegistryPath?: string;
+  registryUrl?: string;
+  taskIds?: string[];
+  excludeTaskIds?: string[];
   maxTasks?: number;
-  difficulty?: string;
   smoke?: boolean;
+  difficulty?: string;
+  nConcurrent?: number;
+  nAttempts?: number;
+  globalTimeoutMultiplier?: number;
+  globalAgentTimeoutSec?: number;
+  globalTestTimeoutSec?: number;
+  noRebuild?: boolean;
+  cleanup?: boolean;
+  livestream?: boolean;
+  logLevel?: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+  agentImportPath?: string;
+  agentKwargs?: Record<string, string | number | boolean>;
 }
 
-const OFFICIAL_DATASET_URL = 'https://raw.githubusercontent.com/evalplus/terminal-bench/main/tasks.jsonl';
+interface TerminalBenchRuntime {
+  tbCommand: string | null;
+  tbVersion: string | null;
+  pythonCommand: string | null;
+  dockerVersion: string | null;
+  problems: string[];
+}
 
-async function downloadOfficialDataset(): Promise<string> {
-  try {
-    return await downloadDataset({
-      name: 'terminal-bench',
-      url: OFFICIAL_DATASET_URL,
-      targetPath: 'tasks.jsonl',
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to download Terminal-Bench dataset. ` +
-      `Install instructions: https://github.com/evalplus/terminal-bench ` +
-      `Error: ${message}`,
+interface TerminalBenchTrialResult {
+  trial_name: string;
+  task_id: string;
+  instruction: string;
+  is_resolved: boolean | null;
+  failure_mode: string;
+  parser_results?: Record<string, string> | null;
+  recording_path?: string | null;
+  total_input_tokens?: number | null;
+  total_output_tokens?: number | null;
+  trial_started_at?: string | null;
+  trial_ended_at?: string | null;
+  agent_started_at?: string | null;
+  agent_ended_at?: string | null;
+  test_started_at?: string | null;
+  test_ended_at?: string | null;
+}
+
+interface TerminalBenchBenchmarkResults {
+  results: TerminalBenchTrialResult[];
+  n_resolved: number;
+  n_unresolved: number;
+  accuracy: number;
+  pass_at_k: Record<string, number>;
+}
+
+interface TerminalBenchRunMetadata {
+  run_id: string;
+  uuid: string;
+  dataset_name?: string | null;
+  dataset_version?: string | null;
+  dataset_path?: string | null;
+  output_path: string;
+  agent_name: string;
+  model_name?: string | null;
+  n_concurrent_trials: number;
+  n_attempts: number;
+  start_time?: string | null;
+  end_time?: string | null;
+  agent_kwargs?: Record<string, unknown> | null;
+}
+
+interface ParsedTerminalBenchArtifacts {
+  benchmarkResults: TerminalBenchBenchmarkResults;
+  runMetadata: TerminalBenchRunMetadata;
+  taskSummaries: Array<{
+    taskId: string;
+    attempts: number;
+    resolvedAttempts: number;
+    unresolvedAttempts: number;
+    failureModes: string[];
+    parserResultKeys: string[];
+    trialDirectories: string[];
+    commandLogs: string[];
+    paneLogs: string[];
+    resultFiles: string[];
+  }>;
+}
+
+const DEFAULT_TERMINAL_BENCH_DATASET = 'terminal-bench-core==0.1.1';
+const TERMINAL_BENCH_AGENT_MODULE = 'tools.terminal_bench_agent';
+const TERMINAL_BENCH_AGENT_CLASS = 'AkmEvalOpenCodeAgent';
+const TERMINAL_BENCH_AGENT_IMPORT_PATH = `${TERMINAL_BENCH_AGENT_MODULE}:${TERMINAL_BENCH_AGENT_CLASS}`;
+
+function inspectTerminalBenchRuntime(rootDir: string): TerminalBenchRuntime {
+  const tbResult = runProcess('tb', ['--help'], rootDir);
+  const python3Version = runProcess('python3', ['--version'], rootDir);
+  const pythonVersion = runProcess('python', ['--version'], rootDir);
+  const dockerResult = runProcess('docker', ['--version'], rootDir);
+
+  const problems: string[] = [];
+  const tbCommand = tbResult.success ? 'tb' : null;
+  const pythonCommand = python3Version.success ? 'python3' : pythonVersion.success ? 'python' : null;
+
+  if (!tbCommand) {
+    problems.push('Terminal-Bench CLI `tb` not found in PATH. Install the official harness with `uv tool install terminal-bench` or `pip install terminal-bench`.');
+  }
+
+  if (!pythonCommand) {
+    problems.push('Python runtime not found in PATH. Terminal-Bench requires Python 3.12+.');
+  }
+
+  if (!dockerResult.success) {
+    problems.push('Docker not found in PATH. Terminal-Bench requires Docker.');
+  }
+
+  return {
+    tbCommand,
+    tbVersion: tbCommand ? (runProcess(tbCommand, ['--version'], rootDir).stdout.trim().split('\n')[0] ?? 'installed') : null,
+    pythonCommand,
+    dockerVersion: dockerResult.success ? dockerResult.stdout.trim().split('\n')[0] ?? 'installed' : null,
+    problems,
+  };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function resolvePackConfig(context: RunContext): TerminalBenchPackConfig {
+  const packConfig = (context.run.packConfig ?? {}) as TerminalBenchPackConfig;
+  return {
+    ...packConfig,
+    nConcurrent:
+      typeof packConfig.nConcurrent === 'number' && packConfig.nConcurrent > 0
+        ? Math.floor(packConfig.nConcurrent)
+        : 1,
+    nAttempts:
+      typeof packConfig.nAttempts === 'number' && packConfig.nAttempts > 0
+        ? Math.floor(packConfig.nAttempts)
+        : 1,
+    cleanup: packConfig.cleanup ?? true,
+    noRebuild: packConfig.noRebuild ?? false,
+    livestream: packConfig.livestream ?? false,
+    logLevel: packConfig.logLevel ?? 'info',
+  };
+}
+
+function resolveDatasetSelector(packConfig: TerminalBenchPackConfig): string | null {
+  if (isNonEmptyString(packConfig.dataset)) {
+    return packConfig.dataset.trim();
+  }
+
+  if (isNonEmptyString(packConfig.datasetName)) {
+    const version = isNonEmptyString(packConfig.datasetVersion) ? packConfig.datasetVersion.trim() : 'head';
+    return `${packConfig.datasetName.trim()}==${version}`;
+  }
+
+  if (isNonEmptyString(packConfig.datasetPath) || isNonEmptyString(packConfig.datasetConfig)) {
+    return null;
+  }
+
+  return DEFAULT_TERMINAL_BENCH_DATASET;
+}
+
+function resolveTaskSelection(packConfig: TerminalBenchPackConfig): string[] | undefined {
+  if (Array.isArray(packConfig.taskIds) && packConfig.taskIds.length > 0) {
+    return packConfig.taskIds.filter((entry): entry is string => isNonEmptyString(entry)).map((entry) => entry.trim());
+  }
+
+  if (packConfig.smoke) {
+    return ['hello-world'];
+  }
+
+  return undefined;
+}
+
+function buildAgentKwargEntries(packConfig: TerminalBenchPackConfig): string[] {
+  const entries: string[] = [];
+  if (!packConfig.agentKwargs) {
+    return entries;
+  }
+
+  for (const [key, value] of Object.entries(packConfig.agentKwargs)) {
+    entries.push(`${key}=${String(value)}`);
+  }
+  return entries;
+}
+
+function writeTerminalBenchOpencodeConfig(context: RunContext): { configDir: string; configPath: string; configContent: string } {
+  const provider = context.run.agentProviderConfig;
+  const model = context.run.agentModel ?? provider?.defaultModel;
+  if (!provider || provider.type !== 'opencode' || !model) {
+    throw new BenchmarkRuntimeError(
+      'terminal-bench currently requires an opencode-backed provider so the official harness can run the official Terminal-Bench opencode installed-agent.',
     );
   }
-}
 
-function loadTasks(datasetPath: string): TerminalBenchTask[] {
-  if (!fs.existsSync(datasetPath)) {
-    throw new Error(`Terminal-Bench dataset not found at "${datasetPath}".`);
+  const sourceConfigPath = context.run.akmEnabled ? context.run.akmConfigPath ?? provider.configPath : provider.configPath;
+  if (!sourceConfigPath) {
+    throw new BenchmarkRuntimeError('terminal-bench opencode provider requires providers.<id>.configPath pointing at a standard opencode config file.');
+  }
+  if (context.run.akmEnabled && !context.run.akmConfigPath) {
+    throw new BenchmarkRuntimeError(
+      'terminal-bench AKM variants require variants[].akm.configPath so the official harness runs against a concrete AKM-specific opencode provider config instead of silently reusing the baseline config.',
+    );
   }
 
-  const tasks: TerminalBenchTask[] = [];
-  const content = fs.readFileSync(datasetPath, 'utf8');
+  const loaded = loadOpencodeConfig(path.resolve(sourceConfigPath));
+  const selected = selectProviderForModel(loaded, model);
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akm-eval-terminal-bench-opencode-'));
+  materializeOpencodeConfig(configDir, selected, model);
+  const configPath = path.join(configDir, 'opencode.json');
+  return {
+    configDir,
+    configPath,
+    configContent: fs.readFileSync(configPath, 'utf8'),
+  };
+}
 
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      tasks.push(JSON.parse(trimmed) as TerminalBenchTask);
-    } catch {
-      // skip malformed lines
+function collectTrialArtifacts(runDirectory: string, taskId: string): {
+  attempts: number;
+  resolvedAttempts: number;
+  unresolvedAttempts: number;
+  failureModes: string[];
+  parserResultKeys: string[];
+  trialDirectories: string[];
+  commandLogs: string[];
+  paneLogs: string[];
+  resultFiles: string[];
+} {
+  const taskDir = path.resolve(runDirectory, taskId);
+  if (!fs.existsSync(taskDir) || !fs.statSync(taskDir).isDirectory()) {
+    return {
+      attempts: 0,
+      resolvedAttempts: 0,
+      unresolvedAttempts: 0,
+      failureModes: [],
+      parserResultKeys: [],
+      trialDirectories: [],
+      commandLogs: [],
+      paneLogs: [],
+      resultFiles: [],
+    };
+  }
+
+  const trialDirectories = fs
+    .readdirSync(taskDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.resolve(taskDir, entry.name))
+    .sort();
+
+  const failureModes = new Set<string>();
+  const parserResultKeys = new Set<string>();
+  const commandLogs: string[] = [];
+  const paneLogs: string[] = [];
+  const resultFiles: string[] = [];
+  let resolvedAttempts = 0;
+  let unresolvedAttempts = 0;
+
+  for (const trialDir of trialDirectories) {
+    const resultFile = path.resolve(trialDir, 'results.json');
+    if (fs.existsSync(resultFile)) {
+      resultFiles.push(resultFile);
+      const parsed = JSON.parse(fs.readFileSync(resultFile, 'utf8')) as TerminalBenchTrialResult;
+      if (parsed.is_resolved) {
+        resolvedAttempts += 1;
+      } else {
+        unresolvedAttempts += 1;
+      }
+      if (isNonEmptyString(parsed.failure_mode)) {
+        failureModes.add(parsed.failure_mode);
+      }
+      if (parsed.parser_results) {
+        for (const key of Object.keys(parsed.parser_results)) {
+          parserResultKeys.add(key);
+        }
+      }
+    }
+
+    const commandsPath = path.resolve(trialDir, 'commands.txt');
+    if (fs.existsSync(commandsPath)) {
+      commandLogs.push(commandsPath);
+    }
+
+    const panesDir = path.resolve(trialDir, 'panes');
+    if (fs.existsSync(panesDir) && fs.statSync(panesDir).isDirectory()) {
+      for (const paneFile of fs.readdirSync(panesDir)) {
+        paneLogs.push(path.resolve(panesDir, paneFile));
+      }
     }
   }
 
-  return tasks;
+  return {
+    attempts: trialDirectories.length,
+    resolvedAttempts,
+    unresolvedAttempts,
+    failureModes: [...failureModes].sort(),
+    parserResultKeys: [...parserResultKeys].sort(),
+    trialDirectories,
+    commandLogs,
+    paneLogs: paneLogs.sort(),
+    resultFiles,
+  };
 }
 
-async function execCommand(
-  cwd: string,
-  command: string,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn(['bash', '-c', command], {
-    cwd,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+function parseTerminalBenchArtifacts(runDirectory: string): ParsedTerminalBenchArtifacts {
+  const resultsPath = path.resolve(runDirectory, 'results.json');
+  const runMetadataPath = path.resolve(runDirectory, 'run_metadata.json');
 
-  await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = proc.exitCode ?? 1;
-
-  return { stdout, stderr, exitCode };
-}
-
-function extractBashBlocks(text: string): string[] {
-  const blocks: string[] = [];
-  const regex = /```(?:bash|sh|shell)\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    const block = match[1].trim();
-    if (block) blocks.push(block);
+  if (!fs.existsSync(resultsPath)) {
+    throw new BenchmarkRuntimeError(`official Terminal-Bench run finished without results.json at ${resultsPath}`);
+  }
+  if (!fs.existsSync(runMetadataPath)) {
+    throw new BenchmarkRuntimeError(`official Terminal-Bench run finished without run_metadata.json at ${runMetadataPath}`);
   }
 
-  // Fallback: look for command-like lines if no code blocks found
-  if (blocks.length === 0) {
-    const lines = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => {
-        if (l.length === 0) return false;
-        if (l.startsWith('#')) return false;
-        if (l.startsWith('-')) return false;
-        if (l.startsWith('*')) return false;
-        if (l.startsWith('>')) return false;
-        if (l.toLowerCase().startsWith('task:')) return false;
-        if (l.toLowerCase().startsWith('workspace')) return false;
-        if (l.toLowerCase().startsWith('provide')) return false;
-        return true;
-      });
-    const commands = lines.map((l) => l.replace(/^\$\s*/, '')).filter((l) => l.length > 0);
-    if (commands.length > 0) {
-      blocks.push(commands.join('\n'));
+  const benchmarkResults = JSON.parse(fs.readFileSync(resultsPath, 'utf8')) as TerminalBenchBenchmarkResults;
+  const runMetadata = JSON.parse(fs.readFileSync(runMetadataPath, 'utf8')) as TerminalBenchRunMetadata;
+  const taskIds = Array.from(new Set((benchmarkResults.results ?? []).map((entry) => entry.task_id))).sort();
+  const taskSummaries = taskIds.map((taskId) => ({ taskId, ...collectTrialArtifacts(runDirectory, taskId) }));
+  return parseTerminalBenchRawOutput({ benchmarkResults, runMetadata, taskSummaries });
+}
+
+function buildHarnessCommand(
+  runtime: TerminalBenchRuntime,
+  context: RunContext,
+  packConfig: TerminalBenchPackConfig,
+  runDirectory: string,
+): { args: string[]; selectedTasks: string[] | undefined } {
+  if (!runtime.tbCommand) {
+    throw new BenchmarkRuntimeError('official Terminal-Bench harness is not installed.');
+  }
+
+  const datasetSelector = resolveDatasetSelector(packConfig);
+  const selectedTasks = resolveTaskSelection(packConfig);
+  const args = ['run'];
+
+  if (datasetSelector) {
+    args.push('--dataset', datasetSelector);
+  }
+  if (isNonEmptyString(packConfig.datasetPath)) {
+    args.push('--dataset-path', path.resolve(context.rootDir, packConfig.datasetPath));
+  }
+  if (isNonEmptyString(packConfig.datasetConfig)) {
+    args.push('--dataset-config', path.resolve(context.rootDir, packConfig.datasetConfig));
+  }
+  if (isNonEmptyString(packConfig.registryUrl)) {
+    args.push('--registry-url', packConfig.registryUrl);
+  }
+  if (isNonEmptyString(packConfig.localRegistryPath)) {
+    args.push('--local-registry-path', path.resolve(context.rootDir, packConfig.localRegistryPath));
+  }
+
+  args.push('--output-path', context.outputDir, '--run-id', path.basename(runDirectory));
+
+  if (isNonEmptyString(packConfig.agentImportPath)) {
+    args.push('--agent-import-path', packConfig.agentImportPath);
+  } else {
+    args.push('--agent-import-path', TERMINAL_BENCH_AGENT_IMPORT_PATH);
+  }
+
+  const model = context.run.agentModel ?? context.run.agentProviderConfig?.defaultModel;
+  if (!model) {
+    throw new BenchmarkRuntimeError('terminal-bench requires a configured model. Set variant.agent.model or providers.<id>.defaultModel.');
+  }
+  args.push('--model', model);
+
+  if (selectedTasks) {
+    for (const taskId of selectedTasks) {
+      args.push('--task-id', taskId);
     }
   }
 
-  return blocks;
+  if (Array.isArray(packConfig.excludeTaskIds)) {
+    for (const taskId of packConfig.excludeTaskIds.filter((entry): entry is string => isNonEmptyString(entry))) {
+      args.push('--exclude-task-id', taskId.trim());
+    }
+  }
+
+  if (typeof packConfig.maxTasks === 'number' && packConfig.maxTasks > 0) {
+    args.push('--n-tasks', String(Math.floor(packConfig.maxTasks)));
+  }
+
+  args.push('--n-concurrent', String(packConfig.nConcurrent ?? 1));
+  args.push('--n-attempts', String(packConfig.nAttempts ?? 1));
+  args.push('--log-level', packConfig.logLevel ?? 'info');
+  args.push(packConfig.cleanup === false ? '--no-cleanup' : '--cleanup');
+  args.push(packConfig.noRebuild === true ? '--no-rebuild' : '--rebuild');
+  if (packConfig.livestream) {
+    args.push('--livestream');
+  }
+  if (typeof packConfig.globalTimeoutMultiplier === 'number' && Number.isFinite(packConfig.globalTimeoutMultiplier)) {
+    args.push('--global-timeout-multiplier', String(packConfig.globalTimeoutMultiplier));
+  }
+  if (typeof packConfig.globalAgentTimeoutSec === 'number' && Number.isFinite(packConfig.globalAgentTimeoutSec)) {
+    args.push('--global-agent-timeout-sec', String(packConfig.globalAgentTimeoutSec));
+  }
+  if (typeof packConfig.globalTestTimeoutSec === 'number' && Number.isFinite(packConfig.globalTestTimeoutSec)) {
+    args.push('--global-test-timeout-sec', String(packConfig.globalTestTimeoutSec));
+  }
+
+  const agentKwargs = buildAgentKwargEntries(packConfig);
+  for (const kwarg of agentKwargs) {
+    args.push('--agent-kwarg', kwarg);
+  }
+
+  return { args, selectedTasks };
+}
+
+function buildHarnessEnvironment(
+  context: RunContext,
+  runtime: TerminalBenchRuntime,
+  opencodeConfigContent: string,
+): Record<string, string> {
+  const provider = context.run.agentProviderConfig;
+  const model = context.run.agentModel ?? provider?.defaultModel;
+  if (!provider || provider.type !== 'opencode' || !model) {
+    throw new BenchmarkRuntimeError('terminal-bench currently only supports opencode-backed providers in this repo.');
+  }
+
+  const configPath = provider.configPath;
+  if (!configPath) {
+    throw new BenchmarkRuntimeError('terminal-bench opencode provider requires configPath.');
+  }
+
+  const loaded = loadOpencodeConfig(path.resolve(configPath));
+  const envRefs = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      const match = value.match(/^\{env:([A-Z_][A-Z0-9_]*)\}$/);
+      if (match) {
+        envRefs.add(match[1]);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        visit(entry);
+      }
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const child of Object.values(value as Record<string, unknown>)) {
+        visit(child);
+      }
+    }
+  };
+  visit(loaded.provider);
+
+  const env: Record<string, string> = { ...(process.env as Record<string, string>) };
+  const forwardedEnvNames = new Set<string>(envRefs);
+  for (const key of envRefs) {
+    const value = process.env[key];
+    if (value) {
+      env[key] = value;
+    }
+  }
+
+  env.PYTHONPATH = [context.rootDir, env.PYTHONPATH].filter(Boolean).join(path.delimiter);
+  env.AKM_EVAL_TERMINAL_BENCH_OPENCODE_CONFIG_CONTENT = opencodeConfigContent;
+  env.AKM_EVAL_TERMINAL_BENCH_MODEL = model;
+  env.AKM_EVAL_TERMINAL_BENCH_VARIANT = context.run.variant;
+  env.AKM_EVAL_TERMINAL_BENCH_MEMORY_BACKEND = context.run.memoryBackend ?? 'none';
+  env.AKM_EVAL_TERMINAL_BENCH_AKM_ENABLED = context.run.akmEnabled ? '1' : '0';
+
+  if (context.run.agentEnvironment) {
+    Object.assign(env, context.run.agentEnvironment);
+    Object.keys(context.run.agentEnvironment).forEach((key) => forwardedEnvNames.add(key));
+  }
+  if (context.run.akmEnvironment) {
+    Object.assign(env, context.run.akmEnvironment);
+    Object.keys(context.run.akmEnvironment).forEach((key) => forwardedEnvNames.add(key));
+  }
+
+  if (context.run.akmEnabled && isNonEmptyString(context.run.akmCommand)) {
+    env.AKM_EVAL_TERMINAL_BENCH_AKM_COMMAND = context.run.akmCommand;
+  }
+  if (isNonEmptyString(context.run.akmConfigPath)) {
+    env.AKM_EVAL_TERMINAL_BENCH_AKM_CONFIG_PATH = path.resolve(context.rootDir, context.run.akmConfigPath);
+  }
+  if (runtime.pythonCommand) {
+    env.AKM_EVAL_TERMINAL_BENCH_PYTHON = runtime.pythonCommand;
+  }
+  env.AKM_EVAL_TERMINAL_BENCH_FORWARD_ENV_NAMES = [...forwardedEnvNames].sort().join(',');
+
+  return env;
 }
 
 export const terminalBenchAdapter: PackAdapter = {
   id: 'terminal-bench',
-  description: 'Terminal-Bench evaluates AI agents on real command-line tasks from the official benchmark.',
+  description: 'Official Terminal-Bench harness executed through the `tb` CLI with authoritative result ingestion.',
+  optionalDependency: 'terminal-bench',
   checkInstalled() {
-    return true;
+    return inspectTerminalBenchRuntime(process.cwd()).problems.length === 0;
   },
-  async run(
-    context: RunContext,
-    memory: MemoryBackend,
-    agent?: AgentRunner,
-  ): Promise<NormalizedRunResult> {
+  getDoctorDetail() {
+    const runtime = inspectTerminalBenchRuntime(process.cwd());
+    if (runtime.problems.length > 0) {
+      return {
+        status: 'warn' as const,
+        detail: runtime.problems.join(' '),
+      };
+    }
+
+    return {
+      status: 'ok' as const,
+      detail: `official Terminal-Bench harness available via ${runtime.tbCommand} (${runtime.tbVersion}); Docker ${runtime.dockerVersion}; Python ${runtime.pythonCommand}`,
+    };
+  },
+  async run(context, memory): Promise<NormalizedRunResult> {
     const store = new ArtifactStore(context.outputDir);
     store.ensureDir();
-
     await memory.reset();
-    await memory.add(context.run.memoryDocuments ?? []);
 
-    const packConfig = context.run.packConfig as TerminalBenchPackConfig | undefined;
-    let datasetPath = packConfig?.datasetPath;
-    const maxTasks = packConfig?.maxTasks ?? Number.MAX_SAFE_INTEGER;
-    const difficultyFilter = packConfig?.difficulty;
-    const smoke = packConfig?.smoke === true;
-
-    if (!datasetPath) {
-      datasetPath = await downloadOfficialDataset();
+    const runtime = inspectTerminalBenchRuntime(context.rootDir);
+    if (runtime.problems.length > 0 || !runtime.tbCommand) {
+      throw new BenchmarkRuntimeError(`terminal-bench runtime requirements not met. ${runtime.problems.join(' ')}`);
     }
 
-    let tasks = loadTasks(datasetPath);
+    const packConfig = resolvePackConfig(context);
+    const harnessOutputRoot = path.resolve(context.outputDir, 'official-harness');
+    const harnessRunDirectory = path.resolve(harnessOutputRoot, context.runId);
+    fs.mkdirSync(harnessOutputRoot, { recursive: true });
 
-    if (difficultyFilter) {
-      tasks = tasks.filter((t) => t.difficulty === difficultyFilter);
-    }
+    let opencodeConfigDir: string | undefined;
+    try {
+      const opencodeConfig = writeTerminalBenchOpencodeConfig(context);
+      opencodeConfigDir = opencodeConfig.configDir;
 
-    if (smoke) {
-      tasks = tasks.slice(0, 5);
-    }
+      const { args, selectedTasks } = buildHarnessCommand(runtime, context, packConfig, harnessRunDirectory);
+      const env = buildHarnessEnvironment(context, runtime, opencodeConfig.configContent);
 
-    tasks = tasks.slice(0, maxTasks);
-
-    const taskResults: Array<{
-      taskId: string;
-      passed: boolean;
-      commands: string[];
-      stdout: string;
-      stderr: string;
-      exitCode: number;
-      durationMs: number;
-    }> = [];
-
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
-    let totalTokens = 0;
-    let totalAgentLatency = 0;
-    let totalCommands = 0;
-    let passedCount = 0;
-
-    for (const task of tasks) {
-      const taskStart = Date.now();
-      const workspaceDir = path.resolve(context.outputDir, 'tasks', task.id);
-      fs.mkdirSync(workspaceDir, { recursive: true });
-
-      // Run setup commands
-      if (task.setup && Array.isArray(task.setup)) {
-        for (const cmd of task.setup) {
-          await execCommand(workspaceDir, cmd);
-        }
-      }
-
-      // Build prompt
-      const prompt = [
-        'You are a helpful terminal assistant.',
-        `Task: ${task.description}`,
-        `Workspace directory: ${workspaceDir}`,
-        'Provide the bash commands needed to complete this task.',
-        'Use ```bash code blocks for commands.',
-      ].join('\n');
-
-      let agentResponse = '';
-      let agentUsage: { input: number; output: number; total: number } | undefined;
-      let agentLatency = 0;
-
-      if (agent) {
-        const result = await agent.run({ prompt });
-        agentResponse = result.text;
-        agentUsage = result.usage;
-        agentLatency = result.latencyMs;
-        totalPromptTokens += agentUsage?.input ?? 0;
-        totalCompletionTokens += agentUsage?.output ?? 0;
-        totalTokens += agentUsage?.total ?? 0;
-        totalAgentLatency += agentLatency;
-      } else {
-        agentResponse = context.run.answer?.actual ?? '';
-      }
-
-      // Extract and execute commands
-      const commandBlocks = extractBashBlocks(agentResponse);
-      totalCommands += commandBlocks.length;
-
-      let stdout = '';
-      let stderr = '';
-      let exitCode = 0;
-
-      for (const block of commandBlocks) {
-        const result = await execCommand(workspaceDir, block);
-        stdout += result.stdout;
-        stderr += result.stderr;
-        if (result.exitCode !== 0) {
-          exitCode = result.exitCode;
-        }
-      }
-
-      // Verify outcome
-      let passed = false;
-      if (task.verifier) {
-        const vResult = await execCommand(workspaceDir, task.verifier);
-        passed = vResult.exitCode === 0;
-      } else if (task.expected !== undefined) {
-        const combined = (stdout + stderr).trim();
-        passed = combined === task.expected.trim() || combined.includes(task.expected.trim());
-      } else {
-        passed = exitCode === 0;
-      }
-
-      if (passed) passedCount++;
-
-      taskResults.push({
-        taskId: task.id,
-        passed,
-        commands: commandBlocks,
-        stdout,
-        stderr,
-        exitCode,
-        durationMs: Date.now() - taskStart,
+      const harnessProc = Bun.spawn([runtime.tbCommand, ...args], {
+        cwd: context.rootDir,
+        env,
+        stdout: 'pipe',
+        stderr: 'pipe',
       });
-    }
+      const [harnessStdout, harnessStderr, harnessExitCode] = await Promise.all([
+        new Response(harnessProc.stdout).text(),
+        new Response(harnessProc.stderr).text(),
+        harnessProc.exited,
+      ]);
 
-    const successRate = tasks.length > 0 ? passedCount / tasks.length : 0;
-    const allStdout = taskResults.map((r) => r.stdout + r.stderr).join('\n');
-    const allExpected = tasks.map((t) => t.expected ?? '').join('\n');
+      if (harnessExitCode !== 0) {
+        throw new BenchmarkRuntimeError(
+          `official Terminal-Bench harness failed with exit code ${harnessExitCode}. stderr: ${harnessStderr.trim() || '(empty)'}`,
+        );
+      }
 
-    const retrievalQuery = context.run.retrieval?.query ?? `${context.run.pack} ${context.run.variant}`;
-    const topK = context.run.retrieval?.topK ?? 3;
-    const searchResults = await memory.search({ text: retrievalQuery, topK });
-    const retrieval = scoreRetrieval(context.run.retrieval?.relevantIds ?? [], searchResults, topK);
-    const answer = scoreAnswer(allExpected, allStdout);
-    const judge = judgeAnswer(allExpected, allStdout);
-    answer.judgedPass = judge.passed ? 1 : 0;
+      const realizedRunDirectory = fs.existsSync(harnessRunDirectory)
+        ? harnessRunDirectory
+        : path.resolve(context.outputDir, context.runId);
+      const authoritative = parseTerminalBenchArtifacts(realizedRunDirectory);
+      const score = scoreTerminalBenchAdapter(authoritative.benchmarkResults.accuracy ?? 0);
+      const totalTrials = authoritative.benchmarkResults.results.length;
+      const promptTokens = authoritative.benchmarkResults.results.reduce(
+        (sum, entry) => sum + (typeof entry.total_input_tokens === 'number' ? entry.total_input_tokens : 0),
+        0,
+      );
+      const completionTokens = authoritative.benchmarkResults.results.reduce(
+        (sum, entry) => sum + (typeof entry.total_output_tokens === 'number' ? entry.total_output_tokens : 0),
+        0,
+      );
+      const totalTokens = promptTokens + completionTokens;
 
-    const startedAt = context.startedAt.toISOString();
-    const finishedAt = new Date().toISOString();
-    const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
+      const startedAt = context.startedAt.toISOString();
+      const finishedAt = authoritative.runMetadata.end_time ?? new Date().toISOString();
+      const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
+      const warnings: string[] = [];
+      const unresolved = authoritative.benchmarkResults.n_unresolved ?? 0;
+      if (unresolved > 0) {
+        warnings.push(`${unresolved} Terminal-Bench trial(s) were unresolved according to the official harness.`);
+      }
+      if (totalTrials === 0) {
+        warnings.push('Official Terminal-Bench harness produced zero trials.');
+      }
 
-    const fallbackTokenUsage = computeTokenUsage({
-      prompt: retrievalQuery,
-      completion: allStdout,
-    });
-
-    const warnings: string[] = [];
-    if (tasks.length === 0) {
-      warnings.push(`No tasks loaded from dataset path: ${datasetPath}`);
-    }
-
-    const result: NormalizedRunResult = {
-      schemaVersion: '1.0',
-      runId: context.runId,
-      pack: context.run.pack,
-      variant: context.run.variant,
-      memoryBackend: memory.id,
-      status:
-        tasks.length === 0
-          ? 'warning'
-          : passedCount === tasks.length
-            ? 'passed'
-            : passedCount > 0
-              ? 'warning'
-              : 'failed',
-      startedAt,
-      finishedAt,
-      durationMs,
-      warnings,
-      notes: [
-        `Terminal-Bench executed ${tasks.length} task(s) from official dataset.`,
-        `Passed: ${passedCount}/${tasks.length}`,
-        `Total commands executed: ${totalCommands}`,
-        `Agent runner: ${agent ? 'available' : 'none'}`,
-      ],
-      metrics: {
-        retrieval,
-        answer,
-        aggregate: {
-          score: Number(successRate.toFixed(6)),
-          retrievalWeight: 0.25,
-          answerWeight: 0.75,
+      const result: NormalizedRunResult = {
+        schemaVersion: '1.0',
+        runId: context.runId,
+        pack: context.run.pack,
+        variant: context.run.variant,
+        memoryBackend: memory.id,
+        status: totalTrials === 0 ? 'warning' : unresolved > 0 ? 'warning' : score > 0 ? 'passed' : 'failed',
+        startedAt,
+        finishedAt,
+        durationMs,
+        warnings,
+        notes: [
+          `Terminal-Bench evaluated ${totalTrials} trial(s) through the official \`tb run\` harness.`,
+          `Resolved ${authoritative.benchmarkResults.n_resolved}/${totalTrials} trial(s) (${(score * 100).toFixed(1)}%).`,
+          `Agent: ${authoritative.runMetadata.agent_name} ${authoritative.runMetadata.model_name ? `(${authoritative.runMetadata.model_name})` : ''}`.trim(),
+        ],
+        metrics: {
+          retrieval: {
+            queryCount: totalTrials,
+            precisionAtK: 0,
+            recallAtK: 0,
+            mrr: 0,
+            ndcgAtK: 0,
+          },
+          answer: {
+            exactMatch: 0,
+            tokenF1: 0,
+            containsExpected: 0,
+            judgedPass: score,
+          },
+          aggregate: {
+            score,
+            retrievalWeight: 0,
+            answerWeight: 1,
+          },
         },
-      },
-      telemetry: {
-        promptTokens: agent ? totalPromptTokens : fallbackTokenUsage.promptTokens,
-        completionTokens: agent ? totalCompletionTokens : fallbackTokenUsage.completionTokens,
-        totalTokens: agent ? totalTokens : fallbackTokenUsage.totalTokens,
-        estimatedCostUsd: estimateCostUsd(agent ? totalTokens : fallbackTokenUsage.totalTokens),
-        latencyMs: summarizeLatencyMs(agent ? totalAgentLatency : durationMs),
-        logs: createLogBuffer([
-          `pack=${context.run.pack}`,
-          `variant=${context.run.variant}`,
-          `memory=${memory.id}`,
-          `tasks=${tasks.length}`,
-          `passed=${passedCount}`,
-          `commands=${totalCommands}`,
-        ]),
-      },
-      artifacts: {
-        resultPath: '',
-        summaryPath: '',
-        rawOutputPath: '',
-      },
-      metadata: {
-        ...context.run.metadata,
-        taskCount: tasks.length,
-        passedCount,
-        totalCommands,
-        successRate: Number(successRate.toFixed(4)),
-      },
-    };
+        telemetry: {
+          promptTokens,
+          completionTokens,
+          totalTokens,
+          estimatedCostUsd: 0,
+          latencyMs: durationMs,
+          logs: [
+            `pack=${context.run.pack}`,
+            `variant=${context.run.variant}`,
+            `memory=${memory.id}`,
+            `tbVersion=${runtime.tbVersion ?? 'unknown'}`,
+            `dockerVersion=${runtime.dockerVersion ?? 'unknown'}`,
+            `model=${authoritative.runMetadata.model_name ?? context.run.agentModel ?? ''}`,
+            `dataset=${authoritative.runMetadata.dataset_name ?? resolveDatasetSelector(packConfig) ?? authoritative.runMetadata.dataset_path ?? 'local'}`,
+            `selectedTasks=${selectedTasks?.join(',') ?? '(all)'}`,
+          ],
+        },
+        artifacts: {
+          resultPath: '',
+          summaryPath: '',
+          rawOutputPath: '',
+        },
+        metadata: {
+          ...context.run.metadata,
+          datasetName: authoritative.runMetadata.dataset_name ?? null,
+          datasetVersion: authoritative.runMetadata.dataset_version ?? null,
+          datasetPath: authoritative.runMetadata.dataset_path ?? null,
+          model: authoritative.runMetadata.model_name ?? null,
+          harnessCommand: runtime.tbCommand,
+          harnessVersion: runtime.tbVersion ?? 'installed',
+          dockerVersion: runtime.dockerVersion ?? 'unknown',
+          pythonCommand: runtime.pythonCommand ?? 'unknown',
+          totalTrials,
+          resolvedTrials: authoritative.benchmarkResults.n_resolved,
+          unresolvedTrials: authoritative.benchmarkResults.n_unresolved,
+          attemptsPerTask: authoritative.runMetadata.n_attempts,
+        },
+      };
 
-    result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
-      pack: 'terminal-bench',
-      memory: memory.id,
-      tasks: taskResults,
-      searchResults,
-      judge,
-    });
-    result.artifacts.resultPath = store.writeJson('result.json', result);
-    result.artifacts.summaryPath = store.writeText('summary.md', markdownReportForResult(result));
-
-    return result;
+      const harnessStdoutPath = store.writeText('harness-stdout.log', harnessStdout);
+      const harnessStderrPath = store.writeText('harness-stderr.log', harnessStderr);
+      result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
+        pack: 'terminal-bench',
+        harnessCommand: [runtime.tbCommand, ...args],
+        harnessRunDirectory: realizedRunDirectory,
+        harnessStdoutPath,
+        harnessStderrPath,
+        authoritative,
+      });
+      result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
+      result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
+      store.writeJson('result.json', result);
+      store.writeText('summary.md', markdownReportForResult(result));
+      return result;
+    } finally {
+      if (opencodeConfigDir) {
+        try {
+          fs.rmSync(opencodeConfigDir, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
   },
 };

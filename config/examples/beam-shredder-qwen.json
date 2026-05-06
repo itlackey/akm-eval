@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "beam-shredder-qwen",
+    "outputDir": "runs/beam-shredder-qwen",
+    "maxConcurrency": 1,
+    "timeoutMs": 1800000
+  },
+  "packs": [
+    {
+      "id": "beam",
+      "adapter": "beam",
+      "enabled": true,
+      "config": {
+        "repoPath": "vendor/BEAM",
+        "pythonBin": "python",
+        "chatSizes": ["100K"],
+        "smoke": true,
+        "maxConversations": 1,
+        "maxQuestionsPerType": 1,
+        "evaluatorModel": "qwen/qwen3.5-9b"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": { "provider": "openai-compatible", "providerRef": "shredder", "model": "qwen/qwen3.5-9b" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    }
+  ],
+  "providers": {
+    "shredder": {
+      "type": "openai-compatible",
+      "baseURL": "http://192.168.0.99:1234/v1",
+      "timeout": 600000,
+      "defaultModel": "qwen/qwen3.5-9b"
+    }
+  },
+  "judging": { "enabled": false },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

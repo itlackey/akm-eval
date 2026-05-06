@@ -33,6 +33,16 @@ export function runDoctorChecks(): DoctorCheck[] {
   ];
 
   for (const pack of packRegistry) {
+    const doctorDetail = pack.getDoctorDetail?.();
+    if (doctorDetail) {
+      checks.push({
+        name: `pack:${pack.id}`,
+        status: doctorDetail.status,
+        detail: doctorDetail.detail,
+      });
+      continue;
+    }
+
     if (!pack.optionalDependency) {
       continue;
     }
@@ -42,7 +52,7 @@ export function runDoctorChecks(): DoctorCheck[] {
       status: installed ? 'ok' : 'warn',
       detail: installed
         ? `optional dependency ${pack.optionalDependency} available`
-        : `optional dependency ${pack.optionalDependency} not installed; stub mode only`,
+        : `optional dependency ${pack.optionalDependency} not installed; runs are blocked until the official harness is available`,
     });
   }
 

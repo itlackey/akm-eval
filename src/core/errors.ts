@@ -34,3 +34,9 @@ export class UnknownMemoryBackendError extends AkmEvalError {
     super(`Unknown memory backend: ${backendId}`, 'UNKNOWN_MEMORY_BACKEND');
   }
 }
+
+export class BenchmarkRuntimeError extends AkmEvalError {
+  constructor(message: string) {
+    super(message, 'BENCHMARK_RUNTIME_ERROR');
+  }
+}

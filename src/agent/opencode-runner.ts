@@ -14,7 +14,7 @@ function parseOpencodeJsonl(stdout: string): {
   let inputTokens = 0;
   let outputTokens = 0;
   let sawTokens = false;
-  const textParts: string[] = [];
+const textParts: string[] = [];
 
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
@@ -50,6 +50,8 @@ function parseOpencodeJsonl(stdout: string): {
   };
 }
 
+const MAX_OPENCODE_PROMPT_BYTES = 100_000;
+
 export class OpencodeAgentRunner implements AgentRunner {
   private providerConfig: AgentProviderConfig;
   private model: string;
@@ -78,18 +80,43 @@ export class OpencodeAgentRunner implements AgentRunner {
       const selected = selectProviderForModel(loaded, this.model);
 
       isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akm-eval-opencode-'));
+      const cacheHome = path.join(isolatedDir, 'cache');
+      const configHome = path.join(isolatedDir, 'config');
+      const opencodeConfigHome = path.join(configHome, 'opencode');
+      fs.mkdirSync(cacheHome, { recursive: true });
+      fs.mkdirSync(configHome, { recursive: true });
+      const realOpencodeConfigDir = path.join(os.homedir(), '.config', 'opencode');
+      if (fs.existsSync(realOpencodeConfigDir)) {
+        fs.symlinkSync(realOpencodeConfigDir, opencodeConfigHome);
+      } else {
+        fs.mkdirSync(opencodeConfigHome, { recursive: true });
+      }
       materializeOpencodeConfig(isolatedDir, selected, this.model);
 
       const env: Record<string, string> = {
         ...process.env as Record<string, string>,
+        XDG_CACHE_HOME: cacheHome,
+        XDG_CONFIG_HOME: configHome,
         OPENCODE_CONFIG: path.join(isolatedDir, 'opencode.json'),
       };
 
-      const args = ['run', '--format', 'json'];
-      if (options.systemPrompt) {
-        args.push('--system', options.systemPrompt);
+      const promptBytes = Buffer.byteLength(options.prompt, 'utf8');
+      if (promptBytes > MAX_OPENCODE_PROMPT_BYTES) {
+        return {
+          ok: false,
+          text: '',
+          latencyMs: Date.now() - startedAt,
+          error:
+            `opencode prompt is too large for CLI argument transport (${promptBytes} bytes). ` +
+            `Use a smaller benchmark slice or switch to an openai-compatible provider for this run.`,
+        };
       }
-      args.push(options.prompt);
+
+      const args = ['run', '--format', 'json', '--model', this.model];
+      const message = options.systemPrompt
+        ? `System instructions:\n${options.systemPrompt}\n\nUser request:\n${options.prompt}`
+        : options.prompt;
+      args.push(message);
 
       const timeoutMs = options.timeoutMs ?? this.providerConfig.timeout ?? 120000;
       const abortController = new AbortController();

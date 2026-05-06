@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-qwen35-ollama",
+    "outputDir": "runs/longmemeval-qwen35-ollama",
+    "maxConcurrency": 1,
+    "timeoutMs": 300000
+  },
+  "packs": [
+    {
+      "id": "longmemeval",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "smoke": true,
+        "maxQuestions": 10,
+        "questionCategories": ["single-session", "multi-session"]
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ollama",
+        "model": "qwen3.5:latest"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "raw-vector",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ollama",
+        "model": "qwen3.5:latest"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "raw-vector" }
+    }
+  ],
+  "providers": {
+    "ollama": {
+      "type": "openai-compatible",
+      "baseURL": "http://localhost:11434/v1",
+      "defaultModel": "qwen3.5:latest"
+    }
+  },
+  "judging": { "enabled": false },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

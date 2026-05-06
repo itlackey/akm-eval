@@ -1,153 +1,199 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import type { AgentRunner } from '../../agent/types.ts';
 import { ArtifactStore } from '../../core/artifact-store.ts';
+import { BenchmarkRuntimeError } from '../../core/errors.ts';
 import type { RunContext } from '../../core/run-context.ts';
 import type { NormalizedRunResult } from '../../core/types.ts';
-import type { MemoryBackend, MemoryDocument } from '../../memory/types.ts';
+import type { MemoryBackend } from '../../memory/types.ts';
 import { markdownReportForResult } from '../../reporting/markdown.ts';
-import { estimateCostUsd } from '../../telemetry/cost.ts';
-import { summarizeLatencyMs } from '../../telemetry/latency.ts';
-import { createLogBuffer } from '../../telemetry/logs.ts';
-import { computeTokenUsage } from '../../telemetry/tokens.ts';
 import type { PackAdapter } from '../types.ts';
-import { loadDataset } from './dataset.ts';
-import { aggregateResults, scoreQuestion, type QuestionResult } from './scorer.ts';
+import { blockedPackDoctorDetail, requireAgentRunner, requireExistingFile } from '../runtime-requirements.ts';
+import { loadDataset, resolveDatasetFile } from './dataset.ts';
+
+interface LongMemEvalPackConfig {
+  datasetPath?: string;
+  maxQuestions?: number;
+  questionCategories?: string[];
+  smoke?: boolean;
+  evaluatorCommand?: string;
+  evaluatorModel?: string;
+  predictionsPath?: string;
+  evaluationLogPath?: string;
+}
+
+interface EvaluationLogEntry {
+  question_id?: string;
+  autoeval_label?: {
+    model?: string;
+    label?: boolean;
+  };
+}
+
+function runCommand(command: string, cwd: string): { stdout: string; stderr: string; exitCode: number } {
+  const proc = Bun.spawnSync(['bash', '-lc', command], {
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: process.env,
+  });
+
+  return {
+    stdout: proc.stdout.toString(),
+    stderr: proc.stderr.toString(),
+    exitCode: proc.exitCode,
+  };
+}
+
+function readJsonLines(filePath: string): EvaluationLogEntry[] {
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as EvaluationLogEntry);
+}
+
+function average(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function resolveEvaluationLogPath(evalStdout: string, fallbackPath: string): string {
+  const candidate = evalStdout
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .at(-1);
+  return candidate && fs.existsSync(candidate) ? candidate : fallbackPath;
+}
 
 export const longMemEvalAdapter: PackAdapter = {
   id: 'longmemeval',
-  description: 'LongMemEval benchmark for evaluating long-term memory in conversational AI.',
+  description: 'LongMemEval using the official dataset and an external official evaluation command.',
   checkInstalled() {
-    return true;
+    return false;
+  },
+  getDoctorDetail() {
+    return blockedPackDoctorDetail(
+      'requires external LongMemEval evaluator command; dataset download is built in, but heuristic local judging is disabled',
+    );
   },
   async run(context, memory, agent): Promise<NormalizedRunResult> {
+    const resolvedAgent = requireAgentRunner(agent, 'longmemeval');
     const store = new ArtifactStore(context.outputDir);
     store.ensureDir();
 
-    const packConfig = context.run.packConfig as Record<string, unknown> | undefined;
-    const datasetPath = typeof packConfig?.datasetPath === 'string'
-      ? packConfig.datasetPath
-      : undefined;
-    const maxQuestions = typeof packConfig?.maxQuestions === 'number'
-      ? packConfig.maxQuestions
-      : undefined;
-    const questionCategories = Array.isArray(packConfig?.questionCategories)
-      ? (packConfig.questionCategories as string[])
-      : undefined;
-    const smoke = packConfig?.smoke === true;
-
-    const questions = await loadDataset({
-      datasetPath,
-      maxQuestions,
-      questionCategories,
-      smoke,
-    });
-
     await memory.reset();
 
-    const results: QuestionResult[] = [];
-    const topK = context.run.retrieval?.topK ?? 3;
-    const fallbackAnswer = context.run.answer?.actual ?? 'No agent runner available.';
+    const packConfig = (context.run.packConfig ?? {}) as LongMemEvalPackConfig;
+    const evaluatorCommand = typeof packConfig.evaluatorCommand === 'string' ? packConfig.evaluatorCommand : undefined;
+    if (!evaluatorCommand) {
+      throw new BenchmarkRuntimeError(
+        'longmemeval requires `pack.config.evaluatorCommand` pointing at the official LongMemEval evaluation script or wrapper. ' +
+          'This repo no longer falls back to heuristic local scoring.',
+      );
+    }
+
+    const datasetPath = await resolveDatasetFile(packConfig.datasetPath);
+    const questions = await loadDataset({
+      datasetPath: packConfig.datasetPath,
+      maxQuestions: packConfig.maxQuestions,
+      questionCategories: packConfig.questionCategories,
+      smoke: packConfig.smoke,
+    });
+
+    const predictions = [] as Array<{ question_id: string; hypothesis: string }>;
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+    let totalTokens = 0;
+    let totalLatencyMs = 0;
 
     for (const question of questions) {
-      const questionStart = Date.now();
-
-      // Build memory documents from conversation chunks
-      const conversationChunks: MemoryDocument[] = question.conversation.map((turn, index) => ({
-        id: `${question.id}-turn-${index}`,
-        text: `${turn.role}: ${turn.content}`,
-        metadata: { questionId: question.id, role: turn.role, category: question.category },
-      }));
-
-      // Add chunks to memory backend (skip for 'none' to avoid noise)
-      if (memory.id !== 'none') {
-        await memory.add(conversationChunks);
-      }
-
-      // Search memory for relevant context
-      let retrievedResults: MemoryDocument[] = [];
-      if (memory.id !== 'none') {
-        const memoryResults = await memory.search({ text: question.question, topK });
-        retrievedResults = memoryResults.map((r) => ({
-          id: r.id,
-          text: r.text,
-          metadata: r.metadata,
-        }));
-      }
-
-      // Build prompt
       const conversationHistory = question.conversation
         .map((turn) => `${turn.role}: ${turn.content}`)
         .join('\n');
+      const prompt = `Conversation history:\n${conversationHistory}\n\nQuestion: ${question.question}\nAnswer:`;
 
-      const retrievedContext = retrievedResults.length > 0
-        ? `\nRetrieved context:\n${retrievedResults.map((r) => `- ${r.text}`).join('\n')}`
-        : '';
-
-      const prompt = `Conversation history:\n${conversationHistory}${retrievedContext}\n\nQuestion: ${question.question}\nAnswer:`;
-
-      // Get answer from agent or fallback
-      let actualAnswer = '';
-      let agentLatency = 0;
-      let promptTokens = 0;
-      let completionTokens = 0;
-      let agentError: string | undefined;
-
-      if (agent) {
-        const agentResult = await agent.run({ prompt });
-        actualAnswer = agentResult.text;
-        agentLatency = agentResult.latencyMs;
-        if (agentResult.usage) {
-          promptTokens = agentResult.usage.input;
-          completionTokens = agentResult.usage.output;
-        }
-        if (!agentResult.ok) {
-          agentError = agentResult.error;
-        }
-      } else {
-        actualAnswer = fallbackAnswer;
-        const tokenUsage = computeTokenUsage({ prompt, completion: actualAnswer });
-        promptTokens = tokenUsage.promptTokens;
-        completionTokens = tokenUsage.completionTokens;
+      const agentResult = await resolvedAgent.run({ prompt });
+      if (!agentResult.ok) {
+        throw new BenchmarkRuntimeError(`longmemeval agent run failed for ${question.id}: ${agentResult.error ?? 'unknown error'}`);
       }
 
-      const questionLatency = agentLatency || Math.max(1, Date.now() - questionStart);
+      totalPromptTokens += agentResult.usage?.input ?? 0;
+      totalCompletionTokens += agentResult.usage?.output ?? 0;
+      totalTokens += agentResult.usage?.total ?? 0;
+      totalLatencyMs += agentResult.latencyMs;
 
-      // Relevant ids for retrieval scoring: all turns for this question
-      const relevantIds = conversationChunks.map((c) => c.id);
-
-      const result = scoreQuestion(
-        question,
-        actualAnswer,
-        retrievedResults,
-        relevantIds,
-        topK,
-        questionLatency,
-        promptTokens,
-        completionTokens,
-      );
-      results.push(result);
-
-      if (agentError) {
-        result.judgeResult = { passed: false, rationale: `Agent error: ${agentError}`, score: 0 };
-      }
+      predictions.push({
+        question_id: question.id,
+        hypothesis: agentResult.text,
+      });
     }
 
-    const aggregated = aggregateResults(results);
+    const predictionsPath = path.resolve(
+      context.outputDir,
+      typeof packConfig.predictionsPath === 'string' ? packConfig.predictionsPath : 'predictions.jsonl',
+    );
+    requireExistingFile(datasetPath, 'longmemeval requires a concrete dataset file for the official evaluator.');
+
+    fs.writeFileSync(predictionsPath, `${predictions.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+
+    const evaluatorModel = typeof packConfig.evaluatorModel === 'string' ? packConfig.evaluatorModel : 'gpt-4o';
+    const evalResult = runCommand(
+      `${evaluatorCommand} ${JSON.stringify(evaluatorModel)} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)}`,
+      context.rootDir,
+    );
+    if (evalResult.exitCode !== 0) {
+      throw new BenchmarkRuntimeError(
+        `longmemeval official evaluator failed with exit code ${evalResult.exitCode}. stderr: ${evalResult.stderr || '(empty)'}`,
+      );
+    }
+
+    const configuredEvaluationLogPath = typeof packConfig.evaluationLogPath === 'string'
+      ? path.resolve(context.rootDir, packConfig.evaluationLogPath)
+      : `${predictionsPath}.eval-results-${evaluatorModel}`;
+    const evaluationLogPath = requireExistingFile(
+      resolveEvaluationLogPath(evalResult.stdout, configuredEvaluationLogPath),
+      'longmemeval official evaluator did not produce the expected evaluation log.',
+    );
+
+    const evaluationEntries = readJsonLines(evaluationLogPath);
+    const questionMap = new Map(questions.map((question) => [question.id, question]));
+    const perQuestion = evaluationEntries.map((entry) => {
+      const questionId = entry.question_id;
+      if (!questionId) {
+        throw new BenchmarkRuntimeError(`longmemeval evaluation log entry is missing question_id: ${JSON.stringify(entry)}`);
+      }
+      const question = questionMap.get(questionId);
+      if (!question) {
+        throw new BenchmarkRuntimeError(`longmemeval evaluation log referenced unknown question_id: ${questionId}`);
+      }
+      const passed = entry.autoeval_label?.label === true;
+      return {
+        questionId,
+        category: question.category,
+        expectedAnswer: question.expectedAnswer,
+        actualAnswer: predictions.find((prediction) => prediction.question_id === questionId)?.hypothesis ?? '',
+        passed,
+      };
+    });
+
+    const overallAccuracy = average(perQuestion.map((entry) => (entry.passed ? 1 : 0)));
+    const categories = new Map<string, number[]>();
+    for (const entry of perQuestion) {
+      const bucket = categories.get(entry.category) ?? [];
+      bucket.push(entry.passed ? 1 : 0);
+      categories.set(entry.category, bucket);
+    }
+
+    const perCategoryAccuracy = Object.fromEntries(
+      [...categories.entries()].map(([category, values]) => [category, Number(average(values).toFixed(6))]),
+    );
 
     const startedAt = context.startedAt.toISOString();
     const finishedAt = new Date().toISOString();
     const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
-
-    const warnings: string[] = [];
-    if (questions.length === 0) {
-      warnings.push('No questions loaded from dataset.');
-    }
-
-    const status = warnings.length > 0
-      ? 'warning'
-      : aggregated.overallAccuracy >= 0.5
-        ? 'passed'
-        : 'failed';
+    const score = Number(overallAccuracy.toFixed(6));
 
     const result: NormalizedRunResult = {
       schemaVersion: '1.0',
@@ -155,45 +201,49 @@ export const longMemEvalAdapter: PackAdapter = {
       pack: context.run.pack,
       variant: context.run.variant,
       memoryBackend: memory.id,
-      status,
+      status: perQuestion.length === 0 ? 'warning' : overallAccuracy > 0 ? 'passed' : 'failed',
       startedAt,
       finishedAt,
       durationMs,
-      warnings,
+      warnings: [],
       notes: [
-        `LongMemEval executed ${questions.length} questions across ${Object.keys(aggregated.perCategoryAccuracy).length} categories.`,
-        `Overall accuracy: ${(aggregated.overallAccuracy * 100).toFixed(1)}%`,
+        `LongMemEval executed ${questions.length} question(s) and scored them with the official evaluator command.`,
+        `Overall accuracy: ${(overallAccuracy * 100).toFixed(1)}%`,
+        `Evaluator model: ${evaluatorModel}`,
       ],
       metrics: {
-        retrieval: aggregated.avgRetrievalMetrics,
-        answer: aggregated.avgAnswerMetrics,
+        retrieval: {
+          queryCount: questions.length,
+          precisionAtK: 0,
+          recallAtK: 0,
+          mrr: 0,
+          ndcgAtK: 0,
+        },
+        answer: {
+          exactMatch: 0,
+          tokenF1: 0,
+          containsExpected: 0,
+          judgedPass: score,
+        },
         aggregate: {
-          score: Number(
-            (
-              (aggregated.avgRetrievalMetrics.ndcgAtK +
-                aggregated.avgAnswerMetrics.tokenF1 +
-                aggregated.avgAnswerMetrics.exactMatch +
-                aggregated.avgAnswerMetrics.judgedPass) /
-              4
-            ).toFixed(6),
-          ),
-          retrievalWeight: 0.5,
-          answerWeight: 0.5,
+          score,
+          retrievalWeight: 0,
+          answerWeight: 1,
         },
       },
       telemetry: {
-        promptTokens: aggregated.totalPromptTokens,
-        completionTokens: aggregated.totalCompletionTokens,
-        totalTokens: aggregated.totalPromptTokens + aggregated.totalCompletionTokens,
-        estimatedCostUsd: estimateCostUsd(aggregated.totalPromptTokens + aggregated.totalCompletionTokens),
-        latencyMs: summarizeLatencyMs(aggregated.totalLatencyMs || durationMs),
-        logs: createLogBuffer([
+        promptTokens: totalPromptTokens,
+        completionTokens: totalCompletionTokens,
+        totalTokens,
+        estimatedCostUsd: 0,
+        latencyMs: totalLatencyMs || durationMs,
+        logs: [
           `pack=${context.run.pack}`,
           `variant=${context.run.variant}`,
           `memory=${memory.id}`,
           `questions=${questions.length}`,
-          `overallAccuracy=${aggregated.overallAccuracy.toFixed(3)}`,
-        ]),
+          `evaluatorModel=${evaluatorModel}`,
+        ],
       },
       artifacts: {
         resultPath: '',
@@ -202,29 +252,28 @@ export const longMemEvalAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
-        overallAccuracy: aggregated.overallAccuracy,
         questionCount: questions.length,
-        ...Object.fromEntries(
-          Object.entries(aggregated.perCategoryAccuracy).map(([k, v]) => [`accuracy_${k}`, v]),
-        ),
+        overallAccuracy: score,
+        evaluatorCommand,
+        evaluatorModel,
+        predictionsPath,
+        evaluationLogPath,
+        ...Object.fromEntries(Object.entries(perCategoryAccuracy).map(([key, value]) => [`accuracy_${key}`, value])),
       },
     };
 
-    const rawOutput = {
+    result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
       pack: 'longmemeval',
-      memory: memory.id,
-      questions: results.map((r) => ({
-        id: r.questionId,
-        category: r.category,
-        expected: r.expectedAnswer,
-        actual: r.actualAnswer,
-        judge: r.judgeResult,
-        retrieval: r.retrievalMetrics,
-      })),
-      aggregated,
-    };
-
-    result.artifacts.rawOutputPath = store.writeJson('raw-output.json', rawOutput);
+      predictionsPath,
+      datasetPath,
+      evaluationLogPath,
+      evaluatorCommand,
+      evaluatorModel,
+      evaluatorStdout: evalResult.stdout,
+      evaluatorStderr: evalResult.stderr,
+      results: perQuestion,
+      perCategoryAccuracy,
+    });
     result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
     result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
     store.writeJson('result.json', result);

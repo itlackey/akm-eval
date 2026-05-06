@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-shredder-qwen",
+    "outputDir": "runs/longmemeval-shredder-qwen",
+    "maxConcurrency": 1,
+    "timeoutMs": 600000
+  },
+  "packs": [
+    {
+      "id": "longmemeval",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "datasetPath": "./datasets/longmemeval/dataset.json",
+        "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
+        "evaluatorModel": "qwen/qwen3.5-9b",
+        "maxQuestions": 10,
+        "questionCategories": ["single-session", "multi-session", "temporal", "preference"]
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "shredder",
+        "model": "qwen/qwen3.5-9b"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "raw-vector",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "shredder",
+        "model": "qwen/qwen3.5-9b"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "raw-vector" }
+    }
+  ],
+  "providers": {
+    "shredder": {
+      "type": "openai-compatible",
+      "baseURL": "http://192.168.0.99:1234/v1",
+      "timeout": 600000,
+      "defaultModel": "qwen/qwen3.5-9b"
+    }
+  },
+  "judging": { "enabled": false },
+  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+}

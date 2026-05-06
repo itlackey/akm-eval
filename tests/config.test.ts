@@ -16,26 +16,86 @@ describe('config loading', () => {
     expect(config.runs.some((run) => run.variant === 'akm-memory')).toBe(true);
   });
 
+  test('loads locomo smoke example config', () => {
+    const config = loadConfig(path.resolve(rootDir, 'config/examples/locomo-smoke.json'));
+    expect(config.version).toBe(1);
+    expect(config.runs.some((run) => run.pack === 'locomo')).toBe(true);
+    expect(config.runs.some((run) => run.memoryBackend === 'raw-vector')).toBe(true);
+  });
+
   test('validates both planned and internal config shapes', () => {
     const planned = validateConfig({
       schemaVersion: 'akm.eval.config.v1',
       run: { id: 'x', outputDir: 'runs/x' },
-      packs: [{ id: 'longmemeval-smoke', adapter: 'longmemeval', enabled: true }],
+      packs: [
+        {
+          id: 'longmemeval-smoke',
+          adapter: 'longmemeval',
+          enabled: true,
+          config: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
+        },
+      ],
       variants: [
         {
           id: 'baseline',
-          agent: { provider: 'none' },
+          agent: { provider: 'openai-compatible', providerRef: 'openai', model: 'gpt-4o-mini' },
           akm: { enabled: false },
           memory: { backend: 'none' },
         },
       ],
+      providers: {
+        openai: {
+          type: 'openai-compatible',
+          baseURL: 'https://api.openai.com/v1',
+          apiKey: '{env:TEST_API_KEY}',
+        },
+      },
     });
     const internal = validateConfig({
       version: 1,
-      runs: [{ pack: 'beam', variant: 'baseline', outputDir: 'runs/custom' }],
+      runs: [
+        {
+          pack: 'beam-lite-proxy',
+          variant: 'baseline',
+          outputDir: 'runs/custom',
+        },
+      ],
     });
     expect(planned.version).toBe(1);
     expect(internal.runs).toHaveLength(1);
+  });
+
+  test('accepts beam planned config with evaluator model override', () => {
+    const planned = validateConfig({
+      schemaVersion: 'akm.eval.config.v1',
+      run: { id: 'beam-smoke', outputDir: 'runs/beam-smoke' },
+      packs: [
+        {
+          id: 'beam-smoke',
+          adapter: 'beam',
+          enabled: true,
+          config: { repoPath: 'vendor/BEAM', evaluatorModel: 'gpt-4.1-mini' },
+        },
+      ],
+      variants: [
+        {
+          id: 'baseline',
+          agent: { provider: 'openai-compatible', providerRef: 'openai', model: 'gpt-4o-mini' },
+          akm: { enabled: false },
+          memory: { backend: 'none' },
+        },
+      ],
+      providers: {
+        openai: {
+          type: 'openai-compatible',
+          baseURL: 'https://api.openai.com/v1',
+          apiKey: '{env:TEST_API_KEY}',
+        },
+      },
+    });
+
+    expect(planned.runs[0]?.pack).toBe('beam');
+    expect(planned.runs[0]?.packConfig?.evaluatorModel).toBe('gpt-4.1-mini');
   });
 
   test('resolves provider refs and env placeholders in planned configs', () => {
@@ -44,6 +104,14 @@ describe('config loading', () => {
       schemaVersion: 'akm.eval.config.v1',
       run: { id: 'x', outputDir: 'runs/x' },
       packs: [{ id: 'longmemeval-smoke', adapter: 'longmemeval', enabled: true }],
+      packs: [
+        {
+          id: 'longmemeval-smoke',
+          adapter: 'longmemeval',
+          enabled: true,
+          config: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
+        },
+      ],
       variants: [
         {
           id: 'baseline',
@@ -66,11 +134,51 @@ describe('config loading', () => {
     delete process.env.TEST_API_KEY;
   });
 
+  test('preserves agent env and akm config in planned runs', () => {
+    const config = validateConfig({
+      schemaVersion: 'akm.eval.config.v1',
+      run: { id: 'terminal', outputDir: 'runs/terminal' },
+      packs: [
+        {
+          id: 'terminal-bench-smoke',
+          adapter: 'terminal-bench',
+          enabled: true,
+        },
+      ],
+      variants: [
+        {
+          id: 'akm-memory',
+          agent: {
+            provider: 'opencode',
+            providerRef: 'opencode',
+            model: 'opencode/gpt-4.1-mini',
+            env: { FOO: 'bar' },
+          },
+          akm: { enabled: true, command: 'akm', env: { AKM_MODE: 'on' }, configPath: 'config/opencode.akm.json' },
+          memory: { backend: 'akm' },
+        },
+      ],
+      providers: {
+        opencode: {
+          type: 'opencode',
+          configPath: 'config/opencode.json',
+          defaultModel: 'opencode/gpt-4.1-mini',
+        },
+      },
+    });
+
+    expect(config.runs[0].agentEnvironment).toEqual({ FOO: 'bar' });
+    expect(config.runs[0].akmEnabled).toBe(true);
+    expect(config.runs[0].akmCommand).toBe('akm');
+    expect(config.runs[0].akmEnvironment).toEqual({ AKM_MODE: 'on' });
+    expect(config.runs[0].akmConfigPath).toBe('config/opencode.akm.json');
+  });
+
   test('resolves env placeholders in direct config providers', () => {
     process.env.DIRECT_KEY = 'direct-secret';
     const config = validateConfig({
       version: 1,
-      runs: [{ pack: 'longmemeval', variant: 'baseline', outputDir: 'runs/longmemeval' }],
+      runs: [{ pack: 'docs-example', variant: 'baseline', outputDir: 'runs/example' }],
       providers: {
         local: {
           type: 'openai-compatible',
@@ -83,9 +191,67 @@ describe('config loading', () => {
     delete process.env.DIRECT_KEY;
   });
 
+  test('rejects benchmark runs without a real model provider', () => {
+    expect(() =>
+      validateConfig({
+        schemaVersion: 'akm.eval.config.v1',
+        run: { id: 'x', outputDir: 'runs/x' },
+        packs: [
+          {
+            id: 'terminal-bench-smoke',
+            adapter: 'terminal-bench',
+            enabled: true,
+          },
+        ],
+        variants: [
+          {
+            id: 'baseline',
+            agent: { provider: 'none' },
+            akm: { enabled: false },
+            memory: { backend: 'none' },
+          },
+        ],
+      }),
+    ).toThrow('has no real agent provider configured');
+  });
+
+  test('rejects opencode model ids without provider prefix', () => {
+    expect(() =>
+      validateConfig({
+        schemaVersion: 'akm.eval.config.v1',
+        run: { id: 'x', outputDir: 'runs/x' },
+        packs: [
+          {
+            id: 'longmemeval-smoke',
+            adapter: 'longmemeval',
+            enabled: true,
+            config: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
+          },
+        ],
+        variants: [
+          {
+            id: 'baseline',
+            agent: { provider: 'opencode', providerRef: 'opencode', model: 'gpt-4.1-mini' },
+            akm: { enabled: false },
+            memory: { backend: 'none' },
+          },
+        ],
+        providers: {
+          opencode: {
+            type: 'opencode',
+            configPath: 'config/opencode.json',
+            defaultModel: 'opencode/gpt-4.1-mini',
+          },
+        },
+      }),
+    ).toThrow('must include the provider prefix');
+  });
+
   test('cli smoke paths work for doctor, list, matrix, and run', () => {
     const doctor = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'doctor'], cwd: rootDir });
     expect(doctor.exitCode).toBe(0);
+    expect(doctor.stdout.toString()).toContain('pack:beam');
+    expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
 
     const listPacks = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
@@ -117,14 +283,16 @@ describe('config loading', () => {
       tmpDatasetPath,
       JSON.stringify([
         {
-          id: 'lme-001',
-          category: 'single-session',
-          conversation: [
-            { role: 'user', content: 'My favorite color is blue.' },
-            { role: 'assistant', content: 'Blue is a great choice!' },
+          question_id: 'lme-001',
+          question_type: 'single-session-user',
+          haystack_sessions: [
+            [
+              { role: 'user', content: 'My favorite color is blue.' },
+              { role: 'assistant', content: 'Blue is a great choice!' },
+            ],
           ],
           question: 'What is my favorite color?',
-          expectedAnswer: 'blue',
+          answer: 'blue',
         },
       ]),
     );
@@ -143,17 +311,25 @@ describe('config loading', () => {
             config: {
               datasetPath: tmpDatasetPath,
               maxQuestions: 1,
+              evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
             },
           },
         ],
         variants: [
           {
             id: 'baseline',
-            agent: { provider: 'none' },
+            agent: { provider: 'openai-compatible', providerRef: 'local', model: 'gpt-4o-mini' },
             akm: { enabled: false },
             memory: { backend: 'none' },
           },
         ],
+        providers: {
+          local: {
+            type: 'openai-compatible',
+            baseURL: 'http://127.0.0.1:9/v1',
+            apiKey: 'test',
+          },
+        },
       }),
     );
 
@@ -176,9 +352,8 @@ describe('config loading', () => {
       cwd: rootDir,
     });
 
-    expect(run.exitCode).toBe(0);
-    expect(run.stdout.toString()).toContain('"schemaVersion": "1.0"');
-    expect(fs.existsSync(path.resolve(outDir, 'result.json'))).toBe(true);
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr.toString()).toContain('longmemeval agent run failed');
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

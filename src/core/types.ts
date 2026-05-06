@@ -32,6 +32,11 @@ export interface RunDefinition {
   variant: string;
   outputDir?: string;
   memoryBackend?: string;
+  agentEnvironment?: Record<string, string>;
+  akmEnabled?: boolean;
+  akmCommand?: string;
+  akmEnvironment?: Record<string, string>;
+  akmConfigPath?: string;
   memoryDocuments?: MemoryDocument[];
   retrieval?: RetrievalConfig;
   answer?: AnswerConfig;

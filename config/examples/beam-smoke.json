@@ -1,7 +1,24 @@
 {
   "schemaVersion": "akm.eval.config.v1",
-  "run": { "id": "akm-memory-smoke", "outputDir": "runs/akm-memory-smoke", "maxConcurrency": 1, "timeoutMs": 1800000 },
-  "packs": [{ "id": "longmemeval-smoke", "adapter": "longmemeval", "enabled": true, "config": { "evaluatorCommand": "python scripts/longmemeval-evaluator.py", "evaluatorModel": "gpt-4o", "smoke": true } }],
+  "run": {
+    "id": "beam-smoke",
+    "outputDir": "runs/beam-smoke"
+  },
+  "packs": [
+    {
+      "id": "beam",
+      "adapter": "beam",
+      "enabled": true,
+      "config": {
+        "repoPath": "vendor/BEAM",
+        "chatSizes": ["100K"],
+        "smoke": true,
+        "maxConversations": 1,
+        "maxQuestionsPerType": 1,
+        "evaluatorModel": "gpt-4.1-mini"
+      }
+    }
+  ],
   "variants": [
     {
       "id": "baseline",
@@ -23,7 +40,5 @@
       "apiKey": "{env:OPENAI_API_KEY}",
       "defaultModel": "gpt-4o-mini"
     }
-  },
-  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
-  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+  }
 }

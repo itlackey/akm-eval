@@ -5,13 +5,13 @@
   "variants": [
     {
       "id": "baseline",
-      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "opencode/gpt-4.1-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "none" }
     },
     {
       "id": "akm-memory",
-      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "opencode/gpt-4.1-mini" },
       "akm": { "enabled": true, "command": "akm" },
       "memory": { "backend": "akm", "config": { "command": "akm memory" } }
     }

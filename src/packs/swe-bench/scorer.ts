@@ -1,3 +1,7 @@
 export function scoreSweBenchAdapter(rawScore: number): number {
-  return Number(rawScore.toFixed(6));
+  if (!Number.isFinite(rawScore)) {
+    return 0;
+  }
+
+  return Number(Math.max(0, Math.min(1, rawScore)).toFixed(6));
 }

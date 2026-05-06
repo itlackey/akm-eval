@@ -1,9 +1,15 @@
 # terminal-bench
 
-This folder contains the Phase 0/1 adapter skeleton for `terminal-bench`.
+This folder contains the official `terminal-bench` integration.
 
-- `adapter.ts`: optional-pack adapter entry point
-- `parse.ts`: placeholder raw-output normalization hook
-- `scorer.ts`: placeholder pack-specific score hook
+- `adapter.ts`: invokes the official `tb run` harness and normalizes authoritative artifacts
+- `parse.ts`: typed raw-artifact pass-through for official results
+- `scorer.ts`: score normalization helper
 
-Real pack wiring can be added later without crossing the project boundary.
+Runtime requirements:
+
+- official Terminal-Bench CLI installed as `tb`
+- Python available in `PATH`
+- Docker available in `PATH`
+- opencode-backed provider config in this repo
+- for AKM-enabled variants, `variants[].akm.configPath` must point at an AKM-specific opencode config

@@ -1,9 +1,13 @@
 # swe-bench
 
-This folder contains the Phase 0/1 adapter skeleton for `swe-bench`.
+This folder wraps the official `swebench` Python harness through a subprocess boundary.
 
-- `adapter.ts`: optional-pack adapter entry point
-- `parse.ts`: placeholder raw-output normalization hook
-- `scorer.ts`: placeholder pack-specific score hook
+- `adapter.ts`: loads an official dataset slice, asks the configured provider/model for patches, then runs `python -m swebench.harness.run_evaluation`
+- `parse.ts`: normalizes the authoritative run report and per-instance harness reports
+- `scorer.ts`: rounds the official resolved-instance fraction into akm-eval's normalized score field
 
-Real pack wiring can be added later without crossing the project boundary.
+Requirements:
+
+- Docker daemon available
+- official `swebench` Python package importable as `python3 -m swebench.harness.run_evaluation` (or `python`)
+- a real model-backed agent provider in the akm-eval variant config
