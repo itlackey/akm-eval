@@ -4,8 +4,9 @@
     "outputDir": "../../runs"
   },
   "runs": [
-    { "id": "akm-fast", "pack": "akm-bench", "variant": "mock-fast", "memoryBackend": "none" },
-    { "id": "akm-quality", "pack": "akm-bench", "variant": "mock-judge", "memoryBackend": "raw-vector" },
-    { "id": "terminal-fast", "pack": "terminal-bench", "variant": "local-default", "memoryBackend": "none" }
-  ]
+    { "id": "akm-baseline", "pack": "akm-bench", "variant": "baseline", "memoryBackend": "none" },
+    { "id": "akm-memory", "pack": "akm-bench", "variant": "akm-memory", "memoryBackend": "akm" },
+    { "id": "terminal-baseline", "pack": "terminal-bench", "variant": "baseline", "memoryBackend": "none" }
+  ],
+  "providers": {}
 }

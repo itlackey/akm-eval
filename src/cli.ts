@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createAgentRunner } from './agent/factory.ts';
+import type { AgentRunner } from './agent/types.ts';
 import { loadConfig } from './config/load-config.ts';
 import { runDoctorChecks } from './core/environment.ts';
 import { createRunContext } from './core/run-context.ts';
@@ -78,9 +80,36 @@ async function runCommand(args: string[]): Promise<number> {
 
   resolveVariant(selectedRun.variant);
   const pack = resolvePack(selectedRun.pack);
-  const context = createRunContext(process.cwd(), config, { ...selectedRun, outputDir: outDir ?? selectedRun.outputDir });
-  const memoryBackend = createMemoryBackend(selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none');
-  const result = await pack.run(context, memoryBackend);
+
+  let agentRunner: AgentRunner | undefined;
+
+  if (selectedRun.agentProviderConfig) {
+    const model = selectedRun.agentModel ?? selectedRun.agentProviderConfig.defaultModel ?? '';
+    if (!model) {
+      throw new Error(
+        `No model specified for run "${selectedRun.id ?? `${selectedRun.pack}-${selectedRun.variant}`}". Set agent.model or provider.defaultModel.`,
+      );
+    }
+    agentRunner = createAgentRunner(
+      selectedRun.agentProviderConfig.type,
+      selectedRun.agentProviderConfig,
+      model,
+    );
+  }
+
+  const context = createRunContext(
+    process.cwd(),
+    config,
+    {
+      ...selectedRun,
+      outputDir: outDir ?? selectedRun.outputDir,
+    },
+    agentRunner,
+  );
+  const memoryBackend = createMemoryBackend(
+    selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none',
+  );
+  const result = await pack.run(context, memoryBackend, agentRunner);
   process.stdout.write(toPrettyJson(result));
   return 0;
 }

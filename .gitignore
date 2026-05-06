@@ -5,3 +5,4 @@ dist
 tests/.artifacts
 runs/*
 !runs/.gitkeep
+config/opencode.local.json

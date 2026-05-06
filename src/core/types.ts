@@ -5,6 +5,16 @@ export interface EvalDefaults {
   memoryBackend?: string;
 }
 
+export interface AgentProviderConfig {
+  type: 'opencode' | 'openai-compatible' | 'custom';
+  baseURL?: string;
+  apiKey?: string;
+  timeout?: number;
+  configPath?: string;
+  defaultModel?: string;
+  options?: Record<string, unknown>;
+}
+
 export interface RetrievalConfig {
   query?: string;
   relevantIds?: string[];
@@ -26,12 +36,22 @@ export interface RunDefinition {
   retrieval?: RetrievalConfig;
   answer?: AnswerConfig;
   metadata?: Record<string, string | number | boolean | null>;
+  /** Optional pack-level config (from packs[].config). */
+  packConfig?: Record<string, unknown>;
+  /** Optional per-run model override (from variant.agent.model). */
+  agentModel?: string;
+  /** The resolved provider key. */
+  agentProvider?: string;
+  /** Resolved provider config. */
+  agentProviderConfig?: AgentProviderConfig;
 }
 
 export interface EvalConfig {
   version: 1;
   defaults?: EvalDefaults;
   runs: RunDefinition[];
+  /** Centralized provider connection configs. */
+  providers?: Record<string, AgentProviderConfig>;
 }
 
 export interface AggregateMetrics {

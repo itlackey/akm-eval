@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { AgentRunner } from '../agent/types.ts';
 import type { EvalConfig, RunDefinition } from './types.ts';
 
 export interface RunContext {
@@ -8,9 +9,10 @@ export interface RunContext {
   runId: string;
   outputDir: string;
   startedAt: Date;
+  agentRunner?: AgentRunner;
 }
 
-export function createRunContext(rootDir: string, config: EvalConfig, run: RunDefinition): RunContext {
+export function createRunContext(rootDir: string, config: EvalConfig, run: RunDefinition, agentRunner?: AgentRunner): RunContext {
   const runId = run.id ?? `${run.pack}-${run.variant}`;
   const outputBase = run.outputDir ?? (config.defaults?.outputDir ? path.resolve(config.defaults.outputDir, runId) : `runs/${runId}`);
   const outputDir = path.resolve(rootDir, outputBase);
@@ -22,5 +24,6 @@ export function createRunContext(rootDir: string, config: EvalConfig, run: RunDe
     runId,
     outputDir,
     startedAt: new Date(),
+    agentRunner,
   };
 }

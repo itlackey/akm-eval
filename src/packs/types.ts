@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { AgentRunner } from '../agent/types.ts';
 import { ArtifactStore } from '../core/artifact-store.ts';
 import type { RunContext } from '../core/run-context.ts';
 import type { NormalizedRunResult } from '../core/types.ts';
@@ -18,7 +19,7 @@ export interface PackAdapter {
   description: string;
   optionalDependency?: string;
   checkInstalled(): boolean;
-  run(context: RunContext, memory: MemoryBackend): Promise<NormalizedRunResult>;
+  run(context: RunContext, memory: MemoryBackend, agent?: AgentRunner): Promise<NormalizedRunResult>;
 }
 
 export function createStubPackAdapter(definition: {
@@ -38,7 +39,7 @@ export function createStubPackAdapter(definition: {
         path.resolve(process.cwd(), 'packages', definition.optionalDependency),
       ].some((candidate) => fs.existsSync(candidate));
     },
-    async run(context: RunContext, memory: MemoryBackend): Promise<NormalizedRunResult> {
+    async run(context: RunContext, memory: MemoryBackend, _agent?: AgentRunner): Promise<NormalizedRunResult> {
       const store = new ArtifactStore(context.outputDir);
       store.ensureDir();
 

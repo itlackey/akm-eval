@@ -2,30 +2,41 @@
   "schemaVersion": "akm.eval.config.v1",
   "run": {
     "id": "longmemeval-smoke",
-    "outputDir": "runs/longmemeval-smoke",
-    "maxConcurrency": 1,
-    "timeoutMs": 1800000
+    "outputDir": "runs/longmemeval-smoke"
   },
   "packs": [
     {
-      "id": "longmemeval-smoke",
+      "id": "longmemeval",
       "adapter": "longmemeval",
       "enabled": true,
       "config": {
-        "datasetPath": "./datasets/longmemeval",
-        "maxQuestions": 5,
-        "questionCategories": ["single-session"]
+        "smoke": true,
+        "maxQuestions": 10,
+        "questionCategories": ["single-session", "multi-session"]
       }
     }
   ],
   "variants": [
     {
-      "id": "raw-vector",
-      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "id": "baseline",
+      "agent": { "provider": "none" },
       "akm": { "enabled": false },
-      "memory": { "backend": "raw-vector" }
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "akm-memory",
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": true, "command": "akm" },
+      "memory": { "backend": "akm", "config": { "command": "akm memory" } }
     }
   ],
+  "providers": {
+    "opencode": {
+      "type": "opencode",
+      "configPath": "config/opencode.json",
+      "defaultModel": "opencode/gpt-4.1-mini"
+    }
+  },
   "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
   "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
 }

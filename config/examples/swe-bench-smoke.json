@@ -1,7 +1,22 @@
 {
   "schemaVersion": "akm.eval.config.v1",
-  "run": { "id": "baseline-smoke", "outputDir": "runs/baseline-smoke", "maxConcurrency": 1, "timeoutMs": 1800000 },
-  "packs": [{ "id": "akm-bench-smoke", "adapter": "akm-bench", "enabled": true, "config": { "smoke": true } }],
+  "run": {
+    "id": "swe-bench-smoke",
+    "outputDir": "runs/swe-bench-smoke",
+    "maxConcurrency": 1,
+    "timeoutMs": 600000
+  },
+  "packs": [
+    {
+      "id": "swe-bench",
+      "adapter": "swe-bench",
+      "enabled": true,
+      "config": {
+        "smoke": true,
+        "maxTasks": 5
+      }
+    }
+  ],
   "variants": [
     {
       "id": "baseline",
