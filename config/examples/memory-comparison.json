@@ -47,7 +47,8 @@
   ],
   "notes": [
     "This planned comparison config still includes blocked external memory backend variants for future integration work.",
-    "Today only the baseline and raw-vector paths are truthful runnable benchmark choices in this repo."
+    "Today only the baseline and raw-vector paths are truthful runnable benchmark choices in this repo.",
+    "`akm-eval run` should fail fast for the akm-memory and mem0-oss variants until a real evaluated backend integration lands."
   ],
   "providers": {
     "openai-compatible": {

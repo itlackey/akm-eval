@@ -260,8 +260,10 @@ describe('config loading', () => {
     const doctor = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'doctor'], cwd: rootDir });
     expect(doctor.exitCode).toBe(0);
     expect(doctor.stdout.toString()).toContain('memory:akm');
+    expect(doctor.stdout.toString()).toContain('memory:raw-vector');
     expect(doctor.stdout.toString()).toContain('pack:beam');
     expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
+    expect(doctor.stdout.toString()).toContain('Truthful evaluated memory backends: none, raw-vector');
 
     const listPacks = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
@@ -285,6 +287,24 @@ describe('config loading', () => {
       cwd: rootDir,
     });
     expect(matrix.exitCode).toBe(0);
+
+    const blockedBackendRun = Bun.spawnSync({
+      cmd: [
+        bunBinary,
+        path.resolve(rootDir, 'src/cli.ts'),
+        'run',
+        '--pack',
+        'longmemeval',
+        '--variant',
+        'akm-memory',
+        '--config',
+        path.resolve(rootDir, 'config/examples/memory-comparison.json'),
+      ],
+      cwd: rootDir,
+    });
+    expect(blockedBackendRun.exitCode).toBe(1);
+    expect(blockedBackendRun.stderr.toString()).toContain('not a truthful evaluated benchmark path in this repo yet');
+    expect(blockedBackendRun.stderr.toString()).toContain('memory backend "akm"');
 
     // Create a temporary local dataset file so the run does not depend on network
     const tmpDir = path.resolve(rootDir, 'tests/.artifacts/tmp');

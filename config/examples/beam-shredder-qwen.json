@@ -13,7 +13,7 @@
       "enabled": true,
       "config": {
         "repoPath": "vendor/BEAM",
-        "pythonBin": "python",
+        "pythonBin": "python3.11",
         "chatSizes": ["100K"],
         "smoke": true,
         "maxConversations": 1,

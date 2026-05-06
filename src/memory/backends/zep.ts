@@ -1,12 +1,8 @@
-import { createAkmBackend } from './akm.ts';
+import { createExternalStub } from './akm.ts';
 
 export function createZepBackend() {
-  const backend = createAkmBackend();
-  return {
-    ...backend,
-    id: 'zep',
-    healthCheck() {
-      return { status: 'warn', detail: 'zep backend stub only; package/config not wired yet.' } as const;
-    },
-  };
+  return createExternalStub(
+    'zep',
+    'zep is kept as a planned external backend ID, but this repo does not yet implement a truthful evaluated retrieval integration for `memory.backend: zep`.',
+  );
 }

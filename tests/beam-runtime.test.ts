@@ -74,4 +74,19 @@ describe('beam runtime preflight', () => {
     expect(status.detail).toContain(repoPath);
     expect(status.detail).toContain(datasetPath);
   });
+
+  test('reports missing prepared 10M dataset when requested', () => {
+    const rootDir = createTempRoot();
+    const repoPath = writeBeamRepo(rootDir);
+    const datasetPath = path.resolve(repoPath, 'test_chats');
+    fs.mkdirSync(datasetPath, { recursive: true });
+    process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1';
+
+    const status = checkBeamRuntime(rootDir, {
+      pythonBin: process.execPath,
+      chatSizes: ['10M'],
+    });
+    expect(status.installed).toBe(false);
+    expect(status.detail).toContain('prepared 10M dataset is missing');
+  });
 });

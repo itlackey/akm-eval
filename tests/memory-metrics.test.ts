@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MemoryBackendUnavailableError } from '../src/core/errors.ts';
 import { createAkmBackend } from '../src/memory/backends/akm.ts';
+import { createMem0Backend } from '../src/memory/backends/mem0.ts';
 import { scoreAnswer } from '../src/memory/answer-metrics.ts';
 import { scoreRetrieval } from '../src/memory/retrieval-metrics.ts';
 import { createRawVectorBackend } from '../src/memory/backends/raw-vector.ts';
@@ -31,5 +32,10 @@ describe('memory backend and metrics', () => {
     expect(backend.healthCheck().detail).toContain('fails explicitly');
     await expect(backend.add([{ id: '1', text: 'memory document' }])).rejects.toBeInstanceOf(MemoryBackendUnavailableError);
     await expect(backend.search({ text: 'memory document', topK: 1 })).rejects.toBeInstanceOf(MemoryBackendUnavailableError);
+  });
+
+  test('mem0 stub reports its own backend id in failures', async () => {
+    const backend = createMem0Backend();
+    await expect(backend.search({ text: 'memory document', topK: 1 })).rejects.toThrow('Memory backend "mem0" is unavailable');
   });
 });

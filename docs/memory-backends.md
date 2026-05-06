@@ -12,3 +12,5 @@ Current runnable/truthful status:
 - `zep`: blocked; currently an explicit unavailable external-backend stub
 
 The blocked external backends are kept as IDs for planned integration work, but they should not be treated as truthful benchmark comparison paths today.
+
+`akm-eval doctor` now reports per-backend status, and `akm-eval run` fails before benchmark execution when a run selects one of the blocked external backend IDs.

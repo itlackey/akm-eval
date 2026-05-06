@@ -1,12 +1,8 @@
-import { createAkmBackend } from './akm.ts';
+import { createExternalStub } from './akm.ts';
 
 export function createOpenVikingBackend() {
-  const backend = createAkmBackend();
-  return {
-    ...backend,
-    id: 'openviking',
-    healthCheck() {
-      return { status: 'warn', detail: 'openviking backend stub only; package/config not wired yet.' } as const;
-    },
-  };
+  return createExternalStub(
+    'openviking',
+    'openviking is kept as a planned external backend ID, but this repo does not yet implement a truthful evaluated retrieval integration for `memory.backend: openviking`.',
+  );
 }

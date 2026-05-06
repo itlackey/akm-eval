@@ -96,6 +96,8 @@ Cross-run reporting currently looks for these optional metadata keys when presen
 - `benchmarkId`: benchmark or dataset identifier such as `SWE-bench/SWE-bench_Verified`
 - `benchmarkVersion`: benchmark version string when the source benchmark publishes one
 
+If the upstream benchmark or dataset does not publish a clear benchmark version for a committed reference artifact, leave `benchmarkVersion` unset. Do not substitute harness package versions, report schema versions, dataset identifiers, or pinned source commits; the cross-run summary will display `-` for unknown benchmark versions.
+
 The cross-run summary derives the displayed date from top-level `startedAt`; it does not require a separate metadata date field.
 
 Consumers should not assume a stable cross-pack key set inside `metadata` beyond these optional summary-friendly keys.

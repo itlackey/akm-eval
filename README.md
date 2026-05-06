@@ -129,6 +129,15 @@ The setup/check script verifies that commit when the BEAM checkout is a git repo
 
 It now also fails early when the prepared dataset path is missing, and it can require judge credentials during preflight with `--require-judge`.
 
+Minimum truthful preflight today:
+
+```bash
+bash scripts/setup-beam-runtime.sh --check --require-judge
+# add --require-10m when running 10M chat sizes
+```
+
+If you use the container helper, it now remaps external BEAM repo and dataset paths into the container instead of passing host-only absolute paths through unchanged.
+
 This only pins the Python-side bootstrap needed to unblock later execution work. It does not claim BEAM is fully reproducible end to end yet.
 
 ## Terminal-Bench

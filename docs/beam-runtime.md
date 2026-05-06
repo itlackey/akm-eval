@@ -32,6 +32,7 @@ The current goal is a staged path to reproducibility, not a false claim of a ful
 - `requirements-beam.txt` is a checked-in snapshot of `vendor/BEAM/requirements.txt` from the pinned upstream commit above.
 - `scripts/setup-beam-runtime.sh` creates a local `.venv-beam` or runs a layout/runtime check with `--check`.
 - When the BEAM checkout is a real git worktree and `git` is available, the script verifies that `HEAD` exactly matches the pinned commit above.
+- Use `--require-10m` when the planned BEAM run includes `10M` chat sizes so preflight fails before execution if that dataset slice is absent.
 - If the checkout is only a copied directory without git metadata, the script can still verify the expected files and pinned requirements snapshot, but it cannot prove the original git commit.
 - Default interpreter target is `python3.11` because the upstream requirements currently include a heavy stack that is not validated here across broader Python versions.
 - Additional runtime overrides:
@@ -42,6 +43,7 @@ Example preflight:
 
 ```bash
 bash scripts/setup-beam-runtime.sh --check --require-judge
+bash scripts/setup-beam-runtime.sh --check --require-10m --require-judge
 ```
 
 This verifies:
@@ -50,14 +52,27 @@ This verifies:
 - pinned Python interpreter version target
 - checked-in requirements snapshot matches upstream `requirements.txt`
 - prepared dataset root exists
+- optional prepared 10M dataset root exists when `--require-10m` is used
 - judge credentials are present when `--require-judge` is used
 
 Example:
 
 ```bash
+git clone https://github.com/mohammadtavakoli78/BEAM vendor/BEAM
+git -C vendor/BEAM checkout 3e12035532eb85768f1a7cd779832b650c4b2ef9
+# prepare datasets with the upstream BEAM flow
 bash scripts/setup-beam-runtime.sh --check
 bash scripts/setup-beam-runtime.sh
 ```
+
+## Minimum truthful operator flow
+
+1. Clone the upstream BEAM repo at the pinned commit.
+2. Prepare the official dataset outside this repo using the upstream BEAM dataset flow.
+3. Run `bash scripts/setup-beam-runtime.sh --check --require-judge` before any BEAM eval.
+4. Add `--require-10m` when the config requests `10M` chat sizes.
+
+This keeps the repo-side workflow explicit without pretending dataset preparation or judge access are solved here.
 
 ## Judge path expectations
 
@@ -72,7 +87,7 @@ This reduces wasted runs by surfacing missing credentials before answer generati
 ## Optional container scaffold
 
 - `tools/beam/Dockerfile` provides a pinned `python:3.11.12-slim-bookworm` base plus the checked-in `requirements-beam.txt`.
-- `tools/beam/run-in-container.sh` runs repo commands inside that local image while mounting the current checkout and passing BEAM dataset/judge env vars through.
+- `tools/beam/run-in-container.sh` runs repo commands inside that local image while mounting the current checkout and remapping BEAM repo/dataset paths into the container.
 - This is an optional staging tool for reducing host drift; it is not presented as a complete containerized BEAM solution.
 
 Example:

@@ -1,12 +1,8 @@
-import { createAkmBackend } from './akm.ts';
+import { createExternalStub } from './akm.ts';
 
 export function createMem0Backend() {
-  const backend = createAkmBackend();
-  return {
-    ...backend,
-    id: 'mem0',
-    healthCheck() {
-      return { status: 'warn', detail: 'mem0 backend stub only; package/config not wired yet.' } as const;
-    },
-  };
+  return createExternalStub(
+    'mem0',
+    'mem0 is kept as a planned external backend ID, but this repo does not yet implement a truthful evaluated retrieval integration for `memory.backend: mem0`.',
+  );
 }

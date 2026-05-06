@@ -22,6 +22,11 @@ Optional preflight env overrides:
 - `BEAM_DATASET_10M_PATH`
 - `BEAM_PYTHON_BIN`
 
+Recommended preflight:
+
+- `bash scripts/setup-beam-runtime.sh --check --require-judge`
+- add `--require-10m` when the pack config includes `10M`
+
 Runner support:
 
 - `opencode`: supported for answer generation
@@ -30,4 +35,4 @@ Runner support:
 
 The pack does not use local heuristic scoring. It normalizes only the authoritative BEAM evaluation artifacts.
 
-`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, and runtime preflight checks for prepared datasets plus judge configuration.
+`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, runtime preflight checks for prepared datasets plus judge configuration, and a container helper that remaps external BEAM repo/dataset paths into the container.

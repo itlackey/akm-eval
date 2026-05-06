@@ -5,7 +5,13 @@ import type { AgentRunner } from './agent/types.ts';
 import { loadConfig } from './config/load-config.ts';
 import { runDoctorChecks } from './core/environment.ts';
 import { createRunContext } from './core/run-context.ts';
-import { createMemoryBackend, listMemoryBackends } from './memory/registry.ts';
+import {
+  createMemoryBackend,
+  getMemoryBackendStatus,
+  listBlockedMemoryBackends,
+  listEvaluatedMemoryBackends,
+  listMemoryBackends,
+} from './memory/registry.ts';
 import { packRegistry, resolvePack } from './packs/registry/index.ts';
 import { compareResults } from './reporting/compare.ts';
 import { toPrettyJson } from './reporting/json.ts';
@@ -41,6 +47,8 @@ async function doctor(): Promise<number> {
     console.log(`${check.status.toUpperCase()} ${check.name}: ${check.detail}`);
   }
   console.log(`Available memory backends: ${listMemoryBackends().join(', ')}`);
+  console.log(`Truthful evaluated memory backends: ${listEvaluatedMemoryBackends().join(', ')}`);
+  console.log(`Blocked/planned memory backends: ${listBlockedMemoryBackends().join(', ')}`);
   return 0;
 }
 
@@ -108,9 +116,16 @@ async function runCommand(args: string[]): Promise<number> {
     },
     agentRunner,
   );
-  const memoryBackend = createMemoryBackend(
-    selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none',
-  );
+  const memoryBackendId = selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none';
+  const memoryBackendStatus = getMemoryBackendStatus(memoryBackendId);
+  if (!memoryBackendStatus.evaluated) {
+    throw new Error(
+      `Run "${selectedRun.id ?? `${selectedRun.pack}-${selectedRun.variant}`}" selects memory backend "${memoryBackendId}", ` +
+        `but this backend is not a truthful evaluated benchmark path in this repo yet. ${memoryBackendStatus.detail}`,
+    );
+  }
+
+  const memoryBackend = createMemoryBackend(memoryBackendId);
   const result = await pack.run(context, memoryBackend, agentRunner);
   process.stdout.write(toPrettyJson(result));
   return 0;

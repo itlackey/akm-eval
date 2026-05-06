@@ -11,6 +11,7 @@ CHECK_ONLY=0
 DATASET_PATH="${BEAM_DATASET_PATH:-}"
 DATASET_10M_PATH="${BEAM_DATASET_10M_PATH:-}"
 REQUIRE_JUDGE=0
+REQUIRE_10M=0
 
 usage() {
   cat <<'EOF'
@@ -25,6 +26,7 @@ Options:
   --python BIN     Python interpreter to use. Default: python3.11.
   --dataset PATH   Prepared BEAM dataset root. Also reads BEAM_DATASET_PATH.
   --dataset10m PATH  Prepared BEAM 10M dataset root. Also reads BEAM_DATASET_10M_PATH.
+  --require-10m    Fail if the prepared BEAM 10M dataset is not available.
   --check          Verify repo/layout/runtime expectations without installing.
   --require-judge  Fail if judge credentials are not configured.
   --help           Show this help text.
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
     --dataset10m)
       DATASET_10M_PATH="$2"
       shift 2
+      ;;
+    --require-10m)
+      REQUIRE_10M=1
+      shift
       ;;
     --check)
       CHECK_ONLY=1
@@ -161,6 +167,9 @@ fi
 
 if [[ -n "$DATASET_10M_PATH" ]]; then
   require_directory "$DATASET_10M_PATH"
+elif [[ "$REQUIRE_10M" -eq 1 ]]; then
+  printf 'Prepared BEAM 10M dataset not found. Set --dataset10m /path/to/dataset, export BEAM_DATASET_10M_PATH, or run the upstream 10M dataset preparation from %s\n' "$REPO_PATH" >&2
+  exit 1
 fi
 
 if [[ "$REQUIRE_JUDGE" -eq 1 && -z "${OPENAI_API_KEY:-}" && "${OPENAI_BASE_URL:-https://api.openai.com/v1}" = 'https://api.openai.com/v1' ]]; then
@@ -201,6 +210,8 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
   printf 'Dataset: %s\n' "$DATASET_PATH"
   if [[ -n "$DATASET_10M_PATH" ]]; then
     printf 'Dataset 10M: %s\n' "$DATASET_10M_PATH"
+  else
+    printf 'Dataset 10M: not checked\n'
   fi
   if [[ "$REQUIRE_JUDGE" -eq 1 ]]; then
     printf 'Judge credentials: configured\n'

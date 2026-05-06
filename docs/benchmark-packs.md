@@ -37,7 +37,7 @@ Current trust policy:
 - Requires official dataset preparation before evaluation.
 - Answer generation can use either supported runner path.
 - Evaluation still depends on BEAM's upstream evaluator and judge model path.
-- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, plus an optional pinned Python container scaffold.
+- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, optional `--require-10m` enforcement for 10M runs, and an optional pinned Python container scaffold.
 
 ### `swe-bench`
 
@@ -57,6 +57,7 @@ Current trust policy:
 
 - `akm`, `mem0`, `zep`, and `openviking` are not yet real evaluated retrieval integrations in this repo.
 - They fail explicitly when retrieval is requested instead of silently returning empty results.
+- `akm-eval run` also rejects those backend IDs before benchmark execution so planned matrix variants cannot be mistaken for runnable evaluated comparisons.
 - Only `none` and `raw-vector` should currently be treated as truthful runnable memory backend choices for benchmark execution inside this repo.
 
 ### `tau-bench`
