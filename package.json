@@ -15,6 +15,7 @@
     "test": "bun test",
     "check": "bun run check:boundary && bun test",
     "lint": "biome check src tests scripts",
-    "format": "biome format --write src tests scripts"
+    "format": "biome format --write src tests scripts",
+    "download:datasets": "bun scripts/download-datasets.ts"
   }
 }

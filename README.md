@@ -12,10 +12,26 @@ Trust policy:
 
 ```bash
 bun install
+bun run download:datasets
 bun test
 bun run check:boundary
 bun src/cli.ts doctor
 ```
+
+## Datasets
+
+Dataset files are not committed to the repository due to their size. Download them before running evals:
+
+```bash
+# Download all datasets
+bun run download:datasets
+
+# Download a specific dataset
+bun scripts/download-datasets.ts LongMemEval
+bun scripts/download-datasets.ts LoCoMo
+```
+
+Datasets are auto-downloaded on first use if not present, but pre-downloading is recommended.
 
 ## Terminal-Bench
 

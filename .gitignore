@@ -9,3 +9,5 @@ config/opencode.local.json
 config/examples/runs/
 config/opencode.shredder.json
 **/__pycache__/
+datasets/longmemeval/dataset.json
+datasets/locomo/locomo10.json
