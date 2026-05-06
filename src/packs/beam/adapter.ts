@@ -12,6 +12,7 @@ import {
   answerBeamQuestion,
   type BeamPackConfig,
   checkBeamRuntime,
+  createBeamRuntimeFingerprint,
   createBeamAnswersFile,
   createBeamResultsRoot,
   loadBeamConversations,
@@ -40,6 +41,7 @@ export const beamAdapter: PackAdapter = {
     const resolvedAgent = requireAgentRunner(agent, 'beam');
     const packConfig = (context.run.packConfig ?? {}) as BeamPackConfig;
     const runtime = resolveBeamRuntime(context.rootDir, packConfig);
+    const runtimeFingerprint = createBeamRuntimeFingerprint(context.rootDir, runtime);
     const store = new ArtifactStore(context.outputDir);
     store.ensureDir();
 
@@ -160,10 +162,11 @@ export const beamAdapter: PackAdapter = {
           `variant=${context.run.variant}`,
           `memory=${memory.id}`,
           `conversations=${conversations.length}`,
-          `questions=${scores.questionCount}`,
-          `evaluatorModel=${evaluatorModel}`,
-          `beamRepo=${runtime.repoPath}`,
-        ],
+        `questions=${scores.questionCount}`,
+        `evaluatorModel=${evaluatorModel}`,
+        `beamRepo=${runtime.repoPath}`,
+        `beamRuntimeFingerprint=${runtimeFingerprint.fingerprintSha256}`,
+      ],
       },
       artifacts: {
         resultPath: '',
@@ -184,6 +187,7 @@ export const beamAdapter: PackAdapter = {
         beamDataset10MPath: runtime.dataset10MPath,
         beamJudgeBaseUrl: runtime.judgeBaseUrl,
         beamJudgeProvider: runtime.judgeProvider,
+        beamRuntimeFingerprint: runtimeFingerprint.fingerprintSha256,
         beamChatSizes: requestedChatSizes,
         judgedPassRate: scores.judgedPassRate,
         ...Object.fromEntries(Object.entries(scores.byType).map(([key, value]) => [`score_${key}`, value])),
@@ -201,6 +205,7 @@ export const beamAdapter: PackAdapter = {
       beamDataset10MPath: runtime.dataset10MPath,
       beamJudgeBaseUrl: runtime.judgeBaseUrl,
       beamJudgeProvider: runtime.judgeProvider,
+      runtimeFingerprint,
       beamChatSizes: requestedChatSizes,
       perConversationSummary,
       scores,

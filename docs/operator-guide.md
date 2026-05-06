@@ -48,4 +48,4 @@ Committed reference artifacts live under `runs/reference/`.
 
 Each reference run should be produced by running directly into its final destination so `result.json` artifact paths match committed files.
 
-New runs now auto-capture `repoCommit` and `runnerType` in `result.json.metadata` when the local git checkout and provider config make those values available. Keep storing pack-specific fields like `benchmarkId` and `benchmarkVersion` truthfully, and let unknown values remain unset.
+New runs now auto-capture `repoCommit` and `runnerType` in `result.json.metadata` when the local git checkout and provider config make those values available. Keep storing pack-specific fields like `benchmarkId` and `benchmarkVersion` truthfully, let unknown values remain unset, and for older committed references prefer an explicit provenance note over reconstructing `repoCommit` from surrounding commits.

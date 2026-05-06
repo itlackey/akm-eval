@@ -24,12 +24,6 @@
       "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "none" }
-    },
-    {
-      "id": "akm-memory",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": true, "command": "akm" },
-      "memory": { "backend": "akm", "config": { "command": "akm memory" } }
     }
   ],
   "providers": {

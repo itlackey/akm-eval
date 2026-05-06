@@ -25,6 +25,18 @@ describe('config loading', () => {
     expect(config.runs.some((run) => run.memoryBackend === 'raw-vector')).toBe(true);
   });
 
+  test('runnable smoke examples no longer include blocked akm-memory runs', () => {
+    for (const relativePath of [
+      'config/examples/beam-smoke.json',
+      'config/examples/longmemeval-smoke.json',
+      'config/examples/swe-bench-smoke.json',
+      'config/examples/terminal-bench-smoke.json',
+    ]) {
+      const config = loadConfig(path.resolve(rootDir, relativePath));
+      expect(config.runs.some((run) => run.memoryBackend === 'akm')).toBe(false);
+    }
+  });
+
   test('loads tau-bench smoke example config', () => {
     const config = loadConfig(path.resolve(rootDir, 'config/examples/tau-bench-smoke.json'));
     expect(config.version).toBe(1);
@@ -287,6 +299,8 @@ describe('config loading', () => {
       cwd: rootDir,
     });
     expect(matrix.exitCode).toBe(0);
+    expect(matrix.stdout.toString()).toContain('| Memory Status |');
+    expect(matrix.stdout.toString()).toContain('| longmemeval-smoke-akm-memory | longmemeval | akm-memory | akm | blocked: ');
 
     const blockedBackendRun = Bun.spawnSync({
       cmd: [

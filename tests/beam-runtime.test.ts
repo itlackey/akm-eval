@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { checkBeamRuntime } from '../src/packs/beam/official.ts';
+import { checkBeamRuntime, createBeamRuntimeFingerprint, resolveBeamRuntime } from '../src/packs/beam/official.ts';
 
 const tempRoots: string[] = [];
 
 function createTempRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'akm-eval-beam-test-'));
+  const requirementsSnapshot = path.resolve(process.cwd(), 'requirements-beam.txt');
+  if (fs.existsSync(requirementsSnapshot)) {
+    fs.copyFileSync(requirementsSnapshot, path.resolve(root, 'requirements-beam.txt'));
+  }
   tempRoots.push(root);
   return root;
 }
@@ -88,5 +92,32 @@ describe('beam runtime preflight', () => {
     });
     expect(status.installed).toBe(false);
     expect(status.detail).toContain('prepared 10M dataset is missing');
+  });
+
+  test('captures a stable runtime fingerprint from resolved repo and dataset state', () => {
+    const rootDir = createTempRoot();
+    const repoPath = writeBeamRepo(rootDir);
+    const datasetPath = path.resolve(repoPath, 'test_chats');
+    fs.mkdirSync(path.resolve(datasetPath, '100K/1'), { recursive: true });
+    fs.mkdirSync(path.resolve(datasetPath, '100K/2'), { recursive: true });
+    fs.mkdirSync(path.resolve(datasetPath, '500K/7'), { recursive: true });
+    process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1';
+
+    const runtime = resolveBeamRuntime(rootDir, { pythonBin: process.execPath });
+    const fingerprint = createBeamRuntimeFingerprint(rootDir, runtime);
+
+    expect(fingerprint.repoPath).toBe(repoPath);
+    expect(fingerprint.repoPathOrigin).toBe('workspace');
+    expect(fingerprint.dataset.conversationCounts).toEqual({
+      '100K': 2,
+      '500K': 1,
+      '1M': 0,
+    });
+    expect(fingerprint.dataset.pathOrigin).toBe('workspace');
+    expect(fingerprint.dataset10M).toBeNull();
+    expect(fingerprint.requirementsSnapshotNormalizedSha256).not.toBeNull();
+    expect(fingerprint.upstreamRequirementsNormalizedSha256).not.toBeNull();
+    expect(fingerprint.requirementsSnapshotMatchesUpstream).toBe(false);
+    expect(fingerprint.fingerprintSha256).toHaveLength(64);
   });
 });

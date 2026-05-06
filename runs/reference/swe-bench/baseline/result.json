@@ -14,7 +14,8 @@
   "notes": [
     "SWE-bench evaluated 1 instance(s) with the official Docker harness.",
     "Resolved 0/1 instances (0.0%).",
-    "Dataset: SWE-bench/SWE-bench_Verified (test)"
+    "Dataset: SWE-bench/SWE-bench_Verified (test)",
+    "Provenance note: this committed reference predates automatic repoCommit capture; committed raw artifacts identify the dataset and harness outputs, but no committed artifact records the akm-eval repo commit used for this run."
   ],
   "metrics": {
     "retrieval": {

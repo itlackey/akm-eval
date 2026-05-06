@@ -30,6 +30,8 @@ describe('memory backend and metrics', () => {
   test('akm backend fails explicitly instead of returning fake empty retrieval', async () => {
     const backend = createAkmBackend();
     expect(backend.healthCheck().detail).toContain('fails explicitly');
+    expect(backend.healthCheck().detail).toContain('akm memory --help');
+    expect(backend.healthCheck().detail).toContain('documented add/search contract');
     await expect(backend.add([{ id: '1', text: 'memory document' }])).rejects.toBeInstanceOf(MemoryBackendUnavailableError);
     await expect(backend.search({ text: 'memory document', topK: 1 })).rejects.toBeInstanceOf(MemoryBackendUnavailableError);
   });

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type { AgentRunResult, AgentRunner } from '../../agent/types.ts';
 import { runProcess } from '../../core/process.ts';
 import { BenchmarkRuntimeError } from '../../core/errors.ts';
@@ -36,6 +37,30 @@ export interface BeamRuntime {
   repoCommit: string | null;
   judgeBaseUrl: string;
   judgeProvider: 'openai' | 'openai-compatible';
+}
+
+export interface BeamDatasetFingerprint {
+  path: string;
+  pathOrigin: 'workspace' | 'external';
+  conversationCounts: Record<string, number>;
+}
+
+export interface BeamRuntimeFingerprint {
+  fingerprintSha256: string;
+  repoPath: string;
+  repoPathOrigin: 'workspace' | 'external';
+  repoCommit: string | null;
+  pythonBin: string;
+  pythonVersion: string | null;
+  judgeBaseUrl: string;
+  judgeProvider: 'openai' | 'openai-compatible';
+  requirementsSnapshotPath: string;
+  requirementsSnapshotNormalizedSha256: string | null;
+  upstreamRequirementsPath: string;
+  upstreamRequirementsNormalizedSha256: string | null;
+  requirementsSnapshotMatchesUpstream: boolean;
+  dataset: BeamDatasetFingerprint;
+  dataset10M: BeamDatasetFingerprint | null;
 }
 
 export interface BeamQuestion {
@@ -85,6 +110,7 @@ const DEFAULT_BEAM_REPO_ENV = 'BEAM_REPO_PATH';
 const DEFAULT_BEAM_DATASET_ENV = 'BEAM_DATASET_PATH';
 const DEFAULT_BEAM_DATASET_10M_ENV = 'BEAM_DATASET_10M_PATH';
 const DEFAULT_BEAM_PYTHON_ENV = 'BEAM_PYTHON_BIN';
+const DEFAULT_DATASET_CHAT_SIZES = ['100K', '500K', '1M'];
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -96,6 +122,45 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function parseJsonFile<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stableJsonValue(entry));
+  }
+
+  const objectValue = asObject(value);
+  if (!objectValue) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.keys(objectValue)
+      .sort()
+      .map((key) => [key, stableJsonValue(objectValue[key])]),
+  );
+}
+
+function sha256Text(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function normalizedRequirementsText(filePath: string): string | null {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return null;
+  }
+
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .join('\n');
+}
+
+function normalizedRequirementsSha256(filePath: string): string | null {
+  const text = normalizedRequirementsText(filePath);
+  return text === null ? null : sha256Text(text);
 }
 
 function firstNonEmptyLine(value: string): string | null {
@@ -169,6 +234,47 @@ function resolveBeamPythonVersion(pythonBin: string, rootDir: string): string | 
   }
 
   return firstNonEmptyLine(`${result.stdout}\n${result.stderr}`);
+}
+
+function isPathInsideRoot(rootDir: string, candidatePath: string): boolean {
+  const relativePath = path.relative(path.resolve(rootDir), path.resolve(candidatePath));
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function pathOrigin(rootDir: string, candidatePath: string): 'workspace' | 'external' {
+  return isPathInsideRoot(rootDir, candidatePath) ? 'workspace' : 'external';
+}
+
+function countNumericDirectories(directoryPath: string): number {
+  if (!fs.existsSync(directoryPath) || !fs.statSync(directoryPath).isDirectory()) {
+    return 0;
+  }
+
+  return fs
+    .readdirSync(directoryPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name)).length;
+}
+
+function summarizeDefaultDatasetRoot(datasetPath: string): Record<string, number> {
+  return Object.fromEntries(
+    DEFAULT_DATASET_CHAT_SIZES.map((chatSize) => [chatSize, countNumericDirectories(path.resolve(datasetPath, chatSize))]),
+  );
+}
+
+function summarizeDatasetRoot(datasetPath: string, type: 'default' | '10m'): Record<string, number> {
+  return type === '10m' ? { '10M': countNumericDirectories(datasetPath) } : summarizeDefaultDatasetRoot(datasetPath);
+}
+
+function datasetFingerprint(rootDir: string, datasetPath: string, type: 'default' | '10m'): BeamDatasetFingerprint {
+  return {
+    path: datasetPath,
+    pathOrigin: pathOrigin(rootDir, datasetPath),
+    conversationCounts: summarizeDatasetRoot(datasetPath, type),
+  };
+}
+
+function fingerprintHash(payload: Omit<BeamRuntimeFingerprint, 'fingerprintSha256'>): string {
+  return sha256Text(JSON.stringify(stableJsonValue(payload)));
 }
 
 function datasetCandidates(rootDir: string, repoPath: string, packConfig: BeamPackConfig, type: 'default' | '10m'): string[] {
@@ -285,6 +391,35 @@ export function resolveBeamRuntime(rootDir: string, packConfig: BeamPackConfig =
     repoCommit: resolveBeamRepoCommit(repoPath),
     judgeBaseUrl: judgeRuntime.judgeBaseUrl,
     judgeProvider: judgeRuntime.judgeProvider,
+  };
+}
+
+export function createBeamRuntimeFingerprint(rootDir: string, runtime: BeamRuntime): BeamRuntimeFingerprint {
+  const requirementsSnapshotPath = path.resolve(rootDir, 'requirements-beam.txt');
+  const upstreamRequirementsPath = path.resolve(runtime.repoPath, 'requirements.txt');
+  const requirementsSnapshotNormalizedSha256 = normalizedRequirementsSha256(requirementsSnapshotPath);
+  const upstreamRequirementsNormalizedSha256 = normalizedRequirementsSha256(upstreamRequirementsPath);
+  const payload = {
+    repoPath: runtime.repoPath,
+    repoPathOrigin: pathOrigin(rootDir, runtime.repoPath),
+    repoCommit: runtime.repoCommit,
+    pythonBin: runtime.pythonBin,
+    pythonVersion: runtime.pythonVersion,
+    judgeBaseUrl: runtime.judgeBaseUrl,
+    judgeProvider: runtime.judgeProvider,
+    requirementsSnapshotPath,
+    requirementsSnapshotNormalizedSha256,
+    upstreamRequirementsPath,
+    upstreamRequirementsNormalizedSha256,
+    requirementsSnapshotMatchesUpstream:
+      requirementsSnapshotNormalizedSha256 !== null && requirementsSnapshotNormalizedSha256 === upstreamRequirementsNormalizedSha256,
+    dataset: datasetFingerprint(rootDir, runtime.datasetPath, 'default'),
+    dataset10M: runtime.dataset10MPath ? datasetFingerprint(rootDir, runtime.dataset10MPath, '10m') : null,
+  } satisfies Omit<BeamRuntimeFingerprint, 'fingerprintSha256'>;
+
+  return {
+    fingerprintSha256: fingerprintHash(payload),
+    ...payload,
   };
 }
 

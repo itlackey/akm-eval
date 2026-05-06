@@ -10,7 +10,7 @@ Current trust policy:
 - `beam` is runnable only when the official `mohammadtavakoli78/BEAM` repo is available locally, the official dataset has already been prepared, and the upstream BEAM evaluator can run with a real judge model.
 - `locomo` is runnable with the official `snap-research/locomo` dataset plus the bundled authoritative QA scoring wrapper. Answer generation still uses akm-eval's configured real model provider.
 - `terminal-bench` is runnable only when the official `tb` harness, Python, and Docker are installed. It executes `tb run` and trusts only the official `results.json` and `run_metadata.json` artifacts.
-- `terminal-bench` currently supports opencode-backed providers in this repo so users can keep using their configured `configPath`; `akm-no-memory` variants also require `variants[].akm.configPath`, but repo-facing AKM comparison claims remain blocked while `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path.
+- `terminal-bench` currently supports opencode-backed providers in this repo so users can keep using their configured `configPath`; AKM-enabled non-retrieval variants also require `variants[].akm.configPath`, but repo-facing AKM comparison claims remain blocked while `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path.
 - `tau-bench` is runnable only when the official Python package is installed and the upstream JSON result file can be treated as the source of truth.
 - `akm-bench` is intentionally blocked until it is wired to authoritative external harness/result artifacts.
 - The repo does not emit proxy or heuristic benchmark scores for blocked packs.
@@ -37,7 +37,7 @@ Current trust policy:
 - Requires official dataset preparation before evaluation.
 - Answer generation can use either supported runner path.
 - Evaluation still depends on BEAM's upstream evaluator and judge model path.
-- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, optional `--require-10m` enforcement for 10M runs, and an optional pinned Python container scaffold.
+- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, optional `--require-10m` enforcement for 10M runs, runtime fingerprint capture in preflight/run artifacts, and an optional pinned Python container scaffold with local image-ID reporting.
 
 ### `swe-bench`
 
@@ -58,6 +58,7 @@ Current trust policy:
 - `akm`, `mem0`, `zep`, and `openviking` are not yet real evaluated retrieval integrations in this repo.
 - They fail explicitly when retrieval is requested instead of silently returning empty results.
 - `akm-eval run` also rejects those backend IDs before benchmark execution so planned matrix variants cannot be mistaken for runnable evaluated comparisons.
+- `akm-eval matrix` now marks those backend rows as blocked/planned instead of rendering them like ordinary runnable memory choices.
 - Only `none` and `raw-vector` should currently be treated as truthful runnable memory backend choices for benchmark execution inside this repo.
 
 ### `tau-bench`

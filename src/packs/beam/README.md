@@ -14,6 +14,7 @@ Requirements:
 - local runtime bootstrap in this repo currently targets `python3.11` via `scripts/setup-beam-runtime.sh`
 - `OPENAI_API_KEY` available for the upstream BEAM judge path
 - pinned upstream/runtime notes live in `docs/beam-runtime.md`
+- each run now records a BEAM runtime fingerprint in `result.json` metadata and `raw-output.json`
 
 Optional preflight env overrides:
 
@@ -26,6 +27,7 @@ Recommended preflight:
 
 - `bash scripts/setup-beam-runtime.sh --check --require-judge`
 - add `--require-10m` when the pack config includes `10M`
+- add `--print-fingerprint` to emit a reproducibility-oriented runtime fingerprint for operator logs
 
 Runner support:
 
@@ -35,4 +37,4 @@ Runner support:
 
 The pack does not use local heuristic scoring. It normalizes only the authoritative BEAM evaluation artifacts.
 
-`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, runtime preflight checks for prepared datasets plus judge configuration, and a container helper that remaps external BEAM repo/dataset paths into the container.
+`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, runtime preflight checks for prepared datasets plus judge configuration, runtime fingerprints for repo/dataset/judge state, and a container helper that remaps external BEAM repo/dataset paths into the container while exposing the local image ID when requested.

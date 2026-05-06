@@ -12,7 +12,8 @@
   "notes": [
     "tau-bench evaluated 1 task(s) in the retail environment.",
     "Average reward: 0.0%.",
-    "Passed 0/1 task(s)."
+    "Passed 0/1 task(s).",
+    "Provenance note: this committed reference predates automatic repoCommit capture; committed raw artifacts identify the retail environment and upstream results file, but no committed artifact records the akm-eval repo commit used for this run."
   ],
   "metrics": {
     "retrieval": {

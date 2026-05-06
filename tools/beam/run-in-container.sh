@@ -8,6 +8,7 @@ REPO_PATH="${BEAM_REPO_PATH:-${ROOT_DIR}/vendor/BEAM}"
 DATASET_PATH="${BEAM_DATASET_PATH:-}"
 DATASET_10M_PATH="${BEAM_DATASET_10M_PATH:-}"
 WORKSPACE_PATH="/workspace"
+PRINT_IMAGE_FINGERPRINT=0
 
 require_directory() {
   local dir_path="$1"
@@ -57,6 +58,7 @@ then runs a command with the current repo mounted at /workspace.
 
 Examples:
   tools/beam/run-in-container.sh --build -- bash scripts/setup-beam-runtime.sh --check
+  tools/beam/run-in-container.sh --build --print-image-fingerprint -- bash scripts/setup-beam-runtime.sh --check --print-fingerprint
   tools/beam/run-in-container.sh -- bun src/cli.ts doctor
 
 Environment:
@@ -74,6 +76,21 @@ It does not pin the upstream dataset contents, judge credentials, GPU stack, or 
 EOF
 }
 
+print_image_fingerprint() {
+  local image_id
+  image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG" 2>/dev/null || true)"
+  if [[ -z "$image_id" ]]; then
+    printf 'Container image not found locally: %s\n' "$IMAGE_TAG" >&2
+    exit 1
+  fi
+
+  local created_at
+  created_at="$(docker image inspect --format '{{.Created}}' "$IMAGE_TAG")"
+  printf 'Container image tag: %s\n' "$IMAGE_TAG"
+  printf 'Container image id: %s\n' "$image_id"
+  printf 'Container image created: %s\n' "$created_at"
+}
+
 BUILD_IMAGE=0
 
 while [[ $# -gt 0 ]]; do
@@ -85,6 +102,10 @@ while [[ $# -gt 0 ]]; do
     --help)
       usage
       exit 0
+      ;;
+    --print-image-fingerprint)
+      PRINT_IMAGE_FINGERPRINT=1
+      shift
       ;;
     --)
       shift
@@ -124,6 +145,10 @@ fi
 
 if [[ "$BUILD_IMAGE" -eq 1 ]]; then
   docker build -t "$IMAGE_TAG" -f "$ROOT_DIR/tools/beam/Dockerfile" "$ROOT_DIR"
+fi
+
+if [[ "$PRINT_IMAGE_FINGERPRINT" -eq 1 ]]; then
+  print_image_fingerprint
 fi
 
 DOCKER_ARGS=(

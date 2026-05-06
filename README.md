@@ -42,6 +42,7 @@ Blocked pack:
 Blocked memory-backend comparison paths:
 
 - `akm`, `mem0`, `zep`, and `openviking` currently fail explicitly instead of pretending to provide evaluated retrieval behavior in benchmark runs
+- `akm` is blocked specifically because the repo can verify `akm --help` and `akm info --format json`, but `akm memory --help` still does not expose a documented indexing/query contract that can be mapped truthfully onto this repo's retrieval interface
 
 ## Runner support
 
@@ -123,6 +124,7 @@ For the current pinned local runtime bootstrap:
 - pinned Python requirements snapshot: `requirements-beam.txt`
 - optional env overrides: `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, `BEAM_PYTHON_BIN`
 - optional container scaffold: `tools/beam/Dockerfile` and `tools/beam/run-in-container.sh`
+- runtime evidence capture: `--print-fingerprint` from the setup/check script and `beamRuntimeFingerprint` in run artifacts
 - detailed notes and limits: `docs/beam-runtime.md`
 
 The setup/check script verifies that commit when the BEAM checkout is a git repo. Without git metadata it falls back to file-layout plus pinned-requirements checks only.
@@ -133,10 +135,13 @@ Minimum truthful preflight today:
 
 ```bash
 bash scripts/setup-beam-runtime.sh --check --require-judge
+bash scripts/setup-beam-runtime.sh --check --require-judge --print-fingerprint
 # add --require-10m when running 10M chat sizes
 ```
 
 If you use the container helper, it now remaps external BEAM repo and dataset paths into the container instead of passing host-only absolute paths through unchanged.
+
+If you want container-side evidence too, use `tools/beam/run-in-container.sh --print-image-fingerprint` to record the local image ID that was actually run.
 
 This only pins the Python-side bootstrap needed to unblock later execution work. It does not claim BEAM is fully reproducible end to end yet.
 
@@ -148,4 +153,4 @@ This only pins the Python-side bootstrap needed to unblock later execution work.
 - Ensure `Docker` and `python3` are available in `PATH`.
 - Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
 - For `akm-no-memory` terminal-bench variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
-- `src/memory/backends/akm.ts` now reports AKM CLI/runtime metadata and fails explicitly when retrieval is requested; it still does not implement a truthful evaluated AKM retrieval path, so committed AKM comparison artifacts and repo-level AKM benchmark claims remain blocked today.
+- `src/memory/backends/akm.ts` now reports AKM CLI/runtime metadata and fails explicitly when retrieval is requested; it still does not implement a truthful evaluated AKM retrieval path, because the current documented AKM CLI surface does not yet expose a repo-mappable memory add/search contract.

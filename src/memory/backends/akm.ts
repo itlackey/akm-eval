@@ -8,9 +8,9 @@ interface AkmBackendRuntime {
 }
 
 function inspectAkmRuntime(): AkmBackendRuntime {
-  const versionResult = runProcess('akm', ['--version'], process.cwd());
-  if (!versionResult.success) {
-    const detail = versionResult.stderr.trim() || versionResult.stdout.trim() || 'akm CLI not found in PATH';
+  const helpResult = runProcess('akm', ['--help'], process.cwd());
+  if (!helpResult.success) {
+    const detail = helpResult.stderr.trim() || helpResult.stdout.trim() || 'akm CLI not found in PATH';
     return {
       available: false,
       detail: `requires the AKM CLI in PATH. ${detail}`,
@@ -22,9 +22,11 @@ function inspectAkmRuntime(): AkmBackendRuntime {
     const detail = infoResult.stderr.trim() || infoResult.stdout.trim() || 'akm info failed';
     return {
       available: false,
-      detail: `akm CLI is present (${versionResult.stdout.trim().split('\n')[0] ?? 'version unknown'}) but \`akm info --format json\` failed: ${detail}`,
+      detail: `akm CLI is present, but \`akm info --format json\` failed: ${detail}`,
     };
   }
+
+  const memoryHelpResult = runProcess('akm', ['memory', '--help'], process.cwd());
 
   let parsed: { version?: string; semanticSearch?: { status?: string } } | null = null;
   try {
@@ -33,15 +35,18 @@ function inspectAkmRuntime(): AkmBackendRuntime {
     parsed = null;
   }
 
-  const version = parsed?.version?.trim() || versionResult.stdout.trim().split('\n')[0] || 'unknown version';
+  const version = parsed?.version?.trim() || 'unknown version';
   const semanticStatus = parsed?.semanticSearch?.status?.trim();
   const semanticDetail = semanticStatus ? ` semanticSearch=${semanticStatus}.` : '';
+  const memoryContractDetail = memoryHelpResult.success
+    ? 'Verified `akm --help` and `akm info --format json`, but `akm memory --help` still does not expose a documented add/search contract that maps truthfully onto this repo\'s `MemoryBackend.add` and `MemoryBackend.search` interface.'
+    : `Verified \`akm --help\` and \`akm info --format json\`, but \`akm memory --help\` failed: ${memoryHelpResult.stderr.trim() || memoryHelpResult.stdout.trim() || 'unknown error'}.`;
 
   return {
     available: false,
     detail:
       `akm CLI ${version} is installed, but this repo does not yet have a truthful evaluated retrieval integration for \`memory.backend: akm\`. ` +
-      `The backend now fails explicitly instead of silently returning empty results.${semanticDetail}`,
+      `${memoryContractDetail} The backend fails explicitly instead of silently returning empty results.${semanticDetail}`,
   };
 }
 
