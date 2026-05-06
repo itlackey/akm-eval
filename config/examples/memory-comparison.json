@@ -12,7 +12,6 @@
       "adapter": "longmemeval",
       "enabled": true,
       "config": {
-        "datasetPath": "./datasets/longmemeval",
         "maxQuestions": 100,
         "questionCategories": ["single-session", "multi-session", "temporal", "preference"]
       }
@@ -21,29 +20,36 @@
   "variants": [
     {
       "id": "baseline",
-      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "none" }
     },
     {
       "id": "akm-memory",
-      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
       "akm": { "enabled": true, "command": "akm" },
       "memory": { "backend": "akm", "config": { "command": "akm memory" } }
     },
     {
       "id": "mem0-oss",
-      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "mem0", "config": { "mode": "oss" } }
     },
     {
       "id": "raw-vector",
-      "agent": { "provider": "opencode", "model": "gpt-4.1-mini" },
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "raw-vector" }
     }
   ],
+  "providers": {
+    "opencode": {
+      "type": "opencode",
+      "configPath": "config/opencode.json",
+      "defaultModel": "opencode/gpt-4.1-mini"
+    }
+  },
   "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
   "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
 }

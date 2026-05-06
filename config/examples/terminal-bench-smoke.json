@@ -1,11 +1,42 @@
 {
   "schemaVersion": "akm.eval.config.v1",
-  "run": { "id": "terminal-bench-smoke", "outputDir": "runs/terminal-bench-smoke", "maxConcurrency": 1, "timeoutMs": 1800000 },
-  "packs": [{ "id": "terminal-bench-smoke", "adapter": "terminal-bench", "enabled": true, "config": {} }],
-  "variants": [
-    { "id": "baseline", "agent": { "provider": "opencode", "model": "gpt-4.1-mini" }, "akm": { "enabled": false }, "memory": { "backend": "none" } },
-    { "id": "akm-no-memory", "agent": { "provider": "opencode", "model": "gpt-4.1-mini" }, "akm": { "enabled": true, "command": "akm" }, "memory": { "backend": "none" } }
+  "run": {
+    "id": "terminal-bench-smoke",
+    "outputDir": "runs/terminal-bench-smoke"
+  },
+  "packs": [
+    {
+      "id": "terminal-bench",
+      "adapter": "terminal-bench",
+      "enabled": true,
+      "config": {
+        "smoke": true,
+        "maxTasks": 5,
+        "difficulty": "easy"
+      }
+    }
   ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": { "provider": "none" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "akm-memory",
+      "agent": { "provider": "opencode", "providerRef": "opencode", "model": "gpt-4.1-mini" },
+      "akm": { "enabled": true, "command": "akm" },
+      "memory": { "backend": "akm", "config": { "command": "akm memory" } }
+    }
+  ],
+  "providers": {
+    "opencode": {
+      "type": "opencode",
+      "configPath": "config/opencode.json",
+      "defaultModel": "opencode/gpt-4.1-mini"
+    }
+  },
   "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
   "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
 }

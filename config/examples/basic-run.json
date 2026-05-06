@@ -8,8 +8,8 @@
     {
       "id": "demo-akm-bench",
       "pack": "akm-bench",
-      "variant": "mock-fast",
-      "memoryBackend": "raw-vector",
+      "variant": "baseline",
+      "memoryBackend": "none",
       "memoryDocuments": [
         { "id": "doc-1", "text": "AKM uses adapter boundaries for optional integrations." },
         { "id": "doc-2", "text": "Raw vector search is deterministic in this skeleton." }
@@ -24,5 +24,6 @@
         "actual": "Raw vector search is deterministic."
       }
     }
-  ]
+  ],
+  "providers": {}
 }

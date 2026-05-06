@@ -8,11 +8,11 @@ export type EvalVariant = {
   id: string;
   label?: string;
   agent: {
-    // "opencode" is the local/default agent provider label used by this scaffold.
-    provider: 'opencode' | 'custom' | 'none';
+    provider: 'opencode' | 'openai-compatible' | 'custom' | 'none';
     model?: string;
     command?: string;
     env?: Record<string, string>;
+    providerRef?: string;
   };
   akm: {
     enabled: boolean;
