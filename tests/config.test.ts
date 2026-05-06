@@ -124,7 +124,6 @@ describe('config loading', () => {
     const config = validateConfig({
       schemaVersion: 'akm.eval.config.v1',
       run: { id: 'x', outputDir: 'runs/x' },
-      packs: [{ id: 'longmemeval-smoke', adapter: 'longmemeval', enabled: true }],
       packs: [
         {
           id: 'longmemeval-smoke',
@@ -199,17 +198,78 @@ describe('config loading', () => {
     process.env.DIRECT_KEY = 'direct-secret';
     const config = validateConfig({
       version: 1,
-      runs: [{ pack: 'docs-example', variant: 'baseline', outputDir: 'runs/example' }],
+      runs: [{ pack: 'docs-example', variant: 'baseline', outputDir: 'runs/example', agentProvider: 'local' }],
       providers: {
         local: {
           type: 'openai-compatible',
           baseURL: 'http://localhost:1234/v1',
           apiKey: '{env:DIRECT_KEY}',
+          defaultModel: 'gpt-4o-mini',
         },
       },
     });
     expect(config.providers?.local.apiKey).toBe('direct-secret');
+    expect(config.runs[0]?.agentProvider).toBe('local');
+    expect(config.runs[0]?.agentProviderConfig?.type).toBe('openai-compatible');
     delete process.env.DIRECT_KEY;
+  });
+
+  test('resolves direct run provider references from global providers', () => {
+    const config = validateConfig({
+      version: 1,
+      defaults: { outputDir: 'runs/example' },
+      runs: [
+        {
+          id: 'longmemeval-baseline',
+          pack: 'longmemeval',
+          variant: 'baseline',
+          outputDir: 'runs/example/longmemeval/baseline',
+          memoryBackend: 'none',
+          agentProvider: 'openai-compatible',
+          packConfig: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
+        },
+      ],
+      providers: {
+        'openai-compatible': {
+          type: 'openai-compatible',
+          baseURL: 'https://api.openai.com/v1',
+          apiKey: 'test',
+          defaultModel: 'gpt-4o-mini',
+        },
+      },
+    });
+
+    expect(config.runs[0]?.agentProvider).toBe('openai-compatible');
+    expect(config.runs[0]?.agentProviderConfig).toEqual({
+      type: 'openai-compatible',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'test',
+      defaultModel: 'gpt-4o-mini',
+    });
+  });
+
+  test('rejects direct run configs that reference unknown global providers', () => {
+    expect(() =>
+      validateConfig({
+        version: 1,
+        runs: [
+          {
+            pack: 'longmemeval',
+            variant: 'baseline',
+            agentProvider: 'missing',
+            packConfig: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
+          },
+        ],
+        providers: {
+          local: {
+            type: 'openai-compatible',
+            baseURL: 'https://api.openai.com/v1',
+            apiKey: 'test',
+            defaultModel: 'gpt-4o-mini',
+          },
+        },
+      }),
+    ).toThrow('references unknown provider "missing"');
   });
 
   test('rejects benchmark runs without a real model provider', () => {

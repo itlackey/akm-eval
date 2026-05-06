@@ -9,6 +9,8 @@
       "id": "demo-akm-bench",
       "pack": "akm-bench",
       "variant": "baseline",
+      "agentProvider": "demo-openai",
+      "agentModel": "gpt-4o-mini",
       "memoryBackend": "none",
       "memoryDocuments": [
         { "id": "doc-1", "text": "AKM uses adapter boundaries for optional integrations." },
@@ -25,5 +27,12 @@
       }
     }
   ],
-  "providers": {}
+  "providers": {
+    "demo-openai": {
+      "type": "openai-compatible",
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "{env:OPENAI_API_KEY}",
+      "defaultModel": "gpt-4o-mini"
+    }
+  }
 }

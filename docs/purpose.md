@@ -18,7 +18,7 @@ This document captures where `akm-eval` is today, what it's missing relative to 
 - TypeScript/Bun project, CLI at `src/cli.ts`
 - "No synthetic fallbacks" trust policy enforced at the framework level — packs must fail clearly when their official harness isn't wired
 - Variant system (`variants[].akm.configPath`) for future baseline-vs-akm A/B once a real AKM execution path exists
-- Dataset auto-download via `bun run download:datasets`
+- Dataset auto-download via `bun run downloads`
 - `doctor` command for environment validation
 - `check:boundary` script for architectural enforcement
 - `list`, `matrix`, `compare`, and per-run `report` CLI commands

@@ -4,9 +4,21 @@
     "outputDir": "../../runs"
   },
   "runs": [
-    { "id": "akm-baseline", "pack": "akm-bench", "variant": "baseline", "memoryBackend": "none" },
-    { "id": "akm-memory", "pack": "akm-bench", "variant": "akm-memory", "memoryBackend": "akm" },
-    { "id": "terminal-baseline", "pack": "terminal-bench", "variant": "baseline", "memoryBackend": "none" }
+    { "id": "akm-baseline", "pack": "akm-bench", "variant": "baseline", "agentProvider": "demo-openai", "memoryBackend": "none" },
+    { "id": "akm-memory", "pack": "akm-bench", "variant": "akm-memory", "agentProvider": "demo-openai", "memoryBackend": "akm" },
+    { "id": "terminal-baseline", "pack": "terminal-bench", "variant": "baseline", "agentProvider": "demo-opencode", "memoryBackend": "none" }
   ],
-  "providers": {}
+  "providers": {
+    "demo-openai": {
+      "type": "openai-compatible",
+      "baseURL": "https://api.openai.com/v1",
+      "apiKey": "{env:OPENAI_API_KEY}",
+      "defaultModel": "gpt-4o-mini"
+    },
+    "demo-opencode": {
+      "type": "opencode",
+      "configPath": "config/opencode.json",
+      "defaultModel": "opencode/gpt-4.1-mini"
+    }
+  }
 }

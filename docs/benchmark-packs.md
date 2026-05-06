@@ -8,7 +8,7 @@ Current trust policy:
 - `longmemeval` is runnable only when you provide a real model connection and `pack.config.evaluatorCommand` that invokes the official LongMemEval evaluation flow.
 - `swe-bench` is runnable only when Docker and the official `swebench` harness are installed. It uses official dataset slices plus the harness' own reports as the source of truth.
 - `beam` is runnable only when the official `mohammadtavakoli78/BEAM` repo is available locally, the official dataset has already been prepared, and the upstream BEAM evaluator can run with a real judge model.
-- `locomo` is runnable with the official `snap-research/locomo` dataset plus the bundled authoritative QA scoring wrapper. Answer generation still uses akm-eval's configured real model provider.
+- `locomo` is runnable with the official `snap-research/locomo` dataset plus the bundled authoritative QA scoring wrapper. Answer generation still uses akm-eval's configured real model provider from the global `providers` map.
 - `terminal-bench` is runnable only when the official `tb` harness, Python, and Docker are installed. It executes `tb run` and trusts only the official `results.json` and `run_metadata.json` artifacts.
 - `terminal-bench` currently supports opencode-backed providers in this repo so users can keep using their configured `configPath`; AKM-enabled non-retrieval variants also require `variants[].akm.configPath`, but repo-facing AKM comparison claims remain blocked while `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path.
 - `tau-bench` is runnable only when the official Python package is installed and the upstream JSON result file can be treated as the source of truth.

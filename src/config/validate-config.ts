@@ -96,15 +96,59 @@ function resolveEnvRefsInProvider(config: AgentProviderConfig): AgentProviderCon
   return resolved;
 }
 
+function resolveProviders(
+  providers: Record<string, AgentProviderConfig> | undefined,
+): Record<string, AgentProviderConfig> | undefined {
+  return providers
+    ? Object.fromEntries(Object.entries(providers).map(([key, provider]) => [key, resolveEnvRefsInProvider(provider)]))
+    : undefined;
+}
+
+function normalizeRunProviderConfig(
+  run: RunDefinition,
+  providers: Record<string, AgentProviderConfig> | undefined,
+): RunDefinition {
+  const resolvedEmbeddedProvider = run.agentProviderConfig
+    ? resolveEnvRefsInProvider(run.agentProviderConfig)
+    : undefined;
+
+  if (resolvedEmbeddedProvider) {
+    return {
+      ...run,
+      agentProviderConfig: resolvedEmbeddedProvider,
+    };
+  }
+
+  if (!run.agentProvider && (!providers || Object.keys(providers).length === 0)) {
+    return run;
+  }
+
+  const providerKey = run.agentProvider ?? (providers && Object.keys(providers).length > 0 ? Object.keys(providers)[0] : undefined);
+  if (!providerKey) {
+    return run;
+  }
+
+  const providerConfig = providers?.[providerKey];
+  if (!providerConfig) {
+    throw new ConfigValidationError([
+      `run "${run.id ?? `${run.pack}-${run.variant}`}" references unknown provider "${providerKey}"`,
+    ]);
+  }
+
+  return {
+    ...run,
+    agentProvider: providerKey,
+    agentProviderConfig: providerConfig,
+  };
+}
+
 function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
   const run = value.run as Record<string, unknown>;
   const packs = value.packs as Array<Record<string, unknown>>;
   const variants = value.variants as EvalVariant[];
   const providers = value.providers as Record<string, AgentProviderConfig> | undefined;
 
-  const resolvedProviders = providers
-    ? Object.fromEntries(Object.entries(providers).map(([k, v]) => [k, resolveEnvRefsInProvider(v)]))
-    : undefined;
+  const resolvedProviders = resolveProviders(providers);
 
   const runs: RunDefinition[] = [];
   for (const pack of packs) {
@@ -182,6 +226,20 @@ function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
   return normalized;
 }
 
+function normalizeDirectConfig(value: EvalConfig): EvalConfig {
+  const resolvedProviders = resolveProviders(value.providers);
+  const runs = value.runs.map((run) => normalizeRunProviderConfig(run, resolvedProviders));
+
+  const normalized: EvalConfig = {
+    ...value,
+    runs,
+    ...(resolvedProviders ? { providers: resolvedProviders } : {}),
+  };
+
+  validateRunDefinitions(normalized.runs);
+  return normalized;
+}
+
 export function validateConfigShape(value: unknown): asserts value is EvalConfig {
   const issues: string[] = [];
 
@@ -200,8 +258,6 @@ export function validateConfigShape(value: unknown): asserts value is EvalConfig
   if (issues.length > 0) {
     throw new ConfigValidationError(issues);
   }
-
-  validateRunDefinitions(value.runs as RunDefinition[]);
 }
 
 export function validateConfig(value: unknown): EvalConfig {
@@ -227,19 +283,5 @@ export function validateConfig(value: unknown): EvalConfig {
   }
 
   validateConfigShape(value);
-
-  // Resolve env refs in providers for direct configs too
-  if (isPlainObject(value.providers)) {
-    const resolved = Object.fromEntries(
-      Object.entries(value.providers as Record<string, AgentProviderConfig>).map(([k, v]) => [
-        k,
-        resolveEnvRefsInProvider(v),
-      ]),
-    );
-    value.providers = resolved;
-  }
-
-  const config = value as EvalConfig;
-  validateRunDefinitions(config.runs);
-  return config;
+  return normalizeDirectConfig(value as EvalConfig);
 }

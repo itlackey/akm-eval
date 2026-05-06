@@ -45,9 +45,9 @@ export interface RunDefinition {
   packConfig?: Record<string, unknown>;
   /** Optional per-run model override (from variant.agent.model). */
   agentModel?: string;
-  /** The resolved provider key. */
+  /** The provider key declared in top-level providers, if any. */
   agentProvider?: string;
-  /** Resolved provider config. */
+  /** Resolved provider config for execution. */
   agentProviderConfig?: AgentProviderConfig;
 }
 
@@ -55,7 +55,7 @@ export interface EvalConfig {
   version: 1;
   defaults?: EvalDefaults;
   runs: RunDefinition[];
-  /** Centralized provider connection configs. */
+  /** Global provider connection configs. */
   providers?: Record<string, AgentProviderConfig>;
 }
 

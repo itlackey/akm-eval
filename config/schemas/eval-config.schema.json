@@ -17,7 +17,89 @@
       "additionalProperties": true
     },
     "packs": { "type": "array", "minItems": 1 },
-    "variants": { "type": "array", "minItems": 1 },
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "agent", "akm", "memory"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "agent": {
+            "type": "object",
+            "required": ["provider"],
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": ["opencode", "openai-compatible", "custom", "none"]
+              },
+              "providerRef": { "type": "string" },
+              "model": { "type": "string" },
+              "command": { "type": "string" },
+              "env": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            },
+            "additionalProperties": true
+          },
+          "akm": {
+            "type": "object",
+            "required": ["enabled"],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "command": { "type": "string" },
+              "configPath": { "type": "string" },
+              "env": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            },
+            "additionalProperties": true
+          },
+          "memory": {
+            "type": "object",
+            "required": ["backend"],
+            "properties": {
+              "backend": {
+                "type": "string",
+                "enum": ["none", "akm", "mem0", "zep", "openviking", "raw-vector"]
+              },
+              "config": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["opencode", "openai-compatible", "custom"]
+          },
+          "baseURL": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "timeout": { "type": "number" },
+          "configPath": { "type": "string" },
+          "defaultModel": { "type": "string" },
+          "options": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "judging": { "type": "object" },
     "telemetry": { "type": "object" }
   },

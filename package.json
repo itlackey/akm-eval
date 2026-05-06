@@ -9,13 +9,21 @@
   },
   "scripts": {
     "start": "bun src/cli.ts",
+    "setup": "bun src/cli.ts setup",
     "doctor": "bun src/cli.ts doctor",
+    "eval": "bun src/cli.ts run",
+    "matrix": "bun src/cli.ts matrix",
+    "compare": "bun src/cli.ts compare",
+    "report": "bun src/cli.ts report",
+    "summary": "bun src/cli.ts summary",
+    "downloads": "bun scripts/download-datasets.ts",
+    "download:datasets": "bun run downloads",
+    "beam:doctor": "bash scripts/setup-beam-runtime.sh --check --require-judge",
     "check:boundary": "bun scripts/check-boundary.ts",
     "check:env": "bun scripts/check-env.ts",
     "test": "bun test",
     "check": "bun run check:boundary && bun test",
     "lint": "biome check src tests scripts",
-    "format": "biome format --write src tests scripts",
-    "download:datasets": "bun scripts/download-datasets.ts"
+    "format": "biome format --write src tests scripts"
   }
 }

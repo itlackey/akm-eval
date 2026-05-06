@@ -23,8 +23,14 @@
           "id": { "type": "string" },
           "pack": { "type": "string" },
           "variant": { "type": "string" },
+          "agentProvider": { "type": "string" },
+          "agentModel": { "type": "string" },
           "memoryBackend": { "type": "string" },
           "outputDir": { "type": "string" },
+          "packConfig": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "memoryDocuments": {
             "type": "array",
             "items": {
@@ -56,6 +62,29 @@
               "expected": { "type": "string" },
               "actual": { "type": "string" }
             },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["opencode", "openai-compatible", "custom"]
+          },
+          "baseURL": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "timeout": { "type": "number" },
+          "configPath": { "type": "string" },
+          "defaultModel": { "type": "string" },
+          "options": {
+            "type": "object",
             "additionalProperties": true
           }
         },

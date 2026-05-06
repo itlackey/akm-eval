@@ -2,6 +2,21 @@
 
 Use `akm-eval run` for a single pack/variant and `akm-eval matrix` for a comparison matrix.
 
+If you want a guided starter config first, run `bun run setup`.
+
+Direct `version: 1` configs should declare provider connections once under top-level `providers`, have each run select one with `agentProvider`, and use `agentModel` only for per-run model overrides. Planned `schemaVersion: "akm.eval.config.v1"` configs keep using `variants[].agent.providerRef` plus `variants[].agent.model`, which resolve to the same normalized runtime provider config during load.
+
+For repo-local operator workflows, prefer these script entrypoints over raw `bun src/cli.ts ...` commands:
+
+- `bun run setup`
+- `bun run doctor`
+- `bun run eval -- --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`
+- `bun run matrix -- --config <config-path>`
+- `bun run report -- --run <run-dir>`
+- `bun run summary -- --runs <runs-dir> --format markdown`
+- `bun run compare -- --baseline <run-dir> --candidate <run-dir>`
+- `bun run downloads [DatasetName]`
+
 ## Runner support boundaries
 
 - `locomo`: `opencode` and `openai-compatible`

@@ -12,11 +12,24 @@ Trust policy:
 
 ```bash
 bun install
-bun run download:datasets
+bun run setup
+bun run downloads
 bun test
 bun run check:boundary
-bun src/cli.ts doctor
+bun run doctor
 ```
+
+Common operator entrypoints:
+
+- `bun run setup`: interactive starter config flow
+- `bun run doctor`: environment and harness preflight summary
+- `bun run eval -- --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`: run one normalized eval
+- `bun run matrix -- --config <config-path>`: show the planned matrix from a config
+- `bun run report -- --run <run-dir>`: render one normalized run
+- `bun run summary -- --runs <runs-dir> --format markdown`: summarize a run tree
+- `bun run compare -- --baseline <run-dir> --candidate <run-dir>`: compare two normalized runs
+- `bun run downloads [DatasetName]`: fetch repo-managed datasets
+- `bun run beam:doctor`: BEAM-specific repo, dataset, and judge preflight
 
 ## Execution checklist
 
@@ -61,6 +74,7 @@ Blocked memory-backend comparison paths:
 - Pack details: [`docs/benchmark-packs.md`](./docs/benchmark-packs.md)
 - Running evals: [`docs/running-evals.md`](./docs/running-evals.md)
 - Operator guide: [`docs/operator-guide.md`](./docs/operator-guide.md)
+- Operator-only remaining blockers: [`docs/operator-blockers.md`](./docs/operator-blockers.md)
 - Contributor guide: [`docs/contributing.md`](./docs/contributing.md)
 - Normalized result contract: [`docs/result-schema.md`](./docs/result-schema.md)
 
@@ -77,7 +91,7 @@ Blocked memory-backend comparison paths:
 Generate a cross-run summary from committed artifacts with:
 
 ```bash
-bun src/cli.ts summary --runs runs/reference --format markdown
+bun run summary -- --runs runs/reference --format markdown
 ```
 
 ## Current critical path
@@ -98,14 +112,32 @@ Dataset files are not committed to the repository due to their size. Download th
 
 ```bash
 # Download all datasets
-bun run download:datasets
+bun run downloads
 
 # Download a specific dataset
-bun scripts/download-datasets.ts LongMemEval
-bun scripts/download-datasets.ts LoCoMo
+bun run downloads LongMemEval
+bun run downloads LoCoMo
 ```
 
 Datasets are auto-downloaded on first use if not present, but pre-downloading is recommended.
+
+## Interactive setup
+
+Use the interactive setup flow to generate a truthful starter config for the packs you care about:
+
+```bash
+bun run setup
+```
+
+The setup flow:
+
+- asks which packs to include
+- asks for the minimum global provider connection config and default model values needed to start
+- optionally downloads repo-managed datasets for `locomo` and `longmemeval`
+- optionally runs existing preflight checks for packs whose external prerequisites you say are already installed
+- writes a starter config file that declares provider connections once at the top level and has runs select them with `agentProvider`, with `agentModel` left for per-run overrides when needed, without claiming external blockers are solved
+
+It keeps external prerequisites explicit. For example, it can run BEAM's existing repo-side preflight, but it does not clone the upstream BEAM repo, prepare BEAM datasets, install Docker, or provision external credentials for SWE-Bench, Terminal-Bench, or Tau-Bench.
 
 ## BEAM Benchmark
 
@@ -121,6 +153,7 @@ For the current pinned local runtime bootstrap:
 
 - upstream source expectation is `mohammadtavakoli78/BEAM` at commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`
 - install/check script: `bash scripts/setup-beam-runtime.sh`
+- quick preflight script: `bun run beam:doctor`
 - pinned Python requirements snapshot: `requirements-beam.txt`
 - optional env overrides: `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, `BEAM_PYTHON_BIN`
 - optional container scaffold: `tools/beam/Dockerfile` and `tools/beam/run-in-container.sh`
@@ -134,6 +167,7 @@ It now also fails early when the prepared dataset path is missing, and it can re
 Minimum truthful preflight today:
 
 ```bash
+bun run beam:doctor
 bash scripts/setup-beam-runtime.sh --check --require-judge
 bash scripts/setup-beam-runtime.sh --check --require-judge --print-fingerprint
 # add --require-10m when running 10M chat sizes

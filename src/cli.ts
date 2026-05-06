@@ -19,20 +19,22 @@ import { markdownReportForComparison, markdownReportForResult } from './reportin
 import { loadNormalizedResult } from './reporting/normalized-result.ts';
 import { renderRunMatrix } from './reporting/matrix.ts';
 import { collectRunSummaries, markdownSummaryForRuns } from './reporting/summary.ts';
+import { runSetupCommand } from './setup.ts';
 import { variantRegistry } from './variants/registry.ts';
 import { resolveVariant } from './variants/resolve-variant.ts';
 
 function usage(): string {
   return [
     'Usage:',
-    '  bun src/cli.ts doctor',
+    '  bun run doctor',
     '  bun src/cli.ts list packs',
     '  bun src/cli.ts list variants',
-    '  bun src/cli.ts run --pack <id> --variant <id> --config <path> [--out <dir>]',
-    '  bun src/cli.ts matrix --config <path>',
-    '  bun src/cli.ts compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
-    '  bun src/cli.ts report --run <dir> [--format markdown|json]',
-    '  bun src/cli.ts summary --runs <dir> [--format markdown|json]',
+    '  bun run eval -- --pack <id> --variant <id> --config <path> [--out <dir>]',
+    '  bun run matrix -- --config <path>',
+    '  bun run compare -- --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
+    '  bun run report -- --run <dir> [--format markdown|json]',
+    '  bun run summary -- --runs <dir> [--format markdown|json]',
+    '  bun run setup',
   ].join('\n');
 }
 
@@ -224,6 +226,10 @@ async function main(): Promise<number> {
 
     if (command === 'summary') {
       return summaryCommand(args.slice(1));
+    }
+
+    if (command === 'setup') {
+      return await runSetupCommand(process.cwd(), args.slice(1));
     }
 
     console.log(usage());

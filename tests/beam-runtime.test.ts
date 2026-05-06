@@ -120,4 +120,33 @@ describe('beam runtime preflight', () => {
     expect(fingerprint.requirementsSnapshotMatchesUpstream).toBe(false);
     expect(fingerprint.fingerprintSha256).toHaveLength(64);
   });
+
+  test('setup script honors documented BEAM_REPO_PATH and BEAM_PYTHON_BIN env overrides', () => {
+    const rootDir = createTempRoot();
+    const externalRoot = createTempRoot();
+    const repoPath = writeBeamRepo(externalRoot);
+    const datasetPath = path.resolve(externalRoot, 'prepared-dataset');
+    const pythonBin = 'python3.11';
+    const requirementsSnapshot = fs.readFileSync(path.resolve(process.cwd(), 'requirements-beam.txt'), 'utf8');
+    fs.mkdirSync(datasetPath, { recursive: true });
+    fs.writeFileSync(path.resolve(repoPath, 'requirements.txt'), requirementsSnapshot, 'utf8');
+
+    const result = Bun.spawnSync({
+      cmd: ['bash', path.resolve(process.cwd(), 'scripts/setup-beam-runtime.sh'), '--check'],
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        BEAM_REPO_PATH: repoPath,
+        BEAM_DATASET_PATH: datasetPath,
+        BEAM_PYTHON_BIN: pythonBin,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe('');
+    expect(result.stdout.toString()).toContain(`BEAM runtime check passed for repo ${repoPath} using ${pythonBin}`);
+    expect(result.stdout.toString()).toContain(`Dataset: ${datasetPath}`);
+  });
 });

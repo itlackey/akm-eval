@@ -3,9 +3,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_PATH="${ROOT_DIR}/vendor/BEAM"
+REPO_PATH="${BEAM_REPO_PATH:-${ROOT_DIR}/vendor/BEAM}"
 VENV_PATH="${ROOT_DIR}/.venv-beam"
-PYTHON_BIN="python3.11"
+PYTHON_BIN="${BEAM_PYTHON_BIN:-python3.11}"
 PINNED_COMMIT="3e12035532eb85768f1a7cd779832b650c4b2ef9"
 CHECK_ONLY=0
 DATASET_PATH="${BEAM_DATASET_PATH:-}"
