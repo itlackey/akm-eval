@@ -133,9 +133,12 @@ The setup flow:
 
 - asks which packs to include
 - asks for the minimum global provider connection config and default model values needed to start
-- optionally downloads repo-managed datasets for `locomo` and `longmemeval`
-- optionally runs existing preflight checks for packs whose external prerequisites you say are already installed
+- shows the detected runtime status for the selected packs using the same checks as `bun run doctor`
+- optionally downloads repo-managed datasets for `locomo` and `longmemeval`; answering no skips downloads and only writes the config
+- optionally runs a deeper read-only BEAM preflight; answering no skips that check
 - writes a starter config file that declares provider connections once at the top level and has runs select them with `agentProvider`, with `agentModel` left for per-run overrides when needed, without claiming external blockers are solved
+
+For `openai-compatible` providers, blank API keys are allowed for local no-auth endpoints such as LM Studio.
 
 It keeps external prerequisites explicit. For example, it can run BEAM's existing repo-side preflight, but it does not clone the upstream BEAM repo, prepare BEAM datasets, install Docker, or provision external credentials for SWE-Bench, Terminal-Bench, or Tau-Bench.
 

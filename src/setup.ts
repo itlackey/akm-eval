@@ -13,6 +13,7 @@ interface OpenAISetupConfig {
   baseURL: string;
   apiKey: string;
   defaultModel: string;
+  timeout?: number;
 }
 
 interface OpencodeSetupConfig {
@@ -25,6 +26,7 @@ export interface StarterConfigOptions {
   configPath: string;
   packs: SetupPackId[];
   primaryProvider: ProviderType;
+  preferRepoManagedDatasetPaths?: boolean;
   openAI?: OpenAISetupConfig;
   opencode?: OpencodeSetupConfig;
   beamRepoPath?: string;
@@ -35,7 +37,6 @@ interface SetupPackDefinition {
   summary: string;
   supportedProviders: ProviderType[];
   repoManagedDataset?: 'LoCoMo' | 'LongMemEval';
-  externalPrereqPrompt?: string;
   blockedWhenMissing: string;
 }
 
@@ -43,6 +44,12 @@ interface SetupActionResult {
   name: string;
   ok: boolean;
   detail: string;
+}
+
+interface SetupPackStatus {
+  packId: SetupPackId;
+  doctorResult: SetupActionResult | null;
+  deeperCheckResult: SetupActionResult | null;
 }
 
 const SETUP_PACKS: SetupPackDefinition[] = [
@@ -64,8 +71,6 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     id: 'beam',
     summary: 'Official upstream BEAM repo and upstream evaluation pipeline.',
     supportedProviders: ['openai-compatible', 'opencode'],
-    externalPrereqPrompt:
-      'Do you already have the upstream BEAM checkout, prepared dataset, and judge credentials available',
     blockedWhenMissing:
       'BEAM remains blocked until the upstream repo, prepared dataset directories, and judge credentials exist outside this repo.',
   },
@@ -73,7 +78,6 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     id: 'swe-bench',
     summary: 'Official SWE-bench Docker harness.',
     supportedProviders: ['openai-compatible', 'opencode'],
-    externalPrereqPrompt: 'Do you already have Docker and the official swebench harness installed',
     blockedWhenMissing:
       'SWE-bench remains blocked until Docker and the official swebench Python harness are installed and runnable.',
   },
@@ -81,7 +85,6 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     id: 'tau-bench',
     summary: 'Official tau-bench Python wrapper.',
     supportedProviders: ['openai-compatible'],
-    externalPrereqPrompt: 'Do you already have Python and the official tau-bench package installed',
     blockedWhenMissing:
       'tau-bench remains blocked until Python and the official tau-bench package are installed outside this repo.',
   },
@@ -89,11 +92,14 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     id: 'terminal-bench',
     summary: 'Official Terminal-Bench tb harness.',
     supportedProviders: ['opencode'],
-    externalPrereqPrompt: 'Do you already have tb, Python, and Docker installed for Terminal-Bench',
     blockedWhenMissing:
       'Terminal-Bench remains blocked until the official tb CLI, Python, Docker, and an opencode config are available.',
   },
 ];
+
+function printSetupStep(step: number, total: number, title: string): void {
+  console.log(`Step ${step}/${total}: ${title}`);
+}
 
 function setupUsage(): string {
   return [
@@ -132,6 +138,7 @@ function createProviderConfig(providerType: ProviderType, options: StarterConfig
       baseURL: options.openAI.baseURL,
       apiKey: options.openAI.apiKey,
       defaultModel: options.openAI.defaultModel,
+      ...(typeof options.openAI.timeout === 'number' ? { timeout: options.openAI.timeout } : {}),
     };
   }
 
@@ -157,10 +164,11 @@ function createPackConfig(packId: SetupPackId, options: StarterConfigOptions): R
         maxSamples: 1,
         maxQuestions: 5,
         topK: 5,
-        maxContextTokens: 16000,
+        maxContextTokens: options.openAI?.baseURL && options.openAI.baseURL !== 'https://api.openai.com/v1' ? 8000 : 16000,
       };
     case 'longmemeval':
       return {
+        ...(options.preferRepoManagedDatasetPaths !== false ? { datasetPath: 'datasets/longmemeval/dataset.json' } : {}),
         evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
         smoke: true,
         maxQuestions: 10,
@@ -279,8 +287,8 @@ function summarizeRepoManagedDatasets(packs: SetupPackId[]): string[] {
   );
 }
 
-function preflightDoctorCheck(packId: SetupPackId): SetupActionResult | null {
-  const check = runDoctorChecks().find((entry) => entry.name === `pack:${packId}`);
+function preflightDoctorCheck(doctorChecks: ReturnType<typeof runDoctorChecks>, packId: SetupPackId): SetupActionResult | null {
+  const check = doctorChecks.find((entry) => entry.name === `pack:${packId}`);
   if (!check) {
     return null;
   }
@@ -291,40 +299,42 @@ function preflightDoctorCheck(packId: SetupPackId): SetupActionResult | null {
   };
 }
 
-function runRepoManagedDownloads(rootDir: string, datasetNames: string[]): SetupActionResult[] {
-  return datasetNames.map((datasetName) => {
-    const result = Bun.spawnSync({
+async function runRepoManagedDownloads(rootDir: string, datasetNames: string[]): Promise<SetupActionResult[]> {
+  const results: SetupActionResult[] = [];
+  for (const datasetName of datasetNames) {
+    console.log(`Running dataset download for ${datasetName}. This may take a while.`);
+    const proc = Bun.spawn({
       cmd: [process.execPath, path.resolve(rootDir, 'scripts/download-datasets.ts'), datasetName],
       cwd: rootDir,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdout: 'inherit',
+      stderr: 'inherit',
       env: process.env,
     });
-    const stdout = result.stdout.toString().trim();
-    const stderr = result.stderr.toString().trim();
-    return {
+    const exitCode = await proc.exited;
+    results.push({
       name: `download:${datasetName}`,
-      ok: result.exitCode === 0,
-      detail: stdout || stderr || `download exited with code ${result.exitCode}`,
-    };
-  });
+      ok: exitCode === 0,
+      detail: exitCode === 0 ? 'download completed' : `download exited with code ${exitCode}`,
+    });
+  }
+  return results;
 }
 
-function runBeamPreflight(rootDir: string, beamRepoPath: string): SetupActionResult {
+async function runBeamPreflight(rootDir: string, beamRepoPath: string): Promise<SetupActionResult> {
   const scriptPath = path.resolve(rootDir, 'scripts/setup-beam-runtime.sh');
-  const result = Bun.spawnSync({
+  console.log('Running deeper BEAM preflight. This is read-only and may pause while it checks Python, repo, dataset, and judge configuration.');
+  const proc = Bun.spawn({
     cmd: ['bash', scriptPath, '--check', '--require-judge', '--repo', beamRepoPath],
     cwd: rootDir,
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: 'inherit',
+    stderr: 'inherit',
     env: process.env,
   });
-  const stdout = result.stdout.toString().trim();
-  const stderr = result.stderr.toString().trim();
+  const exitCode = await proc.exited;
   return {
     name: 'beam preflight',
-    ok: result.exitCode === 0,
-    detail: stdout || stderr || `beam preflight exited with code ${result.exitCode}`,
+    ok: exitCode === 0,
+    detail: exitCode === 0 ? 'BEAM preflight completed' : `beam preflight exited with code ${exitCode}`,
   };
 }
 
@@ -332,12 +342,20 @@ function formatActionResult(result: SetupActionResult): string {
   return `${result.ok ? 'OK' : 'WARN'} ${result.name}: ${result.detail}`;
 }
 
+function resultForPack(statuses: SetupPackStatus[], packId: SetupPackId): SetupActionResult | null {
+  const status = statuses.find((entry) => entry.packId === packId);
+  if (!status) {
+    return null;
+  }
+  return status.deeperCheckResult ?? status.doctorResult;
+}
+
 async function promptLine(
   rl: readline.Interface,
   message: string,
   defaultValue?: string,
 ): Promise<string> {
-  const suffix = defaultValue !== undefined ? ` [${defaultValue}]` : '';
+  const suffix = defaultValue !== undefined && defaultValue.length > 0 ? ` [${defaultValue}]` : '';
   const response = (await rl.question(`${message}${suffix}: `)).trim();
   return response.length > 0 ? response : (defaultValue ?? '');
 }
@@ -420,10 +438,23 @@ async function promptProviderType(
 }
 
 async function promptOpenAIConfig(rl: readline.Interface): Promise<OpenAISetupConfig> {
+  const baseURL = await promptLine(rl, 'OpenAI-compatible base URL', 'https://api.openai.com/v1');
+  const defaultTimeout = baseURL === 'https://api.openai.com/v1' ? '120000' : '600000';
+  const timeoutInput = await promptLine(
+    rl,
+    'Request timeout in milliseconds (increase this for slower local models)',
+    defaultTimeout,
+  );
+  const parsedTimeout = Number(timeoutInput);
   return {
-    baseURL: await promptLine(rl, 'OpenAI-compatible base URL', 'https://api.openai.com/v1'),
-    apiKey: await promptLine(rl, 'API key value or env placeholder', '{env:OPENAI_API_KEY}'),
+    baseURL,
+    apiKey: await promptLine(
+      rl,
+      'API key value or env placeholder (leave blank if the endpoint does not require one)',
+      baseURL === 'https://api.openai.com/v1' ? '{env:OPENAI_API_KEY}' : '',
+    ),
     defaultModel: await promptLine(rl, 'Default model', 'gpt-4o-mini'),
+    timeout: Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? Math.floor(parsedTimeout) : undefined,
   };
 }
 
@@ -454,32 +485,52 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
-    console.log('This setup flow writes a starter config, can download repo-managed datasets, and can run limited preflight checks.');
-    console.log('It does not pretend external blockers are solved when upstream harnesses, Docker, or credentials are missing.');
+    const totalSteps = 5;
+    console.log('This setup flow writes a starter config, can optionally download repo-managed datasets, and can optionally run read-only checks.');
+    console.log('It does not install external tooling for you, and answering no skips the optional action instead of trying to install anything.');
     console.log('');
 
+    printSetupStep(1, totalSteps, 'choose packs');
     const packs = await promptPackSelection(rl);
+
+    printSetupStep(2, totalSteps, 'choose provider connections');
     const primaryProvider = await promptProviderType(rl, packs);
     const providersNeeded = requiredProviderTypes(packs, primaryProvider);
     const openAI = providersNeeded.includes('openai-compatible') ? await promptOpenAIConfig(rl) : undefined;
     const opencode = providersNeeded.includes('opencode') ? await promptOpencodeConfig(rl) : undefined;
+
+    printSetupStep(3, totalSteps, 'detect current runtime status');
+    console.log('Checking the selected packs with the same runtime detection used by `bun run doctor`...');
+    const doctorChecks = runDoctorChecks();
+    for (const packId of packs) {
+      const detected = doctorChecks.find((entry) => entry.name === `pack:${packId}`);
+      if (!detected) {
+        continue;
+      }
+      console.log(`${detected.status.toUpperCase()} ${packId}: ${detected.detail}`);
+    }
+
+    printSetupStep(4, totalSteps, 'choose optional actions');
     const beamRepoPath = packs.includes('beam')
       ? await promptLine(rl, 'BEAM repo path', 'vendor/BEAM')
       : undefined;
     const repoManagedDatasets = summarizeRepoManagedDatasets(packs);
     const downloadDatasets = repoManagedDatasets.length > 0
-      ? await promptYesNo(rl, `Download repo-managed datasets now (${repoManagedDatasets.join(', ')})`, true)
+      ? await promptYesNo(
+        rl,
+        `Download repo-managed datasets now (${repoManagedDatasets.join(', ')})? Yes = download now. No = only write the config`,
+        true,
+      )
+      : false;
+    const runBeamCheck = packs.includes('beam')
+      ? await promptYesNo(
+        rl,
+        'Run deeper BEAM preflight now? Yes = run read-only checks now and it may pause. No = skip BEAM preflight',
+        doctorChecks.find((entry) => entry.name === 'pack:beam')?.status === 'ok',
+      )
       : false;
 
-    const prereqAnswers = new Map<SetupPackId, boolean>();
-    for (const packId of packs) {
-      const prompt = packDefinition(packId).externalPrereqPrompt;
-      if (!prompt) {
-        continue;
-      }
-      prereqAnswers.set(packId, await promptYesNo(rl, prompt, false));
-    }
-
+    printSetupStep(5, totalSteps, 'write starter config');
     const configPathInput = await promptLine(rl, 'Starter config path', 'config/examples/runs/setup-starter.json');
     const configPath = path.resolve(rootDir, configPathInput);
     if (fs.existsSync(configPath)) {
@@ -495,6 +546,7 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       configPath,
       packs,
       primaryProvider,
+      preferRepoManagedDatasetPaths: downloadDatasets,
       openAI,
       opencode,
       beamRepoPath,
@@ -504,6 +556,7 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       configPath,
       packs,
       primaryProvider,
+      preferRepoManagedDatasetPaths: downloadDatasets,
       openAI,
       opencode,
       beamRepoPath,
@@ -514,20 +567,17 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
 
     const actions: SetupActionResult[] = [];
     if (downloadDatasets) {
-      actions.push(...runRepoManagedDownloads(rootDir, repoManagedDatasets));
+      actions.push(...(await runRepoManagedDownloads(rootDir, repoManagedDatasets)));
     }
+    const packStatuses: SetupPackStatus[] = [];
     for (const packId of packs) {
-      if (prereqAnswers.get(packId) !== true) {
-        continue;
+      const doctorResult = preflightDoctorCheck(doctorChecks, packId);
+      let deeperCheckResult: SetupActionResult | null = null;
+      if (packId === 'beam' && runBeamCheck) {
+          deeperCheckResult = await runBeamPreflight(rootDir, beamRepoPath ?? 'vendor/BEAM');
+          actions.push(deeperCheckResult);
       }
-      if (packId === 'beam') {
-        actions.push(runBeamPreflight(rootDir, beamRepoPath ?? 'vendor/BEAM'));
-        continue;
-      }
-      const result = preflightDoctorCheck(packId);
-      if (result) {
-        actions.push(result);
-      }
+      packStatuses.push({ packId, doctorResult, deeperCheckResult });
     }
 
     console.log('');
@@ -544,12 +594,43 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
     }
 
     const blockers = packs
-      .filter((packId) => prereqAnswers.get(packId) === false)
-      .map((packId) => `${packId}: ${packDefinition(packId).blockedWhenMissing}`);
+      .map((packId) => {
+        const result = resultForPack(packStatuses, packId);
+        if (result && !result.ok) {
+          return `${packId}: ${result.detail}`;
+        }
+        return null;
+      })
+      .filter((detail): detail is string => Boolean(detail));
     if (blockers.length > 0) {
       console.log('');
       console.log('Explicit blockers still remaining:');
       blockers.forEach((detail) => console.log(`- ${detail}`));
+    }
+
+    const followUpNotes: string[] = [];
+    if (packs.includes('longmemeval')) {
+      followUpNotes.push(
+        downloadDatasets
+          ? 'longmemeval: the starter config points at the repo-managed dataset and bundled evaluator command, but the Python environment used by that evaluator still needs the `openai` package plus `OPENAI_BASE_URL` for a local compatible endpoint or `OPENAI_API_KEY` for cloud OpenAI.'
+          : 'longmemeval: because you skipped downloading datasets now, the generated config leaves `datasetPath` unset so the built-in resolver can download the official dataset on first use.',
+      );
+    }
+    if (!downloadDatasets && repoManagedDatasets.length > 0) {
+      followUpNotes.push('No datasets were downloaded during setup. You can download them later with `bun run downloads`.');
+    }
+    if (packs.includes('beam') && !runBeamCheck) {
+      followUpNotes.push('beam: deeper BEAM preflight was skipped. Run `bun run beam:doctor` or `bash scripts/setup-beam-runtime.sh --check --require-judge` later when you want to verify the upstream repo, dataset, and judge path.');
+    }
+    if (openAI && openAI.apiKey.length === 0) {
+      followUpNotes.push(
+        'openai-compatible provider: blank API keys are allowed for no-auth local endpoints such as LM Studio. This repo omits the Authorization header for agent calls and supplies a dummy key only where an upstream client library requires a non-empty value.',
+      );
+    }
+    if (followUpNotes.length > 0) {
+      console.log('');
+      console.log('Important notes:');
+      followUpNotes.forEach((detail) => console.log(`- ${detail}`));
     }
 
     const firstRun = config.runs[0];

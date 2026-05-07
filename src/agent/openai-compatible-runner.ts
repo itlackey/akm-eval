@@ -93,6 +93,14 @@ export class OpenAICompatibleRunner implements AgentRunner {
     } catch (err) {
       clearTimeout(timeoutId);
       const latencyMs = Date.now() - startedAt;
+      if (abortController.signal.aborted) {
+        return {
+          ok: false,
+          text: '',
+          latencyMs,
+          error: `openai-compatible request timed out after ${timeoutMs}ms`,
+        };
+      }
       const message = err instanceof Error ? err.message : String(err);
       return {
         ok: false,

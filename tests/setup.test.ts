@@ -28,6 +28,7 @@ describe('setup starter config', () => {
     expect(config.providers?.['openai-compatible']?.type).toBe('openai-compatible');
     expect(config.providers?.['openai-compatible']?.baseURL).toBe('https://api.openai.com/v1');
     expect(config.providers?.['openai-compatible']?.defaultModel).toBe('gpt-4o-mini');
+    expect(config.providers?.['openai-compatible']?.timeout).toBeUndefined();
     expect(config.providers?.opencode).toEqual({
       type: 'opencode',
       configPath: 'config/opencode.json',
@@ -68,6 +69,82 @@ describe('setup starter config', () => {
       nConcurrent: 1,
       nAttempts: 1,
       dataset: 'terminal-bench-core==0.1.1',
+    });
+  });
+
+  test('allows blank API keys for local openai-compatible endpoints and points longmemeval at the repo dataset', () => {
+    const rootDir = '/workspace/akm-eval';
+    const configPath = path.resolve(rootDir, 'config/examples/runs/local-starter.json');
+    const config = buildStarterConfig({
+      rootDir,
+      configPath,
+      packs: ['longmemeval', 'tau-bench'],
+      primaryProvider: 'openai-compatible',
+      openAI: {
+        baseURL: 'http://192.168.0.99:1234/v1',
+        apiKey: '',
+        defaultModel: 'qwen/qwen3.5-9b',
+        timeout: 600000,
+      },
+    });
+
+    expect(config.providers?.['openai-compatible']).toEqual({
+      type: 'openai-compatible',
+      baseURL: 'http://192.168.0.99:1234/v1',
+      apiKey: '',
+      defaultModel: 'qwen/qwen3.5-9b',
+      timeout: 600000,
+    });
+    const longMemEval = config.runs.find((run) => run.pack === 'longmemeval');
+    expect(longMemEval?.packConfig).toEqual({
+      datasetPath: 'datasets/longmemeval/dataset.json',
+      evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
+      smoke: true,
+      maxQuestions: 10,
+      questionCategories: ['single-session', 'multi-session'],
+    });
+    const locomo = buildStarterConfig({
+      rootDir,
+      configPath,
+      packs: ['locomo'],
+      primaryProvider: 'openai-compatible',
+      openAI: {
+        baseURL: 'http://192.168.0.99:1234/v1',
+        apiKey: '',
+        defaultModel: 'qwen/qwen3.5-9b',
+        timeout: 600000,
+      },
+    }).runs[0];
+    expect(locomo?.packConfig).toEqual({
+      smoke: true,
+      maxSamples: 1,
+      maxQuestions: 5,
+      topK: 5,
+      maxContextTokens: 8000,
+    });
+  });
+
+  test('omits longmemeval datasetPath when setup skips repo-managed downloads', () => {
+    const rootDir = '/workspace/akm-eval';
+    const configPath = path.resolve(rootDir, 'config/examples/runs/no-download-starter.json');
+    const config = buildStarterConfig({
+      rootDir,
+      configPath,
+      packs: ['longmemeval'],
+      primaryProvider: 'openai-compatible',
+      preferRepoManagedDatasetPaths: false,
+      openAI: {
+        baseURL: 'http://192.168.0.99:1234/v1',
+        apiKey: '',
+        defaultModel: 'qwen/qwen3.5-9b',
+      },
+    });
+
+    expect(config.runs[0]?.packConfig).toEqual({
+      evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
+      smoke: true,
+      maxQuestions: 10,
+      questionCategories: ['single-session', 'multi-session'],
     });
   });
 

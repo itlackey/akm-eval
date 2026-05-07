@@ -10,6 +10,7 @@ Requirements:
 - real model-backed agent provider
 - `pack.config.evaluatorCommand` pointing at the official LongMemEval evaluation script or wrapper
 - official dataset file, either via `pack.config.datasetPath` or the built-in dataset resolver
+- Python `openai` package plus `OPENAI_BASE_URL` for a local compatible evaluator endpoint or `OPENAI_API_KEY` for cloud OpenAI
 
 Runner support:
 

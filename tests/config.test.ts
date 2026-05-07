@@ -248,6 +248,46 @@ describe('config loading', () => {
     });
   });
 
+  test('prefers the repo-managed longmemeval dataset when no datasetPath is configured', async () => {
+    const datasetModule = await import('../src/packs/longmemeval/dataset.ts');
+    const tmpRoot = path.resolve(rootDir, 'tests/.artifacts/longmemeval-dataset');
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    fs.mkdirSync(path.resolve(tmpRoot, 'datasets/longmemeval'), { recursive: true });
+    const repoDatasetPath = path.resolve(tmpRoot, 'datasets/longmemeval/dataset.json');
+    fs.writeFileSync(repoDatasetPath, '[]\n');
+
+    const resolved = await datasetModule.resolveDatasetFile(undefined, tmpRoot);
+    expect(resolved).toBe(repoDatasetPath);
+
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('accepts tau-bench configs with local openai-compatible endpoints and no API key', () => {
+    const config = validateConfig({
+      version: 1,
+      runs: [
+        {
+          pack: 'tau-bench',
+          variant: 'baseline',
+          outputDir: 'runs/tau-bench',
+          agentProvider: 'local',
+          packConfig: { env: 'retail' },
+        },
+      ],
+      providers: {
+        local: {
+          type: 'openai-compatible',
+          baseURL: 'http://127.0.0.1:1234/v1',
+          apiKey: '',
+          defaultModel: 'qwen/qwen3.5-9b',
+        },
+      },
+    });
+
+    expect(config.runs[0]?.agentProviderConfig?.apiKey).toBe('');
+    expect(config.runs[0]?.agentProviderConfig?.baseURL).toBe('http://127.0.0.1:1234/v1');
+  });
+
   test('rejects direct run configs that reference unknown global providers', () => {
     expect(() =>
       validateConfig({

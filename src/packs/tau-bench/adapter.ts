@@ -57,6 +57,10 @@ function isOpenAICompatibleConfig(config: unknown): config is { type: 'openai-co
   return typeof config === 'object' && config !== null && (config as { type?: string }).type === 'openai-compatible';
 }
 
+function defaultBaseURL(baseURL?: string): string {
+  return baseURL?.trim() || 'https://api.openai.com/v1';
+}
+
 function resolvePackConfig(context: RunContext): Required<Pick<TauBenchPackConfig, 'env' | 'taskSplit' | 'numTrials' | 'maxConcurrency' | 'temperature' | 'seed' | 'shuffle' | 'agentStrategy' | 'userStrategy'>> &
   Pick<TauBenchPackConfig, 'taskIds' | 'userModel' | 'userModelProvider' | 'pythonCommand'> {
   const packConfig = (context.run.packConfig ?? {}) as TauBenchPackConfig;
@@ -106,9 +110,11 @@ export const tauBenchAdapter: PackAdapter = {
       throw new BenchmarkRuntimeError('tau-bench currently requires an openai-compatible provider configuration in this repo.');
     }
 
+    const baseURL = defaultBaseURL(provider.baseURL);
     const apiKey = provider.apiKey?.trim();
-    if (!apiKey) {
-      throw new BenchmarkRuntimeError('tau-bench requires an OPENAI-compatible API key resolved from the configured provider.');
+    const effectiveApiKey = apiKey || (baseURL !== 'https://api.openai.com/v1' ? 'dummy' : undefined);
+    if (!effectiveApiKey) {
+      throw new BenchmarkRuntimeError('tau-bench requires an API key for the default OpenAI endpoint, or a local compatible baseURL that can run with a dummy key.');
     }
 
     const model = context.run.agentModel ?? provider.defaultModel;
@@ -166,7 +172,7 @@ export const tauBenchAdapter: PackAdapter = {
       cwd: context.rootDir,
       env: {
         ...process.env,
-        OPENAI_API_KEY: apiKey,
+        OPENAI_API_KEY: effectiveApiKey,
         ...(provider.baseURL ? { OPENAI_API_BASE: provider.baseURL } : {}),
       },
       stdout: 'pipe',

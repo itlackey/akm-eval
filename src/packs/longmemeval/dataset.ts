@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { downloadDataset } from '../utils/dataset-downloader.ts';
 
 export interface LongMemEvalQuestion {
@@ -10,13 +11,15 @@ export interface LongMemEvalQuestion {
 }
 
 export interface DatasetLoadOptions {
+  rootDir?: string;
   datasetPath?: string;
   maxQuestions?: number;
   questionCategories?: string[];
   smoke?: boolean;
 }
 
-const OFFICIAL_DATASET_URL = 'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json';
+const OFFICIAL_DATASET_URL = 'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json';
+const REPO_MANAGED_DATASET_PATH = 'datasets/longmemeval/dataset.json';
 
 interface RawLongMemEvalItem {
   question_id: string;
@@ -34,15 +37,21 @@ interface NormalizedLongMemEvalItem {
   expectedAnswer: string;
 }
 
-export async function resolveDatasetFile(datasetPath?: string): Promise<string> {
+export async function resolveDatasetFile(datasetPath?: string, rootDir = process.cwd()): Promise<string> {
   if (datasetPath) {
-    if (!fs.existsSync(datasetPath)) {
+    const resolvedDatasetPath = path.isAbsolute(datasetPath) ? datasetPath : path.resolve(rootDir, datasetPath);
+    if (!fs.existsSync(resolvedDatasetPath)) {
       throw new Error(
         `LongMemEval dataset not found at "${datasetPath}". ` +
           `Remove datasetPath from config to auto-download, or provide a valid local path.`,
       );
     }
-    return datasetPath;
+    return resolvedDatasetPath;
+  }
+
+  const repoManagedDatasetPath = path.resolve(rootDir, REPO_MANAGED_DATASET_PATH);
+  if (fs.existsSync(repoManagedDatasetPath)) {
+    return repoManagedDatasetPath;
   }
 
   try {
@@ -95,7 +104,7 @@ function isNormalizedItem(value: unknown): value is NormalizedLongMemEvalItem {
 }
 
 export async function loadDataset(options: DatasetLoadOptions): Promise<LongMemEvalQuestion[]> {
-  const datasetFile = await resolveDatasetFile(options.datasetPath);
+  const datasetFile = await resolveDatasetFile(options.datasetPath, options.rootDir);
 
   const raw = fs.readFileSync(datasetFile, 'utf8');
   let data: unknown;

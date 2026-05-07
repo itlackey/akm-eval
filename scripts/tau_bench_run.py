@@ -27,15 +27,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def sanitize_file_component(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "-" for ch in value)
+
+
 def main() -> None:
     args = parse_args()
     os.makedirs(args.log_dir, exist_ok=True)
 
+    # tau-bench uses model strings inside checkpoint filenames. Normalize them
+    # for the filesystem while preserving the real model name for API calls.
+    original_model = args.model
+    original_user_model = args.user_model or args.model
+    args.model = sanitize_file_component(args.model)
+    args.user_model = sanitize_file_component(args.user_model) if args.user_model else args.model
+
     config = RunConfig(
         model_provider=args.model_provider,
         user_model_provider=args.user_model_provider or args.model_provider,
-        model=args.model,
-        user_model=args.user_model or args.model,
+        model=original_model,
+        user_model=original_user_model,
         num_trials=args.num_trials,
         env=args.env,
         agent_strategy=args.agent_strategy,

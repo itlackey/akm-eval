@@ -38,11 +38,12 @@ The setup command asks for the minimum decisions needed to get started:
 - which pack(s) to include in a starter config
 - whether those packs should use `openai-compatible` or `opencode` where this repo supports both
 - the basic global provider connection fields and default models needed by the selected packs
-- whether to download repo-managed datasets now
-- whether external prerequisites for BEAM, SWE-Bench, Terminal-Bench, or Tau-Bench are already in place so existing preflight checks should run
+- the current detected runtime status for the selected packs using the same checks as `bun run doctor`
+- whether to download repo-managed datasets now; answering no skips downloads and only writes the config
+- whether to run the deeper read-only BEAM preflight when `beam` is selected; answering no skips that check
 - where to write the starter config file
 
-It writes a direct `version: 1` run config with only the selected baseline runs and `memoryBackend: none`, using top-level `providers` for global connections plus per-run `agentProvider` references and optional `agentModel` overrides. Pack-specific runtime blockers remain explicit in the generated flow output rather than being treated as solved.
+It writes a direct `version: 1` run config with only the selected baseline runs and `memoryBackend: none`, using top-level `providers` for global connections plus per-run `agentProvider` references and optional `agentModel` overrides. Blank API keys are allowed for local no-auth `openai-compatible` endpoints. Pack-specific runtime blockers remain explicit in the generated flow output rather than being treated as solved.
 
 The remaining tasks that still require human or external intervention are tracked in [`docs/operator-blockers.md`](./operator-blockers.md).
 

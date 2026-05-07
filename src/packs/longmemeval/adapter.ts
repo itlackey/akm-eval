@@ -29,12 +29,16 @@ interface EvaluationLogEntry {
   };
 }
 
-function runCommand(command: string, cwd: string): { stdout: string; stderr: string; exitCode: number } {
+function isOpenAICompatibleConfig(config: unknown): config is { type: 'openai-compatible'; baseURL?: string; apiKey?: string } {
+  return typeof config === 'object' && config !== null && (config as { type?: string }).type === 'openai-compatible';
+}
+
+function runCommand(command: string, cwd: string, env: Record<string, string | undefined>): { stdout: string; stderr: string; exitCode: number } {
   const proc = Bun.spawnSync(['bash', '-lc', command], {
     cwd,
     stdout: 'pipe',
     stderr: 'pipe',
-    env: process.env,
+    env,
   });
 
   return {
@@ -94,8 +98,9 @@ export const longMemEvalAdapter: PackAdapter = {
       );
     }
 
-    const datasetPath = await resolveDatasetFile(packConfig.datasetPath);
+    const datasetPath = await resolveDatasetFile(packConfig.datasetPath, context.rootDir);
     const questions = await loadDataset({
+      rootDir: context.rootDir,
       datasetPath: packConfig.datasetPath,
       maxQuestions: packConfig.maxQuestions,
       questionCategories: packConfig.questionCategories,
@@ -139,9 +144,20 @@ export const longMemEvalAdapter: PackAdapter = {
     fs.writeFileSync(predictionsPath, `${predictions.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
 
     const evaluatorModel = typeof packConfig.evaluatorModel === 'string' ? packConfig.evaluatorModel : 'gpt-4o';
+    const evaluatorEnv: Record<string, string | undefined> = { ...process.env };
+    const provider = context.run.agentProviderConfig;
+    if (isOpenAICompatibleConfig(provider)) {
+      if (provider.baseURL) {
+        evaluatorEnv.OPENAI_BASE_URL = provider.baseURL;
+      }
+      if (provider.apiKey !== undefined) {
+        evaluatorEnv.OPENAI_API_KEY = provider.apiKey;
+      }
+    }
     const evalResult = runCommand(
       `${evaluatorCommand} ${JSON.stringify(evaluatorModel)} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)}`,
       context.rootDir,
+      evaluatorEnv,
     );
     if (evalResult.exitCode !== 0) {
       throw new BenchmarkRuntimeError(
