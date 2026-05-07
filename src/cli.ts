@@ -35,11 +35,19 @@ function valueAfter(args: string[], flag: string): string | undefined {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
-async function doctor(): Promise<number> {
+async function doctor(args: string[]): Promise<number> {
   const rootDir = getProjectRoot();
-  const checks = runDoctorChecks(rootDir);
+  const packId = valueAfter(args, '--pack');
+  if (packId) {
+    resolvePack(packId);
+  }
+
+  const checks = runDoctorChecks(rootDir, { packId });
   for (const check of checks) {
     console.log(`${check.status.toUpperCase()} ${check.name}: ${check.detail}`);
+  }
+  if (packId) {
+    return 0;
   }
   console.log(`Available memory backends: ${listMemoryBackends().join(', ')}`);
   console.log(`Truthful evaluated memory backends: ${listEvaluatedMemoryBackends().join(', ')}`);
@@ -192,7 +200,7 @@ export async function main(): Promise<number> {
 
   try {
     if (command === 'doctor') {
-      return await doctor();
+      return await doctor(args.slice(1));
     }
 
     if (command === 'list' && subcommand === 'packs') {

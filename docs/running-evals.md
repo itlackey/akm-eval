@@ -9,7 +9,7 @@ Direct `version: 1` configs should declare provider connections once under top-l
 For repo-local operator workflows, prefer these wrapper entrypoints over raw `bun src/cli.ts ...` commands:
 
 - `bin/build-image`
-- `bin/doctor`
+- `bin/doctor [--pack <id>]`
 - `bin/eval --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`
 - `bin/matrix --config <config-path>`
 - `bin/report --run <run-dir>`
@@ -17,6 +17,12 @@ For repo-local operator workflows, prefer these wrapper entrypoints over raw `bu
 - `bin/compare --baseline <run-dir> --candidate <run-dir>`
 - `bin/downloads [DatasetName]`
 - `bin/setup`
+
+Recommended preflight flow:
+
+- use `bin/doctor` for the full repo summary
+- use `bin/doctor --pack <id>` as the preferred per-pack wrapper flow before running that pack
+- keep dedicated pack wrappers only when they add deeper checks than `bin/doctor --pack <id>`; today the main example is `bin/beam-doctor`
 
 ## Runner support boundaries
 

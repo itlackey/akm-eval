@@ -62,7 +62,7 @@ export function normalizeCliArgs(argv: string[]): string[] {
 export function createUsageLines(): string[] {
   return [
     'Usage:',
-    '  bin/doctor',
+    '  bin/doctor [--pack <id>]',
     '  bin/akm-eval list packs',
     '  bin/akm-eval list variants',
     '  bin/eval --pack <id> --variant <id> --config <path> [--out <dir>]',

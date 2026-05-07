@@ -9,7 +9,7 @@ import { validateConfig } from '../src/config/validate-config.ts';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shellBinary = 'bash';
 
-setDefaultTimeout(15000);
+setDefaultTimeout(20000);
 
 function binPath(name: string): string {
   return path.resolve(rootDir, 'bin', name);
@@ -391,6 +391,39 @@ describe('config loading', () => {
     expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
     expect(doctor.stdout.toString()).toContain('Truthful evaluated memory backends: none, raw-vector');
 
+    const packDoctor = Bun.spawnSync({
+      cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'doctor', '--pack', 'locomo'],
+      cwd: rootDir,
+    });
+    expect(packDoctor.exitCode).toBe(0);
+    expect(packDoctor.stdout.toString()).toContain('pack:locomo');
+    expect(packDoctor.stdout.toString()).not.toContain('pack:beam');
+    expect(packDoctor.stdout.toString()).not.toContain('pack:terminal-bench');
+    expect(packDoctor.stdout.toString()).not.toContain('memory:');
+    expect(packDoctor.stdout.toString()).not.toContain('Truthful evaluated memory backends:');
+
+    const unknownPackDoctor = Bun.spawnSync({
+      cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'doctor', '--pack', 'not-a-pack'],
+      cwd: rootDir,
+    });
+    expect(unknownPackDoctor.exitCode).toBe(1);
+    expect(unknownPackDoctor.stderr.toString()).toContain('Unknown pack: not-a-pack');
+
+    const tmpDoctorCwd = path.resolve(rootDir, 'tests/.artifacts/doctor-cwd');
+    fs.mkdirSync(tmpDoctorCwd, { recursive: true });
+    const rootDirDoctor = Bun.spawnSync({
+      cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'doctor', '--pack', 'locomo'],
+      cwd: tmpDoctorCwd,
+      env: {
+        ...process.env,
+        AKM_EVAL_PROJECT_ROOT: rootDir,
+      },
+    });
+    expect(rootDirDoctor.exitCode).toBe(0);
+    expect(rootDirDoctor.stdout.toString()).toContain('pack:locomo');
+    expect(rootDirDoctor.stdout.toString()).not.toContain('missing at scripts/locomo-evaluator.py');
+    expect(rootDirDoctor.stdout.toString()).not.toContain('memory:');
+
     const listPacks = Bun.spawnSync({ cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
     expect(listPacks.stdout.toString()).toContain('akm-bench');
@@ -515,6 +548,7 @@ describe('config loading', () => {
     expect(run.stderr.toString()).toContain('longmemeval agent run failed');
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDoctorCwd, { recursive: true, force: true });
   });
 
   test('wrapper command normalization keeps trust-policy boundaries intact', () => {
@@ -537,7 +571,7 @@ describe('config loading', () => {
   test('usage advertises wrapper-first command surface', () => {
     expect(createUsageLines()).toEqual([
       'Usage:',
-      '  bin/doctor',
+      '  bin/doctor [--pack <id>]',
       '  bin/akm-eval list packs',
       '  bin/akm-eval list variants',
       '  bin/eval --pack <id> --variant <id> --config <path> [--out <dir>]',

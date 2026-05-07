@@ -43,6 +43,7 @@ The current goal is a staged path to reproducibility, not a false claim of a ful
 Example preflight:
 
 ```bash
+bin/doctor --pack beam
 bin/beam-doctor
 bash scripts/setup-beam-runtime.sh --check --require-judge
 bash scripts/setup-beam-runtime.sh --check --require-10m --require-judge
@@ -75,7 +76,7 @@ bash scripts/setup-beam-runtime.sh
 
 1. Clone the upstream BEAM repo at the pinned commit.
 2. Prepare the official dataset outside this repo using the upstream BEAM dataset flow.
-3. Run `bin/beam-doctor` before any BEAM eval.
+3. Run `bin/doctor --pack beam` for the shared wrapper-level status, then `bin/beam-doctor` before any BEAM eval that needs deeper upstream repo, dataset, and judge validation.
 4. Add `--require-10m` when the config requests `10M` chat sizes.
 5. Capture the emitted fingerprint JSON alongside run logs when you need stronger auditability.
 

@@ -19,7 +19,7 @@ bun run check:boundary
 Preferred operator script surface:
 
 - `bin/build-image`
-- `bin/doctor`
+- `bin/doctor [--pack <id>]`
 - `bin/eval --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`
 - `bin/matrix --config <config-path>`
 - `bin/report --run <run-dir>`
@@ -34,6 +34,7 @@ Preferred operator script surface:
 
 ```bash
 bin/doctor
+bin/doctor --pack locomo
 bin/matrix --config config/examples/locomo-smoke.json
 bin/eval --pack locomo --variant baseline --config config/examples/locomo-smoke.json
 ```
@@ -41,9 +42,12 @@ bin/eval --pack locomo --variant baseline --config config/examples/locomo-smoke.
 Default operator flow is:
 
 - choose the closest committed example config
-- run `bin/doctor` to confirm containerized runtime status
+- run `bin/doctor` to confirm the central containerized runtime summary
+- run `bin/doctor --pack <id>` when you want the preferred wrapper-level status for the specific pack you are about to run
 - run `bin/matrix` when you want to inspect the planned runs from that config
 - run the selected pack directly through `bin/eval`
+
+Keep the wrapper surface small. Prefer `bin/doctor --pack <id>` over adding pack aliases unless a pack needs materially deeper checks than the shared doctor surface. `bin/beam-doctor` remains the current exception because it validates the upstream repo, prepared datasets, and judge path.
 
 ## Legacy setup helper
 

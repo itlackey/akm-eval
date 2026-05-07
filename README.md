@@ -23,7 +23,7 @@ bun run check:boundary
 Common operator entrypoints:
 
 - `bin/build-image`: build the operator Docker image used by the wrappers
-- `bin/doctor`: environment and harness preflight summary
+- `bin/doctor [--pack <id>]`: environment and harness preflight summary, or a focused check for one pack
 - `bin/eval --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`: run one normalized eval
 - `bin/matrix --config <config-path>`: show the planned matrix from a config
 - `bin/report --run <run-dir>`: render one normalized run
@@ -132,6 +132,7 @@ Primary operator flow starts from a committed example config plus direct wrapper
 
 ```bash
 bin/doctor
+bin/doctor --pack locomo
 bin/matrix --config config/examples/locomo-smoke.json
 bin/eval --pack locomo --variant baseline --config config/examples/locomo-smoke.json
 ```
@@ -147,6 +148,12 @@ Use the closest committed example config for the pack you want to run:
 - `config/examples/terminal-bench-smoke.json`
 
 Write a direct `version: 1` config when you need custom runs. Declare provider connections once under top-level `providers`, have each run select one with `agentProvider`, and use `agentModel` only for per-run overrides.
+
+Preferred preflight flow:
+
+- run `bin/doctor` for the central repo-wide summary across packs and memory backends
+- run `bin/doctor --pack <id>` when you want the preferred wrapper-level status for one pack before using its example config
+- keep dedicated pack wrappers only where they add materially different checks beyond the shared doctor surface; `bin/beam-doctor` remains that deeper BEAM-specific preflight
 
 ## Legacy guided setup
 
@@ -183,7 +190,8 @@ For the current pinned local runtime bootstrap:
 
 - upstream source expectation is `mohammadtavakoli78/BEAM` at commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`
 - install/check script: `bash scripts/setup-beam-runtime.sh`
-- quick preflight script: `bin/beam-doctor`
+- wrapper-level pack check: `bin/doctor --pack beam`
+- deeper BEAM-specific preflight: `bin/beam-doctor`
 - pinned Python requirements snapshot: `requirements-beam.txt`
 - optional env overrides: `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, `BEAM_PYTHON_BIN`
 - optional container scaffold: `tools/beam/Dockerfile` and `tools/beam/run-in-container.sh`
@@ -197,6 +205,7 @@ It now also fails early when the prepared dataset path is missing, and it can re
 Minimum truthful preflight today:
 
 ```bash
+bin/doctor --pack beam
 bin/beam-doctor
 bash scripts/setup-beam-runtime.sh --check --require-judge
 bash scripts/setup-beam-runtime.sh --check --require-judge --print-fingerprint

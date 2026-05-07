@@ -9,6 +9,10 @@ export interface DoctorCheck {
   detail: string;
 }
 
+export interface DoctorCheckOptions {
+  packId?: string;
+}
+
 export function commandVersion(command: string, args: string[] = ['--version'], cwd = getProjectRoot()): string | null {
   const result = runProcess(command, args, cwd);
   if (!result.success) {
@@ -17,34 +21,43 @@ export function commandVersion(command: string, args: string[] = ['--version'], 
   return result.stdout.trim().split('\n')[0] ?? null;
 }
 
-export function runDoctorChecks(rootDir = getProjectRoot()): DoctorCheck[] {
+export function runDoctorChecks(rootDir = getProjectRoot(), options: DoctorCheckOptions = {}): DoctorCheck[] {
   const bunVersion = commandVersion('bun', ['--version'], rootDir);
   const nodeVersion = commandVersion('node', ['--version'], rootDir);
+  const selectedPack = options.packId ? packRegistry.find((entry) => entry.id === options.packId) : undefined;
+  const packs = selectedPack ? [selectedPack] : packRegistry;
+  const includeSharedChecks = !selectedPack;
 
-  const checks: DoctorCheck[] = [
-    {
-      name: 'bun',
-      status: bunVersion ? 'ok' : 'warn',
-      detail: bunVersion ? `found ${bunVersion}` : 'bun not found in PATH',
-    },
-    {
-      name: 'node',
-      status: nodeVersion ? 'ok' : 'warn',
-      detail: nodeVersion ? `found ${nodeVersion}` : 'node not found in PATH',
-    },
-  ];
+  const checks: DoctorCheck[] = [];
 
-  for (const backendId of listMemoryBackends()) {
-    const detail = getMemoryBackendStatus(backendId, rootDir);
-    checks.push({
-      name: `memory:${backendId}`,
-      status: detail.status,
-      detail: detail.detail,
-    });
+  if (includeSharedChecks) {
+    checks.push(
+      {
+        name: 'bun',
+        status: bunVersion ? 'ok' : 'warn',
+        detail: bunVersion ? `found ${bunVersion}` : 'bun not found in PATH',
+      },
+      {
+        name: 'node',
+        status: nodeVersion ? 'ok' : 'warn',
+        detail: nodeVersion ? `found ${nodeVersion}` : 'node not found in PATH',
+      },
+    );
   }
 
-  for (const pack of packRegistry) {
-    const doctorDetail = pack.getDoctorDetail?.();
+  if (includeSharedChecks) {
+    for (const backendId of listMemoryBackends()) {
+      const detail = getMemoryBackendStatus(backendId, rootDir);
+      checks.push({
+        name: `memory:${backendId}`,
+        status: detail.status,
+        detail: detail.detail,
+      });
+    }
+  }
+
+  for (const pack of packs) {
+    const doctorDetail = pack.getDoctorDetail?.(rootDir);
     if (doctorDetail) {
       checks.push({
         name: `pack:${pack.id}`,

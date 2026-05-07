@@ -65,9 +65,9 @@ function runCommand(command: string, cwd: string): { stdout: string; stderr: str
   };
 }
 
-function checkPythonDeps(): { ok: boolean; detail: string } {
+function checkPythonDeps(rootDir = process.cwd()): { ok: boolean; detail: string } {
   const result = spawnSync('python3', ['-c', 'import numpy, regex, nltk'], {
-    cwd: process.cwd(),
+    cwd: rootDir,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -80,8 +80,8 @@ function checkPythonDeps(): { ok: boolean; detail: string } {
   return { ok: false, detail };
 }
 
-function evaluatorScriptExists(): boolean {
-  return fs.existsSync(path.resolve(process.cwd(), 'scripts/locomo-evaluator.py'));
+function evaluatorScriptExists(rootDir = process.cwd()): boolean {
+  return fs.existsSync(path.resolve(rootDir, 'scripts/locomo-evaluator.py'));
 }
 
 function getSpeakerNames(sample: LoCoMoSample): [string, string] {
@@ -248,19 +248,19 @@ function buildModelKey(input: string): string {
 export const locomoAdapter: PackAdapter = {
   id: 'locomo',
   description: 'LoCoMo question answering with the official dataset and authoritative QA scoring rules.',
-  checkInstalled() {
-    const deps = checkPythonDeps();
-    return deps.ok && evaluatorScriptExists();
+  checkInstalled(rootDir = process.cwd()) {
+    const deps = checkPythonDeps(rootDir);
+    return deps.ok && evaluatorScriptExists(rootDir);
   },
-  getDoctorDetail() {
-    if (!evaluatorScriptExists()) {
+  getDoctorDetail(rootDir = process.cwd()) {
+    if (!evaluatorScriptExists(rootDir)) {
       return {
         status: 'warn' as const,
         detail: 'LoCoMo evaluator wrapper missing at scripts/locomo-evaluator.py; pack runs are blocked until it is available.',
       };
     }
 
-    const deps = checkPythonDeps();
+    const deps = checkPythonDeps(rootDir);
     if (!deps.ok) {
       return {
         status: 'warn' as const,
@@ -270,7 +270,7 @@ export const locomoAdapter: PackAdapter = {
       };
     }
 
-    const datasetCached = fs.existsSync(path.resolve(process.cwd(), 'datasets/locomo/locomo10.json'));
+    const datasetCached = fs.existsSync(path.resolve(rootDir, 'datasets/locomo/locomo10.json'));
     return {
       status: 'ok' as const,
       detail: datasetCached
