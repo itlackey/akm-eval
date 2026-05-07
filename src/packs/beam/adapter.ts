@@ -27,11 +27,11 @@ function average(values: number[]): number {
 export const beamAdapter: PackAdapter = {
   id: 'beam',
   description: 'BEAM using the official dataset and upstream evaluation pipeline.',
-  checkInstalled() {
-    return checkBeamRuntime(process.cwd()).installed;
+  checkInstalled(rootDir = process.cwd()) {
+    return checkBeamRuntime(rootDir).installed;
   },
-  getDoctorDetail() {
-    const detail = checkBeamRuntime(process.cwd());
+  getDoctorDetail(rootDir = process.cwd()) {
+    const detail = checkBeamRuntime(rootDir);
     return {
       status: detail.installed ? 'ok' : 'warn',
       detail: detail.detail,

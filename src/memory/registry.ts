@@ -1,13 +1,13 @@
 import { UnknownMemoryBackendError } from '../core/errors.ts';
 import type { MemoryBackend } from './types.ts';
-import { createAkmBackend } from './backends/akm.ts';
+import { createAkmBackend, getAkmBackendDoctorDetail } from './backends/akm.ts';
 import { createMem0Backend } from './backends/mem0.ts';
 import { createNoneBackend } from './backends/none.ts';
 import { createOpenVikingBackend } from './backends/openviking.ts';
 import { createRawVectorBackend } from './backends/raw-vector.ts';
 import { createZepBackend } from './backends/zep.ts';
 
-type BackendFactory = () => MemoryBackend;
+type BackendFactory = (rootDir?: string) => MemoryBackend;
 type BackendStatus = {
   evaluated: boolean;
   status: 'ok' | 'warn';
@@ -62,22 +62,30 @@ const backendStatusRegistry: Record<string, () => BackendStatus> = {
   }),
 };
 
-export function createMemoryBackend(id = 'none'): MemoryBackend {
+export function createMemoryBackend(id = 'none', rootDir?: string): MemoryBackend {
   const factory = memoryBackendRegistry[id];
   if (!factory) {
     throw new UnknownMemoryBackendError(id);
   }
-  return factory();
+  return factory(rootDir);
 }
 
 export function listMemoryBackends(): string[] {
   return Object.keys(memoryBackendRegistry).sort();
 }
 
-export function getMemoryBackendStatus(id: string): BackendStatus {
+export function getMemoryBackendStatus(id: string, rootDir = process.cwd()): BackendStatus {
   const statusFactory = backendStatusRegistry[id];
   if (!statusFactory) {
     throw new UnknownMemoryBackendError(id);
+  }
+  if (id === 'akm') {
+    const detail = getAkmBackendDoctorDetail(rootDir);
+    return {
+      evaluated: false,
+      status: detail.status,
+      detail: detail.detail,
+    };
   }
   return statusFactory();
 }

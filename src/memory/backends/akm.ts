@@ -7,8 +7,8 @@ interface AkmBackendRuntime {
   detail: string;
 }
 
-function inspectAkmRuntime(): AkmBackendRuntime {
-  const helpResult = runProcess('akm', ['--help'], process.cwd());
+function inspectAkmRuntime(rootDir: string): AkmBackendRuntime {
+  const helpResult = runProcess('akm', ['--help'], rootDir);
   if (!helpResult.success) {
     const detail = helpResult.stderr.trim() || helpResult.stdout.trim() || 'akm CLI not found in PATH';
     return {
@@ -17,7 +17,7 @@ function inspectAkmRuntime(): AkmBackendRuntime {
     };
   }
 
-  const infoResult = runProcess('akm', ['info', '--format', 'json'], process.cwd());
+  const infoResult = runProcess('akm', ['info', '--format', 'json'], rootDir);
   if (!infoResult.success) {
     const detail = infoResult.stderr.trim() || infoResult.stdout.trim() || 'akm info failed';
     return {
@@ -26,7 +26,7 @@ function inspectAkmRuntime(): AkmBackendRuntime {
     };
   }
 
-  const memoryHelpResult = runProcess('akm', ['memory', '--help'], process.cwd());
+  const memoryHelpResult = runProcess('akm', ['memory', '--help'], rootDir);
 
   let parsed: { version?: string; semanticSearch?: { status?: string } } | null = null;
   try {
@@ -71,14 +71,14 @@ export function createExternalStub(id: string, detail: string): MemoryBackend {
   };
 }
 
-export function getAkmBackendDoctorDetail() {
-  const runtime = inspectAkmRuntime();
+export function getAkmBackendDoctorDetail(rootDir: string) {
+  const runtime = inspectAkmRuntime(rootDir);
   return {
     status: runtime.available ? 'ok' : 'warn',
     detail: runtime.detail,
   } as const;
 }
 
-export function createAkmBackend(): MemoryBackend {
-  return createExternalStub('akm', inspectAkmRuntime().detail);
+export function createAkmBackend(rootDir = process.cwd()): MemoryBackend {
+  return createExternalStub('akm', inspectAkmRuntime(rootDir).detail);
 }

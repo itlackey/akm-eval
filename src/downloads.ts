@@ -39,9 +39,7 @@ async function download(source: DatasetSource): Promise<void> {
 
   const response = await fetch(source.url);
   if (!response.ok) {
-    throw new Error(
-      `Failed to download ${source.name}: HTTP ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to download ${source.name}: HTTP ${response.status} ${response.statusText}`);
   }
 
   const contentLength = Number(response.headers.get('content-length') ?? '0');
@@ -68,25 +66,24 @@ async function download(source: DatasetSource): Promise<void> {
 
   process.stdout.write('\n');
 
-  const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  const buffer = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, buffer);
 
   console.log(`[saved] ${source.name} -> ${source.targetPath} (${formatBytes(buffer.length)})`);
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+export async function runDownloadsCommand(args: string[]): Promise<number> {
   const specificDataset = args[0];
 
   const sources = specificDataset
-    ? DATASETS.filter((d) => d.name.toLowerCase() === specificDataset.toLowerCase())
+    ? DATASETS.filter((dataset) => dataset.name.toLowerCase() === specificDataset.toLowerCase())
     : DATASETS;
 
   if (sources.length === 0) {
     console.error(`Unknown dataset: ${specificDataset}`);
-    console.error(`Available datasets: ${DATASETS.map((d) => d.name).join(', ')}`);
-    process.exit(1);
+    console.error(`Available datasets: ${DATASETS.map((dataset) => dataset.name).join(', ')}`);
+    return 1;
   }
 
   console.log(`Downloading ${sources.length} dataset(s)...\n`);
@@ -97,9 +94,5 @@ async function main(): Promise<void> {
   }
 
   console.log('Done! All requested datasets are ready.');
+  return 0;
 }
-
-main().catch((err) => {
-  console.error(`Error: ${err.message}`);
-  process.exit(1);
-});

@@ -1,6 +1,7 @@
 import { packRegistry } from '../packs/registry/index.ts';
 import { getMemoryBackendStatus, listMemoryBackends } from '../memory/registry.ts';
 import { runProcess } from './process.ts';
+import { getProjectRoot } from './project-root.ts';
 
 export interface DoctorCheck {
   name: string;
@@ -8,17 +9,17 @@ export interface DoctorCheck {
   detail: string;
 }
 
-export function commandVersion(command: string, args: string[] = ['--version']): string | null {
-  const result = runProcess(command, args, process.cwd());
+export function commandVersion(command: string, args: string[] = ['--version'], cwd = getProjectRoot()): string | null {
+  const result = runProcess(command, args, cwd);
   if (!result.success) {
     return null;
   }
   return result.stdout.trim().split('\n')[0] ?? null;
 }
 
-export function runDoctorChecks(): DoctorCheck[] {
-  const bunVersion = commandVersion('bun');
-  const nodeVersion = commandVersion('node');
+export function runDoctorChecks(rootDir = getProjectRoot()): DoctorCheck[] {
+  const bunVersion = commandVersion('bun', ['--version'], rootDir);
+  const nodeVersion = commandVersion('node', ['--version'], rootDir);
 
   const checks: DoctorCheck[] = [
     {
@@ -34,7 +35,7 @@ export function runDoctorChecks(): DoctorCheck[] {
   ];
 
   for (const backendId of listMemoryBackends()) {
-    const detail = getMemoryBackendStatus(backendId);
+    const detail = getMemoryBackendStatus(backendId, rootDir);
     checks.push({
       name: `memory:${backendId}`,
       status: detail.status,
@@ -56,7 +57,7 @@ export function runDoctorChecks(): DoctorCheck[] {
     if (!pack.optionalDependency) {
       continue;
     }
-    const installed = pack.checkInstalled();
+    const installed = pack.checkInstalled(rootDir);
     checks.push({
       name: `pack:${pack.id}`,
       status: installed ? 'ok' : 'warn',

@@ -104,8 +104,9 @@ function printSetupStep(step: number, total: number, title: string): void {
 function setupUsage(): string {
   return [
     'Usage:',
-    '  bun run setup',
-    '  bun run setup --help',
+    '  bun run setup:legacy',
+    '  bin/setup',
+    '  bun run setup:legacy --help',
   ].join('\n');
 }
 
@@ -224,7 +225,7 @@ export function buildStarterConfig(options: StarterConfigOptions): EvalConfig {
   const providers = Object.fromEntries(providerEntries);
   const runs: RunDefinition[] = options.packs.map((packId) => {
     const providerType = providerForPack(packId, options.primaryProvider);
-    const outputDir = relativePath(configDir, path.resolve(options.rootDir, 'runs', 'setup', packId, 'baseline'));
+    const outputDir = relativePath(configDir, path.resolve(options.rootDir, 'runs', 'legacy-setup', packId, 'baseline'));
 
     return {
       id: `${packId}-baseline`,
@@ -240,7 +241,7 @@ export function buildStarterConfig(options: StarterConfigOptions): EvalConfig {
   return validateConfig({
     version: 1,
     defaults: {
-      outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'setup')),
+      outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'legacy-setup')),
       memoryBackend: 'none',
     },
     runs,
@@ -258,7 +259,7 @@ function buildStarterConfigDocument(options: StarterConfigOptions): EvalConfig {
   return {
     version: 1,
     defaults: {
-      outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'setup')),
+      outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'legacy-setup')),
       memoryBackend: 'none',
     },
     runs: options.packs.map((packId) => {
@@ -267,7 +268,7 @@ function buildStarterConfigDocument(options: StarterConfigOptions): EvalConfig {
         id: `${packId}-baseline`,
         pack: packId,
         variant: 'baseline',
-        outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'setup', packId, 'baseline')),
+        outputDir: relativePath(configDir, path.resolve(options.rootDir, 'runs', 'legacy-setup', packId, 'baseline')),
         memoryBackend: 'none',
         agentProvider: providerKeyForType(providerType),
         packConfig: createPackConfig(packId, options),
@@ -304,7 +305,7 @@ async function runRepoManagedDownloads(rootDir: string, datasetNames: string[]):
   for (const datasetName of datasetNames) {
     console.log(`Running dataset download for ${datasetName}. This may take a while.`);
     const proc = Bun.spawn({
-      cmd: [process.execPath, path.resolve(rootDir, 'scripts/download-datasets.ts'), datasetName],
+      cmd: [process.execPath, path.resolve(rootDir, 'bin/downloads'), datasetName],
       cwd: rootDir,
       stdout: 'inherit',
       stderr: 'inherit',
@@ -486,8 +487,9 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
     const totalSteps = 5;
-    console.log('This setup flow writes a starter config, can optionally download repo-managed datasets, and can optionally run read-only checks.');
+    console.log('This legacy setup flow writes a starter config, can optionally download repo-managed datasets, and can optionally run read-only checks.');
     console.log('It does not install external tooling for you, and answering no skips the optional action instead of trying to install anything.');
+    console.log('Primary operator flow now starts from committed example configs and direct wrapper commands.');
     console.log('');
 
     printSetupStep(1, totalSteps, 'choose packs');
@@ -500,8 +502,8 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
     const opencode = providersNeeded.includes('opencode') ? await promptOpencodeConfig(rl) : undefined;
 
     printSetupStep(3, totalSteps, 'detect current runtime status');
-    console.log('Checking the selected packs with the same runtime detection used by `bun run doctor`...');
-    const doctorChecks = runDoctorChecks();
+    console.log('Checking the selected packs with the same runtime detection used by `bin/doctor`...');
+    const doctorChecks = runDoctorChecks(rootDir);
     for (const packId of packs) {
       const detected = doctorChecks.find((entry) => entry.name === `pack:${packId}`);
       if (!detected) {
@@ -531,7 +533,7 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       : false;
 
     printSetupStep(5, totalSteps, 'write starter config');
-    const configPathInput = await promptLine(rl, 'Starter config path', 'config/examples/runs/setup-starter.json');
+    const configPathInput = await promptLine(rl, 'Starter config path', 'config/examples/runs/legacy-setup-starter.json');
     const configPath = path.resolve(rootDir, configPathInput);
     if (fs.existsSync(configPath)) {
       const overwrite = await promptYesNo(rl, `Overwrite existing file ${configPathInput}`, false);
@@ -617,10 +619,10 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       );
     }
     if (!downloadDatasets && repoManagedDatasets.length > 0) {
-      followUpNotes.push('No datasets were downloaded during setup. You can download them later with `bun run downloads`.');
+      followUpNotes.push('No datasets were downloaded during setup. You can download them later with `bin/downloads` or use a committed example config that resolves datasets on first use.');
     }
     if (packs.includes('beam') && !runBeamCheck) {
-      followUpNotes.push('beam: deeper BEAM preflight was skipped. Run `bun run beam:doctor` or `bash scripts/setup-beam-runtime.sh --check --require-judge` later when you want to verify the upstream repo, dataset, and judge path.');
+      followUpNotes.push('beam: deeper BEAM preflight was skipped. Run `bin/beam-doctor` or `bash scripts/setup-beam-runtime.sh --check --require-judge` later when you want to verify the upstream repo, dataset, and judge path.');
     }
     if (openAI && openAI.apiKey.length === 0) {
       followUpNotes.push(
@@ -640,10 +642,10 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
     console.log('');
     if (nextRunnableRun) {
       console.log(
-        `Next: bun run eval -- --pack ${nextRunnableRun.pack} --variant ${nextRunnableRun.variant} --config ${path.relative(rootDir, configPath) || configPath}`,
+        `Next: bin/eval --pack ${nextRunnableRun.pack} --variant ${nextRunnableRun.variant} --config ${path.relative(rootDir, configPath) || configPath}`,
       );
     } else if (config.runs[0]) {
-      console.log('Next: resolve the blocker(s) above before running bun run eval.');
+      console.log('Next: resolve the blocker(s) above before running `bin/eval ...`.');
     }
     return 0;
   } finally {

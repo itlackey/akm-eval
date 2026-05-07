@@ -78,11 +78,11 @@ function evaluatorWrapperPath(rootDir: string): string {
 export const longMemEvalAdapter: PackAdapter = {
   id: 'longmemeval',
   description: 'LongMemEval using the official dataset and a configured official-evaluator command (default wrapper bundled in this repo).',
-  checkInstalled() {
-    return fs.existsSync(evaluatorWrapperPath(process.cwd()));
+  checkInstalled(rootDir = process.cwd()) {
+    return fs.existsSync(evaluatorWrapperPath(rootDir));
   },
-  getDoctorDetail() {
-    if (!fs.existsSync(evaluatorWrapperPath(process.cwd()))) {
+  getDoctorDetail(rootDir = process.cwd()) {
+    if (!fs.existsSync(evaluatorWrapperPath(rootDir))) {
       return {
         status: 'warn' as const,
         detail: 'repo-bundled LongMemEval evaluator wrapper missing at scripts/longmemeval-evaluator.py; runs need a configured evaluator command and this repo does not fall back to heuristic local judging.',

@@ -5,6 +5,8 @@ import type { AgentRunner } from './agent/types.ts';
 import { loadConfig } from './config/load-config.ts';
 import { runDoctorChecks } from './core/environment.ts';
 import { createRunContext } from './core/run-context.ts';
+import { createUsageLines, normalizeCliArgs } from './cli-entry.ts';
+import { runDownloadsCommand } from './downloads.ts';
 import {
   createMemoryBackend,
   getMemoryBackendStatus,
@@ -22,20 +24,10 @@ import { collectRunSummaries, markdownSummaryForRuns } from './reporting/summary
 import { runSetupCommand } from './setup.ts';
 import { variantRegistry } from './variants/registry.ts';
 import { resolveVariant } from './variants/resolve-variant.ts';
+import { getProjectRoot } from './core/project-root.ts';
 
 function usage(): string {
-  return [
-    'Usage:',
-    '  bun run doctor',
-    '  bun src/cli.ts list packs',
-    '  bun src/cli.ts list variants',
-    '  bun run eval -- --pack <id> --variant <id> --config <path> [--out <dir>]',
-    '  bun run matrix -- --config <path>',
-    '  bun run compare -- --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
-    '  bun run report -- --run <dir> [--format markdown|json]',
-    '  bun run summary -- --runs <dir> [--format markdown|json]',
-    '  bun run setup',
-  ].join('\n');
+  return createUsageLines().join('\n');
 }
 
 function valueAfter(args: string[], flag: string): string | undefined {
@@ -44,7 +36,8 @@ function valueAfter(args: string[], flag: string): string | undefined {
 }
 
 async function doctor(): Promise<number> {
-  const checks = runDoctorChecks();
+  const rootDir = getProjectRoot();
+  const checks = runDoctorChecks(rootDir);
   for (const check of checks) {
     console.log(`${check.status.toUpperCase()} ${check.name}: ${check.detail}`);
   }
@@ -69,8 +62,9 @@ function listVariants(): number {
 }
 
 async function runCommand(args: string[]): Promise<number> {
+  const rootDir = getProjectRoot();
   const configPath =
-    valueAfter(args, '--config') ?? path.resolve(process.cwd(), 'config/examples/memory-comparison.json');
+    valueAfter(args, '--config') ?? path.resolve(rootDir, 'config/examples/memory-comparison.json');
   const config = loadConfig(configPath);
   const runId = valueAfter(args, '--run-id');
   const packId = valueAfter(args, '--pack');
@@ -110,7 +104,7 @@ async function runCommand(args: string[]): Promise<number> {
   }
 
   const context = createRunContext(
-    process.cwd(),
+    rootDir,
     config,
     {
       ...selectedRun,
@@ -119,7 +113,7 @@ async function runCommand(args: string[]): Promise<number> {
     agentRunner,
   );
   const memoryBackendId = selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none';
-  const memoryBackendStatus = getMemoryBackendStatus(memoryBackendId);
+  const memoryBackendStatus = getMemoryBackendStatus(memoryBackendId, rootDir);
   if (!memoryBackendStatus.evaluated) {
     throw new Error(
       `Run "${selectedRun.id ?? `${selectedRun.pack}-${selectedRun.variant}`}" selects memory backend "${memoryBackendId}", ` +
@@ -127,15 +121,16 @@ async function runCommand(args: string[]): Promise<number> {
     );
   }
 
-  const memoryBackend = createMemoryBackend(memoryBackendId);
+  const memoryBackend = createMemoryBackend(memoryBackendId, rootDir);
   const result = await pack.run(context, memoryBackend, agentRunner);
   process.stdout.write(toPrettyJson(result));
   return 0;
 }
 
 function matrixCommand(args: string[]): number {
+  const rootDir = getProjectRoot();
   const configPath =
-    valueAfter(args, '--config') ?? path.resolve(process.cwd(), 'config/examples/memory-comparison.json');
+    valueAfter(args, '--config') ?? path.resolve(rootDir, 'config/examples/memory-comparison.json');
   const config = loadConfig(configPath);
   process.stdout.write(renderRunMatrix(config));
   return 0;
@@ -186,8 +181,8 @@ function summaryCommand(args: string[]): number {
   return 0;
 }
 
-async function main(): Promise<number> {
-  const args = process.argv.slice(2);
+export async function main(): Promise<number> {
+  const args = normalizeCliArgs(process.argv);
   if (args.length === 0) {
     console.log(usage());
     return 1;
@@ -229,7 +224,11 @@ async function main(): Promise<number> {
     }
 
     if (command === 'setup') {
-      return await runSetupCommand(process.cwd(), args.slice(1));
+      return await runSetupCommand(getProjectRoot(), args.slice(1));
+    }
+
+    if (command === 'downloads') {
+      return await runDownloadsCommand(args.slice(1));
     }
 
     console.log(usage());

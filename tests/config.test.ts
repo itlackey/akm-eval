@@ -2,13 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { createUsageLines, normalizeCliArgs, resolveWrapperCommand } from '../src/cli-entry.ts';
 import { loadConfig } from '../src/config/load-config.ts';
 import { validateConfig } from '../src/config/validate-config.ts';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const bunBinary = process.execPath;
+const shellBinary = 'bash';
 
 setDefaultTimeout(15000);
+
+function binPath(name: string): string {
+  return path.resolve(rootDir, 'bin', name);
+}
 
 describe('config loading', () => {
   test('loads planned example config and normalizes it for execution', () => {
@@ -377,8 +382,8 @@ describe('config loading', () => {
     ).toThrow('must include the provider prefix');
   });
 
-  test('cli smoke paths work for doctor, list, matrix, and run', () => {
-    const doctor = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'doctor'], cwd: rootDir });
+  test('engine smoke paths work for doctor, list, matrix, and run', () => {
+    const doctor = Bun.spawnSync({ cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'doctor'], cwd: rootDir });
     expect(doctor.exitCode).toBe(0);
     expect(doctor.stdout.toString()).toContain('memory:akm');
     expect(doctor.stdout.toString()).toContain('memory:raw-vector');
@@ -386,20 +391,20 @@ describe('config loading', () => {
     expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
     expect(doctor.stdout.toString()).toContain('Truthful evaluated memory backends: none, raw-vector');
 
-    const listPacks = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
+    const listPacks = Bun.spawnSync({ cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
     expect(listPacks.stdout.toString()).toContain('akm-bench');
     expect(listPacks.stdout.toString()).toContain('tau-bench');
     // Verify qa pack was removed
     expect(listPacks.stdout.toString()).not.toContain('qa\t');
 
-    const listVariants = Bun.spawnSync({ cmd: [bunBinary, path.resolve(rootDir, 'src/cli.ts'), 'list', 'variants'], cwd: rootDir });
+    const listVariants = Bun.spawnSync({ cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'list', 'variants'], cwd: rootDir });
     expect(listVariants.exitCode).toBe(0);
     expect(listVariants.stdout.toString()).toContain('akm-memory');
 
     const matrix = Bun.spawnSync({
       cmd: [
-        bunBinary,
+        process.execPath,
         path.resolve(rootDir, 'src/cli.ts'),
         'matrix',
         '--config',
@@ -413,7 +418,7 @@ describe('config loading', () => {
 
     const blockedBackendRun = Bun.spawnSync({
       cmd: [
-        bunBinary,
+        process.execPath,
         path.resolve(rootDir, 'src/cli.ts'),
         'run',
         '--pack',
@@ -491,7 +496,7 @@ describe('config loading', () => {
     fs.rmSync(outDir, { recursive: true, force: true });
     const run = Bun.spawnSync({
       cmd: [
-        bunBinary,
+        process.execPath,
         path.resolve(rootDir, 'src/cli.ts'),
         'run',
         '--pack',
@@ -510,5 +515,39 @@ describe('config loading', () => {
     expect(run.stderr.toString()).toContain('longmemeval agent run failed');
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('wrapper command normalization keeps trust-policy boundaries intact', () => {
+    expect(resolveWrapperCommand(binPath('eval'))).toBe('run');
+    expect(resolveWrapperCommand(binPath('doctor'))).toBe('doctor');
+    expect(resolveWrapperCommand(binPath('downloads'))).toBe('downloads');
+    expect(resolveWrapperCommand(binPath('akm-eval'))).toBe('run');
+
+    expect(normalizeCliArgs(['bun', binPath('eval'), '--pack', 'beam'])).toEqual(['run', '--pack', 'beam']);
+    expect(normalizeCliArgs(['bun', binPath('doctor')])).toEqual(['doctor']);
+    expect(normalizeCliArgs(['bun', binPath('downloads'), 'LoCoMo'])).toEqual(['downloads', 'LoCoMo']);
+    expect(normalizeCliArgs(['bun', binPath('akm-eval'), 'list', 'packs'])).toEqual(['list', 'packs']);
+    expect(normalizeCliArgs(['bun', path.resolve(rootDir, 'src/cli.ts'), 'run', '--pack', 'beam'])).toEqual([
+      'run',
+      '--pack',
+      'beam',
+    ]);
+  });
+
+  test('usage advertises wrapper-first command surface', () => {
+    expect(createUsageLines()).toEqual([
+      'Usage:',
+      '  bin/doctor',
+      '  bin/akm-eval list packs',
+      '  bin/akm-eval list variants',
+      '  bin/eval --pack <id> --variant <id> --config <path> [--out <dir>]',
+      '  bin/matrix --config <path>',
+      '  bin/compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
+      '  bin/report --run <dir> [--format markdown|json]',
+      '  bin/summary --runs <dir> [--format markdown|json]',
+      '  bin/setup',
+      '  bin/downloads [DatasetName]',
+      '  bun run setup:legacy',
+    ]);
   });
 });

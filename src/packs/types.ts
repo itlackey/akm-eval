@@ -7,7 +7,7 @@ export interface PackAdapter {
   id: string;
   description: string;
   optionalDependency?: string;
-  checkInstalled(): boolean;
-  getDoctorDetail?(): { status: 'ok' | 'warn'; detail: string };
+  checkInstalled(rootDir?: string): boolean;
+  getDoctorDetail?(rootDir?: string): { status: 'ok' | 'warn'; detail: string };
   run(context: RunContext, memory: MemoryBackend, agent?: AgentRunner): Promise<NormalizedRunResult>;
 }

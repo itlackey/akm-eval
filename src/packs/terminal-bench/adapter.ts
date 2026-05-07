@@ -517,11 +517,11 @@ export const terminalBenchAdapter: PackAdapter = {
   id: 'terminal-bench',
   description: 'Official Terminal-Bench harness executed through the `tb` CLI with authoritative result ingestion.',
   optionalDependency: 'terminal-bench',
-  checkInstalled() {
-    return inspectTerminalBenchRuntime(process.cwd()).problems.length === 0;
+  checkInstalled(rootDir = process.cwd()) {
+    return inspectTerminalBenchRuntime(rootDir).problems.length === 0;
   },
-  getDoctorDetail() {
-    const runtime = inspectTerminalBenchRuntime(process.cwd());
+  getDoctorDetail(rootDir = process.cwd()) {
+    const runtime = inspectTerminalBenchRuntime(rootDir);
     if (runtime.problems.length > 0) {
       return {
         status: 'warn' as const,

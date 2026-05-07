@@ -2,7 +2,7 @@
 
 This checklist covers the remaining items that cannot be completed by more repo-only coding alone. Each item needs operator action, upstream maintainer action, or an external system that this repository does not control.
 
-Use `bun run setup` first when you need a starter config, repo-managed dataset downloads, and basic preflight guidance. The setup flow reduces manual config assembly, but it does not clear the blockers below on its own.
+Start from a committed example config plus direct wrapper commands such as `bin/doctor` and `bin/eval ...`. If you still need a guided starter config, `bun run setup:legacy` remains available, but it does not clear the blockers below on its own.
 
 ## 1. BEAM upstream checkout and prepared datasets are still external prerequisites
 
@@ -10,7 +10,7 @@ Why the repo cannot finish it alone:
 `beam` hard-requires the upstream `mohammadtavakoli78/BEAM` checkout plus prepared official dataset directories. This repo intentionally does not vendor the upstream repo or datasets, and `src/packs/beam/official.ts` fails when they are absent.
 
 Concrete completion steps a human must perform:
-1. Run `bun run setup` if you still need a starter config or repo-managed dataset downloads for other packs.
+1. Use a committed example config directly, or run `bun run setup:legacy` if you still want a guided starter config.
 2. Clone `https://github.com/mohammadtavakoli78/BEAM` into `vendor/BEAM` or another path passed via `pack.config.repoPath` or `BEAM_REPO_PATH`.
 3. Check out commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`.
 4. Run the upstream BEAM dataset preparation flow so the prepared dataset roots exist for the intended chat sizes.
@@ -57,10 +57,10 @@ Why the repo cannot finish it alone:
 The repo has BEAM adapter code and an upstream answer-file artifact under `runs/reference/beam/`, but it does not yet have a committed normalized BEAM reference run with `result.json`, `summary.md`, and `raw-output.json`. Producing that evidence requires the external BEAM repo, prepared datasets, and judge access.
 
 Concrete completion steps a human must perform:
-1. Run `bun run setup` if you still need the starter config or baseline BEAM run entry written for you.
+1. Use a committed BEAM config directly, or run `bun run setup:legacy` if you still want the helper to write a starter config.
 2. Complete blocker 1 and blocker 2.
 3. Choose the exact committed config for the BEAM reference run.
-4. Run `bun run eval -- --pack beam --variant baseline --config <beam-config> --out runs/reference/beam/baseline`.
+4. Run `bin/eval --pack beam --variant baseline --config <beam-config> --out runs/reference/beam/baseline`.
 5. Review the generated artifacts and commit the full normalized run directory.
 
 What evidence or artifacts should be captured when done:
@@ -70,7 +70,7 @@ What evidence or artifacts should be captured when done:
 - The embedded `beamRuntimeFingerprint` and upstream evaluation outputs referenced from `raw-output.json`.
 
 How to verify completion in this repo afterward:
-Run `bun run report -- --run runs/reference/beam/baseline` and confirm it resolves the normalized BEAM result. Run `bun run summary -- --runs runs/reference --format markdown` and confirm BEAM appears as a normal reference row instead of only having upstream byproducts under `runs/reference/beam/`.
+Run `bin/report --run runs/reference/beam/baseline` and confirm it resolves the normalized BEAM result. Run `bin/summary --runs runs/reference --format markdown` and confirm BEAM appears as a normal reference row instead of only having upstream byproducts under `runs/reference/beam/`.
 
 Sources:
 `README.md`, `runs/reference/README.md`, `src/packs/beam/adapter.ts`, `runs/reference/beam/`
@@ -116,7 +116,7 @@ What evidence or artifacts should be captured when done:
 - Provenance details showing the benchmark version and model/runtime used.
 
 How to verify completion in this repo afterward:
-Once the external process exists, repo verification should be a real ingest path that produces a normalized `result.json` from only the authoritative artifacts. Until then, `bun run doctor` and `bun run eval -- --pack akm-bench ...` should continue to report the pack as blocked.
+Once the external process exists, repo verification should be a real ingest path that produces a normalized `result.json` from only the authoritative artifacts. Until then, `bin/doctor` and `bin/eval --pack akm-bench ...` should continue to report the pack as blocked.
 
 Sources:
 `README.md`, `docs/benchmark-packs.md`, `src/packs/akm-bench/README.md`, `src/packs/akm-bench/adapter.ts`
@@ -140,7 +140,7 @@ What evidence or artifacts should be captured when done:
 - Operator setup notes covering credentials, namespaces, and reset behavior.
 
 How to verify completion in this repo afterward:
-The external prerequisite is satisfied once each chosen backend has a stable, operator-repeatable contract and runtime. Full repo verification will only pass after those integrations are wired, but today you can confirm the current blocked state with `bun run doctor` or `bun run matrix -- --config <config-path>`, which should stop reporting them as blocked only after both the external prerequisite and repo integration are complete.
+The external prerequisite is satisfied once each chosen backend has a stable, operator-repeatable contract and runtime. Full repo verification will only pass after those integrations are wired, but today you can confirm the current blocked state with `bin/doctor` or `bin/matrix --config <config-path>`, which should stop reporting them as blocked only after both the external prerequisite and repo integration are complete.
 
 Sources:
 `docs/memory-backends.md`, `src/memory/registry.ts`, `src/memory/backends/mem0.ts`, `src/memory/backends/openviking.ts`, `src/memory/backends/zep.ts`, `src/variants/registry.ts`
@@ -152,7 +152,7 @@ The committed `runs/reference/swe-bench/baseline/result.json` and `runs/referenc
 
 Concrete completion steps a human must perform:
 1. Either locate an external execution record that already proves the exact akm-eval commit used for each run, or rerun each reference artifact from a known commit.
-2. If rerunning, use `bun run setup` first if you need a fresh truthful starter config for the chosen pack.
+2. If rerunning, use a committed config directly or run `bun run setup:legacy` if you need a fresh guided starter config for the chosen pack.
 3. Run directly into the final reference directories so the normalized artifact paths are truthful.
 4. Commit the updated reference artifacts with `metadata.repoCommit` populated automatically.
 5. If an external historical record is used instead of rerunning, add a committed provenance note that points at that record without guessing.
@@ -163,7 +163,7 @@ What evidence or artifacts should be captured when done:
 - The exact config used for the rerun.
 
 How to verify completion in this repo afterward:
-Open `runs/reference/swe-bench/baseline/result.json` and `runs/reference/tau-bench/baseline/result.json` and confirm `metadata.repoCommit` is populated, or that a committed provenance note points to a specific external record. Then run `bun run summary -- --runs runs/reference --format markdown` and confirm the summary can display those runs without a provenance-gap note.
+Open `runs/reference/swe-bench/baseline/result.json` and `runs/reference/tau-bench/baseline/result.json` and confirm `metadata.repoCommit` is populated, or that a committed provenance note points to a specific external record. Then run `bin/summary --runs runs/reference --format markdown` and confirm the summary can display those runs without a provenance-gap note.
 
 Sources:
 `runs/reference/README.md`, `runs/reference/swe-bench/baseline/result.json`, `runs/reference/tau-bench/baseline/result.json`

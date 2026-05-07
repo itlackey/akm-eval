@@ -12,24 +12,29 @@ Trust policy:
 
 ```bash
 bun install
-bun run setup
-bun run downloads
+bin/build-image
+bin/downloads
+bin/doctor
+bin/eval --pack locomo --variant baseline --config config/examples/locomo-smoke.json
 bun test
 bun run check:boundary
-bun run doctor
 ```
 
 Common operator entrypoints:
 
-- `bun run setup`: interactive starter config flow
-- `bun run doctor`: environment and harness preflight summary
-- `bun run eval -- --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`: run one normalized eval
-- `bun run matrix -- --config <config-path>`: show the planned matrix from a config
-- `bun run report -- --run <run-dir>`: render one normalized run
-- `bun run summary -- --runs <runs-dir> --format markdown`: summarize a run tree
-- `bun run compare -- --baseline <run-dir> --candidate <run-dir>`: compare two normalized runs
-- `bun run downloads [DatasetName]`: fetch repo-managed datasets
-- `bun run beam:doctor`: BEAM-specific repo, dataset, and judge preflight
+- `bin/build-image`: build the operator Docker image used by the wrappers
+- `bin/doctor`: environment and harness preflight summary
+- `bin/eval --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`: run one normalized eval
+- `bin/matrix --config <config-path>`: show the planned matrix from a config
+- `bin/report --run <run-dir>`: render one normalized run
+- `bin/summary --runs <runs-dir> --format markdown`: summarize a run tree
+- `bin/compare --baseline <run-dir> --candidate <run-dir>`: compare two normalized runs
+- `bin/downloads [DatasetName]`: fetch repo-managed datasets
+- `bin/beam-doctor`: BEAM-specific repo, dataset, and judge preflight
+- `bin/setup`: guided starter-config helper in Docker
+- `bun run setup:legacy`: legacy direct-engine setup helper if you explicitly want it
+
+The internal Bun CLI remains the execution engine, but the normal operator path now goes through `bin/` wrappers so harness-backed and script-based packs run inside the same Docker boundary.
 
 ## Execution checklist
 
@@ -91,7 +96,7 @@ Blocked memory-backend comparison paths:
 Generate a cross-run summary from committed artifacts with:
 
 ```bash
-bun run summary -- --runs runs/reference --format markdown
+bin/summary --runs runs/reference --format markdown
 ```
 
 ## Current critical path
@@ -112,31 +117,53 @@ Dataset files are not committed to the repository due to their size. Download th
 
 ```bash
 # Download all datasets
-bun run downloads
+bin/downloads
 
 # Download a specific dataset
-bun run downloads LongMemEval
-bun run downloads LoCoMo
+bin/downloads LongMemEval
+bin/downloads LoCoMo
 ```
 
 Datasets are auto-downloaded on first use if not present, but pre-downloading is recommended.
 
-## Interactive setup
+## Wrapper-first operator flow
 
-Use the interactive setup flow to generate a truthful starter config for the packs you care about:
+Primary operator flow starts from a committed example config plus direct wrapper commands:
 
 ```bash
-bun run setup
+bin/doctor
+bin/matrix --config config/examples/locomo-smoke.json
+bin/eval --pack locomo --variant baseline --config config/examples/locomo-smoke.json
 ```
 
-The setup flow:
+Use the closest committed example config for the pack you want to run:
+
+- `config/examples/locomo-smoke.json`
+- `config/examples/longmemeval-smoke.json`
+- `config/examples/beam-smoke.json`
+- `config/examples/swe-bench-smoke.json`
+- `config/examples/swe-bench-smoke-openai-compatible.json`
+- `config/examples/tau-bench-smoke.json`
+- `config/examples/terminal-bench-smoke.json`
+
+Write a direct `version: 1` config when you need custom runs. Declare provider connections once under top-level `providers`, have each run select one with `agentProvider`, and use `agentModel` only for per-run overrides.
+
+## Legacy guided setup
+
+The guided setup helper still exists, but it is no longer the primary path:
+
+```bash
+bun run setup:legacy
+```
+
+The legacy setup flow:
 
 - asks which packs to include
 - asks for the minimum global provider connection config and default model values needed to start
-- shows the detected runtime status for the selected packs using the same checks as `bun run doctor`
+- shows the detected runtime status for the selected packs using the same checks as `bin/doctor`
 - optionally downloads repo-managed datasets for `locomo` and `longmemeval`; answering no skips downloads and only writes the config
 - optionally runs a deeper read-only BEAM preflight; answering no skips that check
-- writes a starter config file that declares provider connections once at the top level and has runs select them with `agentProvider`, with `agentModel` left for per-run overrides when needed, without claiming external blockers are solved
+- writes a legacy starter config file that declares provider connections once at the top level and has runs select them with `agentProvider`, with `agentModel` left for per-run overrides when needed, without claiming external blockers are solved
 
 For `openai-compatible` providers, blank API keys are allowed for local no-auth endpoints such as LM Studio.
 
@@ -156,7 +183,7 @@ For the current pinned local runtime bootstrap:
 
 - upstream source expectation is `mohammadtavakoli78/BEAM` at commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`
 - install/check script: `bash scripts/setup-beam-runtime.sh`
-- quick preflight script: `bun run beam:doctor`
+- quick preflight script: `bin/beam-doctor`
 - pinned Python requirements snapshot: `requirements-beam.txt`
 - optional env overrides: `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, `BEAM_PYTHON_BIN`
 - optional container scaffold: `tools/beam/Dockerfile` and `tools/beam/run-in-container.sh`
@@ -170,7 +197,7 @@ It now also fails early when the prepared dataset path is missing, and it can re
 Minimum truthful preflight today:
 
 ```bash
-bun run beam:doctor
+bin/beam-doctor
 bash scripts/setup-beam-runtime.sh --check --require-judge
 bash scripts/setup-beam-runtime.sh --check --require-judge --print-fingerprint
 # add --require-10m when running 10M chat sizes

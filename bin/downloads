@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec "$BIN_DIR/_akm_eval_docker.sh" bun src/cli.ts downloads "$@"

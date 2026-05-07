@@ -88,11 +88,11 @@ function resolvePackConfig(context: RunContext): Required<Pick<TauBenchPackConfi
 export const tauBenchAdapter: PackAdapter = {
   id: 'tau-bench',
   description: 'Official tau-bench CLI wrapper using upstream JSON result artifacts.',
-  checkInstalled() {
-    return inspectTauBenchRuntime(process.cwd()).problems.length === 0;
+  checkInstalled(rootDir = process.cwd()) {
+    return inspectTauBenchRuntime(rootDir).problems.length === 0;
   },
-  getDoctorDetail() {
-    const runtime = inspectTauBenchRuntime(process.cwd());
+  getDoctorDetail(rootDir = process.cwd()) {
+    const runtime = inspectTauBenchRuntime(rootDir);
     if (runtime.problems.length > 0) {
       return {
         status: 'warn' as const,

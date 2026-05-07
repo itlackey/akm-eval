@@ -71,6 +71,14 @@ const OFFICIAL_SWE_BENCH_DATASET_ALIASES = new Set([
 const SWE_BENCH_SYSTEM_PROMPT =
   'You are fixing a real software repository issue from SWE-bench. Return only a unified git diff patch that can be applied with git apply. Do not include markdown fences or any explanation.';
 
+const COMMAND_FALLBACKS: Record<string, string[]> = {
+  docker: ['/usr/local/bin/docker', '/usr/bin/docker'],
+};
+
+function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
 function isOfficialDatasetName(value: string): boolean {
   return value.startsWith('SWE-bench/') || OFFICIAL_SWE_BENCH_DATASET_ALIASES.has(value.toLowerCase());
 }
@@ -80,12 +88,32 @@ function runSync(command: string, args: string[], cwd: string): {
   stdout: string;
   stderr: string;
 } {
-  const proc = Bun.spawnSync([command, ...args], {
+  const options = {
     cwd,
     env: process.env,
     stdout: 'pipe',
     stderr: 'pipe',
-  });
+  } as const;
+
+  if (command === 'docker') {
+    const proc = Bun.spawnSync(['bash', '-lc', [command, ...args].map(shellEscape).join(' ')], options);
+    return {
+      exitCode: proc.exitCode,
+      stdout: proc.stdout.toString(),
+      stderr: proc.stderr.toString(),
+    };
+  }
+
+  let proc = Bun.spawnSync([command, ...args], options);
+
+  if (proc.exitCode === 1 && proc.stderr.toString().includes('Executable not found in $PATH')) {
+    for (const fallbackPath of COMMAND_FALLBACKS[command] ?? []) {
+      proc = Bun.spawnSync([fallbackPath, ...args], options);
+      if (!(proc.exitCode === 1 && proc.stderr.toString().includes('Executable not found in $PATH'))) {
+        break;
+      }
+    }
+  }
 
   return {
     exitCode: proc.exitCode,
@@ -279,11 +307,11 @@ function harnessModelDir(modelName: string): string {
 export const sweBenchAdapter: PackAdapter = {
   id: 'swe-bench',
   description: 'Official SWE-bench harness wrapper using Docker and authoritative evaluation artifacts.',
-  checkInstalled() {
-    return inspectSweBenchRuntime(process.cwd()).problems.length === 0;
+  checkInstalled(rootDir = process.cwd()) {
+    return inspectSweBenchRuntime(rootDir).problems.length === 0;
   },
-  getDoctorDetail() {
-    const runtime = inspectSweBenchRuntime(process.cwd());
+  getDoctorDetail(rootDir = process.cwd()) {
+    const runtime = inspectSweBenchRuntime(rootDir);
     if (runtime.problems.length > 0) {
       return {
         status: 'warn' as const,
