@@ -622,7 +622,7 @@ export const terminalBenchAdapter: PackAdapter = {
         ],
         metrics: {
           retrieval: {
-            queryCount: totalTrials,
+            queryCount: 0,
             precisionAtK: 0,
             recallAtK: 0,
             mrr: 0,
@@ -669,7 +669,7 @@ export const terminalBenchAdapter: PackAdapter = {
           datasetName: authoritative.runMetadata.dataset_name ?? null,
           datasetVersion: authoritative.runMetadata.dataset_version ?? null,
           datasetPath: authoritative.runMetadata.dataset_path ?? null,
-          model: authoritative.runMetadata.model_name ?? null,
+          model: authoritative.runMetadata.model_name ?? context.run.metadata?.model ?? null,
           harnessCommand: runtime.tbCommand,
           harnessVersion: runtime.tbVersion ?? 'installed',
           dockerVersion: runtime.dockerVersion ?? 'unknown',

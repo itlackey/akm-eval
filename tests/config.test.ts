@@ -44,6 +44,15 @@ describe('config loading', () => {
     expect(config.runs.some((run) => run.agentProviderConfig?.type === 'openai-compatible')).toBe(true);
   });
 
+  test('loads longmemeval smoke example config with consistent smoke defaults', () => {
+    const config = loadConfig(path.resolve(rootDir, 'config/examples/longmemeval-smoke.json'));
+    const run = config.runs.find((entry) => entry.pack === 'longmemeval');
+    expect(run?.packConfig?.evaluatorCommand).toBe('python scripts/longmemeval-evaluator.py');
+    expect(run?.packConfig?.smoke).toBe(true);
+    expect(run?.packConfig?.maxQuestions).toBe(5);
+    expect(run?.packConfig?.questionCategories).toEqual(['single-session', 'multi-session']);
+  });
+
   test('validates both planned and internal config shapes', () => {
     const planned = validateConfig({
       schemaVersion: 'akm.eval.config.v1',

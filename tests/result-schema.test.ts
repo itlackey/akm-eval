@@ -46,4 +46,39 @@ describe('normalized result schema', () => {
 
     expect(validateNormalizedResult(result)).toBe(true);
   });
+
+  test('validator accepts answer-only results with retrieval queryCount set to zero', () => {
+    const result = {
+      schemaVersion: '1.0',
+      runId: 'answer-only',
+      pack: 'longmemeval',
+      variant: 'baseline',
+      memoryBackend: 'none',
+      status: 'failed',
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      durationMs: 1,
+      warnings: [],
+      notes: [],
+      metrics: {
+        retrieval: { queryCount: 0, precisionAtK: 0, recallAtK: 0, mrr: 0, ndcgAtK: 0 },
+        answer: { exactMatch: 0, tokenF1: 0, containsExpected: 0, judgedPass: 0 },
+        aggregate: { score: 0, retrievalWeight: 0, answerWeight: 1 },
+      },
+      telemetry: {
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        estimatedCostUsd: 0,
+        latencyMs: 1,
+        logs: [],
+      },
+      artifacts: {
+        resultPath: path.resolve(rootDir, 'tests/.artifacts/result.json'),
+        summaryPath: path.resolve(rootDir, 'tests/.artifacts/summary.md'),
+      },
+    };
+
+    expect(validateNormalizedResult(result)).toBe(true);
+  });
 });

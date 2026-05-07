@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe('summary reporting', () => {
-  test('collects result files recursively and prefers model over modelKey', () => {
+  test('collects result files recursively and uses metadata.model only', () => {
     const firstDir = writeResult('b-run', {
       runId: 'run-b',
       variant: 'baseline',
@@ -88,7 +88,7 @@ describe('summary reporting', () => {
 
     expect(summaries).toHaveLength(3);
     expect(summaries.map((entry) => entry.runId)).toEqual(['run-a', 'run-b', 'run-c']);
-    expect(summaries.map((entry) => entry.model)).toEqual(['primary-model', 'fallback-model', null]);
+    expect(summaries.map((entry) => entry.model)).toEqual(['primary-model', null, null]);
     expect(summaries.map((entry) => entry.runnerType)).toEqual([null, null, null]);
     expect(summaries[1]?.resultPath).toBe(path.resolve(firstDir, 'result.json'));
   });

@@ -34,6 +34,7 @@ def sanitize_file_component(value: str) -> str:
 def main() -> None:
     args = parse_args()
     os.makedirs(args.log_dir, exist_ok=True)
+    start_time = os.path.getmtime(args.log_dir) if os.path.exists(args.log_dir) else 0
 
     # tau-bench uses model strings inside checkpoint filenames. Normalize them
     # for the filesystem while preserving the real model name for API calls.
@@ -64,7 +65,14 @@ def main() -> None:
 
     run(config)
 
-    result_files = sorted(glob.glob(os.path.join(args.log_dir, "*.json")), key=os.path.getmtime)
+    result_files = sorted(
+        [
+            file_path
+            for file_path in glob.glob(os.path.join(args.log_dir, "*.json"))
+            if os.path.getmtime(file_path) >= start_time
+        ],
+        key=os.path.getmtime,
+    )
     if not result_files:
         raise RuntimeError(f"tau-bench did not write any JSON results into {args.log_dir}")
     print(f"AKM_EVAL_TAU_BENCH_RESULTS={result_files[-1]}")

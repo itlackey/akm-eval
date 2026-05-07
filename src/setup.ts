@@ -65,7 +65,7 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     summary: 'Official LongMemEval dataset plus external official evaluator command.',
     supportedProviders: ['openai-compatible', 'opencode'],
     repoManagedDataset: 'LongMemEval',
-    blockedWhenMissing: 'LongMemEval still needs the external official evaluator command configured in pack.config.evaluatorCommand.',
+    blockedWhenMissing: 'LongMemEval still needs a configured evaluator command. Setup defaults to the bundled scripts/longmemeval-evaluator.py wrapper, but the Python environment running it still needs openai plus OPENAI_BASE_URL or OPENAI_API_KEY.',
   },
   {
     id: 'beam',
@@ -171,7 +171,7 @@ function createPackConfig(packId: SetupPackId, options: StarterConfigOptions): R
         ...(options.preferRepoManagedDatasetPaths !== false ? { datasetPath: 'datasets/longmemeval/dataset.json' } : {}),
         evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
         smoke: true,
-        maxQuestions: 10,
+        maxQuestions: 5,
         questionCategories: ['single-session', 'multi-session'],
       };
     case 'beam':
@@ -633,12 +633,17 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       followUpNotes.forEach((detail) => console.log(`- ${detail}`));
     }
 
-    const firstRun = config.runs[0];
+    const nextRunnableRun = config.runs.find((run) => {
+      const result = resultForPack(packStatuses, run.pack as SetupPackId);
+      return !result || result.ok;
+    });
     console.log('');
-    if (firstRun) {
+    if (nextRunnableRun) {
       console.log(
-        `Next: bun run eval -- --pack ${firstRun.pack} --variant ${firstRun.variant} --config ${path.relative(rootDir, configPath) || configPath}`,
+        `Next: bun run eval -- --pack ${nextRunnableRun.pack} --variant ${nextRunnableRun.variant} --config ${path.relative(rootDir, configPath) || configPath}`,
       );
+    } else if (config.runs[0]) {
+      console.log('Next: resolve the blocker(s) above before running bun run eval.');
     }
     return 0;
   } finally {

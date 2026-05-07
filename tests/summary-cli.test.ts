@@ -25,9 +25,9 @@ function writeResult(dirName: string) {
         warnings: [],
         notes: [],
         metrics: {
-          retrieval: { queryCount: 1, precisionAtK: 0.75, recallAtK: 0.75, mrr: 0.75, ndcgAtK: 0.75 },
+          retrieval: { queryCount: 0, precisionAtK: 0, recallAtK: 0, mrr: 0, ndcgAtK: 0 },
           answer: { exactMatch: 0.75, tokenF1: 0.75, containsExpected: 0.75, judgedPass: 0.75 },
-          aggregate: { score: 0.75, retrievalWeight: 0.5, answerWeight: 0.5 },
+          aggregate: { score: 0.75, retrievalWeight: 0, answerWeight: 1 },
         },
         telemetry: {
           promptTokens: 1,

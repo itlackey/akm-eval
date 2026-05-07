@@ -133,7 +133,7 @@ export const beamAdapter: PackAdapter = {
       ],
       metrics: {
         retrieval: {
-          queryCount: scores.questionCount,
+          queryCount: 0,
           precisionAtK: 0,
           recallAtK: 0,
           mrr: 0,

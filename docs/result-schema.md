@@ -50,6 +50,8 @@ The old placeholder artifact list in this file was stale. The current normalized
 - `mrr`
 - `ndcgAtK`
 
+`metrics.retrieval.queryCount` means the number of actual retrieval queries exercised by the run. For non-retrieval runs, it should be `0` even when the benchmark processed questions, tasks, or trials through answer-only evaluation. Older committed artifacts may still use workload counts for some non-retrieval packs; prefer newly generated artifacts for consistent cross-pack interpretation.
+
 `metrics.answer` always contains:
 
 - `exactMatch`

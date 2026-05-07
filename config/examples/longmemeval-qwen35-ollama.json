@@ -13,7 +13,8 @@
       "enabled": true,
       "config": {
         "smoke": true,
-        "maxQuestions": 10,
+        "maxQuestions": 5,
+        "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
         "questionCategories": ["single-session", "multi-session"]
       }
     }

@@ -13,7 +13,7 @@
         "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
         "evaluatorModel": "gpt-4o",
         "smoke": true,
-        "maxQuestions": 10,
+        "maxQuestions": 5,
         "questionCategories": ["single-session", "multi-session"]
       }
     }

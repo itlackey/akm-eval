@@ -44,6 +44,13 @@ function withDerivedRunMetadata(rootDir: string, run: RunDefinition): RunDefinit
     }
   }
 
+  if (!hasOwnMetadataKey(metadata, 'model')) {
+    const model = run.agentModel ?? run.agentProviderConfig?.defaultModel;
+    if (model) {
+      metadata.model = model;
+    }
+  }
+
   return {
     ...run,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,

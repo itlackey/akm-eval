@@ -22,3 +22,5 @@ Notes:
 
 - upstream `tau-bench` is explicitly documented as outdated in favor of newer repos, so this integration should be understood as wrapping the original benchmark only
 - `akm-eval` trusts the upstream JSON result file as the source of truth and does not synthesize scores outside that artifact
+- the wrapper normalizes model and user-model strings for checkpoint/result filenames only; upstream API calls still use the original configured model names
+- the shipped smoke/setup path runs a single task; treat that as a smoke-only runtime example rather than a full-run duration expectation

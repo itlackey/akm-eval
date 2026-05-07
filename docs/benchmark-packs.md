@@ -5,7 +5,7 @@ The repository also defines `tau-bench`.
 
 Current trust policy:
 
-- `longmemeval` is runnable only when you provide a real model connection and `pack.config.evaluatorCommand` that invokes the official LongMemEval evaluation flow.
+- `longmemeval` is runnable only when you provide a real model connection and `pack.config.evaluatorCommand` that invokes the official LongMemEval evaluation flow. This repo ships `scripts/longmemeval-evaluator.py` as the default wrapper used by setup/examples.
 - `swe-bench` is runnable only when Docker and the official `swebench` harness are installed. It uses official dataset slices plus the harness' own reports as the source of truth.
 - `beam` is runnable only when the official `mohammadtavakoli78/BEAM` repo is available locally, the official dataset has already been prepared, and the upstream BEAM evaluator can run with a real judge model.
 - `locomo` is runnable with the official `snap-research/locomo` dataset plus the bundled authoritative QA scoring wrapper. Answer generation still uses akm-eval's configured real model provider from the global `providers` map.
@@ -26,7 +26,7 @@ Current trust policy:
 
 ### `longmemeval`
 
-- Requires a real model provider plus `pack.config.evaluatorCommand` pointing at the official LongMemEval evaluation flow.
+- Requires a real model provider plus `pack.config.evaluatorCommand` pointing at the official LongMemEval evaluation flow. This repo ships `scripts/longmemeval-evaluator.py` as the default wrapper used by setup/examples.
 - Dataset resolution is built in, but local heuristic judging is intentionally disabled.
 - `openai-compatible` is the preferred runner path today.
 - `opencode` is only partial support because large conversation prompts may exceed CLI argv transport limits.

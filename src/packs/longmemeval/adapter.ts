@@ -7,7 +7,7 @@ import type { NormalizedRunResult } from '../../core/types.ts';
 import type { MemoryBackend } from '../../memory/types.ts';
 import { markdownReportForResult } from '../../reporting/markdown.ts';
 import type { PackAdapter } from '../types.ts';
-import { blockedPackDoctorDetail, requireAgentRunner, requireExistingFile } from '../runtime-requirements.ts';
+import { requireAgentRunner, requireExistingFile } from '../runtime-requirements.ts';
 import { loadDataset, resolveDatasetFile } from './dataset.ts';
 
 interface LongMemEvalPackConfig {
@@ -71,16 +71,27 @@ function resolveEvaluationLogPath(evalStdout: string, fallbackPath: string): str
   return candidate && fs.existsSync(candidate) ? candidate : fallbackPath;
 }
 
+function evaluatorWrapperPath(rootDir: string): string {
+  return path.resolve(rootDir, 'scripts/longmemeval-evaluator.py');
+}
+
 export const longMemEvalAdapter: PackAdapter = {
   id: 'longmemeval',
-  description: 'LongMemEval using the official dataset and an external official evaluation command.',
+  description: 'LongMemEval using the official dataset and a configured official-evaluator command (default wrapper bundled in this repo).',
   checkInstalled() {
-    return false;
+    return fs.existsSync(evaluatorWrapperPath(process.cwd()));
   },
   getDoctorDetail() {
-    return blockedPackDoctorDetail(
-      'requires external LongMemEval evaluator command; dataset download is built in, but heuristic local judging is disabled',
-    );
+    if (!fs.existsSync(evaluatorWrapperPath(process.cwd()))) {
+      return {
+        status: 'warn' as const,
+        detail: 'repo-bundled LongMemEval evaluator wrapper missing at scripts/longmemeval-evaluator.py; runs need a configured evaluator command and this repo does not fall back to heuristic local judging.',
+      };
+    }
+    return {
+      status: 'ok' as const,
+      detail: 'repo-bundled LongMemEval evaluator wrapper available at scripts/longmemeval-evaluator.py; runs still need pack.config.evaluatorCommand plus Python openai and OPENAI_BASE_URL or OPENAI_API_KEY in that evaluator environment.',
+    };
   },
   async run(context, memory, agent): Promise<NormalizedRunResult> {
     const resolvedAgent = requireAgentRunner(agent, 'longmemeval');
@@ -117,7 +128,16 @@ export const longMemEvalAdapter: PackAdapter = {
       const conversationHistory = question.conversation
         .map((turn) => `${turn.role}: ${turn.content}`)
         .join('\n');
-      const prompt = `Conversation history:\n${conversationHistory}\n\nQuestion: ${question.question}\nAnswer:`;
+      const prompt = [
+        'Conversation history:',
+        conversationHistory,
+        '',
+        `Question: ${question.question}`,
+        'Answer with only the minimal factual answer needed.',
+        'Do not add explanation, markdown, qualifiers, or extra context.',
+        'If the answer is not in the conversation history, answer exactly: I don\'t know',
+        'Answer:',
+      ].join('\n');
 
       const agentResult = await resolvedAgent.run({ prompt });
       if (!agentResult.ok) {
@@ -229,7 +249,7 @@ export const longMemEvalAdapter: PackAdapter = {
       ],
       metrics: {
         retrieval: {
-          queryCount: questions.length,
+          queryCount: 0,
           precisionAtK: 0,
           recallAtK: 0,
           mrr: 0,

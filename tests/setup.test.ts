@@ -100,7 +100,7 @@ describe('setup starter config', () => {
       datasetPath: 'datasets/longmemeval/dataset.json',
       evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
       smoke: true,
-      maxQuestions: 10,
+      maxQuestions: 5,
       questionCategories: ['single-session', 'multi-session'],
     });
     const locomo = buildStarterConfig({
@@ -143,7 +143,7 @@ describe('setup starter config', () => {
     expect(config.runs[0]?.packConfig).toEqual({
       evaluatorCommand: 'python scripts/longmemeval-evaluator.py',
       smoke: true,
-      maxQuestions: 10,
+      maxQuestions: 5,
       questionCategories: ['single-session', 'multi-session'],
     });
   });

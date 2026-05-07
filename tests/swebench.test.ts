@@ -5,6 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { validateConfig } from '../src/config/validate-config.ts';
 import { parseSweBenchRawOutput } from '../src/packs/swe-bench/parse.ts';
 import { scoreSweBenchAdapter } from '../src/packs/swe-bench/scorer.ts';
+import { sanitizePatch, validateUnifiedDiff } from '../src/packs/swe-bench/adapter.ts';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -95,5 +96,19 @@ describe('swe-bench integration helpers', () => {
         },
       }),
     ).toThrow('only accepts official dataset identifiers');
+  });
+
+  test('sanitizes fenced diff output and preserves trailing newline', () => {
+    const patch = sanitizePatch('```diff\ndiff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new\n```');
+    expect(patch).toBe('diff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new\n');
+  });
+
+  test('validates unified diff structure before harness execution', () => {
+    expect(validateUnifiedDiff('')).toBeNull();
+    expect(validateUnifiedDiff('not a patch\n')).toContain('missing diff/file headers');
+    expect(validateUnifiedDiff('diff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n')).toContain('missing @@ hunk headers');
+    expect(
+      validateUnifiedDiff('diff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new\n'),
+    ).toBeNull();
   });
 });

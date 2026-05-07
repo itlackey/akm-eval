@@ -200,18 +200,46 @@ function buildAgentPrompt(instance: SweBenchDatasetInstance): string {
   ].join('\n');
 }
 
-function sanitizePatch(text: string): string {
-  const trimmed = text.trim();
+export function sanitizePatch(text: string): string {
+  const normalized = text.replaceAll('\r\n', '\n');
+  const trimmed = normalized.trim();
   if (!trimmed) {
     return '';
   }
 
   const fencedMatch = trimmed.match(/```(?:diff|patch)?\s*([\s\S]*?)```/i);
   if (fencedMatch) {
-    return fencedMatch[1].trim();
+    const extracted = fencedMatch[1]?.replaceAll('\r\n', '\n') ?? '';
+    return extracted.length > 0 && !extracted.endsWith('\n') ? `${extracted}\n` : extracted;
   }
 
-  return trimmed;
+  return normalized.endsWith('\n') ? normalized : `${normalized}\n`;
+}
+
+export function validateUnifiedDiff(patch: string): string | null {
+  const trimmed = patch.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const lines = patch.replaceAll('\r\n', '\n').split('\n');
+  const hasDiffHeader = lines.some((line) => line.startsWith('diff --git '));
+  const hasFileHeaders = lines.some((line) => line.startsWith('--- ')) && lines.some((line) => line.startsWith('+++ '));
+  const hunkStarts = lines.filter((line) => line.startsWith('@@ '));
+
+  if (!hasDiffHeader && !hasFileHeaders) {
+    return 'patch is not a unified diff (missing diff/file headers)';
+  }
+  if (hunkStarts.length === 0) {
+    return 'patch is not a unified diff (missing @@ hunk headers)';
+  }
+  if (!patch.endsWith('\n')) {
+    return 'patch must end with a newline';
+  }
+  if (patch.includes('```')) {
+    return 'patch still contains markdown fences';
+  }
+  return null;
 }
 
 function loadDatasetSlice(rootDir: string, pythonCommand: string, config: ReturnType<typeof resolvePackConfig>): SweBenchDatasetSlice {
@@ -322,6 +350,10 @@ export const sweBenchAdapter: PackAdapter = {
         model_name_or_path: modelName,
         model_patch: sanitizePatch(agentResult.text),
       });
+      const patchError = validateUnifiedDiff(predictions[predictions.length - 1]!.model_patch);
+      if (patchError) {
+        throw new BenchmarkRuntimeError(`swe-bench produced an invalid patch for ${instance.instance_id}: ${patchError}`);
+      }
     }
 
     fs.writeFileSync(predictionsPath, `${predictions.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
@@ -437,7 +469,7 @@ export const sweBenchAdapter: PackAdapter = {
       ],
       metrics: {
         retrieval: {
-          queryCount: authoritative.runReport.total_instances,
+          queryCount: 0,
           precisionAtK: 0,
           recallAtK: 0,
           mrr: 0,

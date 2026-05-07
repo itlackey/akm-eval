@@ -141,12 +141,12 @@ export async function loadDataset(options: DatasetLoadOptions): Promise<LongMemE
     }));
   }
 
-  if (options.smoke) {
-    questions = questions.slice(0, 5);
-  }
-
   if (options.questionCategories && options.questionCategories.length > 0) {
     questions = questions.filter((q) => options.questionCategories!.includes(q.category));
+  }
+
+  if (options.smoke) {
+    questions = questions.slice(0, 5);
   }
 
   if (options.maxQuestions && options.maxQuestions > 0) {

@@ -222,7 +222,7 @@ export const tauBenchAdapter: PackAdapter = {
       ],
       metrics: {
         retrieval: {
-          queryCount: parsed.totalTasks,
+          queryCount: 0,
           precisionAtK: 0,
           recallAtK: 0,
           mrr: 0,

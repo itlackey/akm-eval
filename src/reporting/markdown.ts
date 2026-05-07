@@ -1,17 +1,24 @@
 import type { ComparisonReport, NormalizedRunResult } from '../core/types.ts';
 
+function metadataValue(result: NormalizedRunResult, key: string): string | null {
+  const value = result.metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 export function markdownReportForResult(result: NormalizedRunResult): string {
   return [
     `# Result: ${result.runId}`,
     '',
     `- Pack: ${result.pack}`,
     `- Variant: ${result.variant}`,
+    `- Model: ${metadataValue(result, 'model') ?? '-'}`,
     `- Memory backend: ${result.memoryBackend}`,
     `- Status: ${result.status}`,
     `- Aggregate score: ${result.metrics.aggregate.score.toFixed(3)}`,
     '',
     '## Retrieval metrics',
     '',
+    `- query count: ${result.metrics.retrieval.queryCount}`,
     `- precision@k: ${result.metrics.retrieval.precisionAtK}`,
     `- recall@k: ${result.metrics.retrieval.recallAtK}`,
     `- mrr: ${result.metrics.retrieval.mrr}`,

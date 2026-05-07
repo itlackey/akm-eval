@@ -28,9 +28,9 @@ function writeResult(dirName: string, score: number, cost: number, latencyMs: nu
         warnings: [],
         notes: [],
         metrics: {
-          retrieval: { queryCount: 1, precisionAtK: score, recallAtK: score, mrr: score, ndcgAtK: score },
+          retrieval: { queryCount: 0, precisionAtK: 0, recallAtK: 0, mrr: 0, ndcgAtK: 0 },
           answer: { exactMatch: score, tokenF1: score, containsExpected: score, judgedPass: score },
-          aggregate: { score, retrievalWeight: 0.5, answerWeight: 0.5 },
+          aggregate: { score, retrievalWeight: 0, answerWeight: 1 },
         },
         telemetry: {
           promptTokens: 10,

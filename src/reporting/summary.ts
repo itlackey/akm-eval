@@ -18,6 +18,10 @@ export interface RunSummaryEntry {
   resultPath: string;
 }
 
+function displayModel(result: NormalizedRunResult): string | null {
+  return metadataValue(result, 'model');
+}
+
 function metadataValue(result: NormalizedRunResult, key: string): string | null {
   const value = result.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -57,12 +61,7 @@ export function collectRunSummaries(rootPath: string): RunSummaryEntry[] {
       date: result.startedAt.split('T')[0] ?? result.startedAt,
       score: result.metrics.aggregate.score,
       status: result.status,
-      model:
-        typeof result.metadata?.model === 'string'
-          ? result.metadata.model
-          : typeof result.metadata?.modelKey === 'string'
-            ? result.metadata.modelKey
-            : null,
+      model: displayModel(result),
       repoCommit: metadataValue(result, 'repoCommit'),
       runnerType: metadataValue(result, 'runnerType'),
       benchmarkId: metadataValue(result, 'benchmarkId'),
