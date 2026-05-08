@@ -31,7 +31,7 @@ Recommended preflight flow:
 - `beam`: `opencode` and `openai-compatible`
 - `swe-bench`: `opencode` and `openai-compatible`
 - `tau-bench`: `openai-compatible`
-- `terminal-bench`: `opencode` only in this repo
+- `terminal-bench`: blocked
 - `akm-bench`: blocked
 
 Important constraints:
@@ -42,14 +42,13 @@ Important constraints:
 - `locomo` uses the official `locomo10.json` dataset and the bundled `scripts/locomo-evaluator.py` scorer. If `datasets/locomo/locomo10.json` is absent, akm-eval downloads it from the official Snap Research repository on first run.
 - `locomo` supports `pack.config.maxContextTokens` for baseline conversation truncation and `pack.config.topK` for memory-backed retrieval mode.
 - For LongMemEval, prefer an `openai-compatible` provider today. The current `opencode run` CLI path passes prompts as argv and can reject very large LongMemEval histories.
-- `swe-bench` requires Docker plus the official `swebench` Python package. The adapter generates prediction patches with the configured variant/provider, then runs `python -m swebench.harness.run_evaluation` and trusts only the harness artifacts.
+- `swe-bench` requires Docker on the host. The `bin/swe-bench-eval` wrapper creates a repo-local virtualenv under `.akm-eval/venvs/swe-bench`, generates prediction patches through repo logic, then runs the official harness on the host and trusts only the harness artifacts.
 - `beam` requires a local checkout of the official `mohammadtavakoli78/BEAM` repo plus its prepared official dataset directories. akm-eval generates BEAM answer files with the configured model/provider path, then runs `python -m src.evaluation.run_evaluation` from the upstream repo and trusts only those evaluation artifacts.
 - `beam` also requires `OPENAI_API_KEY` for the upstream BEAM judge model and optionally `pack.config.evaluatorModel` to choose that judge.
 - `beam` runtime preflight now checks repo layout, prepared dataset presence, and judge configuration before the run proceeds. Use `bash scripts/setup-beam-runtime.sh --check --require-judge`, plus `--require-10m` when the run includes `10M`. Add `--print-fingerprint` when you want a JSON record of the repo/dataset/judge/runtime inputs that were actually detected. `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, `BEAM_DATASET_10M_PATH`, and `BEAM_PYTHON_BIN` can be used as env-backed overrides.
 - `tau-bench` requires the official Python package plus a real model endpoint for both the agent model and user simulator model. In this repo, the first integration path uses `openai-compatible` config values mapped to upstream `openai` mode. Blank API keys are accepted for local compatible endpoints that do not require auth.
 - The shipped tau-bench smoke/example-config path runs a single task (`smoke: true`); treat it as a smoke-only runtime example rather than a full-run duration expectation. The wrapper also normalizes model strings for checkpoint/result filenames only, while preserving the original configured model names for API calls and metadata.
-- `terminal-bench` runs only through the official `tb run` harness. It requires `tb`, Python, Docker, and an opencode-backed provider config. If any requirement is missing, `doctor` and runtime fail clearly.
-- `terminal-bench` AKM-enabled but non-retrieval runs must set `variants[].akm.configPath` to a real AKM-specific opencode config, but repo-facing AKM comparison claims remain blocked because `src/memory/backends/akm.ts` still does not implement a truthful evaluated retrieval path, so benchmark runs selecting `memory.backend: akm` fail fast before harness execution.
+- `terminal-bench` is intentionally blocked right now. The previous official installed-agent path still relies on runtime setup inside benchmark containers, and this repo does not yet ship a truthful prebuilt-image replacement for that upstream contract.
 - `akm-bench` still fails fast with an explicit runtime error instead of producing proxy metrics.
 
 See also:

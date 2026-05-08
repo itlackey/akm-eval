@@ -2,4 +2,24 @@
 set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec "$BIN_DIR/akm-eval" run "$@"
+
+pack=""
+args=("$@")
+for ((i=0; i<${#args[@]}; i++)); do
+  if [ "${args[$i]}" = "--pack" ] && [ $((i+1)) -lt ${#args[@]} ]; then
+    pack="${args[$((i+1))]}"
+    break
+  fi
+done
+
+case "$pack" in
+  swe-bench)
+    exec "$BIN_DIR/swe-bench-eval" "$@"
+    ;;
+  terminal-bench)
+    exec "$BIN_DIR/terminal-bench-eval" "$@"
+    ;;
+  *)
+    exec "$BIN_DIR/akm-eval" run "$@"
+    ;;
+esac

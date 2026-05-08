@@ -12,7 +12,7 @@ import { requireAgentRunner } from '../runtime-requirements.ts';
 import { parseSweBenchRawOutput } from './parse.ts';
 import { scoreSweBenchAdapter } from './scorer.ts';
 
-interface SweBenchPackConfig {
+export interface SweBenchPackConfig {
   datasetName?: string;
   split?: string;
   smoke?: boolean;
@@ -30,14 +30,14 @@ interface SweBenchPackConfig {
   pythonCommand?: string;
 }
 
-interface SweBenchRuntimeStatus {
+export interface SweBenchRuntimeStatus {
   pythonCommand?: string;
   harnessVersion?: string;
   dockerVersion?: string;
   problems: string[];
 }
 
-interface SweBenchDatasetInstance {
+export interface SweBenchDatasetInstance {
   instance_id: string;
   repo: string;
   base_commit: string;
@@ -45,7 +45,7 @@ interface SweBenchDatasetInstance {
   hints_text?: string;
 }
 
-interface SweBenchDatasetSlice {
+export interface SweBenchDatasetSlice {
   dataset_name: string;
   split: string;
   count: number;
@@ -122,7 +122,7 @@ function runSync(command: string, args: string[], cwd: string): {
   };
 }
 
-function inspectSweBenchRuntime(cwd: string, explicitPython?: string): SweBenchRuntimeStatus {
+export function inspectSweBenchRuntime(cwd: string, explicitPython?: string): SweBenchRuntimeStatus {
   const problems: string[] = [];
 
   const docker = runSync('docker', ['info', '--format', '{{.ServerVersion}}'], cwd);
@@ -165,7 +165,7 @@ function inspectSweBenchRuntime(cwd: string, explicitPython?: string): SweBenchR
   };
 }
 
-function resolvePackConfig(context: RunContext): Required<Pick<SweBenchPackConfig, 'datasetName' | 'split' | 'maxWorkers' | 'timeoutSeconds' | 'openFileLimit' | 'cacheLevel' | 'clean' | 'forceRebuild' | 'instanceImageTag' | 'envImageTag'>> &
+export function resolvePackConfig(context: RunContext): Required<Pick<SweBenchPackConfig, 'datasetName' | 'split' | 'maxWorkers' | 'timeoutSeconds' | 'openFileLimit' | 'cacheLevel' | 'clean' | 'forceRebuild' | 'instanceImageTag' | 'envImageTag'>> &
   Pick<SweBenchPackConfig, 'namespace' | 'pythonCommand'> & { maxTasks?: number; instanceIds: string[] } {
   const packConfig = (context.run.packConfig ?? {}) as SweBenchPackConfig;
   const datasetName = typeof packConfig.datasetName === 'string' ? packConfig.datasetName : 'SWE-bench/SWE-bench_Lite';
@@ -207,7 +207,7 @@ function resolvePackConfig(context: RunContext): Required<Pick<SweBenchPackConfi
   };
 }
 
-function buildAgentPrompt(instance: SweBenchDatasetInstance): string {
+export function buildAgentPrompt(instance: SweBenchDatasetInstance): string {
   const hints = instance.hints_text?.trim();
   return [
     `Repository: ${instance.repo}`,
@@ -270,7 +270,7 @@ export function validateUnifiedDiff(patch: string): string | null {
   return null;
 }
 
-function loadDatasetSlice(rootDir: string, pythonCommand: string, config: ReturnType<typeof resolvePackConfig>): SweBenchDatasetSlice {
+export function loadDatasetSlice(rootDir: string, pythonCommand: string, config: ReturnType<typeof resolvePackConfig>): SweBenchDatasetSlice {
   const helperPath = path.resolve(rootDir, 'scripts', 'swebench_list_instances.py');
   const args = [
     helperPath,
@@ -296,32 +296,195 @@ function loadDatasetSlice(rootDir: string, pythonCommand: string, config: Return
   return parsed;
 }
 
-function modelNameForHarness(context: RunContext): string {
+export function modelNameForHarness(context: RunContext): string {
   return context.run.agentModel ?? context.run.agentProviderConfig?.defaultModel ?? context.run.agentProvider ?? 'unknown-model';
 }
 
-function harnessModelDir(modelName: string): string {
+export function harnessModelDir(modelName: string): string {
   return modelName.replaceAll('/', '__');
+}
+
+export function finalizeSweBenchRun(
+  context: RunContext,
+  memory: MemoryBackend,
+  packConfig: ReturnType<typeof resolvePackConfig>,
+  runtime: Pick<SweBenchRuntimeStatus, 'pythonCommand' | 'harnessVersion' | 'dockerVersion'>,
+  datasetSlice: SweBenchDatasetSlice,
+  modelName: string,
+  runId: string,
+  predictionsPath: string,
+  harnessWorkDir: string,
+  harnessArgs: string[],
+  harnessStdout: string,
+  harnessStderr: string,
+  totalPromptTokens: number,
+  totalCompletionTokens: number,
+  totalTokens: number,
+  totalGenerationLatencyMs: number,
+): NormalizedRunResult {
+  const store = new ArtifactStore(context.outputDir);
+  store.ensureDir();
+  const modelDir = harnessModelDir(modelName);
+  const runReportPath = path.resolve(harnessWorkDir, `${modelDir}.${runId}.json`);
+  if (!fs.existsSync(runReportPath)) {
+    throw new BenchmarkRuntimeError(
+      `official SWE-bench harness finished without producing the final run report at ${runReportPath}`,
+    );
+  }
+
+  const instanceLogRootDir = path.resolve(harnessWorkDir, 'logs', 'run_evaluation', runId, modelDir);
+  const authoritative = parseSweBenchRawOutput({
+    runReportPath,
+    instanceLogRootDir,
+  });
+  const score = scoreSweBenchAdapter(
+    authoritative.runReport.total_instances === 0
+      ? 0
+      : authoritative.runReport.resolved_instances / authoritative.runReport.total_instances,
+  );
+
+  const startedAt = context.startedAt.toISOString();
+  const finishedAt = new Date().toISOString();
+  const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
+  const warnings: string[] = [];
+  if (authoritative.runReport.error_instances > 0) {
+    warnings.push(`${authoritative.runReport.error_instances} instance(s) failed inside the official SWE-bench harness.`);
+  }
+  if (authoritative.runReport.empty_patch_instances > 0) {
+    warnings.push(`${authoritative.runReport.empty_patch_instances} instance(s) submitted empty patches.`);
+  }
+
+  const result: NormalizedRunResult = {
+    schemaVersion: '1.0',
+    runId: context.runId,
+    pack: context.run.pack,
+    variant: context.run.variant,
+    memoryBackend: memory.id,
+    status:
+      authoritative.runReport.total_instances === 0
+        ? 'warning'
+        : authoritative.runReport.error_instances > 0 ||
+            authoritative.runReport.completed_instances < authoritative.runReport.total_instances
+          ? 'warning'
+          : score > 0
+            ? 'passed'
+            : 'failed',
+    startedAt,
+    finishedAt,
+    durationMs,
+    warnings,
+    notes: [
+      `SWE-bench evaluated ${authoritative.runReport.total_instances} instance(s) with the official Docker harness.`,
+      `Resolved ${authoritative.runReport.resolved_instances}/${authoritative.runReport.total_instances} instances (${(score * 100).toFixed(1)}%).`,
+      `Dataset: ${packConfig.datasetName} (${packConfig.split})`,
+    ],
+    metrics: {
+      retrieval: {
+        queryCount: 0,
+        precisionAtK: 0,
+        recallAtK: 0,
+        mrr: 0,
+        ndcgAtK: 0,
+      },
+      answer: {
+        exactMatch: 0,
+        tokenF1: 0,
+        containsExpected: 0,
+        judgedPass: score,
+      },
+      aggregate: {
+        score,
+        retrievalWeight: 0,
+        answerWeight: 1,
+      },
+    },
+    telemetry: {
+      promptTokens: totalPromptTokens,
+      completionTokens: totalCompletionTokens,
+      totalTokens,
+      estimatedCostUsd: 0,
+      latencyMs: durationMs,
+      logs: [
+        `pack=${context.run.pack}`,
+        `variant=${context.run.variant}`,
+        `memory=${memory.id}`,
+        `model=${modelName}`,
+        `dataset=${packConfig.datasetName}`,
+        `split=${packConfig.split}`,
+        `runId=${runId}`,
+        `generationLatencyMs=${totalGenerationLatencyMs}`,
+      ],
+    },
+    artifacts: {
+      resultPath: '',
+      summaryPath: '',
+      rawOutputPath: '',
+    },
+    metadata: {
+      ...context.run.metadata,
+      benchmarkId: packConfig.datasetName,
+      datasetName: packConfig.datasetName,
+      split: packConfig.split,
+      model: modelName,
+      harnessPython: runtime.pythonCommand,
+      harnessVersion: runtime.harnessVersion ?? 'installed',
+      dockerVersion: runtime.dockerVersion ?? 'unknown',
+      totalInstances: authoritative.runReport.total_instances,
+      resolvedInstances: authoritative.runReport.resolved_instances,
+      unresolvedInstances: authoritative.runReport.unresolved_instances,
+      errorInstances: authoritative.runReport.error_instances,
+      emptyPatchInstances: authoritative.runReport.empty_patch_instances,
+    },
+  };
+
+  const harnessStdoutPath = store.writeText('harness-stdout.log', harnessStdout);
+  const harnessStderrPath = store.writeText('harness-stderr.log', harnessStderr);
+  result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
+    pack: 'swe-bench',
+    dataset: {
+      name: datasetSlice.dataset_name,
+      split: datasetSlice.split,
+      count: datasetSlice.count,
+      instances: datasetSlice.instances.map((entry) => ({
+        instance_id: entry.instance_id,
+        repo: entry.repo,
+        base_commit: entry.base_commit,
+      })),
+    },
+    predictionsPath,
+    harnessWorkDir,
+    harnessCommand: [runtime.pythonCommand ?? 'python3', ...harnessArgs],
+    harnessStdoutPath,
+    harnessStderrPath,
+    runReportPath,
+    authoritative,
+  });
+  result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
+  result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
+  store.writeJson('result.json', result);
+  store.writeText('summary.md', markdownReportForResult(result));
+  return result;
 }
 
 export const sweBenchAdapter: PackAdapter = {
   id: 'swe-bench',
   description: 'Official SWE-bench harness wrapper using Docker and authoritative evaluation artifacts.',
   checkInstalled(rootDir = process.cwd()) {
-    return inspectSweBenchRuntime(rootDir).problems.length === 0;
+    return runSync('docker', ['info', '--format', '{{.ServerVersion}}'], rootDir).exitCode === 0;
   },
   getDoctorDetail(rootDir = process.cwd()) {
-    const runtime = inspectSweBenchRuntime(rootDir);
-    if (runtime.problems.length > 0) {
+    const docker = runSync('docker', ['info', '--format', '{{.ServerVersion}}'], rootDir);
+    if (docker.exitCode !== 0) {
       return {
         status: 'warn' as const,
-        detail: runtime.problems.join(' '),
+        detail: `Docker daemon unavailable: ${docker.stderr.trim() || 'docker info failed'}`,
       };
     }
 
     return {
       status: 'ok' as const,
-      detail: `official SWE-bench harness available via ${runtime.pythonCommand} (${runtime.harnessVersion}); Docker server ${runtime.dockerVersion}`,
+      detail:
+        'swe-bench runs through a host-side official harness wrapper with a repo-local virtualenv under .akm-eval/venvs/swe-bench; only Docker is required on the host before launch.',
     };
   },
   async run(
@@ -441,145 +604,23 @@ export const sweBenchAdapter: PackAdapter = {
       );
     }
 
-    const modelDir = harnessModelDir(modelName);
-    const runReportPath = path.resolve(harnessWorkDir, `${modelDir}.${runId}.json`);
-    if (!fs.existsSync(runReportPath)) {
-      throw new BenchmarkRuntimeError(
-        `official SWE-bench harness finished without producing the final run report at ${runReportPath}`,
-      );
-    }
-
-    const instanceLogRootDir = path.resolve(harnessWorkDir, 'logs', 'run_evaluation', runId, modelDir);
-    const authoritative = parseSweBenchRawOutput({
-      runReportPath,
-      instanceLogRootDir,
-    });
-    const score = scoreSweBenchAdapter(
-      authoritative.runReport.total_instances === 0
-        ? 0
-        : authoritative.runReport.resolved_instances / authoritative.runReport.total_instances,
-    );
-
-    const startedAt = context.startedAt.toISOString();
-    const finishedAt = new Date().toISOString();
-    const durationMs = Math.max(1, Date.parse(finishedAt) - Date.parse(startedAt));
-    const warnings: string[] = [];
-    if (authoritative.runReport.error_instances > 0) {
-      warnings.push(`${authoritative.runReport.error_instances} instance(s) failed inside the official SWE-bench harness.`);
-    }
-    if (authoritative.runReport.empty_patch_instances > 0) {
-      warnings.push(`${authoritative.runReport.empty_patch_instances} instance(s) submitted empty patches.`);
-    }
-
-    const result: NormalizedRunResult = {
-      schemaVersion: '1.0',
-      runId: context.runId,
-      pack: context.run.pack,
-      variant: context.run.variant,
-      memoryBackend: memory.id,
-      status:
-        authoritative.runReport.total_instances === 0
-          ? 'warning'
-          : authoritative.runReport.error_instances > 0 ||
-              authoritative.runReport.completed_instances < authoritative.runReport.total_instances
-            ? 'warning'
-            : score > 0
-              ? 'passed'
-              : 'failed',
-      startedAt,
-      finishedAt,
-      durationMs,
-      warnings,
-      notes: [
-        `SWE-bench evaluated ${authoritative.runReport.total_instances} instance(s) with the official Docker harness.`,
-        `Resolved ${authoritative.runReport.resolved_instances}/${authoritative.runReport.total_instances} instances (${(score * 100).toFixed(1)}%).`,
-        `Dataset: ${packConfig.datasetName} (${packConfig.split})`,
-      ],
-      metrics: {
-        retrieval: {
-          queryCount: 0,
-          precisionAtK: 0,
-          recallAtK: 0,
-          mrr: 0,
-          ndcgAtK: 0,
-        },
-        answer: {
-          exactMatch: 0,
-          tokenF1: 0,
-          containsExpected: 0,
-          judgedPass: score,
-        },
-        aggregate: {
-          score,
-          retrievalWeight: 0,
-          answerWeight: 1,
-        },
-      },
-      telemetry: {
-        promptTokens: totalPromptTokens,
-        completionTokens: totalCompletionTokens,
-        totalTokens,
-        estimatedCostUsd: 0,
-        latencyMs: durationMs,
-        logs: [
-          `pack=${context.run.pack}`,
-          `variant=${context.run.variant}`,
-          `memory=${memory.id}`,
-          `model=${modelName}`,
-          `dataset=${packConfig.datasetName}`,
-          `split=${packConfig.split}`,
-          `runId=${runId}`,
-          `generationLatencyMs=${totalGenerationLatencyMs}`,
-        ],
-      },
-      artifacts: {
-        resultPath: '',
-        summaryPath: '',
-        rawOutputPath: '',
-      },
-      metadata: {
-        ...context.run.metadata,
-        benchmarkId: packConfig.datasetName,
-        datasetName: packConfig.datasetName,
-        split: packConfig.split,
-        model: modelName,
-        harnessPython: runtime.pythonCommand,
-        harnessVersion: runtime.harnessVersion ?? 'installed',
-        dockerVersion: runtime.dockerVersion ?? 'unknown',
-        totalInstances: authoritative.runReport.total_instances,
-        resolvedInstances: authoritative.runReport.resolved_instances,
-        unresolvedInstances: authoritative.runReport.unresolved_instances,
-        errorInstances: authoritative.runReport.error_instances,
-        emptyPatchInstances: authoritative.runReport.empty_patch_instances,
-      },
-    };
-
-    const harnessStdoutPath = store.writeText('harness-stdout.log', harnessStdout);
-    const harnessStderrPath = store.writeText('harness-stderr.log', harnessStderr);
-    result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
-      pack: 'swe-bench',
-      dataset: {
-        name: datasetSlice.dataset_name,
-        split: datasetSlice.split,
-        count: datasetSlice.count,
-        instances: datasetSlice.instances.map((entry) => ({
-          instance_id: entry.instance_id,
-          repo: entry.repo,
-          base_commit: entry.base_commit,
-        })),
-      },
+    return finalizeSweBenchRun(
+      context,
+      memory,
+      packConfig,
+      runtime,
+      datasetSlice,
+      modelName,
+      runId,
       predictionsPath,
       harnessWorkDir,
-      harnessCommand: [runtime.pythonCommand, ...harnessArgs],
-      harnessStdoutPath,
-      harnessStderrPath,
-      runReportPath,
-      authoritative,
-    });
-    result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
-    result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
-    store.writeJson('result.json', result);
-    store.writeText('summary.md', markdownReportForResult(result));
-    return result;
+      harnessArgs,
+      harnessStdout,
+      harnessStderr,
+      totalPromptTokens,
+      totalCompletionTokens,
+      totalTokens,
+      totalGenerationLatencyMs,
+    );
   },
 };

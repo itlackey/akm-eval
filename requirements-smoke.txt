@@ -1,4 +1,4 @@
-numpy==1.26.4
+numpy==2.2.6
 regex==2024.11.6
 nltk==3.9.1
 openai==2.24.0

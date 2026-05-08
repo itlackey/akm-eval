@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' 'Error: terminal-bench is intentionally blocked. The current upstream installed-agent path still performs runtime setup inside benchmark containers, and this repo does not yet ship a truthful prebuilt-image replacement for that contract.' >&2
+exit 1

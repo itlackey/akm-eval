@@ -22,7 +22,7 @@ bun run check:boundary
 
 Common operator entrypoints:
 
-- `bin/build-image`: build the operator Docker image used by the wrappers
+- `bin/build-image`: build the shared CLI Docker image used by the generic wrappers
 - `bin/doctor [--pack <id>]`: environment and harness preflight summary, or a focused check for one pack
 - `bin/eval --pack <pack> --variant <variant> --config <config-path> --out <output-dir>`: run one normalized eval
 - `bin/matrix --config <config-path>`: show the planned matrix from a config
@@ -34,7 +34,7 @@ Common operator entrypoints:
 - `bin/setup`: guided starter-config helper in Docker
 - `bun run setup:legacy`: legacy direct-engine setup helper if you explicitly want it
 
-The internal Bun CLI remains the execution engine, but the normal operator path now goes through `bin/` wrappers so harness-backed and script-based packs run inside the same Docker boundary.
+The internal Bun CLI remains the execution engine. Generic operator commands run through a shared CLI image, while packs with official host harnesses use explicit host-side wrappers instead of a generic Docker shim.
 
 ## Execution checklist
 
@@ -49,7 +49,7 @@ Runnable packs in the current repo:
 - `locomo`: official LoCoMo dataset plus bundled authoritative evaluator wrapper
 - `longmemeval`: official dataset plus external official evaluator command
 - `beam`: official upstream BEAM repo plus upstream evaluation pipeline, with repo-side preflight/bootstrap support but no committed end-to-end reference run yet
-- `terminal-bench`: official `tb run` harness
+- `terminal-bench`: currently blocked under the no-runtime-installs architecture until its official installed-agent path is replaced with a truthful prebuilt-image contract
 - `swe-bench`: official `swebench` Docker harness
 - `tau-bench`: official upstream Python benchmark wrapper
 
@@ -220,10 +220,8 @@ This only pins the Python-side bootstrap needed to unblock later execution work.
 
 ## Terminal-Bench
 
-`terminal-bench` is executed only through the official `tb` harness.
+`terminal-bench` remains blocked for now.
 
-- Install the official harness with `uv tool install terminal-bench` or `pip install terminal-bench`.
-- Ensure `Docker` and `python3` are available in `PATH`.
-- Use an opencode-backed provider config so akm-eval can pass your configured model through to Terminal-Bench.
-- For `akm-no-memory` terminal-bench variants, set `variants[].akm.configPath` to an AKM-specific opencode config.
-- `src/memory/backends/akm.ts` now reports AKM CLI/runtime metadata and fails explicitly when retrieval is requested; it still does not implement a truthful evaluated AKM retrieval path, because the current documented AKM CLI surface does not yet expose a repo-mappable memory add/search contract.
+- The previous integration depended on Terminal-Bench's upstream installed-agent setup path, which still performs runtime setup inside benchmark containers.
+- That conflicts with the current repo architecture: no nested Docker, no runtime installs, and pack execution defined by prebuilt images plus host-side `docker run` commands.
+- The pack will stay explicitly blocked until there is a truthful prebuilt-image replacement for that upstream contract.

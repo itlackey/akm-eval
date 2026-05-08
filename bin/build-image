@@ -3,6 +3,6 @@ set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
-IMAGE_TAG="${AKM_EVAL_IMAGE_TAG:-akm-eval:local}"
+IMAGE_TAG="${AKM_EVAL_CLI_IMAGE_TAG:-${AKM_EVAL_IMAGE_TAG:-akm-eval-cli:local}}"
 
 exec docker build -f "$REPO_ROOT/docker/akm-eval.Dockerfile" -t "$IMAGE_TAG" "$REPO_ROOT"

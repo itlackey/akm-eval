@@ -8,11 +8,13 @@ describe('wrapper-first operator surface', () => {
   test('ships the expected bin wrappers', () => {
     for (const relativePath of [
       'bin/akm-eval',
-      'bin/_akm_eval_docker.sh',
+      'bin/_akm_eval_cli_image.sh',
       'bin/build-image',
       'bin/setup',
       'bin/doctor',
       'bin/eval',
+      'bin/swe-bench-eval',
+      'bin/terminal-bench-eval',
       'bin/matrix',
       'bin/report',
       'bin/summary',
@@ -26,11 +28,11 @@ describe('wrapper-first operator surface', () => {
     }
   });
 
-  test('docker wrapper exports project root into the container', () => {
-    const wrapperPath = path.resolve(rootDir, 'bin/_akm_eval_docker.sh');
+  test('cli image wrapper exports project root into the container', () => {
+    const wrapperPath = path.resolve(rootDir, 'bin/_akm_eval_cli_image.sh');
     const content = fs.readFileSync(wrapperPath, 'utf8');
     expect(content).toContain('AKM_EVAL_PROJECT_ROOT');
-    expect(content).toContain('/workspace/akm-eval');
+    expect(content).toContain('AKM_EVAL_CLI_IMAGE_TAG');
     expect(content).toContain('docker image inspect');
   });
 });

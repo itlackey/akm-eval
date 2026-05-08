@@ -2,4 +2,31 @@
 set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+pack_id=""
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [ "${args[$i]}" = "--pack" ] && [ $((i + 1)) -lt ${#args[@]} ]; then
+    pack_id="${args[$((i + 1))]}"
+    break
+  fi
+done
+
+if [ "$pack_id" = "swe-bench" ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    printf 'WARN pack:swe-bench: Docker daemon unavailable: docker not found in PATH\n'
+    exit 0
+  fi
+
+  if ! docker_version="$(docker info --format '{{.ServerVersion}}' 2>/dev/null)"; then
+    docker_error="$(docker info --format '{{.ServerVersion}}' 2>&1 || true)"
+    docker_error="${docker_error//$'\n'/ }"
+    printf 'WARN pack:swe-bench: Docker daemon unavailable: %s\n' "${docker_error:-docker info failed}"
+    exit 0
+  fi
+
+  printf 'OK pack:swe-bench: swe-bench runs through a host-side official harness wrapper with a repo-local virtualenv under .akm-eval/venvs/swe-bench; Docker host ready (%s).\n' "$docker_version"
+  exit 0
+fi
+
 exec "$BIN_DIR/akm-eval" doctor "$@"

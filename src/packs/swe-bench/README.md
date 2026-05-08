@@ -9,7 +9,7 @@ This folder wraps the official `swebench` Python harness through a subprocess bo
 Requirements:
 
 - Docker daemon available
-- official `swebench` Python package importable as `python3 -m swebench.harness.run_evaluation` (or `python`)
+- `bin/swe-bench-eval` will bootstrap a repo-local virtualenv at `.akm-eval/venvs/swe-bench` for the official harness
 - a real model-backed agent provider in the akm-eval variant config
 
 Notes:
