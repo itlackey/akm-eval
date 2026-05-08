@@ -79,21 +79,21 @@ const SETUP_PACKS: SetupPackDefinition[] = [
     summary: 'Official SWE-bench Docker harness.',
     supportedProviders: ['openai-compatible', 'opencode'],
     blockedWhenMissing:
-      'SWE-bench remains blocked until Docker and the official swebench Python harness are installed and runnable.',
+      'SWE-bench requires Docker plus a repo-local uv-managed harness environment under .akm/evals/venvs/swe-bench.',
   },
   {
     id: 'tau-bench',
     summary: 'Official tau-bench Python wrapper.',
     supportedProviders: ['openai-compatible'],
     blockedWhenMissing:
-      'tau-bench remains blocked until Python and the official tau-bench package are installed outside this repo.',
+      'tau-bench remains blocked until the official tau-bench package is available in the runtime Python environment.',
   },
   {
     id: 'terminal-bench',
     summary: 'Official Terminal-Bench tb harness.',
     supportedProviders: ['opencode'],
     blockedWhenMissing:
-      'Terminal-Bench remains blocked until the official tb CLI, Python, Docker, and an opencode config are available.',
+      'Terminal-Bench requires Docker, an opencode config, and a repo-local uv-managed harness environment under .akm/evals/venvs/terminal-bench.',
   },
 ];
 
@@ -105,7 +105,6 @@ function setupUsage(): string {
   return [
     'Usage:',
     '  bun run setup:legacy',
-    '  bin/setup',
     '  bun run setup:legacy --help',
   ].join('\n');
 }
@@ -178,7 +177,7 @@ function createPackConfig(packId: SetupPackId, options: StarterConfigOptions): R
     case 'beam':
       return {
         repoPath: options.beamRepoPath ?? 'vendor/BEAM',
-        pythonBin: 'python3.11',
+        pythonBin: '.akm/evals/venvs/beam/bin/python',
         chatSizes: ['100K'],
         smoke: true,
         maxConversations: 1,
@@ -622,7 +621,7 @@ export async function runSetupCommand(rootDir: string, args: string[]): Promise<
       followUpNotes.push('No datasets were downloaded during setup. You can download them later with `bin/downloads` or use a committed example config that resolves datasets on first use.');
     }
     if (packs.includes('beam') && !runBeamCheck) {
-      followUpNotes.push('beam: deeper BEAM preflight was skipped. Run `bin/beam-doctor` or `bash scripts/setup-beam-runtime.sh --check --require-judge` later when you want to verify the upstream repo, dataset, and judge path.');
+      followUpNotes.push('beam: deeper BEAM preflight was skipped. Run `bin/doctor --pack beam` or `bin/beam-doctor` later when you want to verify the upstream repo, dataset, judge path, and repo-local runtime environment.');
     }
     if (openAI && openAI.apiKey.length === 0) {
       followUpNotes.push(

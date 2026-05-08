@@ -36,6 +36,15 @@ import {
   sanitizePatch,
   validateUnifiedDiff,
 } from './packs/swe-bench/adapter.ts';
+import {
+  buildHarnessCommand as buildTerminalBenchHarnessCommand,
+  buildHarnessEnvironment as buildTerminalBenchHarnessEnvironment,
+  finalizeTerminalBenchRun,
+  inspectTerminalBenchRuntime,
+  parseTerminalBenchArtifacts,
+  resolvePackConfig as resolveTerminalBenchPackConfig,
+  writeTerminalBenchOpencodeConfig,
+} from './packs/terminal-bench/adapter.ts';
 
 interface ResolvedExecution {
   rootDir: string;
@@ -371,10 +380,111 @@ async function internalSweBenchFinalize(args: string[]): Promise<number> {
   return 0;
 }
 
-function internalTerminalBenchBlocked(): number {
-  throw new Error(
-    'terminal-bench remains blocked under the current architecture: the official installed-agent path still expects runtime setup inside benchmark containers, and this repo does not yet have a truthful prebuilt-image replacement for that upstream contract.',
-  );
+async function internalTerminalBenchPrepare(args: string[]): Promise<number> {
+  const { rootDir, config, selectedRun, context } = resolveExecution(args);
+  if (selectedRun.pack !== 'terminal-bench') {
+    throw new Error(`internal terminal-bench prepare expected pack terminal-bench, received ${selectedRun.pack}`);
+  }
+
+  const memoryBackendId = selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none';
+  const memoryBackendStatus = getMemoryBackendStatus(memoryBackendId, rootDir);
+  if (!memoryBackendStatus.evaluated) {
+    throw new Error(
+      `Run "${selectedRun.id ?? `${selectedRun.pack}-${selectedRun.variant}`}" selects memory backend "${memoryBackendId}", ` +
+        `but this backend is not a truthful evaluated benchmark path in this repo yet. ${memoryBackendStatus.detail}`,
+    );
+  }
+
+  const packConfig = resolveTerminalBenchPackConfig(context);
+  const { configDir, configContent } = writeTerminalBenchOpencodeConfig(context);
+  const runDirectory = path.resolve(context.outputDir, context.runId);
+  fs.mkdirSync(context.outputDir, { recursive: true });
+  fs.mkdirSync(runDirectory, { recursive: true });
+
+  try {
+    const runtime = {
+      tbCommand: 'tb',
+      tbVersion: null,
+      pythonCommand: 'python3',
+      dockerVersion: null,
+      problems: [],
+    };
+    const { args: tbArgs, selectedTasks } = buildTerminalBenchHarnessCommand(runtime, context, packConfig, runDirectory);
+    const env = buildTerminalBenchHarnessEnvironment(context, runtime, configContent);
+    process.stdout.write(
+      `${JSON.stringify({
+        runDirectory,
+        tbArgs,
+        env,
+        runtime,
+        selectedTasks,
+        configDir,
+      })}\n`,
+    );
+    return 0;
+  } catch (error) {
+    fs.rmSync(configDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function internalTerminalBenchFinalize(args: string[]): Promise<number> {
+  const planPath = valueAfter(args, '--plan');
+  const stdoutFile = valueAfter(args, '--stdout-file');
+  const stderrFile = valueAfter(args, '--stderr-file');
+  const tbExitCodeRaw = valueAfter(args, '--tb-exit-code');
+  const tbVersion = valueAfter(args, '--tb-version');
+  const pythonCommand = valueAfter(args, '--python-command');
+  const dockerVersion = valueAfter(args, '--docker-version');
+  if (!planPath || !stdoutFile || !stderrFile || !tbExitCodeRaw) {
+    throw new Error('internal terminal-bench-finalize requires --plan, --stdout-file, --stderr-file, and --tb-exit-code');
+  }
+
+  const { rootDir, config, selectedRun, context } = resolveExecution(args);
+  if (selectedRun.pack !== 'terminal-bench') {
+    throw new Error(`internal terminal-bench finalize expected pack terminal-bench, received ${selectedRun.pack}`);
+  }
+
+  const memoryBackendId = selectedRun.memoryBackend ?? config.defaults?.memoryBackend ?? 'none';
+  const memoryBackend = createMemoryBackend(memoryBackendId, rootDir);
+  const plan = JSON.parse(fs.readFileSync(planPath, 'utf8')) as {
+    runDirectory: string;
+    tbArgs: string[];
+    runtime: { tbCommand: string | null; tbVersion: string | null; pythonCommand: string | null; dockerVersion: string | null };
+    selectedTasks: string[] | undefined;
+    configDir: string;
+  };
+  const packConfig = resolveTerminalBenchPackConfig(context);
+  const tbExitCode = Number(tbExitCodeRaw);
+
+  try {
+    if (!Number.isFinite(tbExitCode) || tbExitCode !== 0) {
+      const stderr = fs.readFileSync(stderrFile, 'utf8').trim();
+      throw new Error(`official Terminal-Bench harness failed with exit code ${tbExitCodeRaw}: ${stderr || 'tb run failed'}`);
+    }
+
+    const authoritative = parseTerminalBenchArtifacts(plan.runDirectory);
+    const result = finalizeTerminalBenchRun(
+      context,
+      memoryBackend,
+      packConfig,
+      {
+        tbCommand: plan.runtime.tbCommand,
+        tbVersion: tbVersion ?? plan.runtime.tbVersion,
+        pythonCommand: pythonCommand ?? plan.runtime.pythonCommand,
+        dockerVersion: dockerVersion ?? plan.runtime.dockerVersion,
+      },
+      plan.tbArgs,
+      plan.selectedTasks,
+      authoritative,
+      fs.readFileSync(stdoutFile, 'utf8'),
+      fs.readFileSync(stderrFile, 'utf8'),
+    );
+    process.stdout.write(toPrettyJson(result));
+    return 0;
+  } finally {
+    fs.rmSync(plan.configDir, { recursive: true, force: true });
+  }
 }
 
 function matrixCommand(args: string[]): number {
@@ -493,8 +603,12 @@ export async function main(): Promise<number> {
       return await internalSweBenchConfig(args.slice(2));
     }
 
-    if (command === 'internal' && (subcommand === 'terminal-bench-prepare' || subcommand === 'terminal-bench-finalize')) {
-      return internalTerminalBenchBlocked();
+    if (command === 'internal' && subcommand === 'terminal-bench-prepare') {
+      return await internalTerminalBenchPrepare(args.slice(2));
+    }
+
+    if (command === 'internal' && subcommand === 'terminal-bench-finalize') {
+      return await internalTerminalBenchFinalize(args.slice(2));
     }
 
     console.log(usage());

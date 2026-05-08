@@ -7,7 +7,6 @@ export type CliCommand =
   | 'matrix'
   | 'report'
   | 'run'
-  | 'setup'
   | 'summary';
 
 const WRAPPER_COMMANDS: Record<string, CliCommand> = {
@@ -18,7 +17,6 @@ const WRAPPER_COMMANDS: Record<string, CliCommand> = {
   eval: 'run',
   matrix: 'matrix',
   report: 'report',
-  setup: 'setup',
   summary: 'summary',
 };
 
@@ -49,7 +47,6 @@ export function normalizeCliArgs(argv: string[]): string[] {
       firstArg === 'compare' ||
       firstArg === 'report' ||
       firstArg === 'summary' ||
-      firstArg === 'setup' ||
       firstArg === 'downloads'
     ) {
       return args;
@@ -70,7 +67,6 @@ export function createUsageLines(): string[] {
     '  bin/compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
     '  bin/report --run <dir> [--format markdown|json]',
     '  bin/summary --runs <dir> [--format markdown|json]',
-    '  bin/setup',
     '  bin/downloads [DatasetName]',
     '  bun run setup:legacy',
   ];

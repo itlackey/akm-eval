@@ -8,10 +8,12 @@ This folder contains the official `terminal-bench` integration.
 
 Runtime requirements:
 
-- currently blocked under the repo's no-runtime-installs architecture
+- host-side `tb` harness installed in a repo-local uv-managed environment under `.akm/evals/venvs/terminal-bench`, set up automatically by `bin/doctor --pack terminal-bench` and `bin/eval --pack terminal-bench ...`
+- Docker on the host
+- an `opencode` provider config plus required env vars
 
 Notes:
 
 - dataset selection defaults to `terminal-bench-core==0.1.1` unless overridden in pack config
-- the integration is intentionally disabled until the upstream installed-agent path can be replaced with a truthful prebuilt-image contract
+- the upstream installed-agent setup may install Node 22 and `opencode-ai` inside benchmark containers during the run
 - `memory.backend: akm` is still blocked repo-wide, so `akm-memory` remains a planned variant rather than a runnable truthful benchmark path

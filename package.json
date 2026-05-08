@@ -12,13 +12,11 @@
     "akm-eval-eval": "./bin/eval",
     "akm-eval-matrix": "./bin/matrix",
     "akm-eval-report": "./bin/report",
-    "akm-eval-setup": "./bin/setup",
     "akm-eval-summary": "./bin/summary"
   },
   "scripts": {
     "akm-eval": "bash bin/akm-eval",
     "start": "bash bin/akm-eval",
-    "setup": "bash bin/setup",
     "setup:legacy": "bun src/cli.ts setup",
     "doctor": "bash bin/doctor",
     "eval": "bash bin/eval",

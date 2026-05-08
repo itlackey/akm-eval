@@ -9,7 +9,7 @@ Current trust policy:
 - `swe-bench` is runnable only when Docker and the official `swebench` harness are installed. It uses official dataset slices plus the harness' own reports as the source of truth.
 - `beam` is runnable only when the official `mohammadtavakoli78/BEAM` repo is available locally, the official dataset has already been prepared, and the upstream BEAM evaluator can run with a real judge model.
 - `locomo` is runnable with the official `snap-research/locomo` dataset plus the bundled authoritative QA scoring wrapper. Answer generation still uses akm-eval's configured real model provider from the global `providers` map.
-- `terminal-bench` is intentionally blocked. The upstream installed-agent path still relies on runtime setup inside benchmark containers, and this repo does not yet ship a truthful prebuilt-image replacement for that contract.
+- `terminal-bench` is runnable through the official `tb run` harness with an `opencode` installed-agent path. The host wrapper bootstraps the official harness with `uv`, and the installed-agent setup may install Node 22 plus `opencode-ai` inside benchmark containers during the run.
 - `tau-bench` is runnable only when the official Python package is installed and the upstream JSON result file can be treated as the source of truth.
 - `akm-bench` is intentionally blocked until it is wired to authoritative external harness/result artifacts.
 - The repo does not emit proxy or heuristic benchmark scores for blocked packs.
@@ -36,7 +36,7 @@ Current trust policy:
 - Requires official dataset preparation before evaluation.
 - Answer generation can use either supported runner path.
 - Evaluation still depends on BEAM's upstream evaluator and judge model path.
-- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, optional `--require-10m` enforcement for 10M runs, runtime fingerprint capture in preflight/run artifacts, and an optional pinned Python container scaffold with local image-ID reporting.
+- Current repo-side reproducibility slice adds preflight checks for prepared dataset roots and judge configuration, optional `--require-10m` enforcement for 10M runs, and runtime fingerprint capture in preflight/run artifacts.
 
 ### `swe-bench`
 
@@ -48,9 +48,9 @@ Current trust policy:
 ### `terminal-bench`
 
 - Uses the official `tb run` harness only.
-- The pack is intentionally blocked in this repo.
-- The upstream installed-agent path still depends on runtime setup inside benchmark containers.
-- A truthful prebuilt-image replacement has not been wired yet.
+- Requires Docker, `uv`, and an `opencode` config on the host.
+- Runs through a repo-local `uv` environment under `.akm/evals/venvs/terminal-bench`.
+- The upstream installed-agent path may install Node 22 and `opencode-ai` inside benchmark containers during the run.
 
 ### External memory backends
 

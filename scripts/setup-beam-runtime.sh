@@ -4,8 +4,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_PATH="${BEAM_REPO_PATH:-${ROOT_DIR}/vendor/BEAM}"
-VENV_PATH="${ROOT_DIR}/.venv-beam"
-PYTHON_BIN="${BEAM_PYTHON_BIN:-python3.11}"
+VENV_PATH="${ROOT_DIR}/.akm/evals/venvs/beam"
+UV_PYTHON_SPEC="3.11"
+PYTHON_BIN="${VENV_PATH}/bin/python"
 PINNED_COMMIT="3e12035532eb85768f1a7cd779832b650c4b2ef9"
 CHECK_ONLY=0
 DATASET_PATH="${BEAM_DATASET_PATH:-}"
@@ -18,13 +19,13 @@ usage() {
   cat <<'EOF'
 Usage: scripts/setup-beam-runtime.sh [options]
 
-Creates a local Python virtualenv for the upstream BEAM evaluator requirements,
+Creates a local uv-managed Python virtualenv for the upstream BEAM evaluator requirements,
 or runs a non-installing runtime check.
 
 Options:
   --repo PATH      Path to the upstream BEAM checkout.
   --venv PATH      Virtualenv path to create or check.
-  --python BIN     Python interpreter to use. Default: python3.11.
+  --python SPEC    Python version or interpreter path to seed the uv environment. Default: 3.11.
   --dataset PATH   Prepared BEAM dataset root. Also reads BEAM_DATASET_PATH.
   --dataset10m PATH  Prepared BEAM 10M dataset root. Also reads BEAM_DATASET_10M_PATH.
   --require-10m    Fail if the prepared BEAM 10M dataset is not available.
@@ -46,7 +47,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --python)
-      PYTHON_BIN="$2"
+      UV_PYTHON_SPEC="$2"
       shift 2
       ;;
     --dataset)
@@ -87,6 +88,9 @@ done
 
 REPO_PATH="$(realpath "$REPO_PATH")"
 VENV_PATH="$(realpath -m "$VENV_PATH")"
+if [[ -n "${BEAM_PYTHON_BIN:-}" ]]; then
+  PYTHON_BIN="${BEAM_PYTHON_BIN}"
+fi
 
 if [[ -n "$DATASET_PATH" ]]; then
   DATASET_PATH="$(realpath -m "$DATASET_PATH")"
@@ -285,9 +289,20 @@ resolve_dataset_path() {
   return 1
 }
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  printf 'Required Python interpreter not found: %s\n' "$PYTHON_BIN" >&2
+if ! command -v uv >/dev/null 2>&1; then
+  printf 'uv is required to manage the BEAM runtime environment. Install uv first.\n' >&2
   exit 1
+fi
+
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+  if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    printf 'BEAM runtime environment missing at %s. Use bin/doctor --pack beam or bin/eval --pack beam ... so the pack setup script can create the uv-managed environment automatically.\n' "$PYTHON_BIN" >&2
+    exit 1
+  fi
+else
+  mkdir -p "$(dirname "$VENV_PATH")"
+  uv venv --python "$UV_PYTHON_SPEC" "$VENV_PATH" >/dev/null
+  PYTHON_BIN="${VENV_PATH}/bin/python"
 fi
 
 if [[ ! -d "$REPO_PATH" ]]; then
@@ -405,12 +420,10 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
-"$PYTHON_BIN" -m venv "$VENV_PATH"
-"${VENV_PATH}/bin/pip" install --upgrade pip
-"${VENV_PATH}/bin/pip" install -r "${ROOT_DIR}/requirements-beam.txt"
+uv pip install --python "$PYTHON_BIN" -r "${ROOT_DIR}/requirements-beam.txt" >/dev/null
 
 printf 'BEAM runtime installed in %s\n' "$VENV_PATH"
-printf 'Activate with: source %s/bin/activate\n' "$VENV_PATH"
+printf 'Python path: %s\n' "$PYTHON_BIN"
 printf 'Python version: %s\n' "$PYTHON_VERSION"
 if [[ -n "$REPO_COMMIT" ]]; then
   printf 'Repo commit: %s\n' "$REPO_COMMIT"

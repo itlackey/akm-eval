@@ -13,6 +13,9 @@ for ((i=0; i<${#args[@]}; i++)); do
 done
 
 case "$pack" in
+  beam)
+    exec "$BIN_DIR/beam-eval" "$@"
+    ;;
   swe-bench)
     exec "$BIN_DIR/swe-bench-eval" "$@"
     ;;

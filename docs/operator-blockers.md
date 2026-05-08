@@ -19,11 +19,11 @@ Concrete completion steps a human must perform:
 What evidence or artifacts should be captured when done:
 - The BEAM git commit SHA from the checked-out upstream repo.
 - The dataset root paths actually used.
-- The JSON emitted by `bash scripts/setup-beam-runtime.sh --check --print-fingerprint`.
+- The JSON emitted by `bin/beam-doctor --print-fingerprint`.
 - If `10M` is required, the fingerprint showing `dataset10M` and non-zero conversation counts.
 
 How to verify completion in this repo afterward:
-Run `bash scripts/setup-beam-runtime.sh --check --require-judge --print-fingerprint` and confirm it succeeds, reports the pinned repo layout, and records dataset conversation counts instead of failing with missing repo or dataset errors.
+Run `bin/beam-doctor --print-fingerprint` and confirm it succeeds, reports the pinned repo layout, and records dataset conversation counts instead of failing with missing repo or dataset errors.
 
 Sources:
 `README.md`, `docs/beam-runtime.md`, `src/packs/beam/official.ts`, `src/packs/beam/README.md`
@@ -46,36 +46,12 @@ What evidence or artifacts should be captured when done:
 - Run logs showing the upstream evaluator completed.
 
 How to verify completion in this repo afterward:
-Run `bash scripts/setup-beam-runtime.sh --check --require-judge` and confirm it no longer fails on judge configuration. Then run a BEAM smoke config and confirm `raw-output.json` and `result.json.metadata` include `beamJudgeBaseUrl`, `beamJudgeProvider`, and `beamRuntimeFingerprint`.
+Run `bin/doctor --pack beam` and confirm it no longer fails on judge configuration. Then run a BEAM smoke config and confirm `raw-output.json` and `result.json.metadata` include `beamJudgeBaseUrl`, `beamJudgeProvider`, and `beamRuntimeFingerprint`.
 
 Sources:
 `docs/beam-runtime.md`, `src/packs/beam/official.ts`, `src/packs/beam/adapter.ts`
 
-## 3. A normalized BEAM reference run still needs a human-operated end-to-end execution
-
-Why the repo cannot finish it alone:
-The repo has BEAM adapter code and an upstream answer-file artifact under `runs/reference/beam/`, but it does not yet have a committed normalized BEAM reference run with `result.json`, `summary.md`, and `raw-output.json`. Producing that evidence requires the external BEAM repo, prepared datasets, and judge access.
-
-Concrete completion steps a human must perform:
-1. Use a committed BEAM config directly, or run `bun run setup:legacy` if you still want the helper to write a starter config.
-2. Complete blocker 1 and blocker 2.
-3. Choose the exact committed config for the BEAM reference run.
-4. Run `bin/eval --pack beam --variant baseline --config <beam-config> --out runs/reference/beam/baseline`.
-5. Review the generated artifacts and commit the full normalized run directory.
-
-What evidence or artifacts should be captured when done:
-- `runs/reference/beam/baseline/result.json`.
-- `runs/reference/beam/baseline/summary.md`.
-- `runs/reference/beam/baseline/raw-output.json`.
-- The embedded `beamRuntimeFingerprint` and upstream evaluation outputs referenced from `raw-output.json`.
-
-How to verify completion in this repo afterward:
-Run `bin/report --run runs/reference/beam/baseline` and confirm it resolves the normalized BEAM result. Run `bin/summary --runs runs/reference --format markdown` and confirm BEAM appears as a normal reference row instead of only having upstream byproducts under `runs/reference/beam/`.
-
-Sources:
-`README.md`, `runs/reference/README.md`, `src/packs/beam/adapter.ts`, `runs/reference/beam/`
-
-## 4. AKM memory-backend integration is blocked on an upstream add/search contract
+## 3. AKM memory-backend integration is blocked on an upstream add/search contract
 
 Why the repo cannot finish it alone:
 `src/memory/backends/akm.ts` can verify `akm --help` and `akm info --format json`, but it still fails intentionally because `akm memory --help` does not expose a documented indexing and query contract that truthfully maps onto this repo's `MemoryBackend.add()` and `MemoryBackend.search()` interface.
@@ -98,7 +74,7 @@ At minimum, rerun `akm --help`, `akm info --format json`, and `akm memory --help
 Sources:
 `README.md`, `docs/memory-backends.md`, `docs/running-evals.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`
 
-## 5. `akm-bench` still lacks an authoritative external process and artifact boundary
+## 4. `akm-bench` still lacks an authoritative external process and artifact boundary
 
 Why the repo cannot finish it alone:
 `src/packs/akm-bench/adapter.ts` is intentionally hard-blocked. The previous local proxy-scoring path was removed, and the pack cannot be truthfully re-enabled until a real external `akm-bench` process and its authoritative result artifacts exist.
@@ -121,7 +97,7 @@ Once the external process exists, repo verification should be a real ingest path
 Sources:
 `README.md`, `docs/benchmark-packs.md`, `src/packs/akm-bench/README.md`, `src/packs/akm-bench/adapter.ts`
 
-## 6. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
+## 5. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
 
 Why the repo cannot finish it alone:
 These backend IDs are only planned placeholders. The repository has no authoritative service endpoint, CLI contract, credential flow, or reproducible runtime for any of them, so it fails before benchmark execution instead of pretending they are evaluated backends.
@@ -144,29 +120,6 @@ The external prerequisite is satisfied once each chosen backend has a stable, op
 
 Sources:
 `docs/memory-backends.md`, `src/memory/registry.ts`, `src/memory/backends/mem0.ts`, `src/memory/backends/openviking.ts`, `src/memory/backends/zep.ts`, `src/variants/registry.ts`
-
-## 7. Existing SWE-Bench and tau-bench reference artifacts have an unrecoverable provenance gap unless a human reruns or supplies external records
-
-Why the repo cannot finish it alone:
-The committed `runs/reference/swe-bench/baseline/result.json` and `runs/reference/tau-bench/baseline/result.json` explicitly state that they predate automatic `repoCommit` capture. The repository cannot infer the exact akm-eval commit used for those runs from committed artifacts alone without inventing provenance.
-
-Concrete completion steps a human must perform:
-1. Either locate an external execution record that already proves the exact akm-eval commit used for each run, or rerun each reference artifact from a known commit.
-2. If rerunning, use a committed config directly or run `bun run setup:legacy` if you need a fresh guided starter config for the chosen pack.
-3. Run directly into the final reference directories so the normalized artifact paths are truthful.
-4. Commit the updated reference artifacts with `metadata.repoCommit` populated automatically.
-5. If an external historical record is used instead of rerunning, add a committed provenance note that points at that record without guessing.
-
-What evidence or artifacts should be captured when done:
-- Updated `result.json` files with `metadata.repoCommit` present, or a committed provenance note referencing the external record.
-- The corresponding `raw-output.json` and harness outputs from the rerun if rerun is chosen.
-- The exact config used for the rerun.
-
-How to verify completion in this repo afterward:
-Open `runs/reference/swe-bench/baseline/result.json` and `runs/reference/tau-bench/baseline/result.json` and confirm `metadata.repoCommit` is populated, or that a committed provenance note points to a specific external record. Then run `bin/summary --runs runs/reference --format markdown` and confirm the summary can display those runs without a provenance-gap note.
-
-Sources:
-`runs/reference/README.md`, `runs/reference/swe-bench/baseline/result.json`, `runs/reference/tau-bench/baseline/result.json`
 
 ## Scope note
 

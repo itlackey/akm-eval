@@ -37,7 +37,7 @@ jobs:
 
       - name: Run LoCoMo smoke
         if: ${{ env.OPENAI_API_KEY != '' }}
-        run: bun src/cli.ts run --pack locomo --variant baseline --config config/examples/locomo-smoke.json --out runs/ci-smoke/locomo
+        run: bash bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json --out runs/ci-smoke/locomo
 
       - name: Upload smoke artifacts
         if: always()

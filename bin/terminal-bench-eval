@@ -1,5 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-printf '%s\n' 'Error: terminal-bench is intentionally blocked. The current upstream installed-agent path still performs runtime setup inside benchmark containers, and this repo does not yet ship a truthful prebuilt-image replacement for that contract.' >&2
-exit 1
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+VENV_DIR="$REPO_ROOT/.akm/evals/venvs/terminal-bench"
+PLAN_FILE="$(mktemp)"
+ENV_FILE="$(mktemp)"
+STDOUT_FILE="$(mktemp)"
+STDERR_FILE="$(mktemp)"
+
+cleanup() {
+  rm -f "$PLAN_FILE" "$ENV_FILE" "$STDOUT_FILE" "$STDERR_FILE"
+}
+trap cleanup EXIT
+
+if ! command -v docker >/dev/null 2>&1; then
+  printf 'Error: docker is required on the host for terminal-bench.\n' >&2
+  exit 1
+fi
+
+bash "$REPO_ROOT/scripts/setup-terminal-bench-runtime.sh" >/dev/null
+
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
+bash "$BIN_DIR/_akm_eval_cli_image.sh" bun src/cli.ts internal terminal-bench-prepare "$@" > "$PLAN_FILE"
+
+"$VENV_DIR/bin/python" - <<'PY' "$PLAN_FILE" "$ENV_FILE"
+import json
+import shlex
+import sys
+
+plan_path, env_path = sys.argv[1:3]
+with open(plan_path, 'r', encoding='utf-8') as handle:
+    plan = json.load(handle)
+
+with open(env_path, 'w', encoding='utf-8') as handle:
+    for key, value in plan['env'].items():
+        handle.write(f"export {key}={shlex.quote(value)}\n")
+    handle.write("TB_ARGS=(")
+    for arg in plan['tbArgs']:
+        handle.write(f" {shlex.quote(arg)}")
+    handle.write(" )\n")
+PY
+
+set +e
+source "$ENV_FILE"
+"$VENV_DIR/bin/tb" "${TB_ARGS[@]}" >"$STDOUT_FILE" 2>"$STDERR_FILE"
+tb_exit_code=$?
+set -e
+
+tb_version="$($VENV_DIR/bin/tb --help 2>&1 | sed -n '1p')"
+docker_version="$(docker --version)"
+
+exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bun src/cli.ts internal terminal-bench-finalize "$@" \
+  --plan "$PLAN_FILE" \
+  --stdout-file "$STDOUT_FILE" \
+  --stderr-file "$STDERR_FILE" \
+  --tb-exit-code "$tb_exit_code" \
+  --tb-version "$tb_version" \
+  --python-command "$VENV_DIR/bin/python" \
+  --docker-version "$docker_version"

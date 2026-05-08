@@ -647,23 +647,32 @@ export function finalizeTerminalBenchRun(
 
 export const terminalBenchAdapter: PackAdapter = {
   id: 'terminal-bench',
-  description: 'Blocked until Terminal-Bench has a truthful prebuilt-image integration.',
+  description: 'Official Terminal-Bench tb harness with opencode installed-agent integration and authoritative artifacts.',
   optionalDependency: 'terminal-bench',
-  checkInstalled() {
-    return false;
+  checkInstalled(rootDir = process.cwd()) {
+    const runtime = inspectTerminalBenchRuntime(rootDir);
+    return runtime.problems.length === 0;
   },
-  getDoctorDetail() {
+  getDoctorDetail(rootDir = process.cwd()) {
+    const runtime = inspectTerminalBenchRuntime(rootDir);
+    if (runtime.problems.length > 0) {
+      return {
+        status: 'warn' as const,
+        detail: runtime.problems.join(' '),
+      };
+    }
+
     return {
-      status: 'warn' as const,
+      status: 'ok' as const,
       detail:
-        'blocked: terminal-bench still depends on the upstream installed-agent runtime-setup path inside benchmark containers. This repo has not yet replaced that with a truthful prebuilt-image contract, so the pack remains intentionally blocked under the no-runtime-installs architecture.',
+        'terminal-bench runs through the official host-side tb harness. The host needs tb, Python, Docker, and an opencode config; the installed-agent setup may install Node/opencode-ai inside benchmark containers at run time.',
     };
   },
   async run(context, memory): Promise<NormalizedRunResult> {
     void context;
     void memory;
     throw new BenchmarkRuntimeError(
-      'terminal-bench is intentionally blocked: the current official installed-agent path still requires runtime setup inside benchmark containers, and this repo does not yet ship a truthful prebuilt-image replacement for that contract.',
+      'terminal-bench should run through the host-side wrapper. Use bin/eval --pack terminal-bench ... or bin/terminal-bench-eval so the official tb harness runs from the repo-local uv environment.',
     );
   },
 };

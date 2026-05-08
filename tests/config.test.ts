@@ -24,7 +24,7 @@ describe('config loading', () => {
   });
 
   test('loads locomo smoke example config', () => {
-    const config = loadConfig(path.resolve(rootDir, 'config/examples/locomo-smoke.json'));
+    const config = loadConfig(path.resolve(rootDir, 'config/common/locomo-smoke.json'));
     expect(config.version).toBe(1);
     expect(config.runs.some((run) => run.pack === 'locomo')).toBe(true);
     expect(config.runs.some((run) => run.memoryBackend === 'raw-vector')).toBe(true);
@@ -32,10 +32,10 @@ describe('config loading', () => {
 
   test('runnable smoke examples no longer include blocked akm-memory runs', () => {
     for (const relativePath of [
-      'config/examples/beam-smoke.json',
-      'config/examples/longmemeval-smoke.json',
-      'config/examples/swe-bench-smoke.json',
-      'config/examples/terminal-bench-smoke.json',
+      'config/common/beam-smoke.json',
+      'config/common/longmemeval-smoke.json',
+      'config/common/swe-bench-smoke.json',
+      'config/common/terminal-bench-smoke.json',
     ]) {
       const config = loadConfig(path.resolve(rootDir, relativePath));
       expect(config.runs.some((run) => run.memoryBackend === 'akm')).toBe(false);
@@ -43,14 +43,14 @@ describe('config loading', () => {
   });
 
   test('loads tau-bench smoke example config', () => {
-    const config = loadConfig(path.resolve(rootDir, 'config/examples/tau-bench-smoke.json'));
+    const config = loadConfig(path.resolve(rootDir, 'config/common/tau-bench-smoke.json'));
     expect(config.version).toBe(1);
     expect(config.runs.some((run) => run.pack === 'tau-bench')).toBe(true);
     expect(config.runs.some((run) => run.agentProviderConfig?.type === 'openai-compatible')).toBe(true);
   });
 
   test('loads longmemeval smoke example config with consistent smoke defaults', () => {
-    const config = loadConfig(path.resolve(rootDir, 'config/examples/longmemeval-smoke.json'));
+    const config = loadConfig(path.resolve(rootDir, 'config/common/longmemeval-smoke.json'));
     const run = config.runs.find((entry) => entry.pack === 'longmemeval');
     expect(run?.packConfig?.evaluatorCommand).toBe('python scripts/longmemeval-evaluator.py');
     expect(run?.packConfig?.smoke).toBe(true);
@@ -579,7 +579,6 @@ describe('config loading', () => {
       '  bin/compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]',
       '  bin/report --run <dir> [--format markdown|json]',
       '  bin/summary --runs <dir> [--format markdown|json]',
-      '  bin/setup',
       '  bin/downloads [DatasetName]',
       '  bun run setup:legacy',
     ]);

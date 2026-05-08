@@ -9,12 +9,12 @@ This folder wraps the official `swebench` Python harness through a subprocess bo
 Requirements:
 
 - Docker daemon available
-- `bin/swe-bench-eval` will bootstrap a repo-local virtualenv at `.akm-eval/venvs/swe-bench` for the official harness
+- `bin/doctor --pack swe-bench` and `bin/swe-bench-eval` will ensure a repo-local uv-managed environment at `.akm/evals/venvs/swe-bench` for the official harness
 - a real model-backed agent provider in the akm-eval variant config
 
 Notes:
 
 - the adapter accepts official dataset identifiers including Lite and Verified
 - the committed OpenAI-compatible smoke/reference config targets `SWE-bench/SWE-bench_Verified`, while the opencode smoke config still targets `SWE-bench/SWE-bench_Lite`
-- `config/examples/swe-bench-smoke.json` also targets Lite today
+- `config/common/swe-bench-smoke.json` also targets Lite today
 - both `opencode` and `openai-compatible` runners can be used for patch generation

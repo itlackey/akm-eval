@@ -11,7 +11,7 @@ Requirements:
 - repo available via `pack.config.repoPath`, `vendor/BEAM`, or `third_party/BEAM`
 - official dataset directories prepared before running the pack
 - Python available for the upstream evaluator
-- local runtime bootstrap in this repo currently targets `python3.11` via `scripts/setup-beam-runtime.sh`
+- local runtime setup in this repo currently targets a uv-managed Python 3.11 environment at `.akm/evals/venvs/beam` via `scripts/setup-beam-runtime.sh`
 - `OPENAI_API_KEY` available for the upstream BEAM judge path
 - pinned upstream/runtime notes live in `docs/beam-runtime.md`
 - each run now records a BEAM runtime fingerprint in `result.json` metadata and `raw-output.json`
@@ -25,7 +25,7 @@ Optional preflight env overrides:
 
 Recommended preflight:
 
-- `bash scripts/setup-beam-runtime.sh --check --require-judge`
+- `bin/doctor --pack beam`
 - add `--require-10m` when the pack config includes `10M`
 - add `--print-fingerprint` to emit a reproducibility-oriented runtime fingerprint for operator logs
 

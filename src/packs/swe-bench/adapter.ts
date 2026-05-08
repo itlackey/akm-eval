@@ -484,7 +484,7 @@ export const sweBenchAdapter: PackAdapter = {
     return {
       status: 'ok' as const,
       detail:
-        'swe-bench runs through a host-side official harness wrapper with a repo-local virtualenv under .akm-eval/venvs/swe-bench; only Docker is required on the host before launch.',
+        'swe-bench runs through a host-side official harness wrapper with a repo-local uv-managed environment under .akm/evals/venvs/swe-bench; Docker is required on the host before launch.',
     };
   },
   async run(

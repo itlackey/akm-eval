@@ -110,6 +110,7 @@ const DEFAULT_BEAM_REPO_ENV = 'BEAM_REPO_PATH';
 const DEFAULT_BEAM_DATASET_ENV = 'BEAM_DATASET_PATH';
 const DEFAULT_BEAM_DATASET_10M_ENV = 'BEAM_DATASET_10M_PATH';
 const DEFAULT_BEAM_PYTHON_ENV = 'BEAM_PYTHON_BIN';
+const DEFAULT_BEAM_VENV_PYTHON = '.akm/evals/venvs/beam/bin/python';
 const DEFAULT_DATASET_CHAT_SIZES = ['100K', '500K', '1M'];
 
 function isNonEmptyString(value: unknown): value is string {
@@ -182,12 +183,18 @@ function resolveConfiguredPath(rootDir: string, configuredPath?: string, envName
   return isNonEmptyString(envValue) ? path.resolve(rootDir, envValue) : null;
 }
 
-function resolveBeamPythonBin(packConfig: BeamPackConfig): string {
+function normalizeCommandOrPath(rootDir: string, value: string): string {
+  return value.includes(path.sep) || value.startsWith('.') ? path.resolve(rootDir, value) : value;
+}
+
+function resolveBeamPythonBin(rootDir: string, packConfig: BeamPackConfig): string {
   if (isNonEmptyString(packConfig.pythonBin)) {
-    return packConfig.pythonBin;
+    return normalizeCommandOrPath(rootDir, packConfig.pythonBin);
   }
 
-  return isNonEmptyString(process.env[DEFAULT_BEAM_PYTHON_ENV]) ? process.env[DEFAULT_BEAM_PYTHON_ENV] : 'python3';
+  return isNonEmptyString(process.env[DEFAULT_BEAM_PYTHON_ENV])
+    ? normalizeCommandOrPath(rootDir, process.env[DEFAULT_BEAM_PYTHON_ENV])
+    : path.resolve(rootDir, DEFAULT_BEAM_VENV_PYTHON);
 }
 
 function beamRootCandidates(rootDir: string, packConfig: BeamPackConfig): string[] {
@@ -299,12 +306,12 @@ function findBeamDatasetDirectory(
 }
 
 export function checkBeamRuntime(rootDir: string, packConfig: BeamPackConfig = {}): BeamDoctorStatus {
-  const pythonBin = resolveBeamPythonBin(packConfig);
+  const pythonBin = resolveBeamPythonBin(rootDir, packConfig);
   const python = runProcess(pythonBin, ['--version'], rootDir);
   if (!python.success) {
     return {
       installed: false,
-      detail: `python runtime not found via ${pythonBin}; BEAM official evaluator requires Python`,
+      detail: `BEAM uv-managed Python runtime not found via ${pythonBin}; use bin/doctor --pack beam or bin/eval --pack beam ... so the pack setup script can create .akm/evals/venvs/beam automatically.`,
     };
   }
 
@@ -377,7 +384,7 @@ export function resolveBeamRuntime(rootDir: string, packConfig: BeamPackConfig =
     throw new BenchmarkRuntimeError('beam runtime detection failed unexpectedly.');
   }
 
-  const pythonBin = resolveBeamPythonBin(packConfig);
+  const pythonBin = resolveBeamPythonBin(rootDir, packConfig);
   const judgeRuntime = resolveJudgeRuntime();
   const datasetPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, 'default');
   const dataset10MPath = resolveBeamDatasetDirectory(rootDir, repoPath, packConfig, '10m', false);
@@ -443,8 +450,8 @@ function resolveBeamDatasetDirectory(
   }
 
   const downloadCommand = type === '10m'
-    ? `${resolveBeamPythonBin(packConfig)} src/beam/download_dataset.py`
-    : `${resolveBeamPythonBin(packConfig)} src/beam/download_dataset.py`;
+      ? `${resolveBeamPythonBin(rootDir, packConfig)} src/beam/download_dataset.py`
+      : `${resolveBeamPythonBin(rootDir, packConfig)} src/beam/download_dataset.py`;
   throw new BenchmarkRuntimeError(
     `beam dataset directory is missing. Expected one of: ${candidates.join(', ')}. ` +
       `Run the official BEAM dataset preparation first, for example ${downloadCommand} from ${repoPath}.`,

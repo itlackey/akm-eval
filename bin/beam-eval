@@ -4,4 +4,6 @@ set -euo pipefail
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 
-exec bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --require-judge "$@"
+bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" >/dev/null
+
+exec "$BIN_DIR/akm-eval" run "$@"

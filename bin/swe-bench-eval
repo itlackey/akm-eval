@@ -3,7 +3,7 @@ set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
-VENV_DIR="$REPO_ROOT/.akm-eval/venvs/swe-bench"
+VENV_DIR="$REPO_ROOT/.akm/evals/venvs/swe-bench"
 REQ_FILE="$REPO_ROOT/requirements-swebench.txt"
 PLAN_FILE="$(mktemp)"
 DATASET_SLICE_FILE="$(mktemp)"
@@ -15,16 +15,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! command -v python3 >/dev/null 2>&1; then
-  printf 'Error: python3 is required to bootstrap the swe-bench workspace venv.\n' >&2
-  exit 1
-fi
-
-if [ ! -x "$VENV_DIR/bin/python" ]; then
-  python3 -m venv "$VENV_DIR"
-  "$VENV_DIR/bin/python" -m pip install --upgrade pip >/dev/null
-  "$VENV_DIR/bin/python" -m pip install --requirement "$REQ_FILE" >/dev/null
-fi
+bash "$REPO_ROOT/scripts/setup-swe-bench-runtime.sh" >/dev/null
 
 config_json="$(bash "$BIN_DIR/_akm_eval_cli_image.sh" bun src/cli.ts internal swe-bench-config "$@")"
 
