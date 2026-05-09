@@ -24,7 +24,7 @@ Every new pack must satisfy all of the following:
 - add `src/packs/<name>/README.md`
 - register the pack in `src/packs/registry/index.ts`
 - add any config validation needed in `src/config/validate-config.ts`
-- add example config under `config/examples/`
+- add runnable example config under `config/common/` when operators should use it, or add starter material under `config/examples/runs/` only for compatibility flows
 - add docs updates in `README.md`, `docs/benchmark-packs.md`, and `docs/running-evals.md`
 - add tests for config visibility or pack-specific helpers where practical
 

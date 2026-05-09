@@ -37,4 +37,4 @@ Runner support:
 
 The pack does not use local heuristic scoring. It normalizes only the authoritative BEAM evaluation artifacts.
 
-`akm-eval` does not yet ship a fully solved BEAM runtime. The current repo slice records the pinned upstream source, a checked-in requirements snapshot, a minimal setup/check script for the upstream evaluator environment, runtime preflight checks for prepared datasets plus judge configuration, runtime fingerprints for repo/dataset/judge state, and a container helper that remaps external BEAM repo/dataset paths into the container while exposing the local image ID when requested.
+`akm-eval` ships a pinned BEAM source reference, requirements snapshot, setup/check script, runtime preflight, and runtime fingerprints. It still depends on upstream dataset preparation and judge access.

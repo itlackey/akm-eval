@@ -24,7 +24,7 @@ Extra pack requirements still apply:
 - `beam`: local `vendor/BEAM` checkout, prepared official datasets, and judge configuration
 - `terminal-bench`: `opencode` provider path only
 
-`bun` is only required for repo development tasks such as tests and boundary checks.
+`bun` is only required for repo development tasks.
 
 ## Quick start
 
@@ -34,7 +34,7 @@ bin/doctor --pack locomo
 bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json
 ```
 
-Common runnable configs live under `config/common/`:
+Common runnable configs live under `config/common/`; see `docs/running-evals.md` for the current list.
 
 - `config/common/locomo-smoke.json`
 - `config/common/longmemeval-smoke.json`

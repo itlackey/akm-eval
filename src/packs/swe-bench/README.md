@@ -15,6 +15,5 @@ Requirements:
 Notes:
 
 - the adapter accepts official dataset identifiers including Lite and Verified
-- the committed OpenAI-compatible smoke/reference config targets `SWE-bench/SWE-bench_Verified`, while the opencode smoke config still targets `SWE-bench/SWE-bench_Lite`
-- `config/common/swe-bench-smoke.json` also targets Lite today
+- the committed OpenAI-compatible smoke config targets `SWE-bench/SWE-bench_Verified`; the opencode smoke config targets `SWE-bench/SWE-bench_Lite`
 - both `opencode` and `openai-compatible` runners can be used for patch generation

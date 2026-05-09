@@ -16,4 +16,4 @@ Notes:
 
 - dataset selection defaults to `terminal-bench-core==0.1.1` unless overridden in pack config
 - the upstream installed-agent setup may install Node 22 and `opencode-ai` inside benchmark containers during the run
-- `memory.backend: akm` is still blocked repo-wide, so `akm-memory` remains a planned variant rather than a runnable truthful benchmark path
+- `memory.backend: akm` is blocked repo-wide, so `akm-memory` remains planned rather than runnable

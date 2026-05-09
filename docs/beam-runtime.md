@@ -1,10 +1,8 @@
 # BEAM Runtime
 
-This repo's BEAM integration still depends on the upstream evaluator from `mohammadtavakoli78/BEAM`.
+This repo's BEAM integration depends on the upstream evaluator from `mohammadtavakoli78/BEAM`.
 
-This document pins the upstream source and the local runtime-setup path used here so later execution work has a stable baseline.
-
-The current goal is a staged path to reproducibility, not a false claim of a fully solved end-to-end runtime.
+This document pins the upstream source and local runtime-setup path used here.
 
 ## Upstream source
 
@@ -29,13 +27,13 @@ The current goal is a staged path to reproducibility, not a false claim of a ful
 
 ## Runtime setup
 
-- `requirements-beam.txt` is a checked-in snapshot of `vendor/BEAM/requirements.txt` from the pinned upstream commit above.
-- `scripts/setup-beam-runtime.sh` is the pack-local setup script used by `bin/doctor --pack beam`, `bin/beam-doctor`, and `bin/eval --pack beam ...`. It creates a local uv-managed environment at `.akm/evals/venvs/beam` and verifies the BEAM repo, dataset, and judge path.
-- When the BEAM checkout is a real git worktree and `git` is available, the script verifies that `HEAD` exactly matches the pinned commit above.
-- Use `--require-10m` when the planned BEAM run includes `10M` chat sizes so preflight fails before execution if that dataset slice is absent.
-- Use `--print-fingerprint` to emit a JSON runtime fingerprint that records repo path/origin, repo commit when available, Python version, normalized requirements hashes plus match status, judge endpoint class, and dataset conversation counts.
-- If the checkout is only a copied directory without git metadata, the script can still verify the expected files and pinned requirements snapshot, but it cannot prove the original git commit.
-- Default `uv` Python target is `3.11` because the upstream requirements currently include a heavy stack that is not validated here across broader Python versions.
+- `requirements-beam.txt` is a checked-in snapshot of `vendor/BEAM/requirements.txt` from the pinned upstream commit.
+- `scripts/setup-beam-runtime.sh` is the pack-local setup script used by `bin/doctor --pack beam`, `bin/beam-doctor`, and `bin/eval --pack beam ...`; it creates `.akm/evals/venvs/beam` and verifies the BEAM repo, dataset, and judge path.
+- When the BEAM checkout is a real git worktree and `git` is available, the script verifies that `HEAD` matches the pinned commit.
+- Use `--require-10m` when the planned BEAM run includes `10M` chat sizes.
+- Use `--print-fingerprint` to emit repo path, commit, Python version, requirements hash status, judge class, and dataset counts.
+- If the checkout is only a copied directory without git metadata, the script still verifies the expected files and requirements snapshot.
+- Default `uv` Python target is `3.11`.
 - Additional runtime overrides:
   - `pack.config.repoPath` or `BEAM_REPO_PATH`
   - `pack.config.pythonBin` or `BEAM_PYTHON_BIN`
@@ -50,14 +48,14 @@ bin/beam-doctor
 This verifies:
 
 - pinned upstream repo layout
-- pinned Python interpreter version target
-- checked-in requirements snapshot matches upstream `requirements.txt`
+- pinned Python interpreter target
+- requirements snapshot matches upstream `requirements.txt`
 - prepared dataset root exists
 - optional prepared 10M dataset root exists when `--require-10m` is used
 - judge credentials are present when `--require-judge` is used
 - optional runtime fingerprint JSON is emitted when `--print-fingerprint` is used
 
-The fingerprint is evidence capture, not a completeness claim. It can prove which repo path, requirements snapshot, dataset roots, and judge endpoint class were used for a run in this repo slice, but it does not prove the provenance of upstream-prepared datasets or the remote judge implementation.
+The fingerprint captures evidence for the repo path, requirements snapshot, dataset roots, and judge endpoint class.
 
 Example:
 
@@ -68,15 +66,13 @@ git -C vendor/BEAM checkout 3e12035532eb85768f1a7cd779832b650c4b2ef9
 bin/doctor --pack beam
 ```
 
-## Minimum truthful operator flow
+## Minimum operator flow
 
 1. Clone the upstream BEAM repo at the pinned commit.
-2. Prepare the official dataset outside this repo using the upstream BEAM dataset flow.
-3. Run `bin/doctor --pack beam` for the shared wrapper-level status and setup, then `bin/beam-doctor` before any BEAM eval that needs deeper upstream repo, dataset, and judge validation.
+2. Prepare the official dataset with upstream BEAM tooling.
+3. Run `bin/doctor --pack beam`, then `bin/beam-doctor` before BEAM evals that need deeper validation.
 4. Add `--require-10m` when the config requests `10M` chat sizes.
-5. Capture the emitted fingerprint JSON alongside run logs when you need stronger auditability.
-
-This keeps the repo-side workflow explicit without pretending dataset preparation or judge access are solved here.
+5. Capture the fingerprint JSON alongside run logs when you need auditability.
 
 ## Judge path expectations
 
@@ -88,11 +84,4 @@ This keeps the repo-side workflow explicit without pretending dataset preparatio
 
 This reduces wasted runs by surfacing missing credentials before answer generation starts.
 
-## What this does not solve yet
-
-- It does not prove the full upstream BEAM evaluator installs cleanly on every host.
-- It does not make BEAM one-command reproducible end to end.
-- It does not prepare or mirror the upstream datasets inside this repo.
-- It does not remove the need for a real upstream judge model path and credentials.
-- It does not pin host Docker, kernel, CUDA, or other non-Python system layers.
-This is a practical next slice: a pinned source reference, a checked-in Python requirements snapshot, explicit dataset and judge preflight checks, and runtime fingerprint capture.
+This reduces wasted runs by surfacing missing credentials before answer generation starts.

@@ -2,7 +2,7 @@
 
 This checklist covers the remaining items that cannot be completed by more repo-only coding alone. Each item needs operator action, upstream maintainer action, or an external system that this repository does not control.
 
-Start from a committed example config plus direct wrapper commands such as `bin/doctor` and `bin/eval ...`. If you still need a guided starter config, `bun run setup:legacy` remains available, but it does not clear the blockers below on its own.
+Start from a committed config and direct wrapper commands such as `bin/doctor` and `bin/eval ...`.
 
 ## 1. BEAM upstream checkout and prepared datasets are still external prerequisites
 
@@ -10,7 +10,7 @@ Why the repo cannot finish it alone:
 `beam` hard-requires the upstream `mohammadtavakoli78/BEAM` checkout plus prepared official dataset directories. This repo intentionally does not vendor the upstream repo or datasets, and `src/packs/beam/official.ts` fails when they are absent.
 
 Concrete completion steps a human must perform:
-1. Use a committed example config directly, or run `bun run setup:legacy` if you still want a guided starter config.
+1. Use a committed config directly.
 2. Clone `https://github.com/mohammadtavakoli78/BEAM` into `vendor/BEAM` or another path passed via `pack.config.repoPath` or `BEAM_REPO_PATH`.
 3. Check out commit `3e12035532eb85768f1a7cd779832b650c4b2ef9`.
 4. Run the upstream BEAM dataset preparation flow so the prepared dataset roots exist for the intended chat sizes.
@@ -37,7 +37,7 @@ Concrete completion steps a human must perform:
 1. Decide whether the BEAM judge will use upstream OpenAI or an OpenAI-compatible endpoint.
 2. Provision the required credential or endpoint outside this repo.
 3. Export `OPENAI_API_KEY` for the upstream OpenAI path, or set `OPENAI_BASE_URL` and any required auth for the compatible endpoint.
-4. If a non-default judge model is required, set `pack.config.evaluatorModel` in the BEAM run config.
+4. Set `pack.config.evaluatorModel` if a non-default judge model is required.
 
 What evidence or artifacts should be captured when done:
 - The judge endpoint class used: `openai` or `openai-compatible`.
@@ -54,7 +54,7 @@ Sources:
 ## 3. AKM memory-backend integration is blocked on an upstream add/search contract
 
 Why the repo cannot finish it alone:
-`src/memory/backends/akm.ts` can verify `akm --help` and `akm info --format json`, but it still fails intentionally because `akm memory --help` does not expose a documented indexing and query contract that truthfully maps onto this repo's `MemoryBackend.add()` and `MemoryBackend.search()` interface.
+`src/memory/backends/akm.ts` fails intentionally because `akm memory --help` still does not expose a documented add/search contract that truthfully maps to `MemoryBackend.add()` and `MemoryBackend.search()`.
 
 Concrete completion steps a human must perform:
 1. Coordinate with AKM maintainers to provide a stable, documented memory ingestion and retrieval interface.
@@ -64,12 +64,12 @@ Concrete completion steps a human must perform:
 
 What evidence or artifacts should be captured when done:
 - The AKM version string from `akm info --format json`.
-- The CLI or API documentation that describes the supported add and search contract.
-- Example request and response transcripts showing one successful add and one successful search.
-- Any upstream issue, PR, or release note that establishes the contract as supported rather than incidental.
+- Documentation for the supported add/search contract.
+- Example add and search transcripts.
+- Any upstream issue, PR, or release note establishing the contract as supported.
 
 How to verify completion in this repo afterward:
-At minimum, rerun `akm --help`, `akm info --format json`, and `akm memory --help` and confirm the latter now documents a concrete add/search surface. Full repo verification will only pass after the corresponding repo integration lands, but this prerequisite is cleared once the contract is externally documented and reproducible.
+Rerun `akm --help`, `akm info --format json`, and `akm memory --help` and confirm the latter documents a concrete add/search surface.
 
 Sources:
 `README.md`, `docs/memory-backends.md`, `docs/running-evals.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`
@@ -100,7 +100,7 @@ Sources:
 ## 5. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
 
 Why the repo cannot finish it alone:
-These backend IDs are only planned placeholders. The repository has no authoritative service endpoint, CLI contract, credential flow, or reproducible runtime for any of them, so it fails before benchmark execution instead of pretending they are evaluated backends.
+These backend IDs are planned placeholders. The repository has no authoritative service endpoint, CLI contract, credential flow, or reproducible runtime for them.
 
 Concrete completion steps a human must perform:
 1. For each backend, decide the exact product or deployment that will be treated as the benchmark target.
@@ -116,7 +116,7 @@ What evidence or artifacts should be captured when done:
 - Operator setup notes covering credentials, namespaces, and reset behavior.
 
 How to verify completion in this repo afterward:
-The external prerequisite is satisfied once each chosen backend has a stable, operator-repeatable contract and runtime. Full repo verification will only pass after those integrations are wired, but today you can confirm the current blocked state with `bin/doctor` or `bin/matrix --config <config-path>`, which should stop reporting them as blocked only after both the external prerequisite and repo integration are complete.
+Confirm each chosen backend has a stable, operator-repeatable contract and runtime, then rerun `bin/doctor` or `bin/matrix --config <config-path>` to verify the blocked state clears only after the integration lands.
 
 Sources:
 `docs/memory-backends.md`, `src/memory/registry.ts`, `src/memory/backends/mem0.ts`, `src/memory/backends/openviking.ts`, `src/memory/backends/zep.ts`, `src/variants/registry.ts`

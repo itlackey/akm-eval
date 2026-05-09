@@ -27,7 +27,7 @@ They are set up automatically by `bin/doctor --pack ...` and `bin/eval --pack ..
 
 ## Legacy setup
 
-`bun run setup:legacy` still exists if you want a guided starter-config flow.
+If you need a compatibility starter-config flow, use `bun run setup:legacy`.
 
 It is not the normal runtime bootstrap path and it does not replace `bin/doctor --pack ...` for host-managed packs.
 
