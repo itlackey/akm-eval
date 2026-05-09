@@ -1,6 +1,6 @@
 # Next Steps
 
-This repo’s default path is committed configs plus `bin/doctor` and `bin/eval`. `bun run setup:legacy` is compatibility-only.
+This repo’s default path is committed configs plus `bin/doctor` and `bin/eval`.
 
 ## What Exists
 
@@ -28,7 +28,7 @@ This repo’s default path is committed configs plus `bin/doctor` and `bin/eval`
 
 - Status is spread across several docs instead of one compact operator matrix.
 - The BEAM handoff path could be shorter and more procedural.
-- Legacy setup should only appear as compatibility-only.
+- Legacy setup has been removed.
 
 ## Test Gaps
 

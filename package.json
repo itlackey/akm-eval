@@ -17,7 +17,6 @@
   "scripts": {
     "akm-eval": "bash bin/akm-eval",
     "start": "bash bin/akm-eval",
-    "setup:legacy": "bun src/cli.ts setup",
     "doctor": "bash bin/doctor",
     "eval": "bash bin/eval",
     "matrix": "bash bin/matrix",

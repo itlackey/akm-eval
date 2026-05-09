@@ -22,7 +22,6 @@ import { markdownReportForComparison, markdownReportForResult } from './reportin
 import { loadNormalizedResult } from './reporting/normalized-result.ts';
 import { renderRunMatrix } from './reporting/matrix.ts';
 import { collectRunSummaries, markdownSummaryForRuns } from './reporting/summary.ts';
-import { runSetupCommand } from './setup.ts';
 import { variantRegistry } from './variants/registry.ts';
 import { resolveVariant } from './variants/resolve-variant.ts';
 import { getProjectRoot } from './core/project-root.ts';
@@ -581,10 +580,6 @@ export async function main(): Promise<number> {
 
     if (command === 'summary') {
       return summaryCommand(args.slice(1));
-    }
-
-    if (command === 'setup') {
-      return await runSetupCommand(getProjectRoot(), args.slice(1));
     }
 
     if (command === 'downloads') {

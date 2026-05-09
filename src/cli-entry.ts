@@ -68,6 +68,5 @@ export function createUsageLines(): string[] {
     '  bin/report --run <dir> [--format markdown|json]',
     '  bin/summary --runs <dir> [--format markdown|json]',
     '  bin/downloads [DatasetName]',
-    '  bun run setup:legacy',
   ];
 }

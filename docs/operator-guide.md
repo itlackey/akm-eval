@@ -25,12 +25,6 @@ They are set up automatically by `bin/doctor --pack ...` and `bin/eval --pack ..
 - `longmemeval` prefers `openai-compatible`; the `opencode` CLI path can fail on very large prompts.
 - `tau-bench` currently uses the upstream `openai` provider mode through `openai-compatible` config.
 
-## Legacy setup
-
-If you need a compatibility starter-config flow, use `bun run setup:legacy`.
-
-It is not the normal runtime bootstrap path and it does not replace `bin/doctor --pack ...` for host-managed packs.
-
 ## External blockers
 
 Remaining blockers that the repo cannot solve by itself are tracked in [`docs/operator-blockers.md`](./operator-blockers.md).
