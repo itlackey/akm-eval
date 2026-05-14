@@ -2,6 +2,12 @@
 
 AKM Eval runs real benchmark packs through authoritative upstream harnesses and normalizes the outputs.
 
+Part of the [akm](https://github.com/itlackey/akm) ecosystem — see also
+[akm-stash](https://github.com/itlackey/akm-stash),
+[akm-plugins](https://github.com/itlackey/akm-plugins),
+[akm-registry](https://github.com/itlackey/akm-registry), and
+[akm-bench](https://github.com/itlackey/akm-bench).
+
 Trust policy:
 
 - no synthetic or heuristic success metrics
