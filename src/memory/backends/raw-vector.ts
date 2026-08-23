@@ -1,4 +1,4 @@
-import type { MemoryBackend, MemoryDocument, MemoryQuery, MemorySearchResult } from '../types.ts';
+import type { MemoryBackend, MemoryDocument, MemoryQuery, MemorySearchResult } from "../types.ts";
 
 interface IndexedDocument {
   source: MemoryDocument;
@@ -7,7 +7,10 @@ interface IndexedDocument {
 }
 
 function tokenize(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 }
 
 function vectorize(value: string): Map<string, number> {
@@ -48,8 +51,8 @@ export function createRawVectorBackend(): MemoryBackend {
   const documents = new Map<string, IndexedDocument>();
 
   return {
-    id: 'raw-vector',
-    kind: 'in-memory',
+    id: "raw-vector",
+    kind: "in-memory",
     async add(input: MemoryDocument[]): Promise<void> {
       for (const document of input) {
         const vector = vectorize(document.text);
@@ -86,7 +89,7 @@ export function createRawVectorBackend(): MemoryBackend {
       documents.clear();
     },
     healthCheck() {
-      return { status: 'ok', detail: 'deterministic in-memory vector backend ready' } as const;
+      return { status: "ok", detail: "deterministic in-memory vector backend ready" } as const;
     },
   };
 }

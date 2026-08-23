@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
 export class ArtifactStore {
   constructor(public readonly baseDir: string) {}
@@ -11,14 +11,14 @@ export class ArtifactStore {
   writeJson(relativePath: string, value: unknown): string {
     const target = path.resolve(this.baseDir, relativePath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, "utf8");
     return target;
   }
 
   writeText(relativePath: string, value: string): string {
     const target = path.resolve(this.baseDir, relativePath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, value, 'utf8');
+    fs.writeFileSync(target, value, "utf8");
     return target;
   }
 }

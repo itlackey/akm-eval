@@ -42,7 +42,8 @@
     "Three arms over the identical provider/model/judging config in longmemeval-smoke.json — the memory backend is the only delta.",
     "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
     "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
-    "CAVEAT: the longmemeval pack adapter does not currently call memory.add()/memory.search() at all -- every question is answered from the full conversation history placed directly in the prompt regardless of backend. Until the pack is wired to retrieve through the backend, these three arms will score identically; this config exercises the akm backend's reset() path per arm and is the shape to extend once retrieval is wired in."
+    "ASYMMETRY BY DESIGN: baseline (memory.backend none) answers every question from its full haystack conversation, flattened into the prompt, with no memory backend touched. raw-vector and akm-memory instead reset() the backend per question, add() one document per haystack session, then search() with the question text and pack.config.topK (default 5), answering only from the retrieved text. This is the same baseline-vs-retrieval asymmetry locomo-akm-ab.json documents, not a bug -- see src/packs/longmemeval/README.md and docs/memory-backends.md.",
+    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score."
   ],
   "providers": {
     "openai-compatible": {

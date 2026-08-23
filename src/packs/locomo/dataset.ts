@@ -1,9 +1,10 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { BenchmarkRuntimeError } from '../../core/errors.ts';
+import fs from "node:fs";
+import path from "node:path";
+import { BenchmarkRuntimeError } from "../../core/errors.ts";
 
-const OFFICIAL_LOCOMO_DATASET_URL = 'https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json';
-const DEFAULT_DATASET_PATH = path.resolve(process.cwd(), 'datasets/locomo/locomo10.json');
+const OFFICIAL_LOCOMO_DATASET_URL =
+  "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json";
+const DEFAULT_DATASET_PATH = path.resolve(process.cwd(), "datasets/locomo/locomo10.json");
 
 export interface LoCoMoQaExample {
   question: string;
@@ -34,7 +35,13 @@ export interface LoadLoCoMoDatasetOptions {
 }
 
 function isLoCoMoSample(value: unknown): value is LoCoMoSample {
-  return typeof value === 'object' && value !== null && 'sample_id' in value && 'conversation' in value && 'qa' in value;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "sample_id" in value &&
+    "conversation" in value &&
+    "qa" in value
+  );
 }
 
 async function downloadOfficialDataset(targetPath: string): Promise<void> {
@@ -47,11 +54,11 @@ async function downloadOfficialDataset(targetPath: string): Promise<void> {
 
   const body = await response.text();
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, body, 'utf8');
+  fs.writeFileSync(targetPath, body, "utf8");
 }
 
 export async function resolveDatasetFile(datasetPath?: string): Promise<string> {
-  if (typeof datasetPath === 'string' && datasetPath.trim().length > 0) {
+  if (typeof datasetPath === "string" && datasetPath.trim().length > 0) {
     const resolved = path.resolve(datasetPath);
     if (!fs.existsSync(resolved)) {
       throw new BenchmarkRuntimeError(
@@ -70,7 +77,7 @@ export async function resolveDatasetFile(datasetPath?: string): Promise<string> 
 
 export async function loadDataset(options: LoadLoCoMoDatasetOptions = {}): Promise<LoCoMoSample[]> {
   const datasetPath = await resolveDatasetFile(options.datasetPath);
-  const raw = JSON.parse(fs.readFileSync(datasetPath, 'utf8')) as unknown;
+  const raw = JSON.parse(fs.readFileSync(datasetPath, "utf8")) as unknown;
   if (!Array.isArray(raw) || raw.some((entry) => !isLoCoMoSample(entry))) {
     throw new BenchmarkRuntimeError(
       `LoCoMo dataset at ${datasetPath} is not in the expected official format (expected an array of samples with sample_id, conversation, and qa).`,
@@ -84,12 +91,14 @@ export async function loadDataset(options: LoadLoCoMoDatasetOptions = {}): Promi
   }
 
   const maxSamples = options.smoke ? Math.min(options.maxSamples ?? 1, 1) : options.maxSamples;
-  if (typeof maxSamples === 'number' && maxSamples > 0) {
+  if (typeof maxSamples === "number" && maxSamples > 0) {
     samples = samples.slice(0, maxSamples);
   }
 
-  const maxQuestions = options.smoke ? Math.min(options.maxQuestions ?? 5, 5) : options.maxQuestions;
-  if (typeof maxQuestions === 'number' && maxQuestions > 0) {
+  const maxQuestions = options.smoke
+    ? Math.min(options.maxQuestions ?? 5, 5)
+    : options.maxQuestions;
+  if (typeof maxQuestions === "number" && maxQuestions > 0) {
     let remaining = maxQuestions;
     const limited: LoCoMoSample[] = [];
     for (const sample of samples) {
@@ -109,7 +118,9 @@ export async function loadDataset(options: LoadLoCoMoDatasetOptions = {}): Promi
   }
 
   if (samples.length === 0 || samples.every((sample) => sample.qa.length === 0)) {
-    throw new BenchmarkRuntimeError('LoCoMo dataset selection resolved to zero QA examples. Adjust pack.config filters.');
+    throw new BenchmarkRuntimeError(
+      "LoCoMo dataset selection resolved to zero QA examples. Adjust pack.config filters.",
+    );
   }
 
   return samples;

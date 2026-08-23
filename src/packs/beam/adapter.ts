@@ -1,44 +1,44 @@
-import path from 'node:path';
-import { ArtifactStore } from '../../core/artifact-store.ts';
-import { BenchmarkRuntimeError } from '../../core/errors.ts';
-import type { RunContext } from '../../core/run-context.ts';
-import type { NormalizedRunResult } from '../../core/types.ts';
-import type { MemoryBackend } from '../../memory/types.ts';
-import { markdownReportForResult } from '../../reporting/markdown.ts';
-import type { PackAdapter } from '../types.ts';
-import { requireAgentRunner } from '../runtime-requirements.ts';
+import path from "node:path";
+import { ArtifactStore } from "../../core/artifact-store.ts";
+import { BenchmarkRuntimeError } from "../../core/errors.ts";
+import type { RunContext } from "../../core/run-context.ts";
+import type { NormalizedRunResult } from "../../core/types.ts";
+import type { MemoryBackend } from "../../memory/types.ts";
+import { markdownReportForResult } from "../../reporting/markdown.ts";
+import { requireAgentRunner } from "../runtime-requirements.ts";
+import type { PackAdapter } from "../types.ts";
 import {
+  type BeamPackConfig,
   aggregateBeamScores,
   answerBeamQuestion,
-  type BeamPackConfig,
   checkBeamRuntime,
-  createBeamRuntimeFingerprint,
   createBeamAnswersFile,
   createBeamResultsRoot,
+  createBeamRuntimeFingerprint,
   loadBeamConversations,
   resolveBeamRuntime,
   runBeamEvaluation,
-} from './official.ts';
+} from "./official.ts";
 
 function average(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 export const beamAdapter: PackAdapter = {
-  id: 'beam',
-  description: 'BEAM using the official dataset and upstream evaluation pipeline.',
+  id: "beam",
+  description: "BEAM using the official dataset and upstream evaluation pipeline.",
   checkInstalled(rootDir = process.cwd()) {
     return checkBeamRuntime(rootDir).installed;
   },
   getDoctorDetail(rootDir = process.cwd()) {
     const detail = checkBeamRuntime(rootDir);
     return {
-      status: detail.installed ? 'ok' : 'warn',
+      status: detail.installed ? "ok" : "warn",
       detail: detail.detail,
     };
   },
   async run(context, memory, agent): Promise<NormalizedRunResult> {
-    const resolvedAgent = requireAgentRunner(agent, 'beam');
+    const resolvedAgent = requireAgentRunner(agent, "beam");
     const packConfig = (context.run.packConfig ?? {}) as BeamPackConfig;
     const runtime = resolveBeamRuntime(context.rootDir, packConfig);
     const runtimeFingerprint = createBeamRuntimeFingerprint(context.rootDir, runtime);
@@ -49,18 +49,23 @@ export const beamAdapter: PackAdapter = {
 
     const conversations = loadBeamConversations(runtime, packConfig);
     const allowedResultFile =
-      typeof packConfig.evaluatorAllowedResultFile === 'string' && packConfig.evaluatorAllowedResultFile.trim().length > 0
+      typeof packConfig.evaluatorAllowedResultFile === "string" &&
+      packConfig.evaluatorAllowedResultFile.trim().length > 0
         ? packConfig.evaluatorAllowedResultFile
         : `${context.run.variant}.json`;
     const evaluatorModel =
-      typeof packConfig.evaluatorModel === 'string' && packConfig.evaluatorModel.trim().length > 0
+      typeof packConfig.evaluatorModel === "string" && packConfig.evaluatorModel.trim().length > 0
         ? packConfig.evaluatorModel
-        : 'gpt-4.1-mini';
+        : "gpt-4.1-mini";
     const evaluatorConcurrency =
-      typeof packConfig.evaluatorConcurrency === 'number' && packConfig.evaluatorConcurrency > 0
+      typeof packConfig.evaluatorConcurrency === "number" && packConfig.evaluatorConcurrency > 0
         ? packConfig.evaluatorConcurrency
         : 1;
-    const requestedChatSizes = [...new Set(conversations.map((conversation) => conversation.chatSize))].sort().join(',');
+    const requestedChatSizes = [
+      ...new Set(conversations.map((conversation) => conversation.chatSize)),
+    ]
+      .sort()
+      .join(",");
 
     const totalPromptTokens: number[] = [];
     const totalCompletionTokens: number[] = [];
@@ -70,12 +75,15 @@ export const beamAdapter: PackAdapter = {
     const perConversationSummary: Array<Record<string, unknown>> = [];
 
     for (const conversation of conversations) {
-      const answers = [] as Array<{ question: (typeof conversation.questions)[number]; response: string }>;
+      const answers = [] as Array<{
+        question: (typeof conversation.questions)[number];
+        response: string;
+      }>;
       for (const question of conversation.questions) {
         const answer = await answerBeamQuestion(resolvedAgent, conversation, question);
         if (!answer.ok) {
           throw new BenchmarkRuntimeError(
-            `beam agent run failed for conversation ${conversation.conversationId} question ${question.type}[${question.index}]: ${answer.error ?? 'unknown error'}`,
+            `beam agent run failed for conversation ${conversation.conversationId} question ${question.type}[${question.index}]: ${answer.error ?? "unknown error"}`,
           );
         }
 
@@ -90,7 +98,12 @@ export const beamAdapter: PackAdapter = {
       }
 
       const answersRoot = createBeamResultsRoot(context.outputDir, conversation.chatSize);
-      const answerFilePath = createBeamAnswersFile(answersRoot, conversation, answers, allowedResultFile);
+      const answerFilePath = createBeamAnswersFile(
+        answersRoot,
+        conversation,
+        answers,
+        allowedResultFile,
+      );
       const evaluationResult = runBeamEvaluation(
         runtime,
         conversation,
@@ -116,12 +129,12 @@ export const beamAdapter: PackAdapter = {
     const score = scores.overall;
 
     const result: NormalizedRunResult = {
-      schemaVersion: '1.0',
+      schemaVersion: "1.0",
       runId: context.runId,
       pack: context.run.pack,
       variant: context.run.variant,
       memoryBackend: memory.id,
-      status: scores.questionCount === 0 ? 'warning' : score > 0 ? 'passed' : 'failed',
+      status: scores.questionCount === 0 ? "warning" : score > 0 ? "passed" : "failed",
       startedAt,
       finishedAt,
       durationMs,
@@ -165,20 +178,20 @@ export const beamAdapter: PackAdapter = {
           `variant=${context.run.variant}`,
           `memory=${memory.id}`,
           `conversations=${conversations.length}`,
-        `questions=${scores.questionCount}`,
-        `evaluatorModel=${evaluatorModel}`,
-        `beamRepo=${runtime.repoPath}`,
-        `beamRuntimeFingerprint=${runtimeFingerprint.fingerprintSha256}`,
-      ],
+          `questions=${scores.questionCount}`,
+          `evaluatorModel=${evaluatorModel}`,
+          `beamRepo=${runtime.repoPath}`,
+          `beamRuntimeFingerprint=${runtimeFingerprint.fingerprintSha256}`,
+        ],
       },
       artifacts: {
-        resultPath: '',
-        summaryPath: '',
-        rawOutputPath: '',
+        resultPath: "",
+        summaryPath: "",
+        rawOutputPath: "",
       },
       metadata: {
         ...context.run.metadata,
-        benchmarkId: 'BEAM',
+        benchmarkId: "BEAM",
         conversationCount: conversations.length,
         questionCount: scores.questionCount,
         evaluatorModel,
@@ -192,12 +205,14 @@ export const beamAdapter: PackAdapter = {
         beamJudgeProvider: runtime.judgeProvider,
         beamRuntimeFingerprint: runtimeFingerprint.fingerprintSha256,
         beamChatSizes: requestedChatSizes,
-        ...Object.fromEntries(Object.entries(scores.byType).map(([key, value]) => [`score_${key}`, value])),
+        ...Object.fromEntries(
+          Object.entries(scores.byType).map(([key, value]) => [`score_${key}`, value]),
+        ),
       },
     };
 
-    result.artifacts.rawOutputPath = store.writeJson('raw-output.json', {
-      pack: 'beam',
+    result.artifacts.rawOutputPath = store.writeJson("raw-output.json", {
+      pack: "beam",
       evaluatorModel,
       beamRepoCommit: runtime.repoCommit,
       beamRepoPath: runtime.repoPath,
@@ -220,10 +235,10 @@ export const beamAdapter: PackAdapter = {
         avgLatencyMs: Number(average(totalLatencies).toFixed(3)),
       },
     });
-    result.artifacts.resultPath = path.resolve(store.baseDir, 'result.json');
-    result.artifacts.summaryPath = path.resolve(store.baseDir, 'summary.md');
-    store.writeJson('result.json', result);
-    store.writeText('summary.md', markdownReportForResult(result));
+    result.artifacts.resultPath = path.resolve(store.baseDir, "result.json");
+    result.artifacts.summaryPath = path.resolve(store.baseDir, "summary.md");
+    store.writeJson("result.json", result);
+    store.writeText("summary.md", markdownReportForResult(result));
     return result;
   },
 };

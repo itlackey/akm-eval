@@ -17,13 +17,13 @@ export interface MemorySearchResult {
 }
 
 export interface MemoryHealth {
-  status: 'ok' | 'warn';
+  status: "ok" | "warn";
   detail: string;
 }
 
 export interface MemoryBackend {
   id: string;
-  kind: 'disabled' | 'in-memory' | 'external';
+  kind: "disabled" | "in-memory" | "external";
   add(documents: MemoryDocument[]): Promise<void>;
   search(query: MemoryQuery): Promise<MemorySearchResult[]>;
   reset(): Promise<void>;

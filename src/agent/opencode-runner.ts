@@ -1,9 +1,14 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import type { AgentProviderConfig } from '../core/types.ts';
-import { EvalConfigError, loadOpencodeConfig, materializeOpencodeConfig, selectProviderForModel } from '../opencode-config.ts';
-import type { AgentRunOptions, AgentRunResult, AgentRunner } from './types.ts';
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { AgentProviderConfig } from "../core/types.ts";
+import {
+  EvalConfigError,
+  loadOpencodeConfig,
+  materializeOpencodeConfig,
+  selectProviderForModel,
+} from "../opencode-config.ts";
+import type { AgentRunOptions, AgentRunResult, AgentRunner } from "./types.ts";
 
 function parseOpencodeJsonl(stdout: string): {
   text: string;
@@ -14,11 +19,11 @@ function parseOpencodeJsonl(stdout: string): {
   let inputTokens = 0;
   let outputTokens = 0;
   let sawTokens = false;
-const textParts: string[] = [];
+  const textParts: string[] = [];
 
-  for (const line of stdout.split('\n')) {
+  for (const line of stdout.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed.startsWith('{')) continue;
+    if (!trimmed.startsWith("{")) continue;
     try {
       const event = JSON.parse(trimmed) as {
         type?: string;
@@ -28,13 +33,17 @@ const textParts: string[] = [];
           tokens?: { input?: number; output?: number };
         };
       };
-      if (event.type === 'text' && event.part?.type === 'text' && typeof event.part.text === 'string') {
+      if (
+        event.type === "text" &&
+        event.part?.type === "text" &&
+        typeof event.part.text === "string"
+      ) {
         textParts.push(event.part.text);
       }
       const tokens = event.part?.tokens;
-      if (typeof tokens?.input === 'number' || typeof tokens?.output === 'number') {
-        inputTokens = typeof tokens.input === 'number' ? tokens.input : 0;
-        outputTokens = typeof tokens.output === 'number' ? tokens.output : 0;
+      if (typeof tokens?.input === "number" || typeof tokens?.output === "number") {
+        inputTokens = typeof tokens.input === "number" ? tokens.input : 0;
+        outputTokens = typeof tokens.output === "number" ? tokens.output : 0;
         sawTokens = true;
       }
     } catch {
@@ -43,7 +52,7 @@ const textParts: string[] = [];
   }
 
   return {
-    text: textParts.join(''),
+    text: textParts.join(""),
     inputTokens,
     outputTokens,
     sawTokens,
@@ -70,22 +79,22 @@ export class OpencodeAgentRunner implements AgentRunner {
       if (!configPath) {
         return {
           ok: false,
-          text: '',
+          text: "",
           latencyMs: Date.now() - startedAt,
-          error: 'opencode provider requires configPath (path to opencode.json)',
+          error: "opencode provider requires configPath (path to opencode.json)",
         };
       }
 
       const loaded = loadOpencodeConfig(path.resolve(configPath));
       const selected = selectProviderForModel(loaded, this.model);
 
-      isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akm-eval-opencode-'));
-      const cacheHome = path.join(isolatedDir, 'cache');
-      const configHome = path.join(isolatedDir, 'config');
-      const opencodeConfigHome = path.join(configHome, 'opencode');
+      isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-opencode-"));
+      const cacheHome = path.join(isolatedDir, "cache");
+      const configHome = path.join(isolatedDir, "config");
+      const opencodeConfigHome = path.join(configHome, "opencode");
       fs.mkdirSync(cacheHome, { recursive: true });
       fs.mkdirSync(configHome, { recursive: true });
-      const realOpencodeConfigDir = path.join(os.homedir(), '.config', 'opencode');
+      const realOpencodeConfigDir = path.join(os.homedir(), ".config", "opencode");
       if (fs.existsSync(realOpencodeConfigDir)) {
         fs.symlinkSync(realOpencodeConfigDir, opencodeConfigHome);
       } else {
@@ -94,25 +103,23 @@ export class OpencodeAgentRunner implements AgentRunner {
       materializeOpencodeConfig(isolatedDir, selected, this.model);
 
       const env: Record<string, string> = {
-        ...process.env as Record<string, string>,
+        ...(process.env as Record<string, string>),
         XDG_CACHE_HOME: cacheHome,
         XDG_CONFIG_HOME: configHome,
-        OPENCODE_CONFIG: path.join(isolatedDir, 'opencode.json'),
+        OPENCODE_CONFIG: path.join(isolatedDir, "opencode.json"),
       };
 
-      const promptBytes = Buffer.byteLength(options.prompt, 'utf8');
+      const promptBytes = Buffer.byteLength(options.prompt, "utf8");
       if (promptBytes > MAX_OPENCODE_PROMPT_BYTES) {
         return {
           ok: false,
-          text: '',
+          text: "",
           latencyMs: Date.now() - startedAt,
-          error:
-            `opencode prompt is too large for CLI argument transport (${promptBytes} bytes). ` +
-            `Use a smaller benchmark slice or switch to an openai-compatible provider for this run.`,
+          error: `opencode prompt is too large for CLI argument transport (${promptBytes} bytes). Use a smaller benchmark slice or switch to an openai-compatible provider for this run.`,
         };
       }
 
-      const args = ['run', '--format', 'json', '--model', this.model];
+      const args = ["run", "--format", "json", "--model", this.model];
       const message = options.systemPrompt
         ? `System instructions:\n${options.systemPrompt}\n\nUser request:\n${options.prompt}`
         : options.prompt;
@@ -122,11 +129,11 @@ export class OpencodeAgentRunner implements AgentRunner {
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
-      const proc = Bun.spawn(['opencode', ...args], {
+      const proc = Bun.spawn(["opencode", ...args], {
         env,
         cwd: process.cwd(),
-        stdout: 'pipe',
-        stderr: 'pipe',
+        stdout: "pipe",
+        stderr: "pipe",
         signal: abortController.signal,
       });
 
@@ -173,7 +180,7 @@ export class OpencodeAgentRunner implements AgentRunner {
       const message = err instanceof Error ? err.message : String(err);
       return {
         ok: false,
-        text: '',
+        text: "",
         latencyMs,
         error: message,
       };

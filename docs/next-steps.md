@@ -25,10 +25,6 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 - `mem0`, `openviking`, and `zep` are placeholders without real runtimes.
 - BEAM still needs external dataset prep and a real judge endpoint.
 - `tau-bench` and `longmemeval` still have runner/path asymmetries.
-- The `longmemeval` pack adapter does not call `memory.add()`/`memory.search()` at all — every
-  question is answered from the full conversation history in the prompt regardless of which memory
-  backend is selected. `config/common/longmemeval-akm-ab.json` documents this caveat; wiring the
-  pack to actually retrieve through the selected backend is unstarted.
 
 ## External Dependencies
 
@@ -52,9 +48,6 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 ## Priority Next Actions
 
 1. Finalize BEAM operator handoff and evidence capture.
-2. Wire the `longmemeval` pack adapter to actually retrieve through `memory.add()`/`memory.search()`
-   instead of placing full conversation history in every prompt, so `longmemeval-akm-ab.json`'s
-   three arms diverge.
-3. Add regression tests for blocked packs and blocked memory backends.
-4. Consolidate operator status into one runnable/blocked matrix.
-5. Keep smoke configs, pack READMEs, and top-level docs synchronized with actual support.
+2. Add regression tests for blocked packs and blocked memory backends.
+3. Consolidate operator status into one runnable/blocked matrix.
+4. Keep smoke configs, pack READMEs, and top-level docs synchronized with actual support.

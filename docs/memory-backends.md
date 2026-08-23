@@ -200,13 +200,22 @@ out and the result capped at 20,000 characters.
   score can mean akm's retrieval structurally could not answer a query (see the akm backend's own
   header comment in `src/memory/backends/akm.ts`) rather than that retrieval quality is bad.
 - `config/common/longmemeval-akm-ab.json` — the same three-arm shape for `longmemeval`, over the
-  `openai-compatible` runner path (see `src/packs/longmemeval/README.md`). **Caveat:** the
-  `longmemeval` pack adapter does not currently call `memory.add()`/`memory.search()` at all — every
-  question is answered from the full conversation history placed directly in the prompt, regardless
-  of which backend is selected. Until that pack is wired to retrieve through the backend, this
-  config's three arms will produce numerically identical LongMemEval scores; it exists to exercise
-  the akm backend's `reset()` path per-arm and as the config shape to extend once the pack does
-  retrieve.
+  `openai-compatible` runner path (see `src/packs/longmemeval/README.md`). The `longmemeval` pack
+  adapter routes every non-disabled-backend arm through `memory.add()`/`memory.search()` per
+  question: each question is its own instance (LongMemEval, unlike locomo, gives every question its
+  own haystack), so per question the adapter `reset()`s the backend, `add()`s one `MemoryDocument`
+  per haystack session (id = the session id, text = that session's turns), then `search()`es with
+  the question text and the pack's configured `topK`. **The `baseline` arm (`memory.backend: none`)
+  is a deliberate exception, not a bug**: it keeps the pre-retrieval-wiring full-haystack prompt
+  unchanged — every question answered from its entire haystack, flattened, with no backend involved
+  at all — so the three-arm comparison is baseline-full-context vs. two real retrieval arms, the same
+  asymmetry `locomo`'s `baseline` already has (see above). Retrieval metrics (`precisionAtK`,
+  `recallAtK`, `mrr`, `ndcgAtK`) are scored against the official dataset's `answer_session_ids` as
+  ground truth. `result.json.metadata` records the same `zeroHitQueries`/`retrievalQueryCount`
+  counters as `locomo`; check them before publishing a number, for the same reason. It additionally
+  records `questionsWithoutEvidenceLabels`/`retrievalMetricsScoreable`, because a dataset row with no
+  `answer_session_ids` scores 0 on every retrieval metric by construction — even for a backend that
+  retrieved the right session every time — and that has to be distinguishable from measured failure.
 
 ### Tests
 
@@ -219,5 +228,17 @@ out and the result capped at 20,000 characters.
   assertions proving the retrieval ceiling (a body-only term is unretrievable; a
   description/tag/heading term is). The other covers the single-document `remember` path, including
   the index-on-write behavior that lets it skip a second index pass. The CLI under test comes from
-  `AKM_EVAL_AKM_CMD`, falling back to a sibling source checkout at `/home/user/akm/src/cli.ts`; these
-  tests **fail, they do not skip,** when no real akm CLI is reachable.
+  `AKM_EVAL_AKM_CMD`, falling back to a sibling akm source checkout when that is unset.
+  **The suite is skipped on exactly one compound condition: running in CI AND `AKM_EVAL_AKM_CMD`
+  unset** (`describe.skipIf`). CI (`.github/workflows/ci-pr.yml`) has no docker daemon, no akm CLI,
+  and no sibling akm checkout, so it deliberately never sets this var and the suite is skipped
+  there; a CI job that provisions a real akm opts back in just by setting the var.
+
+  The CI half of that condition is load-bearing. Gating on the env var alone would silently skip
+  local `bun test` runs as well — on the very machines where a real akm CLI is present — turning the
+  repo's only live-akm coverage into a green no-op, which is exactly the silent fallback the trust
+  policy forbids. So **locally the suite always runs, and fails rather than skips** when no akm CLI
+  is reachable (no `AKM_EVAL_AKM_CMD`, no sibling checkout), as does any malformed
+  `AKM_EVAL_AKM_CMD`, unreachable binary, or real assertion failure. `AKM_EVAL_SIBLING_CLI`
+  overrides the sibling fallback path. Run it against a specific CLI with:
+  `AKM_EVAL_AKM_CMD='["bun","/home/user/akm/src/cli.ts"]' bun test tests/memory-backend-akm.integration.test.ts`.

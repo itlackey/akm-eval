@@ -1,38 +1,38 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import type { NormalizedRunResult } from '../core/types.ts';
+import fs from "node:fs";
+import path from "node:path";
+import type { NormalizedRunResult } from "../core/types.ts";
 
 function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
 export function validateNormalizedResult(value: unknown): value is NormalizedRunResult {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
   const result = value as Record<string, unknown>;
-  if (result.schemaVersion !== '1.0') {
+  if (result.schemaVersion !== "1.0") {
     return false;
   }
   if (
-    typeof result.runId !== 'string' ||
-    typeof result.pack !== 'string' ||
-    typeof result.variant !== 'string' ||
-    typeof result.memoryBackend !== 'string' ||
-    (result.status !== 'passed' && result.status !== 'failed' && result.status !== 'warning') ||
-    typeof result.startedAt !== 'string' ||
-    typeof result.finishedAt !== 'string' ||
+    typeof result.runId !== "string" ||
+    typeof result.pack !== "string" ||
+    typeof result.variant !== "string" ||
+    typeof result.memoryBackend !== "string" ||
+    (result.status !== "passed" && result.status !== "failed" && result.status !== "warning") ||
+    typeof result.startedAt !== "string" ||
+    typeof result.finishedAt !== "string" ||
     !isNumber(result.durationMs) ||
     !isStringArray(result.warnings) ||
     !isStringArray(result.notes)
   ) {
     return false;
   }
-  if (typeof result.metrics !== 'object' || result.metrics === null) {
+  if (typeof result.metrics !== "object" || result.metrics === null) {
     return false;
   }
   const metrics = result.metrics as Record<string, unknown>;
@@ -58,7 +58,7 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
   ) {
     return false;
   }
-  if (typeof result.telemetry !== 'object' || result.telemetry === null) {
+  if (typeof result.telemetry !== "object" || result.telemetry === null) {
     return false;
   }
   const telemetry = result.telemetry as Record<string, unknown>;
@@ -72,22 +72,22 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
   ) {
     return false;
   }
-  if (typeof result.artifacts !== 'object' || result.artifacts === null) {
+  if (typeof result.artifacts !== "object" || result.artifacts === null) {
     return false;
   }
   const artifacts = result.artifacts as Record<string, unknown>;
   return (
-    typeof artifacts.resultPath === 'string' &&
-    typeof artifacts.summaryPath === 'string' &&
-    (artifacts.rawOutputPath === undefined || typeof artifacts.rawOutputPath === 'string')
+    typeof artifacts.resultPath === "string" &&
+    typeof artifacts.summaryPath === "string" &&
+    (artifacts.rawOutputPath === undefined || typeof artifacts.rawOutputPath === "string")
   );
 }
 
 export function loadNormalizedResult(inputPath: string): NormalizedRunResult {
   const absolute = path.resolve(inputPath);
   const stats = fs.statSync(absolute);
-  const resultPath = stats.isDirectory() ? path.resolve(absolute, 'result.json') : absolute;
-  const parsed = JSON.parse(fs.readFileSync(resultPath, 'utf8')) as unknown;
+  const resultPath = stats.isDirectory() ? path.resolve(absolute, "result.json") : absolute;
+  const parsed = JSON.parse(fs.readFileSync(resultPath, "utf8")) as unknown;
   if (!validateNormalizedResult(parsed)) {
     throw new Error(`Invalid normalized result at ${resultPath}`);
   }

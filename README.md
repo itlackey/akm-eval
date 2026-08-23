@@ -53,10 +53,10 @@ Common runnable configs live under `config/common/`; see `docs/running-evals.md`
 - `config/common/beam-smoke.json`
 - `config/common/tau-bench-smoke.json`
 - `config/common/locomo-akm-ab.json` — baseline / raw-vector / akm three-arm comparison (see `docs/memory-backends.md`)
-- `config/common/longmemeval-akm-ab.json` — same three-arm shape for longmemeval, **but the longmemeval pack
-  adapter does not yet call `memory.add()`/`memory.search()` at all** — every question is answered from the full
-  conversation history regardless of backend, so today all three arms score identically. See the config's own
-  `notes` and `docs/memory-backends.md` before spending judge budget on this one.
+- `config/common/longmemeval-akm-ab.json` — same three-arm shape for longmemeval: the two retrieval arms
+  (`raw-vector`, `akm-memory`) route through `memory.add()`/`memory.search()` per question, while `baseline`
+  keeps the full-haystack prompt. See the config's own `notes` and `docs/memory-backends.md` before spending
+  judge budget on this one.
 
 ## Supported packs
 

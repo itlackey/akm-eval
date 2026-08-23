@@ -18,19 +18,19 @@ export interface ParsedTauBenchRawOutput {
 
 export function parseTauBenchRawOutput(value: unknown): ParsedTauBenchRawOutput {
   if (!Array.isArray(value)) {
-    throw new Error('tau-bench raw output must be an array');
+    throw new Error("tau-bench raw output must be an array");
   }
 
   const entries = value.map((entry) => {
-    if (typeof entry !== 'object' || entry === null) {
-      throw new Error('tau-bench raw entry must be an object');
+    if (typeof entry !== "object" || entry === null) {
+      throw new Error("tau-bench raw entry must be an object");
     }
     const raw = entry as Record<string, unknown>;
     if (
-      typeof raw.task_id !== 'number' ||
-      typeof raw.reward !== 'number' ||
-      typeof raw.trial !== 'number' ||
-      typeof raw.info !== 'object' ||
+      typeof raw.task_id !== "number" ||
+      typeof raw.reward !== "number" ||
+      typeof raw.trial !== "number" ||
+      typeof raw.info !== "object" ||
       raw.info === null ||
       !Array.isArray(raw.traj)
     ) {
@@ -42,9 +42,12 @@ export function parseTauBenchRawOutput(value: unknown): ParsedTauBenchRawOutput 
   const totalTasks = entries.length;
   const passedTasks = entries.filter((entry) => entry.reward >= 1 - 1e-6).length;
   const failedTasks = totalTasks - passedTasks;
-  const averageReward = totalTasks === 0 ? 0 : entries.reduce((sum, entry) => sum + entry.reward, 0) / totalTasks;
+  const averageReward =
+    totalTasks === 0 ? 0 : entries.reduce((sum, entry) => sum + entry.reward, 0) / totalTasks;
   const trials = new Set(entries.map((entry) => entry.trial)).size;
-  const errorCount = entries.filter((entry) => typeof entry.info.error === 'string' && entry.info.error.length > 0).length;
+  const errorCount = entries.filter(
+    (entry) => typeof entry.info.error === "string" && entry.info.error.length > 0,
+  ).length;
 
   return {
     entries,

@@ -1,6 +1,6 @@
-import path from 'node:path';
+import path from "node:path";
 
-const DEFAULT_PROJECT_ROOT = path.resolve(import.meta.dir, '..', '..');
+const DEFAULT_PROJECT_ROOT = path.resolve(import.meta.dir, "..", "..");
 
 export function getProjectRoot(): string {
   const configuredRoot = process.env.AKM_EVAL_PROJECT_ROOT;

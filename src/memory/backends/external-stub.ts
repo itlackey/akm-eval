@@ -1,5 +1,5 @@
-import { MemoryBackendUnavailableError } from '../../core/errors.ts';
-import type { MemoryBackend, MemoryDocument, MemoryQuery, MemorySearchResult } from '../types.ts';
+import { MemoryBackendUnavailableError } from "../../core/errors.ts";
+import type { MemoryBackend, MemoryDocument, MemoryQuery, MemorySearchResult } from "../types.ts";
 
 /**
  * Shared factory for memory backends that are planned but not yet
@@ -19,7 +19,7 @@ export function createExternalStub(id: string, detail: string): MemoryBackend {
 
   return {
     id,
-    kind: 'external',
+    kind: "external",
     async add(_documents: MemoryDocument[]): Promise<void> {
       unavailable();
     },
@@ -28,7 +28,7 @@ export function createExternalStub(id: string, detail: string): MemoryBackend {
     },
     async reset(): Promise<void> {},
     healthCheck() {
-      return { status: 'warn', detail } as const;
+      return { status: "warn", detail } as const;
     },
   };
 }

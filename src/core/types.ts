@@ -1,4 +1,4 @@
-import type { AnswerMetrics, RetrievalMetrics, MemoryDocument } from '../memory/types.ts';
+import type { AnswerMetrics, MemoryDocument, RetrievalMetrics } from "../memory/types.ts";
 
 export interface EvalDefaults {
   outputDir?: string;
@@ -6,7 +6,7 @@ export interface EvalDefaults {
 }
 
 export interface AgentProviderConfig {
-  type: 'opencode' | 'openai-compatible' | 'custom';
+  type: "opencode" | "openai-compatible" | "custom";
   baseURL?: string;
   apiKey?: string;
   timeout?: number;
@@ -66,12 +66,12 @@ export interface AggregateMetrics {
 }
 
 export interface NormalizedRunResult {
-  schemaVersion: '1.0';
+  schemaVersion: "1.0";
   runId: string;
   pack: string;
   variant: string;
   memoryBackend: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: "passed" | "failed" | "warning";
   startedAt: string;
   finishedAt: string;
   durationMs: number;
@@ -108,7 +108,7 @@ export interface ComparisonMetricDelta {
 export interface ComparisonReport {
   baselineRunId: string;
   candidateRunId: string;
-  outcome: 'improved' | 'regressed' | 'unchanged';
+  outcome: "improved" | "regressed" | "unchanged";
   scoreDelta: number;
   absoluteScoreDelta: number;
   relativeScoreDelta: number | null;
@@ -120,4 +120,15 @@ export interface ComparisonReport {
   candidateSuccessPerMinute: number | null;
   failureCategoryChanges: string[];
   metricDeltas: ComparisonMetricDelta[];
+  /**
+   * Carried over verbatim from each run's own NormalizedRunResult.warnings so
+   * a reader of the comparison artifact alone (e.g. `bin/compare` output, or
+   * summary.md rendered from markdownReportForComparison) sees caveats like a
+   * full-haystack-vs-retrieved-only asymmetry between the two arms, not just
+   * the numeric deltas. Without this, a comparison could publish e.g.
+   * "Outcome: regressed" with no indication that the baseline had context the
+   * candidate structurally cannot have.
+   */
+  baselineWarnings: string[];
+  candidateWarnings: string[];
 }

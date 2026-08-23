@@ -1,10 +1,16 @@
-import { spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { BenchmarkRuntimeError, MemoryBackendUnavailableError } from '../../core/errors.ts';
-import type { MemoryBackend, MemoryDocument, MemoryHealth, MemoryQuery, MemorySearchResult } from '../types.ts';
+import { spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { BenchmarkRuntimeError, MemoryBackendUnavailableError } from "../../core/errors.ts";
+import type {
+  MemoryBackend,
+  MemoryDocument,
+  MemoryHealth,
+  MemoryQuery,
+  MemorySearchResult,
+} from "../types.ts";
 
 /**
  * Real akm CLI memory backend.
@@ -158,9 +164,9 @@ import type { MemoryBackend, MemoryDocument, MemoryHealth, MemoryQuery, MemorySe
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_AKM_COMMAND = ['akm'];
+const DEFAULT_AKM_COMMAND = ["akm"];
 /** Schema version (`configVersion`) this adapter is written and verified against. */
-const HERMETIC_CONFIG_VERSION = '0.9.0';
+const HERMETIC_CONFIG_VERSION = "0.9.0";
 /** akm's own `search --limit` hard cap (verified: akm silently clamps to this). */
 const MAX_SEARCH_LIMIT = 200;
 /** Cap on the body text returned per search hit, applied after frontmatter/heading stripping. */
@@ -168,7 +174,7 @@ const MAX_RESULT_TEXT_CHARS = 20_000;
 /** Cap on the synthesized `description` frontmatter field. */
 const MAX_SYNTHESIZED_DESCRIPTION_CHARS = 250;
 /** Tag prefix carrying the original `MemoryDocument.id` through akm's tag surface. */
-const SOURCE_ID_TAG_PREFIX = 'sourceId:';
+const SOURCE_ID_TAG_PREFIX = "sourceId:";
 
 // ── akm command resolution ──────────────────────────────────────────────────
 
@@ -190,7 +196,9 @@ export interface AkmCommandFailure {
  * registered backend regardless of which one a run actually selected) can
  * surface a warning instead of crashing.
  */
-export function resolveAkmCommand(env: NodeJS.ProcessEnv = process.env): AkmCommandResolution | AkmCommandFailure {
+export function resolveAkmCommand(
+  env: NodeJS.ProcessEnv = process.env,
+): AkmCommandResolution | AkmCommandFailure {
   const raw = env.AKM_EVAL_AKM_CMD;
   if (raw === undefined || raw.trim().length === 0) {
     return { ok: true, cmd: [...DEFAULT_AKM_COMMAND] };
@@ -202,16 +210,18 @@ export function resolveAkmCommand(env: NodeJS.ProcessEnv = process.env): AkmComm
   } catch (error) {
     return {
       ok: false,
-      detail:
-        'AKM_EVAL_AKM_CMD must be a JSON array of strings (e.g. ["akm"] or ["bun","/home/user/akm/src/cli.ts"]); ' +
-        `failed to parse: ${error instanceof Error ? error.message : String(error)}`,
+      detail: `AKM_EVAL_AKM_CMD must be a JSON array of strings (e.g. ["akm"] or ["bun","/home/user/akm/src/cli.ts"]); failed to parse: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 
-  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((entry) => typeof entry === 'string' && entry.length > 0)) {
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length === 0 ||
+    !parsed.every((entry) => typeof entry === "string" && entry.length > 0)
+  ) {
     return {
       ok: false,
-      detail: 'AKM_EVAL_AKM_CMD must be a non-empty JSON array of non-empty strings.',
+      detail: "AKM_EVAL_AKM_CMD must be a non-empty JSON array of non-empty strings.",
     };
   }
 
@@ -230,11 +240,11 @@ export interface AkmHermeticDirs {
 
 export function deriveHermeticDirs(workDir: string): AkmHermeticDirs {
   return {
-    bundleDir: path.join(workDir, 'bundle'),
-    configDir: path.join(workDir, 'config'),
-    dataDir: path.join(workDir, 'data'),
-    cacheDir: path.join(workDir, 'cache'),
-    stateDir: path.join(workDir, 'state'),
+    bundleDir: path.join(workDir, "bundle"),
+    configDir: path.join(workDir, "config"),
+    dataDir: path.join(workDir, "data"),
+    cacheDir: path.join(workDir, "cache"),
+    stateDir: path.join(workDir, "state"),
   };
 }
 
@@ -245,11 +255,11 @@ function ensureHermeticDirs(dirs: AkmHermeticDirs): void {
 }
 
 function hermeticConfigJson(): string {
-  return `${JSON.stringify({ configVersion: HERMETIC_CONFIG_VERSION, semanticSearchMode: 'off', registries: [] }, null, 2)}\n`;
+  return `${JSON.stringify({ configVersion: HERMETIC_CONFIG_VERSION, semanticSearchMode: "off", registries: [] }, null, 2)}\n`;
 }
 
 function writeHermeticConfig(dirs: AkmHermeticDirs): void {
-  fs.writeFileSync(path.join(dirs.configDir, 'config.json'), hermeticConfigJson(), 'utf8');
+  fs.writeFileSync(path.join(dirs.configDir, "config.json"), hermeticConfigJson(), "utf8");
 }
 
 /**
@@ -279,7 +289,7 @@ function buildHermeticEnv(dirs: AkmHermeticDirs): NodeJS.ProcessEnv {
     AKM_DATA_DIR: dirs.dataDir,
     AKM_CACHE_DIR: dirs.cacheDir,
     AKM_STATE_DIR: dirs.stateDir,
-    AKM_FORCE_INIT_TMP_STASH: '1',
+    AKM_FORCE_INIT_TMP_STASH: "1",
   };
 }
 
@@ -321,20 +331,25 @@ export function resolveAkmCwd(cmd: string[], fallbackCwd: string): string {
   return fallbackCwd;
 }
 
-function invokeAkm(cmd: string[], args: string[], env: NodeJS.ProcessEnv, cwd: string): AkmInvocation {
+function invokeAkm(
+  cmd: string[],
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): AkmInvocation {
   const [command, ...prefixArgs] = cmd;
   const result = spawnSync(command as string, [...prefixArgs, ...args], {
     cwd: resolveAkmCwd(cmd, cwd),
     env,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
   return {
     success: result.status === 0 && !result.error,
     exitCode: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
     spawnError: result.error ? result.error.message : undefined,
   };
 }
@@ -344,8 +359,8 @@ function describeFailure(action: string, invocation: AkmInvocation): string {
     invocation.spawnError ||
     invocation.stderr.trim() ||
     invocation.stdout.trim() ||
-    `exit code ${invocation.exitCode ?? 'unknown'}`;
-  return `${action} failed (exit ${invocation.exitCode ?? 'unknown'}): ${detail}`;
+    `exit code ${invocation.exitCode ?? "unknown"}`;
+  return `${action} failed (exit ${invocation.exitCode ?? "unknown"}): ${detail}`;
 }
 
 function parseJsonStdout<T>(action: string, invocation: AkmInvocation): T {
@@ -382,41 +397,41 @@ export function probeAkmHealth(cmd: string[], scratchDir: string, cwd: string): 
     writeHermeticConfig(dirs);
   } catch (error) {
     return {
-      status: 'warn',
+      status: "warn",
       detail: `could not prepare a scratch hermetic root at ${scratchDir} for the akm health probe: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 
   const env = buildHermeticEnv(dirs);
 
-  const versionResult = invokeAkm(cmd, ['--version'], env, cwd);
+  const versionResult = invokeAkm(cmd, ["--version"], env, cwd);
   if (!versionResult.success) {
     return {
-      status: 'warn',
-      detail: `akm CLI not reachable via ${JSON.stringify(cmd)} (set AKM_EVAL_AKM_CMD to override). ${describeFailure('akm --version', versionResult)}`,
+      status: "warn",
+      detail: `akm CLI not reachable via ${JSON.stringify(cmd)} (set AKM_EVAL_AKM_CMD to override). ${describeFailure("akm --version", versionResult)}`,
     };
   }
 
   const version = versionResult.stdout.trim();
   if (!satisfiesCaretZeroNine(version)) {
     return {
-      status: 'warn',
+      status: "warn",
       detail:
         `akm CLI at ${JSON.stringify(cmd)} reports version "${version}", which does not satisfy the pinned range ^0.9. ` +
         `This adapter targets akm-cli 0.9.x / configVersion ${HERMETIC_CONFIG_VERSION}.`,
     };
   }
 
-  const infoResult = invokeAkm(cmd, ['info', '--format', 'json'], env, cwd);
+  const infoResult = invokeAkm(cmd, ["info", "--format", "json"], env, cwd);
   if (!infoResult.success) {
     return {
-      status: 'warn',
-      detail: `akm CLI ${version} responded to --version but \`akm info --format json\` failed. ${describeFailure('akm info', infoResult)}`,
+      status: "warn",
+      detail: `akm CLI ${version} responded to --version but \`akm info --format json\` failed. ${describeFailure("akm info", infoResult)}`,
     };
   }
 
   return {
-    status: 'ok',
+    status: "ok",
     detail: `akm CLI ${version} reachable via ${JSON.stringify(cmd)}; \`akm info --format json\` responded successfully.`,
   };
 }
@@ -441,12 +456,12 @@ function splitIntoSentences(text: string): string[] {
   let start = 0;
   let i = 0;
   while (i < text.length) {
-    const ch = text[i]!;
-    if (ch === '.' || ch === '!' || ch === '?') {
+    const ch = text.charAt(i);
+    if (ch === "." || ch === "!" || ch === "?") {
       let end = i + 1;
-      while (end < text.length && /["'”’)\]!?.]/.test(text[end]!)) end += 1;
+      while (end < text.length && /["'”’)\]!?.]/.test(text.charAt(end))) end += 1;
       sentences.push(text.slice(start, end));
-      while (end < text.length && /\s/.test(text[end]!)) end += 1;
+      while (end < text.length && /\s/.test(text.charAt(end))) end += 1;
       start = end;
       i = end;
       continue;
@@ -464,10 +479,13 @@ function splitIntoSentences(text: string): string[] {
  * deterministic, no LLM — this is the synthesis rule that sets akm's
  * retrieval ceiling for every document this backend ingests.
  */
-export function firstSentencesCapped(text: string, capChars = MAX_SYNTHESIZED_DESCRIPTION_CHARS): string {
+export function firstSentencesCapped(
+  text: string,
+  capChars = MAX_SYNTHESIZED_DESCRIPTION_CHARS,
+): string {
   const trimmed = text.trim();
-  if (!trimmed) return '';
-  let out = '';
+  if (!trimmed) return "";
+  let out = "";
   for (const raw of splitIntoSentences(trimmed)) {
     const sentence = raw.trim();
     if (!sentence) continue;
@@ -484,12 +502,12 @@ export function firstSentencesCapped(text: string, capChars = MAX_SYNTHESIZED_DE
 }
 
 /** One `key:value` tag per non-empty `MemoryDocument.metadata` entry. */
-export function metadataToTags(metadata?: MemoryDocument['metadata']): string[] {
+export function metadataToTags(metadata?: MemoryDocument["metadata"]): string[] {
   if (!metadata) return [];
   const tags: string[] = [];
   for (const [key, value] of Object.entries(metadata)) {
     if (value === null || value === undefined) continue;
-    if (typeof value === 'string' && value.trim().length === 0) continue;
+    if (typeof value === "string" && value.trim().length === 0) continue;
     tags.push(`${key}:${value}`);
   }
   return tags;
@@ -499,7 +517,7 @@ export function synthesizeFrontmatter(doc: MemoryDocument): SynthesizedFrontmatt
   return {
     description: firstSentencesCapped(doc.text),
     tags: [`${SOURCE_ID_TAG_PREFIX}${doc.id}`, ...metadataToTags(doc.metadata)],
-    heading: doc.id.replace(/\r?\n/g, ' ').trim() || 'untitled',
+    heading: doc.id.replace(/\r?\n/g, " ").trim() || "untitled",
   };
 }
 
@@ -508,17 +526,17 @@ export function buildFrontmatterBlock(fm: SynthesizedFrontmatter): string {
   const lines: string[] = [];
   if (fm.description) lines.push(`description: ${JSON.stringify(fm.description)}`);
   if (fm.tags.length > 0) lines.push(`tags: ${JSON.stringify(fm.tags)}`);
-  return lines.length > 0 ? `---\n${lines.join('\n')}\n---` : '---\n---';
+  return lines.length > 0 ? `---\n${lines.join("\n")}\n---` : "---\n---";
 }
 
 /** Deterministic, collision-resistant flat asset name for a document id. */
 export function slugifyDocId(id: string): string {
   const base = id
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-  const hash = createHash('sha1').update(id).digest('hex').slice(0, 8);
+  const hash = createHash("sha1").update(id).digest("hex").slice(0, 8);
   return base ? `${base}-${hash}` : `doc-${hash}`;
 }
 
@@ -533,16 +551,16 @@ const FRONTMATTER_BLOCK = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
  * on files written by `akm remember`'s CLI-side YAML serializer.
  */
 export function stripFrontmatterAndOptionalHeading(raw: string): string {
-  const withoutFrontmatter = raw.replace(FRONTMATTER_BLOCK, '');
+  const withoutFrontmatter = raw.replace(FRONTMATTER_BLOCK, "");
   const lines = withoutFrontmatter.split(/\r?\n/);
   let idx = 0;
-  while (idx < lines.length && lines[idx]!.trim().length === 0) idx += 1;
-  if (idx < lines.length && /^#\s+\S/.test(lines[idx]!)) {
+  while (idx < lines.length && lines[idx]?.trim().length === 0) idx += 1;
+  if (idx < lines.length && /^#\s+\S/.test(lines[idx] ?? "")) {
     idx += 1;
-    while (idx < lines.length && lines[idx]!.trim().length === 0) idx += 1;
-    return lines.slice(idx).join('\n');
+    while (idx < lines.length && lines[idx]?.trim().length === 0) idx += 1;
+    return lines.slice(idx).join("\n");
   }
-  return withoutFrontmatter.replace(/^\r?\n+/, '');
+  return withoutFrontmatter.replace(/^\r?\n+/, "");
 }
 
 export function clampSearchLimit(topK: number): number {
@@ -557,14 +575,72 @@ export function clampSearchLimit(topK: number): number {
  * synthesized description might actually need to match on.
  */
 const AKM_QUERY_STOPWORDS = new Set([
-  'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'what', 'who', 'whom', 'which', 'when', 'where', 'why', 'how',
-  'do', 'does', 'did', 'doing', 'has', 'have', 'had',
-  'of', 'on', 'in', 'at', 'to', 'for', 'from', 'by', 'with', 'about', 'as', 'into', 'through',
-  'and', 'or', 'but', 'if', 'so', 'than',
-  'this', 'that', 'these', 'those', 'it', 'its',
-  'i', 'you', 'he', 'she', 'they', 'we', 'him', 'her', 'them', 'his', 'their', 'our', 'my', 'your',
-  'not', 'no',
+  "a",
+  "an",
+  "the",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "what",
+  "who",
+  "whom",
+  "which",
+  "when",
+  "where",
+  "why",
+  "how",
+  "do",
+  "does",
+  "did",
+  "doing",
+  "has",
+  "have",
+  "had",
+  "of",
+  "on",
+  "in",
+  "at",
+  "to",
+  "for",
+  "from",
+  "by",
+  "with",
+  "about",
+  "as",
+  "into",
+  "through",
+  "and",
+  "or",
+  "but",
+  "if",
+  "so",
+  "than",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "i",
+  "you",
+  "he",
+  "she",
+  "they",
+  "we",
+  "him",
+  "her",
+  "them",
+  "his",
+  "their",
+  "our",
+  "my",
+  "your",
+  "not",
+  "no",
 ]);
 
 /**
@@ -578,10 +654,10 @@ const AKM_QUERY_STOPWORDS = new Set([
 export function buildAkmSearchQuery(rawText: string): string {
   const tokens = rawText.split(/\s+/).filter((token) => token.length > 0);
   const kept = tokens.filter((token) => {
-    const bare = token.replace(/[^a-zA-Z0-9']/g, '');
+    const bare = token.replace(/[^a-zA-Z0-9']/g, "");
     return bare.length === 0 || !AKM_QUERY_STOPWORDS.has(bare.toLowerCase());
   });
-  const transformed = kept.join(' ').trim();
+  const transformed = kept.join(" ").trim();
   return transformed.length > 0 ? transformed : rawText;
 }
 
@@ -609,7 +685,7 @@ interface PreparedWrite {
 
 interface SourceRecord {
   sourceId: string;
-  metadata?: MemoryDocument['metadata'];
+  metadata?: MemoryDocument["metadata"];
 }
 
 class AkmRuntime {
@@ -631,7 +707,7 @@ class AkmRuntime {
 
   private requireCmd(): string[] {
     if (!this.cmdResolution.ok) {
-      throw new MemoryBackendUnavailableError('akm', this.cmdResolution.detail);
+      throw new MemoryBackendUnavailableError("akm", this.cmdResolution.detail);
     }
     return this.cmdResolution.cmd;
   }
@@ -639,7 +715,7 @@ class AkmRuntime {
   private requireReady(): void {
     if (!this.ready) {
       throw new BenchmarkRuntimeError(
-        'akm memory backend used before reset(); call reset() first to create the hermetic bundle.',
+        "akm memory backend used before reset(); call reset() first to create the hermetic bundle.",
       );
     }
   }
@@ -649,28 +725,34 @@ class AkmRuntime {
   }
 
   private readEntryCount(cmd: string[]): number {
-    const infoResult = this.run(cmd, ['info', '--format', 'json']);
+    const infoResult = this.run(cmd, ["info", "--format", "json"]);
     if (!infoResult.success) {
-      throw new BenchmarkRuntimeError(describeFailure('akm info', infoResult));
+      throw new BenchmarkRuntimeError(describeFailure("akm info", infoResult));
     }
-    const info = parseJsonStdout<{ indexStats?: { entryCount?: number } }>('akm info', infoResult);
-    return typeof info.indexStats?.entryCount === 'number' ? info.indexStats.entryCount : 0;
+    const info = parseJsonStdout<{ indexStats?: { entryCount?: number } }>("akm info", infoResult);
+    return typeof info.indexStats?.entryCount === "number" ? info.indexStats.entryCount : 0;
   }
 
   private runIndexFull(cmd: string[]): number {
-    const indexResult = this.run(cmd, ['index', '--full', '--format', 'json']);
+    const indexResult = this.run(cmd, ["index", "--full", "--format", "json"]);
     if (!indexResult.success) {
-      throw new BenchmarkRuntimeError(describeFailure('akm index --full', indexResult));
+      throw new BenchmarkRuntimeError(describeFailure("akm index --full", indexResult));
     }
-    const response = parseJsonStdout<{ totalEntries?: number }>('akm index --full', indexResult);
-    return typeof response.totalEntries === 'number' ? response.totalEntries : this.readEntryCount(cmd);
+    const response = parseJsonStdout<{ totalEntries?: number }>("akm index --full", indexResult);
+    return typeof response.totalEntries === "number"
+      ? response.totalEntries
+      : this.readEntryCount(cmd);
   }
 
   healthCheck(): MemoryHealth {
     if (!this.cmdResolution.ok) {
-      return { status: 'warn', detail: this.cmdResolution.detail };
+      return { status: "warn", detail: this.cmdResolution.detail };
     }
-    return probeAkmHealth(this.cmdResolution.cmd, path.join(this.workDir, '.health-probe'), this.cwd);
+    return probeAkmHealth(
+      this.cmdResolution.cmd,
+      path.join(this.workDir, ".health-probe"),
+      this.cwd,
+    );
   }
 
   /**
@@ -683,7 +765,7 @@ class AkmRuntime {
    * future akm version that ships no skeleton at all).
    */
   private stripSeededSkeleton(): void {
-    fs.rmSync(path.join(this.dirs.bundleDir, 'facts'), { recursive: true, force: true });
+    fs.rmSync(path.join(this.dirs.bundleDir, "facts"), { recursive: true, force: true });
   }
 
   /**
@@ -704,9 +786,17 @@ class AkmRuntime {
     ensureHermeticDirs(this.dirs);
     writeHermeticConfig(this.dirs);
 
-    const createResult = this.run(cmd, ['bundle', 'create', '--dir', this.dirs.bundleDir, '--set-default', '--format', 'json']);
+    const createResult = this.run(cmd, [
+      "bundle",
+      "create",
+      "--dir",
+      this.dirs.bundleDir,
+      "--set-default",
+      "--format",
+      "json",
+    ]);
     if (!createResult.success) {
-      throw new BenchmarkRuntimeError(describeFailure('akm bundle create', createResult));
+      throw new BenchmarkRuntimeError(describeFailure("akm bundle create", createResult));
     }
 
     this.stripSeededSkeleton();
@@ -722,22 +812,22 @@ class AkmRuntime {
       name,
       frontmatter,
       ref: `memories/${name}`,
-      filePath: path.join(this.dirs.bundleDir, 'memories', `${name}.md`),
+      filePath: path.join(this.dirs.bundleDir, "memories", `${name}.md`),
     };
   }
 
   private rememberSingle(cmd: string[], write: PreparedWrite): void {
     const content = `# ${write.frontmatter.heading}\n\n${write.doc.text}`;
-    const args = ['remember', content, '--name', write.name, '--force', '--format', 'json'];
-    if (write.frontmatter.description) args.push('--description', write.frontmatter.description);
-    for (const tag of write.frontmatter.tags) args.push('--tag', tag);
+    const args = ["remember", content, "--name", write.name, "--force", "--format", "json"];
+    if (write.frontmatter.description) args.push("--description", write.frontmatter.description);
+    for (const tag of write.frontmatter.tags) args.push("--tag", tag);
 
     const result = this.run(cmd, args);
     if (!result.success) {
       throw new BenchmarkRuntimeError(describeFailure(`akm remember ("${write.doc.id}")`, result));
     }
-    const response = parseJsonStdout<{ ok?: boolean; ref?: string }>('akm remember', result);
-    if (!response.ok || typeof response.ref !== 'string' || !response.ref) {
+    const response = parseJsonStdout<{ ok?: boolean; ref?: string }>("akm remember", result);
+    if (!response.ok || typeof response.ref !== "string" || !response.ref) {
       throw new BenchmarkRuntimeError(
         `akm remember for document "${write.doc.id}" did not return an ok ref. Response: ${result.stdout.slice(0, 500)}`,
       );
@@ -752,12 +842,12 @@ class AkmRuntime {
    * `akm remember` calls, each of which reindexes on write.
    */
   private writeBulk(writes: PreparedWrite[]): void {
-    const memoriesDir = path.join(this.dirs.bundleDir, 'memories');
+    const memoriesDir = path.join(this.dirs.bundleDir, "memories");
     fs.mkdirSync(memoriesDir, { recursive: true });
     for (const write of writes) {
       const block = buildFrontmatterBlock(write.frontmatter);
       const content = `${block}\n\n# ${write.frontmatter.heading}\n\n${write.doc.text}\n`;
-      fs.writeFileSync(write.filePath, content, 'utf8');
+      fs.writeFileSync(write.filePath, content, "utf8");
     }
   }
 
@@ -776,7 +866,10 @@ class AkmRuntime {
       // searchable without any index pass). The bulk branch below does need
       // one, because files written directly to the bundle bypass the CLI
       // entirely.
-      this.rememberSingle(cmd, writes[0]!);
+      const only = writes[0];
+      if (only === undefined)
+        throw new BenchmarkRuntimeError("akm add(): writes[0] missing on the single-document path");
+      this.rememberSingle(cmd, only);
     } else {
       this.writeBulk(writes);
       this.runIndexFull(cmd);
@@ -800,9 +893,7 @@ class AkmRuntime {
     }
     if (after !== expected) {
       throw new BenchmarkRuntimeError(
-        `akm ingestion count mismatch after add(): expected entryCount ${expected} ` +
-          `(before=${before} + ${documents.length} document(s)), got ${after}. ` +
-          'Some documents may have failed to write or index; refusing to proceed silently.',
+        `akm ingestion count mismatch after add(): expected entryCount ${expected} (before=${before} + ${documents.length} document(s)), got ${after}. Some documents may have failed to write or index; refusing to proceed silently.`,
       );
     }
 
@@ -812,12 +903,14 @@ class AkmRuntime {
   }
 
   private readHitText(hitPath: unknown): string {
-    if (typeof hitPath !== 'string' || !hitPath) {
-      throw new BenchmarkRuntimeError('akm search hit is missing a usable `path`; cannot read its content.');
+    if (typeof hitPath !== "string" || !hitPath) {
+      throw new BenchmarkRuntimeError(
+        "akm search hit is missing a usable `path`; cannot read its content.",
+      );
     }
     let raw: string;
     try {
-      raw = fs.readFileSync(hitPath, 'utf8');
+      raw = fs.readFileSync(hitPath, "utf8");
     } catch (error) {
       throw new BenchmarkRuntimeError(
         `failed to read akm search hit content at ${hitPath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -840,33 +933,30 @@ class AkmRuntime {
    * throws instead.
    */
   private mapHit(hit: AgentSearchHit): MemorySearchResult {
-    const ref = typeof hit.ref === 'string' ? hit.ref : '';
+    const ref = typeof hit.ref === "string" ? hit.ref : "";
     if (!ref) {
       throw new BenchmarkRuntimeError(
-        `akm search returned a hit without a \`ref\` (name=${JSON.stringify(hit.name)}). This should never happen with ` +
-          '--shape agent; never call akm search with --detail normal, which is documented to silently drop ref.',
+        `akm search returned a hit without a \`ref\` (name=${JSON.stringify(hit.name)}). This should never happen with --shape agent; never call akm search with --detail normal, which is documented to silently drop ref.`,
       );
     }
 
     const known = this.sourceIndex.get(ref);
     if (!known) {
       throw new BenchmarkRuntimeError(
-        `akm search returned a hit (ref=${ref}) that this instance never added. This hermetic bundle should contain ` +
-          'only documents this backend instance wrote via add() — reset() strips akm\'s own seeded skeleton content, so ' +
-          'an unrecognized ref here is a contamination signal, not pre-existing content to fall back on.',
+        `akm search returned a hit (ref=${ref}) that this instance never added. This hermetic bundle should contain only documents this backend instance wrote via add() — reset() strips akm's own seeded skeleton content, so an unrecognized ref here is a contamination signal, not pre-existing content to fall back on.`,
       );
     }
     const text = this.readHitText(hit.path);
 
     return {
       id: known.sourceId,
-      score: typeof hit.score === 'number' ? hit.score : 0,
+      score: typeof hit.score === "number" ? hit.score : 0,
       text,
       metadata: {
         ...(known.metadata as Record<string, string | number | boolean | null> | undefined),
         ref,
-        ...(typeof hit.name === 'string' ? { akmName: hit.name } : {}),
-        ...(typeof hit.type === 'string' ? { akmType: hit.type } : {}),
+        ...(typeof hit.name === "string" ? { akmName: hit.name } : {}),
+        ...(typeof hit.type === "string" ? { akmType: hit.type } : {}),
       },
     };
   }
@@ -883,12 +973,21 @@ class AkmRuntime {
       );
     }
     const akmQuery = buildAkmSearchQuery(query.text);
-    const result = this.run(cmd, ['search', akmQuery, '--limit', String(limit), '--shape', 'agent', '--format', 'json']);
+    const result = this.run(cmd, [
+      "search",
+      akmQuery,
+      "--limit",
+      String(limit),
+      "--shape",
+      "agent",
+      "--format",
+      "json",
+    ]);
     if (!result.success) {
       throw new BenchmarkRuntimeError(describeFailure(`akm search ("${akmQuery}")`, result));
     }
 
-    const response = parseJsonStdout<{ hits?: AgentSearchHit[] }>('akm search', result);
+    const response = parseJsonStdout<{ hits?: AgentSearchHit[] }>("akm search", result);
     const hits = Array.isArray(response.hits) ? response.hits : [];
     return hits.map((hit) => this.mapHit(hit));
   }
@@ -906,7 +1005,7 @@ class AkmRuntime {
  * needed (`reset()` / the health probe), both of which already `mkdir -p`.
  */
 function generateScratchWorkDir(): string {
-  return path.join(os.tmpdir(), `akm-eval-akm-${randomBytes(8).toString('hex')}`);
+  return path.join(os.tmpdir(), `akm-eval-akm-${randomBytes(8).toString("hex")}`);
 }
 
 export function createAkmBackend(rootDir = process.cwd(), workDir?: string): MemoryBackend {
@@ -914,8 +1013,8 @@ export function createAkmBackend(rootDir = process.cwd(), workDir?: string): Mem
   const runtime = new AkmRuntime(resolvedWorkDir, rootDir);
 
   return {
-    id: 'akm',
-    kind: 'external',
+    id: "akm",
+    kind: "external",
     add: (documents: MemoryDocument[]) => runtime.add(documents),
     search: (query: MemoryQuery) => runtime.search(query),
     reset: () => runtime.reset(),

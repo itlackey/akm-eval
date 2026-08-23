@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
 export interface DatasetDownloadOptions {
   name: string;
@@ -9,8 +9,8 @@ export interface DatasetDownloadOptions {
 }
 
 function getCacheDir(name: string): string {
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
-  return path.resolve(home, '.cache', 'akm-eval', 'datasets', name);
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "/tmp";
+  return path.resolve(home, ".cache", "akm-eval", "datasets", name);
 }
 
 function formatBytes(bytes: number): string {
@@ -36,7 +36,7 @@ export async function downloadDataset(options: DatasetDownloadOptions): Promise<
     );
   }
 
-  const contentLength = Number(response.headers.get('content-length') ?? '0');
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error(`Response body is not readable for dataset "${options.name}"`);
@@ -52,13 +52,15 @@ export async function downloadDataset(options: DatasetDownloadOptions): Promise<
     received += value.length;
     if (contentLength > 0) {
       const pct = ((received / contentLength) * 100).toFixed(1);
-      process.stderr.write(`\rDownloading ${options.name}: ${pct}% (${formatBytes(received)} / ${formatBytes(contentLength)})`);
+      process.stderr.write(
+        `\rDownloading ${options.name}: ${pct}% (${formatBytes(received)} / ${formatBytes(contentLength)})`,
+      );
     } else {
       process.stderr.write(`\rDownloading ${options.name}: ${formatBytes(received)}`);
     }
   }
 
-  process.stderr.write(`\n`);
+  process.stderr.write("\n");
 
   const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
   fs.writeFileSync(cachePath, buffer);

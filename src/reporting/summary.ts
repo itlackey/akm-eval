@@ -1,7 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import type { NormalizedRunResult } from '../core/types.ts';
-import { loadNormalizedResult } from './normalized-result.ts';
+import fs from "node:fs";
+import path from "node:path";
+import type { NormalizedRunResult } from "../core/types.ts";
+import { loadNormalizedResult } from "./normalized-result.ts";
 
 export interface RunSummaryEntry {
   pack: string;
@@ -19,12 +19,12 @@ export interface RunSummaryEntry {
 }
 
 function displayModel(result: NormalizedRunResult): string | null {
-  return metadataValue(result, 'model');
+  return metadataValue(result, "model");
 }
 
 function metadataValue(result: NormalizedRunResult, key: string): string | null {
   const value = result.metadata?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function collectResultPaths(rootPath: string): string[] {
@@ -37,7 +37,7 @@ function collectResultPaths(rootPath: string): string[] {
   const visit = (currentPath: string): void => {
     const stats = fs.statSync(currentPath);
     if (stats.isFile()) {
-      if (path.basename(currentPath) === 'result.json') {
+      if (path.basename(currentPath) === "result.json") {
         resultPaths.push(currentPath);
       }
       return;
@@ -58,14 +58,14 @@ export function collectRunSummaries(rootPath: string): RunSummaryEntry[] {
       pack: result.pack,
       variant: result.variant,
       runId: result.runId,
-      date: result.startedAt.split('T')[0] ?? result.startedAt,
+      date: result.startedAt.split("T")[0] ?? result.startedAt,
       score: result.metrics.aggregate.score,
       status: result.status,
       model: displayModel(result),
-      repoCommit: metadataValue(result, 'repoCommit'),
-      runnerType: metadataValue(result, 'runnerType'),
-      benchmarkId: metadataValue(result, 'benchmarkId'),
-      benchmarkVersion: metadataValue(result, 'benchmarkVersion'),
+      repoCommit: metadataValue(result, "repoCommit"),
+      runnerType: metadataValue(result, "runnerType"),
+      benchmarkId: metadataValue(result, "benchmarkId"),
+      benchmarkVersion: metadataValue(result, "benchmarkVersion"),
       resultPath: result.artifacts.resultPath,
     }));
 }
@@ -73,15 +73,15 @@ export function collectRunSummaries(rootPath: string): RunSummaryEntry[] {
 export function markdownSummaryForRuns(rootPath: string): string {
   const entries = collectRunSummaries(rootPath);
   const lines = [
-    '# Run summary',
-    '',
-    '| Pack | Variant | Run ID | Date | Status | Score | Model | Runner | Benchmark | Version | Repo commit | Result |',
-    '| --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |',
+    "# Run summary",
+    "",
+    "| Pack | Variant | Run ID | Date | Status | Score | Model | Runner | Benchmark | Version | Repo commit | Result |",
+    "| --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |",
     ...entries.map(
       (entry) =>
-        `| ${entry.pack} | ${entry.variant} | ${entry.runId} | ${entry.date} | ${entry.status} | ${entry.score.toFixed(3)} | ${entry.model ?? '-'} | ${entry.runnerType ?? '-'} | ${entry.benchmarkId ?? '-'} | ${entry.benchmarkVersion ?? '-'} | ${entry.repoCommit ?? '-'} | ${entry.resultPath} |`,
+        `| ${entry.pack} | ${entry.variant} | ${entry.runId} | ${entry.date} | ${entry.status} | ${entry.score.toFixed(3)} | ${entry.model ?? "-"} | ${entry.runnerType ?? "-"} | ${entry.benchmarkId ?? "-"} | ${entry.benchmarkVersion ?? "-"} | ${entry.repoCommit ?? "-"} | ${entry.resultPath} |`,
     ),
-    '',
+    "",
   ];
-  return lines.join('\n');
+  return lines.join("\n");
 }

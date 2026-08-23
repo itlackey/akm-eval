@@ -1,9 +1,9 @@
-import { UnknownPackError } from '../../core/errors.ts';
-import type { PackAdapter } from '../types.ts';
-import { longMemEvalAdapter } from '../longmemeval/adapter.ts';
-import { beamAdapter } from '../beam/adapter.ts';
-import { locomoAdapter } from '../locomo/adapter.ts';
-import { tauBenchAdapter } from '../tau-bench/adapter.ts';
+import { UnknownPackError } from "../../core/errors.ts";
+import { beamAdapter } from "../beam/adapter.ts";
+import { locomoAdapter } from "../locomo/adapter.ts";
+import { longMemEvalAdapter } from "../longmemeval/adapter.ts";
+import { tauBenchAdapter } from "../tau-bench/adapter.ts";
+import type { PackAdapter } from "../types.ts";
 
 export const packRegistry: PackAdapter[] = [
   tauBenchAdapter,
