@@ -1,21 +1,20 @@
 {
   "schemaVersion": "akm.eval.config.v1",
   "run": {
-    "id": "memory-comparison-smoke",
-    "outputDir": "runs/memory-comparison-smoke",
-    "maxConcurrency": 1,
-    "timeoutMs": 1800000
+    "id": "longmemeval-akm-ab",
+    "outputDir": "runs/longmemeval-akm-ab"
   },
   "packs": [
     {
-      "id": "longmemeval-smoke",
+      "id": "longmemeval-akm-ab",
       "adapter": "longmemeval",
       "enabled": true,
       "config": {
         "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
         "evaluatorModel": "gpt-4o",
-        "maxQuestions": 100,
-        "questionCategories": ["single-session", "multi-session", "temporal", "preference"]
+        "smoke": true,
+        "maxQuestions": 5,
+        "questionCategories": ["single-session", "multi-session"]
       }
     }
   ],
@@ -27,28 +26,23 @@
       "memory": { "backend": "none" }
     },
     {
-      "id": "akm-memory",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": true, "command": "akm" },
-      "memory": { "backend": "akm" }
-    },
-    {
-      "id": "mem0-oss",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": false },
-      "memory": { "backend": "mem0", "config": { "mode": "oss" } }
-    },
-    {
       "id": "raw-vector",
       "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
       "akm": { "enabled": false },
       "memory": { "backend": "raw-vector" }
+    },
+    {
+      "id": "akm-memory",
+      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
+      "akm": { "enabled": false },
+      "memory": { "backend": "akm" }
     }
   ],
   "notes": [
-    "This planned comparison config still includes blocked external memory backend variants (mem0-oss) for future integration work.",
-    "baseline, raw-vector, and akm-memory are truthful runnable benchmark choices; the akm arm shells out to a real akm CLI (see docs/memory-backends.md) and needs one reachable via AKM_EVAL_AKM_CMD (default [\"akm\"]).",
-    "`akm-eval run` fails fast for the mem0-oss variant, which has no evaluated backend integration; the akm-memory variant runs for real and fails loudly if the akm CLI is unreachable."
+    "Three arms over the identical provider/model/judging config in longmemeval-smoke.json — the memory backend is the only delta.",
+    "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
+    "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
+    "CAVEAT: the longmemeval pack adapter does not currently call memory.add()/memory.search() at all -- every question is answered from the full conversation history placed directly in the prompt regardless of backend. Until the pack is wired to retrieve through the backend, these three arms will score identically; this config exercises the akm backend's reset() path per arm and is the shape to extend once retrieval is wired in."
   ],
   "providers": {
     "openai-compatible": {

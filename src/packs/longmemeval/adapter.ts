@@ -194,6 +194,15 @@ export const longMemEvalAdapter: PackAdapter = {
     );
 
     const evaluationEntries = readJsonLines(evaluationLogPath);
+    if (evaluationEntries.length !== questions.length) {
+      // A partially-completed evaluator run would otherwise silently average
+      // over a smaller, unannounced denominator — a plausible-looking score
+      // hiding a real coverage gap. Fail loud instead.
+      throw new BenchmarkRuntimeError(
+        `longmemeval evaluation log at ${evaluationLogPath} has ${evaluationEntries.length} entries but ${questions.length} ` +
+          'question(s) were asked. Refusing to score a partial evaluation log silently.',
+      );
+    }
     const questionMap = new Map(questions.map((question) => [question.id, question]));
     const perQuestion = evaluationEntries.map((entry) => {
       const questionId = entry.question_id;
@@ -241,11 +250,29 @@ export const longMemEvalAdapter: PackAdapter = {
       startedAt,
       finishedAt,
       durationMs,
-      warnings: [],
+      // The LongMemEval pipeline feeds each question's full haystack context to
+      // the model directly and never calls memory.add()/memory.search() -- the
+      // configured backend is reset and then unused. A non-disabled backend arm
+      // would therefore produce a score that says NOTHING about that backend.
+      // The trust policy forbids letting that read as a real memory-arm result,
+      // so the inert-backend fact is stamped into warnings (machine-visible in
+      // result.json and summary.md), not just into docs. Remove this warning
+      // only when this adapter actually routes retrieval through the backend.
+      warnings:
+        memory.kind !== 'disabled'
+          ? [
+              `memory backend "${memory.id}" was configured but NEVER QUERIED: this adapter does not yet route ` +
+                'retrieval through MemoryBackend.search(), so this arm is indistinguishable from the baseline. ' +
+                'Do not publish this run as evidence about the backend.',
+            ]
+          : [],
       notes: [
         `LongMemEval executed ${questions.length} question(s) and scored them with the official evaluator command.`,
         `Overall accuracy: ${(overallAccuracy * 100).toFixed(1)}%`,
         `Evaluator model: ${evaluatorModel}`,
+        ...(memory.kind !== 'disabled'
+          ? [`Memory backend "${memory.id}" inert in this pack: retrieval queries executed = 0.`]
+          : []),
       ],
       metrics: {
         retrieval: {

@@ -34,8 +34,6 @@ describe('config loading', () => {
     for (const relativePath of [
       'config/common/beam-smoke.json',
       'config/common/longmemeval-smoke.json',
-      'config/common/swe-bench-smoke.json',
-      'config/common/terminal-bench-smoke.json',
     ]) {
       const config = loadConfig(path.resolve(rootDir, relativePath));
       expect(config.runs.some((run) => run.memoryBackend === 'akm')).toBe(false);
@@ -171,12 +169,13 @@ describe('config loading', () => {
   test('preserves agent env and akm config in planned runs', () => {
     const config = validateConfig({
       schemaVersion: 'akm.eval.config.v1',
-      run: { id: 'terminal', outputDir: 'runs/terminal' },
+      run: { id: 'longmemeval', outputDir: 'runs/longmemeval' },
       packs: [
         {
-          id: 'terminal-bench-smoke',
-          adapter: 'terminal-bench',
+          id: 'longmemeval-smoke',
+          adapter: 'longmemeval',
           enabled: true,
+          config: { evaluatorCommand: 'python scripts/longmemeval-evaluator.py' },
         },
       ],
       variants: [
@@ -333,8 +332,8 @@ describe('config loading', () => {
         run: { id: 'x', outputDir: 'runs/x' },
         packs: [
           {
-            id: 'terminal-bench-smoke',
-            adapter: 'terminal-bench',
+            id: 'locomo-smoke',
+            adapter: 'locomo',
             enabled: true,
           },
         ],
@@ -388,8 +387,7 @@ describe('config loading', () => {
     expect(doctor.stdout.toString()).toContain('memory:akm');
     expect(doctor.stdout.toString()).toContain('memory:raw-vector');
     expect(doctor.stdout.toString()).toContain('pack:beam');
-    expect(doctor.stdout.toString()).toContain('pack:terminal-bench');
-    expect(doctor.stdout.toString()).toContain('Truthful evaluated memory backends: none, raw-vector');
+    expect(doctor.stdout.toString()).toContain('Truthful evaluated memory backends: akm, none, raw-vector');
 
     const packDoctor = Bun.spawnSync({
       cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'doctor', '--pack', 'locomo'],
@@ -398,7 +396,6 @@ describe('config loading', () => {
     expect(packDoctor.exitCode).toBe(0);
     expect(packDoctor.stdout.toString()).toContain('pack:locomo');
     expect(packDoctor.stdout.toString()).not.toContain('pack:beam');
-    expect(packDoctor.stdout.toString()).not.toContain('pack:terminal-bench');
     expect(packDoctor.stdout.toString()).not.toContain('memory:');
     expect(packDoctor.stdout.toString()).not.toContain('Truthful evaluated memory backends:');
 
@@ -426,8 +423,12 @@ describe('config loading', () => {
 
     const listPacks = Bun.spawnSync({ cmd: [process.execPath, path.resolve(rootDir, 'src/cli.ts'), 'list', 'packs'], cwd: rootDir });
     expect(listPacks.exitCode).toBe(0);
-    expect(listPacks.stdout.toString()).toContain('akm-bench');
     expect(listPacks.stdout.toString()).toContain('tau-bench');
+    expect(listPacks.stdout.toString()).toContain('locomo');
+    // Verify coding-benchmark packs were removed (moved to akm-bench/Harbor)
+    expect(listPacks.stdout.toString()).not.toContain('akm-bench');
+    expect(listPacks.stdout.toString()).not.toContain('swe-bench');
+    expect(listPacks.stdout.toString()).not.toContain('terminal-bench');
     // Verify qa pack was removed
     expect(listPacks.stdout.toString()).not.toContain('qa\t');
 
@@ -447,9 +448,40 @@ describe('config loading', () => {
     });
     expect(matrix.exitCode).toBe(0);
     expect(matrix.stdout.toString()).toContain('| Memory Status |');
-    expect(matrix.stdout.toString()).toContain('| longmemeval-smoke-akm-memory | longmemeval | akm-memory | akm | blocked: ');
+    // The akm backend is now a real, evaluated integration (subprocess akm CLI
+    // calls) rather than a gated stub, so its matrix row reports "evaluated"
+    // the same way none/raw-vector do; whether the real akm CLI is actually
+    // reachable is a runtime concern, not a gating concern.
+    expect(matrix.stdout.toString()).toContain('| longmemeval-smoke-akm-memory | longmemeval | akm-memory | akm | evaluated |');
+    expect(matrix.stdout.toString()).toContain('| longmemeval-smoke-mem0-oss | longmemeval | mem0-oss | mem0 | blocked: ');
 
+    // mem0 has no implementation yet, so it is still gated ahead of any run.
     const blockedBackendRun = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        path.resolve(rootDir, 'src/cli.ts'),
+        'run',
+        '--pack',
+        'longmemeval',
+        '--variant',
+        'mem0-oss',
+        '--config',
+        path.resolve(rootDir, 'config/examples/memory-comparison.json'),
+      ],
+      cwd: rootDir,
+    });
+    expect(blockedBackendRun.exitCode).toBe(1);
+    expect(blockedBackendRun.stderr.toString()).toContain('not a truthful evaluated benchmark path in this repo yet');
+    expect(blockedBackendRun.stderr.toString()).toContain('memory backend "mem0"');
+
+    // akm is no longer gated, so selecting it now runs for real and fails
+    // loudly (not silently) when the real akm CLI isn't reachable — exactly
+    // the trust-policy behavior the other real-harness packs already have.
+    // AKM_EVAL_AKM_CMD is pinned at a binary that cannot exist rather than
+    // unset: unsetting it falls back to `akm` on PATH, so this assertion
+    // would hold only on machines that happen NOT to have akm installed and
+    // would fail on any machine that does.
+    const unreachableAkmRun = Bun.spawnSync({
       cmd: [
         process.execPath,
         path.resolve(rootDir, 'src/cli.ts'),
@@ -462,10 +494,11 @@ describe('config loading', () => {
         path.resolve(rootDir, 'config/examples/memory-comparison.json'),
       ],
       cwd: rootDir,
+      env: { ...process.env, AKM_EVAL_AKM_CMD: JSON.stringify(['akm-eval-no-such-akm-binary']) },
     });
-    expect(blockedBackendRun.exitCode).toBe(1);
-    expect(blockedBackendRun.stderr.toString()).toContain('not a truthful evaluated benchmark path in this repo yet');
-    expect(blockedBackendRun.stderr.toString()).toContain('memory backend "akm"');
+    expect(unreachableAkmRun.exitCode).toBe(1);
+    expect(unreachableAkmRun.stderr.toString()).not.toContain('not a truthful evaluated benchmark path in this repo yet');
+    expect(unreachableAkmRun.stderr.toString()).toContain('akm bundle create failed');
 
     // Create a temporary local dataset file so the run does not depend on network
     const tmpDir = path.resolve(rootDir, 'tests/.artifacts/tmp');
@@ -581,5 +614,43 @@ describe('config loading', () => {
       '  bin/summary --runs <dir> [--format markdown|json]',
       '  bin/downloads [DatasetName]',
     ]);
+  });
+});
+
+describe('akm A/B configs and inert-backend disclosure', () => {
+  test('both akm A/B configs load and validate with backend as the only variant delta', () => {
+    for (const name of ['locomo-akm-ab.json', 'longmemeval-akm-ab.json']) {
+      const config = loadConfig(path.resolve(rootDir, 'config/common', name));
+      const validated = validateConfig(config, rootDir);
+      expect(validated.runs.length).toBe(3);
+      const backends = validated.runs.map((r) => r.memoryBackend).sort();
+      expect(backends).toEqual(['akm', 'none', 'raw-vector']);
+      // A/B fairness: everything except the memory backend must be identical
+      // across the three variants, or the arm comparison is confounded.
+      const fingerprints = new Set(
+        validated.runs.map((r) =>
+          JSON.stringify({
+            provider: r.agentProvider,
+            model: r.agentModel,
+            packConfig: r.packConfig,
+          }),
+        ),
+      );
+      expect(fingerprints.size).toBe(1);
+    }
+  });
+
+  test('longmemeval adapter discloses an inert (never-queried) memory backend in result warnings', () => {
+    // The longmemeval pipeline does not route retrieval through
+    // MemoryBackend.search(). Until it does, any non-disabled backend arm MUST
+    // carry a machine-visible warning in result.json -- disclosure in docs
+    // alone lets an inert-arm score read as a real memory-arm result. This
+    // contract test pins the guard (and its non-vacuous wording) to the
+    // adapter source; the runtime behavior was verified by executing the full
+    // CLI run path against stub endpoints.
+    const source = fs.readFileSync(path.resolve(rootDir, 'src/packs/longmemeval/adapter.ts'), 'utf8');
+    expect(source).toContain("memory.kind !== 'disabled'");
+    expect(source).toContain('NEVER QUERIED');
+    expect(source).toContain('Do not publish this run as evidence about the backend.');
   });
 });

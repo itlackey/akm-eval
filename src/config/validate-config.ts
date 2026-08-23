@@ -2,26 +2,7 @@ import type { AgentProviderConfig, EvalConfig, RunDefinition } from '../core/typ
 import type { EvalVariant } from '../variants/types.ts';
 import { ConfigValidationError } from '../core/errors.ts';
 
-const PACKS_REQUIRING_REAL_AGENT = new Set(['longmemeval', 'terminal-bench', 'swe-bench', 'tau-bench', 'beam', 'locomo', 'akm-bench']);
-const OFFICIAL_SWE_BENCH_DATASET_ALIASES = new Set([
-  'swe-bench',
-  'swebench',
-  'swe_bench',
-  'swe-bench-lite',
-  'swebench-lite',
-  'swe_bench_lite',
-  'swe-bench_lite',
-  'lite',
-  'swe-bench-verified',
-  'swebench-verified',
-  'swe_bench_verified',
-  'swe-bench_verified',
-  'verified',
-]);
-
-function isOfficialSweBenchDatasetName(value: string): boolean {
-  return value.startsWith('SWE-bench/') || OFFICIAL_SWE_BENCH_DATASET_ALIASES.has(value.toLowerCase());
-}
+const PACKS_REQUIRING_REAL_AGENT = new Set(['longmemeval', 'tau-bench', 'beam', 'locomo']);
 
 function validateRunDefinitions(runs: RunDefinition[]): void {
   const issues: string[] = [];
@@ -56,15 +37,6 @@ function validateRunDefinitions(runs: RunDefinition[]): void {
       if (maxContextTokens !== undefined && (typeof maxContextTokens !== 'number' || maxContextTokens <= 0)) {
         issues.push(
           `run "${run.id ?? `${run.pack}-${run.variant}`}" uses locomo but pack.config.maxContextTokens must be a positive number when provided`,
-        );
-      }
-    }
-
-    if (run.pack === 'swe-bench') {
-      const datasetName = run.packConfig?.datasetName;
-      if (typeof datasetName === 'string' && !isOfficialSweBenchDatasetName(datasetName)) {
-        issues.push(
-          `run "${run.id ?? `${run.pack}-${run.variant}`}" uses swe-bench with datasetName ${JSON.stringify(datasetName)}, but swe-bench only accepts official dataset identifiers`,
         );
       }
     }

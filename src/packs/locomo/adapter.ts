@@ -326,6 +326,14 @@ export const locomoAdapter: PackAdapter = {
     let totalTokens = 0;
     let totalLatencyMs = 0;
     let totalQuestions = 0;
+    // Declared-ceiling disclosure (see docs/memory-backends.md and the akm
+    // backend's own header comment): a memory-backed retrieval arm can score
+    // near-zero for reasons that have nothing to do with retrieval quality —
+    // e.g. a query the backend structurally cannot answer. `zeroHitQueries`
+    // makes that visible in every published result rather than leaving a
+    // reader to infer it from a low score alone.
+    let zeroHitQueries = 0;
+    let retrievalQueryCount = 0;
 
     for (const sample of samples) {
       const documents = flattenConversation(sample);
@@ -350,6 +358,8 @@ export const locomoAdapter: PackAdapter = {
           searchResults = await memory.search({ text: question.question, topK });
           prompt = buildRetrievedPrompt(question, searchResults);
           retrievalMetrics.push(scoreRetrieval(question.evidence ?? [], searchResults, topK));
+          retrievalQueryCount += 1;
+          if (searchResults.length === 0) zeroHitQueries += 1;
         }
 
         const agentResult = await resolvedAgent.run({ prompt });
@@ -425,13 +435,40 @@ export const locomoAdapter: PackAdapter = {
       startedAt,
       finishedAt,
       durationMs,
-      warnings: [],
+      warnings:
+        memory.kind !== 'disabled' && retrievalQueryCount > 0 && zeroHitQueries / retrievalQueryCount >= 0.5
+          ? [
+              `${zeroHitQueries}/${retrievalQueryCount} retrieval queries returned zero hits (>=50%). The aggregate score ` +
+                'for this run is dominated by prompts with no retrieved context at all, not by answer quality on retrieved ' +
+                'context. See metadata.zeroHitQueries / metadata.retrievalCeiling* before publishing this number.',
+            ]
+          : [],
       notes: [
         `LoCoMo executed ${parsed.question_count} question(s) from ${samples.length} sample(s).`,
-        `Official LoCoMo QA score: ${(parsed.overall_accuracy * 100).toFixed(1)}%`,
+        // `overall_accuracy` from the official evaluator is mean per-question
+        // token-F1 (scripts/locomo-evaluator.py), not a binary judged
+        // pass/fail — labeled "QA score" here rather than "accuracy" to
+        // avoid implying otherwise.
+        `Official LoCoMo QA score (mean per-question token-F1): ${(parsed.overall_accuracy * 100).toFixed(1)}%`,
         memory.kind === 'disabled'
-          ? `Conversation-only mode with approximate truncation budget ${maxContextTokens} tokens.`
+          ? `Long-context baseline: full conversation truncated to a ${maxContextTokens}-token budget, NOT a "no memory" ` +
+            'null arm — it differs from the retrieval arms in prompt construction and context length, not only in ' +
+            '`memory.backend`.'
           : `Memory-backed retrieval mode using topK=${topK}.`,
+        ...(memory.kind !== 'disabled' && retrievalQueryCount > 0
+          ? [
+              `Retrieval zero-hit rate: ${zeroHitQueries}/${retrievalQueryCount} queries returned no results ` +
+                `(${((zeroHitQueries / retrievalQueryCount) * 100).toFixed(1)}%).`,
+            ]
+          : []),
+        ...(memory.id === 'akm'
+          ? [
+              'akm declared retrieval ceiling: description/tags/heading synthesized from the first sentence(s) of each ' +
+                'document (never full body prose); a fixed deterministic stopword strip is applied to each query before ' +
+                'it reaches akm\'s conjunctive-AND FTS; the seeded akm skeleton corpus is stripped before ingestion so no ' +
+                'foreign content can appear in results. See src/memory/backends/akm.ts and docs/memory-backends.md.',
+            ]
+          : []),
       ],
       metrics: {
         retrieval,
@@ -473,6 +510,22 @@ export const locomoAdapter: PackAdapter = {
         predictionKey,
         topK,
         maxContextTokens,
+        baselineIsLongContext: memory.kind === 'disabled',
+        ...(memory.kind !== 'disabled'
+          ? {
+              retrievalQueryCount,
+              zeroHitQueries,
+              zeroHitQueryRate: retrievalQueryCount > 0 ? Number((zeroHitQueries / retrievalQueryCount).toFixed(6)) : 0,
+            }
+          : {}),
+        ...(memory.id === 'akm'
+          ? {
+              retrievalCeilingSynthesisRule: 'first-sentence(s)-capped-250-chars+metadata-tags+id-heading',
+              retrievalCeilingQueryTransform: 'fixed-deterministic-stopword-strip',
+              retrievalCeilingSemanticSearchMode: 'off',
+              retrievalCeilingSeededCorpusStripped: true,
+            }
+          : {}),
         datasetPath,
         predictionsPath,
         evaluationOutputPath,

@@ -16,7 +16,7 @@ describe('normalized result schema', () => {
     const result = {
       schemaVersion: '1.0',
       runId: 'demo',
-      pack: 'akm-bench',
+      pack: 'locomo',
       variant: 'baseline',
       memoryBackend: 'none',
       status: 'passed',

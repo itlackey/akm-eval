@@ -27,7 +27,7 @@ The old placeholder artifact list in this file was stale. The current normalized
 
 - `schemaVersion`: currently always `1.0`
 - `runId`: normalized run identifier
-- `pack`: pack ID such as `locomo`, `beam`, `terminal-bench`, or `swe-bench`
+- `pack`: pack ID such as `locomo`, `beam`, `longmemeval`, or `tau-bench`
 - `variant`: variant ID such as `baseline` or another configured run variant ID
 - `memoryBackend`: effective memory backend ID such as `none`, `akm`, or `raw-vector`
 - `status`: one of `passed`, `failed`, or `warning`
@@ -58,6 +58,18 @@ The old placeholder artifact list in this file was stale. The current normalized
 - `tokenF1`
 - `containsExpected`
 - `judgedPass`
+
+`exactMatch`, `tokenF1`, and `containsExpected` are lexical-overlap **diagnostics only**; they never
+decide pass/fail and never feed `metrics.aggregate.score`. `judgedPass` carries the pack's
+authoritative answer-quality number and is always sourced from the upstream evaluator or harness,
+never computed in this repo:
+
+| Pack | `judgedPass` source |
+| --- | --- |
+| `locomo` | the official LoCoMo evaluator's `overall_accuracy` |
+| `longmemeval` | the fraction of official-evaluator entries with `autoeval_label.label === true` |
+| `tau-bench` | the official tau-bench harness's average reward |
+| `beam` | BEAM's own mean per-question judge score (`llm_judge_score`, or `tau_norm` for `event_ordering`) — upstream defines no pass threshold, so this repo reports the mean score rather than manufacturing a pass rate from it |
 
 `metrics.aggregate` always contains:
 
@@ -95,7 +107,7 @@ Cross-run reporting currently looks for these optional metadata keys when presen
 
 - `repoCommit`: repository commit used for the run
 - `runnerType`: runner/provider family such as `openai-compatible` or `opencode`
-- `benchmarkId`: benchmark or dataset identifier such as `SWE-bench/SWE-bench_Verified`
+- `benchmarkId`: benchmark or dataset identifier such as the LongMemEval dataset filename
 - `benchmarkVersion`: benchmark version string when the source benchmark publishes one
 
 If the upstream benchmark or dataset does not publish a clear benchmark version for a committed reference artifact, leave `benchmarkVersion` unset. Do not substitute harness package versions, report schema versions, dataset identifiers, or pinned source commits; the cross-run summary will display `-` for unknown benchmark versions.
@@ -126,9 +138,7 @@ Pack-specific and not guaranteed stable:
 ## Pack caveats
 
 - `locomo` stores the official evaluator output, prediction file path, and evaluator command in `raw-output.json`
-- `longmemeval` stores evaluator command output, predictions, and per-question judged results in `raw-output.json`
-- `beam` stores upstream evaluation results and per-conversation summaries in `raw-output.json`
-- `swe-bench` stores authoritative harness report references plus harness stdout/stderr paths in `raw-output.json`
-- `terminal-bench` stores authoritative harness payloads plus harness stdout/stderr paths in `raw-output.json`
+- `longmemeval` stores evaluator command output, predictions, and per-question judged results in `raw-output.json` — `metrics.answer.judgedPass` comes only from that evaluator's output, never from a local heuristic
+- `beam` stores upstream evaluation results and per-conversation summaries in `raw-output.json` — both `metrics.aggregate.score` and `metrics.answer.judgedPass` are the mean of BEAM's own per-question scores; no pass/fail threshold is applied anywhere in this repo
 
 Consumers should compare normalized fields first and use raw artifacts only for debugging or audit trails.

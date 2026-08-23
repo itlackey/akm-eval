@@ -16,12 +16,6 @@ case "$pack" in
   beam)
     exec "$BIN_DIR/beam-eval" "$@"
     ;;
-  swe-bench)
-    exec "$BIN_DIR/swe-bench-eval" "$@"
-    ;;
-  terminal-bench)
-    exec "$BIN_DIR/terminal-bench-eval" "$@"
-    ;;
   *)
     exec "$BIN_DIR/akm-eval" run "$@"
     ;;

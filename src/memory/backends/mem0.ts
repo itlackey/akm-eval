@@ -1,4 +1,4 @@
-import { createExternalStub } from './akm.ts';
+import { createExternalStub } from './external-stub.ts';
 
 export function createMem0Backend() {
   return createExternalStub(

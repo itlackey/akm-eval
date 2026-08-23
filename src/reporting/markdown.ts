@@ -16,6 +16,14 @@ export function markdownReportForResult(result: NormalizedRunResult): string {
     `- Status: ${result.status}`,
     `- Aggregate score: ${result.metrics.aggregate.score.toFixed(3)}`,
     '',
+    '## Notes',
+    '',
+    // `notes` is where adapters put the caveats a reader must see alongside
+    // the score itself — retrieval-ceiling disclosures included. It was
+    // collected into `result.json` but never rendered here before; a reader
+    // of summary.md alone had no way to see it.
+    ...(result.notes.length > 0 ? result.notes.map((note) => `- ${note}`) : ['- none']),
+    '',
     '## Retrieval metrics',
     '',
     `- query count: ${result.metrics.retrieval.queryCount}`,

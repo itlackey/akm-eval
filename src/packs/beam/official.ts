@@ -727,15 +727,25 @@ export function runBeamEvaluation(
 export interface BeamAggregateScores {
   byType: Record<string, number>;
   overall: number;
-  judgedPassRate: number;
   questionCount: number;
 }
 
+/**
+ * Mean of BEAM's OWN per-question scores — `tau_norm` for `event_ordering`,
+ * `llm_judge_score` for every other ability — overall and per ability type.
+ *
+ * There is deliberately no pass *rate* here. BEAM's evaluator emits continuous
+ * scores and defines no pass/fail threshold, so any binary derived from them
+ * (this code previously counted `score >= 0.5` as a pass) would be a threshold
+ * this repo invented — exactly the "synthetic or heuristic success metric" the
+ * project's trust policy rules out, and the same defect that got
+ * `src/memory/judge.ts` deleted. The adapter therefore reports BEAM's own mean
+ * judge score as `metrics.answer.judgedPass`, not a manufactured pass rate.
+ */
 export function aggregateBeamScores(results: BeamEvaluationResult[]): BeamAggregateScores {
   const totals = new Map<string, { score: number; count: number }>();
   let totalScore = 0;
   let totalQuestions = 0;
-  let passCount = 0;
 
   for (const result of results) {
     for (const [type, entries] of Object.entries(result.evaluation)) {
@@ -747,9 +757,6 @@ export function aggregateBeamScores(results: BeamEvaluationResult[]): BeamAggreg
         totals.set(type, bucket);
         totalScore += score;
         totalQuestions += 1;
-        if (score >= 0.5) {
-          passCount += 1;
-        }
       }
     }
   }
@@ -761,7 +768,6 @@ export function aggregateBeamScores(results: BeamEvaluationResult[]): BeamAggreg
   return {
     byType,
     overall: totalQuestions > 0 ? Number((totalScore / totalQuestions).toFixed(6)) : 0,
-    judgedPassRate: totalQuestions > 0 ? Number((passCount / totalQuestions).toFixed(6)) : 0,
     questionCount: totalQuestions,
   };
 }

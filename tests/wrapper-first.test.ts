@@ -13,8 +13,6 @@ describe('wrapper-first operator surface', () => {
       'bin/doctor',
       'bin/eval',
       'bin/beam-eval',
-      'bin/swe-bench-eval',
-      'bin/terminal-bench-eval',
       'bin/matrix',
       'bin/report',
       'bin/summary',

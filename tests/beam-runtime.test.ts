@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { checkBeamRuntime, createBeamRuntimeFingerprint, resolveBeamRuntime } from '../src/packs/beam/official.ts';
+import {
+  aggregateBeamScores,
+  checkBeamRuntime,
+  createBeamRuntimeFingerprint,
+  resolveBeamRuntime,
+} from '../src/packs/beam/official.ts';
 
 const tempRoots: string[] = [];
 
@@ -148,5 +153,46 @@ describe('beam runtime preflight', () => {
     expect(result.stderr.toString()).toBe('');
     expect(result.stdout.toString()).toContain(`BEAM runtime check passed for repo ${repoPath} using ${pythonBin}`);
     expect(result.stdout.toString()).toContain(`Dataset: ${datasetPath}`);
+  });
+});
+
+describe('beam score aggregation', () => {
+  // BEAM's evaluator emits continuous per-question scores and defines no
+  // pass/fail threshold. This repo therefore reports the mean of those scores
+  // and must never derive a pass rate from them — a locally invented threshold
+  // is precisely the "synthetic or heuristic success metric" the trust policy
+  // in README.md rules out.
+  const results = [
+    {
+      conversationId: 'c1',
+      chatSize: 'small',
+      answerFilePath: '/tmp/a.json',
+      evaluationFilePath: '/tmp/e.json',
+      evaluation: {
+        // Deliberately straddles 0.5: the old thresholded pass rate would have
+        // reported 0.5 here (1 of 2 "passing"), which is not a BEAM number.
+        knowledge_update: [{ llm_judge_score: 0.4 }, { llm_judge_score: 0.6 }],
+        event_ordering: [{ tau_norm: 0.5 }],
+      },
+    },
+  ] as unknown as Parameters<typeof aggregateBeamScores>[0];
+
+  test('reports the mean of BEAM\'s own per-question scores, overall and per ability type', () => {
+    const scores = aggregateBeamScores(results);
+    expect(scores.questionCount).toBe(3);
+    expect(scores.overall).toBe(0.5);
+    expect(scores.byType.knowledge_update).toBe(0.5);
+    expect(scores.byType.event_ordering).toBe(0.5);
+  });
+
+  test('exposes no pass-rate field derived from a locally invented threshold', () => {
+    const scores = aggregateBeamScores(results);
+    expect(Object.keys(scores).sort()).toEqual(['byType', 'overall', 'questionCount']);
+    expect('judgedPassRate' in scores).toBe(false);
+  });
+
+  test('an empty result set scores zero rather than dividing by zero', () => {
+    const scores = aggregateBeamScores([]);
+    expect(scores).toEqual({ byType: {}, overall: 0, questionCount: 0 });
   });
 });

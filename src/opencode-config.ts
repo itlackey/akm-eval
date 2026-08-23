@@ -281,9 +281,14 @@ export function materializeOpencodeConfig(
       read: 'allow',
       webfetch: 'allow',
     },
-    // Disable operator plugins during eval runs. Plugins like akm-opencode
-    // run their own session lifecycle hooks that interfere with the eval's
-    // isolated fixture stash and cause stash mismatch failures.
+    // Disable operator plugins during eval runs. This repo's remaining packs
+    // are memory/long-term-recall benchmarks (locomo, longmemeval, beam,
+    // tau-bench): the opencode runner here drives the model directly to
+    // produce an answer, and an operator plugin such as akm-opencode has no
+    // role in that path. (The coding-benchmark rationale for stripping
+    // plugins — isolating a plugin's own session lifecycle hooks from an
+    // agentic coding run's fixture stash — moved with those packs to
+    // akm-bench, which runs coding benchmarks through Harbor.)
     plugin: [],
   }
 

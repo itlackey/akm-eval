@@ -143,7 +143,10 @@ export const beamAdapter: PackAdapter = {
           exactMatch: 0,
           tokenF1: 0,
           containsExpected: 0,
-          judgedPass: scores.judgedPassRate,
+          // BEAM's own mean LLM-judge / tau_norm score, not a pass rate:
+          // upstream defines no pass threshold, so this repo does not invent
+          // one. See aggregateBeamScores() in ./official.ts.
+          judgedPass: score,
         },
         aggregate: {
           score,
@@ -189,7 +192,6 @@ export const beamAdapter: PackAdapter = {
         beamJudgeProvider: runtime.judgeProvider,
         beamRuntimeFingerprint: runtimeFingerprint.fingerprintSha256,
         beamChatSizes: requestedChatSizes,
-        judgedPassRate: scores.judgedPassRate,
         ...Object.fromEntries(Object.entries(scores.byType).map(([key, value]) => [`score_${key}`, value])),
       },
     };

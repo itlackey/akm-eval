@@ -13,7 +13,7 @@ export const variantRegistry: VariantDefinition[] = [
   },
   {
     id: 'akm-memory',
-    description: 'Planned AKM memory backend variant; benchmark runs are currently blocked.',
+    description: 'AKM memory backend variant, backed by the real akm CLI (see docs/memory-backends.md).',
     tags: ['akm', 'memory'],
   },
   {

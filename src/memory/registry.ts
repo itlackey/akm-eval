@@ -7,7 +7,11 @@ import { createOpenVikingBackend } from './backends/openviking.ts';
 import { createRawVectorBackend } from './backends/raw-vector.ts';
 import { createZepBackend } from './backends/zep.ts';
 
-type BackendFactory = (rootDir?: string) => MemoryBackend;
+// `workDir` is optional and only consumed by the `akm` backend today (a
+// per-instance hermetic root for its AKM_* directories). Every other
+// factory ignores extra arguments, so this widening needed no changes to
+// none/raw-vector/mem0/zep/openviking's own signatures.
+type BackendFactory = (rootDir?: string, workDir?: string) => MemoryBackend;
 type BackendStatus = {
   evaluated: boolean;
   status: 'ok' | 'warn';
@@ -23,7 +27,7 @@ export const memoryBackendRegistry: Record<string, BackendFactory> = {
   'raw-vector': createRawVectorBackend,
 };
 
-const backendStatusRegistry: Record<string, () => BackendStatus> = {
+const backendStatusRegistry: Record<string, (rootDir?: string) => BackendStatus> = {
   none: () => ({
     evaluated: true,
     status: 'ok',
@@ -34,10 +38,10 @@ const backendStatusRegistry: Record<string, () => BackendStatus> = {
     status: 'ok',
     detail: 'truthful deterministic in-memory vector backend ready',
   }),
-  akm: () => {
-    const detail = createAkmBackend().healthCheck();
+  akm: (rootDir) => {
+    const detail = getAkmBackendDoctorDetail(rootDir);
     return {
-      evaluated: false,
+      evaluated: true,
       status: detail.status,
       detail: detail.detail,
     };
@@ -62,12 +66,12 @@ const backendStatusRegistry: Record<string, () => BackendStatus> = {
   }),
 };
 
-export function createMemoryBackend(id = 'none', rootDir?: string): MemoryBackend {
+export function createMemoryBackend(id = 'none', rootDir?: string, workDir?: string): MemoryBackend {
   const factory = memoryBackendRegistry[id];
   if (!factory) {
     throw new UnknownMemoryBackendError(id);
   }
-  return factory(rootDir);
+  return factory(rootDir, workDir);
 }
 
 export function listMemoryBackends(): string[] {
@@ -79,15 +83,7 @@ export function getMemoryBackendStatus(id: string, rootDir = process.cwd()): Bac
   if (!statusFactory) {
     throw new UnknownMemoryBackendError(id);
   }
-  if (id === 'akm') {
-    const detail = getAkmBackendDoctorDetail(rootDir);
-    return {
-      evaluated: false,
-      status: detail.status,
-      detail: detail.detail,
-    };
-  }
-  return statusFactory();
+  return statusFactory(rootDir);
 }
 
 export function listEvaluatedMemoryBackends(): string[] {
