@@ -53,8 +53,17 @@ import path from "node:path";
 import { createAkmBackend, resolveAkmCommand, slugifyDocId } from "../src/memory/backends/akm.ts";
 import type { MemoryDocument } from "../src/memory/types.ts";
 
-/** Default when `AKM_EVAL_AKM_CMD` is unset: a sibling akm source checkout. */
-const SIBLING_AKM_CLI = process.env.AKM_EVAL_SIBLING_CLI ?? "/home/user/akm/src/cli.ts";
+/**
+ * Default when `AKM_EVAL_AKM_CMD` is unset: a sibling akm source checkout,
+ * resolved RELATIVE TO THIS REPO rather than to one machine's home directory.
+ * The previous absolute `/home/user/akm/src/cli.ts` only ever existed on the
+ * machine this suite was written on, so everywhere else the fallback could not
+ * fire and the suite failed with "no akm CLI" even when a checkout sat right
+ * next to the repo. `AKM_EVAL_SIBLING_CLI` still overrides.
+ */
+const SIBLING_AKM_CLI =
+  process.env.AKM_EVAL_SIBLING_CLI ??
+  path.resolve(import.meta.dirname, "..", "..", "akm", "src", "cli.ts");
 
 setDefaultTimeout(120_000);
 

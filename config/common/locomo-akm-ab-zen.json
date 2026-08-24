@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "locomo-akm-ab-zen",
+    "outputDir": "runs/locomo-akm-ab-zen"
+  },
+  "packs": [
+    {
+      "id": "locomo-akm-ab",
+      "adapter": "locomo",
+      "enabled": true,
+      "config": {
+        "smoke": true,
+        "maxSamples": 1,
+        "maxQuestions": 5,
+        "topK": 5,
+        "maxContextTokens": 16000,
+        "evaluatorCommand": "python3 scripts/locomo-evaluator.py"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "mimo-v2.5-free"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "none"
+      }
+    },
+    {
+      "id": "raw-vector",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "mimo-v2.5-free"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "raw-vector"
+      }
+    },
+    {
+      "id": "akm-memory",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "mimo-v2.5-free"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "akm"
+      }
+    }
+  ],
+  "notes": [
+    "ZEN VARIANT of the sibling config, pointed at opencode Zen's free tier (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. The model is a FREE tier -- treat every number from it as a pipeline check and a floor, not as a capability measurement, and do not compare it against numbers produced by a different model.",
+    "`judging` here is inert: nothing under src/ reads it. LoCoMo scores with the official F1 evaluator (no LLM). LongMemEval shells out to scripts/longmemeval-evaluator.py, which builds its own client from OPENAI_BASE_URL + OPENAI_API_KEY and uses packs[0].config.evaluatorModel -- so THAT is the field to change to move the judge, not this block.",
+    "Three arms over the identical provider/model/judging config in locomo-smoke.json \u2014 `memory.backend` is the only variant-level delta, but `baseline` and the two retrieval arms (`raw-vector`, `akm`) also differ in PROMPT CONSTRUCTION: baseline gets the full conversation truncated to maxContextTokens (a long-context reference, not a null/no-memory arm), while the retrieval arms get only the top-topK retrieved snippets. Do not read `baseline` as a no-memory control without accounting for this.",
+    "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
+    "The akm backend's declared frontmatter-synthesis rule sets a retrieval ceiling: only the synthesized description/tags/heading are searchable, never full body prose. A fixed deterministic stopword-strip is applied to each query before it reaches akm's conjunctive-AND FTS, and the run's result.json.metadata records a zeroHitQueries/retrievalQueryCount counter \u2014 check it before publishing a number: a low score can mean akm's retrieval structurally could not answer the query, not that retrieval quality is bad."
+  ],
+  "providers": {
+    "openai-compatible": {
+      "type": "openai-compatible",
+      "baseURL": "https://opencode.ai/zen/v1",
+      "apiKey": "{env:OPENAI_API_KEY}",
+      "defaultModel": "mimo-v2.5-free"
+    }
+  },
+  "judging": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "mimo-v2.5-free",
+    "temperature": 0
+  },
+  "telemetry": {
+    "trackTokens": true,
+    "trackCost": true,
+    "trackLatency": true,
+    "captureLogs": true
+  }
+}
