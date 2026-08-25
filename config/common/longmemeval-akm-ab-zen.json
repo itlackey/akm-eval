@@ -10,7 +10,7 @@
       "adapter": "longmemeval",
       "enabled": true,
       "config": {
-        "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
+        "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
         "evaluatorModel": "qwen3.5-plus",
         "smoke": true,
         "maxQuestions": 5,
