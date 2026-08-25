@@ -64,7 +64,7 @@
     }
   ],
   "notes": [
-    "ZEN VARIANT of the sibling config, pointed at opencode Zen's free tier (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. Uses the PAID qwen3.5-plus, the same model as the akm-bench A/B runs, so numbers are at least internally comparable with those. The free tier was dropped because it rate-limits under concurrent load and its judging quality is unknown.",
+    "ZEN VARIANT of the sibling config, pointed at opencode Zen (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. Uses the PAID qwen3.5-plus, the same model as the akm-bench A/B runs, so numbers are at least internally comparable with those. The free tier was dropped because it rate-limits under concurrent load and its judging quality is unknown.",
     "`judging` here is inert: nothing under src/ reads it. LoCoMo scores with the official F1 evaluator (no LLM). LongMemEval shells out to scripts/longmemeval-evaluator.py, which builds its own client from OPENAI_BASE_URL + OPENAI_API_KEY and uses packs[0].config.evaluatorModel -- so THAT is the field to change to move the judge, not this block.",
     "Three arms over the identical provider/model/judging config in locomo-smoke.json \u2014 `memory.backend` is the only variant-level delta, but `baseline` and the two retrieval arms (`raw-vector`, `akm`) also differ in PROMPT CONSTRUCTION: baseline gets the full conversation truncated to maxContextTokens (a long-context reference, not a null/no-memory arm), while the retrieval arms get only the top-topK retrieved snippets. Do not read `baseline` as a no-memory control without accounting for this.",
     "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
@@ -75,7 +75,8 @@
       "type": "openai-compatible",
       "baseURL": "https://opencode.ai/zen/v1",
       "apiKey": "{env:OPENAI_API_KEY}",
-      "defaultModel": "qwen3.5-plus"
+      "defaultModel": "qwen3.5-plus",
+      "timeout": 300000
     }
   },
   "judging": {

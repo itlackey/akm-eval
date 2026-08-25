@@ -725,3 +725,55 @@ describe("longmemeval adapter: retrieval wiring", () => {
     expect(result.notes.some((n) => n.includes("abstention") && n.includes("confound"))).toBe(true);
   });
 });
+
+// ── Transient-provider-failure disclosure (itlackey/akm-eval#4) ──────────────
+
+describe("longmemeval adapter: agent retry disclosure", () => {
+  test("sums the runner's retries into metadata.agentRetryCount", async () => {
+    const outputDir = tempDir("akm-eval-longmemeval-retries-");
+    const datasetPath = writeDatasetFixture(outputDir);
+    const { backend } = createScriptedMemoryBackend([
+      [{ id: "q1-s1", text: "hit", score: 1, metadata: {} }],
+      [{ id: "q2-s1", text: "hit", score: 1, metadata: {} }],
+    ]);
+    // Two questions in the fixture, each answered only after two retries
+    // through transient provider failures.
+    const agent: AgentRunner = {
+      async run(): Promise<AgentRunResult> {
+        return {
+          ok: true,
+          text: "some answer",
+          usage: { input: 10, output: 2, total: 12 },
+          latencyMs: 5,
+          retries: 2,
+        };
+      },
+    };
+
+    const result = await longMemEvalAdapter.run(
+      buildContext(outputDir, datasetPath, { topK: 2 }),
+      backend,
+      agent,
+    );
+
+    expect(result.metadata?.agentRetryCount).toBe(4);
+  });
+
+  test("records agentRetryCount 0 on a clean run rather than omitting the field", async () => {
+    const outputDir = tempDir("akm-eval-longmemeval-noretries-");
+    const datasetPath = writeDatasetFixture(outputDir);
+    const { backend } = createScriptedMemoryBackend([
+      [{ id: "q1-s1", text: "hit", score: 1, metadata: {} }],
+      [{ id: "q2-s1", text: "hit", score: 1, metadata: {} }],
+    ]);
+    const { agent } = createRecordingAgent(() => "some answer");
+
+    const result = await longMemEvalAdapter.run(
+      buildContext(outputDir, datasetPath, { topK: 2 }),
+      backend,
+      agent,
+    );
+
+    expect(result.metadata?.agentRetryCount).toBe(0);
+  });
+});

@@ -340,6 +340,10 @@ export const locomoAdapter: PackAdapter = {
     // reader to infer it from a low score alone.
     let zeroHitQueries = 0;
     let retrievalQueryCount = 0;
+    // Transient provider failures the agent runner retried through
+    // (itlackey/akm-eval#4). Recorded unconditionally so a clean run and a
+    // run that needed retries are distinguishable in the artifact.
+    let agentRetryCount = 0;
 
     for (const sample of samples) {
       const documents = flattenConversation(sample);
@@ -375,6 +379,7 @@ export const locomoAdapter: PackAdapter = {
           );
         }
 
+        agentRetryCount += agentResult.retries ?? 0;
         totalPromptTokens += agentResult.usage?.input ?? 0;
         totalCompletionTokens += agentResult.usage?.output ?? 0;
         totalTokens += agentResult.usage?.total ?? 0;
@@ -522,6 +527,7 @@ export const locomoAdapter: PackAdapter = {
         predictionKey,
         topK,
         maxContextTokens,
+        agentRetryCount,
         baselineIsLongContext: memory.kind === "disabled",
         ...(memory.kind !== "disabled"
           ? {

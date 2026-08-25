@@ -66,7 +66,7 @@
     }
   ],
   "notes": [
-    "ZEN VARIANT of the sibling config, pointed at opencode Zen's free tier (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. Uses the PAID qwen3.5-plus, the same model as the akm-bench A/B runs, so numbers are at least internally comparable with those. The free tier was dropped because it rate-limits under concurrent load and its judging quality is unknown.",
+    "ZEN VARIANT of the sibling config, pointed at opencode Zen (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. Uses the PAID qwen3.5-plus, the same model as the akm-bench A/B runs, so numbers are at least internally comparable with those. The free tier was dropped because it rate-limits under concurrent load and its judging quality is unknown.",
     "`judging` here is inert: nothing under src/ reads it. LoCoMo scores with the official F1 evaluator (no LLM). LongMemEval shells out to scripts/longmemeval-evaluator.py, which builds its own client from OPENAI_BASE_URL + OPENAI_API_KEY and uses packs[0].config.evaluatorModel -- so THAT is the field to change to move the judge, not this block.",
     "Three arms over the identical provider/model/judging config in longmemeval-smoke.json \u2014 the memory backend is the only delta.",
     "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
@@ -79,7 +79,8 @@
       "type": "openai-compatible",
       "baseURL": "https://opencode.ai/zen/v1",
       "apiKey": "{env:OPENAI_API_KEY}",
-      "defaultModel": "qwen3.5-plus"
+      "defaultModel": "qwen3.5-plus",
+      "timeout": 300000
     }
   },
   "judging": {
