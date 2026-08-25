@@ -2,6 +2,14 @@ name: PR CI
 
 on:
   pull_request:
+  # Also on pushes to main. Without this, CI ran on PRs ONLY, so a commit
+  # landing on main directly was never checked: `093fbe4` switched the
+  # longmemeval configs from `python` to `python3` and left
+  # tests/config.test.ts asserting the old string, and main sat red
+  # (20 pass / 1 fail) until someone happened to run the suite locally.
+  # A gate that cannot observe the branch it protects is not a gate.
+  push:
+    branches: [main]
 
 jobs:
   checks:
