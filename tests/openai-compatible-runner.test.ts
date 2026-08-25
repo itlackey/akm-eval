@@ -15,7 +15,10 @@
  * retry backoff is driven to 1ms so exhaustion cases stay fast.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { OpenAICompatibleRunner, isTransientStatus } from "../src/agent/openai-compatible-runner.ts";
+import {
+  OpenAICompatibleRunner,
+  isTransientStatus,
+} from "../src/agent/openai-compatible-runner.ts";
 import type { AgentProviderConfig } from "../src/core/types.ts";
 
 const providerConfig: AgentProviderConfig = {
@@ -116,7 +119,10 @@ describe("OpenAICompatibleRunner retry", () => {
   });
 
   test("retries a request timeout (the runner's own abort)", async () => {
-    const { callCount } = scriptFetch([{ hangUntilAborted: true }, { status: 200, body: okBody("ok") }]);
+    const { callCount } = scriptFetch([
+      { hangUntilAborted: true },
+      { status: 200, body: okBody("ok") },
+    ]);
 
     const result = await runner().run({ prompt: "hi", timeoutMs: 20 });
 
@@ -192,11 +198,10 @@ describe("OpenAICompatibleRunner retry", () => {
 
   test("a missing baseURL is a configuration error, not something to retry", async () => {
     const { callCount } = scriptFetch([{ status: 200, body: okBody("unreachable") }]);
-    const noBaseUrl = new OpenAICompatibleRunner(
-      { type: "openai-compatible" },
-      "test-model",
-      { maxAttempts: 4, baseDelayMs: 1 },
-    );
+    const noBaseUrl = new OpenAICompatibleRunner({ type: "openai-compatible" }, "test-model", {
+      maxAttempts: 4,
+      baseDelayMs: 1,
+    });
 
     const result = await noBaseUrl.run({ prompt: "hi" });
 
