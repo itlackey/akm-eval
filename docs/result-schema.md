@@ -60,7 +60,15 @@ The old placeholder artifact list in this file was stale. The current normalized
 - `judgedPass`
 
 `exactMatch`, `tokenF1`, and `containsExpected` are lexical-overlap **diagnostics only**; they never
-decide pass/fail and never feed `metrics.aggregate.score`. `judgedPass` carries the pack's
+decide pass/fail and never feed `metrics.aggregate.score`. They are `number | null`, and the
+distinction is load-bearing: **`null` means the pack does not compute the metric, and only a number
+means it was measured.** `locomo` measures all three; `longmemeval`, `tau-bench` and `beam` score on
+their own official LLM judge and compute no lexical overlap at all, so they report `null`. Reporting
+them as `0` made a byte-identical, judge-passing answer read as having zero token overlap with gold,
+and invited a false comparison against LoCoMo's genuinely measured `tokenF1`. `bin/report` and
+`bin/compare` render `null` as `n/a` and emit no delta for a metric either side did not compute.
+
+`judgedPass` carries the pack's
 authoritative answer-quality number and is always sourced from the upstream evaluator or harness,
 never computed in this repo:
 

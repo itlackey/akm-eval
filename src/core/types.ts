@@ -100,9 +100,12 @@ export interface NormalizedRunResult {
 
 export interface ComparisonMetricDelta {
   metric: string;
-  baseline: number;
-  candidate: number;
-  delta: number;
+  /** `null` when the baseline pack did not compute this metric. */
+  baseline: number | null;
+  /** `null` when the candidate pack did not compute this metric. */
+  candidate: number | null;
+  /** `null` whenever either side is `null` -- no delta exists to report. */
+  delta: number | null;
 }
 
 export interface ComparisonReport {
