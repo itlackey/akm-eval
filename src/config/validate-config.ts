@@ -1,27 +1,8 @@
-import type { AgentProviderConfig, EvalConfig, RunDefinition } from '../core/types.ts';
-import type { EvalVariant } from '../variants/types.ts';
-import { ConfigValidationError } from '../core/errors.ts';
+import { ConfigValidationError } from "../core/errors.ts";
+import type { AgentProviderConfig, EvalConfig, RunDefinition } from "../core/types.ts";
+import type { EvalVariant } from "../variants/types.ts";
 
-const PACKS_REQUIRING_REAL_AGENT = new Set(['longmemeval', 'terminal-bench', 'swe-bench', 'tau-bench', 'beam', 'locomo', 'akm-bench']);
-const OFFICIAL_SWE_BENCH_DATASET_ALIASES = new Set([
-  'swe-bench',
-  'swebench',
-  'swe_bench',
-  'swe-bench-lite',
-  'swebench-lite',
-  'swe_bench_lite',
-  'swe-bench_lite',
-  'lite',
-  'swe-bench-verified',
-  'swebench-verified',
-  'swe_bench_verified',
-  'swe-bench_verified',
-  'verified',
-]);
-
-function isOfficialSweBenchDatasetName(value: string): boolean {
-  return value.startsWith('SWE-bench/') || OFFICIAL_SWE_BENCH_DATASET_ALIASES.has(value.toLowerCase());
-}
+const PACKS_REQUIRING_REAL_AGENT = new Set(["longmemeval", "tau-bench", "beam", "locomo"]);
 
 function validateRunDefinitions(runs: RunDefinition[]): void {
   const issues: string[] = [];
@@ -33,45 +14,42 @@ function validateRunDefinitions(runs: RunDefinition[]): void {
       );
     }
 
-    if (run.agentProviderConfig?.type === 'opencode') {
+    if (run.agentProviderConfig?.type === "opencode") {
       const model = run.agentModel ?? run.agentProviderConfig.defaultModel;
-      if (model && !model.includes('/')) {
+      if (model && !model.includes("/")) {
         issues.push(
           `run "${run.id ?? `${run.pack}-${run.variant}`}" uses opencode with model "${model}". Opencode models must include the provider prefix, for example "opencode/gpt-4.1-mini".`,
         );
       }
     }
 
-    if (run.pack === 'longmemeval') {
+    if (run.pack === "longmemeval") {
       const evaluatorCommand = run.packConfig?.evaluatorCommand;
-      if (typeof evaluatorCommand !== 'string' || evaluatorCommand.trim().length === 0) {
+      if (typeof evaluatorCommand !== "string" || evaluatorCommand.trim().length === 0) {
         issues.push(
           `run "${run.id ?? `${run.pack}-${run.variant}`}" uses longmemeval but is missing pack.config.evaluatorCommand for the official evaluator`,
         );
       }
     }
 
-    if (run.pack === 'locomo') {
+    if (run.pack === "locomo") {
       const maxContextTokens = run.packConfig?.maxContextTokens;
-      if (maxContextTokens !== undefined && (typeof maxContextTokens !== 'number' || maxContextTokens <= 0)) {
+      if (
+        maxContextTokens !== undefined &&
+        (typeof maxContextTokens !== "number" || maxContextTokens <= 0)
+      ) {
         issues.push(
           `run "${run.id ?? `${run.pack}-${run.variant}`}" uses locomo but pack.config.maxContextTokens must be a positive number when provided`,
         );
       }
     }
 
-    if (run.pack === 'swe-bench') {
-      const datasetName = run.packConfig?.datasetName;
-      if (typeof datasetName === 'string' && !isOfficialSweBenchDatasetName(datasetName)) {
-        issues.push(
-          `run "${run.id ?? `${run.pack}-${run.variant}`}" uses swe-bench with datasetName ${JSON.stringify(datasetName)}, but swe-bench only accepts official dataset identifiers`,
-        );
-      }
-    }
-
-    if (run.pack === 'beam') {
+    if (run.pack === "beam") {
       const evaluatorModel = run.packConfig?.evaluatorModel;
-      if (evaluatorModel !== undefined && (typeof evaluatorModel !== 'string' || evaluatorModel.trim().length === 0)) {
+      if (
+        evaluatorModel !== undefined &&
+        (typeof evaluatorModel !== "string" || evaluatorModel.trim().length === 0)
+      ) {
         issues.push(
           `run "${run.id ?? `${run.pack}-${run.variant}`}" uses beam but pack.config.evaluatorModel must be a non-empty string when provided`,
         );
@@ -85,13 +63,16 @@ function validateRunDefinitions(runs: RunDefinition[]): void {
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function resolveEnvRefsInProvider(config: AgentProviderConfig): AgentProviderConfig {
   const resolved: AgentProviderConfig = { ...config };
   if (resolved.apiKey) {
-    resolved.apiKey = resolved.apiKey.replace(/\{env:([A-Z_][A-Z0-9_]*)\}/g, (_m, name) => process.env[name] ?? '');
+    resolved.apiKey = resolved.apiKey.replace(
+      /\{env:([A-Z_][A-Z0-9_]*)\}/g,
+      (_m, name) => process.env[name] ?? "",
+    );
   }
   return resolved;
 }
@@ -100,7 +81,12 @@ function resolveProviders(
   providers: Record<string, AgentProviderConfig> | undefined,
 ): Record<string, AgentProviderConfig> | undefined {
   return providers
-    ? Object.fromEntries(Object.entries(providers).map(([key, provider]) => [key, resolveEnvRefsInProvider(provider)]))
+    ? Object.fromEntries(
+        Object.entries(providers).map(([key, provider]) => [
+          key,
+          resolveEnvRefsInProvider(provider),
+        ]),
+      )
     : undefined;
 }
 
@@ -123,7 +109,9 @@ function normalizeRunProviderConfig(
     return run;
   }
 
-  const providerKey = run.agentProvider ?? (providers && Object.keys(providers).length > 0 ? Object.keys(providers)[0] : undefined);
+  const providerKey =
+    run.agentProvider ??
+    (providers && Object.keys(providers).length > 0 ? Object.keys(providers)[0] : undefined);
   if (!providerKey) {
     return run;
   }
@@ -159,7 +147,7 @@ function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
       let agentProvider: string | undefined;
       let agentProviderConfig: AgentProviderConfig | undefined;
 
-      if (variant.agent.provider !== 'none') {
+      if (variant.agent.provider !== "none") {
         if (variant.agent.providerRef) {
           if (!resolvedProviders || !(variant.agent.providerRef in resolvedProviders)) {
             throw new ConfigValidationError([
@@ -182,20 +170,22 @@ function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
         outputDir: `${String(run.outputDir)}/${String(pack.id)}/${variant.id}`,
         memoryBackend: variant.memory.backend,
         agentEnvironment:
-          variant.agent.env && typeof variant.agent.env === 'object'
+          variant.agent.env && typeof variant.agent.env === "object"
             ? Object.fromEntries(
                 Object.entries(variant.agent.env).filter(
-                  (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+                  (entry): entry is [string, string] =>
+                    typeof entry[0] === "string" && typeof entry[1] === "string",
                 ),
               )
             : undefined,
         akmEnabled: variant.akm.enabled,
         akmCommand: variant.akm.command,
         akmEnvironment:
-          variant.akm.env && typeof variant.akm.env === 'object'
+          variant.akm.env && typeof variant.akm.env === "object"
             ? Object.fromEntries(
                 Object.entries(variant.akm.env).filter(
-                  (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string',
+                  (entry): entry is [string, string] =>
+                    typeof entry[0] === "string" && typeof entry[1] === "string",
                 ),
               )
             : undefined,
@@ -203,7 +193,9 @@ function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
         agentModel: variant.agent?.model,
         agentProvider,
         agentProviderConfig,
-        packConfig: isPlainObject(pack.config) ? (pack.config as Record<string, unknown>) : undefined,
+        packConfig: isPlainObject(pack.config)
+          ? (pack.config as Record<string, unknown>)
+          : undefined,
         metadata: {
           packId: String(pack.id),
           adapter: String(pack.adapter),
@@ -244,15 +236,15 @@ export function validateConfigShape(value: unknown): asserts value is EvalConfig
   const issues: string[] = [];
 
   if (!isPlainObject(value)) {
-    throw new ConfigValidationError(['config must be an object']);
+    throw new ConfigValidationError(["config must be an object"]);
   }
 
   if (value.version !== 1) {
-    issues.push('version must be 1');
+    issues.push("version must be 1");
   }
 
   if (!Array.isArray(value.runs) || value.runs.length === 0) {
-    issues.push('runs must be a non-empty array');
+    issues.push("runs must be a non-empty array");
   }
 
   if (issues.length > 0) {
@@ -262,19 +254,19 @@ export function validateConfigShape(value: unknown): asserts value is EvalConfig
 
 export function validateConfig(value: unknown): EvalConfig {
   if (!isPlainObject(value)) {
-    throw new ConfigValidationError(['config must be an object']);
+    throw new ConfigValidationError(["config must be an object"]);
   }
 
-  if (value.schemaVersion === 'akm.eval.config.v1') {
+  if (value.schemaVersion === "akm.eval.config.v1") {
     const issues: string[] = [];
     if (!isPlainObject(value.run)) {
-      issues.push('run must be an object');
+      issues.push("run must be an object");
     }
     if (!Array.isArray(value.packs) || value.packs.length === 0) {
-      issues.push('packs must be a non-empty array');
+      issues.push("packs must be a non-empty array");
     }
     if (!Array.isArray(value.variants) || value.variants.length === 0) {
-      issues.push('variants must be a non-empty array');
+      issues.push("variants must be a non-empty array");
     }
     if (issues.length > 0) {
       throw new ConfigValidationError(issues);

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-akm-ab-zen",
+    "outputDir": "runs/longmemeval-akm-ab-zen"
+  },
+  "packs": [
+    {
+      "id": "longmemeval-akm-ab",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
+        "evaluatorModel": "qwen3.5-plus",
+        "smoke": true,
+        "maxQuestions": 5,
+        "questionCategories": [
+          "single-session",
+          "multi-session"
+        ]
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "qwen3.5-plus"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "none"
+      }
+    },
+    {
+      "id": "raw-vector",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "qwen3.5-plus"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "raw-vector"
+      }
+    },
+    {
+      "id": "akm-memory",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "qwen3.5-plus"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "akm"
+      }
+    }
+  ],
+  "notes": [
+    "ZEN VARIANT of the sibling config, pointed at opencode Zen's free tier (baseURL https://opencode.ai/zen/v1) instead of api.openai.com. Set OPENAI_API_KEY to the Zen key and OPENAI_BASE_URL to that same baseURL: bin/_akm_eval_cli_image.sh forwards both into the CLI container, and the LongMemEval evaluator reads them directly. Uses the PAID qwen3.5-plus, the same model as the akm-bench A/B runs, so numbers are at least internally comparable with those. The free tier was dropped because it rate-limits under concurrent load and its judging quality is unknown.",
+    "`judging` here is inert: nothing under src/ reads it. LoCoMo scores with the official F1 evaluator (no LLM). LongMemEval shells out to scripts/longmemeval-evaluator.py, which builds its own client from OPENAI_BASE_URL + OPENAI_API_KEY and uses packs[0].config.evaluatorModel -- so THAT is the field to change to move the judge, not this block.",
+    "Three arms over the identical provider/model/judging config in longmemeval-smoke.json \u2014 the memory backend is the only delta.",
+    "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
+    "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
+    "ASYMMETRY BY DESIGN: baseline (memory.backend none) answers every question from its full haystack conversation, flattened into the prompt, with no memory backend touched. raw-vector and akm-memory instead reset() the backend per question, add() one document per haystack session, then search() with the question text and pack.config.topK (default 5), answering only from the retrieved text. This is the same baseline-vs-retrieval asymmetry locomo-akm-ab.json documents, not a bug -- see src/packs/longmemeval/README.md and docs/memory-backends.md.",
+    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score."
+  ],
+  "providers": {
+    "openai-compatible": {
+      "type": "openai-compatible",
+      "baseURL": "https://opencode.ai/zen/v1",
+      "apiKey": "{env:OPENAI_API_KEY}",
+      "defaultModel": "qwen3.5-plus"
+    }
+  },
+  "judging": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "qwen3.5-plus",
+    "temperature": 0
+  },
+  "telemetry": {
+    "trackTokens": true,
+    "trackCost": true,
+    "trackLatency": true,
+    "captureLogs": true
+  }
+}

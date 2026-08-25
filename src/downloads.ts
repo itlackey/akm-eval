@@ -1,5 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
 interface DatasetSource {
   name: string;
@@ -9,14 +9,14 @@ interface DatasetSource {
 
 const DATASETS: DatasetSource[] = [
   {
-    name: 'LongMemEval',
-    url: 'https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json',
-    targetPath: 'datasets/longmemeval/dataset.json',
+    name: "LongMemEval",
+    url: "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json",
+    targetPath: "datasets/longmemeval/dataset.json",
   },
   {
-    name: 'LoCoMo',
-    url: 'https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/data/locomo10.json',
-    targetPath: 'datasets/locomo/locomo10.json',
+    name: "LoCoMo",
+    url: "https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/data/locomo10.json",
+    targetPath: "datasets/locomo/locomo10.json",
   },
 ];
 
@@ -31,7 +31,9 @@ async function download(source: DatasetSource): Promise<void> {
 
   if (fs.existsSync(targetPath)) {
     const stats = fs.statSync(targetPath);
-    console.log(`[skip] ${source.name} already exists at ${source.targetPath} (${formatBytes(stats.size)})`);
+    console.log(
+      `[skip] ${source.name} already exists at ${source.targetPath} (${formatBytes(stats.size)})`,
+    );
     return;
   }
 
@@ -39,10 +41,12 @@ async function download(source: DatasetSource): Promise<void> {
 
   const response = await fetch(source.url);
   if (!response.ok) {
-    throw new Error(`Failed to download ${source.name}: HTTP ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to download ${source.name}: HTTP ${response.status} ${response.statusText}`,
+    );
   }
 
-  const contentLength = Number(response.headers.get('content-length') ?? '0');
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error(`Response body is not readable for ${source.name}`);
@@ -58,13 +62,15 @@ async function download(source: DatasetSource): Promise<void> {
     received += value.length;
     if (contentLength > 0) {
       const pct = ((received / contentLength) * 100).toFixed(1);
-      process.stdout.write(`\r  ${pct}% (${formatBytes(received)} / ${formatBytes(contentLength)})`);
+      process.stdout.write(
+        `\r  ${pct}% (${formatBytes(received)} / ${formatBytes(contentLength)})`,
+      );
     } else {
       process.stdout.write(`\r  ${formatBytes(received)}`);
     }
   }
 
-  process.stdout.write('\n');
+  process.stdout.write("\n");
 
   const buffer = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
@@ -82,7 +88,7 @@ export async function runDownloadsCommand(args: string[]): Promise<number> {
 
   if (sources.length === 0) {
     console.error(`Unknown dataset: ${specificDataset}`);
-    console.error(`Available datasets: ${DATASETS.map((dataset) => dataset.name).join(', ')}`);
+    console.error(`Available datasets: ${DATASETS.map((dataset) => dataset.name).join(", ")}`);
     return 1;
   }
 
@@ -90,9 +96,9 @@ export async function runDownloadsCommand(args: string[]): Promise<number> {
 
   for (const source of sources) {
     await download(source);
-    console.log('');
+    console.log("");
   }
 
-  console.log('Done! All requested datasets are ready.');
+  console.log("Done! All requested datasets are ready.");
   return 0;
 }

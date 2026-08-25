@@ -1,8 +1,8 @@
-import { createExternalStub } from './akm.ts';
+import { createExternalStub } from "./external-stub.ts";
 
 export function createOpenVikingBackend() {
   return createExternalStub(
-    'openviking',
-    'openviking is kept as a planned external backend ID, but this repo does not yet implement a truthful evaluated retrieval integration for `memory.backend: openviking`.',
+    "openviking",
+    "openviking is kept as a planned external backend ID, but this repo does not yet implement a truthful evaluated retrieval integration for `memory.backend: openviking`.",
   );
 }

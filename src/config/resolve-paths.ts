@@ -1,5 +1,5 @@
-import path from 'node:path';
-import type { EvalConfig } from '../core/types.ts';
+import path from "node:path";
+import type { EvalConfig } from "../core/types.ts";
 
 export function resolveConfigPaths(config: EvalConfig, baseDir: string): EvalConfig {
   return {

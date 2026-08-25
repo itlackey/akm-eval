@@ -8,8 +8,8 @@
  * under eval control.
  */
 
-import fs from 'node:fs'
-import path from 'node:path'
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * Error class for eval provider-config problems.
@@ -18,48 +18,48 @@ import path from 'node:path'
  * `isUsageError: false` → the caller should exit 78 (CONFIG).
  */
 export class EvalConfigError extends Error {
-  readonly code = 'EVAL_CONFIG'
-  readonly isUsageError: boolean
+  readonly code = "EVAL_CONFIG";
+  readonly isUsageError: boolean;
 
   constructor(message: string, isUsageError: boolean) {
-    super(message)
-    this.name = 'EvalConfigError'
-    this.isUsageError = isUsageError
+    super(message);
+    this.name = "EvalConfigError";
+    this.isUsageError = isUsageError;
   }
 }
 
 /** Parsed + validated result returned by `loadOpencodeConfig`. */
 export interface LoadedOpencodeConfig {
   /** Absolute path of the file that was loaded. */
-  source: string
+  source: string;
   /** Provider map from the standard opencode config. */
-  provider: Record<string, unknown>
+  provider: Record<string, unknown>;
   /** Default model ID from the standard opencode config, if present. */
-  model?: string
+  model?: string;
 }
 
-const ENV_REF_CAPTURE_RE = /^\{env:([A-Z_][A-Z0-9_]*)\}$/
+const ENV_REF_CAPTURE_RE = /^\{env:([A-Z_][A-Z0-9_]*)\}$/;
 
 export function collectEnvRefs(node: unknown): string[] {
-  const refs = new Set<string>()
+  const refs = new Set<string>();
 
   const visit = (value: unknown): void => {
-    if (typeof value === 'string') {
-      const match = value.match(ENV_REF_CAPTURE_RE)
-      if (match) refs.add(match[1])
-      return
+    if (typeof value === "string") {
+      const match = value.match(ENV_REF_CAPTURE_RE);
+      if (match) refs.add(match[1]);
+      return;
     }
     if (Array.isArray(value)) {
-      for (const item of value) visit(item)
-      return
+      for (const item of value) visit(item);
+      return;
     }
-    if (value !== null && typeof value === 'object') {
-      for (const child of Object.values(value as Record<string, unknown>)) visit(child)
+    if (value !== null && typeof value === "object") {
+      for (const child of Object.values(value as Record<string, unknown>)) visit(child);
     }
-  }
+  };
 
-  visit(node)
-  return [...refs].sort()
+  visit(node);
+  return [...refs].sort();
 }
 
 /**
@@ -69,36 +69,36 @@ export function collectEnvRefs(node: unknown): string[] {
  * impression that eval will honor them, so reject them explicitly.
  */
 const FORBIDDEN_TOPLEVEL_KEYS = new Set([
-  'plugin',
-  'mcp',
-  'permission',
-  'disabled_providers',
-  'small_model',
-  'snapshot',
-  'mode',
-  'agent',
-  'command',
-  'skills',
-  'server',
-  'share',
-  'autoshare',
-  'autoupdate',
-  'username',
-  'shell',
-  'logLevel',
-  'watcher',
-  'enabled_providers',
-  'default_agent',
-])
+  "plugin",
+  "mcp",
+  "permission",
+  "disabled_providers",
+  "small_model",
+  "snapshot",
+  "mode",
+  "agent",
+  "command",
+  "skills",
+  "server",
+  "share",
+  "autoshare",
+  "autoupdate",
+  "username",
+  "shell",
+  "logLevel",
+  "watcher",
+  "enabled_providers",
+  "default_agent",
+]);
 
 /**
  * Regex that an `apiKey` string value MUST match when present. The only
  * allowed form is an env-ref placeholder: `{env:VAR_NAME}`.
  */
-const ENV_REF_RE = /^\{env:[A-Z_][A-Z0-9_]*\}$/
+const ENV_REF_RE = /^\{env:[A-Z_][A-Z0-9_]*\}$/;
 
 /** Heuristic to detect literal API credentials accidentally pasted into the file. */
-const CREDENTIAL_RE = /^sk-[A-Za-z0-9_-]{20,}$/
+const CREDENTIAL_RE = /^sk-[A-Za-z0-9_-]{20,}$/;
 
 /**
  * Recursively scan `node` for credential heuristic violations and literal
@@ -109,41 +109,41 @@ const CREDENTIAL_RE = /^sk-[A-Za-z0-9_-]{20,}$/
  * @param jspath JSON-path-like string for error messages, e.g. `provider.myProvider.apiKey`.
  */
 function scanForCredentials(node: unknown, jspath: string): void {
-  if (typeof node === 'string') {
+  if (typeof node === "string") {
     // Heuristic: reject anything that looks like an OpenAI/Anthropic-style key.
     if (CREDENTIAL_RE.test(node)) {
       throw new EvalConfigError(
         `eval provider file: credential heuristic triggered at "${jspath}" — literal API key detected; use {env:VAR_NAME} instead`,
         false,
-      )
+      );
     }
-    return
+    return;
   }
 
   if (Array.isArray(node)) {
     for (let i = 0; i < node.length; i++) {
-      scanForCredentials(node[i], `${jspath}[${i}]`)
+      scanForCredentials(node[i], `${jspath}[${i}]`);
     }
-    return
+    return;
   }
 
-  if (node !== null && typeof node === 'object') {
+  if (node !== null && typeof node === "object") {
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      const childPath = `${jspath}.${key}`
+      const childPath = `${jspath}.${key}`;
 
       // apiKey must be an env-ref if present as a string.
-      if (key === 'apiKey' && typeof value === 'string') {
+      if (key === "apiKey" && typeof value === "string") {
         if (!ENV_REF_RE.test(value)) {
           throw new EvalConfigError(
             `eval provider file: "${childPath}" must be an env-ref (e.g. {env:MY_API_KEY}), not a literal value`,
             false,
-          )
+          );
         }
         // An env-ref is fine — don't recurse further into it.
-        continue
+        continue;
       }
 
-      scanForCredentials(value, childPath)
+      scanForCredentials(value, childPath);
     }
   }
 }
@@ -159,42 +159,42 @@ function scanForCredentials(node: unknown, jspath: string): void {
  */
 export function loadOpencodeConfig(absPath: string): LoadedOpencodeConfig {
   // ── File existence ────────────────────────────────────────────────────────
-  let raw: string
+  let raw: string;
   try {
-    raw = fs.readFileSync(absPath, 'utf8')
+    raw = fs.readFileSync(absPath, "utf8");
   } catch (err) {
-    const isEnoent = (err as NodeJS.ErrnoException).code === 'ENOENT'
+    const isEnoent = (err as NodeJS.ErrnoException).code === "ENOENT";
     if (isEnoent) {
       throw new EvalConfigError(
         `eval provider file not found: ${absPath}`,
         true, // isUsageError → exit 2
-      )
+      );
     }
     throw new EvalConfigError(
       `eval opencode config: could not read "${absPath}": ${err instanceof Error ? err.message : String(err)}`,
       false,
-    )
+    );
   }
 
   // ── JSON parse ────────────────────────────────────────────────────────────
-  let parsed: unknown
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw)
+    parsed = JSON.parse(raw);
   } catch (err) {
     throw new EvalConfigError(
       `eval opencode config: JSON parse error in "${absPath}": ${err instanceof Error ? err.message : String(err)}`,
       false, // isUsageError: false → exit 78 (config error)
-    )
+    );
   }
 
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new EvalConfigError(
-      `eval opencode config: root must be a JSON object (got ${Array.isArray(parsed) ? 'array' : typeof parsed})`,
+      `eval opencode config: root must be a JSON object (got ${Array.isArray(parsed) ? "array" : typeof parsed})`,
       false,
-    )
+    );
   }
 
-  const obj = parsed as Record<string, unknown>
+  const obj = parsed as Record<string, unknown>;
 
   // ── Forbidden top-level keys ──────────────────────────────────────────────
   for (const key of Object.keys(obj)) {
@@ -202,30 +202,30 @@ export function loadOpencodeConfig(absPath: string): LoadedOpencodeConfig {
       throw new EvalConfigError(
         `eval opencode config: forbidden top-level key "${key}" — the eval source config may only define "$schema", "model", and "provider"`,
         false,
-      )
+      );
     }
   }
 
-  if (obj.$schema !== undefined && obj.$schema !== 'https://opencode.ai/config.json') {
+  if (obj.$schema !== undefined && obj.$schema !== "https://opencode.ai/config.json") {
     throw new EvalConfigError(
       `eval opencode config: unsupported $schema ${JSON.stringify(obj.$schema)}; expected "https://opencode.ai/config.json"`,
       false,
-    )
+    );
   }
 
-  if (obj.provider === null || typeof obj.provider !== 'object' || Array.isArray(obj.provider)) {
-    throw new EvalConfigError(`eval opencode config: "provider" must be an object`, false)
+  if (obj.provider === null || typeof obj.provider !== "object" || Array.isArray(obj.provider)) {
+    throw new EvalConfigError(`eval opencode config: "provider" must be an object`, false);
   }
 
-  const provider = obj.provider as Record<string, unknown>
+  const provider = obj.provider as Record<string, unknown>;
 
-  scanForCredentials(provider, 'provider')
+  scanForCredentials(provider, "provider");
 
   return {
     source: absPath,
     provider,
-    ...(typeof obj.model === 'string' ? { model: obj.model } : {}),
-  }
+    ...(typeof obj.model === "string" ? { model: obj.model } : {}),
+  };
 }
 
 /**
@@ -238,17 +238,17 @@ export function selectProviderForModel(
   loaded: LoadedOpencodeConfig,
   modelId: string,
 ): { providerKey: string; entry: unknown } {
-  const slashIdx = modelId.indexOf('/')
-  const providerKey = slashIdx === -1 ? modelId : modelId.slice(0, slashIdx)
+  const slashIdx = modelId.indexOf("/");
+  const providerKey = slashIdx === -1 ? modelId : modelId.slice(0, slashIdx);
 
   if (!(providerKey in loaded.provider)) {
     throw new EvalConfigError(
-      `eval opencode config: model ID "${modelId}" maps to provider key "${providerKey}", which is not present in ${loaded.source}; available: ${Object.keys(loaded.provider).join(', ') || '(none)'}`,
+      `eval opencode config: model ID "${modelId}" maps to provider key "${providerKey}", which is not present in ${loaded.source}; available: ${Object.keys(loaded.provider).join(", ") || "(none)"}`,
       false,
-    )
+    );
   }
 
-  return { providerKey, entry: loaded.provider[providerKey] }
+  return { providerKey, entry: loaded.provider[providerKey] };
 }
 
 /**
@@ -267,7 +267,7 @@ export function materializeOpencodeConfig(
   modelId: string,
 ): void {
   const config = {
-    $schema: 'https://opencode.ai/config.json',
+    $schema: "https://opencode.ai/config.json",
     model: modelId,
     provider: {
       [selected.providerKey]: selected.entry,
@@ -275,18 +275,23 @@ export function materializeOpencodeConfig(
     // Explicitly allow all tools so opencode run (non-interactive) doesn't
     // silently skip bash/file operations due to missing permission config.
     permission: {
-      bash: 'allow',
-      edit: 'allow',
-      write: 'allow',
-      read: 'allow',
-      webfetch: 'allow',
+      bash: "allow",
+      edit: "allow",
+      write: "allow",
+      read: "allow",
+      webfetch: "allow",
     },
-    // Disable operator plugins during eval runs. Plugins like akm-opencode
-    // run their own session lifecycle hooks that interfere with the eval's
-    // isolated fixture stash and cause stash mismatch failures.
+    // Disable operator plugins during eval runs. This repo's remaining packs
+    // are memory/long-term-recall benchmarks (locomo, longmemeval, beam,
+    // tau-bench): the opencode runner here drives the model directly to
+    // produce an answer, and an operator plugin such as akm-opencode has no
+    // role in that path. (The coding-benchmark rationale for stripping
+    // plugins — isolating a plugin's own session lifecycle hooks from an
+    // agentic coding run's fixture stash — moved with those packs to
+    // akm-bench, which runs coding benchmarks through Harbor.)
     plugin: [],
-  }
+  };
 
-  const outPath = path.join(opencodeConfigDir, 'opencode.json')
-  fs.writeFileSync(outPath, JSON.stringify(config, null, 2), { mode: 0o600 })
+  const outPath = path.join(opencodeConfigDir, "opencode.json");
+  fs.writeFileSync(outPath, JSON.stringify(config, null, 2), { mode: 0o600 });
 }

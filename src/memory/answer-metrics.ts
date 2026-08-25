@@ -1,22 +1,27 @@
-import type { AnswerMetrics } from './types.ts';
+import type { AnswerMetrics } from "./types.ts";
 
 function normalize(value: string): string {
   // Intentionally normalize aggressively so smoke-test scoring is deterministic across punctuation differences
   // such as "don't" -> "don t" and "well-known" -> "well known".
-  return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function tokens(value: string): string[] {
   const normalized = normalize(value);
-  return normalized.length === 0 ? [] : normalized.split(' ');
+  return normalized.length === 0 ? [] : normalized.split(" ");
 }
 
 export function scoreAnswer(expected?: string, actual?: string): AnswerMetrics {
-  const safeExpected = expected ?? '';
-  const safeActual = actual ?? '';
+  const safeExpected = expected ?? "";
+  const safeActual = actual ?? "";
   const normalizedExpected = normalize(safeExpected);
   const normalizedActual = normalize(safeActual);
-  const exactMatch = normalizedExpected.length > 0 && normalizedExpected === normalizedActual ? 1 : 0;
+  const exactMatch =
+    normalizedExpected.length > 0 && normalizedExpected === normalizedActual ? 1 : 0;
 
   const expectedTokens = tokens(safeExpected);
   const actualTokens = tokens(safeActual);
@@ -39,7 +44,8 @@ export function scoreAnswer(expected?: string, actual?: string): AnswerMetrics {
   const precision = actualTokens.length === 0 ? 0 : overlap / actualTokens.length;
   const recall = expectedTokens.length === 0 ? 0 : overlap / expectedTokens.length;
   const tokenF1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
-  const containsExpected = normalizedExpected.length > 0 && normalizedActual.includes(normalizedExpected) ? 1 : 0;
+  const containsExpected =
+    normalizedExpected.length > 0 && normalizedActual.includes(normalizedExpected) ? 1 : 0;
 
   return {
     exactMatch,

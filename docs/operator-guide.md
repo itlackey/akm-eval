@@ -10,20 +10,17 @@ This document covers the operator exceptions and pack-specific caveats that do n
 
 ## Host-managed packs
 
-These packs use repo-local uv-managed runtimes under `.akm/evals/venvs/`:
-
-- `beam`
-- `swe-bench`
-- `terminal-bench`
-
-They are set up automatically by `bin/doctor --pack ...` and `bin/eval --pack ...`.
+`beam` uses a repo-local uv-managed runtime under `.akm/evals/venvs/beam`, set up automatically by
+`bin/doctor --pack beam` and `bin/eval --pack beam ...`.
 
 ## Important pack-specific caveats
 
 - `beam` still requires a local `vendor/BEAM` checkout, prepared official datasets, and judge configuration.
-- `terminal-bench` currently requires the `opencode` provider path.
 - `longmemeval` prefers `openai-compatible`; the `opencode` CLI path can fail on very large prompts.
 - `tau-bench` currently uses the upstream `openai` provider mode through `openai-compatible` config.
+
+Coding benchmarks (`swe-bench`, `terminal-bench`) are out of scope for this repo; see
+`docs/benchmark-packs.md` for the pointer to `akm-bench`.
 
 ## External blockers
 

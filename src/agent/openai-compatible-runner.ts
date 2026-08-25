@@ -1,8 +1,8 @@
-import type { AgentProviderConfig } from '../core/types.ts';
-import type { AgentRunOptions, AgentRunResult, AgentRunner } from './types.ts';
+import type { AgentProviderConfig } from "../core/types.ts";
+import type { AgentRunOptions, AgentRunResult, AgentRunner } from "./types.ts";
 
 function resolveEnvRefs(value: string): string {
-  return value.replace(/\{env:([A-Z_][A-Z0-9_]*)\}/g, (_m, name) => process.env[name] ?? '');
+  return value.replace(/\{env:([A-Z_][A-Z0-9_]*)\}/g, (_m, name) => process.env[name] ?? "");
 }
 
 export class OpenAICompatibleRunner implements AgentRunner {
@@ -20,20 +20,22 @@ export class OpenAICompatibleRunner implements AgentRunner {
     if (!baseURL) {
       return {
         ok: false,
-        text: '',
+        text: "",
         latencyMs: Date.now() - startedAt,
-        error: 'openai-compatible provider requires baseURL',
+        error: "openai-compatible provider requires baseURL",
       };
     }
 
-    const url = `${baseURL.replace(/\/$/, '')}/chat/completions`;
-    const apiKey = this.providerConfig.apiKey ? resolveEnvRefs(this.providerConfig.apiKey) : undefined;
+    const url = `${baseURL.replace(/\/$/, "")}/chat/completions`;
+    const apiKey = this.providerConfig.apiKey
+      ? resolveEnvRefs(this.providerConfig.apiKey)
+      : undefined;
 
     const messages: Array<{ role: string; content: string }> = [];
     if (options.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
+      messages.push({ role: "system", content: options.systemPrompt });
     }
-    messages.push({ role: 'user', content: options.prompt });
+    messages.push({ role: "user", content: options.prompt });
 
     const body: Record<string, unknown> = {
       model: this.model,
@@ -48,9 +50,9 @@ export class OpenAICompatibleRunner implements AgentRunner {
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify(body),
@@ -64,7 +66,7 @@ export class OpenAICompatibleRunner implements AgentRunner {
         const text = await response.text();
         return {
           ok: false,
-          text: '',
+          text: "",
           latencyMs,
           error: `HTTP ${response.status}: ${text}`,
         };
@@ -75,12 +77,14 @@ export class OpenAICompatibleRunner implements AgentRunner {
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
 
-      const content = data.choices?.[0]?.message?.content ?? '';
+      const content = data.choices?.[0]?.message?.content ?? "";
       const usage = data.usage
         ? {
             input: data.usage.prompt_tokens ?? 0,
             output: data.usage.completion_tokens ?? 0,
-            total: data.usage.total_tokens ?? (data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0),
+            total:
+              data.usage.total_tokens ??
+              (data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0),
           }
         : undefined;
 
@@ -96,7 +100,7 @@ export class OpenAICompatibleRunner implements AgentRunner {
       if (abortController.signal.aborted) {
         return {
           ok: false,
-          text: '',
+          text: "",
           latencyMs,
           error: `openai-compatible request timed out after ${timeoutMs}ms`,
         };
@@ -104,7 +108,7 @@ export class OpenAICompatibleRunner implements AgentRunner {
       const message = err instanceof Error ? err.message : String(err);
       return {
         ok: false,
-        text: '',
+        text: "",
         latencyMs,
         error: message,
       };

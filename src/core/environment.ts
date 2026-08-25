@@ -1,11 +1,11 @@
-import { packRegistry } from '../packs/registry/index.ts';
-import { getMemoryBackendStatus, listMemoryBackends } from '../memory/registry.ts';
-import { runProcess } from './process.ts';
-import { getProjectRoot } from './project-root.ts';
+import { getMemoryBackendStatus, listMemoryBackends } from "../memory/registry.ts";
+import { packRegistry } from "../packs/registry/index.ts";
+import { runProcess } from "./process.ts";
+import { getProjectRoot } from "./project-root.ts";
 
 export interface DoctorCheck {
   name: string;
-  status: 'ok' | 'warn';
+  status: "ok" | "warn";
   detail: string;
 }
 
@@ -13,18 +13,27 @@ export interface DoctorCheckOptions {
   packId?: string;
 }
 
-export function commandVersion(command: string, args: string[] = ['--version'], cwd = getProjectRoot()): string | null {
+export function commandVersion(
+  command: string,
+  args: string[] = ["--version"],
+  cwd = getProjectRoot(),
+): string | null {
   const result = runProcess(command, args, cwd);
   if (!result.success) {
     return null;
   }
-  return result.stdout.trim().split('\n')[0] ?? null;
+  return result.stdout.trim().split("\n")[0] ?? null;
 }
 
-export function runDoctorChecks(rootDir = getProjectRoot(), options: DoctorCheckOptions = {}): DoctorCheck[] {
-  const bunVersion = commandVersion('bun', ['--version'], rootDir);
-  const nodeVersion = commandVersion('node', ['--version'], rootDir);
-  const selectedPack = options.packId ? packRegistry.find((entry) => entry.id === options.packId) : undefined;
+export function runDoctorChecks(
+  rootDir = getProjectRoot(),
+  options: DoctorCheckOptions = {},
+): DoctorCheck[] {
+  const bunVersion = commandVersion("bun", ["--version"], rootDir);
+  const nodeVersion = commandVersion("node", ["--version"], rootDir);
+  const selectedPack = options.packId
+    ? packRegistry.find((entry) => entry.id === options.packId)
+    : undefined;
   const packs = selectedPack ? [selectedPack] : packRegistry;
   const includeSharedChecks = !selectedPack;
 
@@ -33,14 +42,14 @@ export function runDoctorChecks(rootDir = getProjectRoot(), options: DoctorCheck
   if (includeSharedChecks) {
     checks.push(
       {
-        name: 'bun',
-        status: bunVersion ? 'ok' : 'warn',
-        detail: bunVersion ? `found ${bunVersion}` : 'bun not found in PATH',
+        name: "bun",
+        status: bunVersion ? "ok" : "warn",
+        detail: bunVersion ? `found ${bunVersion}` : "bun not found in PATH",
       },
       {
-        name: 'node',
-        status: nodeVersion ? 'ok' : 'warn',
-        detail: nodeVersion ? `found ${nodeVersion}` : 'node not found in PATH',
+        name: "node",
+        status: nodeVersion ? "ok" : "warn",
+        detail: nodeVersion ? `found ${nodeVersion}` : "node not found in PATH",
       },
     );
   }
@@ -73,7 +82,7 @@ export function runDoctorChecks(rootDir = getProjectRoot(), options: DoctorCheck
     const installed = pack.checkInstalled(rootDir);
     checks.push({
       name: `pack:${pack.id}`,
-      status: installed ? 'ok' : 'warn',
+      status: installed ? "ok" : "warn",
       detail: installed
         ? `optional dependency ${pack.optionalDependency} available`
         : `optional dependency ${pack.optionalDependency} not installed; runs are blocked until the official harness is available`,

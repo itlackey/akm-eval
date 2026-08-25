@@ -1,24 +1,24 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const baseArtifacts = path.resolve(rootDir, 'tests/.artifacts/summary-cli');
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const baseArtifacts = path.resolve(rootDir, "tests/.artifacts/summary-cli");
 
 function writeResult(dirName: string) {
   const dir = path.resolve(baseArtifacts, dirName);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
-    path.resolve(dir, 'result.json'),
+    path.resolve(dir, "result.json"),
     JSON.stringify(
       {
-        schemaVersion: '1.0',
-        runId: 'cli-run',
-        pack: 'beam',
-        variant: 'smoke',
-        memoryBackend: 'none',
-        status: 'passed',
+        schemaVersion: "1.0",
+        runId: "cli-run",
+        pack: "beam",
+        variant: "smoke",
+        memoryBackend: "none",
+        status: "passed",
         startedAt: new Date().toISOString(),
         finishedAt: new Date().toISOString(),
         durationMs: 1,
@@ -38,10 +38,10 @@ function writeResult(dirName: string) {
           logs: [],
         },
         artifacts: {
-          resultPath: path.resolve(dir, 'result.json'),
-          summaryPath: path.resolve(dir, 'summary.md'),
+          resultPath: path.resolve(dir, "result.json"),
+          summaryPath: path.resolve(dir, "summary.md"),
         },
-        metadata: { model: 'cli-model' },
+        metadata: { model: "cli-model" },
       },
       null,
       2,
@@ -53,33 +53,33 @@ afterEach(() => {
   fs.rmSync(baseArtifacts, { recursive: true, force: true });
 });
 
-describe('summary CLI', () => {
-  test('prints json summaries for a runs directory', () => {
-    writeResult('run');
+describe("summary CLI", () => {
+  test("prints json summaries for a runs directory", () => {
+    writeResult("run");
 
     const output = Bun.spawnSync({
-      cmd: [process.execPath, 'src/cli.ts', 'summary', '--runs', baseArtifacts, '--format', 'json'],
+      cmd: [process.execPath, "src/cli.ts", "summary", "--runs", baseArtifacts, "--format", "json"],
       cwd: rootDir,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdout: "pipe",
+      stderr: "pipe",
     });
 
     expect(output.exitCode).toBe(0);
-    expect(output.stderr.toString()).toBe('');
+    expect(output.stderr.toString()).toBe("");
     expect(JSON.parse(output.stdout.toString())).toEqual([
       {
-        pack: 'beam',
-        variant: 'smoke',
-        runId: 'cli-run',
+        pack: "beam",
+        variant: "smoke",
+        runId: "cli-run",
         date: expect.any(String),
         score: 0.75,
-        status: 'passed',
-        model: 'cli-model',
+        status: "passed",
+        model: "cli-model",
         repoCommit: null,
         runnerType: null,
         benchmarkId: null,
         benchmarkVersion: null,
-        resultPath: path.resolve(baseArtifacts, 'run', 'result.json'),
+        resultPath: path.resolve(baseArtifacts, "run", "result.json"),
       },
     ]);
   });

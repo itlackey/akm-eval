@@ -1,25 +1,29 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, test } from 'bun:test';
-import { validateNormalizedResult } from '../src/reporting/normalized-result.ts';
+import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { validateNormalizedResult } from "../src/reporting/normalized-result.ts";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-describe('normalized result schema', () => {
-  test('planned schema files exist and current result validator accepts internal payload', () => {
-    expect(fs.existsSync(path.resolve(rootDir, 'config/schemas/eval-config.schema.json'))).toBe(true);
-    expect(fs.existsSync(path.resolve(rootDir, 'config/schemas/result.schema.json'))).toBe(true);
-    expect(fs.existsSync(path.resolve(rootDir, 'config/schemas/variant.schema.json'))).toBe(true);
-    expect(fs.existsSync(path.resolve(rootDir, 'config/schemas/memory-backend.schema.json'))).toBe(true);
+describe("normalized result schema", () => {
+  test("planned schema files exist and current result validator accepts internal payload", () => {
+    expect(fs.existsSync(path.resolve(rootDir, "config/schemas/eval-config.schema.json"))).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.resolve(rootDir, "config/schemas/result.schema.json"))).toBe(true);
+    expect(fs.existsSync(path.resolve(rootDir, "config/schemas/variant.schema.json"))).toBe(true);
+    expect(fs.existsSync(path.resolve(rootDir, "config/schemas/memory-backend.schema.json"))).toBe(
+      true,
+    );
 
     const result = {
-      schemaVersion: '1.0',
-      runId: 'demo',
-      pack: 'akm-bench',
-      variant: 'baseline',
-      memoryBackend: 'none',
-      status: 'passed',
+      schemaVersion: "1.0",
+      runId: "demo",
+      pack: "locomo",
+      variant: "baseline",
+      memoryBackend: "none",
+      status: "passed",
       startedAt: new Date().toISOString(),
       finishedAt: new Date().toISOString(),
       durationMs: 1,
@@ -39,22 +43,22 @@ describe('normalized result schema', () => {
         logs: [],
       },
       artifacts: {
-        resultPath: path.resolve(rootDir, 'tests/.artifacts/result.json'),
-        summaryPath: path.resolve(rootDir, 'tests/.artifacts/summary.md'),
+        resultPath: path.resolve(rootDir, "tests/.artifacts/result.json"),
+        summaryPath: path.resolve(rootDir, "tests/.artifacts/summary.md"),
       },
     };
 
     expect(validateNormalizedResult(result)).toBe(true);
   });
 
-  test('validator accepts answer-only results with retrieval queryCount set to zero', () => {
+  test("validator accepts answer-only results with retrieval queryCount set to zero", () => {
     const result = {
-      schemaVersion: '1.0',
-      runId: 'answer-only',
-      pack: 'longmemeval',
-      variant: 'baseline',
-      memoryBackend: 'none',
-      status: 'failed',
+      schemaVersion: "1.0",
+      runId: "answer-only",
+      pack: "longmemeval",
+      variant: "baseline",
+      memoryBackend: "none",
+      status: "failed",
       startedAt: new Date().toISOString(),
       finishedAt: new Date().toISOString(),
       durationMs: 1,
@@ -74,8 +78,8 @@ describe('normalized result schema', () => {
         logs: [],
       },
       artifacts: {
-        resultPath: path.resolve(rootDir, 'tests/.artifacts/result.json'),
-        summaryPath: path.resolve(rootDir, 'tests/.artifacts/summary.md'),
+        resultPath: path.resolve(rootDir, "tests/.artifacts/result.json"),
+        summaryPath: path.resolve(rootDir, "tests/.artifacts/summary.md"),
       },
     };
 

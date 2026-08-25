@@ -30,7 +30,7 @@
       "id": "akm-memory",
       "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
       "akm": { "enabled": true, "command": "akm" },
-      "memory": { "backend": "akm", "config": { "command": "akm memory" } }
+      "memory": { "backend": "akm" }
     },
     {
       "id": "mem0-oss",
@@ -46,9 +46,9 @@
     }
   ],
   "notes": [
-    "This planned comparison config still includes blocked external memory backend variants for future integration work.",
-    "Today only the baseline and raw-vector paths are truthful runnable benchmark choices in this repo.",
-    "`akm-eval run` should fail fast for the akm-memory and mem0-oss variants until a real evaluated backend integration lands."
+    "This planned comparison config still includes blocked external memory backend variants (mem0-oss) for future integration work.",
+    "baseline, raw-vector, and akm-memory are truthful runnable benchmark choices; the akm arm shells out to a real akm CLI (see docs/memory-backends.md) and needs one reachable via AKM_EVAL_AKM_CMD (default [\"akm\"]).",
+    "`akm-eval run` fails fast for the mem0-oss variant, which has no evaluated backend integration; the akm-memory variant runs for real and fails loudly if the akm CLI is unreachable."
   ],
   "providers": {
     "openai-compatible": {

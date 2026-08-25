@@ -2,27 +2,35 @@
 
 This repo’s default path is committed configs plus `bin/doctor` and `bin/eval`.
 
+This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
+(`swe-bench`, `terminal-bench`, akm's own task corpus) live in the separate
+[`akm-bench`](https://github.com/itlackey/akm-bench) repo, which runs them through Harbor; see
+`docs/benchmark-packs.md`.
+
 ## What Exists
 
 - `bin/*` wraps the TypeScript implementation in `src/`.
 - Packs normalize authoritative upstream artifacts to `result.json`, `summary.md`, and optional `raw-output.json`.
 - `opencode` and `openai-compatible` are the only runner modes.
-- Host-managed runtimes for BEAM, SWE-Bench, and Terminal-Bench live under `.akm/evals/venvs/`.
+- A host-managed BEAM runtime lives under `.akm/evals/venvs/beam`.
 - Blocked packs and blocked memory backends fail explicitly.
+- `judgedPass` for `longmemeval` comes only from the pack's official `evaluatorCommand` output; there is no local heuristic judge in this repo.
 
 ## Main Gaps
 
-- `akm-bench` has no authoritative external artifact contract.
-- `memory.backend: akm` still lacks a documented add/search contract.
+- `memory.backend: akm` is a real, evaluated adapter (subprocess akm CLI, deterministic
+  frontmatter synthesis, hermetic per-instance install) — see `docs/memory-backends.md`. It still
+  needs a real akm CLI reachable at run time (`AKM_EVAL_AKM_CMD`); see `docs/operator-blockers.md`
+  item 3.
 - `mem0`, `openviking`, and `zep` are placeholders without real runtimes.
 - BEAM still needs external dataset prep and a real judge endpoint.
-- `terminal-bench`, `tau-bench`, and `longmemeval` still have runner/path asymmetries.
+- `tau-bench` and `longmemeval` still have runner/path asymmetries.
 
 ## External Dependencies
 
 - BEAM needs the upstream checkout, prepared datasets, and judge credentials.
-- AKM memory integration needs an upstream contract, not more local scaffolding.
-- `akm-bench` needs a real external process and authoritative artifact schema.
+- AKM memory integration needs a real akm CLI (`^0.9`) reachable to the process running evals —
+  an operator install-or-point-at-a-checkout step, not further repo-internal work.
 
 ## Doc Gaps
 
@@ -40,8 +48,6 @@ This repo’s default path is committed configs plus `bin/doctor` and `bin/eval`
 ## Priority Next Actions
 
 1. Finalize BEAM operator handoff and evidence capture.
-2. Decide whether `akm` memory stays blocked or gets a real upstream contract.
-3. Define the authoritative `akm-bench` artifact boundary.
-4. Add regression tests for blocked packs and blocked memory backends.
-5. Consolidate operator status into one runnable/blocked matrix.
-6. Keep smoke configs, pack READMEs, and top-level docs synchronized with actual support.
+2. Add regression tests for blocked packs and blocked memory backends.
+3. Consolidate operator status into one runnable/blocked matrix.
+4. Keep smoke configs, pack READMEs, and top-level docs synchronized with actual support.

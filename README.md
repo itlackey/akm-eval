@@ -1,6 +1,13 @@
 # akm-eval
 
-AKM Eval runs real benchmark packs through authoritative upstream harnesses and normalizes the outputs.
+AKM Eval runs real memory / long-term-recall benchmark packs through authoritative upstream
+harnesses and dataset evaluators, and normalizes the outputs.
+
+This repo's scope is memory benchmarks only. Standard agentic-coding benchmarks (SWE-bench,
+Terminal-Bench, and akm's own task corpus) live in
+[`akm-bench`](https://github.com/itlackey/akm-bench), which runs them through the Harbor
+benchmark-execution harness instead of duplicating a container/agent runtime here. See
+`docs/benchmark-packs.md` for the split rationale.
 
 Part of the [akm](https://github.com/itlackey/akm) ecosystem — see also
 [akm-stash](https://github.com/itlackey/akm-stash),
@@ -28,7 +35,6 @@ For normal `bin/...` usage:
 Extra pack requirements still apply:
 
 - `beam`: local `vendor/BEAM` checkout, prepared official datasets, and judge configuration
-- `terminal-bench`: `opencode` provider path only
 
 `bun` is only required for repo development tasks.
 
@@ -45,20 +51,23 @@ Common runnable configs live under `config/common/`; see `docs/running-evals.md`
 - `config/common/locomo-smoke.json`
 - `config/common/longmemeval-smoke.json`
 - `config/common/beam-smoke.json`
-- `config/common/swe-bench-smoke.json`
-- `config/common/swe-bench-smoke-openai-compatible.json`
 - `config/common/tau-bench-smoke.json`
-- `config/common/terminal-bench-smoke.json`
+- `config/common/locomo-akm-ab.json` — baseline / raw-vector / akm three-arm comparison (see `docs/memory-backends.md`)
+- `config/common/longmemeval-akm-ab.json` — same three-arm shape for longmemeval: the two retrieval arms
+  (`raw-vector`, `akm-memory`) route through `memory.add()`/`memory.search()` per question, while `baseline`
+  keeps the full-haystack prompt. See the config's own `notes` and `docs/memory-backends.md` before spending
+  judge budget on this one.
 
 ## Supported packs
 
 - `locomo`
 - `longmemeval`
 - `beam`
-- `swe-bench`
-- `terminal-bench`
 - `tau-bench`
-- `akm-bench` remains intentionally blocked
+
+Coding benchmarks (`swe-bench`, `terminal-bench`, and akm's own task corpus) are not part of this
+repo. Run those through [`akm-bench`](https://github.com/itlackey/akm-bench), which executes them
+via Harbor instead of a bespoke container/agent runtime.
 
 ## Runner support
 
@@ -67,10 +76,7 @@ Common runnable configs live under `config/common/`; see `docs/running-evals.md`
 | `locomo` | Yes | Yes |
 | `longmemeval` | Partial | Yes |
 | `beam` | Yes | Yes |
-| `swe-bench` | Yes | Yes |
 | `tau-bench` | No | Yes |
-| `terminal-bench` | Yes | No |
-| `akm-bench` | No | No |
 
 ## Docs
 

@@ -1,120 +1,120 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, test } from 'bun:test';
-import { createRunContext } from '../src/core/run-context.ts';
+import { describe, expect, test } from "bun:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRunContext } from "../src/core/run-context.ts";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-describe('run context metadata', () => {
-  test('derives repoCommit and runnerType for new runs when available', () => {
+describe("run context metadata", () => {
+  test("derives repoCommit and runnerType for new runs when available", () => {
     const expectedCommit = Bun.spawnSync({
-      cmd: ['git', 'rev-parse', 'HEAD'],
+      cmd: ["git", "rev-parse", "HEAD"],
       cwd: rootDir,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    }).stdout
-      .toString()
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+      .stdout.toString()
       .trim();
 
     const context = createRunContext(
       rootDir,
       { version: 1, runs: [] },
       {
-        pack: 'locomo',
-        variant: 'baseline',
-        agentProvider: 'openai-compatible',
+        pack: "locomo",
+        variant: "baseline",
+        agentProvider: "openai-compatible",
         agentProviderConfig: {
-          type: 'openai-compatible',
-          baseURL: 'https://api.openai.com/v1',
+          type: "openai-compatible",
+          baseURL: "https://api.openai.com/v1",
         },
       },
     );
 
     expect(context.run.metadata?.repoCommit).toBe(expectedCommit);
-    expect(context.run.metadata?.runnerType).toBe('openai-compatible');
+    expect(context.run.metadata?.runnerType).toBe("openai-compatible");
   });
 
-  test('preserves explicit metadata values', () => {
+  test("preserves explicit metadata values", () => {
     const context = createRunContext(
       rootDir,
       { version: 1, runs: [] },
       {
-        pack: 'locomo',
-        variant: 'baseline',
+        pack: "locomo",
+        variant: "baseline",
         metadata: {
-          repoCommit: 'manual-commit',
-          runnerType: 'manual-runner',
+          repoCommit: "manual-commit",
+          runnerType: "manual-runner",
         },
-        agentProvider: 'openai-compatible',
+        agentProvider: "openai-compatible",
         agentProviderConfig: {
-          type: 'openai-compatible',
-          baseURL: 'https://api.openai.com/v1',
+          type: "openai-compatible",
+          baseURL: "https://api.openai.com/v1",
         },
       },
     );
 
-    expect(context.run.metadata?.repoCommit).toBe('manual-commit');
-    expect(context.run.metadata?.runnerType).toBe('manual-runner');
+    expect(context.run.metadata?.repoCommit).toBe("manual-commit");
+    expect(context.run.metadata?.runnerType).toBe("manual-runner");
   });
 
-  test('derives model from run agentModel first', () => {
+  test("derives model from run agentModel first", () => {
     const context = createRunContext(
       rootDir,
       { version: 1, runs: [] },
       {
-        pack: 'locomo',
-        variant: 'baseline',
-        agentModel: 'custom/model',
-        agentProvider: 'openai-compatible',
+        pack: "locomo",
+        variant: "baseline",
+        agentModel: "custom/model",
+        agentProvider: "openai-compatible",
         agentProviderConfig: {
-          type: 'openai-compatible',
-          baseURL: 'https://api.openai.com/v1',
-          defaultModel: 'provider/default-model',
+          type: "openai-compatible",
+          baseURL: "https://api.openai.com/v1",
+          defaultModel: "provider/default-model",
         },
       },
     );
 
-    expect(context.run.metadata?.model).toBe('custom/model');
+    expect(context.run.metadata?.model).toBe("custom/model");
   });
 
-  test('falls back to provider default model when run agentModel is absent', () => {
+  test("falls back to provider default model when run agentModel is absent", () => {
     const context = createRunContext(
       rootDir,
       { version: 1, runs: [] },
       {
-        pack: 'locomo',
-        variant: 'baseline',
-        agentProvider: 'openai-compatible',
+        pack: "locomo",
+        variant: "baseline",
+        agentProvider: "openai-compatible",
         agentProviderConfig: {
-          type: 'openai-compatible',
-          baseURL: 'https://api.openai.com/v1',
-          defaultModel: 'provider/default-model',
+          type: "openai-compatible",
+          baseURL: "https://api.openai.com/v1",
+          defaultModel: "provider/default-model",
         },
       },
     );
 
-    expect(context.run.metadata?.model).toBe('provider/default-model');
+    expect(context.run.metadata?.model).toBe("provider/default-model");
   });
 
-  test('preserves explicit metadata model', () => {
+  test("preserves explicit metadata model", () => {
     const context = createRunContext(
       rootDir,
       { version: 1, runs: [] },
       {
-        pack: 'locomo',
-        variant: 'baseline',
+        pack: "locomo",
+        variant: "baseline",
         metadata: {
-          model: 'manual-model',
+          model: "manual-model",
         },
-        agentProvider: 'openai-compatible',
+        agentProvider: "openai-compatible",
         agentProviderConfig: {
-          type: 'openai-compatible',
-          baseURL: 'https://api.openai.com/v1',
-          defaultModel: 'provider/default-model',
+          type: "openai-compatible",
+          baseURL: "https://api.openai.com/v1",
+          defaultModel: "provider/default-model",
         },
       },
     );
 
-    expect(context.run.metadata?.model).toBe('manual-model');
+    expect(context.run.metadata?.model).toBe("manual-model");
   });
 });

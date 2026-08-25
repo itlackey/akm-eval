@@ -37,6 +37,7 @@ for env_name in \
   OPENAI_API_KEY \
   OPENAI_BASE_URL \
   OPENCODE_API_KEY \
+  AKM_EVAL_AKM_CMD \
   AKM_STASH_DIR \
   XDG_CACHE_HOME \
   XDG_CONFIG_HOME \
@@ -48,8 +49,7 @@ for env_name in \
   BEAM_REPO_PATH \
   BEAM_DATASET_PATH \
   BEAM_DATASET_10M_PATH \
-  BEAM_PYTHON_BIN \
-  AKM_EVAL_TERMINAL_BENCH_FORWARD_ENV_NAMES
+  BEAM_PYTHON_BIN
 do
   if [ -n "${!env_name:-}" ]; then
     docker_args+=(-e "$env_name=${!env_name}")
@@ -58,23 +58,11 @@ done
 
 for env_name in $(compgen -e); do
   case "$env_name" in
-    AKM_EVAL_TERMINAL_BENCH_*)
-      docker_args+=(-e "$env_name=${!env_name}")
-      ;;
     *_API_KEY|*_BASE_URL|*_TOKEN)
       docker_args+=(-e "$env_name=${!env_name}")
       ;;
   esac
 done
-
-if [ -n "${AKM_EVAL_TERMINAL_BENCH_FORWARD_ENV_NAMES:-}" ]; then
-  IFS=',' read -r -a forwarded_env_names <<< "$AKM_EVAL_TERMINAL_BENCH_FORWARD_ENV_NAMES"
-  for env_name in "${forwarded_env_names[@]}"; do
-    if [ -n "$env_name" ] && [ -n "${!env_name:-}" ]; then
-      docker_args+=(-e "$env_name=${!env_name}")
-    fi
-  done
-fi
 
 if [ -S /var/run/docker.sock ]; then
   docker_args+=(-v /var/run/docker.sock:/var/run/docker.sock)

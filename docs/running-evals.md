@@ -10,7 +10,7 @@ Use `bin/eval` for a single pack/variant and `bin/matrix` to inspect a config.
 4. Run `bin/eval --pack <pack> --variant <variant> --config <path>`.
 5. Inspect outputs with `bin/report --run <dir>` or `bin/summary --runs <dir>`.
 
-`bin/doctor --pack ...` and `bin/eval --pack ...` create or repair the host-managed pack runtimes used by `beam`, `swe-bench`, and `terminal-bench`.
+`bin/doctor --pack ...` and `bin/eval --pack ...` create or repair the host-managed pack runtime used by `beam`.
 
 ## Common commands
 

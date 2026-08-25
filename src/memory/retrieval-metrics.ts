@@ -1,4 +1,41 @@
-import type { MemorySearchResult, RetrievalMetrics } from './types.ts';
+import type { MemorySearchResult, RetrievalMetrics } from "./types.ts";
+
+/**
+ * Sum queryCount (a real total, never averaged) and mean the four ratio
+ * metrics across a run's per-question `scoreRetrieval` calls. Shared by every
+ * pack adapter that scores retrieval per-question and reports one aggregate
+ * `metrics.retrieval` in its NormalizedRunResult (locomo, longmemeval).
+ */
+export function averageRetrieval(metrics: RetrievalMetrics[]): RetrievalMetrics {
+  if (metrics.length === 0) {
+    return {
+      queryCount: 0,
+      precisionAtK: 0,
+      recallAtK: 0,
+      mrr: 0,
+      ndcgAtK: 0,
+    };
+  }
+
+  const sum = metrics.reduce(
+    (acc, entry) => ({
+      queryCount: acc.queryCount + entry.queryCount,
+      precisionAtK: acc.precisionAtK + entry.precisionAtK,
+      recallAtK: acc.recallAtK + entry.recallAtK,
+      mrr: acc.mrr + entry.mrr,
+      ndcgAtK: acc.ndcgAtK + entry.ndcgAtK,
+    }),
+    { queryCount: 0, precisionAtK: 0, recallAtK: 0, mrr: 0, ndcgAtK: 0 },
+  );
+
+  return {
+    queryCount: sum.queryCount,
+    precisionAtK: Number((sum.precisionAtK / metrics.length).toFixed(6)),
+    recallAtK: Number((sum.recallAtK / metrics.length).toFixed(6)),
+    mrr: Number((sum.mrr / metrics.length).toFixed(6)),
+    ndcgAtK: Number((sum.ndcgAtK / metrics.length).toFixed(6)),
+  };
+}
 
 export function scoreRetrieval(
   relevantIds: string[] = [],

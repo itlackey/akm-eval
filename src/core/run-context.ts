@@ -1,7 +1,7 @@
-import path from 'node:path';
-import type { AgentRunner } from '../agent/types.ts';
-import { runProcess } from './process.ts';
-import type { EvalConfig, RunDefinition } from './types.ts';
+import path from "node:path";
+import type { AgentRunner } from "../agent/types.ts";
+import { runProcess } from "./process.ts";
+import type { EvalConfig, RunDefinition } from "./types.ts";
 
 export interface RunContext {
   rootDir: string;
@@ -13,38 +13,41 @@ export interface RunContext {
   agentRunner?: AgentRunner;
 }
 
-function hasOwnMetadataKey(metadata: Record<string, string | number | boolean | null>, key: string): boolean {
+function hasOwnMetadataKey(
+  metadata: Record<string, string | number | boolean | null>,
+  key: string,
+): boolean {
   return Object.prototype.hasOwnProperty.call(metadata, key);
 }
 
 function detectRepoCommit(rootDir: string): string | null {
-  const result = runProcess('git', ['rev-parse', 'HEAD'], rootDir);
+  const result = runProcess("git", ["rev-parse", "HEAD"], rootDir);
   if (!result.success) {
     return null;
   }
 
-  const commit = result.stdout.trim().split('\n')[0]?.trim();
+  const commit = result.stdout.trim().split("\n")[0]?.trim();
   return commit ? commit : null;
 }
 
 function withDerivedRunMetadata(rootDir: string, run: RunDefinition): RunDefinition {
   const metadata = { ...(run.metadata ?? {}) };
 
-  if (!hasOwnMetadataKey(metadata, 'repoCommit')) {
+  if (!hasOwnMetadataKey(metadata, "repoCommit")) {
     const repoCommit = detectRepoCommit(rootDir);
     if (repoCommit) {
       metadata.repoCommit = repoCommit;
     }
   }
 
-  if (!hasOwnMetadataKey(metadata, 'runnerType')) {
+  if (!hasOwnMetadataKey(metadata, "runnerType")) {
     const runnerType = run.agentProviderConfig?.type ?? run.agentProvider;
     if (runnerType) {
       metadata.runnerType = runnerType;
     }
   }
 
-  if (!hasOwnMetadataKey(metadata, 'model')) {
+  if (!hasOwnMetadataKey(metadata, "model")) {
     const model = run.agentModel ?? run.agentProviderConfig?.defaultModel;
     if (model) {
       metadata.model = model;
@@ -57,10 +60,17 @@ function withDerivedRunMetadata(rootDir: string, run: RunDefinition): RunDefinit
   };
 }
 
-export function createRunContext(rootDir: string, config: EvalConfig, run: RunDefinition, agentRunner?: AgentRunner): RunContext {
+export function createRunContext(
+  rootDir: string,
+  config: EvalConfig,
+  run: RunDefinition,
+  agentRunner?: AgentRunner,
+): RunContext {
   const normalizedRun = withDerivedRunMetadata(rootDir, run);
   const runId = normalizedRun.id ?? `${normalizedRun.pack}-${normalizedRun.variant}`;
-  const outputBase = normalizedRun.outputDir ?? (config.defaults?.outputDir ? path.resolve(config.defaults.outputDir, runId) : `runs/${runId}`);
+  const outputBase =
+    normalizedRun.outputDir ??
+    (config.defaults?.outputDir ? path.resolve(config.defaults.outputDir, runId) : `runs/${runId}`);
   const outputDir = path.resolve(rootDir, outputBase);
 
   return {

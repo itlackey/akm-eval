@@ -24,44 +24,6 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   fi
 done
 
-if [ "$pack_id" = "swe-bench" ]; then
-  run_setup_script "swe-bench" "$REPO_ROOT/scripts/setup-swe-bench-runtime.sh"
-
-  if ! command -v docker >/dev/null 2>&1; then
-    printf 'WARN pack:swe-bench: Docker daemon unavailable: docker not found in PATH\n'
-    exit 0
-  fi
-
-  if ! docker_version="$(docker info --format '{{.ServerVersion}}' 2>/dev/null)"; then
-    docker_error="$(docker info --format '{{.ServerVersion}}' 2>&1 || true)"
-    docker_error="${docker_error//$'\n'/ }"
-    printf 'WARN pack:swe-bench: Docker daemon unavailable: %s\n' "${docker_error:-docker info failed}"
-    exit 0
-  fi
-
-  printf 'OK pack:swe-bench: swe-bench runs through a host-side official harness wrapper with a repo-local uv-managed environment under .akm/evals/venvs/swe-bench; Docker host ready (%s).\n' "$docker_version"
-  exit 0
-fi
-
-if [ "$pack_id" = "terminal-bench" ]; then
-  run_setup_script "terminal-bench" "$REPO_ROOT/scripts/setup-terminal-bench-runtime.sh"
-
-  if ! command -v docker >/dev/null 2>&1; then
-    printf 'WARN pack:terminal-bench: Docker daemon unavailable: docker not found in PATH\n'
-    exit 0
-  fi
-
-  if ! docker_version="$(docker info --format '{{.ServerVersion}}' 2>/dev/null)"; then
-    docker_error="$(docker info --format '{{.ServerVersion}}' 2>&1 || true)"
-    docker_error="${docker_error//$'\n'/ }"
-    printf 'WARN pack:terminal-bench: Docker daemon unavailable: %s\n' "${docker_error:-docker info failed}"
-    exit 0
-  fi
-
-  printf 'OK pack:terminal-bench: terminal-bench runs through the official host-side tb harness with a repo-local uv-managed environment under .akm/evals/venvs/terminal-bench; Docker host ready (%s).\n' "$docker_version"
-  exit 0
-fi
-
 if [ "$pack_id" = "beam" ]; then
   if ! output="$(bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --require-judge 2>&1)"; then
     output="${output//$'\n'/ }"

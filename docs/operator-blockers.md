@@ -51,53 +51,54 @@ Run `bin/doctor --pack beam` and confirm it no longer fails on judge configurati
 Sources:
 `docs/beam-runtime.md`, `src/packs/beam/official.ts`, `src/packs/beam/adapter.ts`
 
-## 3. AKM memory-backend integration is blocked on an upstream add/search contract
+## 3. The `akm` memory backend needs the real akm CLI reachable to actually run
 
 Why the repo cannot finish it alone:
-`src/memory/backends/akm.ts` fails intentionally because `akm memory --help` still does not expose a documented add/search contract that truthfully maps to `MemoryBackend.add()` and `MemoryBackend.search()`.
+`src/memory/backends/akm.ts` is now a real, evaluated integration — every operation shells out to a
+real akm CLI process (`akm remember`/`akm search`/`akm bundle create`/`akm index --full`), with a
+deterministic frontmatter-synthesis step, per-instance hermetic install, and fail-loud
+ingestion-count verification. See `docs/memory-backends.md` for the full contract, and
+`tests/memory-backend-akm.test.ts` / `tests/memory-backend-akm.integration.test.ts` for its test
+coverage (the latter a real, no-mocking round trip against a live akm CLI). This was previously
+written as a repo-internal implementation gap; that gap is closed.
+
+What remains is an ordinary external-dependency prerequisite, the same shape as BEAM's upstream
+checkout in item 1: an operator must make a real akm CLI satisfying `^0.9` reachable before an
+`akm`-backed run (not `doctor`, which reports the gap as a `warn` rather than crashing).
+
+**Docker-wrapper caveat:** `bin/doctor`/`bin/eval` (the documented operator entrypoints) route
+through `bin/_akm_eval_cli_image.sh` into the built `docker/akm-eval.Dockerfile` image, which
+bundles neither the akm CLI nor a mount of any host akm source checkout. `AKM_EVAL_AKM_CMD` is now
+forwarded into that container (previously it was silently dropped — not on the wrapper's env
+allowlist), but the value still has to resolve to something reachable *inside* the container: an
+`akm` binary installed into a custom-built image, or a source-checkout path that lives under the
+mounted workspace directory (`AKM_EVAL_WORKSPACE_DIR`, default the repo root). Running `bun
+src/cli.ts` directly (outside the Docker wrapper) sidesteps this entirely and is how this repo's own
+`tests/memory-backend-akm.integration.test.ts` exercises a real akm CLI.
 
 Concrete completion steps a human must perform:
-1. Coordinate with AKM maintainers to provide a stable, documented memory ingestion and retrieval interface.
-2. Ensure the interface defines how documents are added, how queries are issued, what identifiers and scores are returned, and what persistence or namespace boundaries are supported.
-3. Pin the AKM version that exposes that contract and record the operator setup procedure.
-4. Capture the command or API examples that prove round-trip add and search behavior.
+1. Install akm-cli `^0.9` so `akm` resolves on `PATH`, **or** point `AKM_EVAL_AKM_CMD` at an
+   alternate invocation, e.g. `export AKM_EVAL_AKM_CMD='["bun","/path/to/akm/src/cli.ts"]'` for a
+   source checkout.
+2. If running through the Docker wrapper (`bin/doctor`/`bin/eval`), make sure that invocation is
+   actually reachable inside the container per the caveat above — otherwise run `bun src/cli.ts`
+   directly instead.
+3. Confirm reachability with `bin/doctor` (or `akm-eval doctor`) and check the `memory:akm` line.
 
 What evidence or artifacts should be captured when done:
-- The AKM version string from `akm info --format json`.
-- Documentation for the supported add/search contract.
-- Example add and search transcripts.
-- Any upstream issue, PR, or release note establishing the contract as supported.
+- The `memory:akm` doctor line reporting `status: ok` and the resolved akm version.
+- A completed run's `metadata` in its `result.json`, which records `memoryBackend: "akm"`.
 
 How to verify completion in this repo afterward:
-Rerun `akm --help`, `akm info --format json`, and `akm memory --help` and confirm the latter documents a concrete add/search surface.
+Run `bin/doctor` and confirm `memory:akm` is `OK` (not `WARN`); run
+`akm-eval run --pack <pack> --variant akm-memory --config config/common/locomo-akm-ab.json` (or the
+`longmemeval-akm-ab.json` equivalent) and confirm it does not fail with an akm-unreachable error.
 
 Sources:
-`README.md`, `docs/memory-backends.md`, `docs/running-evals.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`
+`docs/memory-backends.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`,
+`config/common/locomo-akm-ab.json`, `config/common/longmemeval-akm-ab.json`
 
-## 4. `akm-bench` still lacks an authoritative external process and artifact boundary
-
-Why the repo cannot finish it alone:
-`src/packs/akm-bench/adapter.ts` is intentionally hard-blocked. The previous local proxy-scoring path was removed, and the pack cannot be truthfully re-enabled until a real external `akm-bench` process and its authoritative result artifacts exist.
-
-Concrete completion steps a human must perform:
-1. Define or adopt the authoritative external `akm-bench` execution path.
-2. Specify exactly which output artifact from that external process is the source of truth.
-3. Freeze the invocation contract, output schema, and provenance expectations so this repo can normalize them without inventing scores.
-4. Provide one example artifact set produced by the external process.
-
-What evidence or artifacts should be captured when done:
-- The external command or service contract for running `akm-bench`.
-- A sample authoritative artifact bundle from that process.
-- A schema or field reference for the artifact fields that define success and score.
-- Provenance details showing the benchmark version and model/runtime used.
-
-How to verify completion in this repo afterward:
-Once the external process exists, repo verification should be a real ingest path that produces a normalized `result.json` from only the authoritative artifacts. Until then, `bin/doctor` and `bin/eval --pack akm-bench ...` should continue to report the pack as blocked.
-
-Sources:
-`README.md`, `docs/benchmark-packs.md`, `src/packs/akm-bench/README.md`, `src/packs/akm-bench/adapter.ts`
-
-## 5. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
+## 4. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
 
 Why the repo cannot finish it alone:
 These backend IDs are planned placeholders. The repository has no authoritative service endpoint, CLI contract, credential flow, or reproducible runtime for them.
@@ -123,4 +124,8 @@ Sources:
 
 ## Scope note
 
-No separate external blocker was found in the current `swe-bench` or `tau-bench` adapter code beyond the reference-artifact provenance gap above. Their adapters already run through official upstream harnesses when those harnesses and credentials are available.
+`swe-bench` and `terminal-bench` are no longer packs in this repo — coding benchmarks moved to
+[`akm-bench`](https://github.com/itlackey/akm-bench), which runs them through Harbor. See
+`docs/benchmark-packs.md`. No separate external blocker was found in the current `tau-bench`
+adapter code beyond the gaps listed above; it already runs through the official upstream harness
+when that harness and credentials are available.
