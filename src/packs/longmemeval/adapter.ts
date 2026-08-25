@@ -240,6 +240,10 @@ export const longMemEvalAdapter: PackAdapter = {
     // than leaving a reader to infer it from a low score alone.
     let zeroHitQueries = 0;
     let retrievalQueryCount = 0;
+    // Transient provider failures the agent runner retried through
+    // (itlackey/akm-eval#4). Recorded unconditionally so a clean run and a
+    // run that needed retries are distinguishable in the artifact.
+    let agentRetryCount = 0;
     // Second declared-ceiling disclosure, and a distinct failure mode from
     // zeroHitQueries: `scoreRetrieval` keys precision/recall/MRR/nDCG on
     // membership in `evidenceSessionIds`, so a question whose source dataset
@@ -331,6 +335,7 @@ export const longMemEvalAdapter: PackAdapter = {
         );
       }
 
+      agentRetryCount += agentResult.retries ?? 0;
       totalPromptTokens += agentResult.usage?.input ?? 0;
       totalCompletionTokens += agentResult.usage?.output ?? 0;
       totalTokens += agentResult.usage?.total ?? 0;
@@ -586,6 +591,7 @@ export const longMemEvalAdapter: PackAdapter = {
         predictionsPath,
         evaluationLogPath,
         topK,
+        agentRetryCount,
         // `baselineIsLongContext` is per-run but named as a claim about the
         // whole comparison -- on a treatment arm it emits `false`, i.e. the
         // treatment arm's own artifact machine-asserts that the baseline is
