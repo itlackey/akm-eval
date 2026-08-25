@@ -8,7 +8,7 @@ function collectMetricDeltas(
   baseline: NormalizedRunResult,
   candidate: NormalizedRunResult,
 ): ComparisonMetricDelta[] {
-  const pairs: Array<[string, number, number]> = [
+  const pairs: Array<[string, number | null, number | null]> = [
     ["aggregate.score", baseline.metrics.aggregate.score, candidate.metrics.aggregate.score],
     [
       "retrieval.precisionAtK",
@@ -36,7 +36,10 @@ function collectMetricDeltas(
     metric,
     baseline: base,
     candidate: next,
-    delta: Number((next - base).toFixed(6)),
+    // A metric neither side computed has no delta. Subtracting the `null`s as
+    // if they were zeros would manufacture a `0` -- or, worse, a `-0.2` against
+    // a pack that did measure it -- for something never measured at all.
+    delta: base === null || next === null ? null : Number((next - base).toFixed(6)),
   }));
 }
 

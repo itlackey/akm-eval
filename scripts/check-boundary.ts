@@ -12,6 +12,19 @@ const FORBIDDEN_IMPORT_PATTERNS = [
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 
+/**
+ * Directories the walker must never descend into.
+ *
+ * The boundary check only ever looks for forbidden imports in this repo's own
+ * source. Output trees are not source, so reading them is pure cost -- and
+ * actively harmful: `runs/` holds per-run artifacts written by `bin/eval`
+ * inside a container running as root, so the walker hits EACCES on a clean
+ * tree and fails the gate for a reason that has nothing to do with
+ * boundaries. `datasets/` is worse still on cost alone
+ * (`datasets/longmemeval/dataset.json` is 277MB).
+ */
+export const SKIP_DIRS = new Set([".git", "node_modules", "runs", "datasets", ".akm"]);
+
 export interface BoundaryViolation {
   file: string;
   line: number;
@@ -22,7 +35,7 @@ function walk(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
-    if (entry.name === ".git" || entry.name === "node_modules") {
+    if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) {
       continue;
     }
 

@@ -38,9 +38,20 @@ export interface RetrievalMetrics {
   ndcgAtK: number;
 }
 
+/**
+ * Answer-side scores for one run.
+ *
+ * `null` means "this pack does not compute this metric", never "this pack
+ * measured zero". The distinction is load-bearing: LongMemEval, BEAM and
+ * tau-bench all score on their own official LLM judge and compute no lexical
+ * overlap at all, so reporting their `tokenF1` as `0` reads as a measured
+ * zero and invites a false comparison against a pack (LoCoMo) that really
+ * does measure it. Reporting renders `null` as `n/a` and refuses to derive a
+ * delta from it.
+ */
 export interface AnswerMetrics {
-  exactMatch: number;
-  tokenF1: number;
-  containsExpected: number;
+  exactMatch: number | null;
+  tokenF1: number | null;
+  containsExpected: number | null;
   judgedPass: number;
 }

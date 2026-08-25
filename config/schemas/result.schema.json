@@ -49,10 +49,11 @@
         "answer": {
           "type": "object",
           "required": ["exactMatch", "tokenF1", "containsExpected", "judgedPass"],
+          "description": "null on a lexical metric means the pack does not compute it (e.g. an LLM-judged pack), never that it measured zero.",
           "properties": {
-            "exactMatch": { "type": "number" },
-            "tokenF1": { "type": "number" },
-            "containsExpected": { "type": "number" },
+            "exactMatch": { "type": ["number", "null"] },
+            "tokenF1": { "type": ["number", "null"] },
+            "containsExpected": { "type": ["number", "null"] },
             "judgedPass": { "type": "number" }
           },
           "additionalProperties": false

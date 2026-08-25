@@ -26,6 +26,20 @@ if [ -t 0 ] && [ -t 1 ]; then
   docker_args+=(-t)
 fi
 
+# Run as the invoking user, not container root. The repo is bind-mounted, so
+# everything the container writes -- run artifacts under runs/, and the akm
+# backend's .akm-memory work dir inside them -- lands on the host owned by
+# whoever docker ran as. As root that leaves the operator unable to read,
+# archive or delete their own run output, and 0700 akm dirs then break
+# `bun run check` on a clean tree.
+#
+# Skipped under rootless docker, where container root already maps to the
+# invoking user and passing --user would map us to an unusable subuid --
+# reintroducing exactly the ownership problem this avoids.
+if ! docker info --format '{{range .SecurityOptions}}{{.}} {{end}}' 2>/dev/null | grep -q 'name=rootless'; then
+  docker_args+=(--user "$(id -u):$(id -g)")
+fi
+
 docker_args+=(
   -v "$WORKSPACE_DIR:$WORKSPACE_DIR"
   -w "$CONTAINER_WORKDIR"
@@ -66,6 +80,11 @@ done
 
 if [ -S /var/run/docker.sock ]; then
   docker_args+=(-v /var/run/docker.sock:/var/run/docker.sock)
+  # As a non-root uid the socket is only reachable via its owning group.
+  socket_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
+  if [ -n "$socket_gid" ]; then
+    docker_args+=(--group-add "$socket_gid")
+  fi
 fi
 
 exec docker "${docker_args[@]}" "$IMAGE_TAG" "$@"

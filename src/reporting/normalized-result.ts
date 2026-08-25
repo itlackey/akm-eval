@@ -6,6 +6,14 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+/**
+ * A metric a pack did not compute is reported as `null`, not `0` -- see
+ * AnswerMetrics. Both shapes are valid on the wire; `0` still means measured.
+ */
+function isNumberOrNull(value: unknown): value is number | null {
+  return value === null || isNumber(value);
+}
+
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
@@ -48,9 +56,9 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
     !isNumber(retrieval.recallAtK) ||
     !isNumber(retrieval.mrr) ||
     !isNumber(retrieval.ndcgAtK) ||
-    !isNumber(answer.exactMatch) ||
-    !isNumber(answer.tokenF1) ||
-    !isNumber(answer.containsExpected) ||
+    !isNumberOrNull(answer.exactMatch) ||
+    !isNumberOrNull(answer.tokenF1) ||
+    !isNumberOrNull(answer.containsExpected) ||
     !isNumber(answer.judgedPass) ||
     !isNumber(aggregate.score) ||
     !isNumber(aggregate.retrievalWeight) ||

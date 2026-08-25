@@ -551,9 +551,12 @@ export const longMemEvalAdapter: PackAdapter = {
       metrics: {
         retrieval: averageRetrieval(retrievalMetrics),
         answer: {
-          exactMatch: 0,
-          tokenF1: 0,
-          containsExpected: 0,
+          // Not computed by this pack, so reported as `null` rather than `0`:
+          // reporting a metric that was never measured as a number makes it
+          // indistinguishable from a measured zero. See AnswerMetrics.
+          exactMatch: null,
+          tokenF1: null,
+          containsExpected: null,
           judgedPass: score,
         },
         aggregate: {

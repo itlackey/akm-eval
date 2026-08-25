@@ -1,5 +1,14 @@
 import type { ComparisonReport, NormalizedRunResult } from "../core/types.ts";
 
+/**
+ * Renders a metric a pack did not compute as `n/a` rather than a number, so a
+ * reader can never mistake "not measured" for "measured zero". Mirrors the
+ * `?? "-"` treatment the nullable cost/latency columns already get below.
+ */
+function metricValue(value: number | null): string {
+  return value === null ? "n/a" : String(value);
+}
+
 function metadataValue(result: NormalizedRunResult, key: string): string | null {
   const value = result.metadata?.[key];
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -34,10 +43,10 @@ export function markdownReportForResult(result: NormalizedRunResult): string {
     "",
     "## Answer metrics",
     "",
-    `- exact match: ${result.metrics.answer.exactMatch}`,
-    `- token f1: ${result.metrics.answer.tokenF1}`,
-    `- contains expected: ${result.metrics.answer.containsExpected}`,
-    `- judged pass: ${result.metrics.answer.judgedPass}`,
+    `- exact match: ${metricValue(result.metrics.answer.exactMatch)}`,
+    `- token f1: ${metricValue(result.metrics.answer.tokenF1)}`,
+    `- contains expected: ${metricValue(result.metrics.answer.containsExpected)}`,
+    `- judged pass: ${metricValue(result.metrics.answer.judgedPass)}`,
     "",
     "## Warnings",
     "",
@@ -66,7 +75,7 @@ export function markdownReportForComparison(report: ComparisonReport): string {
     "| --- | ---: | ---: | ---: |",
     ...report.metricDeltas.map(
       (metric) =>
-        `| ${metric.metric} | ${metric.baseline} | ${metric.candidate} | ${metric.delta} |`,
+        `| ${metric.metric} | ${metricValue(metric.baseline)} | ${metricValue(metric.candidate)} | ${metricValue(metric.delta)} |`,
     ),
     "",
     "## Warnings",

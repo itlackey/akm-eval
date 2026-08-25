@@ -776,4 +776,40 @@ describe("longmemeval adapter: agent retry disclosure", () => {
 
     expect(result.metadata?.agentRetryCount).toBe(0);
   });
+
+  test("reports the lexical answer metrics it does not compute as null, not as a measured 0, and leaves judgedPass/aggregate.score untouched", async () => {
+    // LongMemEval scores on its official LLM judge and computes no lexical
+    // overlap at all. Reporting exactMatch/tokenF1/containsExpected as 0 made
+    // a byte-identical, judge-passing answer read as having zero token overlap
+    // with gold -- a flat contradiction -- and invited comparison against
+    // LoCoMo's genuinely measured tokenF1. `null` is "not computed"; only a
+    // number means "measured".
+    const outputDir = tempDir("akm-eval-longmemeval-na-metrics-");
+    const datasetPath = writeDatasetFixture(outputDir);
+    const { backend } = createScriptedMemoryBackend([
+      [{ id: "q1-s1", text: "hit", score: 1, metadata: {} }],
+      [{ id: "q2-s1", text: "hit", score: 1, metadata: {} }],
+    ]);
+    // The fake evaluator judges by substring containment, so echoing gold back
+    // verbatim passes the judge on every question.
+    const { agent } = createRecordingAgent((prompt) =>
+      prompt.includes("q1") || prompt.includes("blue") ? "blue" : "hiking",
+    );
+
+    const result = await longMemEvalAdapter.run(
+      buildContext(outputDir, datasetPath, { topK: 2 }),
+      backend,
+      agent,
+    );
+
+    expect(result.metrics.answer.exactMatch).toBeNull();
+    expect(result.metrics.answer.tokenF1).toBeNull();
+    expect(result.metrics.answer.containsExpected).toBeNull();
+
+    // The judge score is the real signal and must be unchanged by this: still
+    // a number, still equal to the aggregate score.
+    expect(typeof result.metrics.answer.judgedPass).toBe("number");
+    expect(result.metrics.answer.judgedPass).toBe(result.metrics.aggregate.score);
+    expect(result.metadata?.overallAccuracy).toBe(result.metrics.aggregate.score);
+  });
 });
