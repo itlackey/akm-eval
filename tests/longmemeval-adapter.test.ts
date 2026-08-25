@@ -32,7 +32,6 @@ import type {
 import {
   buildFullContextPrompt,
   buildRetrievedPrompt,
-  dedupeSessionsById,
   longMemEvalAdapter,
   sessionToMemoryDocument,
 } from "../src/packs/longmemeval/adapter.ts";
@@ -171,33 +170,6 @@ function createRecordingAgent(answerFor: (prompt: string, callIndex: number) => 
   return { agent, prompts };
 }
 
-/**
- * A dataset whose first question repeats a session id in its own haystack --
- * three entries, two distinct ids. Mirrors upstream question `58bf7951`
- * (57 entries / 56 distinct ids) and `1e043500` (50 / 49).
- */
-function writeDuplicateSessionDatasetFixture(dir: string): string {
-  const datasetPath = path.resolve(dir, "dataset.json");
-  const rows = [
-    {
-      question_id: "dup1",
-      question_type: "single-session-user",
-      question: "What is the user's favorite color?",
-      answer: "blue",
-      haystack_sessions: [
-        [{ role: "user", content: "My favorite color is blue." }],
-        [{ role: "user", content: "I like hiking on weekends." }],
-        [{ role: "user", content: "My favorite color is blue." }],
-      ],
-      haystack_session_ids: ["dup-s1", "dup-s2", "dup-s1"],
-      haystack_dates: ["2024-01-01T00:00", "2024-01-02T00:00", "2024-01-03T00:00"],
-      answer_session_ids: ["dup-s1"],
-    },
-  ];
-  fs.writeFileSync(datasetPath, `${JSON.stringify(rows, null, 2)}\n`, "utf8");
-  return datasetPath;
-}
-
 // ── Test dataset fixture ─────────────────────────────────────────────────────
 
 function writeDatasetFixture(dir: string): string {
@@ -254,33 +226,6 @@ function buildContext(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("longmemeval adapter: retrieval wiring", () => {
-  test("a haystack that repeats a session id is ingested once, so the backend receives as many documents as there are distinct ids", async () => {
-    // The end-to-end guard for the dedupe. The unit tests below cover
-    // dedupeSessionsById in isolation, but they pass even if the call site
-    // stops using it -- this one fails, because it asserts what add() is
-    // actually handed by the run loop.
-    //
-    // Without it: 3 sessions in, 2 distinct ids, and an id-keyed store writes
-    // the second dup over the first. The akm backend catches exactly that and
-    // refuses to run ("akm ingestion count mismatch after add(): expected
-    // entryCount 57 ... got 56"), which is how the upstream dataset defect was
-    // found -- the akm arm had never completed a LongMemEval run.
-    const outputDir = tempDir("akm-eval-longmemeval-dup-sessions-");
-    const datasetPath = writeDuplicateSessionDatasetFixture(outputDir);
-
-    const { backend, calls } = createScriptedMemoryBackend([[]]);
-    const { agent } = createRecordingAgent(() => "some answer");
-
-    const context = buildContext(outputDir, datasetPath, { topK: 2 });
-    await longMemEvalAdapter.run(context, backend, agent);
-
-    expect(calls.addCalls.length).toBe(1);
-    const ingested = calls.addCalls[0] ?? [];
-    expect(ingested.map((d) => d.id)).toEqual(["dup-s1", "dup-s2"]);
-    // The invariant the akm backend asserts, stated from the adapter's side.
-    expect(ingested.length).toBe(new Set(ingested.map((d) => d.id)).size);
-  });
-
   test("memory-backed arm adds haystack sessions once per instance, searches with the right query/topK, builds context from exactly the retrieved text, and scores retrieval metrics against evidence session ids", async () => {
     const outputDir = tempDir("akm-eval-longmemeval-retrieval-");
     const datasetPath = writeDatasetFixture(outputDir);
@@ -830,39 +775,5 @@ describe("longmemeval adapter: agent retry disclosure", () => {
     );
 
     expect(result.metadata?.agentRetryCount).toBe(0);
-  });
-});
-
-describe("dedupeSessionsById", () => {
-  const session = (sessionId: string, content: string): LongMemEvalSession => ({
-    sessionId,
-    turns: [{ role: "user", content }],
-  });
-
-  test("collapses sessions that share an id, keeping the first", () => {
-    // The real defect: upstream question 58bf7951 lists 57 haystack entries
-    // with only 56 distinct ids (07b7a667_1 twice). An id-keyed store writes
-    // the second over the first, so it ends up with fewer documents than it
-    // was handed -- which is what made the akm backend refuse to run.
-    const deduped = dedupeSessionsById([
-      session("07b7a667_1", "first"),
-      session("other", "b"),
-      session("07b7a667_1", "second"),
-    ]);
-    expect(deduped.map((s) => s.sessionId)).toEqual(["07b7a667_1", "other"]);
-    expect(deduped[0]?.turns[0]?.content).toBe("first");
-  });
-
-  test("leaves a duplicate-free haystack exactly as it was", () => {
-    const sessions = [session("a", "1"), session("b", "2"), session("c", "3")];
-    expect(dedupeSessionsById(sessions)).toEqual(sessions);
-  });
-
-  test("the ingested document count equals the distinct id count", () => {
-    // The invariant the akm backend's guard asserts. Stated here so a future
-    // change to the mapper cannot reintroduce the mismatch unnoticed.
-    const sessions = [session("x", "1"), session("y", "2"), session("x", "3")];
-    const docs = dedupeSessionsById(sessions).map(sessionToMemoryDocument);
-    expect(docs.length).toBe(new Set(sessions.map((s) => s.sessionId)).size);
   });
 });

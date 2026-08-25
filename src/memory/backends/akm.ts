@@ -875,7 +875,18 @@ class AkmRuntime {
       this.runIndexFull(cmd);
     }
 
-    const expected = before + documents.length;
+    // Distinct ids, NOT documents.length. `slugifyDocId` maps a document id to
+    // a filename, so two documents sharing an id write the same file and akm
+    // ends up holding one entry for them -- correct upsert semantics, and the
+    // same thing raw-vector's id-keyed Map does. Counting documents instead
+    // encoded an unstated precondition (ids are unique) and reported its
+    // violation as data loss: the upstream LongMemEval dataset repeats a
+    // filler session id in 13 of its 500 questions (identical turns, differing
+    // only in haystack_dates), which made this throw on a run where nothing
+    // had actually gone wrong. The assertion still fails loudly for the case
+    // it exists to catch -- a document that failed to write or index.
+    const expectedDistinctIds = new Set(documents.map((document) => document.id)).size;
+    const expected = before + expectedDistinctIds;
     let after = this.readEntryCount(cmd);
     if (after !== expected && writes.length === 1) {
       // Verified live against 0.9.1: `akm remember`'s index-on-write does
@@ -893,7 +904,7 @@ class AkmRuntime {
     }
     if (after !== expected) {
       throw new BenchmarkRuntimeError(
-        `akm ingestion count mismatch after add(): expected entryCount ${expected} (before=${before} + ${documents.length} document(s)), got ${after}. Some documents may have failed to write or index; refusing to proceed silently.`,
+        `akm ingestion count mismatch after add(): expected entryCount ${expected} (before=${before} + ${expectedDistinctIds} distinct id(s) across ${documents.length} document(s)), got ${after}. Some documents may have failed to write or index; refusing to proceed silently.`,
       );
     }
 

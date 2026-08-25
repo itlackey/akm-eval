@@ -172,44 +172,6 @@ export function sessionToMemoryDocument(session: LongMemEvalSession): MemoryDocu
   };
 }
 
-/**
- * Collapse haystack sessions that share a `sessionId` before ingestion.
- *
- * The upstream LongMemEval dataset ships questions whose own haystack lists
- * the same session twice -- `58bf7951` has 57 entries but 56 distinct ids
- * (`07b7a667_1` twice), and `1e043500` has 50 entries and 49 distinct ids
- * (`d5d1f9c4` twice). `sessionToMemoryDocument` keys the document on
- * `sessionId`, so an id-keyed store writes the second over the first and ends
- * up with fewer documents than it was handed.
- *
- * The akm backend catches exactly that and refuses to run:
- *
- *   akm ingestion count mismatch after add(): expected entryCount 57
- *   (before=0 + 57 document(s)), got 56. ... refusing to proceed silently.
- *
- * That guard is right and stays. Deduping here is not a workaround for it --
- * it is the correct reading of the data. Two entries with one id are one
- * session, and ingesting the same content twice cannot mean anything to a
- * memory store. Doing it at the mapper keeps every backend seeing the same
- * document set, which is what makes the arms comparable; fixing it inside one
- * backend's counter would have left raw-vector silently ingesting a duplicate
- * that akm rejects.
- *
- * Retrieval scoring is unaffected: `scoreRetrieval` compares against
- * `evidenceSessionIds`, which are ids, so a duplicate never contributed a
- * second distinct hit.
- */
-export function dedupeSessionsById(sessions: readonly LongMemEvalSession[]): LongMemEvalSession[] {
-  const seen = new Set<string>();
-  const unique: LongMemEvalSession[] = [];
-  for (const session of sessions) {
-    if (seen.has(session.sessionId)) continue;
-    seen.add(session.sessionId);
-    unique.push(session);
-  }
-  return unique;
-}
-
 export const longMemEvalAdapter: PackAdapter = {
   id: "longmemeval",
   description:
@@ -346,9 +308,7 @@ export const longMemEvalAdapter: PackAdapter = {
         // per-question, not per-batch: every question gets an isolated
         // backend state containing only its own haystack sessions.
         await memory.reset();
-        await memory.add(
-          dedupeSessionsById(question.haystackSessions).map(sessionToMemoryDocument),
-        );
+        await memory.add(question.haystackSessions.map(sessionToMemoryDocument));
         searchResults = await memory.search({ text: question.question, topK });
         prompt = buildRetrievedPrompt(question, searchResults);
         retrievalMetrics.push(scoreRetrieval(question.evidenceSessionIds, searchResults, topK));

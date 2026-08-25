@@ -318,6 +318,31 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     expect(files.length).toBe(3);
   });
 
+  test("add() counts DISTINCT ids, so documents sharing an id upsert instead of tripping the mismatch guard", async () => {
+    // The guard used to compare entryCount against documents.length, which
+    // encoded an unstated precondition -- that ids are unique -- and reported
+    // its violation as data loss. slugifyDocId maps id -> filename, so two
+    // documents with one id write one file and akm holds one entry: correct
+    // upsert semantics, identical to raw-vector's id-keyed Map.
+    //
+    // Concretely: the upstream LongMemEval dataset repeats a filler session id
+    // in 13 of its 500 questions (byte-identical turns, differing only in
+    // haystack_dates), and this guard threw on a run where nothing had gone
+    // wrong -- expected 57, got 56.
+    const { workDir } = useFakeAkm();
+    const backend = createAkmBackend(rootDir, workDir);
+    await backend.reset();
+
+    await backend.add([
+      { id: "dup", text: "First copy." },
+      { id: "other", text: "A different document." },
+      { id: "dup", text: "First copy." },
+    ]);
+
+    const files = fs.readdirSync(path.join(workDir, "bundle", "memories"));
+    expect(files.length).toBe(2);
+  });
+
   test("add() fails loudly on an ingestion-count mismatch instead of proceeding silently (bulk path)", async () => {
     const { workDir } = useFakeAkm();
     process.env.FAKE_AKM_INDEX_DELTA = "-1"; // simulate the indexer dropping one document
