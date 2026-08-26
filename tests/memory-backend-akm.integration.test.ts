@@ -127,8 +127,7 @@ function tempDir(prefix: string): string {
 // A first sentence long enough on its own to sit right under the 250-char
 // synthesis cap, so the *second* sentence (carrying the distinctive
 // "flibbernotch" term) is pushed out of the synthesized description. This is
-// the retrieval-ceiling boundary this test exists to prove, not an
-// incidental detail.
+// the synthesis boundary this test exercises, not an incidental detail.
 const LONG_FIRST_SENTENCE =
   "This opening sentence exists purely to occupy space so that the description synthesis cap is reached before any " +
   "later sentence in this same document body is considered, and it says nothing distinctive on its own at all here.";
@@ -148,8 +147,10 @@ const documents: MemoryDocument[] = [
   {
     id: "beta",
     // The distinctive term is real body prose, past the sentence(s) that
-    // make it into the synthesized description — akm's retrieval ceiling
-    // says this term must NOT be findable by search.
+    // make it into the synthesized description. Through akm 0.9.1 this term
+    // was unfindable — the "retrieval ceiling" this suite was written to
+    // prove. akm 0.9.2 (itlackey/akm#819) lifted it: body prose is now
+    // retrievable, so the assertion below guards the FIX, not the ceiling.
     text: `${LONG_FIRST_SENTENCE} Somewhere much later in this note someone in passing mentioned ${BODY_ONLY_TERM} once.`,
   },
   {
@@ -174,7 +175,7 @@ const documents: MemoryDocument[] = [
 describe.skipIf(SKIP_SUITE)(
   "akm backend: REAL integration against a live akm CLI (no fakes)",
   () => {
-    test("round-trips reset -> add(5 docs) -> search against the real akm CLI, proving the retrieval ceiling", async () => {
+    test("round-trips reset -> add(5 docs) -> search against the real akm CLI, across every synthesized retrieval surface", async () => {
       useRealAkm();
       const workDir = tempDir("akm-eval-akm-integration-");
       const backend = createAkmBackend(process.cwd(), workDir);
@@ -197,9 +198,17 @@ describe.skipIf(SKIP_SUITE)(
       expect(typeof descriptionHit.score).toBe("number");
       expect(descriptionHit.score).toBeGreaterThan(0);
 
-      // ── The body-only-prose document is NOT retrievable: the declared ceiling ──
+      // ── Body-only prose IS retrievable (akm >= 0.9.2, itlackey/akm#819) ───
+      // Measured on this corpus: against 0.9.1 this search returned 0 hits;
+      // against 0.9.2-alpha.2 it returns exactly the document that carries the
+      // term in its body. Asserting the hit's identity — not just a non-zero
+      // count — is what keeps this from passing on indiscriminate matching.
       const bodyOnlyHits = await backend.search({ text: BODY_ONLY_TERM, topK: 10 });
-      expect(bodyOnlyHits.length).toBe(0);
+      expect(bodyOnlyHits.length).toBe(1);
+      const bodyOnlyHit = bodyOnlyHits[0];
+      if (!bodyOnlyHit) throw new Error("bodyOnlyHits[0] missing despite length === 1");
+      expect(bodyOnlyHit.id).toBe("beta");
+      expect(bodyOnlyHit.score).toBeGreaterThan(0);
 
       // ── A term that lives only in a synthesized tag IS retrievable ────────
       const tagHits = await backend.search({ text: TAG_TERM, topK: 10 });
