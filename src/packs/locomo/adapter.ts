@@ -480,10 +480,15 @@ export const locomoAdapter: PackAdapter = {
           : []),
         ...(memory.id === "akm"
           ? [
-              "akm declared retrieval ceiling: description/tags/heading synthesized from the first sentence(s) of each " +
-                "document (never full body prose); a fixed deterministic stopword strip is applied to each query before " +
-                "it reaches akm's conjunctive-AND FTS; the seeded akm skeleton corpus is stripped before ingestion so no " +
-                "foreign content can appear in results. See src/memory/backends/akm.ts and docs/memory-backends.md.",
+              "akm indexing (akm >= 0.9.2): full body prose is indexed, not just synthesized " +
+                "description/tags/heading — the pre-0.9.2 body-prose ceiling was lifted by akm#819 " +
+                "(see docs/memory-backends.md for older runs measured under it). This backend still " +
+                "synthesizes description/tags/heading from the first sentence(s) of each document and " +
+                "still applies a fixed deterministic stopword strip to each query, but akm search now " +
+                "runs a progressive strict-AND -> prefix-AND -> OR/prefix-OR fallback rather than a hard " +
+                "conjunctive-AND, so a full-AND miss no longer means zero hits. The seeded akm skeleton " +
+                "corpus is stripped before ingestion so no foreign content can appear in results. See " +
+                "src/memory/backends/akm.ts and docs/memory-backends.md.",
             ]
           : []),
       ],
