@@ -96,18 +96,32 @@ MemoryBackend` to `(rootDir?, workDir?) => MemoryBackend` to carry this through 
 backend (`none`, `raw-vector`, `mem0`, `zep`, `openviking`) ignores the extra argument, so this was
 the only interface change needed.
 
-### The declared frontmatter synthesis rule — and the retrieval ceiling it sets
+### The declared frontmatter synthesis rule — and the retrieval ceiling it set through akm 0.9.1
 
-**Verified empirically: akm's FTS and embedding index covers only name, frontmatter `description`,
-tags, aliases, hints, and in-body markdown headings — never body prose.** A term that appears only in
-a document's body text is unretrievable, full stop; this is akm's real, documented behavior, not a
-bug in this adapter. `tests/memory-backend-akm.integration.test.ts` proves this against the real CLI:
-a document whose distinctive term lives only in a later sentence of its body returns zero hits for
-that term, while the same document's earlier, description-captured sentence remains searchable.
+**Through akm 0.9.1, verified empirically: akm's FTS and embedding index covered only name,
+frontmatter `description`, tags, aliases, hints, and in-body markdown headings — never body prose.**
+A term that appeared only in a document's body text was unretrievable, full stop.
 
-Because of this, `add()` cannot just dump `MemoryDocument.text` into a file — it must synthesize the
-frontmatter/heading surface akm actually indexes. The rule (deterministic, **no LLM**, in
-`synthesizeFrontmatter()`):
+**akm 0.9.2 (itlackey/akm#819) lifted that ceiling.** akm's indexer now also projects a normalized
+body slice (frontmatter, comments, fenced code, and link destinations stripped; capped at 16,384
+characters) into the FTS index at its own lowest-weighted field, so a body-only term is retrievable
+today. `tests/memory-backend-akm.integration.test.ts` was updated (itlackey/akm-eval#9) to assert
+exactly this against the real CLI: a document whose distinctive term lives only in a later sentence
+of its body is now returned as a hit for that term, not zero hits. Separately, `akm search` itself
+changed from a hard conjunctive-AND match to a progressive strict-AND → prefix-AND → OR/prefix-OR
+fallback (the OR stage only engages once both conjunctive stages return zero hits), so a query whose
+terms don't all appear together no longer guarantees a zero-hit result the way it did on 0.9.1.
+
+This backend still synthesizes description/tags/heading on every `add()` — the rule below is
+unchanged, and that surface still matters (fast/high-weight matches, plus the `sourceId:` tag this
+backend's id-recovery bookkeeping depends on) — but since 0.9.2 it is no longer the *only* surface
+akm can retrieve on, so it no longer sets a hard retrieval ceiling. Numbers measured against akm 0.9.1
+or earlier (see `runs/RESULTS-0.9.2*.md`, which restate the pre-0.9.2 figures for comparison) were
+genuinely subject to the ceiling described above and should be read with that in mind; numbers
+measured against akm ≥ 0.9.2 are not.
+
+The synthesis rule itself (deterministic, **no LLM**, in `synthesizeFrontmatter()`), unchanged by the
+0.9.2 retrieval change:
 
 - **`description`** = the first non-empty sentence(s) of the document body, accumulated one whole
   sentence at a time until the next sentence would push the total past **250 characters** (then
@@ -118,11 +132,6 @@ frontmatter/heading surface akm actually indexes. The rule (deterministic, **no 
 - **`tags`** = one `key:value` tag per non-empty entry in `MemoryDocument.metadata`, plus a
   `sourceId:<MemoryDocument.id>` tag (see id semantics below).
 - **`heading`** = an H1 built from `MemoryDocument.id` (`# <id>`), prepended to the body.
-
-This is the declared synthesis rule, and **it sets the ceiling of every retrieval metric measured
-against this backend.** Any published number against `memory.backend: akm` should cite it: a
-document whose only distinctive content lives past the first sentence-or-so of its body, and outside
-its metadata, will not be retrievable by that content.
 
 ### `MemorySearchResult.id` is the original document id, not the akm ref — a deliberate deviation
 
@@ -225,10 +234,12 @@ out and the result capped at 20,000 characters.
   rule, and reset isolation.
 - `tests/memory-backend-akm.integration.test.ts` — real round trips against a live akm CLI (no
   fakes, no docker). One covers the bulk path: `reset` → `add` 5 documents → `search`, with exact
-  assertions proving the retrieval ceiling (a body-only term is unretrievable; a
-  description/tag/heading term is). The other covers the single-document `remember` path, including
-  the index-on-write behavior that lets it skip a second index pass. The CLI under test comes from
-  `AKM_EVAL_AKM_CMD`, falling back to a sibling akm source checkout when that is unset.
+  assertions proving the current (akm ≥ 0.9.2) retrieval contract: a body-only term **is**
+  retrievable, alongside a description/tag/heading term (itlackey/akm#819 lifted the pre-0.9.2 ceiling
+  described above; this suite guards the fix, not the ceiling — see itlackey/akm-eval#9). The other
+  covers the single-document `remember` path, including the index-on-write behavior that lets it skip
+  a second index pass. The CLI under test comes from `AKM_EVAL_AKM_CMD`, falling back to a sibling
+  akm source checkout when that is unset.
   **The suite is skipped on exactly one compound condition: running in CI AND `AKM_EVAL_AKM_CMD`
   unset** (`describe.skipIf`). CI (`.github/workflows/ci-pr.yml`) has no docker daemon, no akm CLI,
   and no sibling akm checkout, so it deliberately never sets this var and the suite is skipped
