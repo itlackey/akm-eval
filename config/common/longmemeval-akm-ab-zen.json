@@ -12,8 +12,8 @@
       "config": {
         "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
         "evaluatorModel": "qwen3.5-plus",
-        "smoke": true,
-        "maxQuestions": 5,
+        "smoke": false,
+        "maxQuestions": 25,
         "questionCategories": [
           "single-session",
           "multi-session"
@@ -27,7 +27,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
@@ -41,7 +41,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
@@ -55,7 +55,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
