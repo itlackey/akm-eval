@@ -38,7 +38,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createAkmBackend } from "../../src/memory/backends/akm.ts";
+import { averageRetrieval, scoreRetrieval } from "../../src/memory/retrieval-metrics.ts";
 import type { MemoryDocument } from "../../src/memory/types.ts";
+import type { RetrievalMetrics } from "../../src/memory/types.ts";
 import { sessionToMemoryDocument } from "../../src/packs/longmemeval/adapter.ts";
 import { loadDataset } from "../../src/packs/longmemeval/dataset.ts";
 
@@ -51,7 +53,16 @@ interface ProbeResult {
   zeroHit: number;
   zeroHitRate: number;
   evidenceScored: number;
+  /** Fraction of questions where ANY evidence doc was retrieved (hit/miss). */
   evidenceRecallAt5: number | null;
+  /**
+   * The repo's canonical per-question metrics, averaged — the same
+   * `scoreRetrieval` the pack adapters report, so probe and adapter numbers
+   * are directly comparable. `precisionAtK` is the one `evidenceRecallAt5`
+   * cannot express: it distinguishes "retrieved the answer plus four
+   * irrelevant documents" from "retrieved the answer cleanly".
+   */
+  retrieval: RetrievalMetrics;
   /** Queries the backend refused outright (e.g. a contamination guard). */
   guardTripped: number;
 }
@@ -66,6 +77,8 @@ function recall(hits: readonly { id?: string }[], evidence: readonly string[]): 
   const ids = new Set(hits.map((h) => String(h.id)));
   return evidence.some((e) => ids.has(String(e)));
 }
+
+const TOP_K = 5;
 
 // ── LoCoMo ───────────────────────────────────────────────────────────────────
 // Mirrors the adapter's own `flattenConversation` / `formatDialogTurn`. Kept in
@@ -123,6 +136,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   let evidenceHit = 0;
   let guardTripped = 0;
   let asked = 0;
+  const perQuestion: RetrievalMetrics[] = [];
 
   for (const q of sample.qa.slice(0, maxQ)) {
     let hits: Awaited<ReturnType<typeof backend.search>>;
@@ -139,6 +153,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     asked += 1;
     if (hits.length === 0) zeroHit += 1;
     const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
+    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
@@ -154,6 +169,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+    retrieval: averageRetrieval(perQuestion),
     guardTripped,
   };
 }
@@ -174,6 +190,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
   let evidenceHit = 0;
   let guardTripped = 0;
   let asked = 0;
+  const perQuestion: RetrievalMetrics[] = [];
 
   for (const q of questions.slice(0, maxQ)) {
     await backend.reset();
@@ -191,6 +208,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     asked += 1;
     if (hits.length === 0) zeroHit += 1;
     const evidence = q.evidenceSessionIds ?? [];
+    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
@@ -206,6 +224,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+    retrieval: averageRetrieval(perQuestion),
     guardTripped,
   };
 }

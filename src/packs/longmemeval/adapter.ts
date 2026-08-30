@@ -4,6 +4,7 @@ import { ArtifactStore } from "../../core/artifact-store.ts";
 import { BenchmarkRuntimeError } from "../../core/errors.ts";
 import type { RunContext } from "../../core/run-context.ts";
 import type { NormalizedRunResult } from "../../core/types.ts";
+import { describeMemoryProvenance } from "../../memory/provenance.ts";
 import { averageRetrieval, scoreRetrieval } from "../../memory/retrieval-metrics.ts";
 import type { MemoryDocument, MemorySearchResult, RetrievalMetrics } from "../../memory/types.ts";
 import { markdownReportForResult } from "../../reporting/markdown.ts";
@@ -591,6 +592,7 @@ export const longMemEvalAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
+        ...describeMemoryProvenance(memory),
         benchmarkId: path.basename(datasetPath, path.extname(datasetPath)),
         questionCount: questions.length,
         overallAccuracy: score,
