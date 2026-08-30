@@ -10,9 +10,9 @@
       "adapter": "locomo",
       "enabled": true,
       "config": {
-        "smoke": true,
+        "smoke": false,
         "maxSamples": 1,
-        "maxQuestions": 5,
+        "maxQuestions": 25,
         "topK": 5,
         "maxContextTokens": 16000,
         "evaluatorCommand": "python3 scripts/locomo-evaluator.py"
@@ -25,7 +25,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
@@ -39,7 +39,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
@@ -53,7 +53,7 @@
       "agent": {
         "provider": "openai-compatible",
         "providerRef": "openai-compatible",
-        "model": "qwen3.5-plus"
+        "model": "deepseek-v4-flash"
       },
       "akm": {
         "enabled": false
