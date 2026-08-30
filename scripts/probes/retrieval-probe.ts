@@ -38,9 +38,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createAkmBackend } from "../../src/memory/backends/akm.ts";
+import type { MemoryDocument } from "../../src/memory/types.ts";
 import { sessionToMemoryDocument } from "../../src/packs/longmemeval/adapter.ts";
 import { loadDataset } from "../../src/packs/longmemeval/dataset.ts";
-import type { MemoryDocument } from "../../src/memory/types.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 
@@ -84,14 +84,22 @@ function formatTurn(d: Record<string, unknown>): string {
   return `${turn}\n`;
 }
 
-function flattenLocomo(sample: Record<string, any>): MemoryDocument[] {
+/** Minimal structural view of a LoCoMo sample — the fields this probe reads. */
+interface LocomoSample {
+  sample_id: string;
+  conversation: Record<string, unknown>;
+  qa: { question: string; evidence?: string[] }[];
+}
+
+function flattenLocomo(sample: LocomoSample): MemoryDocument[] {
   const docs: MemoryDocument[] = [];
   for (const n of sessionNumbers(sample.conversation)) {
-    const session = sample.conversation[`session_${n}`];
+    const session = sample.conversation[`session_${n}`] as unknown[];
     if (!Array.isArray(session)) continue;
     const raw = sample.conversation[`session_${n}_date_time`];
     const dateTime = typeof raw === "string" ? raw : "";
-    for (const d of session) {
+    for (const entry of session) {
+      const d = entry as Record<string, unknown>;
       docs.push({
         id: d.dia_id,
         text: `DATE: ${dateTime}\nCONVERSATION:\n${formatTurn(d)}`,
@@ -104,7 +112,7 @@ function flattenLocomo(sample: Record<string, any>): MemoryDocument[] {
 
 async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   const raw = JSON.parse(fs.readFileSync(path.join(ROOT, "datasets/locomo/locomo10.json"), "utf8"));
-  const sample = (Array.isArray(raw) ? raw : raw.samples)[0];
+  const sample = (Array.isArray(raw) ? raw : raw.samples)[0] as LocomoSample;
   const { backend, workDir } = hermeticBackend();
   const health = backend.healthCheck();
   await backend.reset();
@@ -216,5 +224,7 @@ if (pack !== "locomo" && pack !== "longmemeval") {
 const result = pack === "locomo" ? await probeLocomo(maxQ) : await probeLongMemEval(maxQ);
 console.log(JSON.stringify(result, null, 2));
 if (result.guardTripped > 0) {
-  console.error(`\nNOTE: ${result.guardTripped} query/queries aborted on a backend guard — investigate, do not read as zero-hit.`);
+  console.error(
+    `\nNOTE: ${result.guardTripped} query/queries aborted on a backend guard — investigate, do not read as zero-hit.`,
+  );
 }
