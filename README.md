@@ -40,6 +40,19 @@ Extra pack requirements still apply:
 
 ## Quick start
 
+Validating a new akm-cli version? Start here — free, deterministic, no LLM and
+no Docker. It installs the version in isolation, probes both packs, and grades
+the result against the committed reference values:
+
+```bash
+bin/probe 0.9.10        # or: bin/probe (npm latest), bin/probe --cmd '["/path/to/akm"]'
+```
+
+It exits nonzero if retrieval regressed, which is the signal to stop before
+spending judged-eval budget. Artifacts land in `runs/probes/<version>-<stamp>/`.
+
+For a judged run:
+
 ```bash
 bin/build-image
 bin/doctor --pack locomo

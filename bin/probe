@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# One-command Tier-1 retrieval probe: install a pinned akm-cli into an isolated
+# scratch dir, run BOTH packs' LLM-free probes against it, capture the logs, and
+# diff the result against the committed reference values.
+#
+#   bin/probe                 # probe whatever npm `latest` resolves to
+#   bin/probe 0.9.10          # probe an exact published version
+#   bin/probe --cmd '["/path/to/akm"]'   # probe an already-installed binary
+#
+# Free, deterministic, no LLM, no Docker. Run this BEFORE spending judged-eval
+# budget: if retrieval regressed, stop here (scripts/probes/README.md).
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+
+# Reference values every probe run is graded against. Sourced from
+# runs/RESULTS-n25-0.9.3.md Phase 1 and reproduced unchanged on 0.9.10.
+# Keep in sync with the table in scripts/probes/README.md.
+REFERENCE_JSON='{
+  "locomo":      {"zeroHitRate": 0.0, "evidenceRecallAt5": 0.590, "precisionAtK": 0.232917, "recallAtK": 0.497917},
+  "longmemeval": {"zeroHitRate": 0.0, "evidenceRecallAt5": 0.950, "precisionAtK": 0.676667, "recallAtK": 0.950000}
+}'
+REFERENCE_FROM="akm-cli 0.9.3 / 0.9.10"
+# A metric may drift by this much before it is called a change. mrr/ndcg moved
+# ~0.002 between 0.9.3 and 0.9.10 with an identical retrieved set, so anything
+# under this is ranking jitter, not a retrieval change.
+TOLERANCE=0.005
+
+version=""
+akm_cmd=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cmd) akm_cmd="${2:?--cmd requires a JSON argv array}"; shift 2 ;;
+    -h|--help) sed -n '3,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    *) version="$1"; shift ;;
+  esac
+done
+
+if [ -n "$akm_cmd" ] && [ -n "$version" ]; then
+  echo "probe: pass a version OR --cmd, not both" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------- resolve akm
+if [ -z "$akm_cmd" ]; then
+  version="${version:-latest}"
+  if [ "$version" = "latest" ]; then
+    version="$(npm view akm-cli version)"
+    echo "probe: npm latest resolves to akm-cli@${version}"
+  fi
+
+  # Isolated install, deliberately INSIDE the repo: bin/eval's container
+  # bind-mounts this repo at its own host path, so a /tmp scratch dir is
+  # invisible in-container. runs/* is gitignored.
+  scratch="$REPO_ROOT/runs/.akm-cli-${version}-scratch"
+  akm_bin="$scratch/node_modules/.bin/akm"
+  if [ -x "$akm_bin" ] && [ "$("$akm_bin" --version 2>/dev/null)" = "$version" ]; then
+    echo "probe: reusing isolated install at ${scratch#"$REPO_ROOT/"}"
+  else
+    echo "probe: installing akm-cli@${version} into ${scratch#"$REPO_ROOT/"}"
+    mkdir -p "$scratch"
+    printf '{"name":"akm-cli-probe-scratch","private":true}\n' > "$scratch/package.json"
+    (cd "$scratch" && npm install "akm-cli@${version}" --ignore-scripts --no-audit --no-fund >/dev/null)
+  fi
+  akm_cmd="$(printf '["%s"]' "$akm_bin")"
+  label="$version"
+else
+  label="custom"
+fi
+
+# NEVER let a probe fall back to the real stash. akm resolves bundleDir to
+# ~/akm from default config when no AKM_*_DIR overrides are set; the probe
+# pins its own hermetic dirs, but resolving the version must not.
+mapfile -t akm_argv < <(jq -r '.[]' <<<"$akm_cmd")
+resolved_version="$(AKM_BUNDLE_DIR="$(mktemp -d)" "${akm_argv[@]}" --version 2>/dev/null || echo unknown)"
+[ "$label" = "custom" ] && label="$resolved_version"
+
+# ------------------------------------------------------------------- run them
+stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+out_dir="$REPO_ROOT/runs/probes/${label}-${stamp}"
+mkdir -p "$out_dir"
+
+echo "probe: akm-cli ${resolved_version} -> runs/probes/${label}-${stamp}/"
+echo
+
+status=0
+for pack in locomo longmemeval; do
+  echo "probe: running ${pack}..."
+  # MAX_Q=20 on longmemeval is what every committed reference number used;
+  # locomo's 40 questions are the whole conv-26 slice and need no cap.
+  env_max_q=()
+  [ "$pack" = "longmemeval" ] && env_max_q=(MAX_Q=20)
+  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" "${env_max_q[@]}" \
+           bun scripts/probes/retrieval-probe.ts "$pack" ) \
+         > "$out_dir/$pack.json" 2> "$out_dir/$pack.log"; then
+    echo "probe: ${pack} FAILED -- see runs/probes/${label}-${stamp}/${pack}.log" >&2
+    cat "$out_dir/$pack.log" >&2
+    status=1
+    continue
+  fi
+done
+[ "$status" -ne 0 ] && exit "$status"
+
+# -------------------------------------------------------------------- grade it
+jq -n \
+  --argjson reference "$REFERENCE_JSON" \
+  --argjson tolerance "$TOLERANCE" \
+  --arg reference_from "$REFERENCE_FROM" \
+  --arg version "$resolved_version" \
+  --slurpfile locomo "$out_dir/locomo.json" \
+  --slurpfile longmemeval "$out_dir/longmemeval.json" '
+  def metrics($r): {
+    zeroHitRate: $r.zeroHitRate,
+    evidenceRecallAt5: $r.evidenceRecallAt5,
+    precisionAtK: $r.retrieval.precisionAtK,
+    recallAtK: $r.retrieval.recallAtK,
+  };
+  # zeroHitRate is the one metric where LOWER is better; every other metric
+  # here is a score. Grading the wrong direction would call a fix a regression.
+  def verdict($name; $got; $want):
+    ($got - $want) as $delta
+    | (if $name == "zeroHitRate" then -$delta else $delta end) as $signed
+    | if ($delta | fabs) <= $tolerance then "match"
+      elif $signed > 0 then "IMPROVED"
+      else "REGRESSED" end;
+
+  { akmVersion: $version, referenceFrom: $reference_from, tolerance: $tolerance,
+    guardTripped: { locomo: $locomo[0].guardTripped, longmemeval: $longmemeval[0].guardTripped },
+    packs: [
+      {pack: "locomo", got: metrics($locomo[0]), want: $reference.locomo},
+      {pack: "longmemeval", got: metrics($longmemeval[0]), want: $reference.longmemeval}
+    ] | map(. as $p | $p.got | to_entries | map({
+        pack: $p.pack, metric: .key, got: .value, want: $p.want[.key],
+        delta: (.value - $p.want[.key]),
+        verdict: verdict(.key; .value; $p.want[.key])
+      })) | flatten
+  }' > "$out_dir/verdict.json"
+
+{
+  printf '# Retrieval probe — akm-cli %s\n\n' "$resolved_version"
+  printf 'Run: %s · reference: %s · tolerance: ±%s\n\n' "$stamp" "$REFERENCE_FROM" "$TOLERANCE"
+  printf '| pack | metric | reference | measured | delta | verdict |\n'
+  printf '| --- | --- | --- | --- | --- | --- |\n'
+  jq -r '.packs[] | "| \(.pack) | \(.metric) | \(.want) | \(.got) | \(if .delta >= 0 then "+" else "" end)\(.delta * 1000000 | round / 1000000) | \(.verdict) |"' "$out_dir/verdict.json"
+  printf '\nguardTripped: '
+  jq -r '.guardTripped | to_entries | map("\(.key)=\(.value)") | join(", ")' "$out_dir/verdict.json"
+  printf '\n'
+} > "$out_dir/summary.md"
+
+cat "$out_dir/summary.md"
+echo
+
+# guardTripped counts queries the backend refused outright. They are excluded
+# from the rates rather than counted as misses, so a nonzero count is a silent
+# hole in the sample -- surface it as a finding, not a pass.
+guards="$(jq -r '[.guardTripped[]] | add' "$out_dir/verdict.json")"
+if [ "$guards" != "0" ]; then
+  echo "probe: WARNING -- guardTripped=${guards}; those queries were refused, not scored." >&2
+fi
+
+if jq -e '[.packs[] | select(.verdict == "REGRESSED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
+  echo "probe: RETRIEVAL REGRESSED. Do not spend judged-eval budget on this build." >&2
+  exit 1
+fi
+if jq -e '[.packs[] | select(.verdict == "IMPROVED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
+  echo "probe: retrieval improved over the reference — update REFERENCE_JSON in this script once confirmed."
+  exit 0
+fi
+echo "probe: no retrieval change vs ${REFERENCE_FROM}."
