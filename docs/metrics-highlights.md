@@ -2,6 +2,29 @@
 
 **What akm measurably does for an agent, and where it does not.**
 
+> **NOT YET PUBLISHABLE — see [`docs/comparability.md`](./comparability.md).**
+> This document predates the comparability rules and violates several of them.
+> Read it as an internal directional summary, not as figures that can stand
+> beside another tool's published benchmark numbers:
+>
+> - **§1 and §2 are LongMemEval at n=25 of 500 (5%) and LoCoMo at 1 of 10
+>   conversations / 25 of 1,986 QA pairs (~1.3%)**, sampled as the first N in
+>   file order rather than a seeded random draw (A3).
+> - **The LongMemEval judge was `qwen3.5-plus`, not the benchmark's specified
+>   judge** — every LongMemEval absolute here is judge-substituted (A4).
+> - **The LongMemEval sample excludes the `temporal` category entirely**, and
+>   `knowledge-update` is mislabelled into `single-session` by a catch-all in
+>   `normalizeCategory()` (A2/A3).
+> - **§4 is a Tier-B first-party corpus result** from `akm-bench` sitting in
+>   the same document as Tier-A benchmark numbers, which B1 forbids. Its
+>   engagement figure is now known to track corpus composition rather than
+>   model behaviour — see `akm-bench/docs/comparability.md`.
+> - **No competitor (mem0, Zep) has ever been run**, so nothing here is a
+>   head-to-head with anything but our own naive-vector control.
+>
+> The retrieval-probe numbers in §3 are unaffected: they are deterministic,
+> LLM-free, and internal by construction.
+
 Measured 2026-08-26 → 2026-08-30 against `akm-cli` 0.9.1 → 0.9.3. Every number
 here comes from a committed run artifact; sources are cited per section so any
 claim can be re-derived. Where a result did not survive scrutiny, it is stated

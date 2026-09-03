@@ -21,6 +21,16 @@ Trust policy:
 - no silent fallback when an official harness or evaluator is unavailable
 - baseline and future AKM variants both use real model providers
 
+**Every number here is meant to stand next to the same benchmark's published
+numbers from other tools, so nothing in a benchmark, its dataset, or its
+evaluator may be modified in a way that could move a score.** The rules that
+follow from that — full-or-seeded sampling, the judge as part of the
+benchmark, one variable per round, equal effort for competitor arms, and the
+hard separation from first-party corpus results — are in
+[`docs/comparability.md`](./docs/comparability.md), along with the violations
+that currently block publication. Read it before publishing a figure or
+changing a pack.
+
 ## Host requirements
 
 For normal `bin/...` usage:
