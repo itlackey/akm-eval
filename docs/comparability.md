@@ -52,11 +52,41 @@ benchmark. If sampling is unavoidable, the sample MUST be:
 A subset score is never presented as the benchmark's score. Write
 "LongMemEval (n=25/500, seed=…)", not "LongMemEval".
 
-**A4. The judge is part of the benchmark.** Where scoring uses an LLM judge,
-the judge model and its prompt are part of the published definition. Swapping
-in a cheaper judge changes absolute scores and breaks comparison to every
-published figure. Either run the benchmark's specified judge, or label the
-result as judge-substituted and do not compare it across tools.
+**A4. The scoring method is part of the benchmark — judge AND metric.**
+
+*The judge.* Where scoring uses an LLM judge, the judge model and its prompt
+are part of the published definition. Swapping in a cheaper judge changes
+absolute scores and breaks comparison to every published figure. Either run
+the benchmark's specified judge, or label the result judge-substituted and do
+not compare it across tools.
+
+- **LongMemEval: `gpt-4o`.** The bundled `scripts/longmemeval-evaluator.py`
+  already reproduces upstream's per-question-type rubrics verbatim (abstention,
+  the temporal off-by-one tolerance, knowledge-update, preference), so the
+  judge model was the only non-compliant part and is now pinned in the
+  committed configs.
+- **LoCoMo: no judge.** `scripts/locomo-evaluator.py` computes deterministic
+  token-F1 per `snap-research/locomo`'s own rules. Nothing to substitute — and
+  this is why LoCoMo's cross-round numbers stayed stable while LongMemEval's
+  moved.
+
+*The metric.* Matching the dataset and the judge is still not enough if the
+**reported quantity** differs. The same benchmark is often published under
+different metrics — LoCoMo in particular is reported by some tools as
+LLM-judge accuracy rather than the token-F1 this repo computes. Those are
+different numbers over the same questions, and placing them in one column is a
+category error no amount of care elsewhere repairs.
+
+> **Before citing any competitor figure, confirm which metric they reported,
+> from their own published methodology.** If it differs from ours, either match
+> theirs or do not make the comparison. "Same benchmark" is not the bar; "same
+> quantity" is.
+
+*Routing.* The judge and the agent may need different endpoints — the
+benchmark names the judge model, and the endpoint an agent arm runs on need
+not serve it (opencode Zen serves no gpt-4 family at all). Set
+`AKM_EVAL_JUDGE_API_KEY` / `AKM_EVAL_JUDGE_BASE_URL` to point the judge
+independently; without them the judge follows the agent's provider.
 
 **A5. One variable per round.** Between two rounds being compared, exactly one
 thing changes. When more than one moves (sample size and agent model; CLI and

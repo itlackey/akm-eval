@@ -69,6 +69,56 @@ function runCommand(
   };
 }
 
+/**
+ * Build the environment the official evaluator (the judge) runs under.
+ *
+ * The judge is part of the BENCHMARK; the agent is what we are measuring
+ * (docs/comparability.md A4). They therefore may need different endpoints:
+ * LongMemEval specifies `gpt-4o`, and the endpoint an agent arm runs on does
+ * not necessarily serve it — opencode Zen, for instance, serves no gpt-4
+ * family at all. Before this split the judge was pinned to whatever the agent
+ * provider was, so a compliant judge was simply unreachable whenever the agent
+ * ran anywhere other than cloud OpenAI.
+ *
+ * Precedence: explicit `AKM_EVAL_JUDGE_*` wins, then the agent provider (the
+ * historical behaviour, still correct when both run on one endpoint), then
+ * whatever `OPENAI_*` the ambient environment already carries.
+ */
+export function resolveJudgeEnv(
+  processEnv: Record<string, string | undefined>,
+  agentProvider?: { baseURL?: string; apiKey?: string },
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...processEnv };
+
+  if (agentProvider) {
+    if (agentProvider.baseURL) {
+      env.OPENAI_BASE_URL = agentProvider.baseURL;
+    }
+    if (agentProvider.apiKey !== undefined) {
+      env.OPENAI_API_KEY = agentProvider.apiKey;
+    }
+  }
+
+  const judgeBaseUrl = processEnv.AKM_EVAL_JUDGE_BASE_URL;
+  const judgeApiKey = processEnv.AKM_EVAL_JUDGE_API_KEY;
+
+  if (judgeBaseUrl) {
+    env.OPENAI_BASE_URL = judgeBaseUrl;
+  }
+  if (judgeApiKey) {
+    env.OPENAI_API_KEY = judgeApiKey;
+    // A judge key with no judge base URL means cloud OpenAI. Leaving the
+    // agent's baseURL in place would send the judge key to the AGENT's
+    // endpoint -- a credential sent to the wrong service, not just a
+    // misconfiguration.
+    if (!judgeBaseUrl) {
+      env.OPENAI_BASE_URL = undefined;
+    }
+  }
+
+  return env;
+}
+
 function readJsonLines(filePath: string): EvaluationLogEntry[] {
   return fs
     .readFileSync(filePath, "utf8")
@@ -372,16 +422,13 @@ export const longMemEvalAdapter: PackAdapter = {
 
     const evaluatorModel =
       typeof packConfig.evaluatorModel === "string" ? packConfig.evaluatorModel : "gpt-4o";
-    const evaluatorEnv: Record<string, string | undefined> = { ...process.env };
     const provider = context.run.agentProviderConfig;
-    if (isOpenAICompatibleConfig(provider)) {
-      if (provider.baseURL) {
-        evaluatorEnv.OPENAI_BASE_URL = provider.baseURL;
-      }
-      if (provider.apiKey !== undefined) {
-        evaluatorEnv.OPENAI_API_KEY = provider.apiKey;
-      }
-    }
+    const evaluatorEnv = resolveJudgeEnv(
+      process.env,
+      isOpenAICompatibleConfig(provider)
+        ? { baseURL: provider.baseURL, apiKey: provider.apiKey }
+        : undefined,
+    );
     const evalResult = runCommand(
       `${evaluatorCommand} ${JSON.stringify(evaluatorModel)} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)}`,
       context.rootDir,

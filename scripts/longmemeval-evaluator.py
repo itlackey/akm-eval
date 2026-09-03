@@ -68,8 +68,14 @@ def main() -> int:
     predictions_path = sys.argv[2]
     dataset_path = sys.argv[3]
 
-    api_key = os.environ.get('OPENAI_API_KEY')
-    base_url = os.environ.get('OPENAI_BASE_URL')
+    # The judge may need a different endpoint than the agent under test: the
+    # benchmark specifies its judge model, and the endpoint an agent runs on
+    # does not necessarily serve it. AKM_EVAL_JUDGE_* wins when set; OPENAI_*
+    # remains the fallback for the common case where both are the same.
+    api_key = os.environ.get('AKM_EVAL_JUDGE_API_KEY') or os.environ.get('OPENAI_API_KEY')
+    base_url = os.environ.get('AKM_EVAL_JUDGE_BASE_URL')
+    if base_url is None and not os.environ.get('AKM_EVAL_JUDGE_API_KEY'):
+        base_url = os.environ.get('OPENAI_BASE_URL')
     if not api_key and not base_url:
         print('Set OPENAI_API_KEY for cloud OpenAI or OPENAI_BASE_URL for an OpenAI-compatible evaluator endpoint.', file=sys.stderr)
         return 2

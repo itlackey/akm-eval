@@ -147,3 +147,19 @@ out and the result capped at 20,000 characters.
   `AKM_EVAL_AKM_CMD`, unreachable binary, or real assertion failure. `AKM_EVAL_SIBLING_CLI`
   overrides the sibling fallback path. Run it against a specific CLI with:
   `AKM_EVAL_AKM_CMD='["bun","/home/user/akm/src/cli.ts"]' bun test tests/memory-backend-akm.integration.test.ts`.
+
+
+## Judge credentials
+
+The LongMemEval judge is part of the benchmark and may need a different
+endpoint than the agent under test (`docs/comparability.md` A4):
+
+| variable | purpose |
+| --- | --- |
+| `AKM_EVAL_JUDGE_API_KEY` | key for the judge. Set alone, the judge goes to cloud OpenAI. |
+| `AKM_EVAL_JUDGE_BASE_URL` | optional; an OpenAI-compatible endpoint that serves the judge model. |
+
+Unset, the judge follows the agent's provider — correct only when that provider
+serves the benchmark's judge model. A judge key with no judge base URL
+deliberately clears the agent's base URL, so the key is never sent to the
+agent's endpoint.

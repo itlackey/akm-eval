@@ -11,7 +11,7 @@
       "enabled": true,
       "config": {
         "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
-        "evaluatorModel": "qwen3.5-plus",
+        "evaluatorModel": "gpt-4o",
         "smoke": false,
         "maxQuestions": 25,
         "questionCategories": [
