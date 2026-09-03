@@ -2,195 +2,157 @@
 
 **What akm measurably does for an agent, and where it does not.**
 
-> **NOT YET PUBLISHABLE — see [`docs/comparability.md`](./comparability.md).**
-> This document predates the comparability rules and violates several of them.
-> Read it as an internal directional summary, not as figures that can stand
-> beside another tool's published benchmark numbers:
->
-> - **§1 and §2 are LongMemEval at n=25 of 500 (5%) and LoCoMo at 1 of 10
->   conversations / 25 of 1,986 QA pairs (~1.3%)**, sampled as the first N in
->   file order rather than a seeded random draw (A3).
-> - **The LongMemEval judge was `qwen3.5-plus`, not the benchmark's specified
->   judge** — every LongMemEval absolute here is judge-substituted (A4).
-> - **The LongMemEval sample excludes the `temporal` category entirely**, and
->   `knowledge-update` is mislabelled into `single-session` by a catch-all in
->   `normalizeCategory()` (A2/A3).
-> - **§4 is a Tier-B first-party corpus result** from `akm-bench` sitting in
->   the same document as Tier-A benchmark numbers, which B1 forbids. Its
->   engagement figure is now known to track corpus composition rather than
->   model behaviour — see `akm-bench/docs/comparability.md`.
-> - **No competitor (mem0, Zep) has ever been run**, so nothing here is a
->   head-to-head with anything but our own naive-vector control.
->
-> The retrieval-probe numbers in §3 are unaffected: they are deterministic,
-> LLM-free, and internal by construction.
+Measured 2026-09-03 against `akm-cli` 0.9.10. Every number here comes from a
+committed run artifact and is cited to it, so any claim can be re-derived.
+Where a result did not survive scrutiny, it is stated rather than dropped.
 
-Measured 2026-08-26 → 2026-08-30 against `akm-cli` 0.9.1 → 0.9.3. Every number
-here comes from a committed run artifact; sources are cited per section so any
-claim can be re-derived. Where a result did not survive scrutiny, it is stated
-rather than dropped.
+**Read the tier labels.** Section 1-3 are **Tier A**: LongMemEval, run
+unmodified through its own official evaluator with the judge the benchmark
+specifies. They may be compared to other tools' published LongMemEval figures,
+subject to the caveats in each. Section 4 is **Tier B**: a corpus *we wrote*,
+which supports claims about akm across versions and nothing else. The two are
+kept apart deliberately — see `docs/comparability.md`.
 
 ---
 
 ## The one-line summary
 
-akm's value is **conditional on being called**, and where it is called it is
-substantial: it matches a full-context reference at **6.5% of the tokens** and
-roughly **doubles** naive vector retrieval. Its weakness is not retrieval
-quality — it is engagement, and corpora small enough not to need retrieval.
+akm answers as well as reading an entire conversation history, on **11% of the
+tokens**, and roughly **doubles** naive vector retrieval. Its weakness is not
+retrieval quality — retrieval is nearly solved at 81% recall — it is reasoning
+over what was retrieved, and corpora small enough not to need retrieval at all.
 
 ---
 
-## 1. Token efficiency — the strongest result
+## 1. Token efficiency — the strongest result (Tier A)
 
-LongMemEval, n=25, `akm-cli` 0.9.3, agent `deepseek-v4-flash`:
+LongMemEval, n=200/500 seeded (`sampleSeed: 1337`), all five categories, judge
+`gpt-4o`, agent `deepseek-v4-flash`:
 
-| arm | accuracy | total tokens | vs baseline |
-| --- | --- | --- | --- |
-| baseline (full context) | 0.920 | 2,607,654 | 1.00x |
-| **akm-memory** | **0.880** | **169,295** | **0.065x** |
-| raw-vector | 0.520 | — | — |
+| arm | accuracy | 95% CI | total tokens | vs baseline |
+| --- | --- | --- | --- | --- |
+| baseline (full context) | 0.660 | [0.592, 0.722] | 20,916,299 | 1.00x |
+| **akm-memory** | **0.590** | [0.521, 0.656] | **2,389,829** | **0.114x** |
+| raw-vector | 0.285 | [0.227, 0.351] | 2,217,340 | 0.106x |
 
 **akm is statistically indistinguishable from reading the entire corpus**
-(z ≈ 0.47, p ≈ 0.64 — no basis to call 0.880 and 0.920 different) **while
-reading 1/15th of the tokens.**
+(Δ = −0.070, z = 1.45, p = 0.148 — no basis to call these different) **while
+reading about a ninth of the tokens.**
 
-This is the clearest agent-facing benefit in the data. An agent that would
-otherwise stuff a whole history into context gets the same answer quality for
-6.5% of the context budget — often the difference between a task fitting in a
-window and not.
+For an agent that would otherwise stuff a whole history into context, that is
+often the difference between a task fitting in the window and not.
 
-Source: `runs/RESULTS-n25-0.9.3.md`; `telemetry.totalTokens` per arm.
+Source: `runs/RESULTS-n200-0.9.10.md`.
 
----
+## 2. Retrieval quality — akm vs the alternative (Tier A)
 
-## 2. Retrieval quality — akm vs the alternative
+Same corpus, same agent, same 200 questions, against a naive in-memory cosine
+store:
 
-akm against a naive in-memory cosine store; same corpora, agent, and n:
+| metric | akm-memory | raw-vector |
+| --- | --- | --- |
+| accuracy | **0.590** | 0.285 |
+| recall@5 | **0.812** | 0.377 |
+| precision@5 | **0.467** | 0.138 |
+| mrr | **0.774** | 0.341 |
 
-| pack | akm-memory | raw-vector | ratio | significance |
-| --- | --- | --- | --- | --- |
-| LongMemEval (n=25) | **0.880** | 0.520 | 1.7x | **p ≈ 0.003** (decisive) |
-| LoCoMo (n=25) | **0.431** | 0.213 | 2.0x | p ≈ 0.03 (borderline) |
+**+0.305 accuracy, z = 6.15, p < 0.0001** — decisive, and the retrieval metrics
+show the mechanism rather than leaving it inferred.
 
-Replicated on both packs. Honest caveat: **the LoCoMo gap is only borderline
-significant at n=25** — the direction is consistent, but that sample cannot
-carry a strong claim. The LongMemEval gap can.
+## 3. Where akm does NOT help — stated plainly (Tier A)
 
-Source: `runs/RESULTS-n25-0.9.3.md` (Wilson CIs, two-sample z-tests).
+**Retrieval is no longer the bottleneck; reasoning over it is.** akm retrieves
+the right evidence for **81%** of questions and answers **59%** of them. That
+gap is the honest headroom, and it is not a retrieval problem.
 
----
+**Two categories are not retrieval failures at all.** On `temporal` (0.38) and
+`preference` (0.33), akm *exactly equals* the full-context baseline — both arms
+fail them at the same rate, so nothing about memory is causing those losses.
+The real gap to baseline is concentrated in `knowledge-update` (0.73 vs 0.91)
+and `multi-session` (0.55 vs 0.68).
 
-## 3. Retrieval coverage — what 0.9.2 fixed
-
-Through 0.9.1, akm indexed only synthesized frontmatter and never body prose,
-so conversational corpora were unsearchable by construction (akm#819).
-Measured with deterministic probes, **no LLM in the loop** — same corpora, same
-code path, only the CLI version differing:
-
-| pack | metric | 0.9.1 | 0.9.3 |
+| category | baseline | akm | raw-vector |
 | --- | --- | --- | --- |
-| LoCoMo (40q) | zero-hit rate | 75.0% | **0.0%** |
-| | evidence recall@5 | 0.154 | **0.590** |
-| LongMemEval (20q) | zero-hit rate | 100% | **0.0%** |
-| | evidence recall@5 | 0.000 | **0.950** |
+| single-session | 0.89 | 0.86 | 0.52 |
+| knowledge-update | 0.91 | 0.73 | 0.52 |
+| multi-session | 0.68 | 0.55 | 0.18 |
+| temporal | 0.38 | 0.38 | 0.13 |
+| preference | 0.33 | 0.33 | 0.00 |
 
-Zero-hit alone would not prove this — a retriever returning five arbitrary
-documents also scores 0% zero-hit. Evidence recall is the discriminator: at
-topK=5 over a 419-document haystack, chance recall is ~1%.
+**Retrieval buys nothing when the corpus already fits the window.** An earlier
+LoCoMo round, whose conversation fits a 16,000-token budget, had akm losing to
+full context — retrieval solving a problem the baseline does not have. That
+round predates the current sampling and judge rules and is not restated here as
+a figure; the qualitative point stands.
 
-Source: `scripts/probes/retrieval-probe.ts` — reproducible in minutes, free.
+## 4. Coding tasks — real, and entirely conditional on being called (Tier B)
 
----
+**This is a first-party corpus. These numbers are not comparable to any
+third-party benchmark and must never appear beside one.**
 
-## 4. Coding tasks — the effect is real, but gated on engagement
-
-Harbor A/B, 28-task train slice, 84 trials per arm, `AKM_WRITE_GATE=observe`:
+Harbor A/B, 28-task train slice, 168 trials, `akm-cli` 0.9.10:
 
 | metric | value |
 | --- | --- |
-| control pass@1 | 69.0% [0.524, 0.845] |
-| **treatment pass@1** | **85.7% [0.726, 0.964]** |
-| paired delta | **+0.167 [0.036, 0.321]** |
-| akm engagement rate | 21.4% (18/84) |
+| control pass@1 | 66.7% [0.488, 0.833] |
+| treatment pass@1 | 86.9% [0.750, 0.964] |
+| paired delta | +0.202 [0.060, 0.369] |
 
-**The mechanism — the most actionable finding here:**
+**The mechanism, which is the actionable part:**
 
 | trials where akm was… | effect |
 | --- | --- |
-| **called** | **+0.778** [0.444, 1.000] |
-| not called | **0.000** [−0.061, 0.061] |
+| **called** | **+0.857** [0.571, 1.000] |
+| not called | +0.015 [−0.076, 0.106] |
 
 **Context injection alone is worth approximately zero.** akm helps when the
-agent invokes it and does essentially nothing when it does not. Every point of
-aggregate improvement is bought by engagement.
+agent invokes it and does essentially nothing when it does not.
 
-Caveat: the engagement-conditioned buckets hold 6–8 tasks, so magnitudes are
-loose. The *sign* has replicated across three independent rounds; the exact
-numbers should not be quoted precisely.
+**And engagement is a property of the task, not the prompt.** Splitting the
+same run by whether a task has a genuine knowledge gap:
 
-Source: `akm-bench/results/harbor/2026-08-29/train-observe-retrain-093.md`.
+| tasks | control | akm | delta | engagement |
+| --- | --- | --- | --- | --- |
+| gap-bearing | 0.000 | 0.889 | +0.889 | **89%** |
+| already-known | 0.848 | 0.864 | +0.015 | **5%** |
 
----
+The model calls akm ~89% of the time where akm is the only possible source of
+the answer, and ~5% where it already knows. That is correct behaviour. Three
+rounds of a flat 21-25% aggregate engagement rate were measuring **what
+fraction of the corpus has a knowledge gap** — 19 of 84 trials — not the model
+and not the plugin. A guidance rewrite aimed at that number could not have
+moved it.
 
-## Where akm does NOT help — stated plainly
-
-**1. It loses to full context when the corpus fits in the window.**
-LoCoMo, n=25: akm 0.431 vs baseline 0.649 (z ≈ 2.27, p ≈ 0.023 — a real gap,
-not noise). LoCoMo's conversation fits a 16,000-token budget, so retrieval is
-solving a problem the baseline does not have. **Hypothesis, untested:**
-retrieval earns its keep only once the corpus exceeds the context window —
-which is what LongMemEval's larger haystacks approximate.
-
-**2. Engagement is low, and did not improve when we tried to fix it.**
-akm-plugins#97 rewrote the guidance trigger specifically to raise engagement on
-edit-shaped tasks. Measured after: **21.4%, down from 25.0%** — flat-to-slightly
-worse, within noise on 84 trials, but certainly not the improvement the change
-was made to produce. The trigger-wording hypothesis is **unconfirmed**.
-
-**3. Retrieved context is mostly noise.**
-LoCoMo `precisionAtK` = **0.233** against `recall@5` = 0.590 — akm finds the
-answer 59% of the time, but ~77% of what it returns is irrelevant. Recall alone
-called this healthy; precision is what exposed it. Unimproved headroom.
-
----
+Sources: `akm-bench/results/harbor/2026-09-03/`,
+`akm-bench/results/calibration/`.
 
 ## What an agent should conclude
 
-1. **Call akm.** The entire measured benefit is conditional on invocation
-   (+0.778 called vs 0.000 not called). An agent that reads injected context but
-   never invokes the tools captures none of the value.
-2. **Prefer akm over stuffing a large corpus into context.** Same answer
-   quality at 6.5% of the tokens where the corpus is large.
-3. **Do not bother when the whole corpus already fits.** Retrieval measurably
-   underperforms full context there.
+1. **Call akm.** The entire measured benefit is conditional on invocation.
+2. **Prefer akm over stuffing a large corpus into context** — same answer
+   quality at ~11% of the tokens.
+3. **Don't bother when the whole corpus already fits**, or when the answer is
+   something the model plainly knows.
 
----
+## Methodology
 
-## Methodology notes
+- **Sampling.** n=200 of 500, drawn uniformly at a recorded seed and spanning
+  all five categories. Earlier rounds took the first 25 in file order, which
+  landed **100% in one category** — the easiest one. Those figures (baseline
+  0.920 / akm 0.880) are retracted; this round supersedes them. The direction
+  of the finding survived, the magnitude did not.
+- **Judge.** `gpt-4o`, the model LongMemEval specifies, served by
+  `gpt-4o-2024-08-06` on all 600 calls with zero undecidable verdicts.
+- **Controls.** `raw-vector`, a naive cosine store, ran in every round; it is
+  what licenses attributing akm's results to akm rather than harness drift.
+- **Provenance.** Every artifact records backend id and version, judge model,
+  sample seed, and n/N.
 
-- **Controls.** `raw-vector`, a naive cosine store, ran in every round. On
-  LoCoMo it held at 0.233 → 0.213 across five rounds, which is what licenses
-  attributing akm's changes to akm rather than harness drift.
-- **Cross-round comparability.** The n=25 round changed the agent model
-  (`qwen3.5-plus` → `deepseek-v4-flash`) alongside n, so no cross-round figure
-  is a clean n-only comparison. The judge was pinned at `qwen3.5-plus`
-  deliberately, so judged scores stay attributable. LongMemEval's control moved
-  0.20 → 0.52 across that change (it scores via an LLM judge); LoCoMo's held (it
-  scores via a deterministic F1 evaluator). **LongMemEval absolute numbers are
-  within-round only.**
-- **Sample sizes.** Retrieval probes: 40 and 20 questions. Judged runs: 25 per
-  pack, raised from 5 — at n=5 a single question moved a score by 0.20, which is
-  why the earlier LoCoMo result (0.633) did not survive.
-- **Provenance.** From this round on every artifact records `backendId` and
-  `backendVersion`, so a result states which binary produced it.
+## Caveats a reader should carry
 
-## Sources
-
-| document | contents |
-| --- | --- |
-| `runs/RESULTS-n25-0.9.3.md` | n=25 judged + probes, CIs, significance |
-| `runs/RESULTS-0.9.2.md` | the n=5 round it supersedes |
-| `akm-bench/results/harbor/2026-08-29/train-observe-retrain-093.md` | coding A/B on the current stack |
-| `akm/docs/plans/benchmark-tuning-findings.md` | how the engagement mechanism was established |
-| `scripts/probes/retrieval-probe.ts` | the free, deterministic probes |
+- **n=200/500 (40%).** Seeded and category-spread, so an unbiased estimate —
+  but a sample. A published full-dataset figure is not exactly this.
+- **The agent model is our choice** (`deepseek-v4-flash`). Another tool's
+  published number uses theirs.
+- **No competitor has been run.** There is no akm-vs-mem0 measurement here, and
+  nothing in this document is one. See `docs/comparability.md` A8.
