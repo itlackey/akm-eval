@@ -97,6 +97,7 @@ def main() -> int:
         client_kwargs['base_url'] = base_url
     client = OpenAI(**client_kwargs)
     output_path = f'{predictions_path}.eval-results-{sanitize_file_component(metric_model)}'
+    resolved_models: dict[str, int] = {}
 
     with open(output_path, 'w', encoding='utf-8') as handle:
         for prediction in predictions:
@@ -116,11 +117,32 @@ def main() -> int:
                 max_tokens=10,
             )
             verdict = completion.choices[0].message.content.strip().lower()
+            # Record the model the SERVER says answered, not just the one we
+            # asked for. Routing aliases ("auto") can resolve to a different
+            # model per call, so without this a run is not reproducible even
+            # against itself, and "which judge scored this" is unanswerable
+            # after the fact (docs/comparability.md A4, A7).
+            resolved_model = getattr(completion, 'model', None) or metric_model
+            resolved_models[resolved_model] = resolved_models.get(resolved_model, 0) + 1
             prediction['autoeval_label'] = {
                 'model': metric_model,
+                'resolved_model': resolved_model,
                 'label': 'yes' in verdict,
             }
             handle.write(json.dumps(prediction) + '\n')
+
+    # Surface the resolved-judge census on stderr so it lands in the run log
+    # even when nothing downstream parses the per-prediction field. More than
+    # one entry means the judge was NOT fixed across the run.
+    if resolved_models:
+        census = ', '.join(f'{name}={count}' for name, count in sorted(resolved_models.items()))
+        print(f'judge resolved to: {census}', file=sys.stderr)
+        if len(resolved_models) > 1:
+            print(
+                f'WARNING: judge model varied across this run ({len(resolved_models)} distinct). '
+                'Scores are not attributable to a single judge.',
+                file=sys.stderr,
+            )
 
     print(output_path)
     return 0

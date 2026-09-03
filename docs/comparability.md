@@ -60,11 +60,27 @@ absolute scores and breaks comparison to every published figure. Either run
 the benchmark's specified judge, or label the result judge-substituted and do
 not compare it across tools.
 
-- **LongMemEval: `gpt-4o`.** The bundled `scripts/longmemeval-evaluator.py`
-  already reproduces upstream's per-question-type rubrics verbatim (abstention,
-  the temporal off-by-one tolerance, knowledge-update, preference), so the
-  judge model was the only non-compliant part and is now pinned in the
-  committed configs.
+- **LongMemEval specifies `gpt-4o`.** The bundled
+  `scripts/longmemeval-evaluator.py` reproduces upstream's per-question-type
+  rubrics verbatim (abstention, the temporal off-by-one tolerance,
+  knowledge-update, preference), so the judge model is the only non-compliant
+  part.
+
+  **CURRENT STATE — judge-substituted by operator decision, until further
+  notice.** The committed config judges with ai.lab `auto`
+  (`https://ai.lab.fwdslsh.dev/v1`). LongMemEval absolutes produced this way
+  are internal figures: they may NOT be placed beside another tool's published
+  LongMemEval score.
+
+  `auto` is additionally a **routing alias, not a pinned model**, which is a
+  strictly weaker position than substituting a fixed judge — an unpinned judge
+  can differ between runs, so two of our OWN runs are not necessarily
+  comparable either. The evaluator therefore records the server-reported
+  `resolved_model` on every prediction and prints a census to stderr, with a
+  warning when more than one model served a single run. Read that census
+  before comparing any two rounds. Restoring publishability means setting
+  `evaluatorModel` back to `gpt-4o` and re-running; nothing else about the
+  pack has to change.
 - **LoCoMo: no judge.** `scripts/locomo-evaluator.py` computes deterministic
   token-F1 per `snap-research/locomo`'s own rules. Nothing to substitute — and
   this is why LoCoMo's cross-round numbers stayed stable while LongMemEval's

@@ -11,7 +11,7 @@
       "enabled": true,
       "config": {
         "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
-        "evaluatorModel": "gpt-4o",
+        "evaluatorModel": "auto",
         "smoke": false
       }
     }
@@ -68,7 +68,7 @@
     "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
     "ASYMMETRY BY DESIGN: baseline (memory.backend none) answers every question from its full haystack conversation, flattened into the prompt, with no memory backend touched. raw-vector and akm-memory instead reset() the backend per question, add() one document per haystack session, then search() with the question text and pack.config.topK (default 5), answering only from the retrieved text. This is the same baseline-vs-retrieval asymmetry locomo-akm-ab.json documents, not a bug -- see src/packs/longmemeval/README.md and docs/memory-backends.md.",
     "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score.",
-    "FULL DATASET, OFFICIAL JUDGE: all 500 questions, all five categories, judged by gpt-4o. No maxQuestions/sampleSeed (nothing is sampled) and no questionCategories (the previous single-session+multi-session filter excluded temporal, preference and knowledge-update -- three of five categories). This is the first Tier-A compliant configuration in the repo; see docs/comparability.md."
+    "JUDGE: ai.lab 'auto' (https://ai.lab.fwdslsh.dev/v1), by operator decision until further notice. This is JUDGE-SUBSTITUTED under docs/comparability.md A4 -- LongMemEval specifies gpt-4o -- so absolute scores here are NOT comparable to another tool's published LongMemEval figure. 'auto' is also a routing alias, not a pinned model, so the evaluator records the server-reported resolved model per call and warns if it varied within a run."
   ],
   "providers": {
     "openai-compatible": {
