@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# One-command memory eval with the credentials wired correctly.
+#
+#   bin/memory-eval longmemeval          # all three arms
+#   bin/memory-eval locomo --variant akm-memory
+#   bin/memory-eval longmemeval --dry-run
+#
+# WHY THIS EXISTS: the judge and the agent need DIFFERENT credentials pointed
+# at DIFFERENT endpoints, and they collide on the same variable name. The agent
+# arms run on opencode Zen, which wants OPENAI_API_KEY set to the Zen key; the
+# LongMemEval judge is gpt-4o, which Zen does not serve at all, so it needs a
+# real OpenAI key. Wiring that by hand before a multi-hour run is exactly the
+# kind of step that fails at the end instead of the start.
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+ZEN_BASE_URL="https://opencode.ai/zen/v1"
+
+orig_args=("$@")
+pack=""
+variants=()
+dry_run=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    longmemeval|locomo) pack="$1"; shift ;;
+    --variant) variants+=("${2:?--variant requires a value}"); shift 2 ;;
+    --dry-run) dry_run=1; shift ;;
+    -h|--help) sed -n '3,15p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    *) echo "memory-eval: unexpected argument: $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$pack" ] || { echo "memory-eval: which pack? 'longmemeval' or 'locomo'" >&2; exit 2; }
+[ ${#variants[@]} -gt 0 ] || variants=(baseline raw-vector akm-memory)
+
+config="config/common/${pack}-akm-ab-zen.json"
+[ -f "$config" ] || { echo "memory-eval: missing $config" >&2; exit 1; }
+
+fail() { echo "memory-eval: $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- credentials
+# Pulled from akm rather than the shell, via `akm env run` (the injection path
+# akm's own help prescribes over sourcing the file). --only keeps unrelated
+# credentials out of a multi-hour run's environment.
+if [ -z "${AKM_EVAL_CREDS_REEXEC:-}" ] && command -v akm >/dev/null 2>&1; then
+  ref="$(akm env list --format json 2>/dev/null \
+    | jq -r 'first(.. | objects | select(has("keys")) | select(.keys | index("OPENCODE_API_KEY")) | .ref) // empty' 2>/dev/null || true)"
+  if [ -n "$ref" ]; then
+    echo "memory-eval: loading credentials from akm env '${ref}'"
+    export AKM_EVAL_CREDS_REEXEC=1
+    exec akm env run "$ref" --only OPENCODE_API_KEY,OPENAI_API_KEY -- \
+      "${BASH_SOURCE[0]}" "${orig_args[@]}"
+  fi
+fi
+
+# The judge key. Accept AKM_EVAL_JUDGE_API_KEY, or fall back to a real OpenAI
+# key stored under the generic name -- but only after confirming it is NOT the
+# Zen key, which would silently send Zen credentials to api.openai.com.
+judge_key="${AKM_EVAL_JUDGE_API_KEY:-}"
+if [ -z "$judge_key" ] && [ -n "${OPENAI_API_KEY:-}" ] && [ "${OPENAI_API_KEY:-}" != "${OPENCODE_API_KEY:-}" ]; then
+  judge_key="$OPENAI_API_KEY"
+fi
+
+[ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the agent arms need it."
+
+if [ "$pack" = "longmemeval" ]; then
+  [ -n "$judge_key" ] || fail "no judge key. LongMemEval is judged by gpt-4o, which Zen does not serve. Set AKM_EVAL_JUDGE_API_KEY to a real OpenAI key."
+fi
+
+# Agent arms -> Zen. Judge -> cloud OpenAI (no judge base URL, so
+# resolveJudgeEnv clears the agent's and the key is never sent to Zen).
+export OPENAI_API_KEY="$OPENCODE_API_KEY"
+export OPENAI_BASE_URL="$ZEN_BASE_URL"
+export AKM_EVAL_JUDGE_API_KEY="$judge_key"
+unset AKM_EVAL_JUDGE_BASE_URL
+
+# akm CLI for the akm-memory arm, resolvable inside the eval container.
+if [ -z "${AKM_EVAL_AKM_CMD:-}" ]; then
+  for candidate in runs/.akm-cli-*-scratch/node_modules/.bin/akm; do
+    [ -x "$candidate" ] && AKM_EVAL_AKM_CMD="$(printf '["%s/%s"]' "$REPO_ROOT" "$candidate")" && break
+  done
+  [ -n "${AKM_EVAL_AKM_CMD:-}" ] && export AKM_EVAL_AKM_CMD
+fi
+
+akm_version="$(jq -r '.[0]' <<<"${AKM_EVAL_AKM_CMD:-[\"akm\"]}" | xargs -r -I{} sh -c 'AKM_BUNDLE_DIR=$(mktemp -d) {} --version 2>/dev/null' || echo unknown)"
+
+stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+out_root="runs/${pack}-full-${stamp}"
+mkdir -p "$out_root"
+
+cat <<INFO
+
+memory-eval: pack        ${pack}
+memory-eval: config      ${config}
+memory-eval: arms        ${variants[*]}
+memory-eval: agent       Zen (${ZEN_BASE_URL})
+memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via cloud OpenAI" || echo "")
+memory-eval: questions   $(jq -r '.packs[0].config.maxQuestions // "ALL (no subset)"' "$config")
+memory-eval: categories  $(jq -r 'if .packs[0].config.questionCategories then (.packs[0].config.questionCategories|join(",")) else "ALL" end' "$config")
+memory-eval: akm-cli     ${akm_version}
+memory-eval: output      ${out_root}/
+
+INFO
+
+if [ "$dry_run" = "1" ]; then
+  echo "memory-eval: --dry-run, stopping before execution."
+  exit 0
+fi
+
+status=0
+for variant in "${variants[@]}"; do
+  echo "memory-eval: === ${pack} / ${variant} ==="
+  if ! bin/eval --pack "$pack" --variant "$variant" --config "$config" \
+        --out "${out_root}/${variant}" 2>&1 | tee "${out_root}/${variant}.log"; then
+    echo "memory-eval: ${variant} FAILED (see ${out_root}/${variant}.log)" >&2
+    status=1
+  fi
+done
+
+echo
+echo "memory-eval: done -> ${out_root}/"
+bin/summary --runs "$out_root" --format markdown 2>/dev/null | tee "${out_root}/summary.md" || true
+exit "$status"

@@ -12,13 +12,7 @@
       "config": {
         "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
         "evaluatorModel": "gpt-4o",
-        "smoke": false,
-        "maxQuestions": 25,
-        "questionCategories": [
-          "single-session",
-          "multi-session"
-        ],
-        "sampleSeed": 1337
+        "smoke": false
       }
     }
   ],
@@ -73,7 +67,8 @@
     "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
     "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
     "ASYMMETRY BY DESIGN: baseline (memory.backend none) answers every question from its full haystack conversation, flattened into the prompt, with no memory backend touched. raw-vector and akm-memory instead reset() the backend per question, add() one document per haystack session, then search() with the question text and pack.config.topK (default 5), answering only from the retrieved text. This is the same baseline-vs-retrieval asymmetry locomo-akm-ab.json documents, not a bug -- see src/packs/longmemeval/README.md and docs/memory-backends.md.",
-    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score."
+    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score.",
+    "FULL DATASET, OFFICIAL JUDGE: all 500 questions, all five categories, judged by gpt-4o. No maxQuestions/sampleSeed (nothing is sampled) and no questionCategories (the previous single-session+multi-session filter excluded temporal, preference and knowledge-update -- three of five categories). This is the first Tier-A compliant configuration in the repo; see docs/comparability.md."
   ],
   "providers": {
     "openai-compatible": {
