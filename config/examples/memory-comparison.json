@@ -15,40 +15,63 @@
         "evaluatorCommand": "python scripts/longmemeval-evaluator.py",
         "evaluatorModel": "gpt-4o",
         "maxQuestions": 100,
-        "questionCategories": ["single-session", "multi-session", "temporal", "preference"]
+        "questionCategories": [
+          "single-session",
+          "multi-session",
+          "temporal",
+          "preference"
+        ]
       }
     }
   ],
   "variants": [
     {
       "id": "baseline",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": false },
-      "memory": { "backend": "none" }
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "gpt-4o-mini"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "none"
+      }
     },
     {
       "id": "akm-memory",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": true, "command": "akm" },
-      "memory": { "backend": "akm" }
-    },
-    {
-      "id": "mem0-oss",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": false },
-      "memory": { "backend": "mem0", "config": { "mode": "oss" } }
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "gpt-4o-mini"
+      },
+      "akm": {
+        "enabled": true,
+        "command": "akm"
+      },
+      "memory": {
+        "backend": "akm"
+      }
     },
     {
       "id": "raw-vector",
-      "agent": { "provider": "openai-compatible", "providerRef": "openai-compatible", "model": "gpt-4o-mini" },
-      "akm": { "enabled": false },
-      "memory": { "backend": "raw-vector" }
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "openai-compatible",
+        "model": "gpt-4o-mini"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "raw-vector"
+      }
     }
   ],
   "notes": [
-    "This planned comparison config still includes blocked external memory backend variants (mem0-oss) for future integration work.",
     "baseline, raw-vector, and akm-memory are truthful runnable benchmark choices; the akm arm shells out to a real akm CLI (see docs/memory-backends.md) and needs one reachable via AKM_EVAL_AKM_CMD (default [\"akm\"]).",
-    "`akm-eval run` fails fast for the mem0-oss variant, which has no evaluated backend integration; the akm-memory variant runs for real and fails loudly if the akm CLI is unreachable."
+    "Competitor backends (mem0, Zep, OpenViking) were removed from this repo: a competitor arm we configure ourselves is a strawman risk under docs/comparability.md A8. Cross-tool comparison is done by running the vendor's own published tool, or by citing their published benchmark figures, once our own numbers are Tier-A compliant."
   ],
   "providers": {
     "openai-compatible": {
@@ -58,6 +81,16 @@
       "defaultModel": "gpt-4o-mini"
     }
   },
-  "judging": { "enabled": true, "provider": "openai", "model": "gpt-4.1-mini", "temperature": 0 },
-  "telemetry": { "trackTokens": true, "trackCost": true, "trackLatency": true, "captureLogs": true }
+  "judging": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-4.1-mini",
+    "temperature": 0
+  },
+  "telemetry": {
+    "trackTokens": true,
+    "trackCost": true,
+    "trackLatency": true,
+    "captureLogs": true
+  }
 }

@@ -21,7 +21,7 @@ export type EvalVariant = {
     configPath?: string;
   };
   memory: {
-    backend: "none" | "akm" | "mem0" | "zep" | "openviking" | "raw-vector";
+    backend: "none" | "akm" | "raw-vector";
     config?: Record<string, unknown>;
   };
   limits?: {

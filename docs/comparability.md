@@ -74,12 +74,27 @@ agent model, judge model, dataset revision, `n / N`, sample seed, and the run
 artifact it came from. A figure whose artifact cannot be located is retracted,
 not defended.
 
-**A8. Competitor arms get equal effort.** A comparison to mem0 or Zep is only
-trustworthy if their arm is configured as their own documentation recommends —
-their suggested settings, their default topK, their supported ingestion path.
-An under-configured competitor is not a baseline, it is a strawman. Record the
-competitor's version and config in the artifact, and prefer settings taken
-from their published benchmark methodology over our own guesses.
+**A8. This repo does not host competitor arms.** mem0, Zep and OpenViking were
+removed rather than implemented. A competitor arm we configure ourselves is a
+strawman risk: if we under-configure it — wrong topK, unsupported ingestion
+path, defaults they would never publish against — the resulting win is not a
+finding, and it is the first thing a sceptical reader will check.
+
+Cross-tool comparison takes one of two forms instead:
+
+1. **Cite their published figure**, which is only valid when our own run on
+   that benchmark is Tier-A compliant — same dataset revision, full or
+   seeded-random sample, the benchmark's own judge, its official evaluator.
+   Citing a competitor's full-dataset official-judge number beside our 5%
+   substituted-judge subset is not a comparison, it is a category error.
+2. **Run the vendor's own published tool** as they document it, and publish
+   both runs' provenance side by side. Stronger, and the right form once our
+   own numbers are trusted.
+
+If a competitor arm is ever re-added here, it inherits the obligation this
+rule was written for: configure it to the standard of its own published
+methodology, record its version and config in the artifact, and prefer their
+settings over our guesses.
 
 **A9. Report what looks bad.** Where akm loses, the losing number is published
 with the same prominence as a winning one. This rule exists because the value
@@ -89,20 +104,35 @@ of the whole exercise is that a reader can trust the numbers that favour us.
 
 These block publication today. Each is tracked with what it would take to clear.
 
-1. **Sampling is first-N, not seeded-random** (`maxQuestions` does
-   `slice(0, n)`; `maxSamples` likewise). Violates A3. The committed n=25
-   rounds are therefore not a random sample of either benchmark.
-2. **LongMemEval was run at n=25 of 500 (5%)**, LoCoMo at 1 of 10
-   conversations and 25 of 1,986 QA pairs (~1.3%). Violates A3 pending
-   full-dataset runs or disclosed seeded samples.
-3. **The category filter drops `temporal` entirely** and
-   `normalizeCategory()` folds `knowledge-update` (78 questions) into
-   `single-session` through a catch-all `return`, so `preference` is
-   unreachable and reported categories are wrong. Violates A2/A3.
+1. ~~Sampling is first-N~~ — **FIXED.** `src/core/sampling.ts` draws a seeded
+   uniform sample; subsetting a non-smoke run without an integer `sampleSeed`
+   now fails loudly rather than silently taking file order. Provenance
+   (`order`, `seed`, `n`, `total`) is recorded for the artifact.
+
+   How bad it was, measured: the first 25 LongMemEval questions are **100%
+   `single-session`** — a single category. A seeded n=25 spans all five
+   (4 single-session / 10 multi-session / 1 preference / 8 temporal /
+   2 knowledge-update). Every committed n=25 LongMemEval figure is a
+   one-category score.
+2. **The committed rounds remain unpublishable** — LongMemEval n=25 of 500
+   (5%), LoCoMo 1 of 10 conversations and 25 of 1,986 QA pairs (~1.3%), both
+   drawn under the old first-N behaviour. The fix makes future runs
+   compliant; it does not retroactively repair these. Re-run before citing.
+3. ~~Category mislabelling~~ — **FIXED.** `normalizeCategory()` tested
+   `single` before `preference` (making `preference` unreachable) and ended in
+   a catch-all `return "single-session"` that absorbed all 78
+   `knowledge-update` questions. It now checks most-specific first and throws
+   on an unrecognised type. Verified against the full dataset: 126 / 133 / 30
+   / 133 / 78 across the five categories, summing to 500. The committed
+   configs' `questionCategories: ["single-session", "multi-session"]` still
+   excludes `temporal`, `preference` and `knowledge-update` by choice — that
+   is now a visible, correctly-labelled choice rather than a silent one.
 4. **The judge was `qwen3.5-plus`, not LongMemEval's specified judge.**
    Violates A4; all committed LongMemEval absolutes are judge-substituted.
-5. **mem0, Zep and OpenViking are placeholders with no runtime**, so no
-   head-to-head exists yet. Blocks the comparison the whole goal names, and
-   A8 applies the moment one is stood up.
+5. ~~mem0/Zep/OpenViking placeholders~~ — **closed by removal.** No
+   head-to-head exists, and the path to one now runs through A8's two forms
+   rather than through a backend in this repo. Violations 1-4 are what
+   actually gate it: a citation comparison is only valid once our own side of
+   it is Tier-A compliant.
 
 See `docs/operator-blockers.md` for the operator-side prerequisites.

@@ -20,6 +20,7 @@ import {
 interface LongMemEvalPackConfig {
   datasetPath?: string;
   maxQuestions?: number;
+  sampleSeed?: number;
   questionCategories?: string[];
   smoke?: boolean;
   evaluatorCommand?: string;
@@ -216,6 +217,7 @@ export const longMemEvalAdapter: PackAdapter = {
       rootDir: context.rootDir,
       datasetPath: packConfig.datasetPath,
       maxQuestions: packConfig.maxQuestions,
+      sampleSeed: packConfig.sampleSeed,
       questionCategories: packConfig.questionCategories,
       smoke: packConfig.smoke,
     });

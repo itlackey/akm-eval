@@ -46,7 +46,6 @@ Current trust policy:
   integration against the akm CLI (`^0.9`, reachable via `AKM_EVAL_AKM_CMD`); see
   `docs/memory-backends.md` for its full contract, hermetic layout, and the declared retrieval
   ceiling its frontmatter-synthesis rule sets.
-- `mem0`, `openviking`, and `zep` remain blocked and fail explicitly instead of pretending to be evaluated integrations.
 
 ### `tau-bench`
 

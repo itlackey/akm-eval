@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { type SampleProvenance, sampleItems } from "../../core/sampling.ts";
 import { BenchmarkRuntimeError } from "../../core/errors.ts";
 
 const OFFICIAL_LOCOMO_DATASET_URL =
@@ -30,6 +31,8 @@ export interface LoadLoCoMoDatasetOptions {
   datasetPath?: string;
   maxSamples?: number;
   maxQuestions?: number;
+  /** Required whenever maxSamples/maxQuestions subsets a non-smoke run -- see src/core/sampling.ts. */
+  sampleSeed?: number;
   sampleIds?: string[];
   smoke?: boolean;
 }
@@ -90,32 +93,49 @@ export async function loadDataset(options: LoadLoCoMoDatasetOptions = {}): Promi
     samples = samples.filter((sample) => selected.has(sample.sample_id));
   }
 
+  const totalSamples = samples.length;
   const maxSamples = options.smoke ? Math.min(options.maxSamples ?? 1, 1) : options.maxSamples;
-  if (typeof maxSamples === "number" && maxSamples > 0) {
-    samples = samples.slice(0, maxSamples);
-  }
+  const sampledConversations = sampleItems(samples, maxSamples, {
+    seed: options.sampleSeed,
+    smoke: options.smoke,
+    label: "LoCoMo (conversations)",
+  });
+  samples = sampledConversations.items;
 
+  const totalQuestions = samples.reduce((sum, sample) => sum + sample.qa.length, 0);
   const maxQuestions = options.smoke
     ? Math.min(options.maxQuestions ?? 5, 5)
     : options.maxQuestions;
-  if (typeof maxQuestions === "number" && maxQuestions > 0) {
-    let remaining = maxQuestions;
-    const limited: LoCoMoSample[] = [];
-    for (const sample of samples) {
-      if (remaining <= 0) {
-        break;
-      }
-      const qa = sample.qa.slice(0, remaining);
-      if (qa.length > 0) {
-        limited.push({
-          ...sample,
-          qa,
-        });
-        remaining -= qa.length;
-      }
+
+  // Sample across the FLATTENED question pool, not per-conversation. The old
+  // loop filled its budget from the first conversation before touching the
+  // second, so a 25-question cap over 10 conversations read 25 questions from
+  // one of them -- a subset of a subset, both taken in file order.
+  const flattened = samples.flatMap((sample) =>
+    sample.qa.map((qa) => ({ sampleId: sample.sample_id, qa })),
+  );
+  const sampledQuestions = sampleItems(flattened, maxQuestions, {
+    seed: options.sampleSeed,
+    smoke: options.smoke,
+    label: "LoCoMo (questions)",
+  });
+
+  if (sampledQuestions.provenance.order !== "full") {
+    const keptBySample = new Map<string, LoCoMoSample["qa"]>();
+    for (const entry of sampledQuestions.items) {
+      const list = keptBySample.get(entry.sampleId) ?? [];
+      list.push(entry.qa);
+      keptBySample.set(entry.sampleId, list);
     }
-    samples = limited;
+    samples = samples
+      .filter((sample) => keptBySample.has(sample.sample_id))
+      .map((sample) => ({ ...sample, qa: keptBySample.get(sample.sample_id) ?? [] }));
   }
+
+  lastSampleProvenance = {
+    conversations: { ...sampledConversations.provenance, total: totalSamples },
+    questions: { ...sampledQuestions.provenance, total: totalQuestions },
+  };
 
   if (samples.length === 0 || samples.every((sample) => sample.qa.length === 0)) {
     throw new BenchmarkRuntimeError(
@@ -124,4 +144,18 @@ export async function loadDataset(options: LoadLoCoMoDatasetOptions = {}): Promi
   }
 
   return samples;
+}
+
+/**
+ * Provenance of the most recent `loadDataset` sample, for the adapter to record
+ * in `result.json` -- see docs/comparability.md A3 and A7. LoCoMo subsets twice
+ * (conversations, then questions within them), so both are reported.
+ */
+let lastSampleProvenance: {
+  conversations: SampleProvenance;
+  questions: SampleProvenance;
+} | null = null;
+
+export function getLastSampleProvenance() {
+  return lastSampleProvenance;
 }

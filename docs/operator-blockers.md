@@ -98,29 +98,27 @@ Sources:
 `docs/memory-backends.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`,
 `config/common/locomo-akm-ab.json`, `config/common/longmemeval-akm-ab.json`
 
-## 4. `mem0`, `openviking`, and `zep` still need operator-selected real backend contracts and provisioned runtimes
+## 4. RESOLVED BY REMOVAL — competitor backends are no longer in this repo
 
-Why the repo cannot finish it alone:
-These backend IDs are planned placeholders. The repository has no authoritative service endpoint, CLI contract, credential flow, or reproducible runtime for them.
+`mem0`, `openviking` and `zep` were removed rather than implemented. They were
+stub backends that failed loudly; standing them up would have made this repo
+responsible for configuring a competitor's product well enough to publish a
+number against it, and an under-configured rival is a strawman, not a baseline
+(`docs/comparability.md` A8).
 
-Concrete completion steps a human must perform:
-1. For each backend, decide the exact product or deployment that will be treated as the benchmark target.
-2. Provision a real runtime for that target and document how operators authenticate to it.
-3. Freeze the supported ingestion and search contract for each backend.
-4. Record any namespace, persistence, and reset semantics needed to run benchmarks repeatably.
-5. Capture one backend-specific add and search transcript for each chosen runtime.
+Cross-tool comparison now takes one of two forms, neither of which is a
+blocker on this repo:
 
-What evidence or artifacts should be captured when done:
-- Backend endpoint or CLI details for each selected runtime.
-- Version and deployment identifiers for each backend.
-- Example add and search transcripts with returned IDs and scores.
-- Operator setup notes covering credentials, namespaces, and reset behavior.
+1. **Cite their published figure.** Only valid once our own run is Tier-A
+   compliant on the same benchmark — full or seeded-random sample, the
+   benchmark's own judge, its official evaluator. A citation comparison
+   against a subset run with a substituted judge is not a comparison.
+2. **Run the vendor's own published tool**, as they document it, and report
+   both runs' provenance. This is the stronger form and stays outside this
+   repo until our internal numbers are trusted.
 
-How to verify completion in this repo afterward:
-Confirm each chosen backend has a stable, operator-repeatable contract and runtime, then rerun `bin/doctor` or `bin/matrix --config <config-path>` to verify the blocked state clears only after the integration lands.
-
-Sources:
-`docs/memory-backends.md`, `src/memory/registry.ts`, `src/memory/backends/mem0.ts`, `src/memory/backends/openviking.ts`, `src/memory/backends/zep.ts`, `src/variants/registry.ts`
+Nothing here is required for `akm-eval` to produce publishable akm numbers,
+which is the actual prerequisite for any cross-tool claim.
 
 ## Scope note
 

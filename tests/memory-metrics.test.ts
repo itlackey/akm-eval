@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { scoreAnswer } from "../src/memory/answer-metrics.ts";
-import { createMem0Backend } from "../src/memory/backends/mem0.ts";
 import { createRawVectorBackend } from "../src/memory/backends/raw-vector.ts";
 import { scoreRetrieval } from "../src/memory/retrieval-metrics.ts";
 
@@ -32,12 +31,5 @@ describe("memory backend and metrics", () => {
     );
     expect(answer.exactMatch).toBe(1);
     expect(answer.tokenF1).toBe(1);
-  });
-
-  test("mem0 stub reports its own backend id in failures", async () => {
-    const backend = createMem0Backend();
-    await expect(backend.search({ text: "memory document", topK: 1 })).rejects.toThrow(
-      'Memory backend "mem0" is unavailable',
-    );
   });
 });

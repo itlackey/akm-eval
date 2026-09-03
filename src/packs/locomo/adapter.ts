@@ -32,6 +32,7 @@ interface LoCoMoPackConfig {
   smoke?: boolean;
   maxSamples?: number;
   maxQuestions?: number;
+  sampleSeed?: number;
   sampleIds?: string[];
   topK?: number;
   maxContextTokens?: number;
@@ -297,6 +298,7 @@ export const locomoAdapter: PackAdapter = {
       datasetPath: packConfig.datasetPath,
       maxSamples: packConfig.maxSamples,
       maxQuestions: packConfig.maxQuestions,
+      sampleSeed: packConfig.sampleSeed,
       sampleIds: packConfig.sampleIds,
       smoke: packConfig.smoke,
     });

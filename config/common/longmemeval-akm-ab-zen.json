@@ -17,7 +17,8 @@
         "questionCategories": [
           "single-session",
           "multi-session"
-        ]
+        ],
+        "sampleSeed": 1337
       }
     }
   ],

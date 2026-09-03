@@ -1,6 +1,6 @@
 # Memory backends
 
-The repository defines `none`, `raw-vector`, `akm`, `mem0`, `openviking`, and `zep` backend IDs,
+The repository defines `none`, `raw-vector`, and `akm` backend IDs,
 implementing the 4-method `MemoryBackend` interface in `src/memory/types.ts`
 (`add`/`search`/`reset`/`healthCheck`).
 
@@ -10,119 +10,13 @@ Current runnable/truthful status:
 - `raw-vector`: runnable — deterministic in-memory cosine-similarity baseline.
 - `akm`: runnable — a real, evaluated integration against the akm CLI (subprocess form). See
   below for what "real" means here and where its ceiling comes from.
-- `mem0`, `openviking`, `zep`: blocked external placeholders. `akm-eval matrix` and `akm-eval run`
-  reject runs that select them before execution; see `docs/operator-blockers.md` item 4.
-
-`akm-eval doctor` prints one `memory:<id>` line per backend; `Truthful evaluated memory backends:`
-lists every backend whose adapter is a real, non-stub integration (currently `akm`, `none`,
-`raw-vector`) regardless of whether the backend is actually reachable right now — reachability is a
-runtime concern (`status: ok|warn`, checked by `healthCheck()`), not a gate on whether the code path
-is real.
-
-## The `akm` backend
-
-Implemented in `src/memory/backends/akm.ts`. Every operation shells out to a real akm CLI process —
-`add`/`search`/`reset` are genuine `akm remember` / `akm search` / `akm bundle create` + `akm index
---full` invocations, verified live against akm 0.9.1. Nothing about this backend is simulated or
-mocked in production use; the only mocked variant lives in this repo's own unit tests, against a
-small fake CLI fixture (`tests/fixtures/fake-akm.ts`), with a separate, real, no-mocking integration
-test (`tests/memory-backend-akm.integration.test.ts`) that spawns the actual CLI.
-
-### Invocation resolution
-
-Set `AKM_EVAL_AKM_CMD` to a JSON array of strings naming the command to run:
-
-```sh
-# A globally installed akm binary (default if AKM_EVAL_AKM_CMD is unset)
-export AKM_EVAL_AKM_CMD='["akm"]'
-
-# A source checkout, run through bun (what this repo's own integration test uses)
-export AKM_EVAL_AKM_CMD='["bun","/home/user/akm/src/cli.ts"]'
-```
-
-When the resolved command's last argument is an existing file on disk (the `bun /path/to/cli.ts`
-form), the subprocess is spawned with **that file's own directory** as its working directory, not
-this repo's root. This is load-bearing, not cosmetic: bun's module resolution for a source checkout
-walks up from cwd to find `node_modules`/`bun.lock`, and spawning it with an unrelated project's
-cwd fails with `ENOENT while resolving package 'zod'` (or whichever dependency) even though the akm
-CLI file itself is perfectly reachable — verified empirically while building this adapter. A bare
-installed-binary command (`["akm"]`) keeps this repo's root as its cwd, since it has no such
-dependency-resolution concern.
-
-An unset or malformed `AKM_EVAL_AKM_CMD` never throws at construction time (so `akm-eval doctor`
-can report every backend's status without crashing on one bad env var); it surfaces as a `warn`
-`healthCheck()` and as a `MemoryBackendUnavailableError` from `add`/`search`/`reset`.
-
-### Hermetic per-instance root
-
-Every `MemoryBackend` instance is given a `workDir` (or invents a unique, not-yet-created path
-under the OS temp dir — deliberately *not* `fs.mkdtempSync`, which would leave an abandoned empty
-directory behind on every `doctor` invocation, where the backend is constructed only to read its
-status; creation is deferred to `reset()` and the health probe, both of which already `mkdir -p`),
-and pins all five akm directory env vars underneath it:
-
-```
-<workDir>/bundle  -> AKM_BUNDLE_DIR
-<workDir>/config  -> AKM_CONFIG_DIR
-<workDir>/data    -> AKM_DATA_DIR
-<workDir>/cache   -> AKM_CACHE_DIR
-<workDir>/state   -> AKM_STATE_DIR
-```
-
-`<workDir>/config/config.json` is written by this backend, not by akm, before any command runs:
-
-```json
-{ "configVersion": "0.9.0", "semanticSearchMode": "off", "registries": [] }
-```
-
-`configVersion` is pinned to the schema version this adapter was built and verified against
-(independent of the akm-cli package's own semver — `0.9.1` at verification time).
-`semanticSearchMode: "off"` keeps retrieval to keyword FTS only (no embedding provider, no
-non-determinism). `registries: []` matters more than it looks: akm's own `DEFAULT_CONFIG` ships two
-live registry URLs (a GitHub-raw index and `skills.sh`); leaving `config.json` unwritten would leave
-a "hermetic" install still configured to point at the network, even though no command this backend
-issues uses `--from registry`.
-
-`AKM_FORCE_INIT_TMP_STASH=1` is always set on the child process env. `bun test` sets `BUN_TEST=1` on
-the whole process tree, and that sentinel leaks into the spawned akm subprocess through env
-inheritance; akm's own `bundle create --dir <tmp>` refuses to persist a stash dir under a temp path
-while a test-runner sentinel is present (see akm's `src/commands/sources/init.ts`). Harmless outside
-test runs.
-
-**How the per-run workDir is chosen:** `src/cli.ts`'s `run` command passes
-`path.join(context.outputDir, '.akm-memory')` as the workDir, so it is unique per run and cleaned up
-alongside that run's artifacts. `MemoryBackend` factories were widened from `(rootDir?) =>
-MemoryBackend` to `(rootDir?, workDir?) => MemoryBackend` to carry this through — every other
-backend (`none`, `raw-vector`, `mem0`, `zep`, `openviking`) ignores the extra argument, so this was
-the only interface change needed.
-
-### The declared frontmatter synthesis rule — and the retrieval ceiling it set through akm 0.9.1
-
-**Through akm 0.9.1, verified empirically: akm's FTS and embedding index covered only name,
-frontmatter `description`, tags, aliases, hints, and in-body markdown headings — never body prose.**
-A term that appeared only in a document's body text was unretrievable, full stop.
-
-**akm 0.9.2 (itlackey/akm#819) lifted that ceiling.** akm's indexer now also projects a normalized
-body slice (frontmatter, comments, fenced code, and link destinations stripped; capped at 16,384
-characters) into the FTS index at its own lowest-weighted field, so a body-only term is retrievable
-today. `tests/memory-backend-akm.integration.test.ts` was updated (itlackey/akm-eval#9) to assert
-exactly this against the real CLI: a document whose distinctive term lives only in a later sentence
-of its body is now returned as a hit for that term, not zero hits. Separately, `akm search` itself
-changed from a hard conjunctive-AND match to a progressive strict-AND → prefix-AND → OR/prefix-OR
-fallback (the OR stage only engages once both conjunctive stages return zero hits), so a query whose
-terms don't all appear together no longer guarantees a zero-hit result the way it did on 0.9.1.
-
-This backend still synthesizes description/tags/heading on every `add()` — the rule below is
-unchanged, and that surface still matters (fast/high-weight matches, plus the `sourceId:` tag this
-backend's id-recovery bookkeeping depends on) — but since 0.9.2 it is no longer the *only* surface
-akm can retrieve on, so it no longer sets a hard retrieval ceiling. Numbers measured against akm 0.9.1
-or earlier (see `runs/RESULTS-0.9.2*.md`, which restate the pre-0.9.2 figures for comparison) were
-genuinely subject to the ceiling described above and should be read with that in mind; numbers
-measured against akm ≥ 0.9.2 are not.
-
-The synthesis rule itself (deterministic, **no LLM**, in `synthesizeFrontmatter()`), unchanged by the
-0.9.2 retrieval change:
-
+- Competitor backends (`mem0`, `openviking`, `zep`) were REMOVED. They were
+  never more than stubs, and a competitor arm this repo configures itself is a
+  strawman risk under `docs/comparability.md` A8 — an under-configured rival is
+  not a baseline. Cross-tool comparison is done by running the vendor's own
+  published tool, or by citing their published benchmark figures, and only
+  once our own numbers are Tier-A compliant. Re-adding one means owning its
+  configuration to the standard of its own published methodology.
 - **`description`** = the first non-empty sentence(s) of the document body, accumulated one whole
   sentence at a time until the next sentence would push the total past **250 characters** (then
   stopped there), or hard-truncated with a trailing `…` if the very first sentence alone exceeds the

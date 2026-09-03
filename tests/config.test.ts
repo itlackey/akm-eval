@@ -486,12 +486,14 @@ describe("config loading", () => {
     expect(matrix.stdout.toString()).toContain(
       "| longmemeval-smoke-akm-memory | longmemeval | akm-memory | akm | evaluated |",
     );
-    expect(matrix.stdout.toString()).toContain(
-      "| longmemeval-smoke-mem0-oss | longmemeval | mem0-oss | mem0 | blocked: ",
-    );
+    // mem0/zep/openviking were removed (see docs/comparability.md A8), so no
+    // backend ships in a "blocked" state any more and nothing should render as
+    // one. The gate itself still has to reject a backend id it does not know:
+    // that is the path an unknown or mistyped backend takes.
+    expect(matrix.stdout.toString()).not.toContain("blocked: ");
+    expect(matrix.stdout.toString()).not.toContain("mem0");
 
-    // mem0 has no implementation yet, so it is still gated ahead of any run.
-    const blockedBackendRun = Bun.spawnSync({
+    const unknownBackendRun = Bun.spawnSync({
       cmd: [
         process.execPath,
         path.resolve(rootDir, "src/cli.ts"),
@@ -505,11 +507,7 @@ describe("config loading", () => {
       ],
       cwd: rootDir,
     });
-    expect(blockedBackendRun.exitCode).toBe(1);
-    expect(blockedBackendRun.stderr.toString()).toContain(
-      "not a truthful evaluated benchmark path in this repo yet",
-    );
-    expect(blockedBackendRun.stderr.toString()).toContain('memory backend "mem0"');
+    expect(unknownBackendRun.exitCode).toBe(1);
 
     // akm is no longer gated, so selecting it now runs for real and fails
     // loudly (not silently) when the real akm CLI isn't reachable — exactly
