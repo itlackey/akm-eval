@@ -19,9 +19,11 @@ REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 ZEN_BASE_URL="https://opencode.ai/zen/v1"
-# Judge endpoint, by operator decision until further notice (see
-# docs/comparability.md A4 for what this costs in comparability).
-JUDGE_BASE_URL="${AKM_EVAL_JUDGE_BASE_URL:-https://ai.lab.fwdslsh.dev/v1}"
+# Judge endpoint. Empty means cloud OpenAI, which is what LongMemEval's
+# specified judge (gpt-4o) requires -- Zen serves no gpt-4 family, and ai.lab
+# rejects every named model. Override only for a host that can actually serve
+# the judge the benchmark names.
+JUDGE_BASE_URL="${AKM_EVAL_JUDGE_BASE_URL:-}"
 
 orig_args=("$@")
 pack=""
@@ -68,7 +70,8 @@ fi
 # cloud-OpenAI judge, and is used only when the value differs from the Zen key
 # so Zen credentials can never be sent to another host by a naming accident.
 judge_key="${AKM_EVAL_JUDGE_API_KEY:-}"
-if [ -z "$judge_key" ] && [ -n "${LAB_API_KEY:-}" ] && [ "$JUDGE_BASE_URL" = "${LAB_AI_BASE_URL:-https://ai.lab.fwdslsh.dev/v1}" ]; then
+if [ -z "$judge_key" ] && [ -n "${LAB_API_KEY:-}" ] && [ -n "$JUDGE_BASE_URL" ] \
+   && [ "$JUDGE_BASE_URL" = "${LAB_AI_BASE_URL:-}" ]; then
   judge_key="$LAB_API_KEY"
 fi
 if [ -z "$judge_key" ] && [ -n "${OPENAI_API_KEY:-}" ] && [ "${OPENAI_API_KEY:-}" != "${OPENCODE_API_KEY:-}" ]; then
@@ -78,7 +81,7 @@ fi
 [ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the agent arms need it."
 
 if [ "$pack" = "longmemeval" ]; then
-  [ -n "$judge_key" ] || fail "no judge key for ${JUDGE_BASE_URL}. Set AKM_EVAL_JUDGE_API_KEY, or store LAB_API_KEY in akm env."
+  [ -n "$judge_key" ] || fail "no judge key for ${JUDGE_BASE_URL:-cloud OpenAI}. Set AKM_EVAL_JUDGE_API_KEY to a key that can serve $(jq -r '.packs[0].config.evaluatorModel' "$config")."
 fi
 
 # Agent arms -> Zen. Judge -> cloud OpenAI (no judge base URL, so
@@ -86,7 +89,13 @@ fi
 export OPENAI_API_KEY="$OPENCODE_API_KEY"
 export OPENAI_BASE_URL="$ZEN_BASE_URL"
 export AKM_EVAL_JUDGE_API_KEY="$judge_key"
-export AKM_EVAL_JUDGE_BASE_URL="$JUDGE_BASE_URL"
+# Unset, not empty: resolveJudgeEnv treats an absent judge base URL as "cloud
+# OpenAI" and clears the agent's, so the judge key is never sent to Zen.
+if [ -n "$JUDGE_BASE_URL" ]; then
+  export AKM_EVAL_JUDGE_BASE_URL="$JUDGE_BASE_URL"
+else
+  unset AKM_EVAL_JUDGE_BASE_URL
+fi
 
 # akm CLI for the akm-memory arm, resolvable inside the eval container.
 if [ -z "${AKM_EVAL_AKM_CMD:-}" ]; then
@@ -118,7 +127,7 @@ memory-eval: pack        ${pack}
 memory-eval: config      ${config}
 memory-eval: arms        ${variants[*]}
 memory-eval: agent       Zen (${ZEN_BASE_URL})
-memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via ${JUDGE_BASE_URL}" || echo "")
+memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via ${JUDGE_BASE_URL:-cloud OpenAI}" || echo "")
 memory-eval: questions   $(jq -r '.packs[0].config.maxQuestions // "ALL (no subset)"' "$config")
 memory-eval: categories  $(jq -r 'if .packs[0].config.questionCategories then (.packs[0].config.questionCategories|join(",")) else "ALL" end' "$config")
 memory-eval: akm-cli     ${akm_version}

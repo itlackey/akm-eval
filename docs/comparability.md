@@ -66,25 +66,22 @@ not compare it across tools.
   knowledge-update, preference), so the judge model is the only non-compliant
   part.
 
-  **CURRENT STATE — judge-substituted by operator decision, until further
-  notice.** The committed config judges with ai.lab `auto`
-  (`https://ai.lab.fwdslsh.dev/v1`). LongMemEval absolutes produced this way
-  are internal figures: they may NOT be placed beside another tool's published
-  LongMemEval score.
+  **CURRENT STATE — compliant.** The committed configs judge with `gpt-4o`.
 
-  `auto` is additionally a **routing alias, not a pinned model**, which is a
-  strictly weaker position than substituting a fixed judge — an unpinned judge
-  can differ between runs, so two of our OWN runs are not necessarily
-  comparable either. The evaluator therefore records the server-reported
-  `resolved_model` on every prediction and prints a census to stderr, with a
-  warning when more than one model served a single run. Read that census
-  before comparing any two rounds. Restoring publishability means setting
-  `evaluatorModel` back to `gpt-4o` and re-running; nothing else about the
-  pack has to change.
-- **LoCoMo: no judge.** `scripts/locomo-evaluator.py` computes deterministic
-  token-F1 per `snap-research/locomo`'s own rules. Nothing to substitute — and
-  this is why LoCoMo's cross-round numbers stayed stable while LongMemEval's
-  moved.
+  ai.lab was evaluated as a cheaper judge host and **rejected on evidence**,
+  recorded here so it is not re-proposed: it rejects every named model
+  (`model_not_found` for all 93 in `/v1/models`; only `auto` routes), so the
+  judge cannot be pinned there at all — and an unpinned judge breaks
+  round-over-round comparison against our own prior runs, not just against
+  other tools. Worse, `auto` routed a judge call to `qwen3-embedding-0.6b`, an
+  embedding model, whose output happened to contain the substring "yes" and so
+  scored as a pass under upstream's label rule.
+
+  The cost argument for substituting does not hold either: the judge sees only
+  question + answer + response, never the haystack, and is roughly **1.2% of a
+  run's tokens** (~0.75M of ~60M for a full 500-question three-arm round). The
+  expensive part is the agent arm, and the agent model is a disclosed choice
+  rather than a compliance constraint — so cost is cut there, not here.
 
 *The metric.* Matching the dataset and the judge is still not enough if the
 **reported quantity** differs. The same benchmark is often published under
