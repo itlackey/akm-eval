@@ -75,7 +75,18 @@ fi
 # ~/akm from default config when no AKM_*_DIR overrides are set; the probe
 # pins its own hermetic dirs, but resolving the version must not.
 mapfile -t akm_argv < <(jq -r '.[]' <<<"$akm_cmd")
-resolved_version="$(AKM_BUNDLE_DIR="$(mktemp -d)" "${akm_argv[@]}" --version 2>/dev/null || echo unknown)"
+# Pin ALL FIVE akm dirs, not just the bundle. akm resolves the others from
+# default config independently, so pinning one leaves AKM_DATA_DIR on the
+# user's real stash -- which is where index.db lives, and where a stray lock
+# would block their everyday akm use. The probe body is already hermetic; this
+# is the version check, which was not.
+_akm_tmp="$(mktemp -d)"
+resolved_version="$(
+  AKM_BUNDLE_DIR="$_akm_tmp/bundle" AKM_CONFIG_DIR="$_akm_tmp/config" \
+  AKM_DATA_DIR="$_akm_tmp/data" AKM_CACHE_DIR="$_akm_tmp/cache" \
+  AKM_STATE_DIR="$_akm_tmp/state" \
+  "${akm_argv[@]}" --version 2>/dev/null || echo unknown
+)"
 [ "$label" = "custom" ] && label="$resolved_version"
 
 # ------------------------------------------------------------------- run them

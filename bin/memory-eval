@@ -96,7 +96,17 @@ if [ -z "${AKM_EVAL_AKM_CMD:-}" ]; then
   [ -n "${AKM_EVAL_AKM_CMD:-}" ] && export AKM_EVAL_AKM_CMD
 fi
 
-akm_version="$(jq -r '.[0]' <<<"${AKM_EVAL_AKM_CMD:-[\"akm\"]}" | xargs -r -I{} sh -c 'AKM_BUNDLE_DIR=$(mktemp -d) {} --version 2>/dev/null' || echo unknown)"
+# Pin ALL FIVE akm dirs. Pinning only the bundle leaves AKM_DATA_DIR on the
+# user's real stash (where index.db lives), so a version check could take a
+# lock on the DB they use for everything else.
+_akm_tmp="$(mktemp -d)"
+akm_version="$(
+  AKM_BUNDLE_DIR="$_akm_tmp/bundle" AKM_CONFIG_DIR="$_akm_tmp/config" \
+  AKM_DATA_DIR="$_akm_tmp/data" AKM_CACHE_DIR="$_akm_tmp/cache" \
+  AKM_STATE_DIR="$_akm_tmp/state" \
+  jq -r '.[0]' <<<"${AKM_EVAL_AKM_CMD:-[\"akm\"]}" \
+    | xargs -r -I{} sh -c '"$0" --version 2>/dev/null' {} || echo unknown
+)"
 
 stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 out_root="runs/${pack}-full-${stamp}"
