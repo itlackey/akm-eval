@@ -68,8 +68,14 @@ def main() -> int:
     predictions_path = sys.argv[2]
     dataset_path = sys.argv[3]
 
-    api_key = os.environ.get('OPENAI_API_KEY')
-    base_url = os.environ.get('OPENAI_BASE_URL')
+    # The judge may need a different endpoint than the agent under test: the
+    # benchmark specifies its judge model, and the endpoint an agent runs on
+    # does not necessarily serve it. AKM_EVAL_JUDGE_* wins when set; OPENAI_*
+    # remains the fallback for the common case where both are the same.
+    api_key = os.environ.get('AKM_EVAL_JUDGE_API_KEY') or os.environ.get('OPENAI_API_KEY')
+    base_url = os.environ.get('AKM_EVAL_JUDGE_BASE_URL')
+    if base_url is None and not os.environ.get('AKM_EVAL_JUDGE_API_KEY'):
+        base_url = os.environ.get('OPENAI_BASE_URL')
     if not api_key and not base_url:
         print('Set OPENAI_API_KEY for cloud OpenAI or OPENAI_BASE_URL for an OpenAI-compatible evaluator endpoint.', file=sys.stderr)
         return 2
@@ -91,6 +97,13 @@ def main() -> int:
         client_kwargs['base_url'] = base_url
     client = OpenAI(**client_kwargs)
     output_path = f'{predictions_path}.eval-results-{sanitize_file_component(metric_model)}'
+    resolved_models: dict[str, int] = {}
+    unparseable: list = []
+    # Raise via env for a verbose judge; the default is generous enough for any
+    # judge that answers after a short preamble, and irrelevant to a terse one.
+    max_tokens = int(os.environ.get('AKM_EVAL_JUDGE_MAX_TOKENS', '64'))
+    # Above this share of undecidable verdicts the run is not a measurement.
+    max_unparseable_rate = float(os.environ.get('AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE', '0.02'))
 
     with open(output_path, 'w', encoding='utf-8') as handle:
         for prediction in predictions:
@@ -107,14 +120,75 @@ def main() -> int:
                 model=metric_model,
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0,
-                max_tokens=10,
+                # Upstream uses 10, which is ample for gpt-4o (it answers in one
+                # token). It is NOT ample for judges that emit reasoning before
+                # answering: measured on ai.lab, both gpt-oss:120b and
+                # qwen3.8-27b return "We need to see if model response..." and
+                # get truncated at 10 tokens, so a CORRECT answer scores as
+                # wrong. That is a silent, systematic under-count across every
+                # arm. Raising the cap cannot change a compliant judge's verdict
+                # (gpt-4o's output is well under either limit); it only stops
+                # truncation from manufacturing false negatives.
+                max_tokens=max_tokens,
             )
-            verdict = completion.choices[0].message.content.strip().lower()
+            raw_verdict = (completion.choices[0].message.content or '').strip()
+            verdict = raw_verdict.lower()
+
+            # Upstream's label rule is `'yes' in verdict`, kept verbatim so
+            # scores stay comparable. What is ADDED is detection of verdicts
+            # that rule cannot legitimately decide: a truncated preamble scores
+            # as "no" and a garbled response containing the substring "yes"
+            # scores as "yes", both silently. Count them and fail loudly below
+            # rather than reporting a number built partly on noise.
+            normalized = verdict.strip('.\'" \t')
+            if normalized not in ('yes', 'no'):
+                unparseable.append({'question_id': question_id, 'raw': raw_verdict[:200]})
+            # Record the model the SERVER says answered, not just the one we
+            # asked for. Routing aliases ("auto") can resolve to a different
+            # model per call, so without this a run is not reproducible even
+            # against itself, and "which judge scored this" is unanswerable
+            # after the fact (docs/comparability.md A4, A7).
+            resolved_model = getattr(completion, 'model', None) or metric_model
+            resolved_models[resolved_model] = resolved_models.get(resolved_model, 0) + 1
             prediction['autoeval_label'] = {
                 'model': metric_model,
+                'resolved_model': resolved_model,
                 'label': 'yes' in verdict,
+                'raw_verdict': raw_verdict[:200],
             }
             handle.write(json.dumps(prediction) + '\n')
+
+    # Surface the resolved-judge census on stderr so it lands in the run log
+    # even when nothing downstream parses the per-prediction field. More than
+    # one entry means the judge was NOT fixed across the run.
+    if resolved_models:
+        census = ', '.join(f'{name}={count}' for name, count in sorted(resolved_models.items()))
+        print(f'judge resolved to: {census}', file=sys.stderr)
+        if len(resolved_models) > 1:
+            print(
+                f'WARNING: judge model varied across this run ({len(resolved_models)} distinct). '
+                'Scores are not attributable to a single judge.',
+                file=sys.stderr,
+            )
+
+    if unparseable:
+        rate = len(unparseable) / max(len(predictions), 1)
+        print(
+            f'judge returned {len(unparseable)}/{len(predictions)} verdicts that are neither '
+            f'"yes" nor "no" ({rate:.1%}). Examples: '
+            + '; '.join(repr(u['raw'][:60]) for u in unparseable[:3]),
+            file=sys.stderr,
+        )
+        if rate > max_unparseable_rate:
+            print(
+                f'FATAL: {rate:.1%} of judge verdicts were undecidable, above the '
+                f'{max_unparseable_rate:.1%} threshold. Upstream scores such a verdict as "no", so '
+                'these are silent false negatives across every arm -- the run is not a measurement. '
+                'Use a judge that answers the rubric directly, or raise '
+                'AKM_EVAL_JUDGE_MAX_TOKENS if the judge is being truncated mid-reasoning.',
+                file=sys.stderr,
+            )
+            return 1
 
     print(output_path)
     return 0

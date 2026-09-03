@@ -22,7 +22,6 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
   frontmatter synthesis, hermetic per-instance install) — see `docs/memory-backends.md`. It still
   needs a real akm CLI reachable at run time (`AKM_EVAL_AKM_CMD`); see `docs/operator-blockers.md`
   item 3.
-- `mem0`, `openviking`, and `zep` are placeholders without real runtimes.
 - BEAM still needs external dataset prep and a real judge endpoint.
 - `tau-bench` and `longmemeval` still have runner/path asymmetries.
 

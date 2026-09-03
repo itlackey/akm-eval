@@ -64,7 +64,7 @@
             "properties": {
               "backend": {
                 "type": "string",
-                "enum": ["none", "akm", "mem0", "zep", "openviking", "raw-vector"]
+                "enum": ["none", "akm", "raw-vector"]
               },
               "config": {
                 "type": "object",

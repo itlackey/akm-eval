@@ -18,23 +18,6 @@ export const variantRegistry: VariantDefinition[] = [
     tags: ["akm", "memory"],
   },
   {
-    id: "mem0-oss",
-    description:
-      "Planned external mem0 OSS comparison variant; benchmark runs are currently blocked.",
-    tags: ["memory", "external"],
-  },
-  {
-    id: "openviking",
-    description:
-      "Planned external OpenViking comparison variant; benchmark runs are currently blocked.",
-    tags: ["memory", "external"],
-  },
-  {
-    id: "zep",
-    description: "Planned external Zep comparison variant; benchmark runs are currently blocked.",
-    tags: ["memory", "external"],
-  },
-  {
     id: "raw-vector",
     description: "Deterministic raw-vector baseline backend.",
     tags: ["memory", "baseline"],

@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # `WARN memory:akm: akm CLI not reachable`. Node 22+ is required: akm-cli's
 # preinstall refuses to install below it. The version is pinned to match the
 # rest of the benchmark stack (harbor/akm_opencode.py AKM_CLI_VERSION).
-ARG AKM_CLI_VERSION=0.9.1
+ARG AKM_CLI_VERSION=0.9.10
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
   && apt-get install -y --no-install-recommends nodejs \
   && rm -rf /var/lib/apt/lists/* \

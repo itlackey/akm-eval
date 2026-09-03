@@ -15,7 +15,8 @@
         "maxQuestions": 25,
         "topK": 5,
         "maxContextTokens": 16000,
-        "evaluatorCommand": "python3 scripts/locomo-evaluator.py"
+        "evaluatorCommand": "python3 scripts/locomo-evaluator.py",
+        "sampleSeed": 1337
       }
     }
   ],

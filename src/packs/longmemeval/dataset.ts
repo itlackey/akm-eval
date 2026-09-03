@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BenchmarkRuntimeError } from "../../core/errors.ts";
+import { type SampleProvenance, sampleItems } from "../../core/sampling.ts";
 import { downloadDataset } from "../utils/dataset-downloader.ts";
 
 export interface LongMemEvalSession {
@@ -12,7 +14,7 @@ export interface LongMemEvalSession {
 
 export interface LongMemEvalQuestion {
   id: string;
-  category: "single-session" | "multi-session" | "temporal" | "preference";
+  category: "single-session" | "multi-session" | "temporal" | "preference" | "knowledge-update";
   /** Full haystack flattened into one turn sequence — used only by the disabled-backend (full-context) arm. */
   conversation: Array<{ role: string; content: string }>;
   /** Haystack sessions with session-level identity, used by the memory-backend (retrieval) arm as add() documents. */
@@ -43,6 +45,8 @@ export interface DatasetLoadOptions {
   rootDir?: string;
   datasetPath?: string;
   maxQuestions?: number;
+  /** Required whenever maxQuestions subsets a non-smoke run -- see src/core/sampling.ts. */
+  sampleSeed?: number;
   questionCategories?: string[];
   smoke?: boolean;
 }
@@ -117,13 +121,30 @@ export async function resolveDatasetFile(
   }
 }
 
+/**
+ * Map the dataset's `question_type` onto this pack's normalized categories.
+ *
+ * Order matters and the fallback throws, both deliberately. The previous
+ * version tested `single` first, so `single-session-preference` normalized to
+ * `single-session` and the `preference` category was unreachable; and it ended
+ * in `return "single-session"`, which silently relabelled all 78
+ * `knowledge-update` questions as single-session. A category filter is how a
+ * run decides what it measures, so a wrong label is a wrong denominator on
+ * every per-category figure, invisibly. An unrecognised type now fails the run
+ * rather than being absorbed into whichever bucket happens to be tested last.
+ */
 function normalizeCategory(rawType: string): LongMemEvalQuestion["category"] {
   const type = rawType.toLowerCase();
+  if (type.includes("preference")) return "preference";
+  if (type.includes("knowledge-update")) return "knowledge-update";
   if (type.includes("single")) return "single-session";
   if (type.includes("multi")) return "multi-session";
   if (type.includes("temporal")) return "temporal";
-  if (type.includes("preference")) return "preference";
-  return "single-session";
+  throw new BenchmarkRuntimeError(
+    `LongMemEval: unrecognised question_type ${JSON.stringify(rawType)}. Add it to normalizeCategory() ` +
+      "rather than letting it fall into another category -- a mislabelled question silently corrupts " +
+      "every per-category figure and any questionCategories filter.",
+  );
 }
 
 function flattenSessions(
@@ -244,13 +265,25 @@ export async function loadDataset(options: DatasetLoadOptions): Promise<LongMemE
     questions = questions.filter((q) => options.questionCategories?.includes(q.category));
   }
 
-  if (options.smoke) {
-    questions = questions.slice(0, 5);
-  }
+  const requested = options.smoke ? Math.min(options.maxQuestions ?? 5, 5) : options.maxQuestions;
+  const sampled = sampleItems(questions, requested, {
+    seed: options.sampleSeed,
+    smoke: options.smoke,
+    label: "LongMemEval",
+  });
+  lastSampleProvenance = sampled.provenance;
 
-  if (options.maxQuestions && options.maxQuestions > 0) {
-    questions = questions.slice(0, options.maxQuestions);
-  }
+  return sampled.items;
+}
 
-  return questions;
+/**
+ * Provenance of the most recent `loadDataset` sample, for the adapter to record
+ * in `result.json`. A subset score is meaningless without its `n / total` and
+ * seed (docs/comparability.md A3, A7), so the artifact carries them rather than
+ * relying on the config still being alongside the result when it is read.
+ */
+let lastSampleProvenance: SampleProvenance | null = null;
+
+export function getLastSampleProvenance(): SampleProvenance | null {
+  return lastSampleProvenance;
 }

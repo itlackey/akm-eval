@@ -11,13 +11,10 @@
       "enabled": true,
       "config": {
         "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
-        "evaluatorModel": "qwen3.5-plus",
+        "evaluatorModel": "gpt-4o",
         "smoke": false,
-        "maxQuestions": 25,
-        "questionCategories": [
-          "single-session",
-          "multi-session"
-        ]
+        "maxQuestions": 200,
+        "sampleSeed": 1337
       }
     }
   ],
@@ -72,7 +69,9 @@
     "openai-compatible is the runner path this pack fully supports (see src/packs/longmemeval/README.md); opencode is partial.",
     "The akm arm needs the real akm CLI reachable (AKM_EVAL_AKM_CMD, default [\"akm\"]); see docs/memory-backends.md.",
     "ASYMMETRY BY DESIGN: baseline (memory.backend none) answers every question from its full haystack conversation, flattened into the prompt, with no memory backend touched. raw-vector and akm-memory instead reset() the backend per question, add() one document per haystack session, then search() with the question text and pack.config.topK (default 5), answering only from the retrieved text. This is the same baseline-vs-retrieval asymmetry locomo-akm-ab.json documents, not a bug -- see src/packs/longmemeval/README.md and docs/memory-backends.md.",
-    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score."
+    "Retrieval metrics (precisionAtK/recallAtK/mrr/ndcgAtK) are scored against the official dataset's answer_session_ids; result.json.metadata.zeroHitQueries/retrievalQueryCount disclose the akm retrieval ceiling the same way locomo-akm-ab.json does, and questionsWithoutEvidenceLabels/retrievalMetricsScoreable disclose whether the dataset actually carried ground truth to score against at all -- check them all before publishing a score.",
+    "JUDGE: gpt-4o via cloud OpenAI -- the model LongMemEval specifies, so this configuration is Tier-A compliant on A4 and its absolutes may be compared to another tool's published LongMemEval figure. The judge is ~1.2% of a run's tokens; the agent arm is the cost. ai.lab was evaluated and rejected as a judge host: it rejects every named model (only 'auto' routes), and 'auto' resolved one call to an embedding model whose output scored as a pass.",
+    "SAMPLE: 200 of 500, seeded uniform (sampleSeed 1337), all five categories. A3-compliant -- reproducible from the seed and category-spread rather than the first-N file-order slice the earlier n=25 rounds took. EVERY figure from this run must be reported as 'n=200/500, seed=1337'; it is not the benchmark's score."
   ],
   "providers": {
     "openai-compatible": {

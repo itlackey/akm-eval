@@ -18,6 +18,17 @@ stop there — no point spending LLM budget on a judged run.
 
 ## Usage
 
+Prefer `bin/probe`, which runs both packs against an isolated install of a
+pinned version, captures the artifacts, and grades them against the reference
+values below so nobody has to remember them:
+
+```sh
+bin/probe 0.9.10
+```
+
+The underlying scripts, if you need one pack or a binary `bin/probe` cannot
+install:
+
 ```sh
 AKM_EVAL_AKM_CMD='["/path/to/akm"]' bun scripts/probes/retrieval-probe.ts locomo
 AKM_EVAL_AKM_CMD='["/path/to/akm"]' MAX_Q=20 bun scripts/probes/retrieval-probe.ts longmemeval
