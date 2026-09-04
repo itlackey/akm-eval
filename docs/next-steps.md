@@ -12,24 +12,25 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 - `bin/*` wraps the TypeScript implementation in `src/`.
 - Packs normalize authoritative upstream artifacts to `result.json`, `summary.md`, and optional `raw-output.json`.
 - `opencode` and `openai-compatible` are the only runner modes.
-- A host-managed BEAM runtime lives under `.akm/evals/venvs/beam`.
+- Operator commands use prebuilt core/BEAM containers; the host checkout only
+  supplies configs, datasets, source provenance, and result storage.
 - Blocked packs and blocked memory backends fail explicitly.
 - `judgedPass` for `longmemeval` comes only from the pack's official `evaluatorCommand` output; there is no local heuristic judge in this repo.
 
 ## Main Gaps
 
-- `memory.backend: akm` is a real, evaluated adapter (subprocess akm CLI, deterministic
-  frontmatter synthesis, hermetic per-instance install) — see `docs/memory-backends.md`. It still
-  needs a real akm CLI reachable at run time (`AKM_EVAL_AKM_CMD`); see `docs/operator-blockers.md`
-  item 3.
+- `memory.backend: akm` is a real, evaluated adapter (subprocess akm CLI,
+  deterministic frontmatter synthesis, hermetic per-instance state) — see
+  `docs/memory-backends.md`. Published targets use an explicit version-selected
+  image; source targets use `AKM_EVAL_AKM_CMD` plus a read-only source mount.
 - BEAM still needs external dataset prep and a real judge endpoint.
 - `tau-bench` and `longmemeval` still have runner/path asymmetries.
 
 ## External Dependencies
 
 - BEAM needs the upstream checkout, prepared datasets, and judge credentials.
-- AKM memory integration needs a real akm CLI (`^0.9`) reachable to the process running evals —
-  an operator install-or-point-at-a-checkout step, not further repo-internal work.
+- AKM memory integration needs an explicit published version or mounted source
+  checkout; it does not require a host CLI installation.
 
 ## Doc Gaps
 

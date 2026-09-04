@@ -8,10 +8,13 @@ This document covers the operator exceptions and pack-specific caveats that do n
 - `bin/doctor --pack <id>` is the preferred per-pack preflight.
 - `bin/beam-doctor` is the direct BEAM setup/preflight surface when you want BEAM-specific flags such as `--require-10m` or `--print-fingerprint`.
 
-## Host-managed packs
+## Container-managed packs
 
-`beam` uses a repo-local uv-managed runtime under `.akm/evals/venvs/beam`, set up automatically by
-`bin/doctor --pack beam` and `bin/eval --pack beam ...`.
+`beam` uses the optional Docker image target with the pinned
+`requirements-beam.txt` environment under `/opt/akm-eval/venvs/beam`.
+`bin/doctor --pack beam`, `bin/beam-doctor`, and `bin/eval --pack beam ...`
+select it automatically. The image is intentionally much larger than the core
+memory-eval image; the host never needs uv or Python.
 
 ## Important pack-specific caveats
 

@@ -18,26 +18,31 @@ stop there — no point spending LLM budget on a judged run.
 
 ## Usage
 
-Prefer `bin/probe`, which runs both packs against an isolated install of a
-pinned version, captures the artifacts, and grades them against the reference
-values below so nobody has to remember them:
+Prefer `bin/probe`, which runs both packs against a version-pinned image,
+captures the artifacts, and grades them against the reference values below so
+nobody has to remember them:
 
 ```sh
-bin/probe 0.9.10
-bin/probe --identity-permutation 0.9.10
+bin/probe --akm-version 0.9.14-beta.1
+bin/probe --identity-permutation --akm-version 0.9.14-beta.1
 ```
+
+Both commands execute in the version-specific core image. The host needs
+Docker, not Bun/npm/jq, and `bin/probe` intentionally has no implicit `latest`
+or baked-version fallback.
 
 The underlying scripts, if you need one pack or a binary `bin/probe` cannot
 install:
 
 ```sh
-AKM_EVAL_AKM_CMD='["/path/to/akm"]' bun scripts/probes/retrieval-probe.ts locomo
-AKM_EVAL_AKM_CMD='["/path/to/akm"]' MAX_Q=20 bun scripts/probes/retrieval-probe.ts longmemeval
+AKM_EVAL_AKM_SOURCE_DIR=/absolute/path/to/akm \
+  bin/probe --cmd '["bun","/absolute/path/to/akm/src/cli.ts"]'
 ```
 
-Pin `AKM_EVAL_AKM_CMD` explicitly when comparing versions — install the target
-into a scratch dir rather than relying on whatever is on PATH. Each run uses a
-fresh hermetic bundle under the OS temp dir and never touches a real stash.
+Pin the published target with `--akm-version`. For a source target, use
+`--cmd` together with `AKM_EVAL_AKM_SOURCE_DIR`; never rely on an arbitrary
+command from host `PATH`. Each run uses a fresh hermetic bundle under the
+container temp dir and never touches a real stash.
 
 ### Identity-permutation release gate
 
@@ -74,8 +79,9 @@ evaluator checkout, Bun runtime, and downloaded corpus, then grade their saved
 artifacts:
 
 ```sh
-bin/probe 0.9.13
-bin/probe --identity-permutation --cmd '["bun","/absolute/path/to/akm/src/cli.ts"]'
+bin/probe --akm-version 0.9.13
+AKM_EVAL_AKM_SOURCE_DIR=/absolute/path/to/akm \
+  bin/probe --identity-permutation --cmd '["bun","/absolute/path/to/akm/src/cli.ts"]'
 bin/probe-pair --control runs/probes/<control-stamp> --candidate runs/probes/<candidate-stamp>
 ```
 

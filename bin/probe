@@ -1,20 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-command Tier-1 retrieval probe: install a pinned akm-cli into an isolated
-# scratch dir, run BOTH packs' LLM-free probes against it, capture the logs, and
-# record an informational comparison against the historical reference values.
+# One-command Tier-1 retrieval probe: select an image containing a pinned
+# akm-cli, run BOTH packs' LLM-free probes, capture the logs, and record an
+# informational comparison against the historical reference values.
 #
-#   bin/probe                 # probe whatever npm `latest` resolves to
-#   bin/probe 0.9.10          # probe an exact published version
+#   bin/probe --akm-version 0.9.14-beta.1
+#   bin/probe 0.9.10          # positional compatibility alias
 #   bin/probe --cmd '["/path/to/akm"]'   # probe an already-installed binary
 #   bin/probe --identity-permutation 0.9.13  # also gate filename/slug independence
 #
-# Free, deterministic, no LLM, no Docker. Run this BEFORE spending judged-eval
-# budget: use bin/probe-pair for the release gate (scripts/probes/README.md).
+# Free and deterministic (no LLM). It runs in Docker so the host needs no
+# Bun/npm/jq. Run this BEFORE judged budget; use bin/probe-pair for the gate.
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+
+usage() {
+  printf '%s\n' \
+    'usage: bin/probe --akm-version VERSION [--identity-permutation]' \
+    '       bin/probe --cmd '\''["/absolute/path/to/akm"]'\'' [--identity-permutation]'
+}
+
+if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
+  requested_version=""
+  has_custom_command=0
+  wants_help=0
+  outer_args=("$@")
+  for ((i = 0; i < ${#outer_args[@]}; i++)); do
+    case "${outer_args[$i]}" in
+      --akm-version)
+        requested_version="${outer_args[$((i + 1))]:?--akm-version requires a value}"
+        i=$((i + 1))
+        ;;
+      --cmd)
+        has_custom_command=1
+        i=$((i + 1))
+        ;;
+      -h|--help) wants_help=1 ;;
+      --identity-permutation) ;;
+      -*) ;;
+      *) requested_version="${outer_args[$i]}" ;;
+    esac
+  done
+  if [ "$wants_help" = "1" ]; then
+    usage
+    exit 0
+  fi
+  if [ "$wants_help" = "0" ] && [ -z "$requested_version" ] && [ "$has_custom_command" = "0" ]; then
+    echo "probe: select an exact target with --akm-version VERSION (or use --cmd)" >&2
+    exit 2
+  fi
+  if [ -n "$requested_version" ]; then
+    export AKM_EVAL_AKM_VERSION="$requested_version"
+  fi
+  exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/probe" "$@"
+fi
+
 required_bun="1.3.13"
 actual_bun="$(bun --version 2>/dev/null || true)"
 [ "$actual_bun" = "$required_bun" ] || { echo "probe: requires Bun $required_bun (found ${actual_bun:-missing})" >&2; exit 2; }
@@ -38,40 +80,24 @@ identity_permutation_check=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --cmd) akm_cmd="${2:?--cmd requires a JSON argv array}"; shift 2 ;;
+    --akm-version) version="${2:?--akm-version requires a value}"; shift 2 ;;
     --identity-permutation) identity_permutation_check=1; shift ;;
-    -h|--help) sed -n '3,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) version="$1"; shift ;;
   esac
 done
 
 if [ -n "$akm_cmd" ] && [ -n "$version" ]; then
-  echo "probe: pass a version OR --cmd, not both" >&2
+  echo "probe: pass --akm-version (or a positional version) OR --cmd, not both" >&2
   exit 2
 fi
 
 # ---------------------------------------------------------------- resolve akm
 if [ -z "$akm_cmd" ]; then
-  version="${version:-latest}"
-  if [ "$version" = "latest" ]; then
-    version="$(npm view akm-cli version)"
-    echo "probe: npm latest resolves to akm-cli@${version}"
-  fi
-
-  # Isolated install, deliberately INSIDE the repo: bin/eval's container
-  # bind-mounts this repo at its own host path, so a /tmp scratch dir is
-  # invisible in-container. runs/* is gitignored.
-  scratch="$REPO_ROOT/runs/.akm-cli-${version}-scratch"
-  akm_bin="$scratch/node_modules/.bin/akm"
-  if [ -x "$akm_bin" ] && [ "$("$akm_bin" --version 2>/dev/null)" = "$version" ]; then
-    echo "probe: reusing isolated install at ${scratch#"$REPO_ROOT/"}"
-  else
-    echo "probe: installing akm-cli@${version} into ${scratch#"$REPO_ROOT/"}"
-    mkdir -p "$scratch"
-    printf '{"name":"akm-cli-probe-scratch","private":true}\n' > "$scratch/package.json"
-    (cd "$scratch" && npm install "akm-cli@${version}" --ignore-scripts --no-audit --no-fund >/dev/null)
-  fi
-  akm_cmd="$(printf '["%s"]' "$akm_bin")"
+  version="${version:-${AKM_EVAL_AKM_VERSION:-}}"
+  [ -n "$version" ] || { echo "probe: no AKM version selected" >&2; exit 2; }
+  akm_cmd='["akm"]'
   label="$version"
 else
   label="custom"
@@ -80,6 +106,11 @@ fi
 # NEVER let a probe fall back to the real stash. akm resolves bundleDir to
 # ~/akm from default config when no AKM_*_DIR overrides are set; the probe
 # pins its own hermetic dirs, but resolving the version must not.
+if ! jq -e 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' \
+  >/dev/null <<<"$akm_cmd"; then
+  echo "probe: --cmd must be a non-empty JSON argv array of strings" >&2
+  exit 2
+fi
 mapfile -t akm_argv < <(jq -r '.[]' <<<"$akm_cmd")
 # Pin ALL FIVE akm dirs, not just the bundle. akm resolves the others from
 # default config independently, so pinning one leaves AKM_DATA_DIR on the
@@ -95,6 +126,10 @@ resolved_version="$(
   "${akm_argv[@]}" --version 2>/dev/null || echo unknown
 )"
 [ "$label" = "custom" ] && label="$resolved_version"
+if [ -n "$version" ] && [ "$resolved_version" != "$version" ]; then
+  echo "probe: selected akm-cli $version but command resolved to ${resolved_version}; rebuild/select the matching image" >&2
+  exit 2
+fi
 
 # ------------------------------------------------------------------- run them
 stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"

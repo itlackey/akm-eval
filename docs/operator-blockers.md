@@ -51,38 +51,35 @@ Run `bin/doctor --pack beam` and confirm it no longer fails on judge configurati
 Sources:
 `docs/beam-runtime.md`, `src/packs/beam/official.ts`, `src/packs/beam/adapter.ts`
 
-## 3. The `akm` memory backend needs the real akm CLI reachable to actually run
+## 3. Source-checkout AKM targets still need an explicit mount
 
 Why the repo cannot finish it alone:
 `src/memory/backends/akm.ts` is now a real, evaluated integration — every operation shells out to a
 real akm CLI process (`akm remember`/`akm search`/`akm bundle create`/`akm index --full`), with a
-deterministic frontmatter-synthesis step, per-instance hermetic install, and fail-loud
+deterministic frontmatter-synthesis step, per-instance hermetic state, and fail-loud
 ingestion-count verification. See `docs/memory-backends.md` for the full contract, and
 `tests/memory-backend-akm.test.ts` / `tests/memory-backend-akm.integration.test.ts` for its test
 coverage (the latter a real, no-mocking round trip against a live akm CLI). This was previously
 written as a repo-internal implementation gap; that gap is closed.
 
-What remains is an ordinary external-dependency prerequisite, the same shape as BEAM's upstream
-checkout in item 1: an operator must make a real akm CLI satisfying `^0.9` reachable before an
-`akm`-backed run (not `doctor`, which reports the gap as a `warn` rather than crashing).
+Published versions no longer have a host dependency: the wrapper installs the
+selected CLI while building its version-specific image. Only source-checkout
+testing needs an external path made reachable inside the container.
 
-**Docker-wrapper caveat:** `bin/doctor`/`bin/eval` (the documented operator entrypoints) route
-through `bin/_akm_eval_cli_image.sh` into the built `docker/akm-eval.Dockerfile` image, which
-bundles neither the akm CLI nor a mount of any host akm source checkout. `AKM_EVAL_AKM_CMD` is now
-forwarded into that container (previously it was silently dropped — not on the wrapper's env
-allowlist), but the value still has to resolve to something reachable *inside* the container: an
-`akm` binary installed into a custom-built image, or a source-checkout path that lives under the
-mounted workspace directory (`AKM_EVAL_WORKSPACE_DIR`, default the repo root). Running `bun
-src/cli.ts` directly (outside the Docker wrapper) sidesteps this entirely and is how this repo's own
-`tests/memory-backend-akm.integration.test.ts` exercises a real akm CLI.
+**Container path:** the documented wrappers build/select an image tagged for
+the exact `AKM_EVAL_AKM_VERSION`; that image contains the matching published
+CLI. `bin/probe` requires `--akm-version` (or `--cmd`), and
+`bin/memory-eval` requires `--akm-version` whenever the `akm-memory` arm is
+selected, then verifies the command's reported version before any paid calls.
+For a source command outside this checkout, set `AKM_EVAL_AKM_SOURCE_DIR` so
+the wrapper mounts that source read-only at the same absolute path.
 
 Concrete completion steps a human must perform:
-1. Install akm-cli `^0.9` so `akm` resolves on `PATH`, **or** point `AKM_EVAL_AKM_CMD` at an
-   alternate invocation, e.g. `export AKM_EVAL_AKM_CMD='["bun","/path/to/akm/src/cli.ts"]'` for a
-   source checkout.
-2. If running through the Docker wrapper (`bin/doctor`/`bin/eval`), make sure that invocation is
-   actually reachable inside the container per the caveat above — otherwise run `bun src/cli.ts`
-   directly instead.
+1. Select a published CLI with `--akm-version VERSION`, or point
+   `AKM_EVAL_AKM_CMD` at an alternate invocation and mount its checkout with
+   `AKM_EVAL_AKM_SOURCE_DIR`.
+2. Keep the expected `AKM_EVAL_AKM_VERSION` explicit for a judged source run;
+   a version mismatch is fatal before model calls.
 3. Confirm reachability with `bin/doctor` (or `akm-eval doctor`) and check the `memory:akm` line.
 
 What evidence or artifacts should be captured when done:
@@ -91,8 +88,9 @@ What evidence or artifacts should be captured when done:
 
 How to verify completion in this repo afterward:
 Run `bin/doctor` and confirm `memory:akm` is `OK` (not `WARN`); run
-`akm-eval run --pack <pack> --variant akm-memory --config config/common/locomo-akm-ab.json` (or the
-`longmemeval-akm-ab.json` equivalent) and confirm it does not fail with an akm-unreachable error.
+`AKM_EVAL_AKM_VERSION=<version> bin/eval --pack <pack> --variant akm-memory
+--config config/common/locomo-akm-ab.json` (or the LongMemEval equivalent) and
+confirm it does not fail with an akm-unreachable error.
 
 Sources:
 `docs/memory-backends.md`, `src/memory/backends/akm.ts`, `src/memory/registry.ts`,

@@ -50,7 +50,8 @@ Current trust policy:
 ### `tau-bench`
 
 - Uses the official upstream Python benchmark package and JSON results file.
-- No Docker is required.
+- Operator commands run through Docker like the other packs; the host is not
+  the Python runtime.
 - Current repo integration supports the upstream `openai` provider mode via `openai-compatible` configs.
 - The benchmark is upstream-marked as outdated, so this integration is scoped to the original `tau-bench` only.
 

@@ -31,7 +31,7 @@ Options:
   --require-10m    Fail if the prepared BEAM 10M dataset is not available.
   --check          Verify repo/layout/runtime expectations without installing.
   --require-judge  Fail if judge credentials are not configured.
-   --print-fingerprint  Print a reproducibility-oriented runtime fingerprint after checks.
+  --print-fingerprint  Print a reproducibility-oriented runtime fingerprint after checks.
   --help           Show this help text.
 EOF
 }
@@ -289,14 +289,14 @@ resolve_dataset_path() {
   return 1
 }
 
-if ! command -v uv >/dev/null 2>&1; then
+if [[ "$CHECK_ONLY" -eq 0 ]] && ! command -v uv >/dev/null 2>&1; then
   printf 'uv is required to manage the BEAM runtime environment. Install uv first.\n' >&2
   exit 1
 fi
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-    printf 'BEAM runtime environment missing at %s. Use bin/doctor --pack beam or bin/eval --pack beam ... so the pack setup script can create the uv-managed environment automatically.\n' "$PYTHON_BIN" >&2
+    printf 'BEAM runtime environment missing at %s. Operator commands must use the prebuilt beam image; contributors can run this setup script without --check to create a local uv environment.\n' "$PYTHON_BIN" >&2
     exit 1
   fi
 else

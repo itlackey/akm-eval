@@ -3,6 +3,52 @@ set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
-IMAGE_TAG="${AKM_EVAL_CLI_IMAGE_TAG:-${AKM_EVAL_IMAGE_TAG:-akm-eval-cli:local}}"
+# shellcheck source=bin/_akm_eval_image_lib.sh
+source "$BIN_DIR/_akm_eval_image_lib.sh"
+AKM_VERSION="${AKM_EVAL_AKM_VERSION:-}"
+IMAGE_FLAVOR="${AKM_EVAL_IMAGE_FLAVOR:-core}"
 
-exec docker build -f "$REPO_ROOT/docker/akm-eval.Dockerfile" -t "$IMAGE_TAG" "$REPO_ROOT"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --akm-version)
+      AKM_VERSION="${2:?--akm-version requires a value}"
+      shift 2
+      ;;
+    --flavor)
+      IMAGE_FLAVOR="${2:?--flavor requires core or beam}"
+      shift 2
+      ;;
+    -h|--help)
+      echo 'usage: bin/build-image [--akm-version VERSION] [--flavor core|beam]'
+      exit 0
+      ;;
+    *)
+      echo "build-image: unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+akm_eval_validate_version "$AKM_VERSION" || {
+  echo "build-image: invalid akm version for an image tag: $AKM_VERSION" >&2
+  exit 2
+}
+case "$IMAGE_FLAVOR" in
+  core|beam) ;;
+  *) echo "build-image: --flavor must be core or beam" >&2; exit 2 ;;
+esac
+
+if ! RUNTIME_FINGERPRINT="$(akm_eval_runtime_fingerprint "$REPO_ROOT" "$IMAGE_FLAVOR")"; then
+  echo "build-image: could not fingerprint evaluator image inputs; is this a git checkout?" >&2
+  exit 1
+fi
+DEFAULT_TAG="$(akm_eval_default_image_tag "$IMAGE_FLAVOR" "$AKM_VERSION" "$RUNTIME_FINGERPRINT")"
+IMAGE_TAG="${AKM_EVAL_CLI_IMAGE_TAG:-${AKM_EVAL_IMAGE_TAG:-$DEFAULT_TAG}}"
+
+exec docker build \
+  --file "$REPO_ROOT/docker/akm-eval.Dockerfile" \
+  --target "$IMAGE_FLAVOR" \
+  --build-arg "AKM_CLI_VERSION=$AKM_VERSION" \
+  --label "org.akm.eval.runtime-fingerprint=$RUNTIME_FINGERPRINT" \
+  --tag "$IMAGE_TAG" \
+  "$REPO_ROOT"

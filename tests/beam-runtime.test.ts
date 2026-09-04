@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,13 +41,21 @@ function writeBeamRepo(rootDir: string): string {
   return repoPath;
 }
 
+const beamEnvNames = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "BEAM_REPO_PATH",
+  "BEAM_DATASET_PATH",
+  "BEAM_DATASET_10M_PATH",
+  "BEAM_PYTHON_BIN",
+] as const;
+
+beforeEach(() => {
+  for (const name of beamEnvNames) Reflect.deleteProperty(process.env, name);
+});
+
 afterEach(() => {
-  process.env.OPENAI_API_KEY = undefined;
-  process.env.OPENAI_BASE_URL = undefined;
-  process.env.BEAM_REPO_PATH = undefined;
-  process.env.BEAM_DATASET_PATH = undefined;
-  process.env.BEAM_DATASET_10M_PATH = undefined;
-  process.env.BEAM_PYTHON_BIN = undefined;
+  for (const name of beamEnvNames) Reflect.deleteProperty(process.env, name);
 
   for (const dir of tempRoots.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -154,14 +162,9 @@ describe("beam runtime preflight", () => {
         mode: 0o755,
       },
     );
-    // The script hard-requires `uv` on PATH even in --check mode, but the
-    // check-only branch merely probes `command -v uv` and never executes it
-    // (venv creation happens only outside --check). GitHub runners ship no uv,
-    // so a presence stub keeps this test hermetic without faking any behavior
-    // the check path actually exercises.
-    fs.writeFileSync(path.resolve(stubBinDir, "uv"), "#!/usr/bin/env bash\nexit 0\n", {
-      mode: 0o755,
-    });
+    // --check validates an already-installed interpreter and deliberately does
+    // not require uv. Operator wrappers run this path in the prebuilt BEAM
+    // image, so uv is not a host dependency.
     const requirementsSnapshot = fs.readFileSync(
       path.resolve(process.cwd(), "requirements-beam.txt"),
       "utf8",

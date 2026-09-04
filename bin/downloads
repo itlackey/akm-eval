@@ -2,4 +2,5 @@
 set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+export AKM_EVAL_DATASETS_WRITABLE=1
 exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bun src/cli.ts downloads "$@"

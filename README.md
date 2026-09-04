@@ -33,14 +33,33 @@ changing a pack.
 
 ## Host requirements
 
-For normal `bin/...` usage:
+For normal `bin/...` usage, the host only needs:
 
 - `bash`
+- `git` (to clone the evaluator and to record provenance)
 - `docker` with a running daemon
-- `uv`
-- one real model-provider setup:
-  - `opencode`: `config/opencode.json` plus required env such as `OPENCODE_API_KEY`
-  - or `openai-compatible`: a reachable endpoint plus its required env/config
+
+The images contain the pinned Bun, Node, Python, jq, and evaluator libraries;
+version-selected images also contain that exact `akm-cli`. The checkout is
+mounted read-only for configs, datasets, source, and git provenance; only
+result paths are writable, and `bin/downloads` temporarily makes `datasets/`
+writable. Its `node_modules` is masked so host packages cannot shadow the image
+lockfile. No host Bun, Node, npm, Python, uv, or jq is used.
+
+Provide a real model endpoint through exported variables, or keep them in a
+Docker env file outside the repo:
+
+```bash
+cp .env.example ../akm-eval.env  # fill this file; keep it outside the checkout
+AKM_EVAL_ENV_FILE=/absolute/path/to/eval.env \
+  bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
+```
+
+The wrapper forwards only documented provider variables (by name, so values do
+not appear in Docker argv). Add unusual provider variables explicitly with
+`AKM_EVAL_ENV_ALLOWLIST=NAME,OTHER_NAME`. Local provider files and secrets are
+never copied into the image. See [`docs/running-evals.md`](./docs/running-evals.md)
+for external dataset and source mounts.
 
 Extra pack requirements still apply:
 
@@ -57,9 +76,9 @@ the judge is pinned, and the evaluator is the benchmark's own.
 
 **1. Prerequisites**
 
-- `bun`, `docker` (running daemon), `uv`
-- Two credentials, which `bin/memory-eval` will load from `akm env` if you keep
-  them there, or you can export yourself:
+- `git` and `docker` (running daemon)
+- Two credentials, exported directly or supplied through
+  `AKM_EVAL_ENV_FILE`:
 
   | variable | what it is |
   | --- | --- |
@@ -72,9 +91,9 @@ the judge is pinned, and the evaluator is the benchmark's own.
 **2. Free check first — did retrieval change?**
 
 ```bash
-bin/build-image        # once per machine
-bin/probe 0.9.10       # LLM-free, deterministic, minutes
-bin/probe --identity-permutation 0.9.10  # release-only, roughly 2x probe time
+bin/build-image --akm-version 0.9.14-beta.1  # optional; wrappers build a missing image
+bin/probe --akm-version 0.9.14-beta.1       # LLM-free, deterministic, minutes
+bin/probe --identity-permutation --akm-version 0.9.14-beta.1
 ```
 
 Grades both memory packs against committed reference values and exits nonzero on
@@ -83,8 +102,8 @@ a regression. If this fails, stop — there is no point spending judged budget.
 **3. The judged run**
 
 ```bash
-bin/memory-eval longmemeval        # all three arms
-bin/memory-eval longmemeval --dry-run   # print the resolved config and stop
+bin/memory-eval longmemeval --akm-version 0.9.14-beta.1
+bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
 ```
 
 Writes `runs/longmemeval-full-<stamp>/{baseline,raw-vector,akm-memory}/` with a
@@ -110,12 +129,12 @@ number.
 
 ## Quick start
 
-Validating a new akm-cli version? Start here — free, deterministic, no LLM and
-no Docker. It installs the version in isolation, probes both packs, and grades
-the result against the committed reference values:
+Validating a new akm-cli version? Start here — free and deterministic, with no
+LLM or host toolchain. It builds/selects a version-specific Docker image,
+probes both packs, and grades the result against committed reference values:
 
 ```bash
-bin/probe 0.9.10        # or: bin/probe (npm latest), bin/probe --cmd '["/path/to/akm"]'
+bin/probe --akm-version 0.9.14-beta.1
 ```
 
 The historical comparison is informational because
@@ -127,9 +146,11 @@ compares the two matching artifacts and writes a verdict even when it fails.
 For a judged run:
 
 ```bash
-bin/build-image
-bin/doctor --pack locomo
-bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json
+bin/build-image --akm-version 0.9.14-beta.1
+AKM_EVAL_AKM_VERSION=0.9.14-beta.1 \
+  bin/doctor --pack locomo
+AKM_EVAL_AKM_VERSION=0.9.14-beta.1 \
+  bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json
 ```
 
 Common runnable configs live under `config/common/`; see `docs/running-evals.md` for the current list.

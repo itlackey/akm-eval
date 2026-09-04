@@ -1,0 +1,27 @@
+# The operator checkout is bind-mounted at runtime.  The image only needs the
+# source and lock snapshots below; large datasets, prior runs, BEAM checkouts,
+# local dependency trees, git objects, and credentials must never enter the
+# build context or an image layer.
+**
+
+!package.json
+!bun.lock
+!requirements-smoke.txt
+!requirements-beam.txt
+!tsconfig.json
+
+!bin/
+!bin/**
+!config/
+!config/**
+!docker/
+!docker/**
+!scripts/
+!scripts/**
+!src/
+!src/**
+
+# Local provider files may contain credentials.  Runtime bind mounts and
+# --env-file are the supported secret/config paths.
+config/*.local.json
+config/opencode.shredder.json
