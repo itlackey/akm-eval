@@ -22,6 +22,7 @@ const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
     arch: "x64",
     targetCommit: "published-or-unresolved",
     targetDirty: "false",
+    akmCommand: '["akm"]',
   },
   ...overrides,
 });
@@ -77,11 +78,30 @@ describe("paired release probe grading", () => {
       artifact(),
       artifact({ probeContext: { ...artifact().probeContext, evaluatorCommit: "unknown" } }),
     );
-    expect(unknown.contextMismatches).toContain("locomo: unknown evaluator context");
+    expect(unknown.contextMismatches).toContain("locomo candidate: unknown evaluator context");
     const dirty = paired(
       artifact(),
       artifact({ probeContext: { ...artifact().probeContext, targetDirty: "true" } }),
     );
-    expect(dirty.contextMismatches).toContain("locomo: dirty akm target");
+    expect(dirty.contextMismatches).toContain("locomo candidate: dirty akm target");
+  });
+
+  test("rejects malformed context and a context split between pack artifacts", () => {
+    const malformed = paired(artifact(), artifact({ probeContext: {} }));
+    expect(malformed.comparable).toBe(false);
+    expect(malformed.contextMismatches).toContain("locomo candidate: invalid evaluatorCommit");
+    const clean = artifact();
+    const split = gradePairedProbe(
+      { locomo: { ...clean, pack: "locomo" }, longmemeval: { ...clean, pack: "longmemeval" } },
+      {
+        locomo: { ...clean, pack: "locomo" },
+        longmemeval: {
+          ...clean,
+          pack: "longmemeval",
+          probeContext: { ...clean.probeContext, akmCommand: '["other"]' },
+        },
+      },
+    );
+    expect(split.contextMismatches).toContain("candidate: locomo/longmemeval akmCommand differs");
   });
 });

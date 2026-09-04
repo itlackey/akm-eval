@@ -130,6 +130,56 @@ function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] 
   return failures;
 }
 
+const stringContextKeys = [
+  "evaluatorCommit",
+  "evaluatorDirty",
+  "bunVersion",
+  "datasetSha256",
+  "platform",
+  "arch",
+  "targetCommit",
+  "targetDirty",
+  "akmCommand",
+] as const;
+const numericContextKeys = ["topK", "maxQuestions"] as const;
+const invariantContextKeys = [
+  "evaluatorCommit",
+  "evaluatorDirty",
+  "bunVersion",
+  "platform",
+  "arch",
+  "targetCommit",
+  "targetDirty",
+  "akmCommand",
+] as const;
+
+function validContext(context: ProbeArtifact["probeContext"]): string[] {
+  if (!context) return ["missing probeContext"];
+  const failures: string[] = [];
+  for (const key of stringContextKeys) {
+    if (typeof context[key] !== "string" || context[key].trim().length === 0)
+      failures.push(`invalid ${key}`);
+  }
+  for (const key of numericContextKeys) {
+    if (typeof context[key] !== "number" || !Number.isFinite(context[key]))
+      failures.push(`invalid ${key}`);
+  }
+  if (context.evaluatorCommit === "unknown") failures.push("unknown evaluator context");
+  if (context.targetCommit === "unknown") failures.push("unknown akm target");
+  if (context.evaluatorDirty !== "false") failures.push("dirty evaluator");
+  if (context.targetDirty !== "false") failures.push("dirty akm target");
+  return failures;
+}
+
+function sideContextMismatches(side: string, artifacts: Record<string, ProbeArtifact>): string[] {
+  const locomo = artifacts.locomo?.probeContext;
+  const longmem = artifacts.longmemeval?.probeContext;
+  if (!locomo || !longmem) return [];
+  return invariantContextKeys
+    .filter((key) => locomo[key] !== longmem[key])
+    .map((key) => `${side}: locomo/longmemeval ${key} differs`);
+}
+
 export function gradePairedProbe(
   controlByPack: Record<string, ProbeArtifact>,
   candidateByPack: Record<string, ProbeArtifact>,
@@ -139,6 +189,10 @@ export function gradePairedProbe(
   const mismatches: string[] = [];
   const controlContexts = controlByPack.locomo?.probeContext ?? {};
   const candidateContexts = candidateByPack.locomo?.probeContext ?? {};
+  mismatches.push(
+    ...sideContextMismatches("control", controlByPack),
+    ...sideContextMismatches("candidate", candidateByPack),
+  );
   for (const pack of ["locomo", "longmemeval"]) {
     const control = controlByPack[pack];
     const candidate = candidateByPack[pack];
@@ -155,16 +209,13 @@ export function gradePairedProbe(
     mismatches.push(
       ...contextMismatches(control, candidate).map((mismatch) => `${pack}: ${mismatch}`),
     );
-    for (const artifact of [control, candidate]) {
-      if (!artifact.probeContext || artifact.probeContext.evaluatorCommit === "unknown")
-        mismatches.push(`${pack}: unknown evaluator context`);
-      if (artifact.probeContext?.evaluatorDirty === "true")
-        mismatches.push(`${pack}: dirty evaluator`);
-      if (artifact.probeContext?.targetCommit === "unknown")
-        mismatches.push(`${pack}: unknown akm target`);
-      if (artifact.probeContext?.targetDirty === "true")
-        mismatches.push(`${pack}: dirty akm target`);
-    }
+    for (const [side, artifact] of [
+      ["control", control],
+      ["candidate", candidate],
+    ] as const)
+      mismatches.push(
+        ...validContext(artifact.probeContext).map((failure) => `${pack} ${side}: ${failure}`),
+      );
     const candidateMetrics = new Map(
       metricEntries(candidate).map(([name, value]) => [name, value]),
     );

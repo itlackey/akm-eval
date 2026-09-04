@@ -31,6 +31,7 @@ const artifact = (pack: string) => ({
     arch: "x64",
     targetCommit: "published-or-unresolved",
     targetDirty: "false",
+    akmCommand: '["akm"]',
   },
 });
 
