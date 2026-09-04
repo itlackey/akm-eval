@@ -13,7 +13,9 @@ The proposed `akm-evals` monorepo would put both projects in one operator-facing
 repository while retaining this boundary between separate packages. The phased
 container-first migration and its acceptance criteria are in
 [`docs/monorepo-migration.md`](./monorepo-migration.md). That proposal remains
-staged work; it does not change the current ownership described above.
+staged work tracked in
+[#21](https://github.com/itlackey/akm-eval/issues/21); it does not change the
+current ownership described above.
 
 ## What Exists
 

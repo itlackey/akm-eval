@@ -4,6 +4,8 @@ Status: proposed
 
 Staging branch: `staging/akm-evals-monorepo`
 
+Tracking issue: [#21](https://github.com/itlackey/akm-eval/issues/21)
+
 ## Decision summary
 
 Create one operator-facing repository, eventually named `akm-evals`, while
