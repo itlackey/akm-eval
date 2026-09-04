@@ -23,7 +23,7 @@ const artifact = (pack: string) => ({
   probeContext: {
     evaluatorCommit: "a",
     evaluatorDirty: "false",
-    bunVersion: "1",
+    bunVersion: "1.3.13",
     datasetSha256: "d",
     topK: 5,
     maxQuestions: 20,

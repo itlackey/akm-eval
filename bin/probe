@@ -84,6 +84,7 @@ mapfile -t akm_argv < <(jq -r '.[]' <<<"$akm_cmd")
 # would block their everyday akm use. The probe body is already hermetic; this
 # is the version check, which was not.
 _akm_tmp="$(mktemp -d)"
+trap 'rm -rf "$_akm_tmp"' EXIT
 resolved_version="$(
   AKM_BUNDLE_DIR="$_akm_tmp/bundle" AKM_CONFIG_DIR="$_akm_tmp/config" \
   AKM_DATA_DIR="$_akm_tmp/data" AKM_CACHE_DIR="$_akm_tmp/cache" \

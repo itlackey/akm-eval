@@ -14,7 +14,7 @@ const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
   probeContext: {
     evaluatorCommit: "a",
     evaluatorDirty: "false",
-    bunVersion: "1",
+    bunVersion: "1.3.13",
     datasetSha256: "d",
     topK: 5,
     maxQuestions: 20,
@@ -104,5 +104,14 @@ describe("paired release probe grading", () => {
       },
     );
     expect(split.contextMismatches).toContain("candidate: locomo/longmemeval akmCommand differs");
+  });
+
+  test("rejects the wrong Bun pin and inconsistent question count", () => {
+    const wrongBun = paired(
+      artifact(),
+      artifact({ probeContext: { ...artifact().probeContext, bunVersion: "1.4.0" } }),
+    );
+    expect(wrongBun.contextMismatches).toContain("locomo candidate: Bun must be pinned to 1.3.13");
+    expect(paired(artifact(), artifact({ questions: 19 })).comparable).toBe(false);
   });
 });

@@ -131,6 +131,10 @@ function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] 
     artifact.scoreSaturatedTopKRate > 1
   )
     failures.push("invalid scoreSaturatedTopKRate");
+  if (artifact.probeContext?.maxQuestions !== artifact.questions)
+    failures.push("questions/maxQuestions differ");
+  if (artifact.identityPermutation?.rankingOrMetricDependent !== false)
+    failures.push("missing or failing identity diagnostic");
   return failures;
 }
 
@@ -170,6 +174,7 @@ function validContext(context: ProbeArtifact["probeContext"]): string[] {
       failures.push(`invalid ${key}`);
   }
   if (context.evaluatorCommit === "unknown") failures.push("unknown evaluator context");
+  if (context.bunVersion !== "1.3.13") failures.push("Bun must be pinned to 1.3.13");
   if (context.targetCommit === "unknown") failures.push("unknown akm target");
   if (context.evaluatorDirty !== "false") failures.push("dirty evaluator");
   if (context.targetDirty !== "false") failures.push("dirty akm target");
