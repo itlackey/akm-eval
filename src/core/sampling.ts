@@ -81,11 +81,7 @@ export function sampleItems<T>(
 
   if (typeof options.seed !== "number" || !Number.isInteger(options.seed)) {
     throw new ConfigValidationError([
-      `${options.label}: sampling ${n} of ${total} requires an integer 'sampleSeed' in the pack config. ` +
-        "Taking the first N instead is a systematic slice of the dataset's file order, not a sample of " +
-        "the benchmark, and its score cannot be compared to a published figure (docs/comparability.md A3). " +
-        "Set a seed to draw a reproducible random sample, or set 'smoke': true if this is a plumbing " +
-        "check rather than a measurement.",
+      `${options.label}: sampling ${n} of ${total} requires an integer 'sampleSeed' in the pack config. Taking the first N instead is a systematic slice of the dataset's file order, not a sample of the benchmark, and its score cannot be compared to a published figure (docs/comparability.md A3). Set a seed to draw a reproducible random sample, or set 'smoke': true if this is a plumbing check rather than a measurement.`,
     ]);
   }
 

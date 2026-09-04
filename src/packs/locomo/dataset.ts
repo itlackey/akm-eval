@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { type SampleProvenance, sampleItems } from "../../core/sampling.ts";
 import { BenchmarkRuntimeError } from "../../core/errors.ts";
+import { type SampleProvenance, sampleItems } from "../../core/sampling.ts";
 
 const OFFICIAL_LOCOMO_DATASET_URL =
   "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json";
