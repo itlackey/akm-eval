@@ -63,8 +63,29 @@ interface ProbeResult {
    * irrelevant documents" from "retrieved the answer cleanly".
    */
   retrieval: RetrievalMetrics;
+  /**
+   * Fraction of answered queries whose entire top-K came back at ONE score.
+   *
+   * A high rate means the DISPLAYED scores carry no ordering information for
+   * most queries, so whatever the backend breaks ties on decides the metrics
+   * above. That is only safe when the tie-break is itself a relevance signal.
+   * akm <= 0.9.13 clamped relaxed non-name candidates to a hard ceiling and
+   * then fell through to an alphabetical path compare, which is not — and on
+   * this pack that silently moved the numbers between runs. Treat a rate this
+   * high as a reason to check WHAT the backend ties on before trusting a
+   * reference drawn from the run.
+   */
+  tiedTopKRate: number;
   /** Queries the backend refused outright (e.g. a contamination guard). */
   guardTripped: number;
+}
+
+/** Did every hit in this result set come back at the same score? */
+function isFullyTied(hits: readonly { score?: number | null }[]): boolean {
+  if (hits.length < 2) return false;
+  const first = hits[0]?.score;
+  if (typeof first !== "number") return false;
+  return hits.every((h) => h.score === first);
 }
 
 /** Fresh hermetic bundle; never a real stash. */
@@ -137,6 +158,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   let guardTripped = 0;
   let asked = 0;
   const perQuestion: RetrievalMetrics[] = [];
+  let tiedTopK = 0;
 
   for (const q of sample.qa.slice(0, maxQ)) {
     let hits: Awaited<ReturnType<typeof backend.search>>;
@@ -154,6 +176,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     if (hits.length === 0) zeroHit += 1;
     const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
     perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
+    if (isFullyTied(hits)) tiedTopK += 1;
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
@@ -170,6 +193,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
     retrieval: averageRetrieval(perQuestion),
+    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
     guardTripped,
   };
 }
@@ -191,6 +215,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
   let guardTripped = 0;
   let asked = 0;
   const perQuestion: RetrievalMetrics[] = [];
+  let tiedTopK = 0;
 
   for (const q of questions.slice(0, maxQ)) {
     await backend.reset();
@@ -209,6 +234,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     if (hits.length === 0) zeroHit += 1;
     const evidence = q.evidenceSessionIds ?? [];
     perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
+    if (isFullyTied(hits)) tiedTopK += 1;
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
@@ -225,6 +251,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
     retrieval: averageRetrieval(perQuestion),
+    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
     guardTripped,
   };
 }

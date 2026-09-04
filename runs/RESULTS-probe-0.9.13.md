@@ -54,12 +54,53 @@ Longmemeval is unaffected across both days on every metric.
 - **A remote embedding backend.** akm reads no `OPENAI_*` variable for
   embeddings.
 
-### Still open
+### Root cause: the metric was measuring tie order
 
-akm ships `onnxruntime-node`, so a *local* embedding path exists that needs no
-API key. `AKM_CACHE_DIR` is hermetic per run, but a model cache under `$HOME`
-would pass through the env filter unchanged. That is the leading remaining
-hypothesis and is the next thing to test.
+Dumping the probe's per-question hits settled it. On LoCoMo, **109 of the
+returned hits carried the identical score 0.65, and 24 of 40 questions had a
+top-5 that was entirely tied**. The number is `RELAXED_NON_NAME_SCORE_CEILING`
+in `akm/src/indexer/search/ranking.ts`: any candidate admitted on the relaxed
+tier whose *name* holds no query token is clamped to it.
+
+Every LoCoMo document is a dialogue turn whose name is an opaque id (`D1:3`),
+so no name ever holds a query token, so **every** candidate clamps to exactly
+0.65. `buildSearchResultComparator` then compares equal scores, equal rounded
+scores, equal name tiers and equal type boosts, and falls through to its last
+resort — `a.filePath.localeCompare(b.filePath)`. Alphabetical filename order
+decided which documents came back for 60% of the pack.
+
+That is why the same binary moved between runs: nothing about *retrieval*
+changed, only which of a large set of exactly-tied candidates surfaced first.
+It also explains why longmemeval never moved (its names carry query tokens, so
+the ceiling rarely binds) and why the #929 cascade patch read as pure noise —
+it widened a candidate pool whose scores all collapse to one value.
+
+Ruled out along the way, for the record: a local ONNX embedding path (no model
+cache activity, and embeddings need explicit config), and locale-dependent
+`localeCompare` (four locales, identical results).
+
+### The fix
+
+`applyRelaxedLexicalScoreCeiling` now records the pre-clamp score as
+`preCeilingScore` — the same idiom `applyBeliefStateScoreCeiling` already
+used — and the comparator orders on it before falling through to the
+filename compare. Displayed scores are unchanged; only the order within a
+clamped set changes.
+
+Measured on the same probe, LoCoMo:
+
+| metric | 0.9.13 published | with the fix | change |
+| --- | --- | --- | --- |
+| evidenceRecall@5 | 0.564 | **0.692** | +22.7% |
+| recall@5 | 0.485417 | **0.591667** | +21.9% |
+| precision@5 | 0.227917 | **0.257917** | +13.2% |
+| MRR | 0.36625 | **0.4725** | +29.0% |
+| nDCG@5 | 0.380024 | **0.492014** | +29.5% |
+
+LongMemEval is unchanged on every metric (0.95 / 0.676667 / 0.95), as expected.
+
+The probe now reports `tiedTopKRate` so a saturated run announces itself
+instead of being mistaken for a version regression.
 
 ## Consequence for #929 / #930
 
