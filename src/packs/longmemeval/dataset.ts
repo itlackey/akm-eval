@@ -141,9 +141,7 @@ function normalizeCategory(rawType: string): LongMemEvalQuestion["category"] {
   if (type.includes("multi")) return "multi-session";
   if (type.includes("temporal")) return "temporal";
   throw new BenchmarkRuntimeError(
-    `LongMemEval: unrecognised question_type ${JSON.stringify(rawType)}. Add it to normalizeCategory() ` +
-      "rather than letting it fall into another category -- a mislabelled question silently corrupts " +
-      "every per-category figure and any questionCategories filter.",
+    `LongMemEval: unrecognised question_type ${JSON.stringify(rawType)}. Add it to normalizeCategory() rather than letting it fall into another category -- a mislabelled question silently corrupts every per-category figure and any questionCategories filter.`,
   );
 }
 
