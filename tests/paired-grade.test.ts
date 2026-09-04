@@ -10,7 +10,17 @@ const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
   retrieval: { precisionAtK: 0.5, recallAtK: 0.6, mrr: 0.7, ndcgAtK: 0.65 },
   guardTripped: 0,
   scoreSaturatedTopKRate: 1,
-  identityPermutation: { mode: "identity-permutation", rankingOrMetricDependent: false, queriesCompared: 20, rankChangedQueries: 0, metricChangedQueries: 0, missingQueryIds: [], extraQueryIds: [], duplicateBaselineQueryIds: [], duplicatePermutedQueryIds: [] },
+  identityPermutation: {
+    mode: "identity-permutation",
+    rankingOrMetricDependent: false,
+    queriesCompared: 20,
+    rankChangedQueries: 0,
+    metricChangedQueries: 0,
+    missingQueryIds: [],
+    extraQueryIds: [],
+    duplicateBaselineQueryIds: [],
+    duplicatePermutedQueryIds: [],
+  },
   probeContext: {
     evaluatorCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     evaluatorDirty: "false",

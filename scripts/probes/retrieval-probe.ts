@@ -260,64 +260,67 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   const sample = (Array.isArray(raw) ? raw : raw.samples)[0] as LocomoSample;
   const documents = flattenLocomo(sample);
   const { backend, workDir } = hermeticBackend();
-  const health = backend.healthCheck();
-  await backend.reset();
-  await backend.add(documents);
+  try {
+    const health = backend.healthCheck();
+    await backend.reset();
+    await backend.add(documents);
 
-  let zeroHit = 0;
-  let evidenceScored = 0;
-  let evidenceHit = 0;
-  let guardTripped = 0;
-  let asked = 0;
-  const perQuestion: RetrievalMetrics[] = [];
-  let scoreSaturatedTopK = 0;
-  const observations: IdentityPermutationObservation[] = [];
-  const queries: IdentityPermutationQuery[] = [];
-  const duplicateIds = duplicateContentIds(documents);
+    let zeroHit = 0;
+    let evidenceScored = 0;
+    let evidenceHit = 0;
+    let guardTripped = 0;
+    let asked = 0;
+    const perQuestion: RetrievalMetrics[] = [];
+    let scoreSaturatedTopK = 0;
+    const observations: IdentityPermutationObservation[] = [];
+    const queries: IdentityPermutationQuery[] = [];
+    const duplicateIds = duplicateContentIds(documents);
 
-  for (const [index, q] of sample.qa.slice(0, maxQ).entries()) {
-    let hits: Awaited<ReturnType<typeof backend.search>>;
-    try {
-      hits = await backend.search({ text: q.question, topK: 5 });
-    } catch (err) {
-      // A backend guard (e.g. contamination) is a real finding, not a zero-hit.
-      if (String((err as Error).message).includes("never added")) {
-        guardTripped += 1;
-        continue;
+    for (const [index, q] of sample.qa.slice(0, maxQ).entries()) {
+      let hits: Awaited<ReturnType<typeof backend.search>>;
+      try {
+        hits = await backend.search({ text: q.question, topK: 5 });
+      } catch (err) {
+        // A backend guard (e.g. contamination) is a real finding, not a zero-hit.
+        if (String((err as Error).message).includes("never added")) {
+          guardTripped += 1;
+          continue;
+        }
+        throw err;
       }
-      throw err;
+      asked += 1;
+      if (hits.length === 0) zeroHit += 1;
+      const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
+      const metric = scoreRetrieval(evidence, hits, TOP_K);
+      perQuestion.push(metric);
+      if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+      observations.push(observation(String(index), hits, metric, duplicateIds));
+      queries.push({ id: String(index), text: q.question, evidence, documents });
+      if (evidence.length > 0) {
+        evidenceScored += 1;
+        if (recall(hits, evidence)) evidenceHit += 1;
+      }
     }
-    asked += 1;
-    if (hits.length === 0) zeroHit += 1;
-    const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
-    const metric = scoreRetrieval(evidence, hits, TOP_K);
-    perQuestion.push(metric);
-    if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
-    observations.push(observation(String(index), hits, metric, duplicateIds));
-    queries.push({ id: String(index), text: q.question, evidence, documents });
-    if (evidence.length > 0) {
-      evidenceScored += 1;
-      if (recall(hits, evidence)) evidenceHit += 1;
-    }
-  }
 
-  const identityPermutation = await checkIdentityPermutation(queries);
-  fs.rmSync(workDir, { recursive: true, force: true });
-  return {
-    pack: `locomo (${sample.sample_id})`,
-    akmVersion: health.detail ?? "unknown",
-    questions: asked,
-    zeroHit,
-    zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
-    evidenceScored,
-    evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
-    retrieval: averageRetrieval(perQuestion),
-    scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
-    identityPermutation,
-    ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
-    probeContext: probeContext(datasetPath, maxQ),
-    guardTripped,
-  };
+    const identityPermutation = await checkIdentityPermutation(queries);
+    return {
+      pack: `locomo (${sample.sample_id})`,
+      akmVersion: health.detail ?? "unknown",
+      questions: asked,
+      zeroHit,
+      zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
+      evidenceScored,
+      evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+      retrieval: averageRetrieval(perQuestion),
+      scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+      identityPermutation,
+      ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
+      probeContext: probeContext(datasetPath, maxQ),
+      guardTripped,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 // ── LongMemEval ──────────────────────────────────────────────────────────────
@@ -330,63 +333,66 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
   });
   const datasetPath = path.join(ROOT, "datasets/longmemeval/dataset.json");
   const { backend, workDir } = hermeticBackend();
-  const health = backend.healthCheck();
+  try {
+    const health = backend.healthCheck();
 
-  let zeroHit = 0;
-  let evidenceScored = 0;
-  let evidenceHit = 0;
-  let guardTripped = 0;
-  let asked = 0;
-  const perQuestion: RetrievalMetrics[] = [];
-  let scoreSaturatedTopK = 0;
-  const observations: IdentityPermutationObservation[] = [];
-  const queries: IdentityPermutationQuery[] = [];
+    let zeroHit = 0;
+    let evidenceScored = 0;
+    let evidenceHit = 0;
+    let guardTripped = 0;
+    let asked = 0;
+    const perQuestion: RetrievalMetrics[] = [];
+    let scoreSaturatedTopK = 0;
+    const observations: IdentityPermutationObservation[] = [];
+    const queries: IdentityPermutationQuery[] = [];
 
-  for (const q of questions.slice(0, maxQ)) {
-    const documents = q.haystackSessions.map(sessionToMemoryDocument);
-    await backend.reset();
-    await backend.add(documents);
-    let hits: Awaited<ReturnType<typeof backend.search>>;
-    try {
-      hits = await backend.search({ text: q.question, topK: 5 });
-    } catch (err) {
-      if (String((err as Error).message).includes("never added")) {
-        guardTripped += 1;
-        continue;
+    for (const q of questions.slice(0, maxQ)) {
+      const documents = q.haystackSessions.map(sessionToMemoryDocument);
+      await backend.reset();
+      await backend.add(documents);
+      let hits: Awaited<ReturnType<typeof backend.search>>;
+      try {
+        hits = await backend.search({ text: q.question, topK: 5 });
+      } catch (err) {
+        if (String((err as Error).message).includes("never added")) {
+          guardTripped += 1;
+          continue;
+        }
+        throw err;
       }
-      throw err;
+      asked += 1;
+      if (hits.length === 0) zeroHit += 1;
+      const evidence = q.evidenceSessionIds ?? [];
+      const metric = scoreRetrieval(evidence, hits, TOP_K);
+      perQuestion.push(metric);
+      if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+      observations.push(observation(q.id, hits, metric, duplicateContentIds(documents)));
+      queries.push({ id: q.id, text: q.question, evidence, documents });
+      if (evidence.length > 0) {
+        evidenceScored += 1;
+        if (recall(hits, evidence)) evidenceHit += 1;
+      }
     }
-    asked += 1;
-    if (hits.length === 0) zeroHit += 1;
-    const evidence = q.evidenceSessionIds ?? [];
-    const metric = scoreRetrieval(evidence, hits, TOP_K);
-    perQuestion.push(metric);
-    if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
-    observations.push(observation(q.id, hits, metric, duplicateContentIds(documents)));
-    queries.push({ id: q.id, text: q.question, evidence, documents });
-    if (evidence.length > 0) {
-      evidenceScored += 1;
-      if (recall(hits, evidence)) evidenceHit += 1;
-    }
-  }
 
-  const identityPermutation = await checkIdentityPermutation(queries);
-  fs.rmSync(workDir, { recursive: true, force: true });
-  return {
-    pack: "longmemeval",
-    akmVersion: health.detail ?? "unknown",
-    questions: asked,
-    zeroHit,
-    zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
-    evidenceScored,
-    evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
-    retrieval: averageRetrieval(perQuestion),
-    scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
-    identityPermutation,
-    ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
-    probeContext: probeContext(datasetPath, maxQ),
-    guardTripped,
-  };
+    const identityPermutation = await checkIdentityPermutation(queries);
+    return {
+      pack: "longmemeval",
+      akmVersion: health.detail ?? "unknown",
+      questions: asked,
+      zeroHit,
+      zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
+      evidenceScored,
+      evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+      retrieval: averageRetrieval(perQuestion),
+      scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+      identityPermutation,
+      ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
+      probeContext: probeContext(datasetPath, maxQ),
+      guardTripped,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────

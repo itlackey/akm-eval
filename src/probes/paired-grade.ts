@@ -17,7 +17,17 @@ export interface ProbeArtifact extends ProbeMetrics {
   evidenceScored: number;
   guardTripped: number;
   scoreSaturatedTopKRate: number;
-  identityPermutation?: { mode?: string; rankingOrMetricDependent: boolean; queriesCompared?: number; rankChangedQueries?: number; metricChangedQueries?: number; missingQueryIds?: unknown[]; extraQueryIds?: unknown[]; duplicateBaselineQueryIds?: unknown[]; duplicatePermutedQueryIds?: unknown[] };
+  identityPermutation?: {
+    mode?: string;
+    rankingOrMetricDependent: boolean;
+    queriesCompared?: number;
+    rankChangedQueries?: number;
+    metricChangedQueries?: number;
+    missingQueryIds?: unknown[];
+    extraQueryIds?: unknown[];
+    duplicateBaselineQueryIds?: unknown[];
+    duplicatePermutedQueryIds?: unknown[];
+  };
   probeContext?: Record<string, string | number>;
 }
 
@@ -136,10 +146,26 @@ function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] 
   if (artifact.identityPermutation?.rankingOrMetricDependent !== false)
     failures.push("missing or failing identity diagnostic");
   const identity = artifact.identityPermutation;
-  if (!identity || identity.mode !== "identity-permutation" || identity.queriesCompared !== artifact.questions || identity.rankChangedQueries !== 0 || identity.metricChangedQueries !== 0 || !Array.isArray(identity.missingQueryIds) || !Array.isArray(identity.extraQueryIds) || !Array.isArray(identity.duplicateBaselineQueryIds) || !Array.isArray(identity.duplicatePermutedQueryIds) || identity.missingQueryIds.length || identity.extraQueryIds.length || identity.duplicateBaselineQueryIds.length || identity.duplicatePermutedQueryIds.length)
+  if (
+    !identity ||
+    identity.mode !== "identity-permutation" ||
+    identity.queriesCompared !== artifact.questions ||
+    identity.rankChangedQueries !== 0 ||
+    identity.metricChangedQueries !== 0 ||
+    !Array.isArray(identity.missingQueryIds) ||
+    !Array.isArray(identity.extraQueryIds) ||
+    !Array.isArray(identity.duplicateBaselineQueryIds) ||
+    !Array.isArray(identity.duplicatePermutedQueryIds) ||
+    identity.missingQueryIds.length ||
+    identity.extraQueryIds.length ||
+    identity.duplicateBaselineQueryIds.length ||
+    identity.duplicatePermutedQueryIds.length
+  )
     failures.push("invalid identity diagnostic shape");
-  if (!/^[0-9a-f]{40}$/.test(String(artifact.probeContext?.evaluatorCommit))) failures.push("invalid evaluator commit");
-  if (!/^[0-9a-f]{64}$/.test(String(artifact.probeContext?.datasetSha256))) failures.push("invalid dataset hash");
+  if (!/^[0-9a-f]{40}$/.test(String(artifact.probeContext?.evaluatorCommit)))
+    failures.push("invalid evaluator commit");
+  if (!/^[0-9a-f]{64}$/.test(String(artifact.probeContext?.datasetSha256)))
+    failures.push("invalid dataset hash");
   return failures;
 }
 
