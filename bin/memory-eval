@@ -3,9 +3,9 @@ set -euo pipefail
 
 # One-command memory eval with the credentials wired correctly.
 #
-#   bin/memory-eval longmemeval          # all three arms
-#   bin/memory-eval locomo --variant akm-memory
-#   bin/memory-eval longmemeval --dry-run
+#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1
+#   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.14-beta.1
+#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
 #
 # WHY THIS EXISTS: the judge and the agent need DIFFERENT credentials pointed
 # at DIFFERENT endpoints, and they collide on the same variable name. The agent
@@ -16,6 +16,35 @@ set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+
+usage() {
+  printf '%s\n' \
+    'usage: bin/memory-eval <longmemeval|locomo> --akm-version VERSION [--variant ID] [--dry-run]' \
+    '       Omit --akm-version only when no akm-memory arm is selected.'
+}
+
+if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
+  requested_version=""
+  outer_args=("$@")
+  for ((i = 0; i < ${#outer_args[@]}; i++)); do
+    case "${outer_args[$i]}" in
+      --akm-version)
+        requested_version="${outer_args[$((i + 1))]:?--akm-version requires a value}"
+        i=$((i + 1))
+        ;;
+      --variant) i=$((i + 1)) ;;
+    esac
+  done
+  if [ "${outer_args[0]:-}" = "-h" ] || [ "${outer_args[0]:-}" = "--help" ]; then
+    usage
+    exit 0
+  fi
+  if [ -n "$requested_version" ]; then
+    export AKM_EVAL_AKM_VERSION="$requested_version"
+  fi
+  exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/memory-eval" "$@"
+fi
+
 cd "$REPO_ROOT"
 
 ZEN_BASE_URL="https://opencode.ai/zen/v1"
@@ -25,16 +54,17 @@ ZEN_BASE_URL="https://opencode.ai/zen/v1"
 # the judge the benchmark names.
 JUDGE_BASE_URL="${AKM_EVAL_JUDGE_BASE_URL:-}"
 
-orig_args=("$@")
 pack=""
 variants=()
 dry_run=0
+requested_akm_version="${AKM_EVAL_AKM_VERSION:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     longmemeval|locomo) pack="$1"; shift ;;
     --variant) variants+=("${2:?--variant requires a value}"); shift 2 ;;
+    --akm-version) requested_akm_version="${2:?--akm-version requires a value}"; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
-    -h|--help) sed -n '3,15p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     *) echo "memory-eval: unexpected argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -46,21 +76,21 @@ config="config/common/${pack}-akm-ab-zen.json"
 
 fail() { echo "memory-eval: $*" >&2; exit 1; }
 
-# ---------------------------------------------------------------- credentials
-# Pulled from akm rather than the shell, via `akm env run` (the injection path
-# akm's own help prescribes over sourcing the file). --only keeps unrelated
-# credentials out of a multi-hour run's environment.
-if [ -z "${AKM_EVAL_CREDS_REEXEC:-}" ] && command -v akm >/dev/null 2>&1; then
-  ref="$(akm env list --format json 2>/dev/null \
-    | jq -r 'first(.. | objects | select(has("keys")) | select(.keys | index("OPENCODE_API_KEY")) | .ref) // empty' 2>/dev/null || true)"
-  if [ -n "$ref" ]; then
-    echo "memory-eval: loading credentials from akm env '${ref}'"
-    export AKM_EVAL_CREDS_REEXEC=1
-    exec akm env run "$ref" --only OPENCODE_API_KEY,OPENAI_API_KEY -- \
-      akm env run env/lab --only LAB_API_KEY,LAB_AI_BASE_URL -- \
-      "${BASH_SOURCE[0]}" "${orig_args[@]}"
-  fi
+# Judged akm-memory runs require an explicit target version.  This prevents a
+# stale baked CLI or an arbitrary old scratch glob from becoming the measured
+# candidate.  AKM_EVAL_AKM_CMD remains supported, but must report that version.
+needs_akm=0
+for variant in "${variants[@]}"; do
+  [ "$variant" = "akm-memory" ] && needs_akm=1
+done
+if [ "$needs_akm" = "1" ] && [ -z "$requested_akm_version" ]; then
+  fail "akm-memory requires --akm-version VERSION (or AKM_EVAL_AKM_VERSION)."
 fi
+
+# Credentials are intentionally never fetched from the AKM CLI under test.
+# Export the documented variables or point AKM_EVAL_ENV_FILE at a Docker env
+# file.  This keeps secrets out of image layers and separates benchmark input
+# from the target whose behavior is being measured.
 
 # The judge key. Accept AKM_EVAL_JUDGE_API_KEY, or fall back to a real OpenAI
 # key stored under the generic name -- but only after confirming it is NOT the
@@ -97,29 +127,30 @@ else
   unset AKM_EVAL_JUDGE_BASE_URL
 fi
 
-# akm CLI for the akm-memory arm, resolvable inside the eval container.
-if [ -z "${AKM_EVAL_AKM_CMD:-}" ]; then
-  for candidate in runs/.akm-cli-*-scratch/node_modules/.bin/akm; do
-    [ -x "$candidate" ] && AKM_EVAL_AKM_CMD="$(printf '["%s/%s"]' "$REPO_ROOT" "$candidate")" && break
-  done
-  [ -n "${AKM_EVAL_AKM_CMD:-}" ] && export AKM_EVAL_AKM_CMD
-fi
+export AKM_EVAL_AKM_CMD="${AKM_EVAL_AKM_CMD:-[\"akm\"]}"
 
 # Pin ALL FIVE akm dirs. Pinning only the bundle leaves AKM_DATA_DIR on the
 # user's real stash (where index.db lives), so a version check could take a
 # lock on the DB they use for everything else.
 _akm_tmp="$(mktemp -d)"
+trap 'rm -rf "$_akm_tmp"' EXIT
+if ! jq -e 'type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' \
+  >/dev/null <<<"$AKM_EVAL_AKM_CMD"; then
+  fail "AKM_EVAL_AKM_CMD must be a non-empty JSON argv array of strings"
+fi
+mapfile -t akm_argv < <(jq -r '.[]' <<<"$AKM_EVAL_AKM_CMD")
 akm_version="$(
   AKM_BUNDLE_DIR="$_akm_tmp/bundle" AKM_CONFIG_DIR="$_akm_tmp/config" \
   AKM_DATA_DIR="$_akm_tmp/data" AKM_CACHE_DIR="$_akm_tmp/cache" \
   AKM_STATE_DIR="$_akm_tmp/state" \
-  jq -r '.[0]' <<<"${AKM_EVAL_AKM_CMD:-[\"akm\"]}" \
-    | xargs -r -I{} sh -c '"$0" --version 2>/dev/null' {} || echo unknown
+  "${akm_argv[@]}" --version 2>/dev/null || echo unknown
 )"
+if [ "$needs_akm" = "1" ] && [ "$akm_version" != "$requested_akm_version" ]; then
+  fail "requested akm-cli ${requested_akm_version}, but AKM_EVAL_AKM_CMD reports ${akm_version}."
+fi
 
 stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 out_root="runs/${pack}-full-${stamp}"
-mkdir -p "$out_root"
 
 cat <<INFO
 
@@ -140,6 +171,7 @@ if [ "$dry_run" = "1" ]; then
   exit 0
 fi
 
+mkdir -p "$out_root"
 status=0
 for variant in "${variants[@]}"; do
   echo "memory-eval: === ${pack} / ${variant} ==="

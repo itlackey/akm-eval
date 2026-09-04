@@ -28,12 +28,19 @@ This document pins the upstream source and local runtime-setup path used here.
 ## Runtime setup
 
 - `requirements-beam.txt` is a checked-in snapshot of `vendor/BEAM/requirements.txt` from the pinned upstream commit.
-- `scripts/setup-beam-runtime.sh` is the pack-local setup script used by `bin/doctor --pack beam`, `bin/beam-doctor`, and `bin/eval --pack beam ...`; it creates `.akm/evals/venvs/beam` and verifies the BEAM repo, dataset, and judge path.
+- `bin/doctor --pack beam`, `bin/beam-doctor`, and `bin/eval --pack beam ...`
+  select the optional `beam` image target. Its Python 3.11 environment and the
+  frozen requirements snapshot are installed at image-build time under
+  `/opt/akm-eval/venvs/beam`.
+- `scripts/setup-beam-runtime.sh --check` verifies the mounted BEAM repo,
+  dataset, interpreter, requirements snapshot, and judge path without changing
+  the host or container. Its non-checking uv install mode remains a contributor
+  utility, not the operator path.
 - When the BEAM checkout is a real git worktree and `git` is available, the script verifies that `HEAD` matches the pinned commit.
 - Use `--require-10m` when the planned BEAM run includes `10M` chat sizes.
 - Use `--print-fingerprint` to emit repo path, commit, Python version, requirements hash status, judge class, and dataset counts.
 - If the checkout is only a copied directory without git metadata, the script still verifies the expected files and requirements snapshot.
-- Default `uv` Python target is `3.11`.
+- Container Python is pinned to the image's Python 3.11 runtime.
 - Additional runtime overrides:
   - `pack.config.repoPath` or `BEAM_REPO_PATH`
   - `pack.config.pythonBin` or `BEAM_PYTHON_BIN`
@@ -45,7 +52,7 @@ bin/doctor --pack beam
 bin/beam-doctor
 ```
 
-This verifies:
+This verifies inside the container:
 
 - pinned upstream repo layout
 - pinned Python interpreter target

@@ -4,4 +4,9 @@ set -euo pipefail
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 
-exec bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --require-judge "$@"
+if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
+  export AKM_EVAL_IMAGE_FLAVOR=beam
+  exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/beam-doctor" "$@"
+fi
+
+exec bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --check --require-judge "$@"

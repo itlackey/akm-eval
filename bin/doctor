@@ -25,13 +25,18 @@ for ((i = 0; i < ${#args[@]}; i++)); do
 done
 
 if [ "$pack_id" = "beam" ]; then
-  if ! output="$(bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --require-judge 2>&1)"; then
+  if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
+    export AKM_EVAL_IMAGE_FLAVOR=beam
+    exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/doctor" "$@"
+  fi
+
+  if ! output="$(bash "$REPO_ROOT/scripts/setup-beam-runtime.sh" --check --require-judge 2>&1)"; then
     output="${output//$'\n'/ }"
     printf 'WARN pack:beam: %s\n' "${output:-beam runtime setup failed}"
     exit 0
   fi
 
-  printf 'OK pack:beam: beam runtime setup and preflight passed; repo-local uv-managed environment ready under .akm/evals/venvs/beam.\n'
+  printf 'OK pack:beam: preinstalled container runtime and upstream BEAM preflight passed.\n'
   exit 0
 fi
 

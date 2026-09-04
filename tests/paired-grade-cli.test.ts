@@ -76,7 +76,7 @@ test("paired-grade CLI writes an inspectable verdict on a failing candidate", ()
       "--expected-candidate-commit",
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     ],
-    { cwd: root },
+    { cwd: root, env: { ...process.env, AKM_EVAL_IN_CONTAINER: "1" } },
   );
   expect(result.exitCode).toBe(1);
   expect(JSON.parse(fs.readFileSync(out, "utf8"))).toMatchObject({
@@ -112,7 +112,7 @@ test("probe-pair rejects malformed local control identities before reading artif
       "--expected-candidate-commit",
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     ],
-    { cwd: root },
+    { cwd: root, env: { ...process.env, AKM_EVAL_IN_CONTAINER: "1" } },
   );
   expect(result.exitCode).toBe(2);
   expect(result.stderr.toString()).toContain("expected control commit must be a 40-hex SHA");

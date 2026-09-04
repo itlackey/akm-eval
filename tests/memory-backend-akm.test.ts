@@ -200,7 +200,7 @@ describe("akm backend: deterministic frontmatter synthesis", () => {
 
 describe("akm backend: command resolution", () => {
   test('defaults to ["akm"] when AKM_EVAL_AKM_CMD is unset', () => {
-    process.env.AKM_EVAL_AKM_CMD = undefined;
+    Reflect.deleteProperty(process.env, "AKM_EVAL_AKM_CMD");
     expect(resolveAkmCommand(process.env)).toEqual({ ok: true, cmd: ["akm"] });
   });
 
