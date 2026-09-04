@@ -28,8 +28,11 @@ const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
 
 const paired = (control: ProbeArtifact, candidate: ProbeArtifact) =>
   gradePairedProbe(
-    { locomo: control, longmemeval: control },
-    { locomo: candidate, longmemeval: candidate },
+    { locomo: { ...control, pack: "locomo" }, longmemeval: { ...control, pack: "longmemeval" } },
+    {
+      locomo: { ...candidate, pack: "locomo" },
+      longmemeval: { ...candidate, pack: "longmemeval" },
+    },
   );
 
 describe("paired release probe grading", () => {
@@ -52,7 +55,7 @@ describe("paired release probe grading", () => {
     ).toBe("regressed");
   });
 
-  test("fails guards, missing identity checks, and mismatched evaluator context", () => {
+  test("fails guards, missing identity checks, mismatched, unknown, and dirty contexts", () => {
     const candidate = artifact({
       guardTripped: 1,
       identityPermutation: undefined,
@@ -70,5 +73,15 @@ describe("paired release probe grading", () => {
     expect(verdict.contextMismatches).toContain(
       "locomo: evaluatorCommit: control=a candidate=different",
     );
+    const unknown = paired(
+      artifact(),
+      artifact({ probeContext: { ...artifact().probeContext, evaluatorCommit: "unknown" } }),
+    );
+    expect(unknown.contextMismatches).toContain("locomo: unknown evaluator context");
+    const dirty = paired(
+      artifact(),
+      artifact({ probeContext: { ...artifact().probeContext, targetDirty: "true" } }),
+    );
+    expect(dirty.contextMismatches).toContain("locomo: dirty akm target");
   });
 });

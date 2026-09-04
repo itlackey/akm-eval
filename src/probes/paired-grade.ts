@@ -109,8 +109,10 @@ function contextMismatches(control: ProbeArtifact, candidate: ProbeArtifact): st
 
 function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] {
   const failures: string[] = [];
-  if (artifact.pack.toLowerCase().includes(expectedPack) === false) failures.push("pack identity differs");
-  if (!Number.isInteger(artifact.questions) || artifact.questions < 1) failures.push("invalid questions");
+  if (artifact.pack.toLowerCase().includes(expectedPack) === false)
+    failures.push("pack identity differs");
+  if (!Number.isInteger(artifact.questions) || artifact.questions < 1)
+    failures.push("invalid questions");
   if (!Number.isInteger(artifact.evidenceScored) || artifact.evidenceScored < 0)
     failures.push("invalid evidenceScored");
   if (!Number.isInteger(artifact.guardTripped) || artifact.guardTripped < 0)
@@ -119,7 +121,11 @@ function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] 
     if (value !== null && (!Number.isFinite(value) || value < 0 || value > 1))
       failures.push("invalid metric shape");
   }
-  if (!Number.isFinite(artifact.scoreSaturatedTopKRate) || artifact.scoreSaturatedTopKRate < 0 || artifact.scoreSaturatedTopKRate > 1)
+  if (
+    !Number.isFinite(artifact.scoreSaturatedTopKRate) ||
+    artifact.scoreSaturatedTopKRate < 0 ||
+    artifact.scoreSaturatedTopKRate > 1
+  )
     failures.push("invalid scoreSaturatedTopKRate");
   return failures;
 }
@@ -140,8 +146,12 @@ export function gradePairedProbe(
       mismatches.push(`missing ${pack} artifact`);
       continue;
     }
-    mismatches.push(...validArtifact(control, pack).map((failure) => `${pack} control: ${failure}`));
-    mismatches.push(...validArtifact(candidate, pack).map((failure) => `${pack} candidate: ${failure}`));
+    mismatches.push(
+      ...validArtifact(control, pack).map((failure) => `${pack} control: ${failure}`),
+    );
+    mismatches.push(
+      ...validArtifact(candidate, pack).map((failure) => `${pack} candidate: ${failure}`),
+    );
     mismatches.push(
       ...contextMismatches(control, candidate).map((mismatch) => `${pack}: ${mismatch}`),
     );
@@ -150,7 +160,8 @@ export function gradePairedProbe(
         mismatches.push(`${pack}: unknown evaluator context`);
       if (artifact.probeContext?.evaluatorDirty === "true")
         mismatches.push(`${pack}: dirty evaluator`);
-      if (artifact.probeContext?.targetCommit === "unknown") mismatches.push(`${pack}: unknown akm target`);
+      if (artifact.probeContext?.targetCommit === "unknown")
+        mismatches.push(`${pack}: unknown akm target`);
       if (artifact.probeContext?.targetDirty === "true")
         mismatches.push(`${pack}: dirty akm target`);
     }

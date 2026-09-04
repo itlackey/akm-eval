@@ -18,13 +18,19 @@ const artifact = (pack: string) => ({
   evidenceRecallAt5: 0.8,
   retrieval: { precisionAtK: 0.5, recallAtK: 0.6, mrr: 0.7, ndcgAtK: 0.65 },
   guardTripped: 0,
+  scoreSaturatedTopKRate: 1,
   identityPermutation: { rankingOrMetricDependent: false },
   probeContext: {
     evaluatorCommit: "a",
+    evaluatorDirty: "false",
     bunVersion: "1",
     datasetSha256: "d",
     topK: 5,
     maxQuestions: 20,
+    platform: "linux",
+    arch: "x64",
+    targetCommit: "published-or-unresolved",
+    targetDirty: "false",
   },
 });
 
@@ -60,5 +66,10 @@ test("paired-grade CLI writes an inspectable verdict on a failing candidate", ()
   expect(JSON.parse(fs.readFileSync(out, "utf8"))).toMatchObject({
     passed: false,
     mode: "paired-release",
+    controlContexts: { evaluatorCommit: "a", targetCommit: "published-or-unresolved" },
+    candidateContexts: { evaluatorCommit: "a", targetCommit: "published-or-unresolved" },
   });
+  const verdict = JSON.parse(fs.readFileSync(out, "utf8"));
+  expect(verdict.packs).toHaveLength(2);
+  expect(verdict.packs[0].scoreSaturatedTopKRate).toEqual({ control: 1, candidate: 1 });
 });
