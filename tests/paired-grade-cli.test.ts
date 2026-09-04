@@ -19,12 +19,12 @@ const artifact = (pack: string) => ({
   retrieval: { precisionAtK: 0.5, recallAtK: 0.6, mrr: 0.7, ndcgAtK: 0.65 },
   guardTripped: 0,
   scoreSaturatedTopKRate: 1,
-  identityPermutation: { rankingOrMetricDependent: false },
+  identityPermutation: { mode: "identity-permutation", rankingOrMetricDependent: false, queriesCompared: 20, rankChangedQueries: 0, metricChangedQueries: 0, missingQueryIds: [], extraQueryIds: [], duplicateBaselineQueryIds: [], duplicatePermutedQueryIds: [] },
   probeContext: {
-    evaluatorCommit: "a",
+    evaluatorCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     evaluatorDirty: "false",
     bunVersion: "1.3.13",
-    datasetSha256: "d",
+    datasetSha256: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     topK: 5,
     maxQuestions: 20,
     platform: "linux",
@@ -72,8 +72,8 @@ test("paired-grade CLI writes an inspectable verdict on a failing candidate", ()
   expect(JSON.parse(fs.readFileSync(out, "utf8"))).toMatchObject({
     passed: false,
     mode: "paired-release",
-    controlContexts: { evaluatorCommit: "a", targetCommit: "published-or-unresolved" },
-    candidateContexts: { evaluatorCommit: "a", targetCommit: "published-or-unresolved" },
+    controlContexts: { evaluatorCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", targetCommit: "published-or-unresolved" },
+    candidateContexts: { evaluatorCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", targetCommit: "published-or-unresolved" },
   });
   const verdict = JSON.parse(fs.readFileSync(out, "utf8"));
   expect(verdict.packs).toHaveLength(2);
