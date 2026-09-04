@@ -60,6 +60,7 @@ export interface PairedProbeVerdict {
 export interface PairedExpectations {
   expectedControlVersion: string;
   expectedCandidateCommit: string;
+  expectedControlCommit?: string;
 }
 
 const metricEntries = (
@@ -121,9 +122,17 @@ function contextMismatches(control: ProbeArtifact, candidate: ProbeArtifact): st
   return mismatches;
 }
 
-function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] {
+function validArtifact(
+  artifact: ProbeArtifact,
+  expectedPack: string,
+  requireIdentity: boolean,
+): string[] {
   const failures: string[] = [];
-  if (artifact.pack.toLowerCase().includes(expectedPack) === false)
+  if (
+    expectedPack === "locomo"
+      ? !/^locomo( \(|$)/.test(artifact.pack)
+      : artifact.pack !== "longmemeval"
+  )
     failures.push("pack identity differs");
   if (!Number.isInteger(artifact.questions) || artifact.questions < 1)
     failures.push("invalid questions");
@@ -143,23 +152,24 @@ function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] 
     failures.push("invalid scoreSaturatedTopKRate");
   if (artifact.probeContext?.maxQuestions !== artifact.questions)
     failures.push("questions/maxQuestions differ");
-  if (artifact.identityPermutation?.rankingOrMetricDependent !== false)
+  if (requireIdentity && artifact.identityPermutation?.rankingOrMetricDependent !== false)
     failures.push("missing or failing identity diagnostic");
   const identity = artifact.identityPermutation;
   if (
-    !identity ||
-    identity.mode !== "identity-permutation" ||
-    identity.queriesCompared !== artifact.questions ||
-    identity.rankChangedQueries !== 0 ||
-    identity.metricChangedQueries !== 0 ||
-    !Array.isArray(identity.missingQueryIds) ||
-    !Array.isArray(identity.extraQueryIds) ||
-    !Array.isArray(identity.duplicateBaselineQueryIds) ||
-    !Array.isArray(identity.duplicatePermutedQueryIds) ||
-    identity.missingQueryIds.length ||
-    identity.extraQueryIds.length ||
-    identity.duplicateBaselineQueryIds.length ||
-    identity.duplicatePermutedQueryIds.length
+    requireIdentity &&
+    (!identity ||
+      identity.mode !== "identity-permutation" ||
+      identity.queriesCompared !== artifact.questions ||
+      identity.rankChangedQueries !== 0 ||
+      identity.metricChangedQueries !== 0 ||
+      !Array.isArray(identity.missingQueryIds) ||
+      !Array.isArray(identity.extraQueryIds) ||
+      !Array.isArray(identity.duplicateBaselineQueryIds) ||
+      !Array.isArray(identity.duplicatePermutedQueryIds) ||
+      identity.missingQueryIds.length ||
+      identity.extraQueryIds.length ||
+      identity.duplicateBaselineQueryIds.length ||
+      identity.duplicatePermutedQueryIds.length)
   )
     failures.push("invalid identity diagnostic shape");
   if (!/^[0-9a-f]{40}$/.test(String(artifact.probeContext?.evaluatorCommit)))
@@ -206,6 +216,7 @@ function validContext(context: ProbeArtifact["probeContext"]): string[] {
   }
   if (context.evaluatorCommit === "unknown") failures.push("unknown evaluator context");
   if (context.bunVersion !== "1.3.13") failures.push("Bun must be pinned to 1.3.13");
+  if (context.topK !== 5) failures.push("topK must be 5");
   if (context.targetCommit === "unknown") failures.push("unknown akm target");
   if (context.evaluatorDirty !== "false") failures.push("dirty evaluator");
   if (context.targetDirty !== "false") failures.push("dirty akm target");
@@ -225,7 +236,7 @@ export function gradePairedProbe(
   controlByPack: Record<string, ProbeArtifact>,
   candidateByPack: Record<string, ProbeArtifact>,
   tolerance = PAIRED_SCORE_TOLERANCE,
-  expectations?: PairedExpectations,
+  expectations: PairedExpectations,
 ): PairedProbeVerdict {
   const packs: PairedPackVerdict[] = [];
   const mismatches: string[] = [];
@@ -243,10 +254,10 @@ export function gradePairedProbe(
       continue;
     }
     mismatches.push(
-      ...validArtifact(control, pack).map((failure) => `${pack} control: ${failure}`),
+      ...validArtifact(control, pack, false).map((failure) => `${pack} control: ${failure}`),
     );
     mismatches.push(
-      ...validArtifact(candidate, pack).map((failure) => `${pack} candidate: ${failure}`),
+      ...validArtifact(candidate, pack, true).map((failure) => `${pack} candidate: ${failure}`),
     );
     mismatches.push(
       ...contextMismatches(control, candidate).map((mismatch) => `${pack}: ${mismatch}`),
@@ -258,10 +269,13 @@ export function gradePairedProbe(
       mismatches.push(
         ...validContext(artifact.probeContext).map((failure) => `${pack} ${side}: ${failure}`),
       );
-    if (expectations) {
+    {
       if (control.probeContext?.targetVersion !== expectations.expectedControlVersion)
         mismatches.push(`${pack} control: targetVersion does not match expected control`);
-      if (control.probeContext?.targetCommit !== "published-or-unresolved")
+      if (
+        control.probeContext?.targetCommit !==
+        (expectations.expectedControlCommit ?? "published-or-unresolved")
+      )
         mismatches.push(`${pack} control: targetCommit must be published-or-unresolved`);
       if (candidate.probeContext?.targetCommit !== expectations.expectedCandidateCommit)
         mismatches.push(`${pack} candidate: targetCommit does not match expected candidate`);

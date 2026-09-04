@@ -45,6 +45,8 @@ const paired = (control: ProbeArtifact, candidate: ProbeArtifact) =>
       locomo: { ...candidate, pack: "locomo" },
       longmemeval: { ...candidate, pack: "longmemeval" },
     },
+    0.005,
+    { expectedControlVersion: "0.9.13", expectedCandidateCommit: "published-or-unresolved" },
   );
 
 describe("paired release probe grading", () => {
@@ -112,6 +114,8 @@ describe("paired release probe grading", () => {
           probeContext: { ...clean.probeContext, akmCommand: '["other"]' },
         },
       },
+      0.005,
+      { expectedControlVersion: "0.9.13", expectedCandidateCommit: "published-or-unresolved" },
     );
     expect(split.contextMismatches).toContain("candidate: locomo/longmemeval akmCommand differs");
   });

@@ -12,6 +12,7 @@ const candidateDir = option("--candidate");
 const outputPath = option("--out");
 const expectedControlVersion = option("--expected-control-version");
 const expectedCandidateCommit = option("--expected-candidate-commit");
+const expectedControlCommit = option("--expected-control-commit");
 if (
   !controlDir ||
   !candidateDir ||
@@ -31,7 +32,11 @@ const verdict = gradePairedProbe(
   { locomo: read(controlDir, "locomo"), longmemeval: read(controlDir, "longmemeval") },
   { locomo: read(candidateDir, "locomo"), longmemeval: read(candidateDir, "longmemeval") },
   0.005,
-  { expectedControlVersion, expectedCandidateCommit },
+  {
+    expectedControlVersion,
+    expectedCandidateCommit,
+    ...(expectedControlCommit ? { expectedControlCommit } : {}),
+  },
 );
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${JSON.stringify(verdict, null, 2)}\n`);
