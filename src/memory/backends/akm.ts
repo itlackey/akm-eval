@@ -876,6 +876,16 @@ class AkmRuntime {
 
     const before = this.readEntryCount(cmd);
     const writes = documents.map((doc, index) => this.prepareWrite(doc, index));
+    const names = new Map<string, string>();
+    for (const write of writes) {
+      const existing = names.get(write.name);
+      if (existing !== undefined && existing !== write.doc.id) {
+        throw new BenchmarkRuntimeError(
+          `storageNameForDocument collision: ${JSON.stringify(existing)} and ${JSON.stringify(write.doc.id)} both map to ${JSON.stringify(write.name)}`,
+        );
+      }
+      names.set(write.name, write.doc.id);
+    }
 
     if (writes.length === 1) {
       // No `akm index` call here in the common case: `akm remember` indexes

@@ -16,6 +16,7 @@ export interface ProbeArtifact extends ProbeMetrics {
   questions: number;
   evidenceScored: number;
   guardTripped: number;
+  scoreSaturatedTopKRate: number;
   identityPermutation?: { rankingOrMetricDependent: boolean };
   probeContext?: Record<string, string | number>;
 }
@@ -33,6 +34,7 @@ export interface PairedPackVerdict {
   metrics: PairedMetricVerdict[];
   guardTripped: { control: number; candidate: number };
   candidateIdentityDependent: boolean;
+  scoreSaturatedTopKRate: { control: number; candidate: number };
 }
 
 export interface PairedProbeVerdict {
@@ -105,6 +107,23 @@ function contextMismatches(control: ProbeArtifact, candidate: ProbeArtifact): st
   return mismatches;
 }
 
+function validArtifact(artifact: ProbeArtifact, expectedPack: string): string[] {
+  const failures: string[] = [];
+  if (artifact.pack.toLowerCase().includes(expectedPack) === false) failures.push("pack identity differs");
+  if (!Number.isInteger(artifact.questions) || artifact.questions < 1) failures.push("invalid questions");
+  if (!Number.isInteger(artifact.evidenceScored) || artifact.evidenceScored < 0)
+    failures.push("invalid evidenceScored");
+  if (!Number.isInteger(artifact.guardTripped) || artifact.guardTripped < 0)
+    failures.push("invalid guardTripped");
+  for (const [, value] of metricEntries(artifact)) {
+    if (value !== null && (!Number.isFinite(value) || value < 0 || value > 1))
+      failures.push("invalid metric shape");
+  }
+  if (!Number.isFinite(artifact.scoreSaturatedTopKRate) || artifact.scoreSaturatedTopKRate < 0 || artifact.scoreSaturatedTopKRate > 1)
+    failures.push("invalid scoreSaturatedTopKRate");
+  return failures;
+}
+
 export function gradePairedProbe(
   controlByPack: Record<string, ProbeArtifact>,
   candidateByPack: Record<string, ProbeArtifact>,
@@ -121,12 +140,17 @@ export function gradePairedProbe(
       mismatches.push(`missing ${pack} artifact`);
       continue;
     }
+    mismatches.push(...validArtifact(control, pack).map((failure) => `${pack} control: ${failure}`));
+    mismatches.push(...validArtifact(candidate, pack).map((failure) => `${pack} candidate: ${failure}`));
     mismatches.push(
       ...contextMismatches(control, candidate).map((mismatch) => `${pack}: ${mismatch}`),
     );
     for (const artifact of [control, candidate]) {
+      if (!artifact.probeContext || artifact.probeContext.evaluatorCommit === "unknown")
+        mismatches.push(`${pack}: unknown evaluator context`);
       if (artifact.probeContext?.evaluatorDirty === "true")
         mismatches.push(`${pack}: dirty evaluator`);
+      if (artifact.probeContext?.targetCommit === "unknown") mismatches.push(`${pack}: unknown akm target`);
       if (artifact.probeContext?.targetDirty === "true")
         mismatches.push(`${pack}: dirty akm target`);
     }
@@ -141,6 +165,10 @@ export function gradePairedProbe(
       metrics,
       guardTripped: { control: control.guardTripped, candidate: candidate.guardTripped },
       candidateIdentityDependent: candidate.identityPermutation?.rankingOrMetricDependent !== false,
+      scoreSaturatedTopKRate: {
+        control: control.scoreSaturatedTopKRate,
+        candidate: candidate.scoreSaturatedTopKRate,
+      },
     });
   }
   const comparable = mismatches.length === 0 && packs.length === 2;

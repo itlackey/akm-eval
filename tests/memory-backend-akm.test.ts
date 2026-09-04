@@ -340,6 +340,25 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     expect(raw).toContain("First document about kumquats.");
   });
 
+  test("storage-name projection rejects unsafe names and collisions", async () => {
+    const { workDir } = useFakeAkm();
+    const backend = createAkmBackend(rootDir, workDir, {
+      storageNameForDocument: () => "../escape",
+    });
+    await backend.reset();
+    await expect(backend.add([{ id: "a", text: "a" }])).rejects.toThrow("safe flat");
+    const colliding = createAkmBackend(rootDir, tempDir("akm-eval-akm-runtime-"), {
+      storageNameForDocument: () => "same",
+    });
+    await colliding.reset();
+    await expect(
+      colliding.add([
+        { id: "a", text: "a" },
+        { id: "b", text: "b" },
+      ]),
+    ).rejects.toThrow("collision");
+  });
+
   test("add() counts DISTINCT ids, so documents sharing an id upsert instead of tripping the mismatch guard", async () => {
     // The guard used to compare entryCount against documents.length, which
     // encoded an unstated precondition -- that ids are unique -- and reported
