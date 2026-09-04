@@ -169,6 +169,11 @@ const documents: MemoryDocument[] = [
   },
 ];
 
+function expectKnownSearchRef(ref: unknown, id: string): void {
+  const parent = `memories/${slugifyDocId(id)}`;
+  expect(ref).toMatch(new RegExp(`^${parent}(?:#akm-fragment-[1-9][0-9]*-[a-f0-9]{12})?$`));
+}
+
 // Skipped ONLY in hosted CI with no AKM_EVAL_AKM_CMD provisioned; locally this
 // always runs and fails (never skips) if no akm CLI is reachable. See the file
 // header comment for why both halves of the condition are required.
@@ -193,7 +198,7 @@ describe.skipIf(SKIP_SUITE)(
       const descriptionHit = descriptionHits[0];
       if (!descriptionHit) throw new Error("descriptionHits[0] missing despite length === 1");
       expect(descriptionHit.id).toBe("alpha");
-      expect(descriptionHit.metadata?.ref).toBe(`memories/${slugifyDocId("alpha")}`);
+      expectKnownSearchRef(descriptionHit.metadata?.ref, "alpha");
       expect(descriptionHit.text).toContain(DESCRIPTION_TERM);
       expect(typeof descriptionHit.score).toBe("number");
       expect(descriptionHit.score).toBeGreaterThan(0);
@@ -244,7 +249,7 @@ describe.skipIf(SKIP_SUITE)(
       const soloHit = hits[0];
       if (!soloHit) throw new Error("hits[0] missing despite length === 1");
       expect(soloHit.id).toBe("solo");
-      expect(soloHit.metadata?.ref).toBe(`memories/${slugifyDocId("solo")}`);
+      expectKnownSearchRef(soloHit.metadata?.ref, "solo");
       expect(soloHit.text).toContain(DESCRIPTION_TERM);
     });
   },
