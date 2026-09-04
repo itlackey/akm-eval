@@ -13,7 +13,11 @@ import { sampleItems } from "../src/core/sampling.ts";
  * is — every machine that actually runs the pack. The timeout below covers
  * parsing 264 MB of JSON, which is not a 5s operation either.
  */
-const LONGMEMEVAL_DATASET = path.resolve(import.meta.dirname, "..", "datasets/longmemeval/dataset.json");
+const LONGMEMEVAL_DATASET = path.resolve(
+  import.meta.dirname,
+  "..",
+  "datasets/longmemeval/dataset.json",
+);
 const NO_CORPUS = !fs.existsSync(LONGMEMEVAL_DATASET);
 const CORPUS_TEST_TIMEOUT_MS = 120_000;
 
@@ -88,33 +92,41 @@ describe("sampleItems", () => {
 });
 
 describe.skipIf(NO_CORPUS)("LongMemEval category normalization", () => {
-  test("every dataset question_type maps to a distinct, correct category", async () => {
-    // The old normalizeCategory tested `single` before `preference` and ended
-    // in `return "single-session"`, so `single-session-preference` was
-    // mislabelled and all 78 `knowledge-update` questions were absorbed
-    // silently. Both are wrong denominators on every per-category figure.
-    const { loadDataset } = await import("../src/packs/longmemeval/dataset.ts");
-    const questions = await loadDataset({});
-    const counts: Record<string, number> = {};
-    for (const q of questions) counts[q.category] = (counts[q.category] ?? 0) + 1;
+  test(
+    "every dataset question_type maps to a distinct, correct category",
+    async () => {
+      // The old normalizeCategory tested `single` before `preference` and ended
+      // in `return "single-session"`, so `single-session-preference` was
+      // mislabelled and all 78 `knowledge-update` questions were absorbed
+      // silently. Both are wrong denominators on every per-category figure.
+      const { loadDataset } = await import("../src/packs/longmemeval/dataset.ts");
+      const questions = await loadDataset({});
+      const counts: Record<string, number> = {};
+      for (const q of questions) counts[q.category] = (counts[q.category] ?? 0) + 1;
 
-    expect(counts["knowledge-update"]).toBe(78);
-    expect(counts.preference).toBe(30);
-    expect(counts["single-session"]).toBe(126);
-    expect(counts["multi-session"]).toBe(133);
-    expect(counts.temporal).toBe(133);
-    expect(questions).toHaveLength(500);
-  }, CORPUS_TEST_TIMEOUT_MS);
+      expect(counts["knowledge-update"]).toBe(78);
+      expect(counts.preference).toBe(30);
+      expect(counts["single-session"]).toBe(126);
+      expect(counts["multi-session"]).toBe(133);
+      expect(counts.temporal).toBe(133);
+      expect(questions).toHaveLength(500);
+    },
+    CORPUS_TEST_TIMEOUT_MS,
+  );
 
-  test("the seeded sample spans categories; first-N does not", async () => {
-    // This is the concrete bug the seed fixes: the committed n=25 rounds drew
-    // 25 questions that were ALL one category.
-    const { loadDataset } = await import("../src/packs/longmemeval/dataset.ts");
-    const full = await loadDataset({});
-    const sampled = await loadDataset({ maxQuestions: 25, sampleSeed: 1337 });
+  test(
+    "the seeded sample spans categories; first-N does not",
+    async () => {
+      // This is the concrete bug the seed fixes: the committed n=25 rounds drew
+      // 25 questions that were ALL one category.
+      const { loadDataset } = await import("../src/packs/longmemeval/dataset.ts");
+      const full = await loadDataset({});
+      const sampled = await loadDataset({ maxQuestions: 25, sampleSeed: 1337 });
 
-    const spread = (qs: typeof full) => new Set(qs.map((q) => q.category)).size;
-    expect(spread(full.slice(0, 25))).toBe(1);
-    expect(spread(sampled)).toBeGreaterThanOrEqual(4);
-  }, CORPUS_TEST_TIMEOUT_MS);
+      const spread = (qs: typeof full) => new Set(qs.map((q) => q.category)).size;
+      expect(spread(full.slice(0, 25))).toBe(1);
+      expect(spread(sampled)).toBeGreaterThanOrEqual(4);
+    },
+    CORPUS_TEST_TIMEOUT_MS,
+  );
 });
