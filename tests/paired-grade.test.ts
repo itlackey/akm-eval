@@ -73,7 +73,7 @@ describe("paired release probe grading", () => {
     expect(verdict.passed).toBe(false);
     expect(verdict.comparable).toBe(false);
     expect(verdict.contextMismatches).toContain(
-      "locomo: evaluatorCommit: control=a candidate=different",
+      "locomo: evaluatorCommit: control=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa candidate=different",
     );
     const unknown = paired(
       artifact(),
