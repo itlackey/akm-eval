@@ -673,6 +673,13 @@ interface AgentSearchHit {
   estimatedTokens?: unknown;
 }
 
+/**
+ * #937 adds safe, opaque Markdown fragment selectors to ordinary search refs.
+ * The evaluator only accepts the selector form AKM emits; a general `#...`
+ * suffix is never treated as proof that an otherwise unknown hit is ours.
+ */
+const AKM_FRAGMENT_REF = /^(?<parent>[^#]+)#akm-fragment-[1-9][0-9]*-[a-f0-9]{12}$/;
+
 // ── Runtime ──────────────────────────────────────────────────────────────────
 
 interface PreparedWrite {
@@ -971,7 +978,23 @@ class AkmRuntime {
    * of misleading number the project's trust policy rules out — so this
    * throws instead.
    */
-  private mapHit(hit: AgentSearchHit): MemorySearchResult {
+  private readFragmentHitText(cmd: string[], ref: string): string {
+    const result = this.run(cmd, ["show", ref, "--format", "json"]);
+    if (!result.success) {
+      throw new BenchmarkRuntimeError(describeFailure(`akm show ("${ref}")`, result));
+    }
+    const response = parseJsonStdout<{ content?: unknown }>("akm show", result);
+    if (typeof response.content !== "string") {
+      throw new BenchmarkRuntimeError(
+        `akm show for fragment hit "${ref}" did not return string content; refusing to substitute the parent document.`,
+      );
+    }
+    return response.content.length > MAX_RESULT_TEXT_CHARS
+      ? `${response.content.slice(0, MAX_RESULT_TEXT_CHARS)}…`
+      : response.content;
+  }
+
+  private mapHit(hit: AgentSearchHit, cmd: string[]): MemorySearchResult {
     const ref = typeof hit.ref === "string" ? hit.ref : "";
     if (!ref) {
       throw new BenchmarkRuntimeError(
@@ -979,13 +1002,15 @@ class AkmRuntime {
       );
     }
 
-    const known = this.sourceIndex.get(ref);
+    const fragmentMatch = AKM_FRAGMENT_REF.exec(ref);
+    const parentRef = fragmentMatch?.groups?.parent ?? ref;
+    const known = this.sourceIndex.get(parentRef);
     if (!known) {
       throw new BenchmarkRuntimeError(
         `akm search returned a hit (ref=${ref}) that this instance never added. This hermetic bundle should contain only documents this backend instance wrote via add() — reset() strips akm's own seeded skeleton content, so an unrecognized ref here is a contamination signal, not pre-existing content to fall back on.`,
       );
     }
-    const text = this.readHitText(hit.path);
+    const text = fragmentMatch ? this.readFragmentHitText(cmd, ref) : this.readHitText(hit.path);
 
     return {
       id: known.sourceId,
@@ -1028,7 +1053,7 @@ class AkmRuntime {
 
     const response = parseJsonStdout<{ hits?: AgentSearchHit[] }>("akm search", result);
     const hits = Array.isArray(response.hits) ? response.hits : [];
-    return hits.map((hit) => this.mapHit(hit));
+    return hits.map((hit) => this.mapHit(hit, cmd));
   }
 }
 

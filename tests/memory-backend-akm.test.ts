@@ -28,6 +28,7 @@ const envKeysToRestore = [
   "FAKE_AKM_VERSION",
   "FAKE_AKM_SKELETON_COUNT",
   "FAKE_AKM_INDEX_DELTA",
+  "FAKE_AKM_SEARCH_REF_SUFFIX",
 ] as const;
 const savedEnv: Record<string, string | undefined> = {};
 for (const key of envKeysToRestore) savedEnv[key] = process.env[key];
@@ -441,6 +442,33 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     expect(typeof results[0]?.score).toBe("number");
   });
 
+  test("search() accepts only AKM's opaque fragment selector for a known parent and reads that retrieval unit", async () => {
+    const { workDir, logPath } = useFakeAkm();
+    process.env.FAKE_AKM_SEARCH_REF_SUFFIX = "#akm-fragment-1-deadbeefcafe";
+    const backend = createAkmBackend(rootDir, workDir);
+    await backend.reset();
+    await backend.add([{ id: "D1:3", text: "A sentence about starfruit." }]);
+
+    const results = await backend.search({ text: "starfruit", topK: 5 });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe("D1:3");
+    expect(results[0]?.metadata?.ref).toBe(
+      `memories/${slugifyDocId("D1:3")}#akm-fragment-1-deadbeefcafe`,
+    );
+    expect(results[0]?.text).toBe("A sentence about starfruit.\n");
+    expect(readInvocations(logPath).some((argv) => argv[0] === "show")).toBe(true);
+  });
+
+  test("search() does not normalize arbitrary hash suffixes into trusted parent refs", async () => {
+    const { workDir } = useFakeAkm();
+    process.env.FAKE_AKM_SEARCH_REF_SUFFIX = "#akm-fragment-1-deadbeef";
+    const backend = createAkmBackend(rootDir, workDir);
+    await backend.reset();
+    await backend.add([{ id: "D1:3", text: "A sentence about starfruit." }]);
+
+    await expect(backend.search({ text: "starfruit", topK: 5 })).rejects.toThrow(/never added/);
+  });
+
   test("search() throws on a hit that is not this instance's own bookkeeping (contamination signal, not pre-existing content)", async () => {
     const { workDir } = useFakeAkm();
     const backend = createAkmBackend(rootDir, workDir);
@@ -450,6 +478,21 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     // reset() strips akm's seeded skeleton, this hermetic bundle should only
     // ever contain documents this instance added itself — an unrecognized
     // ref is a contamination signal the backend must refuse to paper over.
+    fs.mkdirSync(path.join(workDir, "bundle", "memories"), { recursive: true });
+    fs.writeFileSync(
+      path.join(workDir, "bundle", "memories", "external-doc.md"),
+      "---\ntype: memory\ndescription: An externally written memory about jackfruit.\n---\n\n# external-doc\n\nBody text.\n",
+      "utf8",
+    );
+
+    await expect(backend.search({ text: "jackfruit", topK: 5 })).rejects.toThrow(/never added/);
+  });
+
+  test("search() keeps an unknown fragment parent fail-closed as contamination", async () => {
+    const { workDir } = useFakeAkm();
+    process.env.FAKE_AKM_SEARCH_REF_SUFFIX = "#akm-fragment-1-deadbeefcafe";
+    const backend = createAkmBackend(rootDir, workDir);
+    await backend.reset();
     fs.mkdirSync(path.join(workDir, "bundle", "memories"), { recursive: true });
     fs.writeFileSync(
       path.join(workDir, "bundle", "memories", "external-doc.md"),

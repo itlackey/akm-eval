@@ -17,6 +17,7 @@
  *   FAKE_AKM_SKELETON_COUNT - "fact" skeleton files `bundle create` seeds (default 3)
  *   FAKE_AKM_INDEX_DELTA    - integer added to the true file count `index --full` reports,
  *                             to simulate a broken indexer (ingestion-count-mismatch test)
+ *   FAKE_AKM_SEARCH_REF_SUFFIX - test-only suffix appended to every search ref
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -293,7 +294,7 @@ function cmdSearch(): void {
       const name = path.basename(filePath, ".md");
       hits.push({
         name,
-        ref: `memories/${name}`,
+        ref: `memories/${name}${process.env.FAKE_AKM_SEARCH_REF_SUFFIX ?? ""}`,
         type: "memory",
         path: filePath,
         description,
@@ -324,6 +325,19 @@ function cmdSearch(): void {
   }
 }
 
+function cmdShow(): void {
+  const requestedRef = argv[1] ?? "";
+  const parentRef = requestedRef.replace(/#akm-fragment-[1-9][0-9]*-[a-f0-9]{12}$/, "");
+  const name = parentRef.startsWith("memories/") ? parentRef.slice("memories/".length) : "";
+  const filePath = name ? path.join(bundleDir(), "memories", `${name}.md`) : "";
+  if (!filePath || !fs.existsSync(filePath)) fail(`not found: ${requestedRef}`);
+  const raw = fs.readFileSync(filePath, "utf8");
+  const body = raw
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
+    .replace(/^\s*#.*\r?\n\r?\n?/, "");
+  printJson({ ref: parentRef, content: body });
+}
+
 // ── Dispatch ─────────────────────────────────────────────────────────────────
 
 logInvocation();
@@ -340,6 +354,8 @@ if (argv.includes("--version") || argv.includes("-v")) {
   cmdRemember();
 } else if (argv[0] === "search") {
   cmdSearch();
+} else if (argv[0] === "show") {
+  cmdShow();
 } else {
   fail(`fake-akm: unhandled command: ${argv.join(" ")}`, 2);
 }
