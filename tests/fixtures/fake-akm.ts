@@ -332,9 +332,7 @@ function cmdShow(): void {
   const filePath = name ? path.join(bundleDir(), "memories", `${name}.md`) : "";
   if (!filePath || !fs.existsSync(filePath)) fail(`not found: ${requestedRef}`);
   const raw = fs.readFileSync(filePath, "utf8");
-  const body = raw
-    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
-    .replace(/^\s*#.*\r?\n\r?\n?/, "");
+  const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").replace(/^\s*#.*\r?\n\r?\n?/, "");
   printJson({ ref: parentRef, content: body });
 }
 
