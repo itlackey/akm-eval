@@ -16,12 +16,15 @@ while [ $# -gt 0 ]; do
     --expected-control-version) expected_control_version="${2:?--expected-control-version requires a version}"; shift 2 ;;
     --expected-candidate-commit) expected_candidate_commit="${2:?--expected-candidate-commit requires a 40-hex SHA}"; shift 2 ;;
     --expected-control-commit) expected_control_commit="${2:?--expected-control-commit requires a 40-hex SHA}"; shift 2 ;;
-    -h|--help) echo 'usage: bin/probe-pair --control <probe-dir> --candidate <probe-dir>'; exit 0 ;;
+    -h|--help) echo 'usage: bin/probe-pair --control <probe-dir> --candidate <probe-dir> --expected-control-version <version> [--expected-control-commit <40hex>] --expected-candidate-commit <40hex>'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$control" ] && [ -n "$candidate" ] && [ -n "$expected_control_version" ] && [ -n "$expected_candidate_commit" ] || { echo 'control, candidate, expected control version, and expected candidate commit are required' >&2; exit 2; }
 [[ "$expected_candidate_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'expected candidate commit must be a 40-hex SHA' >&2; exit 2; }
+if [ -n "$expected_control_commit" ]; then
+  [[ "$expected_control_commit" =~ ^[0-9a-f]{40}$ ]] || { echo 'expected control commit must be a 40-hex SHA' >&2; exit 2; }
+fi
 
 out="$candidate/paired-verdict.json"
 extra=()

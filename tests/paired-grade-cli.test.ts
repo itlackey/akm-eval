@@ -95,3 +95,25 @@ test("paired-grade CLI writes an inspectable verdict on a failing candidate", ()
   expect(verdict.packs).toHaveLength(2);
   expect(verdict.packs[0].scoreSaturatedTopKRate).toEqual({ control: 1, candidate: 1 });
 });
+
+test("probe-pair rejects malformed local control identities before reading artifacts", () => {
+  const result = Bun.spawnSync(
+    [
+      "bash",
+      "bin/probe-pair",
+      "--control",
+      "/missing/control",
+      "--candidate",
+      "/missing/candidate",
+      "--expected-control-version",
+      "0.9.13",
+      "--expected-control-commit",
+      "not-a-sha",
+      "--expected-candidate-commit",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ],
+    { cwd: root },
+  );
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain("expected control commit must be a 40-hex SHA");
+});

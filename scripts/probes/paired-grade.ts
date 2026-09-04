@@ -25,6 +25,14 @@ if (
   );
   process.exit(2);
 }
+if (!/^[0-9a-f]{40}$/.test(expectedCandidateCommit)) {
+  console.error("expected candidate commit must be a 40-hex SHA");
+  process.exit(2);
+}
+if (expectedControlCommit && !/^[0-9a-f]{40}$/.test(expectedControlCommit)) {
+  console.error("expected control commit must be a 40-hex SHA");
+  process.exit(2);
+}
 
 const read = (dir: string, pack: string): ProbeArtifact =>
   JSON.parse(fs.readFileSync(path.join(dir, `${pack}.json`), "utf8")) as ProbeArtifact;
