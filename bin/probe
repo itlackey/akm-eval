@@ -3,7 +3,7 @@ set -euo pipefail
 
 # One-command Tier-1 retrieval probe: install a pinned akm-cli into an isolated
 # scratch dir, run BOTH packs' LLM-free probes against it, capture the logs, and
-# diff the result against the committed reference values.
+# record an informational comparison against the historical reference values.
 #
 #   bin/probe                 # probe whatever npm `latest` resolves to
 #   bin/probe 0.9.10          # probe an exact published version
@@ -11,12 +11,12 @@ set -euo pipefail
 #   bin/probe --identity-permutation 0.9.13  # also gate filename/slug independence
 #
 # Free, deterministic, no LLM, no Docker. Run this BEFORE spending judged-eval
-# budget: if retrieval regressed, stop here (scripts/probes/README.md).
+# budget: use bin/probe-pair for the release gate (scripts/probes/README.md).
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 
-# Reference values every probe run is graded against. Sourced from
+# Historical values retained only for continuity with old run records. Sourced from
 # runs/RESULTS-n25-0.9.3.md Phase 1 and reproduced unchanged on 0.9.10.
 # Keep in sync with the table in scripts/probes/README.md.
 REFERENCE_JSON='{
@@ -24,7 +24,7 @@ REFERENCE_JSON='{
   "longmemeval": {"zeroHitRate": 0.0, "evidenceRecallAt5": 0.950, "precisionAtK": 0.676667, "recallAtK": 0.950000}
 }'
 REFERENCE_FROM="akm-cli 0.9.3 / 0.9.10"
-# A metric may drift by this much before it is called a change. mrr/ndcg moved
+# A metric may drift by this much before it is called a historical change. mrr/ndcg moved
 # ~0.002 between 0.9.3 and 0.9.10 with an identical retrieved set, so anything
 # under this is ranking jitter, not a retrieval change.
 TOLERANCE=0.005
@@ -179,8 +179,8 @@ if [ "$guards" != "0" ]; then
 fi
 
 if jq -e '[.packs[] | select(.verdict == "REGRESSED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
-  echo "probe: RETRIEVAL REGRESSED. Do not spend judged-eval budget on this build." >&2
-  exit 1
+  echo "probe: differs from the stale historical reference; informational only. Use bin/probe-pair for release gating." >&2
+  exit 0
 fi
 if jq -e '[.packs[] | select(.verdict == "IMPROVED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
   echo "probe: retrieval improved over the reference — update REFERENCE_JSON in this script once confirmed."

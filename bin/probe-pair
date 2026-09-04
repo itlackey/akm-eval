@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+
+control=""
+candidate=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --control) control="${2:?--control requires a probe artifact directory}"; shift 2 ;;
+    --candidate) candidate="${2:?--candidate requires a probe artifact directory}"; shift 2 ;;
+    -h|--help) echo 'usage: bin/probe-pair --control <probe-dir> --candidate <probe-dir>'; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$control" ] && [ -n "$candidate" ] || { echo 'both --control and --candidate are required' >&2; exit 2; }
+
+out="$candidate/paired-verdict.json"
+if ! (cd "$REPO_ROOT" && bun scripts/probes/paired-grade.ts --control "$control" --candidate "$candidate" --out "$out"); then
+  echo "probe-pair: FAILED — inspect $out" >&2
+  exit 1
+fi
+echo "probe-pair: passed — $out"

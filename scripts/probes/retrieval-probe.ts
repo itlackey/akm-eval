@@ -34,6 +34,7 @@
  * temp dir and never touches a real stash.
  */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -48,8 +49,7 @@ import {
   type IdentityPermutationObservation,
   compareIdentityPermutationObservations,
   hasScoreSaturatedTopK,
-  permuteOpaqueDocumentIdentities,
-  remapPermutedHits,
+  opaqueStorageNameProjection,
 } from "../../src/probes/retrieval-diagnostics.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -75,14 +75,17 @@ interface ProbeResult {
   scoreSaturatedTopKRate: number;
   /** Present only when IDENTITY_PERMUTATION_CHECK=1 / bin/probe --identity-permutation. */
   identityPermutation?: IdentityPermutationDiagnostic;
+  probeContext: Record<string, string | number>;
   /** Queries the backend refused outright (e.g. a contamination guard). */
   guardTripped: number;
 }
 
 /** Fresh hermetic bundle; never a real stash. */
-function hermeticBackend() {
+function hermeticBackend(
+  storageNameForDocument?: (document: MemoryDocument, index: number) => string,
+) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-probe-"));
-  return { backend: createAkmBackend(ROOT, workDir), workDir };
+  return { backend: createAkmBackend(ROOT, workDir, { storageNameForDocument }), workDir };
 }
 
 function recall(hits: readonly { id?: string }[], evidence: readonly string[]): boolean {
@@ -95,6 +98,17 @@ const RUN_IDENTITY_PERMUTATION_CHECK = process.env.IDENTITY_PERMUTATION_CHECK ==
 
 function metricVector(metric: RetrievalMetrics): number[] {
   return [metric.precisionAtK, metric.recallAtK, metric.mrr, metric.ndcgAtK];
+}
+
+function probeContext(datasetPath: string, maxQuestions: number): Record<string, string | number> {
+  const commit = Bun.spawnSync(["git", "-C", ROOT, "rev-parse", "HEAD"]);
+  return {
+    evaluatorCommit: commit.exitCode === 0 ? commit.stdout.toString().trim() : "unknown",
+    bunVersion: Bun.version,
+    datasetSha256: crypto.createHash("sha256").update(fs.readFileSync(datasetPath)).digest("hex"),
+    topK: TOP_K,
+    maxQuestions,
+  };
 }
 
 function duplicateContentIds(documents: readonly MemoryDocument[]): ReadonlySet<string> {
@@ -130,31 +144,34 @@ interface IdentityPermutationQuery {
 }
 
 async function checkIdentityPermutation(
-  backend: ReturnType<typeof createAkmBackend>,
   queries: readonly IdentityPermutationQuery[],
   baseline: readonly IdentityPermutationObservation[],
 ): Promise<IdentityPermutationDiagnostic | undefined> {
   if (!RUN_IDENTITY_PERMUTATION_CHECK) return undefined;
   const replay: IdentityPermutationObservation[] = [];
   let activeDocuments: readonly MemoryDocument[] | undefined;
-  let activePermutation: ReturnType<typeof permuteOpaqueDocumentIdentities> | undefined;
-  for (const query of queries) {
-    if (query.documents !== activeDocuments) {
-      activeDocuments = query.documents;
-      activePermutation = permuteOpaqueDocumentIdentities(query.documents);
-      await backend.reset();
-      await backend.add(activePermutation.documents);
+  let replayBackend: ReturnType<typeof createAkmBackend> | undefined;
+  let replayWorkDir: string | undefined;
+  try {
+    for (const query of queries) {
+      if (query.documents !== activeDocuments) {
+        activeDocuments = query.documents;
+        if (replayWorkDir) fs.rmSync(replayWorkDir, { recursive: true, force: true });
+        const replay = hermeticBackend(opaqueStorageNameProjection("reverse", 500));
+        replayBackend = replay.backend;
+        replayWorkDir = replay.workDir;
+        await replayBackend.reset();
+        await replayBackend.add([...query.documents]);
+      }
+      if (!replayBackend) throw new Error("Identity permutation setup failed");
+      const hits = await replayBackend.search({ text: query.text, topK: TOP_K });
+      const metric = scoreRetrieval(query.evidence, hits, TOP_K);
+      replay.push(observation(query.id, hits, metric, duplicateContentIds(query.documents)));
     }
-    if (!activePermutation) throw new Error("Identity permutation setup failed");
-    const hits = remapPermutedHits(
-      await backend.search({ text: query.text, topK: TOP_K }),
-      activePermutation.originalIdByPermutedId,
-    );
-    const metric = scoreRetrieval(query.evidence, hits, TOP_K);
-    replay.push(observation(query.id, hits, metric, duplicateContentIds(query.documents)));
+    return compareIdentityPermutationObservations(baseline, replay);
+  } finally {
+    if (replayWorkDir) fs.rmSync(replayWorkDir, { recursive: true, force: true });
   }
-  const diagnostic = compareIdentityPermutationObservations(baseline, replay);
-  return diagnostic;
 }
 
 // ── LoCoMo ───────────────────────────────────────────────────────────────────
@@ -202,10 +219,13 @@ function flattenLocomo(sample: LocomoSample): MemoryDocument[] {
 
 async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   const raw = JSON.parse(fs.readFileSync(path.join(ROOT, "datasets/locomo/locomo10.json"), "utf8"));
+  const datasetPath = path.join(ROOT, "datasets/locomo/locomo10.json");
   const sample = (Array.isArray(raw) ? raw : raw.samples)[0] as LocomoSample;
-  const { backend, workDir } = hermeticBackend();
-  const health = backend.healthCheck();
   const documents = flattenLocomo(sample);
+  const { backend, workDir } = hermeticBackend(
+    RUN_IDENTITY_PERMUTATION_CHECK ? opaqueStorageNameProjection("forward", 500) : undefined,
+  );
+  const health = backend.healthCheck();
   await backend.reset();
   await backend.add(documents);
 
@@ -246,7 +266,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     }
   }
 
-  const identityPermutation = await checkIdentityPermutation(backend, queries, observations);
+  const identityPermutation = await checkIdentityPermutation(queries, observations);
   fs.rmSync(workDir, { recursive: true, force: true });
   return {
     pack: `locomo (${sample.sample_id})`,
@@ -259,6 +279,7 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     retrieval: averageRetrieval(perQuestion),
     scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
     identityPermutation,
+    probeContext: probeContext(datasetPath, maxQ),
     guardTripped,
   };
 }
@@ -271,7 +292,10 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     rootDir: ROOT,
     datasetPath: path.join(ROOT, "datasets/longmemeval/dataset.json"),
   });
-  const { backend, workDir } = hermeticBackend();
+  const datasetPath = path.join(ROOT, "datasets/longmemeval/dataset.json");
+  const { backend, workDir } = hermeticBackend(
+    RUN_IDENTITY_PERMUTATION_CHECK ? opaqueStorageNameProjection("forward", 500) : undefined,
+  );
   const health = backend.healthCheck();
 
   let zeroHit = 0;
@@ -312,7 +336,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     }
   }
 
-  const identityPermutation = await checkIdentityPermutation(backend, queries, observations);
+  const identityPermutation = await checkIdentityPermutation(queries, observations);
   fs.rmSync(workDir, { recursive: true, force: true });
   return {
     pack: "longmemeval",
@@ -325,6 +349,7 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     retrieval: averageRetrieval(perQuestion),
     scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
     identityPermutation,
+    probeContext: probeContext(datasetPath, maxQ),
     guardTripped,
   };
 }

@@ -65,6 +65,26 @@ top-5 sets with equal finite public scores. It cannot tell whether the backend
 uses a safe hidden secondary key or an alphabetical filename fallback; use the
 identity-permutation gate for that correctness question.
 
+## Paired release gate
+
+The historical values in `bin/probe` are stale and are never a release gate.
+Run a published `0.9.13` control and the source candidate from the same
+evaluator checkout, Bun runtime, and downloaded corpus, then grade their saved
+artifacts:
+
+```sh
+bin/probe 0.9.13
+bin/probe --identity-permutation --cmd '["bun","/absolute/path/to/akm/src/cli.ts"]'
+bin/probe-pair --control runs/probes/<control-stamp> --candidate runs/probes/<candidate-stamp>
+```
+
+`bin/probe-pair` writes `paired-verdict.json` under the candidate artifact even
+on failure. It requires matching evaluator commit, Bun version, dataset SHA-256,
+top-K, question count, and evidence denominator; zero guards; a passing
+candidate identity diagnostic; and no regression beyond 0.005 in evidence
+recall, precision, recall, MRR, or nDCG. Zero-hit rate has zero tolerance: any
+increase fails.
+
 ## Reference values
 
 These probes are what established that akm#819 lifted the body-prose retrieval

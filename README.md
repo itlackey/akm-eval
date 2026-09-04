@@ -118,11 +118,11 @@ the result against the committed reference values:
 bin/probe 0.9.10        # or: bin/probe (npm latest), bin/probe --cmd '["/path/to/akm"]'
 ```
 
-It exits nonzero if retrieval regressed, which is the signal to stop before
-spending judged-eval budget. Artifacts land in `runs/probes/<version>-<stamp>/`.
-For a release candidate, also run `bin/probe --identity-permutation ...`; it
-fails when changing only generated opaque identities changes ranks or retrieval
-metrics.
+The historical comparison is informational because
+its LoCoMo reference is stale; artifacts land in `runs/probes/<version>-<stamp>/`.
+For release approval, run a `0.9.13` control and an identity-permutation source
+candidate, then use `bin/probe-pair --control <dir> --candidate <dir>`. It
+compares the two matching artifacts and writes a verdict even when it fails.
 
 For a judged run:
 

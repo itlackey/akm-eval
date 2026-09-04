@@ -318,6 +318,28 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     expect(files.length).toBe(3);
   });
 
+  test("storage-name projection changes only generated filenames, not synthesized semantic surfaces", async () => {
+    const { workDir } = useFakeAkm();
+    const documents = [
+      { id: "caller-a", text: "First document about kumquats.", metadata: { source: "probe" } },
+      { id: "caller-b", text: "Second document about durians.", metadata: { source: "probe" } },
+    ];
+    const backend = createAkmBackend(rootDir, workDir, {
+      storageNameForDocument: (_document, index) => `z9xq${index}`,
+    });
+    await backend.reset();
+    await backend.add(documents);
+
+    expect(fs.readdirSync(path.join(workDir, "bundle", "memories")).sort()).toEqual([
+      "z9xq0.md",
+      "z9xq1.md",
+    ]);
+    const raw = fs.readFileSync(path.join(workDir, "bundle", "memories", "z9xq0.md"), "utf8");
+    expect(raw).toContain('tags: ["sourceId:caller-a","source:probe"]');
+    expect(raw).toContain("# caller-a");
+    expect(raw).toContain("First document about kumquats.");
+  });
+
   test("add() counts DISTINCT ids, so documents sharing an id upsert instead of tripping the mismatch guard", async () => {
     // The guard used to compare entryCount against documents.length, which
     // encoded an unstated precondition -- that ids are unique -- and reported

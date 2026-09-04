@@ -688,6 +688,12 @@ interface SourceRecord {
   metadata?: MemoryDocument["metadata"];
 }
 
+/** Test/probe-only projection for the generated storage name/path. It never
+ * changes caller identity, synthesized tags, heading, body, or metadata. */
+export interface AkmBackendOptions {
+  storageNameForDocument?: (document: MemoryDocument, index: number) => string;
+}
+
 class AkmRuntime {
   private readonly dirs: AkmHermeticDirs;
   private readonly env: NodeJS.ProcessEnv;
@@ -699,6 +705,7 @@ class AkmRuntime {
     private readonly workDir: string,
     private readonly cwd: string,
     env: NodeJS.ProcessEnv = process.env,
+    private readonly options: AkmBackendOptions = {},
   ) {
     this.cmdResolution = resolveAkmCommand(env);
     this.dirs = deriveHermeticDirs(workDir);
@@ -804,8 +811,8 @@ class AkmRuntime {
     this.ready = true;
   }
 
-  private prepareWrite(doc: MemoryDocument): PreparedWrite {
-    const name = slugifyDocId(doc.id);
+  private prepareWrite(doc: MemoryDocument, index: number): PreparedWrite {
+    const name = this.options.storageNameForDocument?.(doc, index) ?? slugifyDocId(doc.id);
     const frontmatter = synthesizeFrontmatter(doc);
     return {
       doc,
@@ -857,7 +864,7 @@ class AkmRuntime {
     if (documents.length === 0) return;
 
     const before = this.readEntryCount(cmd);
-    const writes = documents.map((doc) => this.prepareWrite(doc));
+    const writes = documents.map((doc, index) => this.prepareWrite(doc, index));
 
     if (writes.length === 1) {
       // No `akm index` call here in the common case: `akm remember` indexes
@@ -1019,9 +1026,13 @@ function generateScratchWorkDir(): string {
   return path.join(os.tmpdir(), `akm-eval-akm-${randomBytes(8).toString("hex")}`);
 }
 
-export function createAkmBackend(rootDir = process.cwd(), workDir?: string): MemoryBackend {
+export function createAkmBackend(
+  rootDir = process.cwd(),
+  workDir?: string,
+  options?: AkmBackendOptions,
+): MemoryBackend {
   const resolvedWorkDir = workDir ?? generateScratchWorkDir();
-  const runtime = new AkmRuntime(resolvedWorkDir, rootDir);
+  const runtime = new AkmRuntime(resolvedWorkDir, rootDir, process.env, options);
 
   return {
     id: "akm",

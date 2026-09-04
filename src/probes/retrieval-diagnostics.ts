@@ -15,49 +15,16 @@ export function hasScoreSaturatedTopK(
   );
 }
 
-export interface IdentityPermutation {
-  documents: MemoryDocument[];
-  /** Maps the synthetic opaque id returned by AKM back to the source id. */
-  originalIdByPermutedId: ReadonlyMap<string, string>;
-}
-
-/**
- * Reverse the sorted source identities onto monotonic opaque ids. This changes
- * generated filenames/slugs while preserving text and all caller metadata.
- */
-export function permuteOpaqueDocumentIdentities(
-  documents: readonly MemoryDocument[],
-): IdentityPermutation {
-  const sortedIds = [...new Set(documents.map((document) => document.id))].sort();
-  const width = Math.max(3, String(Math.max(0, sortedIds.length - 1)).length);
-  const originalIdByPermutedId = new Map<string, string>();
-  const permutedIdByOriginalId = new Map<string, string>();
-
-  for (const [index, originalId] of [...sortedIds].reverse().entries()) {
-    // Deliberately non-word-like: the identity must not add a natural-language
-    // search term to AKM's generated heading/frontmatter.
-    const permutedId = `z9xq${String(index).padStart(width, "0")}`;
-    originalIdByPermutedId.set(permutedId, originalId);
-    permutedIdByOriginalId.set(originalId, permutedId);
-  }
-
-  return {
-    documents: documents.map((document) => ({
-      ...document,
-      id: permutedIdByOriginalId.get(document.id) ?? document.id,
-    })),
-    originalIdByPermutedId,
+/** Equal-shape, non-word-like generated names; only storage path/name changes. */
+export function opaqueStorageNameProjection(
+  direction: "forward" | "reverse",
+  documentCount: number,
+): (document: MemoryDocument, index: number) => string {
+  const width = Math.max(3, String(Math.max(0, documentCount - 1)).length);
+  return (_document, index) => {
+    const projected = direction === "forward" ? index : documentCount - index - 1;
+    return `z9xq${String(projected).padStart(width, "0")}`;
   };
-}
-
-export function remapPermutedHits(
-  hits: readonly MemorySearchResult[],
-  originalIdByPermutedId: ReadonlyMap<string, string>,
-): MemorySearchResult[] {
-  return hits.map((hit) => ({
-    ...hit,
-    id: originalIdByPermutedId.get(hit.id) ?? hit.id,
-  }));
 }
 
 export interface IdentityPermutationObservation {
@@ -86,6 +53,10 @@ export interface IdentityPermutationDiagnostic {
   queriesCompared: number;
   rankChangedQueries: number;
   metricChangedQueries: number;
+  missingQueryIds: readonly string[];
+  extraQueryIds: readonly string[];
+  duplicateBaselineQueryIds: readonly string[];
+  duplicatePermutedQueryIds: readonly string[];
   rankingOrMetricDependent: boolean;
   /** First three changes: enough release evidence without dumping corpus text. */
   samples: readonly IdentityPermutationChangedQuery[];
@@ -96,12 +67,28 @@ export function compareIdentityPermutationObservations(
   baseline: readonly IdentityPermutationObservation[],
   permuted: readonly IdentityPermutationObservation[],
 ): IdentityPermutationDiagnostic {
+  const duplicates = (observations: readonly IdentityPermutationObservation[]): string[] => {
+    const counts = new Map<string, number>();
+    for (const observation of observations) {
+      counts.set(observation.queryId, (counts.get(observation.queryId) ?? 0) + 1);
+    }
+    return [...counts]
+      .filter(([, count]) => count > 1)
+      .map(([queryId]) => queryId)
+      .sort();
+  };
   const permutedByQuery = new Map(
     permuted.map((observation) => [observation.queryId, observation]),
   );
   let rankChangedQueries = 0;
   let metricChangedQueries = 0;
   const samples: IdentityPermutationChangedQuery[] = [];
+  const baselineIds = new Set(baseline.map((observation) => observation.queryId));
+  const permutedIds = new Set(permuted.map((observation) => observation.queryId));
+  const missingQueryIds = [...baselineIds].filter((queryId) => !permutedIds.has(queryId)).sort();
+  const extraQueryIds = [...permutedIds].filter((queryId) => !baselineIds.has(queryId)).sort();
+  const duplicateBaselineQueryIds = duplicates(baseline);
+  const duplicatePermutedQueryIds = duplicates(permuted);
 
   for (const original of baseline) {
     const replay = permutedByQuery.get(original.queryId);
@@ -150,7 +137,17 @@ export function compareIdentityPermutationObservations(
     queriesCompared: baseline.length,
     rankChangedQueries,
     metricChangedQueries,
-    rankingOrMetricDependent: rankChangedQueries > 0 || metricChangedQueries > 0,
+    missingQueryIds,
+    extraQueryIds,
+    duplicateBaselineQueryIds,
+    duplicatePermutedQueryIds,
+    rankingOrMetricDependent:
+      rankChangedQueries > 0 ||
+      metricChangedQueries > 0 ||
+      missingQueryIds.length > 0 ||
+      extraQueryIds.length > 0 ||
+      duplicateBaselineQueryIds.length > 0 ||
+      duplicatePermutedQueryIds.length > 0,
     samples,
   };
 }

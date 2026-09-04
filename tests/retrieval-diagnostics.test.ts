@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   compareIdentityPermutationObservations,
   hasScoreSaturatedTopK,
-  permuteOpaqueDocumentIdentities,
-  remapPermutedHits,
+  opaqueStorageNameProjection,
 } from "../src/probes/retrieval-diagnostics.ts";
 
 describe("retrieval diagnostics", () => {
@@ -48,29 +47,15 @@ describe("retrieval diagnostics", () => {
     ).toBe(false);
   });
 
-  test("identity permutation changes only opaque ids and maps returned ids back", () => {
-    const permutation = permuteOpaqueDocumentIdentities([
-      { id: "D1:1", text: "same body", metadata: { source: "locomo" } },
-      { id: "D1:2", text: "same body", metadata: { source: "locomo" } },
-    ]);
-    expect(permutation.documents.map((document) => document.text)).toEqual([
-      "same body",
-      "same body",
-    ]);
-    expect(permutation.documents.map((document) => document.metadata)).toEqual([
-      { source: "locomo" },
-      { source: "locomo" },
-    ]);
-    expect(permutation.documents.map((document) => document.id)).not.toEqual(["D1:1", "D1:2"]);
-    const firstPermutedId = permutation.documents[0]?.id;
-    expect(firstPermutedId).toBeDefined();
-    if (!firstPermutedId) throw new Error("Expected a permuted identity");
-    expect(
-      remapPermutedHits(
-        [{ id: firstPermutedId, text: "hit", score: 0.65, metadata: {} }],
-        permutation.originalIdByPermutedId,
-      )[0]?.id,
-    ).toBe("D1:1");
+  test("storage projections are equal-shape opaque names in opposite path order", () => {
+    const document = { id: "caller-id", text: "same body", metadata: { source: "locomo" } };
+    expect(opaqueStorageNameProjection("forward", 3)(document, 0)).toBe("z9xq000");
+    expect(opaqueStorageNameProjection("reverse", 3)(document, 0)).toBe("z9xq002");
+    expect(document).toEqual({
+      id: "caller-id",
+      text: "same body",
+      metadata: { source: "locomo" },
+    });
   });
 
   test("identity permutation reports rank or metric dependence", () => {
@@ -124,6 +109,26 @@ describe("retrieval diagnostics", () => {
     expect(dependent.samples[0]).toMatchObject({
       kind: "rank-order-only",
       publicScoreSaturated: true,
+    });
+  });
+
+  test("identity permutation rejects duplicate, missing, and extra query ids", () => {
+    const invalid = compareIdentityPermutationObservations(
+      [
+        { queryId: "a", hitIds: [], publicScores: [], metric: [], hasDuplicateContent: false },
+        { queryId: "a", hitIds: [], publicScores: [], metric: [], hasDuplicateContent: false },
+        { queryId: "b", hitIds: [], publicScores: [], metric: [], hasDuplicateContent: false },
+      ],
+      [
+        { queryId: "a", hitIds: [], publicScores: [], metric: [], hasDuplicateContent: false },
+        { queryId: "c", hitIds: [], publicScores: [], metric: [], hasDuplicateContent: false },
+      ],
+    );
+    expect(invalid.rankingOrMetricDependent).toBe(true);
+    expect(invalid).toMatchObject({
+      missingQueryIds: ["b"],
+      extraQueryIds: ["c"],
+      duplicateBaselineQueryIds: ["a"],
     });
   });
 });

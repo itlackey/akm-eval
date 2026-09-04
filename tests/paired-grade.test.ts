@@ -1,0 +1,68 @@
+import { describe, expect, test } from "bun:test";
+import { type ProbeArtifact, gradePairedProbe } from "../src/probes/paired-grade.ts";
+
+const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
+  pack: "pack",
+  questions: 20,
+  evidenceScored: 20,
+  zeroHitRate: 0,
+  evidenceRecallAt5: 0.8,
+  retrieval: { precisionAtK: 0.5, recallAtK: 0.6, mrr: 0.7, ndcgAtK: 0.65 },
+  guardTripped: 0,
+  identityPermutation: { rankingOrMetricDependent: false },
+  probeContext: {
+    evaluatorCommit: "a",
+    bunVersion: "1",
+    datasetSha256: "d",
+    topK: 5,
+    maxQuestions: 20,
+  },
+  ...overrides,
+});
+
+const paired = (control: ProbeArtifact, candidate: ProbeArtifact) =>
+  gradePairedProbe(
+    { locomo: control, longmemeval: control },
+    { locomo: candidate, longmemeval: candidate },
+  );
+
+describe("paired release probe grading", () => {
+  test("passes an equivalent hermetic candidate across all six metrics", () => {
+    expect(paired(artifact(), artifact()).passed).toBe(true);
+  });
+
+  test("fails score regressions beyond the explicit tolerance and any zero-hit increase", () => {
+    const candidate = artifact({
+      zeroHitRate: 0.001,
+      retrieval: { precisionAtK: 0.494, recallAtK: 0.6, mrr: 0.7, ndcgAtK: 0.65 },
+    });
+    const verdict = paired(artifact(), candidate);
+    expect(verdict.passed).toBe(false);
+    expect(
+      verdict.packs[0]?.metrics.find((metric) => metric.metric === "zeroHitRate")?.verdict,
+    ).toBe("regressed");
+    expect(
+      verdict.packs[0]?.metrics.find((metric) => metric.metric === "precisionAtK")?.verdict,
+    ).toBe("regressed");
+  });
+
+  test("fails guards, missing identity checks, and mismatched evaluator context", () => {
+    const candidate = artifact({
+      guardTripped: 1,
+      identityPermutation: undefined,
+      probeContext: {
+        evaluatorCommit: "different",
+        bunVersion: "1",
+        datasetSha256: "d",
+        topK: 5,
+        maxQuestions: 20,
+      },
+    });
+    const verdict = paired(artifact(), candidate);
+    expect(verdict.passed).toBe(false);
+    expect(verdict.comparable).toBe(false);
+    expect(verdict.contextMismatches).toContain(
+      "locomo: evaluatorCommit: control=a candidate=different",
+    );
+  });
+});
