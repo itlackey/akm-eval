@@ -7,6 +7,14 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 [`akm-bench`](https://github.com/itlackey/akm-bench) repo, which runs them through Harbor; see
 `docs/benchmark-packs.md`.
 
+## Staged consolidation
+
+The proposed `akm-evals` monorepo would put both projects in one operator-facing
+repository while retaining this boundary between separate packages. The phased
+container-first migration and its acceptance criteria are in
+[`docs/monorepo-migration.md`](./monorepo-migration.md). That proposal remains
+staged work; it does not change the current ownership described above.
+
 ## What Exists
 
 - `bin/*` wraps the TypeScript implementation in `src/`.
