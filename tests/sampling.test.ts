@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
 
 import { ConfigValidationError } from "../src/core/errors.ts";
 import { sampleItems } from "../src/core/sampling.ts";
+
+/**
+ * The category assertions below read the REAL 264 MB LongMemEval corpus, which
+ * is gitignored and fetched on demand. On a fresh checkout (CI) `loadDataset`
+ * would download it inside the test and blow bun's 5s per-test timeout, so the
+ * block skips when the corpus is not already on disk and runs everywhere it
+ * is — every machine that actually runs the pack. The timeout below covers
+ * parsing 264 MB of JSON, which is not a 5s operation either.
+ */
+const LONGMEMEVAL_DATASET = path.resolve(import.meta.dirname, "..", "datasets/longmemeval/dataset.json");
+const NO_CORPUS = !fs.existsSync(LONGMEMEVAL_DATASET);
+const CORPUS_TEST_TIMEOUT_MS = 120_000;
 
 const items = Array.from({ length: 100 }, (_, i) => i);
 
@@ -73,7 +87,7 @@ describe("sampleItems", () => {
   });
 });
 
-describe("LongMemEval category normalization", () => {
+describe.skipIf(NO_CORPUS)("LongMemEval category normalization", () => {
   test("every dataset question_type maps to a distinct, correct category", async () => {
     // The old normalizeCategory tested `single` before `preference` and ended
     // in `return "single-session"`, so `single-session-preference` was
@@ -90,7 +104,7 @@ describe("LongMemEval category normalization", () => {
     expect(counts["multi-session"]).toBe(133);
     expect(counts.temporal).toBe(133);
     expect(questions).toHaveLength(500);
-  });
+  }, CORPUS_TEST_TIMEOUT_MS);
 
   test("the seeded sample spans categories; first-N does not", async () => {
     // This is the concrete bug the seed fixes: the committed n=25 rounds drew
@@ -102,5 +116,5 @@ describe("LongMemEval category normalization", () => {
     const spread = (qs: typeof full) => new Set(qs.map((q) => q.category)).size;
     expect(spread(full.slice(0, 25))).toBe(1);
     expect(spread(sampled)).toBeGreaterThanOrEqual(4);
-  });
+  }, CORPUS_TEST_TIMEOUT_MS);
 });
