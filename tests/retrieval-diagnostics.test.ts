@@ -49,8 +49,12 @@ describe("retrieval diagnostics", () => {
 
   test("storage projections are equal-shape opaque names in opposite path order", () => {
     const document = { id: "caller-id", text: "same body", metadata: { source: "locomo" } };
-    expect(opaqueStorageNameProjection("forward", 3)(document, 0)).toBe("z9xq000");
-    expect(opaqueStorageNameProjection("reverse", 3)(document, 0)).toBe("z9xq002");
+    const other = { id: "other-id", text: "other body" };
+    expect(opaqueStorageNameProjection("forward", [document, other])(document, 0)).toBe("z9xq000");
+    expect(opaqueStorageNameProjection("reverse", [document, other])(document, 0)).toBe("z9xq001");
+    expect(opaqueStorageNameProjection("forward", [document, document])(document, 1)).toBe(
+      "z9xq000",
+    );
     expect(document).toEqual({
       id: "caller-id",
       text: "same body",

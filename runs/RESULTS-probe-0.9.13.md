@@ -63,7 +63,7 @@ top-5 that was entirely tied**. The number is `RELAXED_NON_NAME_SCORE_CEILING`
 in `akm/src/indexer/search/ranking.ts`: any candidate admitted on the relaxed
 tier whose *name* holds no query token is clamped to it.
 
-Every LoCoMo document is a dialogue turn whose name is an opaque id (`D1:3`),
+Every LoCoMo document is a dialogue turn whose caller identity is an opaque id (`D1:3`),
 so no name ever holds a query token, so **every** candidate clamps to exactly
 0.65. `buildSearchResultComparator` then compares equal scores, equal rounded
 scores, equal name tiers and equal type boosts, and falls through to its last
@@ -102,7 +102,7 @@ and downloaded corpus are:
 The combined candidate improves LoCoMo but regresses LongMemEval. It is not
 approved for a judged run until that paired regression is resolved. The probe
 reports `scoreSaturatedTopKRate` only as disclosure; use the explicit
-identity-permutation gate to test whether generated identities affect ranking.
+storage-name permutation gate to test whether generated filename/path assignment affects ranking while caller identities remain fixed.
 
 ## Consequence for #929 / #930
 

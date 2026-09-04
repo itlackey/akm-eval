@@ -694,6 +694,15 @@ export interface AkmBackendOptions {
   storageNameForDocument?: (document: MemoryDocument, index: number) => string;
 }
 
+function safeStorageName(name: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+    throw new BenchmarkRuntimeError(
+      `storageNameForDocument must return a safe flat lowercase name, got ${JSON.stringify(name)}`,
+    );
+  }
+  return name;
+}
+
 class AkmRuntime {
   private readonly dirs: AkmHermeticDirs;
   private readonly env: NodeJS.ProcessEnv;
@@ -812,7 +821,9 @@ class AkmRuntime {
   }
 
   private prepareWrite(doc: MemoryDocument, index: number): PreparedWrite {
-    const name = this.options.storageNameForDocument?.(doc, index) ?? slugifyDocId(doc.id);
+    const name = safeStorageName(
+      this.options.storageNameForDocument?.(doc, index) ?? slugifyDocId(doc.id),
+    );
     const frontmatter = synthesizeFrontmatter(doc);
     return {
       doc,

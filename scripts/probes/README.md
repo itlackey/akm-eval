@@ -41,13 +41,14 @@ fresh hermetic bundle under the OS temp dir and never touches a real stash.
 
 ### Identity-permutation release gate
 
-`--identity-permutation` reindexes each pack after replacing every opaque
-document identity with a deterministic reversed permutation. It preserves text
-and caller metadata, maps returned identities back before scoring, and fails if
-ranks or per-query retrieval metrics change. This catches generated
-filename/slug order becoming an accidental tie-breaker. It roughly doubles
-probe runtime, so it is an explicit release gate rather than an always-on smoke
-check.
+`--identity-permutation` runs each pack twice with forward and reverse,
+equal-shape opaque **storage-name** assignments. Caller document IDs,
+`sourceId` tags, H1 headings, metadata, text, corpus order, evidence and query
+order remain unchanged; returned refs are mapped back to those unchanged caller
+IDs before comparison. It fails if ranks or per-query retrieval metrics change.
+This isolates generated filename/path fallback as an accidental tie-breaker. It
+roughly doubles probe runtime, so it is an explicit release gate rather than an
+always-on smoke check.
 
 ## Reading the output
 

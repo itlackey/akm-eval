@@ -40,6 +40,8 @@ export interface PairedProbeVerdict {
   tolerance: number;
   comparable: boolean;
   contextMismatches: string[];
+  controlContexts: Record<string, string | number>;
+  candidateContexts: Record<string, string | number>;
   packs: PairedPackVerdict[];
   passed: boolean;
 }
@@ -82,7 +84,15 @@ function gradeMetric(
 
 function contextMismatches(control: ProbeArtifact, candidate: ProbeArtifact): string[] {
   const mismatches: string[] = [];
-  for (const key of ["evaluatorCommit", "bunVersion", "datasetSha256", "topK", "maxQuestions"]) {
+  for (const key of [
+    "evaluatorCommit",
+    "bunVersion",
+    "datasetSha256",
+    "topK",
+    "maxQuestions",
+    "platform",
+    "arch",
+  ]) {
     if (control.probeContext?.[key] !== candidate.probeContext?.[key]) {
       mismatches.push(
         `${key}: control=${String(control.probeContext?.[key])} candidate=${String(candidate.probeContext?.[key])}`,
@@ -102,6 +112,8 @@ export function gradePairedProbe(
 ): PairedProbeVerdict {
   const packs: PairedPackVerdict[] = [];
   const mismatches: string[] = [];
+  const controlContexts = controlByPack.locomo?.probeContext ?? {};
+  const candidateContexts = candidateByPack.locomo?.probeContext ?? {};
   for (const pack of ["locomo", "longmemeval"]) {
     const control = controlByPack[pack];
     const candidate = candidateByPack[pack];
@@ -112,6 +124,12 @@ export function gradePairedProbe(
     mismatches.push(
       ...contextMismatches(control, candidate).map((mismatch) => `${pack}: ${mismatch}`),
     );
+    for (const artifact of [control, candidate]) {
+      if (artifact.probeContext?.evaluatorDirty === "true")
+        mismatches.push(`${pack}: dirty evaluator`);
+      if (artifact.probeContext?.targetDirty === "true")
+        mismatches.push(`${pack}: dirty akm target`);
+    }
     const candidateMetrics = new Map(
       metricEntries(candidate).map(([name, value]) => [name, value]),
     );
@@ -131,6 +149,8 @@ export function gradePairedProbe(
     tolerance,
     comparable,
     contextMismatches: mismatches,
+    controlContexts,
+    candidateContexts,
     packs,
     passed:
       comparable &&

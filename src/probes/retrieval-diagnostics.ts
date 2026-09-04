@@ -18,11 +18,15 @@ export function hasScoreSaturatedTopK(
 /** Equal-shape, non-word-like generated names; only storage path/name changes. */
 export function opaqueStorageNameProjection(
   direction: "forward" | "reverse",
-  documentCount: number,
+  documents: readonly MemoryDocument[],
 ): (document: MemoryDocument, index: number) => string {
-  const width = Math.max(3, String(Math.max(0, documentCount - 1)).length);
-  return (_document, index) => {
-    const projected = direction === "forward" ? index : documentCount - index - 1;
+  const ids = [...new Set(documents.map((document) => document.id))];
+  const positions = new Map(ids.map((id, index) => [id, index]));
+  const width = Math.max(3, String(Math.max(0, ids.length - 1)).length);
+  return (document) => {
+    const position = positions.get(document.id);
+    if (position === undefined) throw new Error(`missing storage projection for ${document.id}`);
+    const projected = direction === "forward" ? position : ids.length - position - 1;
     return `z9xq${String(projected).padStart(width, "0")}`;
   };
 }
