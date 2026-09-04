@@ -15,6 +15,9 @@ set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+required_bun="1.3.13"
+actual_bun="$(bun --version 2>/dev/null || true)"
+[ "$actual_bun" = "$required_bun" ] || { echo "probe: requires Bun $required_bun (found ${actual_bun:-missing})" >&2; exit 2; }
 
 # Historical values retained only for continuity with old run records. Sourced from
 # runs/RESULTS-n25-0.9.3.md Phase 1 and reproduced unchanged on 0.9.10.

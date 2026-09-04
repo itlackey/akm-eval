@@ -235,7 +235,7 @@ function sideContextMismatches(side: string, artifacts: Record<string, ProbeArti
 export function gradePairedProbe(
   controlByPack: Record<string, ProbeArtifact>,
   candidateByPack: Record<string, ProbeArtifact>,
-  tolerance = PAIRED_SCORE_TOLERANCE,
+  tolerance: number,
   expectations: PairedExpectations,
 ): PairedProbeVerdict {
   const packs: PairedPackVerdict[] = [];
@@ -269,17 +269,15 @@ export function gradePairedProbe(
       mismatches.push(
         ...validContext(artifact.probeContext).map((failure) => `${pack} ${side}: ${failure}`),
       );
-    {
-      if (control.probeContext?.targetVersion !== expectations.expectedControlVersion)
-        mismatches.push(`${pack} control: targetVersion does not match expected control`);
-      if (
-        control.probeContext?.targetCommit !==
-        (expectations.expectedControlCommit ?? "published-or-unresolved")
-      )
-        mismatches.push(`${pack} control: targetCommit must be published-or-unresolved`);
-      if (candidate.probeContext?.targetCommit !== expectations.expectedCandidateCommit)
-        mismatches.push(`${pack} candidate: targetCommit does not match expected candidate`);
-    }
+    if (control.probeContext?.targetVersion !== expectations.expectedControlVersion)
+      mismatches.push(`${pack} control: targetVersion does not match expected control`);
+    if (
+      control.probeContext?.targetCommit !==
+      (expectations.expectedControlCommit ?? "published-or-unresolved")
+    )
+      mismatches.push(`${pack} control: targetCommit must be published-or-unresolved`);
+    if (candidate.probeContext?.targetCommit !== expectations.expectedCandidateCommit)
+      mismatches.push(`${pack} candidate: targetCommit does not match expected candidate`);
     const candidateMetrics = new Map(
       metricEntries(candidate).map(([name, value]) => [name, value]),
     );

@@ -128,4 +128,40 @@ describe("paired release probe grading", () => {
     expect(wrongBun.contextMismatches).toContain("locomo candidate: Bun must be pinned to 1.3.13");
     expect(paired(artifact(), artifact({ questions: 19 })).comparable).toBe(false);
   });
+
+  test("allows a published control without a diagnostic but enforces requested target identities", () => {
+    const control = artifact({ identityPermutation: undefined });
+    const candidate = artifact({
+      probeContext: {
+        ...artifact().probeContext,
+        targetCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+    });
+    const release = gradePairedProbe(
+      { locomo: { ...control, pack: "locomo" }, longmemeval: { ...control, pack: "longmemeval" } },
+      {
+        locomo: { ...candidate, pack: "locomo" },
+        longmemeval: { ...candidate, pack: "longmemeval" },
+      },
+      0.005,
+      {
+        expectedControlVersion: "0.9.13",
+        expectedCandidateCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+    );
+    expect(release.passed).toBe(true);
+    const wrong = gradePairedProbe(
+      { locomo: { ...control, pack: "locomo" }, longmemeval: { ...control, pack: "longmemeval" } },
+      {
+        locomo: { ...candidate, pack: "locomo" },
+        longmemeval: { ...candidate, pack: "longmemeval" },
+      },
+      0.005,
+      {
+        expectedControlVersion: "0.9.12",
+        expectedCandidateCommit: "cccccccccccccccccccccccccccccccccccccccc",
+      },
+    );
+    expect(wrong.passed).toBe(false);
+  });
 });
