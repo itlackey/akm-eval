@@ -47,6 +47,10 @@ export interface PairedProbeVerdict {
   packs: PairedPackVerdict[];
   passed: boolean;
 }
+export interface PairedExpectations {
+  expectedControlVersion: string;
+  expectedCandidateCommit: string;
+}
 
 const metricEntries = (
   artifact: ProbeArtifact,
@@ -139,6 +143,7 @@ const stringContextKeys = [
   "arch",
   "targetCommit",
   "targetDirty",
+  "targetVersion",
   "akmCommand",
 ] as const;
 const numericContextKeys = ["topK", "maxQuestions"] as const;
@@ -184,6 +189,7 @@ export function gradePairedProbe(
   controlByPack: Record<string, ProbeArtifact>,
   candidateByPack: Record<string, ProbeArtifact>,
   tolerance = PAIRED_SCORE_TOLERANCE,
+  expectations?: PairedExpectations,
 ): PairedProbeVerdict {
   const packs: PairedPackVerdict[] = [];
   const mismatches: string[] = [];
@@ -216,6 +222,14 @@ export function gradePairedProbe(
       mismatches.push(
         ...validContext(artifact.probeContext).map((failure) => `${pack} ${side}: ${failure}`),
       );
+    if (expectations) {
+      if (control.probeContext?.targetVersion !== expectations.expectedControlVersion)
+        mismatches.push(`${pack} control: targetVersion does not match expected control`);
+      if (control.probeContext?.targetCommit !== "published-or-unresolved")
+        mismatches.push(`${pack} control: targetCommit must be published-or-unresolved`);
+      if (candidate.probeContext?.targetCommit !== expectations.expectedCandidateCommit)
+        mismatches.push(`${pack} candidate: targetCommit does not match expected candidate`);
+    }
     const candidateMetrics = new Map(
       metricEntries(candidate).map(([name, value]) => [name, value]),
     );

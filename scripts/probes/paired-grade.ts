@@ -10,9 +10,17 @@ function option(name: string): string | undefined {
 const controlDir = option("--control");
 const candidateDir = option("--candidate");
 const outputPath = option("--out");
-if (!controlDir || !candidateDir || !outputPath) {
+const expectedControlVersion = option("--expected-control-version");
+const expectedCandidateCommit = option("--expected-candidate-commit");
+if (
+  !controlDir ||
+  !candidateDir ||
+  !outputPath ||
+  !expectedControlVersion ||
+  !expectedCandidateCommit
+) {
   console.error(
-    "usage: bun scripts/probes/paired-grade.ts --control <probe-dir> --candidate <probe-dir> --out <verdict.json>",
+    "usage: bun scripts/probes/paired-grade.ts --control <probe-dir> --candidate <probe-dir> --out <verdict.json> --expected-control-version 0.9.13 --expected-candidate-commit <40hex>",
   );
   process.exit(2);
 }
@@ -22,6 +30,8 @@ const read = (dir: string, pack: string): ProbeArtifact =>
 const verdict = gradePairedProbe(
   { locomo: read(controlDir, "locomo"), longmemeval: read(controlDir, "longmemeval") },
   { locomo: read(candidateDir, "locomo"), longmemeval: read(candidateDir, "longmemeval") },
+  0.005,
+  { expectedControlVersion, expectedCandidateCommit },
 );
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${JSON.stringify(verdict, null, 2)}\n`);

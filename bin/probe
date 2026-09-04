@@ -109,7 +109,7 @@ for pack in locomo longmemeval; do
   [ "$pack" = "longmemeval" ] && env_max_q=(MAX_Q=20)
   identity_check_env=()
   [ "$identity_permutation_check" -eq 1 ] && identity_check_env=(IDENTITY_PERMUTATION_CHECK=1)
-  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" "${env_max_q[@]}" "${identity_check_env[@]}" \
+  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" AKM_EVAL_TARGET_VERSION="$resolved_version" "${env_max_q[@]}" "${identity_check_env[@]}" \
            bun scripts/probes/retrieval-probe.ts "$pack" ) \
          > "$out_dir/$pack.json" 2> "$out_dir/$pack.log"; then
     echo "probe: ${pack} FAILED -- see runs/probes/${label}-${stamp}/${pack}.log" >&2

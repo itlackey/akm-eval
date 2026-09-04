@@ -22,6 +22,7 @@ const artifact = (overrides: Partial<ProbeArtifact> = {}): ProbeArtifact => ({
     arch: "x64",
     targetCommit: "published-or-unresolved",
     targetDirty: "false",
+    targetVersion: "0.9.13",
     akmCommand: '["akm"]',
   },
   ...overrides,

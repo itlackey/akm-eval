@@ -31,6 +31,7 @@ const artifact = (pack: string) => ({
     arch: "x64",
     targetCommit: "published-or-unresolved",
     targetDirty: "false",
+    targetVersion: "0.9.13",
     akmCommand: '["akm"]',
   },
 });
@@ -60,6 +61,10 @@ test("paired-grade CLI writes an inspectable verdict on a failing candidate", ()
       candidate,
       "--out",
       out,
+      "--expected-control-version",
+      "0.9.13",
+      "--expected-candidate-commit",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     ],
     { cwd: root },
   );
