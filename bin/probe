@@ -3,19 +3,23 @@ set -euo pipefail
 
 # One-command Tier-1 retrieval probe: install a pinned akm-cli into an isolated
 # scratch dir, run BOTH packs' LLM-free probes against it, capture the logs, and
-# diff the result against the committed reference values.
+# record an informational comparison against the historical reference values.
 #
 #   bin/probe                 # probe whatever npm `latest` resolves to
 #   bin/probe 0.9.10          # probe an exact published version
 #   bin/probe --cmd '["/path/to/akm"]'   # probe an already-installed binary
+#   bin/probe --identity-permutation 0.9.13  # also gate filename/slug independence
 #
 # Free, deterministic, no LLM, no Docker. Run this BEFORE spending judged-eval
-# budget: if retrieval regressed, stop here (scripts/probes/README.md).
+# budget: use bin/probe-pair for the release gate (scripts/probes/README.md).
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+required_bun="1.3.13"
+actual_bun="$(bun --version 2>/dev/null || true)"
+[ "$actual_bun" = "$required_bun" ] || { echo "probe: requires Bun $required_bun (found ${actual_bun:-missing})" >&2; exit 2; }
 
-# Reference values every probe run is graded against. Sourced from
+# Historical values retained only for continuity with old run records. Sourced from
 # runs/RESULTS-n25-0.9.3.md Phase 1 and reproduced unchanged on 0.9.10.
 # Keep in sync with the table in scripts/probes/README.md.
 REFERENCE_JSON='{
@@ -23,16 +27,18 @@ REFERENCE_JSON='{
   "longmemeval": {"zeroHitRate": 0.0, "evidenceRecallAt5": 0.950, "precisionAtK": 0.676667, "recallAtK": 0.950000}
 }'
 REFERENCE_FROM="akm-cli 0.9.3 / 0.9.10"
-# A metric may drift by this much before it is called a change. mrr/ndcg moved
+# A metric may drift by this much before it is called a historical change. mrr/ndcg moved
 # ~0.002 between 0.9.3 and 0.9.10 with an identical retrieved set, so anything
 # under this is ranking jitter, not a retrieval change.
 TOLERANCE=0.005
 
 version=""
 akm_cmd=""
+identity_permutation_check=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --cmd) akm_cmd="${2:?--cmd requires a JSON argv array}"; shift 2 ;;
+    --identity-permutation) identity_permutation_check=1; shift ;;
     -h|--help) sed -n '3,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) version="$1"; shift ;;
@@ -81,6 +87,7 @@ mapfile -t akm_argv < <(jq -r '.[]' <<<"$akm_cmd")
 # would block their everyday akm use. The probe body is already hermetic; this
 # is the version check, which was not.
 _akm_tmp="$(mktemp -d)"
+trap 'rm -rf "$_akm_tmp"' EXIT
 resolved_version="$(
   AKM_BUNDLE_DIR="$_akm_tmp/bundle" AKM_CONFIG_DIR="$_akm_tmp/config" \
   AKM_DATA_DIR="$_akm_tmp/data" AKM_CACHE_DIR="$_akm_tmp/cache" \
@@ -104,7 +111,9 @@ for pack in locomo longmemeval; do
   # locomo's 40 questions are the whole conv-26 slice and need no cap.
   env_max_q=()
   [ "$pack" = "longmemeval" ] && env_max_q=(MAX_Q=20)
-  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" "${env_max_q[@]}" \
+  identity_check_env=()
+  [ "$identity_permutation_check" -eq 1 ] && identity_check_env=(IDENTITY_PERMUTATION_CHECK=1)
+  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" AKM_EVAL_TARGET_VERSION="$resolved_version" "${env_max_q[@]}" "${identity_check_env[@]}" \
            bun scripts/probes/retrieval-probe.ts "$pack" ) \
          > "$out_dir/$pack.json" 2> "$out_dir/$pack.log"; then
     echo "probe: ${pack} FAILED -- see runs/probes/${label}-${stamp}/${pack}.log" >&2
@@ -158,6 +167,7 @@ jq -n \
   jq -r '.packs[] | "| \(.pack) | \(.metric) | \(.want) | \(.got) | \(if .delta >= 0 then "+" else "" end)\(.delta * 1000000 | round / 1000000) | \(.verdict) |"' "$out_dir/verdict.json"
   printf '\nguardTripped: '
   jq -r '.guardTripped | to_entries | map("\(.key)=\(.value)") | join(", ")' "$out_dir/verdict.json"
+  [ "$identity_permutation_check" -eq 1 ] && printf 'identityPermutation: passed\n'
   printf '\n'
 } > "$out_dir/summary.md"
 
@@ -173,8 +183,8 @@ if [ "$guards" != "0" ]; then
 fi
 
 if jq -e '[.packs[] | select(.verdict == "REGRESSED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
-  echo "probe: RETRIEVAL REGRESSED. Do not spend judged-eval budget on this build." >&2
-  exit 1
+  echo "probe: differs from the stale historical reference; informational only. Use bin/probe-pair for release gating." >&2
+  exit 0
 fi
 if jq -e '[.packs[] | select(.verdict == "IMPROVED")] | length > 0' "$out_dir/verdict.json" >/dev/null; then
   echo "probe: retrieval improved over the reference — update REFERENCE_JSON in this script once confirmed."

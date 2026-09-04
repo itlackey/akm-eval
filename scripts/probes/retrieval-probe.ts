@@ -34,6 +34,7 @@
  * temp dir and never touches a real stash.
  */
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +44,13 @@ import type { MemoryDocument } from "../../src/memory/types.ts";
 import type { RetrievalMetrics } from "../../src/memory/types.ts";
 import { sessionToMemoryDocument } from "../../src/packs/longmemeval/adapter.ts";
 import { loadDataset } from "../../src/packs/longmemeval/dataset.ts";
+import {
+  type IdentityPermutationDiagnostic,
+  type IdentityPermutationObservation,
+  compareIdentityPermutationObservations,
+  hasScoreSaturatedTopK,
+  opaqueStorageNameProjection,
+} from "../../src/probes/retrieval-diagnostics.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 
@@ -63,35 +71,21 @@ interface ProbeResult {
    * irrelevant documents" from "retrieved the answer cleanly".
    */
   retrieval: RetrievalMetrics;
-  /**
-   * Fraction of answered queries whose entire top-K came back at ONE score.
-   *
-   * A high rate means the DISPLAYED scores carry no ordering information for
-   * most queries, so whatever the backend breaks ties on decides the metrics
-   * above. That is only safe when the tie-break is itself a relevance signal.
-   * akm <= 0.9.13 clamped relaxed non-name candidates to a hard ceiling and
-   * then fell through to an alphabetical path compare, which is not — and on
-   * this pack that silently moved the numbers between runs. Treat a rate this
-   * high as a reason to check WHAT the backend ties on before trusting a
-   * reference drawn from the run.
-   */
-  tiedTopKRate: number;
+  /** Fraction of full returned top-Ks with one finite public score. Disclosure only. */
+  scoreSaturatedTopKRate: number;
+  /** Present only when IDENTITY_PERMUTATION_CHECK=1 / bin/probe --identity-permutation. */
+  identityPermutation?: IdentityPermutationDiagnostic;
+  probeContext: Record<string, string | number>;
   /** Queries the backend refused outright (e.g. a contamination guard). */
   guardTripped: number;
 }
 
-/** Did every hit in this result set come back at the same score? */
-function isFullyTied(hits: readonly { score?: number | null }[]): boolean {
-  if (hits.length < 2) return false;
-  const first = hits[0]?.score;
-  if (typeof first !== "number") return false;
-  return hits.every((h) => h.score === first);
-}
-
 /** Fresh hermetic bundle; never a real stash. */
-function hermeticBackend() {
+function hermeticBackend(
+  storageNameForDocument?: (document: MemoryDocument, index: number) => string,
+) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-probe-"));
-  return { backend: createAkmBackend(ROOT, workDir), workDir };
+  return { backend: createAkmBackend(ROOT, workDir, { storageNameForDocument }), workDir };
 }
 
 function recall(hits: readonly { id?: string }[], evidence: readonly string[]): boolean {
@@ -100,6 +94,122 @@ function recall(hits: readonly { id?: string }[], evidence: readonly string[]): 
 }
 
 const TOP_K = 5;
+const RUN_IDENTITY_PERMUTATION_CHECK = process.env.IDENTITY_PERMUTATION_CHECK === "1";
+
+function metricVector(metric: RetrievalMetrics): number[] {
+  return [metric.precisionAtK, metric.recallAtK, metric.mrr, metric.ndcgAtK];
+}
+
+function probeContext(datasetPath: string, maxQuestions: number): Record<string, string | number> {
+  const git = (directory: string): { commit: string; dirty: string } => {
+    const commit = Bun.spawnSync(["git", "-C", directory, "rev-parse", "HEAD"]);
+    const dirty = Bun.spawnSync(["git", "-C", directory, "status", "--porcelain"]);
+    return {
+      commit: commit.exitCode === 0 ? commit.stdout.toString().trim() : "unknown",
+      dirty: dirty.exitCode === 0 && dirty.stdout.toString().trim() ? "true" : "false",
+    };
+  };
+  const evaluator = git(ROOT);
+  const command = process.env.AKM_EVAL_AKM_CMD ?? '["akm"]';
+  let targetCommit = "published-or-unresolved";
+  let targetDirty = "false";
+  try {
+    const parsed = JSON.parse(command);
+    const cliPath = Array.isArray(parsed)
+      ? parsed.find((part) => String(part).endsWith("/src/cli.ts"))
+      : undefined;
+    if (typeof cliPath === "string") {
+      const target = git(path.dirname(path.dirname(cliPath)));
+      targetCommit = target.commit;
+      targetDirty = target.dirty;
+    }
+  } catch {}
+  return {
+    evaluatorCommit: evaluator.commit,
+    evaluatorDirty: evaluator.dirty,
+    bunVersion: Bun.version,
+    platform: process.platform,
+    arch: process.arch,
+    akmCommand: command,
+    targetCommit,
+    targetDirty,
+    targetVersion: process.env.AKM_EVAL_TARGET_VERSION ?? "unknown",
+    datasetSha256: crypto.createHash("sha256").update(fs.readFileSync(datasetPath)).digest("hex"),
+    topK: TOP_K,
+    maxQuestions,
+  };
+}
+
+function duplicateContentIds(documents: readonly MemoryDocument[]): ReadonlySet<string> {
+  const idsByText = new Map<string, string[]>();
+  for (const document of documents) {
+    const ids = idsByText.get(document.text) ?? [];
+    ids.push(document.id);
+    idsByText.set(document.text, ids);
+  }
+  return new Set([...idsByText.values()].filter((ids) => ids.length > 1).flat());
+}
+
+function observation(
+  queryId: string,
+  hits: Awaited<ReturnType<ReturnType<typeof createAkmBackend>["search"]>>,
+  metric: RetrievalMetrics,
+  duplicateIds: ReadonlySet<string>,
+): IdentityPermutationObservation {
+  return {
+    queryId,
+    hitIds: hits.map((hit) => hit.id),
+    publicScores: hits.map((hit) => hit.score),
+    metric: metricVector(metric),
+    hasDuplicateContent: hits.some((hit) => duplicateIds.has(hit.id)),
+  };
+}
+
+interface IdentityPermutationQuery {
+  id: string;
+  text: string;
+  evidence: readonly string[];
+  documents: readonly MemoryDocument[];
+}
+
+async function checkIdentityPermutation(
+  queries: readonly IdentityPermutationQuery[],
+): Promise<IdentityPermutationDiagnostic | undefined> {
+  if (!RUN_IDENTITY_PERMUTATION_CHECK) return undefined;
+  const collect = async (
+    direction: "forward" | "reverse",
+  ): Promise<IdentityPermutationObservation[]> => {
+    const observations: IdentityPermutationObservation[] = [];
+    let activeDocuments: readonly MemoryDocument[] | undefined;
+    let backend: ReturnType<typeof createAkmBackend> | undefined;
+    let workDir: string | undefined;
+    try {
+      for (const query of queries) {
+        if (query.documents !== activeDocuments) {
+          activeDocuments = query.documents;
+          if (workDir) fs.rmSync(workDir, { recursive: true, force: true });
+          const projected = hermeticBackend(
+            opaqueStorageNameProjection(direction, query.documents),
+          );
+          backend = projected.backend;
+          workDir = projected.workDir;
+          await backend.reset();
+          await backend.add([...query.documents]);
+        }
+        if (!backend) throw new Error("Identity permutation setup failed");
+        const hits = await backend.search({ text: query.text, topK: TOP_K });
+        const metric = scoreRetrieval(query.evidence, hits, TOP_K);
+        observations.push(
+          observation(query.id, hits, metric, duplicateContentIds(query.documents)),
+        );
+      }
+      return observations;
+    } finally {
+      if (workDir) fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  };
+  return compareIdentityPermutationObservations(await collect("forward"), await collect("reverse"));
+}
 
 // ── LoCoMo ───────────────────────────────────────────────────────────────────
 // Mirrors the adapter's own `flattenConversation` / `formatDialogTurn`. Kept in
@@ -146,56 +256,71 @@ function flattenLocomo(sample: LocomoSample): MemoryDocument[] {
 
 async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   const raw = JSON.parse(fs.readFileSync(path.join(ROOT, "datasets/locomo/locomo10.json"), "utf8"));
+  const datasetPath = path.join(ROOT, "datasets/locomo/locomo10.json");
   const sample = (Array.isArray(raw) ? raw : raw.samples)[0] as LocomoSample;
+  const documents = flattenLocomo(sample);
   const { backend, workDir } = hermeticBackend();
-  const health = backend.healthCheck();
-  await backend.reset();
-  await backend.add(flattenLocomo(sample));
+  try {
+    const health = backend.healthCheck();
+    await backend.reset();
+    await backend.add(documents);
 
-  let zeroHit = 0;
-  let evidenceScored = 0;
-  let evidenceHit = 0;
-  let guardTripped = 0;
-  let asked = 0;
-  const perQuestion: RetrievalMetrics[] = [];
-  let tiedTopK = 0;
+    let zeroHit = 0;
+    let evidenceScored = 0;
+    let evidenceHit = 0;
+    let guardTripped = 0;
+    let asked = 0;
+    const perQuestion: RetrievalMetrics[] = [];
+    let scoreSaturatedTopK = 0;
+    const observations: IdentityPermutationObservation[] = [];
+    const queries: IdentityPermutationQuery[] = [];
+    const duplicateIds = duplicateContentIds(documents);
 
-  for (const q of sample.qa.slice(0, maxQ)) {
-    let hits: Awaited<ReturnType<typeof backend.search>>;
-    try {
-      hits = await backend.search({ text: q.question, topK: 5 });
-    } catch (err) {
-      // A backend guard (e.g. contamination) is a real finding, not a zero-hit.
-      if (String((err as Error).message).includes("never added")) {
-        guardTripped += 1;
-        continue;
+    for (const [index, q] of sample.qa.slice(0, maxQ).entries()) {
+      let hits: Awaited<ReturnType<typeof backend.search>>;
+      try {
+        hits = await backend.search({ text: q.question, topK: 5 });
+      } catch (err) {
+        // A backend guard (e.g. contamination) is a real finding, not a zero-hit.
+        if (String((err as Error).message).includes("never added")) {
+          guardTripped += 1;
+          continue;
+        }
+        throw err;
       }
-      throw err;
+      asked += 1;
+      if (hits.length === 0) zeroHit += 1;
+      const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
+      const metric = scoreRetrieval(evidence, hits, TOP_K);
+      perQuestion.push(metric);
+      if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+      observations.push(observation(String(index), hits, metric, duplicateIds));
+      queries.push({ id: String(index), text: q.question, evidence, documents });
+      if (evidence.length > 0) {
+        evidenceScored += 1;
+        if (recall(hits, evidence)) evidenceHit += 1;
+      }
     }
-    asked += 1;
-    if (hits.length === 0) zeroHit += 1;
-    const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
-    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
-    if (isFullyTied(hits)) tiedTopK += 1;
-    if (evidence.length > 0) {
-      evidenceScored += 1;
-      if (recall(hits, evidence)) evidenceHit += 1;
-    }
-  }
 
-  fs.rmSync(workDir, { recursive: true, force: true });
-  return {
-    pack: `locomo (${sample.sample_id})`,
-    akmVersion: health.detail ?? "unknown",
-    questions: asked,
-    zeroHit,
-    zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
-    evidenceScored,
-    evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
-    retrieval: averageRetrieval(perQuestion),
-    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
-    guardTripped,
-  };
+    const identityPermutation = await checkIdentityPermutation(queries);
+    return {
+      pack: `locomo (${sample.sample_id})`,
+      akmVersion: health.detail ?? "unknown",
+      questions: asked,
+      zeroHit,
+      zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
+      evidenceScored,
+      evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+      retrieval: averageRetrieval(perQuestion),
+      scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+      identityPermutation,
+      ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
+      probeContext: probeContext(datasetPath, maxQ),
+      guardTripped,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 // ── LongMemEval ──────────────────────────────────────────────────────────────
@@ -206,54 +331,68 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     rootDir: ROOT,
     datasetPath: path.join(ROOT, "datasets/longmemeval/dataset.json"),
   });
+  const datasetPath = path.join(ROOT, "datasets/longmemeval/dataset.json");
   const { backend, workDir } = hermeticBackend();
-  const health = backend.healthCheck();
+  try {
+    const health = backend.healthCheck();
 
-  let zeroHit = 0;
-  let evidenceScored = 0;
-  let evidenceHit = 0;
-  let guardTripped = 0;
-  let asked = 0;
-  const perQuestion: RetrievalMetrics[] = [];
-  let tiedTopK = 0;
+    let zeroHit = 0;
+    let evidenceScored = 0;
+    let evidenceHit = 0;
+    let guardTripped = 0;
+    let asked = 0;
+    const perQuestion: RetrievalMetrics[] = [];
+    let scoreSaturatedTopK = 0;
+    const observations: IdentityPermutationObservation[] = [];
+    const queries: IdentityPermutationQuery[] = [];
 
-  for (const q of questions.slice(0, maxQ)) {
-    await backend.reset();
-    await backend.add(q.haystackSessions.map(sessionToMemoryDocument));
-    let hits: Awaited<ReturnType<typeof backend.search>>;
-    try {
-      hits = await backend.search({ text: q.question, topK: 5 });
-    } catch (err) {
-      if (String((err as Error).message).includes("never added")) {
-        guardTripped += 1;
-        continue;
+    for (const q of questions.slice(0, maxQ)) {
+      const documents = q.haystackSessions.map(sessionToMemoryDocument);
+      await backend.reset();
+      await backend.add(documents);
+      let hits: Awaited<ReturnType<typeof backend.search>>;
+      try {
+        hits = await backend.search({ text: q.question, topK: 5 });
+      } catch (err) {
+        if (String((err as Error).message).includes("never added")) {
+          guardTripped += 1;
+          continue;
+        }
+        throw err;
       }
-      throw err;
+      asked += 1;
+      if (hits.length === 0) zeroHit += 1;
+      const evidence = q.evidenceSessionIds ?? [];
+      const metric = scoreRetrieval(evidence, hits, TOP_K);
+      perQuestion.push(metric);
+      if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+      observations.push(observation(q.id, hits, metric, duplicateContentIds(documents)));
+      queries.push({ id: q.id, text: q.question, evidence, documents });
+      if (evidence.length > 0) {
+        evidenceScored += 1;
+        if (recall(hits, evidence)) evidenceHit += 1;
+      }
     }
-    asked += 1;
-    if (hits.length === 0) zeroHit += 1;
-    const evidence = q.evidenceSessionIds ?? [];
-    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
-    if (isFullyTied(hits)) tiedTopK += 1;
-    if (evidence.length > 0) {
-      evidenceScored += 1;
-      if (recall(hits, evidence)) evidenceHit += 1;
-    }
-  }
 
-  fs.rmSync(workDir, { recursive: true, force: true });
-  return {
-    pack: "longmemeval",
-    akmVersion: health.detail ?? "unknown",
-    questions: asked,
-    zeroHit,
-    zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
-    evidenceScored,
-    evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
-    retrieval: averageRetrieval(perQuestion),
-    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
-    guardTripped,
-  };
+    const identityPermutation = await checkIdentityPermutation(queries);
+    return {
+      pack: "longmemeval",
+      akmVersion: health.detail ?? "unknown",
+      questions: asked,
+      zeroHit,
+      zeroHitRate: asked ? Number((zeroHit / asked).toFixed(3)) : 0,
+      evidenceScored,
+      evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
+      retrieval: averageRetrieval(perQuestion),
+      scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+      identityPermutation,
+      ...(process.env.AKM_PROBE_DUMP === "1" ? { observations } : {}),
+      probeContext: probeContext(datasetPath, maxQ),
+      guardTripped,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -273,4 +412,10 @@ if (result.guardTripped > 0) {
   console.error(
     `\nNOTE: ${result.guardTripped} query/queries aborted on a backend guard — investigate, do not read as zero-hit.`,
   );
+}
+if (result.identityPermutation?.rankingOrMetricDependent) {
+  console.error(
+    `\nIDENTITY-PERMUTATION RELEASE GATE FAILED: ${result.identityPermutation.rankChangedQueries}/${result.identityPermutation.queriesCompared} rankings and ${result.identityPermutation.metricChangedQueries}/${result.identityPermutation.queriesCompared} metric rows changed when only opaque generated identities changed.`,
+  );
+  process.exitCode = 1;
 }
