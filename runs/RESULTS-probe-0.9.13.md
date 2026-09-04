@@ -5,8 +5,9 @@ LLM-free Tier-1 retrieval probe (`bin/probe`), published npm builds, MAX_Q=40
 
 ## Headline
 
-**0.9.13 changes retrieval by exactly zero.** Published 0.9.10, 0.9.11, 0.9.12
-and 0.9.13 produce byte-identical metrics on both packs. Every digit matches.
+Published 0.9.10 through 0.9.13 reproduce one another in the paired 2026-09-04
+environment. They do **not** reproduce the older LoCoMo reference, so that
+reference is not a release gate.
 
 ## All probe runs to date
 
@@ -79,28 +80,29 @@ Ruled out along the way, for the record: a local ONNX embedding path (no model
 cache activity, and embeddings need explicit config), and locale-dependent
 `localeCompare` (four locales, identical results).
 
-### The fix
+### The tie-order fix (#940), and the combined candidate
 
-`applyRelaxedLexicalScoreCeiling` now records the pre-clamp score as
-`preCeilingScore` — the same idiom `applyBeliefStateScoreCeiling` already
-used — and the comparator orders on it before falling through to the
+Issue #940 records the pre-relaxed-ceiling score separately from the belief
+ceiling score, and the comparator orders on it before falling through to the
 filename compare. Displayed scores are unchanged; only the order within a
 clamped set changes.
 
-Measured on the same probe, LoCoMo:
+That is distinct from #933, which changes score calibration. The integrated
+release candidate therefore must be measured as a combination, not attributed
+to #940 alone. Paired artifacts from the same evaluator commit, Bun 1.3.14,
+and downloaded corpus are:
 
-| metric | 0.9.13 published | with the fix | change |
+| build | artifact | LoCoMo ev@5 / P@5 / R@5 | LongMemEval ev@5 / P@5 / R@5 |
 | --- | --- | --- | --- |
-| evidenceRecall@5 | 0.564 | **0.692** | +22.7% |
-| recall@5 | 0.485417 | **0.591667** | +21.9% |
-| precision@5 | 0.227917 | **0.257917** | +13.2% |
-| MRR | 0.36625 | **0.4725** | +29.0% |
-| nDCG@5 | 0.380024 | **0.492014** | +29.5% |
+| published 0.9.13 | `0.9.13-2026-09-04T08-07-11Z` | .564 / .227917 / .485417 | .950 / .676667 / .950 |
+| pre-#933/#940 (`3ad44a46`) | `0.9.13-2026-09-04T08-10-42Z` | .564 / .227917 / .485417 | .950 / .676667 / .950 |
+| post-#933/pre-#940 (`11fb1f21`) | `0.9.13-2026-09-04T08-11-55Z` | .333 / .182917 / .260417 | .850 / .656667 / .850 |
+| combined candidate (`d1b88cb3`) | `0.9.13-2026-09-04T08-08-38Z` | .667 / .262917 / .591667 | .900 / .666667 / .900 |
 
-LongMemEval is unchanged on every metric (0.95 / 0.676667 / 0.95), as expected.
-
-The probe now reports `tiedTopKRate` so a saturated run announces itself
-instead of being mistaken for a version regression.
+The combined candidate improves LoCoMo but regresses LongMemEval. It is not
+approved for a judged run until that paired regression is resolved. The probe
+reports `scoreSaturatedTopKRate` only as disclosure; use the explicit
+identity-permutation gate to test whether generated identities affect ranking.
 
 ## Consequence for #929 / #930
 
@@ -110,5 +112,6 @@ identical) and cut precision hard (locomo 0.232917 → 0.147500, −37%;
 longmemeval 0.676667 → 0.275000, −59%). That verdict stands, and is why #929
 was closed and PR #931 abandoned.
 
-#930 (BM25 field weights) remains untested. It should not be measured until the
-reference above is trustworthy again.
+#933 is score calibration; #940 is the relaxed-ceiling tie-order fix. Further
+calibration work must use a paired control/candidate comparison, not the stale
+LoCoMo reference above.

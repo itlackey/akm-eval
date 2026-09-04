@@ -43,6 +43,14 @@ import type { MemoryDocument } from "../../src/memory/types.ts";
 import type { RetrievalMetrics } from "../../src/memory/types.ts";
 import { sessionToMemoryDocument } from "../../src/packs/longmemeval/adapter.ts";
 import { loadDataset } from "../../src/packs/longmemeval/dataset.ts";
+import {
+  type IdentityPermutationDiagnostic,
+  type IdentityPermutationObservation,
+  compareIdentityPermutationObservations,
+  hasScoreSaturatedTopK,
+  permuteOpaqueDocumentIdentities,
+  remapPermutedHits,
+} from "../../src/probes/retrieval-diagnostics.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 
@@ -63,29 +71,12 @@ interface ProbeResult {
    * irrelevant documents" from "retrieved the answer cleanly".
    */
   retrieval: RetrievalMetrics;
-  /**
-   * Fraction of answered queries whose entire top-K came back at ONE score.
-   *
-   * A high rate means the DISPLAYED scores carry no ordering information for
-   * most queries, so whatever the backend breaks ties on decides the metrics
-   * above. That is only safe when the tie-break is itself a relevance signal.
-   * akm <= 0.9.13 clamped relaxed non-name candidates to a hard ceiling and
-   * then fell through to an alphabetical path compare, which is not — and on
-   * this pack that silently moved the numbers between runs. Treat a rate this
-   * high as a reason to check WHAT the backend ties on before trusting a
-   * reference drawn from the run.
-   */
-  tiedTopKRate: number;
+  /** Fraction of full returned top-Ks with one finite public score. Disclosure only. */
+  scoreSaturatedTopKRate: number;
+  /** Present only when IDENTITY_PERMUTATION_CHECK=1 / bin/probe --identity-permutation. */
+  identityPermutation?: IdentityPermutationDiagnostic;
   /** Queries the backend refused outright (e.g. a contamination guard). */
   guardTripped: number;
-}
-
-/** Did every hit in this result set come back at the same score? */
-function isFullyTied(hits: readonly { score?: number | null }[]): boolean {
-  if (hits.length < 2) return false;
-  const first = hits[0]?.score;
-  if (typeof first !== "number") return false;
-  return hits.every((h) => h.score === first);
 }
 
 /** Fresh hermetic bundle; never a real stash. */
@@ -100,6 +91,71 @@ function recall(hits: readonly { id?: string }[], evidence: readonly string[]): 
 }
 
 const TOP_K = 5;
+const RUN_IDENTITY_PERMUTATION_CHECK = process.env.IDENTITY_PERMUTATION_CHECK === "1";
+
+function metricVector(metric: RetrievalMetrics): number[] {
+  return [metric.precisionAtK, metric.recallAtK, metric.mrr, metric.ndcgAtK];
+}
+
+function duplicateContentIds(documents: readonly MemoryDocument[]): ReadonlySet<string> {
+  const idsByText = new Map<string, string[]>();
+  for (const document of documents) {
+    const ids = idsByText.get(document.text) ?? [];
+    ids.push(document.id);
+    idsByText.set(document.text, ids);
+  }
+  return new Set([...idsByText.values()].filter((ids) => ids.length > 1).flat());
+}
+
+function observation(
+  queryId: string,
+  hits: Awaited<ReturnType<ReturnType<typeof createAkmBackend>["search"]>>,
+  metric: RetrievalMetrics,
+  duplicateIds: ReadonlySet<string>,
+): IdentityPermutationObservation {
+  return {
+    queryId,
+    hitIds: hits.map((hit) => hit.id),
+    publicScores: hits.map((hit) => hit.score),
+    metric: metricVector(metric),
+    hasDuplicateContent: hits.some((hit) => duplicateIds.has(hit.id)),
+  };
+}
+
+interface IdentityPermutationQuery {
+  id: string;
+  text: string;
+  evidence: readonly string[];
+  documents: readonly MemoryDocument[];
+}
+
+async function checkIdentityPermutation(
+  backend: ReturnType<typeof createAkmBackend>,
+  queries: readonly IdentityPermutationQuery[],
+  baseline: readonly IdentityPermutationObservation[],
+): Promise<IdentityPermutationDiagnostic | undefined> {
+  if (!RUN_IDENTITY_PERMUTATION_CHECK) return undefined;
+  const replay: IdentityPermutationObservation[] = [];
+  let activeDocuments: readonly MemoryDocument[] | undefined;
+  let activePermutation: ReturnType<typeof permuteOpaqueDocumentIdentities> | undefined;
+  for (const query of queries) {
+    if (query.documents !== activeDocuments) {
+      activeDocuments = query.documents;
+      activePermutation = permuteOpaqueDocumentIdentities(query.documents);
+      await backend.reset();
+      await backend.add(activePermutation.documents);
+    }
+    if (!activePermutation) throw new Error("Identity permutation setup failed");
+    const hits = remapPermutedHits(
+      await backend.search({ text: query.text, topK: TOP_K }),
+      activePermutation.originalIdByPermutedId,
+    );
+    const metric = scoreRetrieval(query.evidence, hits, TOP_K);
+    replay.push(observation(query.id, hits, metric, duplicateContentIds(query.documents)));
+  }
+  const diagnostic = compareIdentityPermutationObservations(baseline, replay);
+  return diagnostic;
+}
 
 // ── LoCoMo ───────────────────────────────────────────────────────────────────
 // Mirrors the adapter's own `flattenConversation` / `formatDialogTurn`. Kept in
@@ -149,8 +205,9 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   const sample = (Array.isArray(raw) ? raw : raw.samples)[0] as LocomoSample;
   const { backend, workDir } = hermeticBackend();
   const health = backend.healthCheck();
+  const documents = flattenLocomo(sample);
   await backend.reset();
-  await backend.add(flattenLocomo(sample));
+  await backend.add(documents);
 
   let zeroHit = 0;
   let evidenceScored = 0;
@@ -158,9 +215,12 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
   let guardTripped = 0;
   let asked = 0;
   const perQuestion: RetrievalMetrics[] = [];
-  let tiedTopK = 0;
+  let scoreSaturatedTopK = 0;
+  const observations: IdentityPermutationObservation[] = [];
+  const queries: IdentityPermutationQuery[] = [];
+  const duplicateIds = duplicateContentIds(documents);
 
-  for (const q of sample.qa.slice(0, maxQ)) {
+  for (const [index, q] of sample.qa.slice(0, maxQ).entries()) {
     let hits: Awaited<ReturnType<typeof backend.search>>;
     try {
       hits = await backend.search({ text: q.question, topK: 5 });
@@ -175,14 +235,18 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     asked += 1;
     if (hits.length === 0) zeroHit += 1;
     const evidence: string[] = Array.isArray(q.evidence) ? q.evidence : [];
-    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
-    if (isFullyTied(hits)) tiedTopK += 1;
+    const metric = scoreRetrieval(evidence, hits, TOP_K);
+    perQuestion.push(metric);
+    if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+    observations.push(observation(String(index), hits, metric, duplicateIds));
+    queries.push({ id: String(index), text: q.question, evidence, documents });
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
     }
   }
 
+  const identityPermutation = await checkIdentityPermutation(backend, queries, observations);
   fs.rmSync(workDir, { recursive: true, force: true });
   return {
     pack: `locomo (${sample.sample_id})`,
@@ -193,7 +257,8 @@ async function probeLocomo(maxQ: number): Promise<ProbeResult> {
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
     retrieval: averageRetrieval(perQuestion),
-    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
+    scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+    identityPermutation,
     guardTripped,
   };
 }
@@ -215,11 +280,14 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
   let guardTripped = 0;
   let asked = 0;
   const perQuestion: RetrievalMetrics[] = [];
-  let tiedTopK = 0;
+  let scoreSaturatedTopK = 0;
+  const observations: IdentityPermutationObservation[] = [];
+  const queries: IdentityPermutationQuery[] = [];
 
   for (const q of questions.slice(0, maxQ)) {
+    const documents = q.haystackSessions.map(sessionToMemoryDocument);
     await backend.reset();
-    await backend.add(q.haystackSessions.map(sessionToMemoryDocument));
+    await backend.add(documents);
     let hits: Awaited<ReturnType<typeof backend.search>>;
     try {
       hits = await backend.search({ text: q.question, topK: 5 });
@@ -233,14 +301,18 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     asked += 1;
     if (hits.length === 0) zeroHit += 1;
     const evidence = q.evidenceSessionIds ?? [];
-    perQuestion.push(scoreRetrieval(evidence, hits, TOP_K));
-    if (isFullyTied(hits)) tiedTopK += 1;
+    const metric = scoreRetrieval(evidence, hits, TOP_K);
+    perQuestion.push(metric);
+    if (hasScoreSaturatedTopK(hits, TOP_K)) scoreSaturatedTopK += 1;
+    observations.push(observation(q.id, hits, metric, duplicateContentIds(documents)));
+    queries.push({ id: q.id, text: q.question, evidence, documents });
     if (evidence.length > 0) {
       evidenceScored += 1;
       if (recall(hits, evidence)) evidenceHit += 1;
     }
   }
 
+  const identityPermutation = await checkIdentityPermutation(backend, queries, observations);
   fs.rmSync(workDir, { recursive: true, force: true });
   return {
     pack: "longmemeval",
@@ -251,7 +323,8 @@ async function probeLongMemEval(maxQ: number): Promise<ProbeResult> {
     evidenceScored,
     evidenceRecallAt5: evidenceScored ? Number((evidenceHit / evidenceScored).toFixed(3)) : null,
     retrieval: averageRetrieval(perQuestion),
-    tiedTopKRate: asked ? Number((tiedTopK / asked).toFixed(3)) : 0,
+    scoreSaturatedTopKRate: asked ? Number((scoreSaturatedTopK / asked).toFixed(3)) : 0,
+    identityPermutation,
     guardTripped,
   };
 }
@@ -273,4 +346,10 @@ if (result.guardTripped > 0) {
   console.error(
     `\nNOTE: ${result.guardTripped} query/queries aborted on a backend guard — investigate, do not read as zero-hit.`,
   );
+}
+if (result.identityPermutation?.rankingOrMetricDependent) {
+  console.error(
+    `\nIDENTITY-PERMUTATION RELEASE GATE FAILED: ${result.identityPermutation.rankChangedQueries}/${result.identityPermutation.queriesCompared} rankings and ${result.identityPermutation.metricChangedQueries}/${result.identityPermutation.queriesCompared} metric rows changed when only opaque generated identities changed.`,
+  );
+  process.exitCode = 1;
 }

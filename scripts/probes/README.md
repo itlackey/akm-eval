@@ -24,6 +24,7 @@ values below so nobody has to remember them:
 
 ```sh
 bin/probe 0.9.10
+bin/probe --identity-permutation 0.9.10
 ```
 
 The underlying scripts, if you need one pack or a binary `bin/probe` cannot
@@ -38,6 +39,16 @@ Pin `AKM_EVAL_AKM_CMD` explicitly when comparing versions — install the target
 into a scratch dir rather than relying on whatever is on PATH. Each run uses a
 fresh hermetic bundle under the OS temp dir and never touches a real stash.
 
+### Identity-permutation release gate
+
+`--identity-permutation` reindexes each pack after replacing every opaque
+document identity with a deterministic reversed permutation. It preserves text
+and caller metadata, maps returned identities back before scoring, and fails if
+ranks or per-query retrieval metrics change. This catches generated
+filename/slug order becoming an accidental tie-breaker. It roughly doubles
+probe runtime, so it is an explicit release gate rather than an always-on smoke
+check.
+
 ## Reading the output
 
 `zeroHitRate` **alone is not evidence of good retrieval**: a retriever that
@@ -48,6 +59,11 @@ returns five arbitrary documents for every query also scores 0% zero-hit.
 `guardTripped` counts queries the backend refused outright (e.g. its
 contamination guard). Those are a finding to investigate, **not** zero-hits;
 they are excluded from the rates rather than silently counted as misses.
+
+`scoreSaturatedTopKRate` is disclosure only: the fraction of full returned
+top-5 sets with equal finite public scores. It cannot tell whether the backend
+uses a safe hidden secondary key or an alphabetical filename fallback; use the
+identity-permutation gate for that correctness question.
 
 ## Reference values
 

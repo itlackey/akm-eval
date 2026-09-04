@@ -8,6 +8,7 @@ set -euo pipefail
 #   bin/probe                 # probe whatever npm `latest` resolves to
 #   bin/probe 0.9.10          # probe an exact published version
 #   bin/probe --cmd '["/path/to/akm"]'   # probe an already-installed binary
+#   bin/probe --identity-permutation 0.9.13  # also gate filename/slug independence
 #
 # Free, deterministic, no LLM, no Docker. Run this BEFORE spending judged-eval
 # budget: if retrieval regressed, stop here (scripts/probes/README.md).
@@ -30,9 +31,11 @@ TOLERANCE=0.005
 
 version=""
 akm_cmd=""
+identity_permutation_check=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --cmd) akm_cmd="${2:?--cmd requires a JSON argv array}"; shift 2 ;;
+    --identity-permutation) identity_permutation_check=1; shift ;;
     -h|--help) sed -n '3,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) version="$1"; shift ;;
@@ -104,7 +107,9 @@ for pack in locomo longmemeval; do
   # locomo's 40 questions are the whole conv-26 slice and need no cap.
   env_max_q=()
   [ "$pack" = "longmemeval" ] && env_max_q=(MAX_Q=20)
-  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" "${env_max_q[@]}" \
+  identity_check_env=()
+  [ "$identity_permutation_check" -eq 1 ] && identity_check_env=(IDENTITY_PERMUTATION_CHECK=1)
+  if ! ( cd "$REPO_ROOT" && env AKM_EVAL_AKM_CMD="$akm_cmd" "${env_max_q[@]}" "${identity_check_env[@]}" \
            bun scripts/probes/retrieval-probe.ts "$pack" ) \
          > "$out_dir/$pack.json" 2> "$out_dir/$pack.log"; then
     echo "probe: ${pack} FAILED -- see runs/probes/${label}-${stamp}/${pack}.log" >&2
@@ -158,6 +163,7 @@ jq -n \
   jq -r '.packs[] | "| \(.pack) | \(.metric) | \(.want) | \(.got) | \(if .delta >= 0 then "+" else "" end)\(.delta * 1000000 | round / 1000000) | \(.verdict) |"' "$out_dir/verdict.json"
   printf '\nguardTripped: '
   jq -r '.guardTripped | to_entries | map("\(.key)=\(.value)") | join(", ")' "$out_dir/verdict.json"
+  [ "$identity_permutation_check" -eq 1 ] && printf 'identityPermutation: passed\n'
   printf '\n'
 } > "$out_dir/summary.md"
 
