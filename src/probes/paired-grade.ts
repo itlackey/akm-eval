@@ -275,7 +275,7 @@ export function gradePairedProbe(
       control.probeContext?.targetCommit !==
       (expectations.expectedControlCommit ?? "published-or-unresolved")
     )
-      mismatches.push(`${pack} control: targetCommit must be published-or-unresolved`);
+      mismatches.push(`${pack} control: targetCommit does not match expected control`);
     if (candidate.probeContext?.targetCommit !== expectations.expectedCandidateCommit)
       mismatches.push(`${pack} candidate: targetCommit does not match expected candidate`);
     const candidateMetrics = new Map(

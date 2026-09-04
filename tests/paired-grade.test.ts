@@ -163,5 +163,42 @@ describe("paired release probe grading", () => {
       },
     );
     expect(wrong.passed).toBe(false);
+    expect(wrong.contextMismatches).toContain(
+      "locomo candidate: targetCommit does not match expected candidate",
+    );
+    expect(wrong.contextMismatches).toContain(
+      "locomo control: targetVersion does not match expected control",
+    );
+    const local = gradePairedProbe(
+      {
+        locomo: {
+          ...control,
+          pack: "locomo",
+          probeContext: {
+            ...control.probeContext,
+            targetCommit: "dddddddddddddddddddddddddddddddddddddddd",
+          },
+        },
+        longmemeval: {
+          ...control,
+          pack: "longmemeval",
+          probeContext: {
+            ...control.probeContext,
+            targetCommit: "dddddddddddddddddddddddddddddddddddddddd",
+          },
+        },
+      },
+      {
+        locomo: { ...candidate, pack: "locomo" },
+        longmemeval: { ...candidate, pack: "longmemeval" },
+      },
+      0.005,
+      {
+        expectedControlVersion: "0.9.13",
+        expectedControlCommit: "dddddddddddddddddddddddddddddddddddddddd",
+        expectedCandidateCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+    );
+    expect(local.passed).toBe(true);
   });
 });
