@@ -3,9 +3,10 @@ set -euo pipefail
 
 # One-command memory eval with the credentials wired correctly.
 #
-#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1
+#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --out runs/longmemeval-0.9.14
 #   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.14-beta.1
 #   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
+#   bin/memory-eval longmemeval --akm-source ../akm --variant akm-memory-lead
 #
 # WHY THIS EXISTS: the judge and the agent need DIFFERENT credentials pointed
 # at DIFFERENT endpoints, and they collide on the same variable name. The agent
@@ -19,12 +20,13 @@ REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 
 usage() {
   printf '%s\n' \
-    'usage: bin/memory-eval <longmemeval|locomo> --akm-version VERSION [--variant ID] [--dry-run]' \
-    '       Omit --akm-version only when no akm-memory arm is selected.'
+    'usage: bin/memory-eval <longmemeval|locomo> (--akm-version VERSION | --akm-source DIR) [--config PATH] [--variant ID] [--out runs/DIR] [--dry-run]' \
+    '       Omit the AKM target only when no akm-memory arm is selected.'
 }
 
 if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
   requested_version=""
+  requested_source=""
   outer_args=("$@")
   for ((i = 0; i < ${#outer_args[@]}; i++)); do
     case "${outer_args[$i]}" in
@@ -33,6 +35,12 @@ if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
         i=$((i + 1))
         ;;
       --variant) i=$((i + 1)) ;;
+      --config) i=$((i + 1)) ;;
+      --out) i=$((i + 1)) ;;
+      --akm-source)
+        requested_source="${outer_args[$((i + 1))]:?--akm-source requires a directory}"
+        i=$((i + 1))
+        ;;
     esac
   done
   if [ "${outer_args[0]:-}" = "-h" ] || [ "${outer_args[0]:-}" = "--help" ]; then
@@ -41,6 +49,9 @@ if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
   fi
   if [ -n "$requested_version" ]; then
     export AKM_EVAL_AKM_VERSION="$requested_version"
+  fi
+  if [ -n "$requested_source" ]; then
+    export AKM_EVAL_AKM_SOURCE_DIR="$requested_source"
   fi
   exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/memory-eval" "$@"
 fi
@@ -58,21 +69,27 @@ pack=""
 variants=()
 dry_run=0
 requested_akm_version="${AKM_EVAL_AKM_VERSION:-}"
+requested_akm_source="${AKM_EVAL_AKM_SOURCE_DIR:-}"
+config_override=""
+requested_output=""
 while [ $# -gt 0 ]; do
   case "$1" in
     longmemeval|locomo) pack="$1"; shift ;;
     --variant) variants+=("${2:?--variant requires a value}"); shift 2 ;;
     --akm-version) requested_akm_version="${2:?--akm-version requires a value}"; shift 2 ;;
+    --akm-source) requested_akm_source="${2:?--akm-source requires a directory}"; shift 2 ;;
+    --config) config_override="${2:?--config requires a path}"; shift 2 ;;
+    --out) requested_output="${2:?--out requires a path}"; shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "memory-eval: unexpected argument: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$pack" ] || { echo "memory-eval: which pack? 'longmemeval' or 'locomo'" >&2; exit 2; }
-[ ${#variants[@]} -gt 0 ] || variants=(baseline raw-vector akm-memory)
 
-config="config/common/${pack}-akm-ab-zen.json"
+config="${config_override:-config/common/${pack}-akm-ab-zen.json}"
 [ -f "$config" ] || { echo "memory-eval: missing $config" >&2; exit 1; }
+[ ${#variants[@]} -gt 0 ] || mapfile -t variants < <(jq -r '.variants[].id' "$config")
 
 fail() { echo "memory-eval: $*" >&2; exit 1; }
 
@@ -81,10 +98,13 @@ fail() { echo "memory-eval: $*" >&2; exit 1; }
 # candidate.  AKM_EVAL_AKM_CMD remains supported, but must report that version.
 needs_akm=0
 for variant in "${variants[@]}"; do
-  [ "$variant" = "akm-memory" ] && needs_akm=1
+  case "$variant" in akm-memory*) needs_akm=1 ;; esac
 done
-if [ "$needs_akm" = "1" ] && [ -z "$requested_akm_version" ]; then
-  fail "akm-memory requires --akm-version VERSION (or AKM_EVAL_AKM_VERSION)."
+if [ -n "$requested_akm_version" ] && [ -n "$requested_akm_source" ]; then
+  fail "--akm-version and --akm-source are mutually exclusive."
+fi
+if [ "$needs_akm" = "1" ] && [ -z "$requested_akm_version" ] && [ -z "$requested_akm_source" ]; then
+  fail "akm-memory requires --akm-version VERSION or --akm-source DIR."
 fi
 
 # Credentials are intentionally never fetched from the AKM CLI under test.
@@ -95,10 +115,11 @@ fi
 # The judge key. Accept AKM_EVAL_JUDGE_API_KEY, or fall back to a real OpenAI
 # key stored under the generic name -- but only after confirming it is NOT the
 # Zen key, which would silently send Zen credentials to api.openai.com.
-# The judge runs on ai.lab, so its key is LAB_API_KEY. An explicit
-# AKM_EVAL_JUDGE_API_KEY still wins; the OPENAI_API_KEY fallback remains for a
-# cloud-OpenAI judge, and is used only when the value differs from the Zen key
-# so Zen credentials can never be sent to another host by a naming accident.
+# If the judge is explicitly routed to the configured ai.lab endpoint, its key
+# is LAB_API_KEY. An explicit AKM_EVAL_JUDGE_API_KEY still wins; the
+# OPENAI_API_KEY fallback remains for a cloud-OpenAI judge, and is used only
+# when the value differs from the Zen key so Zen credentials can never be sent
+# to another host by a naming accident.
 judge_key="${AKM_EVAL_JUDGE_API_KEY:-}"
 if [ -z "$judge_key" ] && [ -n "${LAB_API_KEY:-}" ] && [ -n "$JUDGE_BASE_URL" ] \
    && [ "$JUDGE_BASE_URL" = "${LAB_AI_BASE_URL:-}" ]; then
@@ -108,7 +129,15 @@ if [ -z "$judge_key" ] && [ -n "${OPENAI_API_KEY:-}" ] && [ "${OPENAI_API_KEY:-}
   judge_key="$OPENAI_API_KEY"
 fi
 
-[ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the agent arms need it."
+provider_uses_lab="$(jq -r '[.variants[].agent.providerRef] | any(. == "ai-lab")' "$config")"
+if [ "$provider_uses_lab" = "true" ]; then
+  [ -n "${LAB_API_KEY:-}" ] || fail "LAB_API_KEY is unset; the ai.lab agent arms need it."
+  [ -n "${LAB_AI_BASE_URL:-}" ] || fail "LAB_AI_BASE_URL is unset; the ai.lab agent arms need it."
+  agent_label="ai.lab (${LAB_AI_BASE_URL})"
+else
+  [ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the Zen agent arms need it."
+  agent_label="Zen (${ZEN_BASE_URL})"
+fi
 
 if [ "$pack" = "longmemeval" ]; then
   [ -n "$judge_key" ] || fail "no judge key for ${JUDGE_BASE_URL:-cloud OpenAI}. Set AKM_EVAL_JUDGE_API_KEY to a key that can serve $(jq -r '.packs[0].config.evaluatorModel' "$config")."
@@ -116,8 +145,10 @@ fi
 
 # Agent arms -> Zen. Judge -> cloud OpenAI (no judge base URL, so
 # resolveJudgeEnv clears the agent's and the key is never sent to Zen).
-export OPENAI_API_KEY="$OPENCODE_API_KEY"
-export OPENAI_BASE_URL="$ZEN_BASE_URL"
+if [ "$provider_uses_lab" != "true" ]; then
+  export OPENAI_API_KEY="$OPENCODE_API_KEY"
+  export OPENAI_BASE_URL="$ZEN_BASE_URL"
+fi
 export AKM_EVAL_JUDGE_API_KEY="$judge_key"
 # Unset, not empty: resolveJudgeEnv treats an absent judge base URL as "cloud
 # OpenAI" and clears the agent's, so the judge key is never sent to Zen.
@@ -145,23 +176,38 @@ akm_version="$(
   AKM_STATE_DIR="$_akm_tmp/state" \
   "${akm_argv[@]}" --version 2>/dev/null || echo unknown
 )"
-if [ "$needs_akm" = "1" ] && [ "$akm_version" != "$requested_akm_version" ]; then
+if [ "$needs_akm" = "1" ] && [ -n "$requested_akm_version" ] && [ "$akm_version" != "$requested_akm_version" ]; then
   fail "requested akm-cli ${requested_akm_version}, but AKM_EVAL_AKM_CMD reports ${akm_version}."
 fi
 
-stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-out_root="runs/${pack}-full-${stamp}"
+if [ -n "$requested_output" ]; then
+  runs_root="$(realpath -m -- "$REPO_ROOT/runs")"
+  case "$requested_output" in
+    /*) output_candidate="$requested_output" ;;
+    *) output_candidate="$REPO_ROOT/$requested_output" ;;
+  esac
+  out_root="$(realpath -m -- "$output_candidate")"
+  case "$out_root" in
+    "$runs_root"/*) ;;
+    *) fail "--out must resolve beneath $runs_root so the Docker wrapper can persist checkpoints safely." ;;
+  esac
+else
+  stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+  out_root="runs/${pack}-full-${stamp}"
+fi
 
 cat <<INFO
 
 memory-eval: pack        ${pack}
 memory-eval: config      ${config}
 memory-eval: arms        ${variants[*]}
-memory-eval: agent       Zen (${ZEN_BASE_URL})
+memory-eval: agent       ${agent_label}
 memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via ${JUDGE_BASE_URL:-cloud OpenAI}" || echo "")
 memory-eval: questions   $(jq -r '.packs[0].config.maxQuestions // "ALL (no subset)"' "$config")
 memory-eval: categories  $(jq -r 'if .packs[0].config.questionCategories then (.packs[0].config.questionCategories|join(",")) else "ALL" end' "$config")
 memory-eval: akm-cli     ${akm_version}
+memory-eval: akm-source  ${AKM_EVAL_AKM_SOURCE_SHA:-published-package}${AKM_EVAL_AKM_SOURCE_DIR:+ (read-only mount: $AKM_EVAL_AKM_SOURCE_DIR)}
+memory-eval: akm-tree    ${AKM_EVAL_AKM_SOURCE_FINGERPRINT:-n/a}${AKM_EVAL_AKM_SOURCE_DIRTY:+ (dirty=$AKM_EVAL_AKM_SOURCE_DIRTY)}
 memory-eval: output      ${out_root}/
 
 INFO

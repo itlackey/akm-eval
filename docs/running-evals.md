@@ -29,10 +29,14 @@ is preinstalled. It never creates a host venv.
   absolute path.
 - External BEAM paths in `BEAM_REPO_PATH`, `BEAM_DATASET_PATH`, and
   `BEAM_DATASET_10M_PATH` are mounted read-only automatically.
-- To probe a source checkout, set
-  `AKM_EVAL_AKM_SOURCE_DIR=/absolute/path/to/akm` and pass
-  `--cmd '["bun","/absolute/path/to/akm/src/cli.ts"]'`. The source checkout
-  must already contain whatever source-only assets that command needs.
+- To test an unpublished source checkout, use `--akm-source /absolute/path/to/akm`
+  with `bin/build-image`, `bin/probe`, or `bin/memory-eval`, or export
+  `AKM_EVAL_AKM_SOURCE_DIR` for `bin/eval`. The wrapper creates a sanitized
+  Docker context containing only Git-tracked and untracked-nonignored files,
+  installs locked dependencies, and builds AKM inside a derivative image. The
+  checkout is also mounted read-only for provenance and is never built or
+  modified on the host. Source images and result metadata are bound to the Git
+  SHA, full tree fingerprint, and dirty state.
 - Use `host.docker.internal` rather than `localhost` for an API server running
   on the host.
 
@@ -51,7 +55,7 @@ version for a retrieval probe or judged `akm-memory` run.
 
 ## Common commands
 
-- `bin/build-image --akm-version <exact-version> [--flavor core|beam]`
+- `bin/build-image (--akm-version <exact-version> | --akm-source <checkout>) [--flavor core|beam]`
 - `bin/doctor [--pack <id>]`
 - `bin/eval --pack <pack> --variant <variant> --config <config-path> [--out <output-dir>]`
 - `bin/matrix --config <config-path>`
@@ -59,9 +63,9 @@ version for a retrieval probe or judged `akm-memory` run.
 - `bin/summary --runs <runs-dir> --format markdown`
 - `bin/compare --baseline <run-dir> --candidate <run-dir>`
 - `bin/downloads [DatasetName]`
-- `bin/probe --akm-version <exact-version>`
+- `bin/probe (--akm-version <exact-version> | --akm-source <checkout>)`
 - `bin/probe-pair --control <dir> --candidate <dir> ...`
-- `bin/memory-eval <pack> --akm-version <exact-version> [--variant <id>]`
+- `bin/memory-eval <pack> (--akm-version <exact-version> | --akm-source <checkout>) [--config <path>] [--variant <id>] [--out runs/<stable-id>]`
 
 The current runnable configs are listed in `README.md`.
 
@@ -72,6 +76,30 @@ Runs write normalized artifacts under the chosen output directory in `runs/`:
 - `result.json`
 - `summary.md`
 - optional `raw-output.json` and harness logs
+
+LongMemEval additionally fsyncs one signature-bound answer checkpoint after
+each question and one judge checkpoint after each verdict. Re-running the same
+command with the same explicit `--out runs/<stable-id>` resumes exact matches.
+Without `--out`, the wrapper creates a new timestamped directory and therefore
+starts a new checkpoint lineage. Any change to the dataset/questions, provider
+endpoint/model, AKM version/source tree, memory config, evaluator code, judge
+prompt, or judge endpoint/model produces a different identity and does not
+reuse stale work.
+
+The 0.9.15 release screen is:
+
+```bash
+bin/probe --akm-source ../akm
+bin/memory-eval longmemeval \
+  --akm-source ../akm \
+  --config config/common/longmemeval-akm-fragment-context-0915.json \
+  --out runs/longmemeval-0.9.15-rc
+```
+
+It compares the new explicit `exact` and `lead` context modes on the same
+seeded n=200 sample. The `auto` answer-model census must be reviewed in every
+result; use a concrete model for a causal A/B and run all 500 questions before
+publishing a benchmark score.
 
 See also:
 

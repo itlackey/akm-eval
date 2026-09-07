@@ -65,6 +65,7 @@ function scriptFetch(responses: ScriptedResponse[]): { callCount: () => number }
 
 function okBody(text: string): string {
   return JSON.stringify({
+    model: "provider-resolved-model",
     choices: [{ message: { content: text } }],
     usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
   });
@@ -193,6 +194,7 @@ describe("OpenAICompatibleRunner retry", () => {
 
     expect(result.ok).toBe(true);
     expect(result.retries).toBe(0);
+    expect(result.resolvedModel).toBe("provider-resolved-model");
     expect(callCount()).toBe(1);
   });
 

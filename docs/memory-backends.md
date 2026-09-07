@@ -90,6 +90,24 @@ out and the result capped at 20,000 characters.
 | --- | --- |
 | `AKM_EVAL_AKM_CMD` | JSON array naming the akm invocation. Default `["akm"]`. |
 | per-run `workDir` | `path.join(context.outputDir, '.akm-memory')`, set automatically by `src/cli.ts run`; not separately configurable today. |
+| `memory.config.fragmentContext.mode` | `exact` or `lead`. Omitted preserves the pre-0.9.15 `akm show REF --format json` argv exactly. |
+| `memory.config.fragmentContext.maxChars` | Optional positive integer budget for `lead`; mutually exclusive with `maxTokens`. |
+| `memory.config.fragmentContext.maxTokens` | Optional positive integer budget for `lead`; mutually exclusive with `maxChars`. |
+
+AKM 0.9.15's `lead` mode returns the indexed-safe first fragment followed by
+an explicit `[Selected matching fragment]` section, with the selected match
+last and preserved preferentially under the budget. The evaluator does not
+reconstruct context from raw files. It records selected/parent refs, fragment
+ordinal/count and line bounds, neighbor refs, fragment/parent sizes,
+`matchStage`, context mode/budget/truncation, and SHA-256/size of the actual
+text returned. Raw context bodies and descriptions are not duplicated into
+provenance artifacts.
+
+LongMemEval reports `metrics.context` separately from session retrieval. Its
+literal containment diagnostic shows whether a normalized reference answer
+survived in returned text, including the rate conditional on retrieving a
+ground-truth evidence session. It is not an answer judge and excludes
+abstention questions.
 
 ### Runnable configs
 

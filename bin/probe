@@ -8,6 +8,7 @@ set -euo pipefail
 #   bin/probe --akm-version 0.9.14-beta.1
 #   bin/probe 0.9.10          # positional compatibility alias
 #   bin/probe --cmd '["/path/to/akm"]'   # probe an already-installed binary
+#   bin/probe --akm-source ../akm         # build an unpublished checkout in Docker
 #   bin/probe --identity-permutation 0.9.13  # also gate filename/slug independence
 #
 # Free and deterministic (no LLM). It runs in Docker so the host needs no
@@ -19,12 +20,14 @@ REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 usage() {
   printf '%s\n' \
     'usage: bin/probe --akm-version VERSION [--identity-permutation]' \
+    '       bin/probe --akm-source DIR [--identity-permutation]' \
     '       bin/probe --cmd '\''["/absolute/path/to/akm"]'\'' [--identity-permutation]'
 }
 
 if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
   requested_version=""
   has_custom_command=0
+  requested_source=""
   wants_help=0
   outer_args=("$@")
   for ((i = 0; i < ${#outer_args[@]}; i++)); do
@@ -37,6 +40,10 @@ if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
         has_custom_command=1
         i=$((i + 1))
         ;;
+      --akm-source)
+        requested_source="${outer_args[$((i + 1))]:?--akm-source requires a directory}"
+        i=$((i + 1))
+        ;;
       -h|--help) wants_help=1 ;;
       --identity-permutation) ;;
       -*) ;;
@@ -47,12 +54,15 @@ if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
     usage
     exit 0
   fi
-  if [ "$wants_help" = "0" ] && [ -z "$requested_version" ] && [ "$has_custom_command" = "0" ]; then
-    echo "probe: select an exact target with --akm-version VERSION (or use --cmd)" >&2
+  if [ "$wants_help" = "0" ] && [ -z "$requested_version" ] && [ -z "$requested_source" ] && [ "$has_custom_command" = "0" ]; then
+    echo "probe: select an exact target with --akm-version VERSION, --akm-source DIR, or --cmd" >&2
     exit 2
   fi
   if [ -n "$requested_version" ]; then
     export AKM_EVAL_AKM_VERSION="$requested_version"
+  fi
+  if [ -n "$requested_source" ]; then
+    export AKM_EVAL_AKM_SOURCE_DIR="$requested_source"
   fi
   exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/probe" "$@"
 fi
@@ -77,10 +87,12 @@ TOLERANCE=0.005
 version=""
 akm_cmd=""
 identity_permutation_check=0
+source_dir="${AKM_EVAL_AKM_SOURCE_DIR:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --cmd) akm_cmd="${2:?--cmd requires a JSON argv array}"; shift 2 ;;
     --akm-version) version="${2:?--akm-version requires a value}"; shift 2 ;;
+    --akm-source) source_dir="${2:?--akm-source requires a directory}"; shift 2 ;;
     --identity-permutation) identity_permutation_check=1; shift ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
@@ -88,13 +100,20 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -n "$akm_cmd" ] && [ -n "$version" ]; then
-  echo "probe: pass --akm-version (or a positional version) OR --cmd, not both" >&2
+selected_target_count=0
+[ -n "$akm_cmd" ] && selected_target_count=$((selected_target_count + 1))
+[ -n "$version" ] && selected_target_count=$((selected_target_count + 1))
+[ -n "$source_dir" ] && selected_target_count=$((selected_target_count + 1))
+if [ "$selected_target_count" -gt 1 ]; then
+  echo "probe: pass exactly one of --akm-version, --akm-source, or --cmd" >&2
   exit 2
 fi
 
 # ---------------------------------------------------------------- resolve akm
-if [ -z "$akm_cmd" ]; then
+if [ -n "$source_dir" ]; then
+  akm_cmd='["akm"]'
+  label="source-${AKM_EVAL_AKM_SOURCE_SHA:-unknown}"
+elif [ -z "$akm_cmd" ]; then
   version="${version:-${AKM_EVAL_AKM_VERSION:-}}"
   [ -n "$version" ] || { echo "probe: no AKM version selected" >&2; exit 2; }
   akm_cmd='["akm"]'

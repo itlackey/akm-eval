@@ -156,4 +156,24 @@ describe("longmemeval dataset loading", () => {
     const questions = await loadDataset({ rootDir, datasetPath });
     expect(questions[0]?.haystackSessionsSynthesized).toBe(false);
   });
+
+  test("normalizes official numeric count answers to the pack's string contract", async () => {
+    const rootDir = createTempRoot();
+    const datasetPath = path.resolve(rootDir, "dataset.json");
+    const rows = [
+      {
+        question_id: "numeric-answer",
+        question_type: "single-session-user",
+        question: "How many were there?",
+        answer: 3,
+        haystack_sessions: [[{ role: "assistant", content: "There were three." }]],
+      },
+    ];
+    fs.writeFileSync(datasetPath, `${JSON.stringify(rows, null, 2)}\n`, "utf8");
+
+    const questions = await loadDataset({ rootDir, datasetPath });
+
+    expect(questions[0]?.expectedAnswer).toBe("3");
+    expect(typeof questions[0]?.expectedAnswer).toBe("string");
+  });
 });

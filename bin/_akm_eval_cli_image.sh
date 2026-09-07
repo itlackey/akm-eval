@@ -6,6 +6,7 @@ REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 # shellcheck source=bin/_akm_eval_image_lib.sh
 source "$BIN_DIR/_akm_eval_image_lib.sh"
 AKM_VERSION="${AKM_EVAL_AKM_VERSION:-}"
+AKM_SOURCE_DIR="${AKM_EVAL_AKM_SOURCE_DIR:-}"
 IMAGE_FLAVOR="${AKM_EVAL_IMAGE_FLAVOR:-core}"
 
 akm_eval_validate_version "$AKM_VERSION" || {
@@ -16,12 +17,27 @@ case "$IMAGE_FLAVOR" in
   core|beam) ;;
   *) printf 'Error: AKM_EVAL_IMAGE_FLAVOR must be core or beam.\n' >&2; exit 2 ;;
 esac
+if [ -n "$AKM_VERSION" ] && [ -n "$AKM_SOURCE_DIR" ]; then
+  printf 'Error: AKM_EVAL_AKM_VERSION and AKM_EVAL_AKM_SOURCE_DIR are mutually exclusive.\n' >&2
+  exit 2
+fi
 
 if ! RUNTIME_FINGERPRINT="$(akm_eval_runtime_fingerprint "$REPO_ROOT" "$IMAGE_FLAVOR")"; then
   printf 'Error: could not fingerprint the evaluator image inputs; is this a git checkout?\n' >&2
   exit 1
 fi
 DEFAULT_IMAGE_TAG="$(akm_eval_default_image_tag "$IMAGE_FLAVOR" "$AKM_VERSION" "$RUNTIME_FINGERPRINT")"
+if [ -n "$AKM_SOURCE_DIR" ]; then
+  if ! AKM_SOURCE_DIR="$(akm_eval_canonical_path "$AKM_SOURCE_DIR")" || \
+     ! git -C "$AKM_SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'Error: AKM_EVAL_AKM_SOURCE_DIR must be a git checkout: %s\n' "$AKM_SOURCE_DIR" >&2
+    exit 2
+  fi
+  export AKM_EVAL_AKM_SOURCE_DIR="$AKM_SOURCE_DIR"
+  SOURCE_SHA="$(git -C "$AKM_SOURCE_DIR" rev-parse HEAD)"
+  SOURCE_FINGERPRINT="$(akm_eval_source_fingerprint "$AKM_SOURCE_DIR")"
+  DEFAULT_IMAGE_TAG="$(akm_eval_source_image_tag "$SOURCE_SHA" "$SOURCE_FINGERPRINT" "$RUNTIME_FINGERPRINT")"
+fi
 IMAGE_TAG="${AKM_EVAL_CLI_IMAGE_TAG:-${AKM_EVAL_IMAGE_TAG:-$DEFAULT_IMAGE_TAG}}"
 
 if ! WORKSPACE_DIR="$(akm_eval_canonical_path "${AKM_EVAL_WORKSPACE_DIR:-$REPO_ROOT}")"; then
@@ -42,6 +58,7 @@ if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
     exit 1
   fi
   AKM_EVAL_AKM_VERSION="$AKM_VERSION" \
+    AKM_EVAL_EXPECTED_SOURCE_FINGERPRINT="${SOURCE_FINGERPRINT:-}" \
     AKM_EVAL_IMAGE_FLAVOR="$IMAGE_FLAVOR" \
     AKM_EVAL_CLI_IMAGE_TAG="$IMAGE_TAG" \
     bash "$REPO_ROOT/bin/build-image"
@@ -119,6 +136,7 @@ for env_name in \
   AKM_EVAL_JUDGE_BASE_URL \
   AKM_EVAL_JUDGE_MAX_TOKENS \
   AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE \
+  AKM_EVAL_JUDGE_RUNTIME_FINGERPRINT \
   BEAM_PYTHON_BIN
 do
   if [ -n "${!env_name:-}" ]; then

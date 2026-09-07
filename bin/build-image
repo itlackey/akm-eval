@@ -6,6 +6,7 @@ REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 # shellcheck source=bin/_akm_eval_image_lib.sh
 source "$BIN_DIR/_akm_eval_image_lib.sh"
 AKM_VERSION="${AKM_EVAL_AKM_VERSION:-}"
+AKM_SOURCE_DIR="${AKM_EVAL_AKM_SOURCE_DIR:-}"
 IMAGE_FLAVOR="${AKM_EVAL_IMAGE_FLAVOR:-core}"
 
 while [ $# -gt 0 ]; do
@@ -18,8 +19,12 @@ while [ $# -gt 0 ]; do
       IMAGE_FLAVOR="${2:?--flavor requires core or beam}"
       shift 2
       ;;
+    --akm-source)
+      AKM_SOURCE_DIR="${2:?--akm-source requires a directory}"
+      shift 2
+      ;;
     -h|--help)
-      echo 'usage: bin/build-image [--akm-version VERSION] [--flavor core|beam]'
+      echo 'usage: bin/build-image [--akm-version VERSION | --akm-source DIR] [--flavor core|beam]'
       exit 0
       ;;
     *)
@@ -38,17 +43,84 @@ case "$IMAGE_FLAVOR" in
   *) echo "build-image: --flavor must be core or beam" >&2; exit 2 ;;
 esac
 
+if [ -n "$AKM_VERSION" ] && [ -n "$AKM_SOURCE_DIR" ]; then
+  echo "build-image: --akm-version and --akm-source are mutually exclusive" >&2
+  exit 2
+fi
+
 if ! RUNTIME_FINGERPRINT="$(akm_eval_runtime_fingerprint "$REPO_ROOT" "$IMAGE_FLAVOR")"; then
   echo "build-image: could not fingerprint evaluator image inputs; is this a git checkout?" >&2
   exit 1
 fi
 DEFAULT_TAG="$(akm_eval_default_image_tag "$IMAGE_FLAVOR" "$AKM_VERSION" "$RUNTIME_FINGERPRINT")"
+if [ -n "$AKM_SOURCE_DIR" ]; then
+  if ! AKM_SOURCE_DIR="$(akm_eval_canonical_path "$AKM_SOURCE_DIR")" || \
+     ! git -C "$AKM_SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "build-image: --akm-source must be a git checkout: $AKM_SOURCE_DIR" >&2
+    exit 2
+  fi
+  SOURCE_SHA="$(git -C "$AKM_SOURCE_DIR" rev-parse HEAD)"
+  SOURCE_FINGERPRINT="$(akm_eval_source_fingerprint "$AKM_SOURCE_DIR")"
+  if [ -n "${AKM_EVAL_EXPECTED_SOURCE_FINGERPRINT:-}" ] && \
+     [ "$SOURCE_FINGERPRINT" != "$AKM_EVAL_EXPECTED_SOURCE_FINGERPRINT" ]; then
+    echo "build-image: AKM source changed after image selection; retry so its tag and provenance stay aligned" >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$AKM_SOURCE_DIR" status --porcelain --untracked-files=normal)" ]; then
+    SOURCE_DIRTY=1
+  else
+    SOURCE_DIRTY=0
+  fi
+  COMBINED_RUNTIME_FINGERPRINT="$(printf 'eval=%s\nsource=%s\n' "$RUNTIME_FINGERPRINT" "$SOURCE_FINGERPRINT" | git hash-object --stdin)"
+  DEFAULT_TAG="$(akm_eval_source_image_tag "$SOURCE_SHA" "$SOURCE_FINGERPRINT" "$RUNTIME_FINGERPRINT")"
+fi
 IMAGE_TAG="${AKM_EVAL_CLI_IMAGE_TAG:-${AKM_EVAL_IMAGE_TAG:-$DEFAULT_TAG}}"
+
+if [ -n "$AKM_SOURCE_DIR" ]; then
+  BASE_TAG="$(akm_eval_default_image_tag "$IMAGE_FLAVOR" "" "$RUNTIME_FINGERPRINT")"
+  SOURCE_CONTEXT="$(mktemp -d)"
+  trap 'rm -rf -- "$SOURCE_CONTEXT"' EXIT
+  if ! akm_eval_prepare_source_context "$AKM_SOURCE_DIR" "$SOURCE_CONTEXT"; then
+    echo "build-image: failed to prepare sanitized AKM source context" >&2
+    exit 1
+  fi
+  PREPARED_FINGERPRINT="$(akm_eval_prepared_context_fingerprint "$AKM_SOURCE_DIR" "$SOURCE_CONTEXT")"
+  if [ "$PREPARED_FINGERPRINT" != "$SOURCE_FINGERPRINT" ]; then
+    echo "build-image: AKM source changed while its container context was prepared; retry from a stable checkout" >&2
+    exit 1
+  fi
+  # The context is already allowlisted from git. Do not let a source-controlled
+  # ignore file silently remove a fingerprinted build input after validation.
+  rm -f -- "$SOURCE_CONTEXT/.dockerignore"
+  if ! docker image inspect "$BASE_TAG" >/dev/null 2>&1; then
+    docker build \
+      --file "$REPO_ROOT/docker/akm-eval.Dockerfile" \
+      --target "$IMAGE_FLAVOR" \
+      --build-arg "AKM_CLI_VERSION=" \
+      --build-arg "AKM_EVAL_RUNTIME_FINGERPRINT=$RUNTIME_FINGERPRINT" \
+      --label "org.akm.eval.runtime-fingerprint=$RUNTIME_FINGERPRINT" \
+      --tag "$BASE_TAG" \
+      "$REPO_ROOT"
+  fi
+  exec docker build \
+    --file "$REPO_ROOT/docker/akm-eval-local-akm.Dockerfile" \
+    --build-arg "BASE_IMAGE=$BASE_TAG" \
+    --build-arg "AKM_SOURCE_GIT_SHA=$SOURCE_SHA" \
+    --build-arg "AKM_SOURCE_FINGERPRINT=$SOURCE_FINGERPRINT" \
+    --build-arg "AKM_SOURCE_DIRTY=$SOURCE_DIRTY" \
+    --build-arg "AKM_EVAL_RUNTIME_FINGERPRINT=$COMBINED_RUNTIME_FINGERPRINT" \
+    --label "org.akm.eval.runtime-fingerprint=$COMBINED_RUNTIME_FINGERPRINT" \
+    --label "org.akm.eval.akm-source-sha=$SOURCE_SHA" \
+    --label "org.akm.eval.akm-source-fingerprint=$SOURCE_FINGERPRINT" \
+    --tag "$IMAGE_TAG" \
+    "$SOURCE_CONTEXT"
+fi
 
 exec docker build \
   --file "$REPO_ROOT/docker/akm-eval.Dockerfile" \
   --target "$IMAGE_FLAVOR" \
   --build-arg "AKM_CLI_VERSION=$AKM_VERSION" \
+  --build-arg "AKM_EVAL_RUNTIME_FINGERPRINT=$RUNTIME_FINGERPRINT" \
   --label "org.akm.eval.runtime-fingerprint=$RUNTIME_FINGERPRINT" \
   --tag "$IMAGE_TAG" \
   "$REPO_ROOT"

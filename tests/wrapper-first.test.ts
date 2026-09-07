@@ -28,6 +28,7 @@ describe("wrapper-first operator surface", () => {
       ".dockerignore",
       ".env.example",
       "docker/akm-eval.Dockerfile",
+      "docker/akm-eval-local-akm.Dockerfile",
       "docker/akm-eval-entrypoint.sh",
     ]) {
       expect(fs.existsSync(path.resolve(rootDir, relativePath))).toBe(true);
@@ -205,6 +206,64 @@ describe("docker-first operator wrappers", () => {
     ).toBe(true);
   });
 
+  test("an unpublished AKM checkout selects a content-addressed source image and is mounted read-only", () => {
+    const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-source-checkout-"));
+    stubDirs.push(sourceDir);
+    fs.writeFileSync(path.join(sourceDir, "package.json"), '{"name":"fake-akm"}\n');
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "tests@example.invalid"],
+      ["config", "user.name", "Tests"],
+      ["add", "package.json"],
+      ["commit", "-qm", "fixture"],
+    ]) {
+      expect(spawnSync("git", args, { cwd: sourceDir }).status).toBe(0);
+    }
+
+    const result = runOperatorWrapperWithStubDocker("bin/probe", ["--akm-source", sourceDir]);
+    expect(result.status).toBe(0);
+    expect(result.forbiddenCalls).toEqual([]);
+    const flattened = result.invocations.flat();
+    expect(flattened.some((arg) => arg.startsWith("akm-eval-core:akm-source-"))).toBe(true);
+    expect(flattened).toContain(`type=bind,source=${sourceDir},target=${sourceDir},readonly`);
+    expect(flattened).toContain("AKM_EVAL_AKM_SOURCE_DIR");
+  });
+
+  test("local-source image context excludes gitignored host files", () => {
+    const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-source-sanitize-"));
+    const preparedDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-source-prepared-"));
+    stubDirs.push(sourceDir, preparedDir);
+    fs.writeFileSync(path.join(sourceDir, ".gitignore"), "secret.env\n");
+    fs.writeFileSync(path.join(sourceDir, "tracked.txt"), "tracked\n");
+    fs.writeFileSync(path.join(sourceDir, "untracked.txt"), "untracked\n");
+    fs.writeFileSync(path.join(sourceDir, "secret.env"), "DO_NOT_COPY=secret\n");
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "tests@example.invalid"],
+      ["config", "user.name", "Tests"],
+      ["add", ".gitignore", "tracked.txt"],
+      ["commit", "-qm", "fixture"],
+    ]) {
+      expect(spawnSync("git", args, { cwd: sourceDir }).status).toBe(0);
+    }
+    const prepare = spawnSync(
+      "bash",
+      [
+        "-c",
+        'source "$1"; akm_eval_prepare_source_context "$2" "$3"',
+        "bash",
+        path.resolve(rootDir, "bin/_akm_eval_image_lib.sh"),
+        sourceDir,
+        preparedDir,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(prepare.status).toBe(0);
+    expect(fs.readFileSync(path.join(preparedDir, "tracked.txt"), "utf8")).toBe("tracked\n");
+    expect(fs.readFileSync(path.join(preparedDir, "untracked.txt"), "utf8")).toBe("untracked\n");
+    expect(fs.existsSync(path.join(preparedDir, "secret.env"))).toBe(false);
+  });
+
   test("probe-pair and memory-eval enter Docker before using tool dependencies", () => {
     for (const [wrapper, args] of [
       [
@@ -227,6 +286,22 @@ describe("docker-first operator wrappers", () => {
       expect(result.forbiddenCalls).toEqual([]);
       expect(result.invocations.some((argv) => argv[0] === "run")).toBe(true);
     }
+  });
+
+  test("memory-eval forwards a stable output path into its container", () => {
+    const result = runOperatorWrapperWithStubDocker("bin/memory-eval", [
+      "longmemeval",
+      "--akm-version",
+      "0.9.14-beta.1",
+      "--out",
+      "runs/release-screen",
+      "--dry-run",
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.forbiddenCalls).toEqual([]);
+    const invocation = result.invocations.find((argv) => argv[0] === "run");
+    expect(invocation).toContain("--out");
+    expect(invocation).toContain("runs/release-screen");
   });
 
   test("help is host-only and generic commands select an AKM-free runtime image", () => {

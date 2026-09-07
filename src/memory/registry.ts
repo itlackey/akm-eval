@@ -1,5 +1,9 @@
 import { UnknownMemoryBackendError } from "../core/errors.ts";
-import { createAkmBackend, getAkmBackendDoctorDetail } from "./backends/akm.ts";
+import {
+  type AkmBackendOptions,
+  createAkmBackend,
+  getAkmBackendDoctorDetail,
+} from "./backends/akm.ts";
 import { createNoneBackend } from "./backends/none.ts";
 import { createRawVectorBackend } from "./backends/raw-vector.ts";
 import type { MemoryBackend } from "./types.ts";
@@ -8,7 +12,11 @@ import type { MemoryBackend } from "./types.ts";
 // per-instance hermetic root for its AKM_* directories). Every other
 // factory ignores extra arguments, so this widening needed no changes to
 // none/raw-vector's own signatures.
-type BackendFactory = (rootDir?: string, workDir?: string) => MemoryBackend;
+type BackendFactory = (
+  rootDir?: string,
+  workDir?: string,
+  config?: Record<string, unknown>,
+) => MemoryBackend;
 type BackendStatus = {
   evaluated: boolean;
   status: "ok" | "warn";
@@ -17,7 +25,8 @@ type BackendStatus = {
 
 export const memoryBackendRegistry: Record<string, BackendFactory> = {
   none: createNoneBackend,
-  akm: createAkmBackend,
+  akm: (rootDir, workDir, config) =>
+    createAkmBackend(rootDir, workDir, config as AkmBackendOptions | undefined),
   "raw-vector": createRawVectorBackend,
 };
 
@@ -46,12 +55,13 @@ export function createMemoryBackend(
   id = "none",
   rootDir?: string,
   workDir?: string,
+  config?: Record<string, unknown>,
 ): MemoryBackend {
   const factory = memoryBackendRegistry[id];
   if (!factory) {
     throw new UnknownMemoryBackendError(id);
   }
-  return factory(rootDir, workDir);
+  return factory(rootDir, workDir, config);
 }
 
 export function listMemoryBackends(): string[] {

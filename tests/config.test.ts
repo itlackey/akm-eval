@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createUsageLines, normalizeCliArgs, resolveWrapperCommand } from "../src/cli-entry.ts";
 import { loadConfig } from "../src/config/load-config.ts";
 import { validateConfig } from "../src/config/validate-config.ts";
+import { resolveVariant } from "../src/variants/resolve-variant.ts";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shellBinary = "bash";
@@ -212,6 +213,87 @@ describe("config loading", () => {
     expect(config.runs[0].akmCommand).toBe("akm");
     expect(config.runs[0].akmEnvironment).toEqual({ AKM_MODE: "on" });
     expect(config.runs[0].akmConfigPath).toBe("config/opencode.akm.json");
+  });
+
+  test("preserves and validates the explicit AKM fragment-context contract", () => {
+    const planned = validateConfig({
+      schemaVersion: "akm.eval.config.v1",
+      run: { id: "fragment-context", outputDir: "runs/fragment-context" },
+      packs: [
+        {
+          id: "longmemeval",
+          adapter: "longmemeval",
+          config: { evaluatorCommand: "python scripts/longmemeval-evaluator.py" },
+        },
+      ],
+      variants: [
+        {
+          id: "akm-memory-lead",
+          agent: { provider: "openai-compatible", providerRef: "lab", model: "auto" },
+          akm: { enabled: false },
+          memory: {
+            backend: "akm",
+            config: { fragmentContext: { mode: "lead", maxChars: 3200 } },
+          },
+        },
+      ],
+      providers: {
+        lab: { type: "openai-compatible", baseURL: "https://example.invalid/v1" },
+      },
+    });
+    expect(planned.runs[0]?.memoryBackendConfig).toEqual({
+      fragmentContext: { mode: "lead", maxChars: 3200 },
+    });
+
+    expect(() =>
+      validateConfig({
+        ...planned,
+        runs: [
+          {
+            ...planned.runs[0],
+            memoryBackendConfig: {
+              fragmentContext: { mode: "lead", maxChars: 3200, maxTokens: 800 },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  test("the committed fragment-context variants resolve for execution", () => {
+    const config = loadConfig(
+      path.resolve(rootDir, "config/common/longmemeval-akm-fragment-context-0915.json"),
+    );
+
+    expect(config.runs.map((run) => resolveVariant(run.variant).id)).toEqual([
+      "akm-memory-exact",
+      "akm-memory-lead",
+    ]);
+  });
+
+  test("resolves provider baseURL env placeholders for container-configured endpoints", () => {
+    process.env.TEST_BASE_URL = "https://lab.example.invalid/v1";
+    const config = validateConfig({
+      version: 1,
+      runs: [
+        {
+          pack: "longmemeval",
+          variant: "baseline",
+          memoryBackend: "none",
+          agentProvider: "lab",
+          packConfig: { evaluatorCommand: "python scripts/longmemeval-evaluator.py" },
+        },
+      ],
+      providers: {
+        lab: {
+          type: "openai-compatible",
+          baseURL: "{env:TEST_BASE_URL}",
+          defaultModel: "auto",
+        },
+      },
+    });
+    expect(config.runs[0]?.agentProviderConfig?.baseURL).toBe("https://lab.example.invalid/v1");
+    process.env.TEST_BASE_URL = undefined;
   });
 
   test("resolves env placeholders in direct config providers", () => {

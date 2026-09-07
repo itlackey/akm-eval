@@ -21,6 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRunOptions, AgentRunResult, AgentRunner } from "../src/agent/types.ts";
+import { runEvaluatorCommand } from "../src/core/evaluator-command.ts";
 import { createRunContext } from "../src/core/run-context.ts";
 import type { EvalConfig, RunDefinition } from "../src/core/types.ts";
 import type {
@@ -84,7 +85,10 @@ interface BackendCalls {
  * fully scripted, not driven by what was actually add()-ed, exactly what
  * "a scripted fake MemoryBackend (deterministic search results)" calls for.
  */
-function createScriptedMemoryBackend(scriptedSearchResults: MemorySearchResult[][]): {
+function createScriptedMemoryBackend(
+  scriptedSearchResults: MemorySearchResult[][],
+  healthDetail = "scripted fake backend",
+): {
   backend: MemoryBackend;
   calls: BackendCalls;
 } {
@@ -106,7 +110,7 @@ function createScriptedMemoryBackend(scriptedSearchResults: MemorySearchResult[]
       return results;
     },
     healthCheck() {
-      return { status: "ok", detail: "scripted fake backend" } as const;
+      return { status: "ok", detail: healthDetail } as const;
     },
   };
   return { backend, calls };
@@ -164,7 +168,13 @@ function createRecordingAgent(answerFor: (prompt: string, callIndex: number) => 
     async run(options: AgentRunOptions): Promise<AgentRunResult> {
       prompts.push(options.prompt);
       const text = answerFor(options.prompt, prompts.length - 1);
-      return { ok: true, text, usage: { input: 10, output: 2, total: 12 }, latencyMs: 5 };
+      return {
+        ok: true,
+        text,
+        usage: { input: 10, output: 2, total: 12 },
+        latencyMs: 5,
+        resolvedModel: "provider-resolved-test-model",
+      };
     },
   };
   return { agent, prompts };
@@ -226,6 +236,19 @@ function buildContext(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("longmemeval adapter: retrieval wiring", () => {
+  test("the evaluator preserves the Docker image's pinned PATH", () => {
+    const dir = tempDir("akm-eval-pinned-path-");
+    const executable = path.resolve(dir, "pinned-evaluator");
+    fs.writeFileSync(executable, "#!/bin/sh\nprintf pinned-runtime", { mode: 0o755 });
+
+    const result = runEvaluatorCommand("pinned-evaluator", rootDir, {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+    });
+
+    expect(result).toEqual({ stdout: "pinned-runtime", stderr: "", exitCode: 0 });
+  });
+
   test("memory-backed arm adds haystack sessions once per instance, searches with the right query/topK, builds context from exactly the retrieved text, and scores retrieval metrics against evidence session ids", async () => {
     const outputDir = tempDir("akm-eval-longmemeval-retrieval-");
     const datasetPath = writeDatasetFixture(outputDir);
@@ -315,9 +338,77 @@ describe("longmemeval adapter: retrieval wiring", () => {
     expect(result.metadata?.zeroHitQueryRate).toBe(0.5);
     expect(result.metadata?.baselineIsLongContext).toBe(false);
     expect(result.metadata?.topK).toBe(2);
+    expect(result.telemetry.resolvedModels).toEqual({ "provider-resolved-test-model": 2 });
+    expect(result.metadata?.agentResolvedModels).toBe("provider-resolved-test-model=2");
+    expect(result.metrics.context).toEqual({
+      queryCount: 2,
+      nonAbstentionQueryCount: 2,
+      literalAnswerContainment: 0,
+      evidenceHitQueryCount: 1,
+      evidenceHitContextAnswerContainment: 0,
+      evidenceHitButAnswerMissingCount: 1,
+    });
 
     // -- never-queried tripwire must NOT fire on the wired path --
     expect(result.warnings.some((w) => w.includes("NEVER QUERIED"))).toBe(false);
+  });
+
+  test("checkpoints each paid answer and resumes after a later question fails", async () => {
+    const outputDir = tempDir("akm-eval-longmemeval-resume-");
+    const datasetPath = writeDatasetFixture(outputDir);
+    const firstBackend = createScriptedMemoryBackend([
+      [{ id: "q1-s1", text: "user: My favorite color is blue.", score: 1, metadata: {} }],
+      [{ id: "q2-s1", text: "user: I enjoy painting.", score: 1, metadata: {} }],
+    ]);
+    let firstAgentCalls = 0;
+    const firstAgent: AgentRunner = {
+      async run(): Promise<AgentRunResult> {
+        firstAgentCalls += 1;
+        if (firstAgentCalls === 2) {
+          return { ok: false, text: "", latencyMs: 1, error: "scripted late failure" };
+        }
+        return {
+          ok: true,
+          text: "blue",
+          usage: { input: 10, output: 2, total: 12 },
+          latencyMs: 5,
+          resolvedModel: "resolved-a",
+        };
+      },
+    };
+
+    await expect(
+      longMemEvalAdapter.run(
+        buildContext(outputDir, datasetPath),
+        firstBackend.backend,
+        firstAgent,
+      ),
+    ).rejects.toThrow(/checkpointed/);
+    expect(firstAgentCalls).toBe(2);
+
+    const resumedBackend = createScriptedMemoryBackend([
+      [{ id: "q2-s1", text: "user: I enjoy painting.", score: 1, metadata: {} }],
+    ]);
+    const resumedAgent = createRecordingAgent(() => "painting");
+    const result = await longMemEvalAdapter.run(
+      buildContext(outputDir, datasetPath),
+      resumedBackend.backend,
+      resumedAgent.agent,
+    );
+
+    expect(resumedAgent.prompts).toHaveLength(1);
+    expect(resumedBackend.calls.searchCalls).toEqual([
+      { text: "What hobby did the user mention?", topK: 5 },
+    ]);
+    expect(result.metadata?.resumedQuestionCount).toBe(1);
+    expect(result.metrics.context?.literalAnswerContainment).toBe(1);
+    expect(result.telemetry.resolvedModels).toEqual({
+      "provider-resolved-test-model": 1,
+      "resolved-a": 1,
+    });
+    expect(
+      fs.readFileSync(String(result.metadata?.checkpointPath), "utf8").trim().split("\n"),
+    ).toHaveLength(2);
   });
 
   test("disabled-backend (baseline) arm is byte-identical to the pre-retrieval-wiring full-haystack prompt and never touches the memory backend", async () => {

@@ -102,13 +102,16 @@ a regression. If this fails, stop — there is no point spending judged budget.
 **3. The judged run**
 
 ```bash
-bin/memory-eval longmemeval --akm-version 0.9.14-beta.1
+bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 \
+  --out runs/longmemeval-0.9.14
 bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
 ```
 
-Writes `runs/longmemeval-full-<stamp>/{baseline,raw-vector,akm-memory}/` with a
-`result.json` per arm. Expect roughly 45-60 minutes and ~24M agent tokens at the
-committed `n=200` sample.
+Writes one `result.json` per arm beneath the explicit output directory. Re-run
+the same command with the same `--out` value to resume signature-matching
+per-question answer and judge checkpoints. If `--out` is omitted, a timestamped
+`runs/longmemeval-full-<stamp>/` directory is created for one-shot runs. Expect
+roughly 45-60 minutes and ~24M agent tokens at the committed `n=200` sample.
 
 **What the committed config pins**
 
@@ -136,6 +139,18 @@ probes both packs, and grades the result against committed reference values:
 ```bash
 bin/probe --akm-version 0.9.14-beta.1
 ```
+
+For an unpublished checkout, the equivalent path builds locked dependencies
+and AKM itself inside Docker while leaving the host checkout read-only:
+
+```bash
+bin/probe --akm-source ../akm
+bin/memory-eval longmemeval --akm-source ../akm \
+  --config config/common/longmemeval-akm-fragment-context-0915.json
+```
+
+The result records the source Git SHA, full tree fingerprint/dirty state,
+provider-resolved model census, and per-question context provenance.
 
 The historical comparison is informational because
 its LoCoMo reference is stale; artifacts land in `runs/probes/<version>-<stamp>/`.

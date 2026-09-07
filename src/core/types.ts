@@ -1,4 +1,9 @@
-import type { AnswerMetrics, MemoryDocument, RetrievalMetrics } from "../memory/types.ts";
+import type {
+  AnswerMetrics,
+  ContextSufficiencyMetrics,
+  MemoryDocument,
+  RetrievalMetrics,
+} from "../memory/types.ts";
 
 export interface EvalDefaults {
   outputDir?: string;
@@ -32,6 +37,8 @@ export interface RunDefinition {
   variant: string;
   outputDir?: string;
   memoryBackend?: string;
+  /** Backend-specific configuration, copied from `variants[].memory.config`. */
+  memoryBackendConfig?: Record<string, unknown>;
   agentEnvironment?: Record<string, string>;
   akmEnabled?: boolean;
   akmCommand?: string;
@@ -79,6 +86,7 @@ export interface NormalizedRunResult {
   notes: string[];
   metrics: {
     retrieval: RetrievalMetrics;
+    context?: ContextSufficiencyMetrics;
     answer: AnswerMetrics;
     aggregate: AggregateMetrics;
   };
@@ -89,6 +97,8 @@ export interface NormalizedRunResult {
     estimatedCostUsd: number;
     latencyMs: number;
     logs: string[];
+    /** Provider-returned response model census; absent when a runner cannot expose it. */
+    resolvedModels?: Record<string, number>;
   };
   artifacts: {
     resultPath: string;

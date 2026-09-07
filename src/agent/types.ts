@@ -18,6 +18,8 @@ export interface AgentRunResult {
    * different from one that did not — see itlackey/akm-eval#4.
    */
   retries?: number;
+  /** Model id returned by the provider for this response (not the requested alias). */
+  resolvedModel?: string;
 }
 
 export interface AgentRunner {

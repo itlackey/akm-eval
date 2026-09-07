@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import hashlib
 import os
 import sys
 
@@ -12,8 +13,62 @@ def load_entries(path: str):
         return json.load(handle)
 
 
+def load_checkpoint_entries(path: str):
+    """Load completed judge rows, tolerating only a torn final append."""
+    if not os.path.exists(path):
+        return []
+    with open(path, 'r', encoding='utf-8') as handle:
+        lines = handle.readlines()
+    entries = []
+    recovered = False
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            if any(candidate.strip() for candidate in lines[index + 1:]):
+                raise RuntimeError(f'Judge checkpoint is corrupt before its final line: {path}:{index + 1}')
+            print(f'Recovering incomplete final judge checkpoint line: {path}:{index + 1}', file=sys.stderr)
+            recovered = True
+            break
+    if recovered:
+        with open(path, 'w', encoding='utf-8') as handle:
+            for entry in entries:
+                handle.write(json.dumps(entry) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+    return entries
+
+
 def sanitize_file_component(value: str) -> str:
     return ''.join(ch if ch.isalnum() or ch in {'-', '_', '.'} else '_' for ch in value)
+
+
+def judge_script_sha256() -> str:
+    with open(__file__, 'rb') as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def judge_input_sha256(
+    prompt: str,
+    metric_model: str,
+    base_url: str | None,
+    max_tokens: int,
+) -> str:
+    payload = {
+        'contract': 'longmemeval-official-rubric-v2',
+        'interface': 'openai.chat.completions.create',
+        'prompt': prompt,
+        'requested_model': metric_model,
+        'base_url': base_url or 'https://api.openai.com/v1',
+        'temperature': 0,
+        'max_tokens': max_tokens,
+        'judge_script_sha256': judge_script_sha256(),
+        'runtime_fingerprint': os.environ.get('AKM_EVAL_JUDGE_RUNTIME_FINGERPRINT'),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def get_prompt(question_type: str, question: str, answer: str, response: str, abstention: bool) -> str:
@@ -99,13 +154,37 @@ def main() -> int:
     output_path = f'{predictions_path}.eval-results-{sanitize_file_component(metric_model)}'
     resolved_models: dict[str, int] = {}
     unparseable: list = []
+    resumed_count = 0
     # Raise via env for a verbose judge; the default is generous enough for any
     # judge that answers after a short preamble, and irrelevant to a terse one.
     max_tokens = int(os.environ.get('AKM_EVAL_JUDGE_MAX_TOKENS', '64'))
     # Above this share of undecidable verdicts the run is not a measurement.
     max_unparseable_rate = float(os.environ.get('AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE', '0.02'))
 
-    with open(output_path, 'w', encoding='utf-8') as handle:
+    prior_by_input = {}
+    prior_entries = load_checkpoint_entries(output_path) if os.environ.get('AKM_EVAL_JUDGE_RESUME', '1') != '0' else []
+    for prior in prior_entries:
+        label = prior.get('autoeval_label') or {}
+        input_hash = label.get('judge_input_sha256')
+        raw_verdict = label.get('raw_verdict')
+        resolved_model = label.get('resolved_model')
+        if (
+            isinstance(input_hash, str)
+            and len(input_hash) == 64
+            and isinstance(raw_verdict, str)
+            and raw_verdict.strip()
+            and isinstance(resolved_model, str)
+            and resolved_model
+            and label.get('model') == metric_model
+            and isinstance(label.get('label'), bool)
+        ):
+            prior_by_input[input_hash] = prior
+
+    completed = []
+    # Append and fsync each newly-paid verdict immediately. At successful
+    # completion the file is compacted atomically into current prediction
+    # order, removing stale rows from an older hypothesis set.
+    with open(output_path, 'a', encoding='utf-8') as handle:
         for prediction in predictions:
             question_id = prediction['question_id']
             reference = dataset_by_id[question_id]
@@ -116,6 +195,20 @@ def main() -> int:
                 prediction['hypothesis'],
                 question_id.endswith('_abs'),
             )
+            input_hash = judge_input_sha256(prompt, metric_model, base_url, max_tokens)
+            prior = prior_by_input.get(input_hash)
+            if prior is not None:
+                prediction = prior
+                resumed_count += 1
+                raw_verdict = str((prediction.get('autoeval_label') or {}).get('raw_verdict') or '').strip()
+                verdict = raw_verdict.lower()
+                resolved_model = (prediction.get('autoeval_label') or {}).get('resolved_model') or metric_model
+                resolved_models[resolved_model] = resolved_models.get(resolved_model, 0) + 1
+                normalized = verdict.strip('.\'" \t')
+                if normalized not in ('yes', 'no'):
+                    unparseable.append({'question_id': question_id, 'raw': raw_verdict[:200]})
+                completed.append(prediction)
+                continue
             completion = client.chat.completions.create(
                 model=metric_model,
                 messages=[{'role': 'user', 'content': prompt}],
@@ -155,8 +248,21 @@ def main() -> int:
                 'resolved_model': resolved_model,
                 'label': 'yes' in verdict,
                 'raw_verdict': raw_verdict[:200],
+                'judge_input_sha256': input_hash,
             }
             handle.write(json.dumps(prediction) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+            completed.append(prediction)
+
+    compact_path = f'{output_path}.tmp-{os.getpid()}'
+    with open(compact_path, 'w', encoding='utf-8') as handle:
+        for prediction in completed:
+            handle.write(json.dumps(prediction) + '\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(compact_path, output_path)
+    print(f'judge checkpoint: resumed {resumed_count}/{len(predictions)} verdict(s)', file=sys.stderr)
 
     # Surface the resolved-judge census on stderr so it lands in the run log
     # even when nothing downstream parses the per-prediction field. More than

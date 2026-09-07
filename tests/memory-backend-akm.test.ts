@@ -437,6 +437,8 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
     expect(results.length).toBe(1);
     expect(results[0]?.id).toBe("D1:3");
     expect(results[0]?.metadata?.ref).toBe(`memories/${slugifyDocId("D1:3")}`);
+    expect(results[0]?.metadata?.description).toBe("A sentence about starfruit.");
+    expect(results[0]?.metadata?.matchStage).toBe("exact");
     expect(results[0]?.text).toContain("A sentence about starfruit.");
     expect(results[0]?.text).not.toContain("---");
     expect(typeof results[0]?.score).toBe("number");
@@ -456,7 +458,54 @@ describe("akm backend: dispatch against a fake akm CLI subprocess", () => {
       `memories/${slugifyDocId("D1:3")}#akm-fragment-1-deadbeefcafe`,
     );
     expect(results[0]?.text).toBe("A sentence about starfruit.\n");
-    expect(readInvocations(logPath).some((argv) => argv[0] === "show")).toBe(true);
+    expect(results[0]?.metadata?.selectedRef).toBe(
+      `memories/${slugifyDocId("D1:3")}#akm-fragment-1-deadbeefcafe`,
+    );
+    expect(results[0]?.metadata?.parentRef).toBe(`memories/${slugifyDocId("D1:3")}`);
+    expect(results[0]?.metadata?.fragmentOrdinal).toBe(1);
+    expect(results[0]?.metadata?.fragmentCount).toBe(1);
+    expect(results[0]?.metadata?.contextMode).toBe("exact");
+    const showCall = readInvocations(logPath).find((argv) => argv[0] === "show");
+    expect(showCall).toBeDefined();
+    expect(showCall).not.toContain("--context");
+  });
+
+  test("6ade9755 regression: exact fragment omits the answer while opt-in indexed lead context restores it", async () => {
+    const document = {
+      id: "6ade9755-session",
+      text: "user: I take yoga classes at Serenity Yoga.\n\n<!-- fake-fragment -->\n\nuser: I also compare generic yoga apps on my phone.",
+    };
+
+    const exactFixture = useFakeAkm();
+    process.env.FAKE_AKM_SEARCH_REF_SUFFIX = "#akm-fragment-2-deadbeefcafe";
+    const exact = createAkmBackend(rootDir, exactFixture.workDir);
+    await exact.reset();
+    await exact.add([document]);
+    const exactResults = await exact.search({ text: "yoga", topK: 5 });
+    expect(exactResults[0]?.text).toContain("generic yoga apps");
+    expect(exactResults[0]?.text).not.toContain("Serenity Yoga");
+
+    const leadFixture = useFakeAkm();
+    const lead = createAkmBackend(rootDir, leadFixture.workDir, {
+      fragmentContext: { mode: "lead", maxChars: 400 },
+    });
+    await lead.reset();
+    await lead.add([document]);
+    const leadResults = await lead.search({ text: "yoga", topK: 5 });
+    expect(leadResults[0]?.text).toContain("Serenity Yoga");
+    expect(leadResults[0]?.text).toContain("[Selected matching fragment]");
+    expect(leadResults[0]?.text.indexOf("Serenity Yoga")).toBeLessThan(
+      leadResults[0]?.text.indexOf("generic yoga apps"),
+    );
+    expect(leadResults[0]?.metadata?.contextMode).toBe("lead");
+    expect(leadResults[0]?.metadata?.contextMaxChars).toBe(400);
+    expect(leadResults[0]?.metadata?.contextTruncated).toBe(false);
+
+    const showCall = readInvocations(leadFixture.logPath).find((argv) => argv[0] === "show");
+    expect(showCall).toContain("--context");
+    expect(showCall).toContain("lead");
+    expect(showCall).toContain("--max-chars");
+    expect(showCall).toContain("400");
   });
 
   test("search() does not normalize arbitrary hash suffixes into trusted parent refs", async () => {

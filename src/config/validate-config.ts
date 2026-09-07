@@ -32,6 +32,46 @@ function validateRunDefinitions(runs: RunDefinition[]): void {
       }
     }
 
+    if (run.memoryBackend === "akm") {
+      const fragmentContext = run.memoryBackendConfig?.fragmentContext;
+      if (fragmentContext !== undefined) {
+        if (!isPlainObject(fragmentContext)) {
+          issues.push(
+            `run "${run.id ?? `${run.pack}-${run.variant}`}" uses akm but memory.config.fragmentContext must be an object`,
+          );
+        } else {
+          const mode = fragmentContext.mode;
+          const maxTokens = fragmentContext.maxTokens;
+          const maxChars = fragmentContext.maxChars;
+          if (mode !== "exact" && mode !== "lead") {
+            issues.push(
+              `run "${run.id ?? `${run.pack}-${run.variant}`}" uses akm but memory.config.fragmentContext.mode must be "exact" or "lead"`,
+            );
+          }
+          for (const [name, value] of [
+            ["maxTokens", maxTokens],
+            ["maxChars", maxChars],
+          ] as const) {
+            if (value !== undefined && (!Number.isInteger(value) || (value as number) <= 0)) {
+              issues.push(
+                `run "${run.id ?? `${run.pack}-${run.variant}`}" uses akm but memory.config.fragmentContext.${name} must be a positive integer when provided`,
+              );
+            }
+          }
+          if (maxTokens !== undefined && maxChars !== undefined) {
+            issues.push(
+              `run "${run.id ?? `${run.pack}-${run.variant}`}" uses akm but memory.config.fragmentContext.maxTokens and maxChars are mutually exclusive`,
+            );
+          }
+          if (mode === "exact" && (maxTokens !== undefined || maxChars !== undefined)) {
+            issues.push(
+              `run "${run.id ?? `${run.pack}-${run.variant}`}" uses akm but fragment context budgets are only valid with mode "lead"`,
+            );
+          }
+        }
+      }
+    }
+
     if (run.pack === "locomo") {
       const maxContextTokens = run.packConfig?.maxContextTokens;
       if (
@@ -68,6 +108,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function resolveEnvRefsInProvider(config: AgentProviderConfig): AgentProviderConfig {
   const resolved: AgentProviderConfig = { ...config };
+  if (resolved.baseURL) {
+    resolved.baseURL = resolved.baseURL.replace(
+      /\{env:([A-Z_][A-Z0-9_]*)\}/g,
+      (_m, name) => process.env[name] ?? "",
+    );
+  }
   if (resolved.apiKey) {
     resolved.apiKey = resolved.apiKey.replace(
       /\{env:([A-Z_][A-Z0-9_]*)\}/g,
@@ -169,6 +215,9 @@ function normalizePlannedConfig(value: Record<string, unknown>): EvalConfig {
         variant: variant.id,
         outputDir: `${String(run.outputDir)}/${String(pack.id)}/${variant.id}`,
         memoryBackend: variant.memory.backend,
+        memoryBackendConfig: isPlainObject(variant.memory.config)
+          ? variant.memory.config
+          : undefined,
         agentEnvironment:
           variant.agent.env && typeof variant.agent.env === "object"
             ? Object.fromEntries(
