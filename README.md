@@ -67,6 +67,22 @@ Extra pack requirements still apply:
 
 `bun` is only required for repo development tasks.
 
+## Official results ledger
+
+[`results/official-results.json`](./results/official-results.json) is the
+canonical, tracked, append-only ledger for completed benchmark scores and
+statistics. Each round records the full protocol identity, resolved model
+census, scores, token usage, timing, category and retrieval metrics, comparison
+deltas, and checksums for the underlying run artifacts. Its contract is
+published in
+[`config/schemas/official-results.schema.json`](./config/schemas/official-results.schema.json)
+and checked in CI.
+
+Narrative reports under `runs/` and `docs/metrics-highlights.md` remain useful
+historical analysis, but new official numbers must be recorded in the ledger.
+Corrections append a superseding or retracted record instead of silently
+rewriting an earlier result.
+
 ## Reproduce the published results
 
 The numbers in [`docs/metrics-highlights.md`](./docs/metrics-highlights.md) and

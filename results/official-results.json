@@ -1,0 +1,277 @@
+{
+  "$schema": "../config/schemas/official-results.schema.json",
+  "schemaVersion": "akm.eval.official-results.v1",
+  "updatedAt": "2026-09-08T07:52:49.852Z",
+  "policy": {
+    "canonical": true,
+    "appendOnly": true,
+    "tokenUsageScope": "Token counts are provider-reported answer-model usage. Judge usage is excluded unless a future official evaluator records it.",
+    "historicalResults": "This ledger starts with the 2026-09-08 full-500 round. Older tracked reports remain historical until migrated with equivalent provenance. Corrections append a superseding or retracted round; they do not silently rewrite a published record."
+  },
+  "rounds": [
+    {
+      "id": "longmemeval-qwen35-9b-q4km-131k-v1",
+      "recordedAt": "2026-09-08T07:52:49.852Z",
+      "status": "complete",
+      "tier": "A",
+      "benchmark": {
+        "id": "longmemeval",
+        "datasetSha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+        "datasetSourceRevision": "xiaowu0162/longmemeval-cleaned@98d7416c24c778c2fee6e6f3006e7a073259d48f",
+        "questionCount": 500,
+        "questionIdsSha256": "a4849b8afda6b6ed31ead4fc28d00784d2d5fef945be87642f5ce3ab710b21c4",
+        "sample": "full",
+        "evaluatorRepoCommit": "edf6c0f4210af84b788604c91b8b7d66e4ac0b8a",
+        "evaluatorCodeSha256": "cd25d89b9dbd801482fdb02bba5f686e1b71e98241274c26b645afb84033e80c",
+        "promptContract": "longmemeval-v2"
+      },
+      "answerModel": {
+        "requestedModel": "qwen3.5-9b",
+        "resolvedModels": {
+          "qwen3.5-9b": 1500
+        },
+        "artifact": "Qwen3.5-9B-Q4_K_M.gguf",
+        "artifactSha256": "cd76ec205963b3b33350093e6904d9de16c4e666fd104e1f632d25c7f15f2a13",
+        "quantization": "Q4_K_M",
+        "parameters": 8953803264,
+        "runtimeImage": "ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f",
+        "options": {
+          "temperature": 0,
+          "max_tokens": 256,
+          "seed": 1337,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        }
+      },
+      "judge": {
+        "requestedModel": "gpt-4o",
+        "resolvedModels": {
+          "gpt-4o-2024-08-06": 1500
+        },
+        "temperature": 0,
+        "usageCaptured": false
+      },
+      "akmCandidate": {
+        "label": "0.9.15 candidate",
+        "sourceBranch": "release/0.9.15",
+        "sourceGitSha": "a06d7f57bc817b53d969e42b091d284d50d2508c",
+        "sourceTreeFingerprint": "832597680ae69d1e0ed6f1c6abd19655d7367387",
+        "sourceDirty": false,
+        "reportedCliVersion": "0.9.14"
+      },
+      "protocol": {
+        "topK": 5,
+        "fragmentContext": {
+          "mode": "lead",
+          "maxChars": 3200
+        },
+        "configSha256": "1e7579d42b8f681941f1a47cde8da1c3e48fdfbc64449cf6df50f43b1b0f249e",
+        "artifactRoot": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1",
+        "servingTopology": "Baseline used a dedicated RTX 4060 Ti with one 131072-token slot. Raw-vector and AKM ran concurrently on a second RTX 4060 Ti using two 32768-token slots. Accuracy is comparable; cross-arm wall time is not a controlled latency benchmark."
+      },
+      "arms": [
+        {
+          "id": "baseline",
+          "label": "Full-context baseline",
+          "memoryBackend": "none",
+          "score": 0.392,
+          "correct": 196,
+          "questionCount": 500,
+          "categoryAccuracy": {
+            "single-session": 0.761905,
+            "multi-session": 0.172932,
+            "preference": 0,
+            "temporal": 0.180451,
+            "knowledge-update": 0.679487
+          },
+          "retrievalMetrics": {
+            "queryCount": 0,
+            "precisionAtK": 0,
+            "recallAtK": 0,
+            "mrr": 0,
+            "ndcgAtK": 0
+          },
+          "contextMetrics": {
+            "queryCount": 500,
+            "nonAbstentionQueryCount": 470,
+            "literalAnswerContainment": 0.597872,
+            "evidenceHitQueryCount": 0,
+            "evidenceHitContextAnswerContainment": 0,
+            "evidenceHitButAnswerMissingCount": 0
+          },
+          "tokens": {
+            "prompt": 53836503,
+            "completion": 2803,
+            "total": 53839306,
+            "averagePerQuestion": 107678.612,
+            "scope": "answer-model-only"
+          },
+          "timing": {
+            "wallMs": 40205128,
+            "wallPrecision": "approximate",
+            "wallBasis": "Reconstructed from the earliest durable answer-checkpoint timestamp through final result completion across one checkpointed restart; initialization and the first answer before checkpoint creation make this a lower-bound approximation.",
+            "answerModelLatencyMs": 39814708
+          },
+          "retries": 0,
+          "resolvedAnswerModels": {
+            "qwen3.5-9b": 500
+          },
+          "resolvedJudgeModels": {
+            "gpt-4o-2024-08-06": 500
+          },
+          "checkpointSignature": "ac45af52c7b12278ab7db82ad7b77f2ebb2ec3186367faa228749286955306ee",
+          "artifacts": {
+            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/result.json",
+            "resultSha256": "b3000a5057ede98f063bb6fc9d75a679c8ba14c2e46d076953a80f796d7e07b9",
+            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/predictions.jsonl",
+            "predictionsSha256": "934c2aae2ca9d073c1eba494d44bab72afab062f3de51bc80c9a46858bfff618",
+            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogSha256": "461592256ffabe3f9c5ec17e1d8eec70c46db658d3338b328a91a92114c16987"
+          }
+        },
+        {
+          "id": "raw-vector",
+          "label": "Raw vector",
+          "memoryBackend": "raw-vector",
+          "score": 0.286,
+          "correct": 143,
+          "questionCount": 500,
+          "categoryAccuracy": {
+            "single-session": 0.642857,
+            "multi-session": 0.12782,
+            "preference": 0,
+            "temporal": 0.090226,
+            "knowledge-update": 0.423077
+          },
+          "retrievalMetrics": {
+            "queryCount": 500,
+            "precisionAtK": 0.1336,
+            "recallAtK": 0.400933,
+            "mrr": 0.349633,
+            "ndcgAtK": 0.323383
+          },
+          "contextMetrics": {
+            "queryCount": 500,
+            "nonAbstentionQueryCount": 470,
+            "literalAnswerContainment": 0.393617,
+            "evidenceHitQueryCount": 244,
+            "evidenceHitContextAnswerContainment": 0.569672,
+            "evidenceHitButAnswerMissingCount": 105
+          },
+          "tokens": {
+            "prompt": 5491194,
+            "completion": 2624,
+            "total": 5493818,
+            "averagePerQuestion": 10987.636,
+            "scope": "answer-model-only"
+          },
+          "timing": {
+            "wallMs": 3364880,
+            "wallPrecision": "exact",
+            "wallBasis": "Normalized result duration from worker start through official judging.",
+            "answerModelLatencyMs": 3070626
+          },
+          "retries": 0,
+          "resolvedAnswerModels": {
+            "qwen3.5-9b": 500
+          },
+          "resolvedJudgeModels": {
+            "gpt-4o-2024-08-06": 500
+          },
+          "checkpointSignature": "37dbf9f807fdab60c783ca8d7da3b923fb3ad2d6374acf2e762981950f955e25",
+          "artifacts": {
+            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/result.json",
+            "resultSha256": "d4756eb671433e2711afce178d45c649b5d97599db4a30c96dbf13e275870a1e",
+            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl",
+            "predictionsSha256": "15923eb3500dcfbddfb0719b46692651473f1c38315f4bcbf9de66ce49ca5085",
+            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogSha256": "80d7301f4a393d89742f5a9c64bde0f0cd8168335dd2df481ce10b9ba31b2c7e"
+          }
+        },
+        {
+          "id": "akm-memory-lead",
+          "label": "AKM 0.9.15 candidate, lead fragments",
+          "memoryBackend": "akm",
+          "score": 0.362,
+          "correct": 181,
+          "questionCount": 500,
+          "categoryAccuracy": {
+            "single-session": 0.761905,
+            "multi-session": 0.150376,
+            "preference": 0.1,
+            "temporal": 0.157895,
+            "knowledge-update": 0.525641
+          },
+          "retrievalMetrics": {
+            "queryCount": 500,
+            "precisionAtK": 0.4805,
+            "recallAtK": 0.8477,
+            "mrr": 0.864267,
+            "ndcgAtK": 0.846663
+          },
+          "contextMetrics": {
+            "queryCount": 500,
+            "nonAbstentionQueryCount": 470,
+            "literalAnswerContainment": 0.47234,
+            "evidenceHitQueryCount": 451,
+            "evidenceHitContextAnswerContainment": 0.485588,
+            "evidenceHitButAnswerMissingCount": 232
+          },
+          "tokens": {
+            "prompt": 1728013,
+            "completion": 3014,
+            "total": 1731027,
+            "averagePerQuestion": 3462.054,
+            "scope": "answer-model-only"
+          },
+          "timing": {
+            "wallMs": 4462258,
+            "wallPrecision": "exact",
+            "wallBasis": "Normalized result duration from worker start through AKM ingestion/retrieval, answer generation, and official judging.",
+            "answerModelLatencyMs": 1834044
+          },
+          "retries": 0,
+          "resolvedAnswerModels": {
+            "qwen3.5-9b": 500
+          },
+          "resolvedJudgeModels": {
+            "gpt-4o-2024-08-06": 500
+          },
+          "checkpointSignature": "e108cc4b7d2401fd09b52303590ed254e61ab09fe4637aa6b717e5a5f227156d",
+          "artifacts": {
+            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/result.json",
+            "resultSha256": "21370c75fa3fb58a908af9643524a60cd73e9a3d13507265ede783a16b97e13c",
+            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/predictions.jsonl",
+            "predictionsSha256": "9199fff4c3355517a7f3c9ef15dec3dc08af0bfd5991daea013f2315f228f6fa",
+            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogSha256": "78a8c10c0590208c55f0864a25a99b143c612dd36ddd230558f60ed88b8cd2bb"
+          }
+        }
+      ],
+      "comparisons": [
+        {
+          "left": "akm-memory-lead",
+          "right": "raw-vector",
+          "scoreDelta": 0.076,
+          "correctDelta": 38,
+          "tokenReduction": 0.6849136611369361
+        },
+        {
+          "left": "akm-memory-lead",
+          "right": "baseline",
+          "scoreDelta": -0.03,
+          "correctDelta": -15,
+          "tokenReduction": 0.9678482668405867
+        }
+      ],
+      "notes": [
+        "AKM beats raw-vector by 7.6 percentage points and 38 correct answers while using 68.5% fewer answer-model tokens.",
+        "AKM trails the full-context baseline by 3.0 percentage points and 15 correct answers while using 96.8% fewer answer-model tokens.",
+        "The AKM source checkout is the release/0.9.15 candidate identified above. Its package metadata still reported CLI version 0.9.14 during this source-built run.",
+        "The official evaluator log records no judge token usage, so token totals must not be presented as including GPT-4o judging.",
+        "Historical reports under runs/ and docs/metrics-highlights.md are not silently superseded or migrated by this entry."
+      ]
+    }
+  ]
+}
