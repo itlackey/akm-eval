@@ -55,14 +55,15 @@ export function describeMemoryProvenance(memory: MemoryBackend): MemoryProvenanc
       ...base,
       ...(version ? { backendVersion: version } : {}),
       ...(detail ? { backendDetail: detail } : {}),
-      ...(process.env.AKM_EVAL_AKM_SOURCE_SHA
+      ...(memory.id === "akm" && process.env.AKM_EVAL_AKM_SOURCE_SHA
         ? { backendSourceGitSha: process.env.AKM_EVAL_AKM_SOURCE_SHA }
         : {}),
-      ...(process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT
+      ...(memory.id === "akm" && process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT
         ? { backendSourceFingerprint: process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT }
         : {}),
-      ...(process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "0" ||
-      process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "1"
+      ...(memory.id === "akm" &&
+      (process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "0" ||
+        process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "1")
         ? { backendSourceDirty: process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "1" }
         : {}),
     };

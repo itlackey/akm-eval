@@ -25,11 +25,14 @@ describe("wrapper-first operator surface", () => {
       "bin/probe",
       "bin/probe-pair",
       "bin/memory-eval",
+      "bin/reference-eval",
+      "bin/reference-model",
       ".dockerignore",
       ".env.example",
       "docker/akm-eval.Dockerfile",
       "docker/akm-eval-local-akm.Dockerfile",
       "docker/akm-eval-entrypoint.sh",
+      "docker/reference/qwen35-9b.compose.yaml",
     ]) {
       expect(fs.existsSync(path.resolve(rootDir, relativePath))).toBe(true);
     }
@@ -96,7 +99,10 @@ afterAll(() => {
  * against it. Nothing is containerised here -- the assertion is purely about
  * which flags the wrapper hands to docker.
  */
-function runWrapperWithStubDocker(securityOptions: string): string[][] {
+function runWrapperWithStubDocker(securityOptions: string): {
+  invocations: string[][];
+  workspace: string;
+} {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-docker-stub-"));
   stubDirs.push(dir);
   const logPath = path.join(dir, "argv.log");
@@ -127,11 +133,14 @@ function runWrapperWithStubDocker(securityOptions: string): string[][] {
   });
   expect(result.status).toBe(0);
 
-  return fs
-    .readFileSync(logPath, "utf8")
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => line.split(" "));
+  return {
+    invocations: fs
+      .readFileSync(logPath, "utf8")
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => line.split(" ")),
+    workspace: dir,
+  };
 }
 
 function runOperatorWrapperWithStubDocker(
@@ -264,6 +273,38 @@ describe("docker-first operator wrappers", () => {
     expect(fs.existsSync(path.join(preparedDir, "secret.env"))).toBe(false);
   });
 
+  test("image fingerprints depend on bytes, not tracked-versus-untracked status", () => {
+    const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "akm-eval-fingerprint-order-"));
+    stubDirs.push(sourceDir);
+    fs.mkdirSync(path.join(sourceDir, "bin"));
+    fs.mkdirSync(path.join(sourceDir, "src"));
+    fs.writeFileSync(path.join(sourceDir, "src/z.ts"), "export const z = 1;\n");
+    fs.writeFileSync(path.join(sourceDir, "bin/a"), "#!/bin/sh\n");
+    for (const args of [
+      ["init", "-q"],
+      ["add", "src/z.ts"],
+    ]) {
+      expect(spawnSync("git", args, { cwd: sourceDir }).status).toBe(0);
+    }
+    const fingerprint = () =>
+      spawnSync(
+        "bash",
+        [
+          "-c",
+          'source "$1"; akm_eval_runtime_fingerprint "$2" core',
+          "bash",
+          path.resolve(rootDir, "bin/_akm_eval_image_lib.sh"),
+          sourceDir,
+        ],
+        { encoding: "utf8" },
+      ).stdout.trim();
+
+    const withUntrackedFile = fingerprint();
+    expect(withUntrackedFile).not.toBe("");
+    expect(spawnSync("git", ["add", "bin/a"], { cwd: sourceDir }).status).toBe(0);
+    expect(fingerprint()).toBe(withUntrackedFile);
+  });
+
   test("probe-pair and memory-eval enter Docker before using tool dependencies", () => {
     for (const [wrapper, args] of [
       [
@@ -285,6 +326,91 @@ describe("docker-first operator wrappers", () => {
       expect(result.status).toBe(0);
       expect(result.forbiddenCalls).toEqual([]);
       expect(result.invocations.some((argv) => argv[0] === "run")).toBe(true);
+    }
+  });
+
+  test("reference help is host-only and expensive control reruns are guarded before Docker", () => {
+    for (const wrapper of ["bin/reference-eval", "bin/reference-model"]) {
+      const help = runOperatorWrapperWithStubDocker(wrapper, ["--help"]);
+      expect(help.status).toBe(0);
+      expect(help.invocations).toEqual([]);
+      expect(help.forbiddenCalls).toEqual([]);
+    }
+
+    const refused = runOperatorWrapperWithStubDocker("bin/reference-eval", [
+      "rerun-controls",
+      "--out",
+      "runs/refused",
+    ]);
+    expect(refused.status).toBe(2);
+    expect(refused.invocations).toEqual([]);
+    expect(refused.forbiddenCalls).toEqual([]);
+  });
+
+  test("reference verification enters the dependency-pinned runtime image", () => {
+    const result = runOperatorWrapperWithStubDocker("bin/reference-eval", ["verify"]);
+    expect(result.status).toBe(0);
+    expect(result.forbiddenCalls).toEqual([]);
+    expect(result.invocations.some((argv) => argv[0] === "run")).toBe(true);
+    expect(result.invocations.flat().some((arg) => arg.startsWith("akm-eval-core:runtime-"))).toBe(
+      true,
+    );
+  });
+
+  test("reference dry-run selects the requested AKM image without touching the model", () => {
+    const result = runOperatorWrapperWithStubDocker("bin/reference-eval", [
+      "run-akm",
+      "--akm-version",
+      "0.9.15",
+      "--out",
+      "runs/reference-dry-run",
+      "--dry-run",
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.forbiddenCalls).toEqual([]);
+    expect(
+      result.invocations.flat().some((arg) => arg.startsWith("akm-eval-core:akm-0.9.15-")),
+    ).toBe(true);
+  });
+
+  test("reference runs attach the evaluator to the private model network", () => {
+    const result = runOperatorWrapperWithStubDocker("bin/reference-eval", [
+      "run-akm",
+      "--akm-version",
+      "0.9.15",
+      "--out",
+      "runs/reference-network",
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.forbiddenCalls).toEqual([]);
+    const evaluatorRun = result.invocations
+      .filter((argv) => argv[0] === "run")
+      .find((argv) => argv.includes("akm-eval-reference"));
+    expect(evaluatorRun).toContain("--network");
+    expect(evaluatorRun).toContain("akm-eval-reference");
+  });
+
+  test("reference model profile pins model bytes, runtime, topology, and GPU placement", () => {
+    const wrapper = fs.readFileSync(path.resolve(rootDir, "bin/reference-model"), "utf8");
+    const compose = fs.readFileSync(
+      path.resolve(rootDir, "docker/reference/qwen35-9b.compose.yaml"),
+      "utf8",
+    );
+    expect(wrapper).toContain("cd76ec205963b3b33350093e6904d9de16c4e666fd104e1f632d25c7f15f2a13");
+    expect(wrapper).toContain("d9006465af6fc714af653e381fbfa55ead5af84b");
+    expect(compose).toContain(
+      "ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f",
+    );
+    for (const pinned of [
+      '"131072"',
+      '"65536"',
+      '"2"',
+      "q8_0",
+      "enable_thinking",
+      "AKM_EVAL_BASELINE_GPU",
+      "AKM_EVAL_RETRIEVAL_GPU",
+    ]) {
+      expect(compose).toContain(pinned);
     }
   });
 
@@ -367,19 +493,20 @@ describe("cli image wrapper container uid", () => {
     // -- runs/<run>/**, including the akm backend's 0700 .akm-memory work dir
     // -- lands on the host owned by root, so the operator cannot delete their
     // own run output and check:boundary used to die with EACCES on it.
-    const invocations = runWrapperWithStubDocker("[name=seccomp,profile=builtin]");
+    const { invocations, workspace } = runWrapperWithStubDocker("[name=seccomp,profile=builtin]");
     const runArgs = invocations.find((argv) => argv[0] === "run");
 
     expect(runArgs).toBeDefined();
     const userIndex = runArgs?.indexOf("--user") ?? -1;
     expect(userIndex).toBeGreaterThanOrEqual(0);
     expect(runArgs?.[userIndex + 1]).toBe(`${process.getuid?.()}:${process.getgid?.()}`);
+    expect(fs.statSync(path.join(workspace, "node_modules")).isDirectory()).toBe(true);
   });
 
   test("omits --user under rootless docker, where container root already maps to the invoking user", () => {
     // Under rootless docker --user would map us to an unusable subuid --
     // reintroducing the exact ownership problem the flag exists to avoid.
-    const invocations = runWrapperWithStubDocker("[name=rootless]");
+    const { invocations } = runWrapperWithStubDocker("[name=rootless]");
     const runArgs = invocations.find((argv) => argv[0] === "run");
 
     expect(runArgs).toBeDefined();

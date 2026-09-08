@@ -69,6 +69,14 @@ if [ -t 0 ] && [ -t 1 ]; then
   docker_args+=(-t)
 fi
 
+if [ -n "${AKM_EVAL_DOCKER_NETWORK:-}" ]; then
+  case "$AKM_EVAL_DOCKER_NETWORK" in
+    *[!A-Za-z0-9_.-]*) printf 'Error: invalid AKM_EVAL_DOCKER_NETWORK name.\n' >&2; exit 2 ;;
+    *) ;;
+  esac
+  docker_args+=(--network "$AKM_EVAL_DOCKER_NETWORK")
+fi
+
 # Run as the invoking user, not container root. Writable result mounts must
 # land on the host owned by whoever invoked Docker. As root they would leave
 # the operator unable to archive or delete their own run output, and 0700 AKM
@@ -83,7 +91,12 @@ fi
 
 runs_dir="$WORKSPACE_DIR/runs"
 datasets_dir="$WORKSPACE_DIR/datasets"
-mkdir -p "$runs_dir" "$datasets_dir"
+node_modules_dir="$WORKSPACE_DIR/node_modules"
+# A fresh clone has no ignored node_modules/ directory. Docker cannot create a
+# nested volume mountpoint through the read-only checkout bind, so establish
+# the empty host mountpoint before starting the container. The named volume
+# still masks it; no dependency is installed on the host.
+mkdir -p "$runs_dir" "$datasets_dir" "$node_modules_dir"
 
 datasets_mount="type=bind,source=$datasets_dir,target=$datasets_dir,readonly"
 if [ "${AKM_EVAL_DATASETS_WRITABLE:-0}" = "1" ]; then
@@ -130,6 +143,11 @@ for env_name in \
   HF_TOKEN \
   LAB_API_KEY \
   LAB_AI_BASE_URL \
+  AKM_EVAL_AGENT_API_KEY \
+  AKM_EVAL_BASELINE_BASE_URL \
+  AKM_EVAL_RETRIEVAL_BASE_URL \
+  AKM_EVAL_ANSWER_MODEL_ARTIFACT_SHA256 \
+  AKM_EVAL_ANSWER_MODEL_RUNTIME_IMAGE \
   AKM_EVAL_AKM_CMD \
   AKM_EVAL_AKM_VERSION \
   AKM_EVAL_JUDGE_API_KEY \

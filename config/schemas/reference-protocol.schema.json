@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akm-eval.local/reference-protocol.schema.json",
+  "title": "akm-eval reusable reference protocol",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "benchmark",
+    "answerModel",
+    "judge",
+    "akm",
+    "configuration",
+    "controls",
+    "artifactManifest"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "akm.eval.reference-protocol.v1" },
+    "id": { "$ref": "#/$defs/nonEmpty" },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "id",
+        "datasetSource",
+        "datasetSha256",
+        "questionCount",
+        "questionIdsSha256",
+        "topK",
+        "promptContract",
+        "promptProtocolSha256"
+      ],
+      "properties": {
+        "id": { "const": "longmemeval" },
+        "datasetSource": { "type": "string", "format": "uri" },
+        "datasetSha256": { "$ref": "#/$defs/sha256" },
+        "questionCount": { "type": "integer", "minimum": 1 },
+        "questionIdsSha256": { "$ref": "#/$defs/sha256" },
+        "topK": { "type": "integer", "minimum": 1 },
+        "promptContract": { "$ref": "#/$defs/nonEmpty" },
+        "promptProtocolSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "answerModel": {
+      "type": "object",
+      "required": [
+        "requestedModel",
+        "resolvedModel",
+        "artifact",
+        "artifactSource",
+        "artifactBytes",
+        "artifactSha256",
+        "quantization",
+        "runtimeImage",
+        "options"
+      ],
+      "properties": {
+        "requestedModel": { "$ref": "#/$defs/nonEmpty" },
+        "resolvedModel": { "$ref": "#/$defs/nonEmpty" },
+        "artifact": { "$ref": "#/$defs/nonEmpty" },
+        "artifactSource": { "type": "string", "format": "uri" },
+        "artifactBytes": { "type": "integer", "minimum": 1 },
+        "artifactSha256": { "$ref": "#/$defs/sha256" },
+        "quantization": { "$ref": "#/$defs/nonEmpty" },
+        "runtimeImage": { "$ref": "#/$defs/nonEmpty" },
+        "options": {
+          "type": "object",
+          "required": ["temperature", "max_tokens", "seed", "chat_template_kwargs"],
+          "properties": {
+            "temperature": { "type": "number" },
+            "max_tokens": { "type": "integer", "minimum": 1 },
+            "seed": { "type": "integer" },
+            "chat_template_kwargs": {
+              "type": "object",
+              "required": ["enable_thinking"],
+              "properties": { "enable_thinking": { "type": "boolean" } },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "judge": {
+      "type": "object",
+      "required": [
+        "requestedModel",
+        "resolvedModel",
+        "temperature",
+        "maxTokens",
+        "maxUnparseableRate",
+        "scriptSha256"
+      ],
+      "properties": {
+        "requestedModel": { "$ref": "#/$defs/nonEmpty" },
+        "resolvedModel": { "$ref": "#/$defs/nonEmpty" },
+        "temperature": { "type": "number" },
+        "maxTokens": { "type": "integer", "minimum": 1 },
+        "maxUnparseableRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "scriptSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "akm": {
+      "type": "object",
+      "required": ["variant", "fragmentContext"],
+      "properties": {
+        "variant": { "const": "akm-memory-lead" },
+        "fragmentContext": {
+          "type": "object",
+          "required": ["mode", "maxChars"],
+          "properties": {
+            "mode": { "const": "lead" },
+            "maxChars": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "configuration": {
+      "type": "object",
+      "required": ["recordedPath", "recordedSha256", "reproductionPath", "reproductionSha256"],
+      "properties": {
+        "recordedPath": { "$ref": "#/$defs/repoPath" },
+        "recordedSha256": { "$ref": "#/$defs/sha256" },
+        "reproductionPath": { "$ref": "#/$defs/repoPath" },
+        "reproductionSha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "controls": {
+      "const": ["baseline", "raw-vector"]
+    },
+    "artifactManifest": { "$ref": "#/$defs/repoPath" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nonEmpty": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "repoPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    }
+  }
+}

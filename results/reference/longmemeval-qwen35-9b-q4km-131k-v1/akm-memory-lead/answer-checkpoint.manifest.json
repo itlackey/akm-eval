@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "signature": "e108cc4b7d2401fd09b52303590ed254e61ab09fe4637aa6b717e5a5f227156d",
+  "datasetPath": "/home/founder3/code/github/itlackey/akm-eval/datasets/longmemeval/dataset.json",
+  "questionCount": 500,
+  "questionIdsSha256": "a4849b8afda6b6ed31ead4fc28d00784d2d5fef945be87642f5ce3ab710b21c4",
+  "memoryBackend": "akm",
+  "memoryBackendConfig": {
+    "fragmentContext": {
+      "mode": "lead",
+      "maxChars": 3200
+    }
+  },
+  "topK": 5,
+  "agentProviderType": "openai-compatible",
+  "agentBaseURL": "http://host.docker.internal:4060/v1",
+  "requestedAgentModel": "qwen3.5-9b",
+  "agentProviderOptions": {
+    "temperature": 0,
+    "max_tokens": 256,
+    "seed": 1337,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "backendRuntimeIdentity": "{\"backendId\":\"akm\",\"backendVersion\":\"0.9.14\",\"backendDetail\":\"akm CLI 0.9.14 reachable via [\\\"akm\\\"]; `akm info --format json` responded successfully.\",\"sourceGitSha\":\"a06d7f57bc817b53d969e42b091d284d50d2508c\",\"sourceTreeFingerprint\":\"832597680ae69d1e0ed6f1c6abd19655d7367387\",\"sourceDirty\":\"0\",\"explicitRuntimeFingerprint\":\"f599743ee88070702fc0be6a5f7affc18c936191\"}",
+  "evaluatorCodeSha256": "cd25d89b9dbd801482fdb02bba5f686e1b71e98241274c26b645afb84033e80c",
+  "promptContract": "longmemeval-v2"
+}

@@ -17,3 +17,4 @@ config/opencode.shredder.json
 datasets/longmemeval/dataset.json
 datasets/locomo/locomo10.json
 vendor/
+models/

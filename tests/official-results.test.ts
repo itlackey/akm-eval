@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,8 +36,11 @@ interface OfficialArm {
   resolvedJudgeModels: ModelCensus;
   checkpointSignature: string;
   artifacts: {
+    resultPath: string;
     resultSha256: string;
+    predictionsPath: string;
     predictionsSha256: string;
+    judgeLogPath: string;
     judgeLogSha256: string;
   };
 }
@@ -52,7 +57,17 @@ interface OfficialRound {
   };
   answerModel: { resolvedModels: ModelCensus; artifactSha256: string };
   judge: { resolvedModels: ModelCensus; usageCaptured: boolean };
-  protocol: { configSha256: string };
+  protocol: {
+    configSha256: string;
+    configPath: string;
+    reproductionConfigPath: string;
+    reproductionConfigSha256: string;
+    referenceProtocolPath: string;
+    referenceProtocolSha256: string;
+    artifactManifestPath: string;
+    artifactManifestSha256: string;
+    artifactRoot: string;
+  };
   arms: OfficialArm[];
   comparisons: Array<{
     left: string;
@@ -72,6 +87,10 @@ interface OfficialLedger {
 
 function censusCount(census: ModelCensus): number {
   return Object.values(census).reduce((sum, count) => sum + count, 0);
+}
+
+function sha256(filePath: string): string {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
 describe("official results ledger", () => {
@@ -94,7 +113,7 @@ describe("official results ledger", () => {
 
     for (const round of ledger.rounds) {
       expect(Number.isNaN(Date.parse(round.recordedAt))).toBe(false);
-      expect(round.status).toBe("complete");
+      expect(["complete", "partial", "retracted"]).toContain(round.status);
       expect(round.arms.length).toBeGreaterThan(0);
       expect(new Set(round.arms.map((arm) => arm.id)).size).toBe(round.arms.length);
       expect(round.benchmark.datasetSha256).toMatch(sha256Pattern);
@@ -102,6 +121,25 @@ describe("official results ledger", () => {
       expect(round.benchmark.evaluatorCodeSha256).toMatch(sha256Pattern);
       expect(round.answerModel.artifactSha256).toMatch(sha256Pattern);
       expect(round.protocol.configSha256).toMatch(sha256Pattern);
+      expect(sha256(path.resolve(rootDir, round.protocol.configPath))).toBe(
+        round.protocol.configSha256,
+      );
+      expect(sha256(path.resolve(rootDir, round.protocol.reproductionConfigPath))).toBe(
+        round.protocol.reproductionConfigSha256,
+      );
+      for (const trackedPath of [
+        round.protocol.referenceProtocolPath,
+        round.protocol.artifactManifestPath,
+        round.protocol.artifactRoot,
+      ]) {
+        expect(fs.existsSync(path.resolve(rootDir, trackedPath))).toBe(true);
+      }
+      expect(sha256(path.resolve(rootDir, round.protocol.referenceProtocolPath))).toBe(
+        round.protocol.referenceProtocolSha256,
+      );
+      expect(sha256(path.resolve(rootDir, round.protocol.artifactManifestPath))).toBe(
+        round.protocol.artifactManifestSha256,
+      );
       expect(censusCount(round.answerModel.resolvedModels)).toBe(
         round.benchmark.questionCount * round.arms.length,
       );
@@ -126,6 +164,15 @@ describe("official results ledger", () => {
         expect(arm.artifacts.resultSha256).toMatch(sha256Pattern);
         expect(arm.artifacts.predictionsSha256).toMatch(sha256Pattern);
         expect(arm.artifacts.judgeLogSha256).toMatch(sha256Pattern);
+        expect(sha256(path.resolve(rootDir, arm.artifacts.resultPath))).toBe(
+          arm.artifacts.resultSha256,
+        );
+        expect(sha256(path.resolve(rootDir, arm.artifacts.predictionsPath))).toBe(
+          arm.artifacts.predictionsSha256,
+        );
+        expect(sha256(path.resolve(rootDir, arm.artifacts.judgeLogPath))).toBe(
+          arm.artifacts.judgeLogSha256,
+        );
       }
 
       for (const comparison of round.comparisons) {
@@ -146,5 +193,17 @@ describe("official results ledger", () => {
         expect(round.arms.every((arm) => arm.tokens.scope === "answer-model-only")).toBe(true);
       }
     }
+  });
+
+  test("reconstructs the official round from its immutable evidence bundle", () => {
+    const result = spawnSync(process.execPath, ["scripts/reference-results.ts", "verify"], {
+      cwd: rootDir,
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Verified reference round");
+    expect(result.stdout).toContain("53,839,306");
+    expect(result.stdout).toContain("1,731,027");
   });
 });

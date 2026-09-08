@@ -6,7 +6,9 @@ runtime.
 
 ## Default flow
 
-1. Pick a committed config in `config/common/`.
+1. Pick a committed config in `config/common/`. For the reusable full-500
+   reference protocol, use `bin/reference-eval`; do not invoke its
+   `config/reference/` file directly.
 2. Pick the exact akm-cli version being evaluated. The wrapper builds its
    version-specific image on first use, or run
    `bin/build-image --akm-version <version>` explicitly.
@@ -66,6 +68,10 @@ version for a retrieval probe or judged `akm-memory` run.
 - `bin/probe (--akm-version <exact-version> | --akm-source <checkout>)`
 - `bin/probe-pair --control <dir> --candidate <dir> ...`
 - `bin/memory-eval <pack> (--akm-version <exact-version> | --akm-source <checkout>) [--config <path>] [--variant <id>] [--out runs/<stable-id>]`
+- `bin/reference-eval verify`
+- `bin/reference-eval run-akm (--akm-version <exact-version> | --akm-source <checkout>) --out runs/<stable-id>`
+- `bin/reference-eval rerun-controls --confirm-control-rerun --out runs/<stable-id>`
+- `bin/reference-model <fetch|verify|up|down|status|logs>`
 
 The current runnable configs are listed in `README.md`.
 
@@ -81,12 +87,25 @@ LongMemEval additionally fsyncs one signature-bound answer checkpoint after
 each question and one judge checkpoint after each verdict. Re-running the same
 command with the same explicit `--out runs/<stable-id>` resumes exact matches.
 Without `--out`, the wrapper creates a new timestamped directory and therefore
-starts a new checkpoint lineage. Any change to the dataset/questions, provider
-endpoint/model, AKM version/source tree, memory config, evaluator code, judge
-prompt, or judge endpoint/model produces a different identity and does not
-reuse stale work.
+starts a new checkpoint lineage. Changes to the dataset/questions, provider
+endpoint/model/options, selected memory backend/config/runtime, evaluator code,
+or answer prompt produce a different identity and do not reuse stale work. AKM
+source identity is scoped to AKM checkpoints: a new AKM release does not
+invalidate `none` or `raw-vector` controls. Raw-vector's implementation is
+included in its own code hash, so changing it does invalidate vector
+checkpoints.
 
-The 0.9.15 release screen is:
+For the official fixed-model 0.9.15/full-500 path:
+
+```bash
+bin/reference-eval run-akm --akm-source ../akm \
+  --out runs/qwen-reference-akm-0.9.15
+```
+
+See [`reference-results.md`](./reference-results.md) for model containers,
+frozen-control reuse, intentional control reruns, and publication checks.
+
+The older production-routing screen remains available for exploratory work:
 
 ```bash
 bin/probe --akm-source ../akm
@@ -96,13 +115,14 @@ bin/memory-eval longmemeval \
   --out runs/longmemeval-0.9.15-rc
 ```
 
-It compares the new explicit `exact` and `lead` context modes on the same
+It compares the explicit `exact` and `lead` context modes on the same
 seeded n=200 sample. The `auto` answer-model census must be reviewed in every
-result; use a concrete model for a causal A/B and run all 500 questions before
-publishing a benchmark score.
+result. It is not the official reference and must not be published as the
+full-benchmark score.
 
 See also:
 
 - [`docs/operator-guide.md`](./operator-guide.md)
+- [`docs/reference-results.md`](./reference-results.md)
 - [`docs/benchmark-packs.md`](./benchmark-packs.md)
 - [`docs/result-schema.md`](./result-schema.md)

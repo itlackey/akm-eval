@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+COMPOSE_FILE="$REPO_ROOT/docker/reference/qwen35-9b.compose.yaml"
+IMAGE="ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f"
+MODEL_FILE="Qwen3.5-9B-Q4_K_M.gguf"
+MODEL_SHA256="cd76ec205963b3b33350093e6904d9de16c4e666fd104e1f632d25c7f15f2a13"
+MODEL_URL="https://huggingface.co/lmstudio-community/Qwen3.5-9B-GGUF/resolve/d9006465af6fc714af653e381fbfa55ead5af84b/Qwen3.5-9B-Q4_K_M.gguf"
+
+usage() {
+  printf '%s\n' \
+    'usage: bin/reference-model <fetch|verify|up|down|status|logs> [--model-dir DIR]' \
+    '' \
+    'Downloads and serves the exact Qwen 3.5 9B Q4_K_M artifact used by the' \
+    'official small-model reference round. The host needs only bash and Docker.'
+}
+
+command_name="${1:-}"
+if [ "$command_name" = "-h" ] || [ "$command_name" = "--help" ]; then
+  usage
+  exit 0
+fi
+[ -n "$command_name" ] || { usage >&2; exit 2; }
+shift
+
+model_dir="${AKM_EVAL_MODEL_DIR:-$REPO_ROOT/models/reference}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --model-dir) model_dir="${2:?--model-dir requires a directory}"; shift 2 ;;
+    *) printf 'reference-model: unexpected argument: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+
+command -v docker >/dev/null 2>&1 || {
+  printf 'reference-model: docker is required.\n' >&2
+  exit 1
+}
+mkdir -p "$model_dir"
+model_dir="$(cd -- "$model_dir" && pwd -P)"
+
+container_check() {
+  docker run --rm --user "$(id -u):$(id -g)" \
+    --mount "type=bind,source=$model_dir,target=/models" \
+    --entrypoint /bin/sh "$IMAGE" -ec \
+    "printf '%s  %s\\n' '$MODEL_SHA256' '/models/$MODEL_FILE' | sha256sum --check --status"
+}
+
+compose() {
+  AKM_EVAL_MODEL_DIR="$model_dir" docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+case "$command_name" in
+  fetch)
+    if container_check; then
+      printf 'reference-model: verified existing %s/%s\n' "$model_dir" "$MODEL_FILE"
+      exit 0
+    fi
+    docker run --rm --user "$(id -u):$(id -g)" \
+      --mount "type=bind,source=$model_dir,target=/models" \
+      --entrypoint /bin/sh "$IMAGE" -ec \
+      "curl --fail --location --retry 5 --retry-all-errors --continue-at - --output '/models/$MODEL_FILE.partial' '$MODEL_URL'; if ! printf '%s  %s\\n' '$MODEL_SHA256' '/models/$MODEL_FILE.partial' | sha256sum --check --status; then rm -f '/models/$MODEL_FILE.partial'; exit 1; fi; mv '/models/$MODEL_FILE.partial' '/models/$MODEL_FILE'"
+    printf 'reference-model: downloaded and verified %s/%s\n' "$model_dir" "$MODEL_FILE"
+    ;;
+  verify)
+    if container_check; then
+      printf 'reference-model: SHA-256 verified: %s/%s\n' "$model_dir" "$MODEL_FILE"
+    else
+      printf 'reference-model: missing or checksum mismatch: %s/%s\n' "$model_dir" "$MODEL_FILE" >&2
+      exit 1
+    fi
+    ;;
+  up)
+    container_check || {
+      printf 'reference-model: model missing or invalid; run bin/reference-model fetch first.\n' >&2
+      exit 1
+    }
+    compose up --detach --wait --wait-timeout 600
+    printf '%s\n' \
+      'reference-model: baseline  http://qwen-baseline:8080/v1 on akm-eval-reference (131072 tokens, 1 slot)' \
+      'reference-model: retrieval http://qwen-retrieval:8080/v1 on akm-eval-reference (32768 tokens/slot, 2 slots)' \
+      'reference-model: host inspection ports are http://127.0.0.1:4062/v1 and http://127.0.0.1:4060/v1'
+    ;;
+  down) compose down ;;
+  status) compose ps ;;
+  logs) compose logs --follow ;;
+  *) usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-qwen35-9b-q4km-131k-v1",
+    "outputDir": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1"
+  },
+  "packs": [
+    {
+      "id": "longmemeval-qwen35-9b-q4km-131k-v1",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "datasetPath": "datasets/longmemeval/dataset.json",
+        "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
+        "evaluatorModel": "gpt-4o",
+        "smoke": false,
+        "resume": true,
+        "topK": 5
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "baseline",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ai-lab",
+        "model": "qwen3.5-9b"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "none" }
+    },
+    {
+      "id": "raw-vector",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ai-lab",
+        "model": "qwen3.5-9b"
+      },
+      "akm": { "enabled": false },
+      "memory": { "backend": "raw-vector" }
+    },
+    {
+      "id": "akm-memory-lead",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ai-lab",
+        "model": "qwen3.5-9b"
+      },
+      "akm": { "enabled": false },
+      "memory": {
+        "backend": "akm",
+        "config": {
+          "fragmentContext": {
+            "mode": "lead",
+            "maxChars": 3200
+          }
+        }
+      }
+    }
+  ],
+  "providers": {
+    "ai-lab": {
+      "type": "openai-compatible",
+      "baseURL": "{env:LAB_AI_BASE_URL}",
+      "apiKey": "{env:LAB_API_KEY}",
+      "defaultModel": "qwen3.5-9b",
+      "timeout": 600000,
+      "options": {
+        "temperature": 0,
+        "max_tokens": 256,
+        "seed": 1337,
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      }
+    }
+  },
+  "judging": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0
+  },
+  "telemetry": {
+    "trackTokens": true,
+    "trackCost": true,
+    "trackLatency": true,
+    "captureLogs": true
+  },
+  "notes": [
+    "Reusable small-model reference: all 500 official LongMemEval questions, local qwen3.5-9b Q4_K_M answers from a pinned llama.cpp container on one RTX 4060 Ti, and the official GPT-4o judge.",
+    "The local answer server must expose one context slot of at least 131072 tokens. Baseline receives the full haystack; raw-vector and AKM receive only topK=5 retrieved context. AKM uses the 0.9.15 lead fragment contract capped at 3200 characters.",
+    "The provider id remains ai-lab solely because bin/memory-eval currently selects its safe env forwarding path by providerRef; LAB_AI_BASE_URL is set to the local Docker host endpoint and LAB_API_KEY is a non-secret local placeholder. The recorded base URL and resolved model census are authoritative."
+  ]
+}

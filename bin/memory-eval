@@ -3,24 +3,22 @@ set -euo pipefail
 
 # One-command memory eval with the credentials wired correctly.
 #
-#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --out runs/longmemeval-0.9.14
-#   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.14-beta.1
-#   bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
+#   bin/memory-eval longmemeval --akm-version 0.9.15 --out runs/longmemeval-0.9.15
+#   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.15
+#   bin/memory-eval longmemeval --akm-version 0.9.15 --dry-run
 #   bin/memory-eval longmemeval --akm-source ../akm --variant akm-memory-lead
 #
-# WHY THIS EXISTS: the judge and the agent need DIFFERENT credentials pointed
-# at DIFFERENT endpoints, and they collide on the same variable name. The agent
-# arms run on opencode Zen, which wants OPENAI_API_KEY set to the Zen key; the
-# LongMemEval judge is gpt-4o, which Zen does not serve at all, so it needs a
-# real OpenAI key. Wiring that by hand before a multi-hour run is exactly the
-# kind of step that fails at the end instead of the start.
+# WHY THIS EXISTS: the judge and answer model may use different credentials and
+# endpoints. The wrapper resolves the providers selected by the requested arms,
+# validates their env placeholders up front, and never infers routing from a
+# provider's arbitrary config key.
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
 
 usage() {
   printf '%s\n' \
-    'usage: bin/memory-eval <longmemeval|locomo> (--akm-version VERSION | --akm-source DIR) [--config PATH] [--variant ID] [--out runs/DIR] [--dry-run]' \
+    'usage: bin/memory-eval <longmemeval|locomo> (--akm-version VERSION | --akm-source DIR) [--config PATH] [--variant ID] [--out runs/DIR] [--parallel] [--dry-run]' \
     '       Omit the AKM target only when no akm-memory arm is selected.'
 }
 
@@ -68,6 +66,7 @@ JUDGE_BASE_URL="${AKM_EVAL_JUDGE_BASE_URL:-}"
 pack=""
 variants=()
 dry_run=0
+parallel=0
 requested_akm_version="${AKM_EVAL_AKM_VERSION:-}"
 requested_akm_source="${AKM_EVAL_AKM_SOURCE_DIR:-}"
 config_override=""
@@ -80,6 +79,7 @@ while [ $# -gt 0 ]; do
     --akm-source) requested_akm_source="${2:?--akm-source requires a directory}"; shift 2 ;;
     --config) config_override="${2:?--config requires a path}"; shift 2 ;;
     --out) requested_output="${2:?--out requires a path}"; shift 2 ;;
+    --parallel) parallel=1; shift ;;
     --dry-run) dry_run=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "memory-eval: unexpected argument: $1" >&2; exit 2 ;;
@@ -98,6 +98,8 @@ fail() { echo "memory-eval: $*" >&2; exit 1; }
 # candidate.  AKM_EVAL_AKM_CMD remains supported, but must report that version.
 needs_akm=0
 for variant in "${variants[@]}"; do
+  jq -e --arg id "$variant" '.variants | any(.id == $id)' "$config" >/dev/null ||
+    fail "config has no variant named ${variant}."
   case "$variant" in akm-memory*) needs_akm=1 ;; esac
 done
 if [ -n "$requested_akm_version" ] && [ -n "$requested_akm_source" ]; then
@@ -112,43 +114,90 @@ fi
 # file.  This keeps secrets out of image layers and separates benchmark input
 # from the target whose behavior is being measured.
 
-# The judge key. Accept AKM_EVAL_JUDGE_API_KEY, or fall back to a real OpenAI
-# key stored under the generic name -- but only after confirming it is NOT the
-# Zen key, which would silently send Zen credentials to api.openai.com.
-# If the judge is explicitly routed to the configured ai.lab endpoint, its key
-# is LAB_API_KEY. An explicit AKM_EVAL_JUDGE_API_KEY still wins; the
-# OPENAI_API_KEY fallback remains for a cloud-OpenAI judge, and is used only
-# when the value differs from the Zen key so Zen credentials can never be sent
-# to another host by a naming accident.
-judge_key="${AKM_EVAL_JUDGE_API_KEY:-}"
-if [ -z "$judge_key" ] && [ -n "${LAB_API_KEY:-}" ] && [ -n "$JUDGE_BASE_URL" ] \
-   && [ "$JUDGE_BASE_URL" = "${LAB_AI_BASE_URL:-}" ]; then
-  judge_key="$LAB_API_KEY"
-fi
-if [ -z "$judge_key" ] && [ -n "${OPENAI_API_KEY:-}" ] && [ "${OPENAI_API_KEY:-}" != "${OPENCODE_API_KEY:-}" ]; then
-  judge_key="$OPENAI_API_KEY"
+ambient_openai_key="${OPENAI_API_KEY:-}"
+
+# Backward-compatible Zen convenience: old configs reference OPENAI_API_KEY,
+# but operators store the agent credential as OPENCODE_API_KEY so the cloud
+# judge key cannot be confused with it. Routing is identified by the declared
+# endpoint, not by providerRef.
+uses_zen=0
+for variant in "${variants[@]}"; do
+  provider_ref="$(jq -r --arg id "$variant" '.variants[] | select(.id == $id) | (.agent.providerRef // .agent.provider)' "$config")"
+  provider_base="$(jq -r --arg ref "$provider_ref" '.providers[$ref].baseURL // ""' "$config")"
+  if [ "$provider_base" = "$ZEN_BASE_URL" ]; then
+    uses_zen=1
+  fi
+done
+if [ "$uses_zen" = "1" ]; then
+  [ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the selected Zen endpoint needs it."
+  export OPENAI_API_KEY="$OPENCODE_API_KEY"
+  export OPENAI_BASE_URL="$ZEN_BASE_URL"
 fi
 
-provider_uses_lab="$(jq -r '[.variants[].agent.providerRef] | any(. == "ai-lab")' "$config")"
-if [ "$provider_uses_lab" = "true" ]; then
-  [ -n "${LAB_API_KEY:-}" ] || fail "LAB_API_KEY is unset; the ai.lab agent arms need it."
-  [ -n "${LAB_AI_BASE_URL:-}" ] || fail "LAB_AI_BASE_URL is unset; the ai.lab agent arms need it."
-  agent_label="ai.lab (${LAB_AI_BASE_URL})"
-else
-  [ -n "${OPENCODE_API_KEY:-}" ] || fail "OPENCODE_API_KEY is unset; the Zen agent arms need it."
-  agent_label="Zen (${ZEN_BASE_URL})"
+resolve_provider_value() {
+  local raw="$1"
+  local field="$2"
+  local env_name
+  if [[ "$raw" =~ ^\{env:([A-Z_][A-Z0-9_]*)\}$ ]]; then
+    env_name="${BASH_REMATCH[1]}"
+    [ -n "${!env_name:-}" ] || fail "$env_name is unset; selected provider field $field requires it."
+    printf '%s\n' "${!env_name}"
+  else
+    printf '%s\n' "$raw"
+  fi
+}
+
+declare -A seen_providers=()
+agent_labels=()
+agent_endpoints=()
+agent_keys=()
+for variant in "${variants[@]}"; do
+  provider_ref="$(jq -r --arg id "$variant" '.variants[] | select(.id == $id) | (.agent.providerRef // .agent.provider)' "$config")"
+  [ -n "$provider_ref" ] || fail "variant ${variant} has no provider reference."
+  if [ -n "${seen_providers[$provider_ref]:-}" ]; then
+    continue
+  fi
+  seen_providers[$provider_ref]=1
+  jq -e --arg ref "$provider_ref" '.providers[$ref] | type == "object"' "$config" >/dev/null ||
+    fail "config has no provider named ${provider_ref}."
+  provider_type="$(jq -r --arg ref "$provider_ref" '.providers[$ref].type' "$config")"
+  provider_base_raw="$(jq -r --arg ref "$provider_ref" '.providers[$ref].baseURL // ""' "$config")"
+  provider_key_raw="$(jq -r --arg ref "$provider_ref" '.providers[$ref].apiKey // ""' "$config")"
+  provider_base="$(resolve_provider_value "$provider_base_raw" "${provider_ref}.baseURL")"
+  provider_key=""
+  if [ -n "$provider_key_raw" ]; then
+    provider_key="$(resolve_provider_value "$provider_key_raw" "${provider_ref}.apiKey")"
+  fi
+  if [ "$provider_type" = "openai-compatible" ]; then
+    [ -n "$provider_base" ] || fail "selected openai-compatible provider ${provider_ref} has no baseURL."
+  fi
+  agent_labels+=("${provider_ref} (${provider_base:-$provider_type})")
+  agent_endpoints+=("$provider_base")
+  agent_keys+=("$provider_key")
+done
+agent_label="$(IFS=', '; printf '%s' "${agent_labels[*]}")"
+
+# The explicit judge credential wins. A judge deliberately routed to one of
+# the selected agent endpoints may reuse that endpoint's credential. Cloud
+# OpenAI can fall back to the ambient OPENAI_API_KEY only when it was not the
+# Zen credential.
+judge_key="${AKM_EVAL_JUDGE_API_KEY:-}"
+if [ -z "$judge_key" ] && [ -n "$JUDGE_BASE_URL" ]; then
+  for ((i = 0; i < ${#agent_endpoints[@]}; i++)); do
+    if [ "$JUDGE_BASE_URL" = "${agent_endpoints[$i]}" ]; then
+      judge_key="${agent_keys[$i]}"
+      break
+    fi
+  done
+fi
+if [ -z "$judge_key" ] && [ -n "$ambient_openai_key" ] && [ "$ambient_openai_key" != "${OPENCODE_API_KEY:-}" ]; then
+  judge_key="$ambient_openai_key"
 fi
 
 if [ "$pack" = "longmemeval" ]; then
   [ -n "$judge_key" ] || fail "no judge key for ${JUDGE_BASE_URL:-cloud OpenAI}. Set AKM_EVAL_JUDGE_API_KEY to a key that can serve $(jq -r '.packs[0].config.evaluatorModel' "$config")."
 fi
 
-# Agent arms -> Zen. Judge -> cloud OpenAI (no judge base URL, so
-# resolveJudgeEnv clears the agent's and the key is never sent to Zen).
-if [ "$provider_uses_lab" != "true" ]; then
-  export OPENAI_API_KEY="$OPENCODE_API_KEY"
-  export OPENAI_BASE_URL="$ZEN_BASE_URL"
-fi
 export AKM_EVAL_JUDGE_API_KEY="$judge_key"
 # Unset, not empty: resolveJudgeEnv treats an absent judge base URL as "cloud
 # OpenAI" and clears the agent's, so the judge key is never sent to Zen.
@@ -201,6 +250,7 @@ cat <<INFO
 memory-eval: pack        ${pack}
 memory-eval: config      ${config}
 memory-eval: arms        ${variants[*]}
+memory-eval: execution   $([ "$parallel" = "1" ] && echo parallel || echo sequential)
 memory-eval: agent       ${agent_label}
 memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via ${JUDGE_BASE_URL:-cloud OpenAI}" || echo "")
 memory-eval: questions   $(jq -r '.packs[0].config.maxQuestions // "ALL (no subset)"' "$config")
@@ -219,14 +269,33 @@ fi
 
 mkdir -p "$out_root"
 status=0
-for variant in "${variants[@]}"; do
+run_variant() {
+  local variant="$1"
   echo "memory-eval: === ${pack} / ${variant} ==="
-  if ! bin/eval --pack "$pack" --variant "$variant" --config "$config" \
-        --out "${out_root}/${variant}" 2>&1 | tee "${out_root}/${variant}.log"; then
-    echo "memory-eval: ${variant} FAILED (see ${out_root}/${variant}.log)" >&2
-    status=1
-  fi
-done
+  bin/eval --pack "$pack" --variant "$variant" --config "$config" \
+    --out "${out_root}/${variant}" 2>&1 | tee "${out_root}/${variant}.log"
+}
+
+if [ "$parallel" = "1" ] && [ ${#variants[@]} -gt 1 ]; then
+  pids=()
+  for variant in "${variants[@]}"; do
+    run_variant "$variant" &
+    pids+=("$!")
+  done
+  for ((i = 0; i < ${#pids[@]}; i++)); do
+    if ! wait "${pids[$i]}"; then
+      echo "memory-eval: ${variants[$i]} FAILED (see ${out_root}/${variants[$i]}.log)" >&2
+      status=1
+    fi
+  done
+else
+  for variant in "${variants[@]}"; do
+    if ! run_variant "$variant"; then
+      echo "memory-eval: ${variant} FAILED (see ${out_root}/${variant}.log)" >&2
+      status=1
+    fi
+  done
+fi
 
 echo
 echo "memory-eval: done -> ${out_root}/"

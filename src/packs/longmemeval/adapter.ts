@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ArtifactStore } from "../../core/artifact-store.ts";
@@ -26,6 +27,10 @@ import {
   loadDataset,
   resolveDatasetFile,
 } from "./dataset.ts";
+import {
+  longMemEvalBackendRuntimeIdentity,
+  longMemEvalEvaluatorCodeSha256,
+} from "./runtime-identity.ts";
 
 interface LongMemEvalPackConfig {
   datasetPath?: string;
@@ -46,23 +51,8 @@ interface LongMemEvalPackConfig {
 
 const DEFAULT_TOP_K = 5;
 
-function evaluatorCodeSha256(): string {
-  const repositoryRoot = path.resolve(import.meta.dir, "../../..");
-  const files = [
-    import.meta.filename,
-    path.resolve(import.meta.dir, "checkpoint.ts"),
-    path.resolve(import.meta.dir, "dataset.ts"),
-    path.resolve(import.meta.dir, "../../agent/openai-compatible-runner.ts"),
-    path.resolve(import.meta.dir, "../../agent/types.ts"),
-    path.resolve(import.meta.dir, "../../memory/backends/akm.ts"),
-    path.resolve(import.meta.dir, "../../memory/registry.ts"),
-    path.resolve(import.meta.dir, "../../memory/types.ts"),
-  ];
-  return sha256Text(
-    files
-      .map((file) => `${path.relative(repositoryRoot, file)}\0${fs.readFileSync(file, "utf8")}`)
-      .join("\0"),
-  );
+function sha256File(filePath: string): string {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
 interface EvaluationLogEntry {
@@ -256,12 +246,30 @@ function evaluatorWrapperPath(rootDir: string): string {
   return path.resolve(rootDir, "scripts/longmemeval-evaluator.py");
 }
 
+const FULL_CONTEXT_HEADING = "Conversation history:";
+const RETRIEVED_CONTEXT_HEADING =
+  "Conversation history (retrieved excerpts, not the full haystack):";
 const ANSWER_INSTRUCTIONS = [
   "Answer with only the minimal factual answer needed.",
   "Do not add explanation, markdown, qualifiers, or extra context.",
   "If the answer is not in the conversation history, answer exactly: I don't know",
   "Answer:",
 ];
+
+/** Stable semantic identity for the answer prompts, independent of AKM code. */
+export function longMemEvalPromptProtocolSha256(): string {
+  return sha256Text(
+    JSON.stringify({
+      contract: "longmemeval-v2",
+      fullContextHeading: FULL_CONTEXT_HEADING,
+      retrievedContextHeading: RETRIEVED_CONTEXT_HEADING,
+      turnRendering: "${role}: ${content}",
+      sessionSeparator: "\\n\\n",
+      questionRendering: "Question: ${question}",
+      answerInstructions: ANSWER_INSTRUCTIONS,
+    }),
+  );
+}
 
 /**
  * The disabled-backend (baseline) arm's prompt: the FULL haystack, flattened,
@@ -275,7 +283,7 @@ export function buildFullContextPrompt(question: LongMemEvalQuestion): string {
     .map((turn) => `${turn.role}: ${turn.content}`)
     .join("\n");
   return [
-    "Conversation history:",
+    FULL_CONTEXT_HEADING,
     conversationHistory,
     "",
     `Question: ${question.question}`,
@@ -298,7 +306,7 @@ export function buildRetrievedPrompt(
   searchResults: MemorySearchResult[],
 ): string {
   return [
-    "Conversation history (retrieved excerpts, not the full haystack):",
+    RETRIEVED_CONTEXT_HEADING,
     buildRetrievedContext(searchResults),
     "",
     `Question: ${question.question}`,
@@ -386,15 +394,11 @@ export const longMemEvalAdapter: PackAdapter = {
       typeof packConfig.topK === "number" && packConfig.topK > 0 ? packConfig.topK : DEFAULT_TOP_K;
 
     const memoryProvenance = describeMemoryProvenance(memory);
-    const backendRuntimeIdentity = JSON.stringify({
-      backendId: memoryProvenance.backendId,
-      backendVersion: memoryProvenance.backendVersion ?? null,
-      backendDetail: memoryProvenance.backendDetail ?? null,
-      sourceGitSha: process.env.AKM_EVAL_AKM_SOURCE_SHA ?? null,
-      sourceTreeFingerprint: process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT ?? null,
-      sourceDirty: process.env.AKM_EVAL_AKM_SOURCE_DIRTY ?? null,
-      explicitRuntimeFingerprint: process.env.AKM_EVAL_AKM_RUNTIME_FINGERPRINT ?? null,
-    });
+    const backendRuntimeIdentity = longMemEvalBackendRuntimeIdentity(memoryProvenance);
+    const questionIdsSha256 = sha256Text(JSON.stringify(questions.map((question) => question.id)));
+    const datasetSha256 = sha256File(datasetPath);
+    const promptProtocolSha256 = longMemEvalPromptProtocolSha256();
+    const evaluatorCodeSha256 = longMemEvalEvaluatorCodeSha256(memory.id);
     const checkpointIdentity = createCheckpointIdentity({
       datasetPath,
       questions,
@@ -406,7 +410,7 @@ export const longMemEvalAdapter: PackAdapter = {
       requestedAgentModel: context.run.agentModel,
       agentProviderOptions: context.run.agentProviderConfig?.options,
       backendRuntimeIdentity,
-      evaluatorCodeSha256: evaluatorCodeSha256(),
+      evaluatorCodeSha256,
     });
     const checkpointPath = resolveCheckpointPath(
       context.outputDir,
@@ -922,6 +926,17 @@ export const longMemEvalAdapter: PackAdapter = {
         ...context.run.metadata,
         ...memoryProvenance,
         benchmarkId: path.basename(datasetPath, path.extname(datasetPath)),
+        datasetSha256,
+        questionIdsSha256,
+        promptContract: "longmemeval-v2",
+        promptProtocolSha256,
+        evaluatorCodeSha256,
+        judgeScriptSha256: sha256File(evaluatorWrapperPath(context.rootDir)),
+        judgeMaxTokens: Number(process.env.AKM_EVAL_JUDGE_MAX_TOKENS ?? "64"),
+        judgeMaxUnparseableRate: Number(process.env.AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE ?? "0.02"),
+        judgeRuntimeFingerprint: process.env.AKM_EVAL_JUDGE_RUNTIME_FINGERPRINT ?? null,
+        answerModelArtifactSha256: process.env.AKM_EVAL_ANSWER_MODEL_ARTIFACT_SHA256 ?? null,
+        answerModelRuntimeImage: process.env.AKM_EVAL_ANSWER_MODEL_RUNTIME_IMAGE ?? null,
         questionCount: questions.length,
         overallAccuracy: score,
         evaluatorCommand,

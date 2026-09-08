@@ -143,6 +143,13 @@
             "topK",
             "fragmentContext",
             "configSha256",
+            "configPath",
+            "reproductionConfigPath",
+            "reproductionConfigSha256",
+            "referenceProtocolPath",
+            "referenceProtocolSha256",
+            "artifactManifestPath",
+            "artifactManifestSha256",
             "artifactRoot",
             "servingTopology"
           ],
@@ -158,6 +165,13 @@
               "additionalProperties": false
             },
             "configSha256": { "$ref": "#/$defs/sha256" },
+            "configPath": { "type": "string" },
+            "reproductionConfigPath": { "type": "string" },
+            "reproductionConfigSha256": { "$ref": "#/$defs/sha256" },
+            "referenceProtocolPath": { "type": "string" },
+            "referenceProtocolSha256": { "$ref": "#/$defs/sha256" },
+            "artifactManifestPath": { "type": "string" },
+            "artifactManifestSha256": { "$ref": "#/$defs/sha256" },
             "artifactRoot": { "type": "string" },
             "servingTopology": { "type": "string" }
           },

@@ -1,0 +1,108 @@
+name: akm-eval-qwen-reference
+
+services:
+  qwen-baseline:
+    image: ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f
+    init: true
+    restart: unless-stopped
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "${AKM_EVAL_BASELINE_GPU:-1}"
+      CUDA_VISIBLE_DEVICES: "${AKM_EVAL_BASELINE_GPU:-1}"
+    ports:
+      - "127.0.0.1:${AKM_EVAL_BASELINE_PORT:-4062}:8080"
+    networks: [reference]
+    volumes:
+      - type: bind
+        source: "${AKM_EVAL_MODEL_DIR:-../../models/reference}"
+        target: /models
+        read_only: true
+    command:
+      - --model
+      - /models/Qwen3.5-9B-Q4_K_M.gguf
+      - --alias
+      - qwen3.5-9b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "131072"
+      - --parallel
+      - "1"
+      - --n-gpu-layers
+      - all
+      - --split-mode
+      - none
+      - --main-gpu
+      - "0"
+      - --flash-attn
+      - "on"
+      - --cache-type-k
+      - q8_0
+      - --cache-type-v
+      - q8_0
+      - --jinja
+      - --chat-template-kwargs
+      - '{"enable_thinking":false}'
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  qwen-retrieval:
+    image: ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f
+    init: true
+    restart: unless-stopped
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: "${AKM_EVAL_RETRIEVAL_GPU:-0}"
+      CUDA_VISIBLE_DEVICES: "${AKM_EVAL_RETRIEVAL_GPU:-0}"
+    ports:
+      - "127.0.0.1:${AKM_EVAL_RETRIEVAL_PORT:-4060}:8080"
+    networks: [reference]
+    volumes:
+      - type: bind
+        source: "${AKM_EVAL_MODEL_DIR:-../../models/reference}"
+        target: /models
+        read_only: true
+    command:
+      - --model
+      - /models/Qwen3.5-9B-Q4_K_M.gguf
+      - --alias
+      - qwen3.5-9b
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "65536"
+      - --parallel
+      - "2"
+      - --n-gpu-layers
+      - all
+      - --split-mode
+      - none
+      - --main-gpu
+      - "0"
+      - --flash-attn
+      - "on"
+      - --cache-type-k
+      - q8_0
+      - --cache-type-v
+      - q8_0
+      - --jinja
+      - --chat-template-kwargs
+      - '{"enable_thinking":false}'
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+networks:
+  reference:
+    name: akm-eval-reference

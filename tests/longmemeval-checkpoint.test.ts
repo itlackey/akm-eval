@@ -9,6 +9,10 @@ import {
   prepareCheckpoint,
   resolveCheckpointPath,
 } from "../src/packs/longmemeval/checkpoint.ts";
+import {
+  longMemEvalBackendRuntimeIdentity,
+  longMemEvalEvaluatorFiles,
+} from "../src/packs/longmemeval/runtime-identity.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -60,6 +64,45 @@ function entry(signature: string): LongMemEvalCheckpointEntry {
 }
 
 describe("LongMemEval answer checkpoints", () => {
+  test("AKM source identity invalidates only the AKM arm", () => {
+    const sourceA = {
+      AKM_EVAL_AKM_SOURCE_SHA: "source-a",
+      AKM_EVAL_AKM_SOURCE_FINGERPRINT: "tree-a",
+      AKM_EVAL_AKM_SOURCE_DIRTY: "0",
+      AKM_EVAL_AKM_RUNTIME_FINGERPRINT: "runtime-a",
+    };
+    const sourceB = {
+      AKM_EVAL_AKM_SOURCE_SHA: "source-b",
+      AKM_EVAL_AKM_SOURCE_FINGERPRINT: "tree-b",
+      AKM_EVAL_AKM_SOURCE_DIRTY: "1",
+      AKM_EVAL_AKM_RUNTIME_FINGERPRINT: "runtime-b",
+    };
+
+    for (const backendId of ["none", "raw-vector"]) {
+      const provenance = { backendId, backendKind: "in-process", backendDetail: backendId };
+      expect(longMemEvalBackendRuntimeIdentity(provenance, sourceA)).toBe(
+        longMemEvalBackendRuntimeIdentity(provenance, sourceB),
+      );
+    }
+
+    const akm = { backendId: "akm", backendKind: "external", backendDetail: "akm CLI" };
+    expect(longMemEvalBackendRuntimeIdentity(akm, sourceA)).not.toBe(
+      longMemEvalBackendRuntimeIdentity(akm, sourceB),
+    );
+  });
+
+  test("evaluator hashes include exactly the selected backend implementation", () => {
+    const relative = (backend: string) =>
+      longMemEvalEvaluatorFiles(backend).map((file) => path.relative(process.cwd(), file));
+
+    expect(relative("raw-vector")).toContain("src/memory/backends/raw-vector.ts");
+    expect(relative("raw-vector")).not.toContain("src/memory/backends/akm.ts");
+    expect(relative("akm")).toContain("src/memory/backends/akm.ts");
+    expect(relative("akm")).not.toContain("src/memory/backends/raw-vector.ts");
+    expect(relative("none")).toContain("src/memory/backends/none.ts");
+    expect(relative("none")).not.toContain("src/memory/backends/akm.ts");
+  });
+
   test("runtime identity changes invalidate the checkpoint signature", () => {
     const clean = identity(
       JSON.stringify({ version: "0.9.15", gitSha: "aaa", treeFingerprint: "tree-a" }),

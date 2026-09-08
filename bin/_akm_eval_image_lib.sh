@@ -43,7 +43,7 @@ akm_eval_runtime_fingerprint() {
   files="$(
     git -C "$repo_root" ls-files -co --exclude-standard -- \
       .dockerignore package.json bun.lock requirements-smoke.txt requirements-beam.txt \
-      tsconfig.json bin config docker scripts src
+      tsconfig.json bin config docker scripts src | LC_ALL=C sort
   )" || return 1
   [ -n "$files" ] || return 1
 
@@ -73,7 +73,7 @@ akm_eval_default_image_tag() {
 akm_eval_source_fingerprint() {
   local source_root="$1"
   local files file
-  files="$(git -C "$source_root" ls-files -co --exclude-standard)" || return 1
+  files="$(git -C "$source_root" ls-files -co --exclude-standard | LC_ALL=C sort)" || return 1
   [ -n "$files" ] || return 1
   {
     while IFS= read -r file; do
@@ -110,7 +110,7 @@ akm_eval_prepared_context_fingerprint() {
       [ -e "$source_root/$file" ] || [ -L "$source_root/$file" ] || continue
       printf '%s\t' "$file"
       git hash-object -- "$prepared_root/$file" || return 1
-    done < <(git -C "$source_root" ls-files -co --exclude-standard -z)
+    done < <(git -C "$source_root" ls-files -co --exclude-standard -z | LC_ALL=C sort -z)
   } | git hash-object --stdin
 }
 

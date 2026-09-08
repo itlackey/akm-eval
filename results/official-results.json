@@ -67,7 +67,14 @@
           "maxChars": 3200
         },
         "configSha256": "1e7579d42b8f681941f1a47cde8da1c3e48fdfbc64449cf6df50f43b1b0f249e",
-        "artifactRoot": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1",
+        "configPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/recorded-config.json",
+        "reproductionConfigPath": "config/reference/longmemeval-qwen35-9b-q4km-131k-v1.json",
+        "reproductionConfigSha256": "14dc225ce0ae4b5d280d6e90d4b07017dd06506a5d49a1a2de51bf8ec80ddaf2",
+        "referenceProtocolPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/protocol.json",
+        "referenceProtocolSha256": "2baee6a8431c85ee8e01bd317b2db169b3ff02c68543b22a72f18f82998551a8",
+        "artifactManifestPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/SHA256SUMS",
+        "artifactManifestSha256": "fc300b3dc72af4805b97076b5124e5bccf937190b447236dec63c280aa46088b",
+        "artifactRoot": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1",
         "servingTopology": "Baseline used a dedicated RTX 4060 Ti with one 131072-token slot. Raw-vector and AKM ran concurrently on a second RTX 4060 Ti using two 32768-token slots. Accuracy is comparable; cross-arm wall time is not a controlled latency benchmark."
       },
       "arms": [
@@ -122,11 +129,11 @@
           },
           "checkpointSignature": "ac45af52c7b12278ab7db82ad7b77f2ebb2ec3186367faa228749286955306ee",
           "artifacts": {
-            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/result.json",
+            "resultPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/result.json",
             "resultSha256": "b3000a5057ede98f063bb6fc9d75a679c8ba14c2e46d076953a80f796d7e07b9",
-            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/predictions.jsonl",
+            "predictionsPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/predictions.jsonl",
             "predictionsSha256": "934c2aae2ca9d073c1eba494d44bab72afab062f3de51bc80c9a46858bfff618",
-            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/baseline/judge-results.jsonl",
             "judgeLogSha256": "461592256ffabe3f9c5ec17e1d8eec70c46db658d3338b328a91a92114c16987"
           }
         },
@@ -181,11 +188,11 @@
           },
           "checkpointSignature": "37dbf9f807fdab60c783ca8d7da3b923fb3ad2d6374acf2e762981950f955e25",
           "artifacts": {
-            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/result.json",
+            "resultPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/result.json",
             "resultSha256": "d4756eb671433e2711afce178d45c649b5d97599db4a30c96dbf13e275870a1e",
-            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl",
+            "predictionsPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl",
             "predictionsSha256": "15923eb3500dcfbddfb0719b46692651473f1c38315f4bcbf9de66ce49ca5085",
-            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/judge-results.jsonl",
             "judgeLogSha256": "80d7301f4a393d89742f5a9c64bde0f0cd8168335dd2df481ce10b9ba31b2c7e"
           }
         },
@@ -240,11 +247,11 @@
           },
           "checkpointSignature": "e108cc4b7d2401fd09b52303590ed254e61ab09fe4637aa6b717e5a5f227156d",
           "artifacts": {
-            "resultPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/result.json",
+            "resultPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/result.json",
             "resultSha256": "21370c75fa3fb58a908af9643524a60cd73e9a3d13507265ede783a16b97e13c",
-            "predictionsPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/predictions.jsonl",
+            "predictionsPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/predictions.jsonl",
             "predictionsSha256": "9199fff4c3355517a7f3c9ef15dec3dc08af0bfd5991daea013f2315f228f6fa",
-            "judgeLogPath": "runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/predictions.jsonl.eval-results-gpt-4o",
+            "judgeLogPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/akm-memory-lead/judge-results.jsonl",
             "judgeLogSha256": "78a8c10c0590208c55f0864a25a99b143c612dd36ddd230558f60ed88b8cd2bb"
           }
         }

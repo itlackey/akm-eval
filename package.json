@@ -12,6 +12,7 @@
     "akm-eval-eval": "./bin/eval",
     "akm-eval-matrix": "./bin/matrix",
     "akm-eval-report": "./bin/report",
+    "akm-eval-reference": "./bin/reference-eval",
     "akm-eval-summary": "./bin/summary"
   },
   "scripts": {
@@ -22,6 +23,7 @@
     "matrix": "bash bin/matrix",
     "compare": "bash bin/compare",
     "report": "bash bin/report",
+    "reference": "bash bin/reference-eval verify",
     "summary": "bash bin/summary",
     "downloads": "bash bin/downloads",
     "download:datasets": "bun run downloads",

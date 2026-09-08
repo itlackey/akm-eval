@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "longmemeval-qwen35-9b-q4km-131k-v1-raw-vector",
+  "pack": "longmemeval",
+  "variant": "raw-vector",
+  "memoryBackend": "raw-vector",
+  "status": "passed",
+  "startedAt": "2026-09-08T00:43:37.722Z",
+  "finishedAt": "2026-09-08T01:39:42.602Z",
+  "durationMs": 3364880,
+  "warnings": [],
+  "notes": [
+    "LongMemEval executed 500 question(s) and scored them with the official evaluator command.",
+    "Overall accuracy: 28.6%",
+    "Evaluator model: gpt-4o",
+    "Per-question answer checkpoint: /home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/.checkpoints/longmemeval-37dbf9f807fdab60c783ca8d7da3b923fb3ad2d6374acf2e762981950f955e25.jsonl (0/500 answer(s) resumed).",
+    "Memory-backed retrieval mode using topK=5; each question resets the backend and adds only its own haystack sessions (one document per session) before searching. The full-haystack (`none`/disabled-backend) arm in this same comparison answers every question from its ENTIRE haystack -- a lower score here than that arm does not necessarily mean retrieval quality is worse; it can mean retrieval lost an answer a full-context baseline structurally cannot lose. See metadata.thisArmContextMode.",
+    "Retrieval zero-hit rate: 0/500 queries returned no results (0.0%).",
+    "Average results returned per query: 5.00 (topK=5). precisionAtK is divided by the number of results actually returned, not by topK, so a backend that returns fewer results per query (e.g. akm returning only genuine hits) reports a structurally higher precisionAtK than a backend that always returns topK results (e.g. raw-vector, with no relevance threshold) for the same underlying retrieval quality. Do not compare precisionAtK across backends with different result-count behavior without accounting for this.",
+    "30/500 questions are abstention (\"_abs\") instances, graded on whether the model correctly declines to answer rather than on factual recall. A retrieval arm handed little or no context can abstain more easily than a full-context baseline with more surface to hallucinate from, so part of any overallAccuracy difference between arms on this dataset reflects that confound rather than answer quality alone. See metadata.abstentionQuestionCount."
+  ],
+  "metrics": {
+    "retrieval": {
+      "queryCount": 500,
+      "precisionAtK": 0.1336,
+      "recallAtK": 0.400933,
+      "mrr": 0.349633,
+      "ndcgAtK": 0.323383
+    },
+    "context": {
+      "queryCount": 500,
+      "nonAbstentionQueryCount": 470,
+      "literalAnswerContainment": 0.393617,
+      "evidenceHitQueryCount": 244,
+      "evidenceHitContextAnswerContainment": 0.569672,
+      "evidenceHitButAnswerMissingCount": 105
+    },
+    "answer": {
+      "exactMatch": null,
+      "tokenF1": null,
+      "containsExpected": null,
+      "judgedPass": 0.286
+    },
+    "aggregate": {
+      "score": 0.286,
+      "retrievalWeight": 0,
+      "answerWeight": 1
+    }
+  },
+  "telemetry": {
+    "promptTokens": 5491194,
+    "completionTokens": 2624,
+    "totalTokens": 5493818,
+    "estimatedCostUsd": 0,
+    "latencyMs": 3070626,
+    "logs": [
+      "pack=longmemeval",
+      "variant=raw-vector",
+      "memory=raw-vector",
+      "questions=500",
+      "evaluatorModel=gpt-4o"
+    ],
+    "resolvedModels": {
+      "qwen3.5-9b": 500
+    }
+  },
+  "artifacts": {
+    "resultPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/result.json",
+    "summaryPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/summary.md",
+    "rawOutputPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/raw-output.json"
+  },
+  "metadata": {
+    "packId": "longmemeval-qwen35-9b-q4km-131k-v1",
+    "adapter": "longmemeval",
+    "configRunId": "longmemeval-qwen35-9b-q4km-131k-v1",
+    "repoCommit": "edf6c0f4210af84b788604c91b8b7d66e4ac0b8a",
+    "runnerType": "openai-compatible",
+    "model": "qwen3.5-9b",
+    "backendId": "raw-vector",
+    "backendKind": "in-memory",
+    "backendDetail": "deterministic in-memory vector backend ready",
+    "backendSourceGitSha": "a06d7f57bc817b53d969e42b091d284d50d2508c",
+    "backendSourceFingerprint": "832597680ae69d1e0ed6f1c6abd19655d7367387",
+    "backendSourceDirty": false,
+    "benchmarkId": "dataset",
+    "questionCount": 500,
+    "overallAccuracy": 0.286,
+    "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
+    "evaluatorModel": "gpt-4o",
+    "predictionsPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl",
+    "evaluationLogPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/predictions.jsonl.eval-results-gpt-4o",
+    "topK": 5,
+    "agentRetryCount": 0,
+    "checkpointPath": "/home/founder3/code/github/itlackey/akm-eval/runs/reference/longmemeval-qwen35-9b-q4km-131k-v1/raw-vector/.checkpoints/longmemeval-37dbf9f807fdab60c783ca8d7da3b923fb3ad2d6374acf2e762981950f955e25.jsonl",
+    "checkpointSignature": "37dbf9f807fdab60c783ca8d7da3b923fb3ad2d6374acf2e762981950f955e25",
+    "checkpointResumeEnabled": true,
+    "resumedQuestionCount": 0,
+    "agentResolvedModelCount": 1,
+    "agentResolvedModels": "qwen3.5-9b=500",
+    "judgeResolvedModelCount": 1,
+    "judgeResolvedModels": "gpt-4o-2024-08-06=500",
+    "contextSufficiencyDefinition": "normalized-literal-answer-containment; evidence-hit rate conditions on a retrieved ground-truth session; abstention questions excluded",
+    "baselineIsLongContext": false,
+    "thisArmContextMode": "retrieved-only",
+    "abstentionQuestionCount": 30,
+    "retrievalQueryCount": 500,
+    "zeroHitQueries": 0,
+    "zeroHitQueryRate": 0,
+    "avgResultsReturned": 5,
+    "questionsWithoutEvidenceLabels": 0,
+    "questionsWithUnmatchableEvidenceLabels": 0,
+    "questionsWithSynthesizedHaystack": 0,
+    "retrievalMetricsScoreable": true,
+    "accuracy_single-session": 0.642857,
+    "accuracy_multi-session": 0.12782,
+    "accuracy_preference": 0,
+    "accuracy_temporal": 0.090226,
+    "accuracy_knowledge-update": 0.423077
+  }
+}

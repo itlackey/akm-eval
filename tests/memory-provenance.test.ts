@@ -64,6 +64,41 @@ describe("describeMemoryProvenance", () => {
     expect(p.backendDetail).toBe("in-process cosine store");
   });
 
+  test("AKM source metadata is scoped to the AKM backend", () => {
+    const previous = {
+      sha: process.env.AKM_EVAL_AKM_SOURCE_SHA,
+      fingerprint: process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT,
+      dirty: process.env.AKM_EVAL_AKM_SOURCE_DIRTY,
+    };
+    process.env.AKM_EVAL_AKM_SOURCE_SHA = "a".repeat(40);
+    process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT = "b".repeat(40);
+    process.env.AKM_EVAL_AKM_SOURCE_DIRTY = "0";
+    try {
+      const raw = describeMemoryProvenance(
+        backend("raw-vector", "in-process", () => ({ status: "ok", detail: "raw vector" })),
+      );
+      const akm = describeMemoryProvenance(
+        backend("akm", "external", () => ({ status: "ok", detail: "akm CLI 0.9.15" })),
+      );
+      expect(raw.backendSourceGitSha).toBeUndefined();
+      expect(raw.backendSourceFingerprint).toBeUndefined();
+      expect(raw.backendSourceDirty).toBeUndefined();
+      expect(akm.backendSourceGitSha).toBe("a".repeat(40));
+      expect(akm.backendSourceFingerprint).toBe("b".repeat(40));
+      expect(akm.backendSourceDirty).toBe(false);
+    } finally {
+      if (previous.sha === undefined)
+        Reflect.deleteProperty(process.env, "AKM_EVAL_AKM_SOURCE_SHA");
+      else process.env.AKM_EVAL_AKM_SOURCE_SHA = previous.sha;
+      if (previous.fingerprint === undefined)
+        Reflect.deleteProperty(process.env, "AKM_EVAL_AKM_SOURCE_FINGERPRINT");
+      else process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT = previous.fingerprint;
+      if (previous.dirty === undefined)
+        Reflect.deleteProperty(process.env, "AKM_EVAL_AKM_SOURCE_DIRTY");
+      else process.env.AKM_EVAL_AKM_SOURCE_DIRTY = previous.dirty;
+    }
+  });
+
   test("a throwing healthCheck degrades to id+kind and never fails the run", () => {
     // Provenance is metadata. It must not be able to abort an expensive run.
     const p = describeMemoryProvenance(

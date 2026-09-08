@@ -52,7 +52,7 @@ Docker env file outside the repo:
 ```bash
 cp .env.example ../akm-eval.env  # fill this file; keep it outside the checkout
 AKM_EVAL_ENV_FILE=/absolute/path/to/eval.env \
-  bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
+  bin/memory-eval longmemeval --akm-version 0.9.15 --dry-run
 ```
 
 The wrapper forwards only documented provider variables (by name, so values do
@@ -83,68 +83,52 @@ historical analysis, but new official numbers must be recorded in the ledger.
 Corrections append a superseding or retracted record instead of silently
 rewriting an earlier result.
 
+The full per-question evidence and checksum manifest for each reusable round
+are tracked under [`results/reference/`](./results/reference/). Run
+`bin/reference-eval verify` to reconstruct and verify the published numbers
+without credentials or model calls.
+
+Current full-500 small-model reference (Qwen 3.5 9B Q4_K_M answers, official
+GPT-4o judge):
+
+| Arm | Score | Correct | Answer-model tokens | Wall time |
+| --- | ---: | ---: | ---: | ---: |
+| Full-context baseline | 39.2% | 196/500 | 53,839,306 | ~11h 10m |
+| Raw vector | 28.6% | 143/500 | 5,493,818 | 56m 5s |
+| AKM 0.9.15 candidate (`lead`, 3200 chars) | 36.2% | 181/500 | 1,731,027 | 1h 14m 22s |
+
+AKM is +7.6 percentage points over raw vector with 68.5% fewer answer-model
+tokens, and -3.0 points from full context with 96.8% fewer tokens. Judge token
+usage is not included because the upstream evaluator does not report it; wall
+times are operational, not a controlled cross-arm latency comparison.
+
 ## Reproduce the published results
 
-The numbers in [`docs/metrics-highlights.md`](./docs/metrics-highlights.md) and
-[`runs/RESULTS-n200-0.9.10.md`](./runs/RESULTS-n200-0.9.10.md) come from two
-commands. Both are reproducible: the sample regenerates from its recorded seed,
-the judge is pinned, and the evaluator is the benchmark's own.
-
-**1. Prerequisites**
-
-- `git` and `docker` (running daemon)
-- Two credentials, exported directly or supplied through
-  `AKM_EVAL_ENV_FILE`:
-
-  | variable | what it is |
-  | --- | --- |
-  | `OPENCODE_API_KEY` | the agent arms' provider (opencode Zen) |
-  | `AKM_EVAL_JUDGE_API_KEY` | an OpenAI key that can serve `gpt-4o` — the judge LongMemEval specifies. Zen does not serve any gpt-4 model, so this is a separate credential. |
-
-  Only the judge needs OpenAI. It never sees the conversation haystack, so it is
-  roughly 1% of a run's tokens.
-
-**2. Free check first — did retrieval change?**
+The current official reference is a full 500-question, three-arm LongMemEval
+round using a checksum-pinned local Qwen 3.5 9B model and the official GPT-4o
+judge. Verify its complete tracked evidence without an API call:
 
 ```bash
-bin/build-image --akm-version 0.9.14-beta.1  # optional; wrappers build a missing image
-bin/probe --akm-version 0.9.14-beta.1       # LLM-free, deterministic, minutes
-bin/probe --identity-permutation --akm-version 0.9.14-beta.1
+bin/reference-eval verify
 ```
 
-Grades both memory packs against committed reference values and exits nonzero on
-a regression. If this fails, stop — there is no point spending judged budget.
-
-**3. The judged run**
+For a normal AKM release, reuse the verified baseline and raw-vector controls
+and run only the AKM arm:
 
 ```bash
-bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 \
-  --out runs/longmemeval-0.9.14
-bin/memory-eval longmemeval --akm-version 0.9.14-beta.1 --dry-run
+bin/downloads LongMemEval
+bin/reference-model fetch
+bin/reference-model up
+export AKM_EVAL_JUDGE_API_KEY=...
+bin/reference-eval run-akm --akm-version 0.9.15 \
+  --out runs/qwen-reference-akm-0.9.15
 ```
 
-Writes one `result.json` per arm beneath the explicit output directory. Re-run
-the same command with the same `--out` value to resume signature-matching
-per-question answer and judge checkpoints. If `--out` is omitted, a timestamped
-`runs/longmemeval-full-<stamp>/` directory is created for one-shot runs. Expect
-roughly 45-60 minutes and ~24M agent tokens at the committed `n=200` sample.
-
-**What the committed config pins**
-
-| setting | value | why |
-| --- | --- | --- |
-| sample | 200 / 500, `sampleSeed: 1337` | seeded and reproducible; subsetting without a seed is refused |
-| categories | all five | no filter — dropping a hard category inflates the score |
-| judge | `gpt-4o` | the model the benchmark specifies |
-| evaluator | official, unmodified | no local heuristic scoring |
-
-To run the full 500 instead, remove `maxQuestions` and `sampleSeed` from
-`config/common/longmemeval-akm-ab-zen.json`. To change the sample, change the
-seed and re-run — never re-roll silently, and report the seed you used.
-
-The rules any published figure has to satisfy are in
-[`docs/comparability.md`](./docs/comparability.md). Read it before quoting a
-number.
+Control reruns are available but deliberately require an explicit confirmation
+flag. The exact model source, two-GPU Docker topology, reuse compatibility
+contract, resume behavior, AKM-only workflow, control/all-arm commands, and
+publication checklist are in
+[`docs/reference-results.md`](./docs/reference-results.md).
 
 ## Quick start
 
@@ -153,7 +137,7 @@ LLM or host toolchain. It builds/selects a version-specific Docker image,
 probes both packs, and grades the result against committed reference values:
 
 ```bash
-bin/probe --akm-version 0.9.14-beta.1
+bin/probe --akm-version 0.9.15
 ```
 
 For an unpublished checkout, the equivalent path builds locked dependencies
@@ -177,14 +161,18 @@ compares the two matching artifacts and writes a verdict even when it fails.
 For a judged run:
 
 ```bash
-bin/build-image --akm-version 0.9.14-beta.1
-AKM_EVAL_AKM_VERSION=0.9.14-beta.1 \
+bin/build-image --akm-version 0.9.15
+AKM_EVAL_AKM_VERSION=0.9.15 \
   bin/doctor --pack locomo
-AKM_EVAL_AKM_VERSION=0.9.14-beta.1 \
+AKM_EVAL_AKM_VERSION=0.9.15 \
   bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json
 ```
 
 Common runnable configs live under `config/common/`; see `docs/running-evals.md` for the current list.
+
+The immutable full-500 reference reproduction config lives under
+`config/reference/` and should be invoked through `bin/reference-eval`, which
+adds compatibility checks and expensive-control guards.
 
 - `config/common/locomo-smoke.json`
 - `config/common/longmemeval-smoke.json`
@@ -219,6 +207,7 @@ via Harbor instead of a bespoke container/agent runtime.
 ## Docs
 
 - command flow: [`docs/running-evals.md`](./docs/running-evals.md)
+- official results and reproduction: [`docs/reference-results.md`](./docs/reference-results.md)
 - operator caveats and exceptions: [`docs/operator-guide.md`](./docs/operator-guide.md)
 - pack constraints: [`docs/benchmark-packs.md`](./docs/benchmark-packs.md)
 - remaining external blockers: [`docs/operator-blockers.md`](./docs/operator-blockers.md)
