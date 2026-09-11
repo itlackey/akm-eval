@@ -96,11 +96,21 @@ GPT-4o judge):
 | Full-context baseline | 39.2% | 196/500 | 53,839,306 | ~11h 10m |
 | Raw vector | 28.6% | 143/500 | 5,493,818 | 56m 5s |
 | AKM 0.9.15 candidate (`lead`, 3200 chars) | 36.2% | 181/500 | 1,731,027 | 1h 14m 22s |
+| AKM 0.9.15 published package (`lead`, 3200 chars) | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
+| AKM 0.9.16-alpha.1 published package (`lead`, 3200 chars) | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
 
-AKM is +7.6 percentage points over raw vector with 68.5% fewer answer-model
-tokens, and -3.0 points from full context with 96.8% fewer tokens. Judge token
-usage is not included because the upstream evaluator does not report it; wall
-times are operational, not a controlled cross-arm latency comparison.
+The published 0.9.16-alpha.1 package is +11.0 percentage points over raw vector
+and +0.4 points over full context. It is +3.2 points and 16 answers over the
+published 0.9.15 package, with 2,508,208 more answer-model tokens. Judge token
+usage is not included because the upstream evaluator does not report it.
+
+The frozen controls and original source-candidate arm are Tier A. The two
+published-package follow-ups are Tier B because their interrupted runs resumed
+through an operator-approved pool mixing two CUDA workers and one Intel/SYCL
+worker. Every worker served the identical checksum-pinned model and options;
+the tracked routing record shows 609/609 successful post-resume requests and
+zero retries. Their approximate wall times include the interruption and are
+operational lower bounds, not controlled latency measurements.
 
 ## Reproduce the published results
 
@@ -110,6 +120,10 @@ judge. Verify its complete tracked evidence without an API call:
 
 ```bash
 bin/reference-eval verify
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.15
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.1
 ```
 
 For a normal AKM release, reuse the verified baseline and raw-vector controls
@@ -120,8 +134,8 @@ bin/downloads LongMemEval
 bin/reference-model fetch
 bin/reference-model up
 export AKM_EVAL_JUDGE_API_KEY=...
-bin/reference-eval run-akm --akm-version 0.9.15 \
-  --out runs/qwen-reference-akm-0.9.15
+bin/reference-eval run-akm --akm-version 0.9.16-alpha.1 \
+  --out runs/qwen-reference-akm-0.9.16-alpha.1
 ```
 
 Control reruns are available but deliberately require an explicit confirmation

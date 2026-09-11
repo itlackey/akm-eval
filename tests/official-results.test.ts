@@ -195,15 +195,23 @@ describe("official results ledger", () => {
     }
   });
 
-  test("reconstructs the official round from its immutable evidence bundle", () => {
-    const result = spawnSync(process.execPath, ["scripts/reference-results.ts", "verify"], {
-      cwd: rootDir,
-      encoding: "utf8",
-    });
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("Verified reference round");
-    expect(result.stdout).toContain("53,839,306");
-    expect(result.stdout).toContain("1,731,027");
+  test("reconstructs every completed round from its immutable evidence bundle", () => {
+    const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8")) as OfficialLedger;
+    for (const round of ledger.rounds.filter((entry) => entry.status === "complete")) {
+      const result = spawnSync(
+        process.execPath,
+        ["scripts/reference-results.ts", "verify", "--round", round.id],
+        {
+          cwd: rootDir,
+          encoding: "utf8",
+        },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain(`Verified reference round ${round.id}.`);
+      for (const arm of round.arms) {
+        expect(result.stdout).toContain(arm.tokens.total.toLocaleString("en-US"));
+      }
+    }
   });
 });

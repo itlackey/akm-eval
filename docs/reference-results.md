@@ -11,11 +11,22 @@ AKM arm** against them.
 | Full-context baseline | 39.2% | 196/500 | 53,839,306 | ~11h 10m |
 | Raw vector | 28.6% | 143/500 | 5,493,818 | 56m 5s |
 | AKM 0.9.15 candidate (`lead`, 3200 chars) | 36.2% | 181/500 | 1,731,027 | 1h 14m 22s |
+| AKM 0.9.15 published package (`lead`, 3200 chars) | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
+| AKM 0.9.16-alpha.1 published package (`lead`, 3200 chars) | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
 
 Token totals are provider-reported **answer-model** usage. The upstream judge
-does not report GPT-4o tokens, so judge usage is not included. Wall time is
-operational context, not a cross-arm latency benchmark: the full-context arm
-had a dedicated GPU while vector and AKM shared a two-slot server.
+does not report GPT-4o tokens, so judge usage is not included. The frozen
+three-arm round is Tier A. The two published-package rows are Tier B: their
+checkpointed runs resumed through an operator-approved Bifrost pool mixing two
+CUDA workers and one Intel/SYCL worker, all serving the identical model bytes
+and options. Their displayed wall times are lower-bound operational elapsed
+times from first durable checkpoint through completion, including the
+interruption; they are not controlled latency benchmarks.
+
+The published 0.9.16-alpha.1 package gains 3.2 percentage points and 16 correct
+answers over the published 0.9.15 package, while using 2,508,208 more
+answer-model tokens (144.9% more). Against the frozen controls it is +11.0
+points over raw vector and +0.4 points over full context.
 
 ## Verify the published evidence
 
@@ -23,13 +34,17 @@ From a fresh clone, with no model, dataset, credential, or API call:
 
 ```bash
 bin/reference-eval verify
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.15
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.1
 ```
 
-This verifies every file in the immutable `SHA256SUMS` bundle, reconstructs
-scores, token totals, retry totals, and model censuses from per-question
-records, cross-checks them against `results/official-results.json`, and prints
-the table. A missing 277 MB dataset is reported but does not prevent evidence
-verification.
+These commands verify every file in each immutable `SHA256SUMS` bundle,
+reconstruct scores, token totals, retry totals, and model censuses from
+per-question records, cross-check them against `results/official-results.json`,
+and print the recorded arms. A missing 277 MB dataset is reported but does not
+prevent evidence verification.
 
 The evidence lives under
 `results/reference/longmemeval-qwen35-9b-q4km-131k-v1/`. The original config is
@@ -95,11 +110,11 @@ AKM_EVAL_ENV_FILE=/absolute/path/to/akm-eval.env bin/reference-eval verify
 
 ## Test a new AKM release (normal path)
 
-Published package:
+Published package (replace the version and output directory together):
 
 ```bash
-bin/reference-eval run-akm --akm-version 0.9.15 \
-  --out runs/qwen-reference-akm-0.9.15
+bin/reference-eval run-akm --akm-version 0.9.16-alpha.1 \
+  --out runs/qwen-reference-akm-0.9.16-alpha.1
 ```
 
 Unpublished checkout, built inside Docker from Git-tracked and unignored files:
@@ -182,10 +197,13 @@ Never replace the frozen bundle or edit a published score in place.
 2. Run `bin/reference-eval compare` for compatibility.
 3. Copy the evidence into a new `results/reference/<round-id>/` directory,
    remove only rebuildable backend indexes, and create a sorted `SHA256SUMS`.
-4. Append a new round to `results/official-results.json`. If correcting a prior
-   entry, append a superseding or retracted record; do not rewrite history.
+4. Append a candidate-only round to `results/official-results.json`; keep the
+   frozen controls in their original round and store the strict cross-round
+   comparison in the new evidence bundle. If correcting a prior entry, append
+   a superseding or retracted record; do not rewrite history.
 5. Run `bun run check`, `bun run lint`, and `bin/reference-eval verify` in a
-   fresh clone before opening the results PR.
+   fresh clone, plus `bin/reference-eval verify --round <round-id>` for every
+   new round, before opening the results PR.
 
 The ledger is data for humans and machines; the reference directory is the
 evidence behind it. A score is not official until both are tracked and all

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "akm.eval.checkpointed-wall-time.v1",
+  "checkpointFirstDurableAt": "2026-09-11T03:46:55.201779280Z",
+  "finalInvocationStartedAt": "2026-09-11T04:32:28.487Z",
+  "finishedAt": "2026-09-11T05:20:27.554Z",
+  "resumedQuestionCount": 203,
+  "finalInvocationMs": 2879067,
+  "lowerBoundOperationalWallMs": 5612352,
+  "precision": "approximate",
+  "basis": "Elapsed time from the source checkpoint file's original filesystem birth timestamp through result completion. It includes the interruption and resumed invocation but excludes initialization and the first answer before the first durable checkpoint, so it is a lower bound."
+}

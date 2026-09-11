@@ -71,3 +71,25 @@ reruns, and publication checklist.
 Older n=200/DeepSeek reports under `runs/` remain historical experiments; they
 are not the current official result. Agentic-coding measurements belong in
 [`akm-bench`](https://github.com/itlackey/akm-bench), not this memory-eval repo.
+
+## Published-package follow-up (2026-09-11)
+
+The 0.9.15 and 0.9.16-alpha.1 npm packages were subsequently run as AKM-only
+arms against the same frozen controls:
+
+| Arm | Accuracy | Correct | Answer-model tokens | Operational wall time |
+| --- | ---: | ---: | ---: | ---: |
+| AKM 0.9.15 published package | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
+| AKM 0.9.16-alpha.1 published package | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
+
+The alpha improved accuracy by 3.2 percentage points and 16 answers over the
+published 0.9.15 package, but used 2,508,208 more answer-model tokens (144.9%
+more). It scored 11.0 points above raw vector and 0.4 points above full context.
+
+These follow-ups are Tier B, not replacements for the Tier A reference round.
+They resumed from existing CUDA checkpoints through an operator-approved
+three-GPU pool that mixed CUDA and Intel/SYCL llama.cpp runtimes. The model
+artifact and request options were identical, all 609 post-resume requests
+succeeded, and no answer retries occurred. The checksum bundles preserve the
+complete answer/verdict evidence, routing census, and the lower-bound timing
+derivation.
