@@ -5,6 +5,7 @@ FROM oven/bun:1.3.13 AS bun-runtime
 FROM node:22.18.0-bookworm-slim AS core
 
 ARG AKM_CLI_VERSION
+ARG AKM_EVAL_RUNTIME_FINGERPRINT
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
@@ -22,7 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV AKM_EVAL_APP_ROOT=/opt/akm-eval \
   AKM_EVAL_CORE_VENV=/opt/akm-eval/venvs/core \
-  AKM_EVAL_IMAGE_AKM_VERSION=${AKM_CLI_VERSION}
+  AKM_EVAL_IMAGE_AKM_VERSION=${AKM_CLI_VERSION} \
+  AKM_EVAL_AKM_RUNTIME_FINGERPRINT=${AKM_EVAL_RUNTIME_FINGERPRINT}
 ENV PATH="${AKM_EVAL_CORE_VENV}/bin:${AKM_EVAL_APP_ROOT}/node_modules/.bin:${PATH}"
 
 WORKDIR ${AKM_EVAL_APP_ROOT}

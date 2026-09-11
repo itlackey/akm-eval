@@ -25,6 +25,12 @@ export interface MemoryProvenance {
   backendVersion?: string;
   /** Full health detail — the raw provenance string, including the resolved command. */
   backendDetail?: string;
+  /** Git commit for an unpublished source checkout, supplied by the Docker wrapper. */
+  backendSourceGitSha?: string;
+  /** Content hash including tracked modifications/untracked files, when source-built. */
+  backendSourceFingerprint?: string;
+  /** Whether the source checkout differed from its recorded commit. */
+  backendSourceDirty?: boolean;
 }
 
 /** `akm CLI 0.9.3 reachable via [...]` -> `0.9.3`. Undefined when absent. */
@@ -49,6 +55,17 @@ export function describeMemoryProvenance(memory: MemoryBackend): MemoryProvenanc
       ...base,
       ...(version ? { backendVersion: version } : {}),
       ...(detail ? { backendDetail: detail } : {}),
+      ...(memory.id === "akm" && process.env.AKM_EVAL_AKM_SOURCE_SHA
+        ? { backendSourceGitSha: process.env.AKM_EVAL_AKM_SOURCE_SHA }
+        : {}),
+      ...(memory.id === "akm" && process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT
+        ? { backendSourceFingerprint: process.env.AKM_EVAL_AKM_SOURCE_FINGERPRINT }
+        : {}),
+      ...(memory.id === "akm" &&
+      (process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "0" ||
+        process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "1")
+        ? { backendSourceDirty: process.env.AKM_EVAL_AKM_SOURCE_DIRTY === "1" }
+        : {}),
     };
   } catch {
     return base;

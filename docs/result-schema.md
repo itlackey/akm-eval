@@ -52,6 +52,14 @@ The old placeholder artifact list in this file was stale. The current normalized
 
 `metrics.retrieval.queryCount` means the number of actual retrieval queries exercised by the run. For non-retrieval runs, it should be `0` even when the benchmark processed questions, tasks, or trials through answer-only evaluation. Older committed artifacts may still use workload counts for some non-retrieval packs; prefer newly generated artifacts for consistent cross-pack interpretation.
 
+`metrics.context` is optional and currently emitted by LongMemEval. It is a
+transparent normalized-literal-containment diagnostic over the context handed
+to the agent, not an answer-quality judge. It contains query/non-abstention
+counts, overall literal-answer containment, evidence-hit count, containment
+conditional on a ground-truth evidence-session hit, and the corresponding
+evidence-hit-but-answer-missing count. This distinguishes correct-parent /
+wrong-fragment failures from retrieval misses.
+
 `metrics.answer` always contains:
 
 - `exactMatch`
@@ -95,6 +103,12 @@ never computed in this repo:
 - `estimatedCostUsd`
 - `latencyMs`
 - `logs`
+
+`telemetry.resolvedModels` is an optional model-id/count census populated from
+provider response payloads. It records what actually answered each question,
+not only the requested alias. A multi-model census makes an `auto` run useful
+as a production-routing measurement but unsuitable as a fixed-model causal
+A/B.
 
 ## `artifacts`
 
@@ -146,7 +160,7 @@ Pack-specific and not guaranteed stable:
 ## Pack caveats
 
 - `locomo` stores the official evaluator output, prediction file path, and evaluator command in `raw-output.json`
-- `longmemeval` stores evaluator command output, predictions, and per-question judged results in `raw-output.json` — `metrics.answer.judgedPass` comes only from that evaluator's output, never from a local heuristic
+- `longmemeval` stores evaluator command output, predictions, per-question judged results, resolved answer/judge models, and retrieval/context provenance in `raw-output.json`; context/description bodies are represented by sizes and SHA-256 rather than duplicated. Signature-bound, fsynced answer and judge checkpoints make interrupted paid runs resumable without permitting reuse across changed inputs or runtimes. `metrics.answer.judgedPass` comes only from the official evaluator's output, never from a local heuristic.
 - `beam` stores upstream evaluation results and per-conversation summaries in `raw-output.json` — both `metrics.aggregate.score` and `metrics.answer.judgedPass` are the mean of BEAM's own per-question scores; no pass/fail threshold is applied anywhere in this repo
 
 Consumers should compare normalized fields first and use raw artifacts only for debugging or audit trails.

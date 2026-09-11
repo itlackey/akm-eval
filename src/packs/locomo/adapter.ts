@@ -4,6 +4,7 @@ import path from "node:path";
 import type { AgentRunner } from "../../agent/types.ts";
 import { ArtifactStore } from "../../core/artifact-store.ts";
 import { BenchmarkRuntimeError } from "../../core/errors.ts";
+import { runEvaluatorCommand } from "../../core/evaluator-command.ts";
 import type { RunContext } from "../../core/run-context.ts";
 import type { NormalizedRunResult } from "../../core/types.ts";
 import { describeMemoryProvenance } from "../../memory/provenance.ts";
@@ -61,24 +62,6 @@ const CONV_START_PROMPT =
 
 function estimateTokens(value: string): number {
   return Math.max(1, Math.ceil(Buffer.byteLength(value, "utf8") / 4));
-}
-
-function runCommand(
-  command: string,
-  cwd: string,
-): { stdout: string; stderr: string; exitCode: number } {
-  const proc = Bun.spawnSync(["bash", "-lc", command], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: process.env,
-  });
-
-  return {
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
-    exitCode: proc.exitCode,
-  };
 }
 
 function checkPythonDeps(rootDir = process.cwd()): { ok: boolean; detail: string } {
@@ -422,7 +405,7 @@ export const locomoAdapter: PackAdapter = {
       packConfig.evaluatorCommand.trim().length > 0
         ? packConfig.evaluatorCommand.trim()
         : DEFAULT_EVALUATOR_COMMAND;
-    const evalResult = runCommand(
+    const evalResult = runEvaluatorCommand(
       `${evaluatorCommand} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)} ${JSON.stringify(evaluationOutputPath)} ${JSON.stringify(modelKey)} ${JSON.stringify(predictionKey)}`,
       context.rootDir,
     );

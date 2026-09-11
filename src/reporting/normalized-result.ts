@@ -47,6 +47,7 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
   const retrieval = metrics.retrieval as Record<string, unknown> | null;
   const answer = metrics.answer as Record<string, unknown> | null;
   const aggregate = metrics.aggregate as Record<string, unknown> | null;
+  const context = metrics.context as Record<string, unknown> | null | undefined;
   if (
     !retrieval ||
     !answer ||
@@ -66,6 +67,18 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
   ) {
     return false;
   }
+  if (
+    context !== undefined &&
+    context !== null &&
+    (!isNumber(context.queryCount) ||
+      !isNumber(context.nonAbstentionQueryCount) ||
+      !isNumber(context.literalAnswerContainment) ||
+      !isNumber(context.evidenceHitQueryCount) ||
+      !isNumber(context.evidenceHitContextAnswerContainment) ||
+      !isNumber(context.evidenceHitButAnswerMissingCount))
+  ) {
+    return false;
+  }
   if (typeof result.telemetry !== "object" || result.telemetry === null) {
     return false;
   }
@@ -77,6 +90,15 @@ export function validateNormalizedResult(value: unknown): value is NormalizedRun
     !isNumber(telemetry.estimatedCostUsd) ||
     !isNumber(telemetry.latencyMs) ||
     !isStringArray(telemetry.logs)
+  ) {
+    return false;
+  }
+  if (
+    telemetry.resolvedModels !== undefined &&
+    (typeof telemetry.resolvedModels !== "object" ||
+      telemetry.resolvedModels === null ||
+      Array.isArray(telemetry.resolvedModels) ||
+      !Object.values(telemetry.resolvedModels).every(isNumber))
   ) {
     return false;
   }

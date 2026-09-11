@@ -4,6 +4,7 @@ This folder contains the LongMemEval integration for `akm-eval`.
 
 - `adapter.ts`: loads the official dataset, queries the configured runner, and invokes a configured official evaluator command
 - `dataset.ts`: resolves the dataset path, including built-in download behavior for the official dataset file, and normalizes each row into haystack sessions (with session id + timestamp) plus ground-truth evidence session ids. Refuses to load a raw dataset item whose `haystack_session_ids` array is present but a different length than `haystack_sessions` — a short array would otherwise silently mix real dataset session ids with synthesized fallback ids within the same question.
+- `checkpoint.ts`: fsynced per-question answer checkpoints bound to the exact dataset, provider, AKM runtime/source tree, memory config, and evaluator code
 
 Requirements:
 
@@ -18,6 +19,13 @@ Runner support:
 - `opencode`: partial, because large LongMemEval conversation prompts can exceed CLI argv transport limits
 
 The pack fails clearly when the official evaluator is not configured.
+
+`pack.config.resume` defaults to `true`. A successful answer is checkpointed
+immediately, and the bundled GPT-4o evaluator likewise checkpoints every
+verdict. A later provider or judge failure can be resumed without paying for
+completed work again. Reuse is fail-closed: checkpoints are invalidated by a
+changed AKM version/source fingerprint, dataset/questions, endpoint/model,
+context mode/budget, evaluator implementation, or exact judge prompt contract.
 
 ## Retrieval
 

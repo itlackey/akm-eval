@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "akm.eval.config.v1",
+  "run": {
+    "id": "longmemeval-akm-fragment-context-0915",
+    "outputDir": "runs/longmemeval-akm-fragment-context-0915"
+  },
+  "packs": [
+    {
+      "id": "longmemeval-akm-fragment-context-0915",
+      "adapter": "longmemeval",
+      "enabled": true,
+      "config": {
+        "evaluatorCommand": "python3 scripts/longmemeval-evaluator.py",
+        "evaluatorModel": "gpt-4o",
+        "smoke": false,
+        "maxQuestions": 200,
+        "sampleSeed": 1337,
+        "resume": true
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "akm-memory-exact",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ai-lab",
+        "model": "auto"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "akm",
+        "config": {
+          "fragmentContext": {
+            "mode": "exact"
+          }
+        }
+      }
+    },
+    {
+      "id": "akm-memory-lead",
+      "agent": {
+        "provider": "openai-compatible",
+        "providerRef": "ai-lab",
+        "model": "auto"
+      },
+      "akm": {
+        "enabled": false
+      },
+      "memory": {
+        "backend": "akm",
+        "config": {
+          "fragmentContext": {
+            "mode": "lead",
+            "maxChars": 3200
+          }
+        }
+      }
+    }
+  ],
+  "notes": [
+    "0.9.15 fragment-context A/B. Both arms keep AKM ranking unchanged; only the indexed-safe content returned for a winning fragment differs.",
+    "The exact arm explicitly exercises the new 0.9.15 API and is not a 0.9.14 control. Run the published 0.9.14 package separately with the legacy akm-memory config, then run both arms against the same 0.9.15 source checkout.",
+    "The answer model uses ai.lab model=auto for production-routing validation. result.json telemetry.resolvedModels and raw-output.json per-question resolvedAgentModel MUST be reviewed; use a concrete model instead of auto for a causal A/B.",
+    "The judge is the benchmark-specified gpt-4o and requires AKM_EVAL_JUDGE_API_KEY. LAB_AI_BASE_URL and LAB_API_KEY configure only the answer provider.",
+    "This is a seeded n=200/500 release screen, not the full official benchmark score. Run all 500 questions on the release candidate before publishing a benchmark claim."
+  ],
+  "providers": {
+    "ai-lab": {
+      "type": "openai-compatible",
+      "baseURL": "{env:LAB_AI_BASE_URL}",
+      "apiKey": "{env:LAB_API_KEY}",
+      "defaultModel": "auto",
+      "timeout": 300000
+    }
+  },
+  "judging": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0
+  },
+  "telemetry": {
+    "trackTokens": true,
+    "trackCost": true,
+    "trackLatency": true,
+    "captureLogs": true
+  }
+}

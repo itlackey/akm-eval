@@ -18,6 +18,16 @@ export const variantRegistry: VariantDefinition[] = [
     tags: ["akm", "memory"],
   },
   {
+    id: "akm-memory-exact",
+    description: "AKM memory using the indexed fragment exactly as retrieved.",
+    tags: ["akm", "memory", "fragment-context", "exact"],
+  },
+  {
+    id: "akm-memory-lead",
+    description: "AKM memory using bounded lead context for the selected fragment.",
+    tags: ["akm", "memory", "fragment-context", "lead"],
+  },
+  {
     id: "raw-vector",
     description: "Deterministic raw-vector baseline backend.",
     tags: ["memory", "baseline"],

@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$BIN_DIR/.." && pwd)"
+REFERENCE_CONFIG="config/reference/longmemeval-qwen35-9b-q4km-131k-v1.json"
+MODEL_SHA256="cd76ec205963b3b33350093e6904d9de16c4e666fd104e1f632d25c7f15f2a13"
+MODEL_RUNTIME="ghcr.io/ggml-org/llama.cpp@sha256:e61f29b37c471f956a772f91f4e9952d29f237e5d1a1a748e14421aae090305f"
+ROUND_ID="longmemeval-qwen35-9b-q4km-131k-v1"
+
+usage() {
+  printf '%s\n' \
+    'usage:' \
+    '  bin/reference-eval verify' \
+    '  bin/reference-eval compare --candidate runs/.../akm-memory-lead/result.json' \
+    '  bin/reference-eval run-akm (--akm-version VERSION | --akm-source DIR) --out runs/DIR [--dry-run]' \
+    '  bin/reference-eval rerun-control <baseline|raw-vector> --confirm-control-rerun --out runs/DIR [--dry-run]' \
+    '  bin/reference-eval rerun-controls --confirm-control-rerun --out runs/DIR [--dry-run]' \
+    '  bin/reference-eval rerun-all (--akm-version VERSION | --akm-source DIR) --confirm-all-rerun --out runs/DIR [--dry-run]' \
+    '' \
+    'run-akm reuses the tracked baseline/vector controls. Control and all-arm' \
+    'reruns are deliberately guarded because they consume many model calls.'
+}
+
+command_name="${1:-}"
+if [ "$command_name" = "-h" ] || [ "$command_name" = "--help" ] || [ -z "$command_name" ]; then
+  usage
+  [ -n "$command_name" ] || exit 2
+  exit 0
+fi
+
+if [ "${AKM_EVAL_IN_CONTAINER:-0}" != "1" ]; then
+  requested_version=""
+  requested_source=""
+  dry_run=0
+  confirmed_controls=0
+  confirmed_all=0
+  outer_args=("$@")
+  for ((i = 0; i < ${#outer_args[@]}; i++)); do
+    case "${outer_args[$i]}" in
+      --akm-version)
+        requested_version="${outer_args[$((i + 1))]:?--akm-version requires a value}"
+        i=$((i + 1))
+        ;;
+      --akm-source)
+        requested_source="${outer_args[$((i + 1))]:?--akm-source requires a directory}"
+        i=$((i + 1))
+        ;;
+      --candidate|--out|--round) i=$((i + 1)) ;;
+      --dry-run) dry_run=1 ;;
+      --confirm-control-rerun) confirmed_controls=1 ;;
+      --confirm-all-rerun) confirmed_all=1 ;;
+    esac
+  done
+  [ -z "$requested_version" ] || export AKM_EVAL_AKM_VERSION="$requested_version"
+  [ -z "$requested_source" ] || export AKM_EVAL_AKM_SOURCE_DIR="$requested_source"
+
+  if [ "$dry_run" = "0" ]; then
+    case "$command_name" in
+      rerun-control|rerun-controls)
+        [ "$confirmed_controls" = "1" ] || {
+          printf 'reference-eval: refusing an expensive control rerun without --confirm-control-rerun.\n' >&2
+          exit 2
+        }
+        ;;
+      rerun-all)
+        [ "$confirmed_all" = "1" ] || {
+          printf 'reference-eval: refusing an expensive all-arm rerun without --confirm-all-rerun.\n' >&2
+          exit 2
+        }
+        ;;
+    esac
+  fi
+  case "$command_name" in
+    run-akm|rerun-all)
+      if [ -z "$requested_version" ] && [ -z "$requested_source" ]; then
+        printf 'reference-eval: %s requires --akm-version or --akm-source.\n' "$command_name" >&2
+        exit 2
+      fi
+      ;;
+  esac
+
+  export AKM_EVAL_JUDGE_MAX_TOKENS=64
+  export AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE=0.02
+
+  case "$command_name" in
+    run-akm|rerun-control|rerun-controls|rerun-all)
+      export AKM_EVAL_ANSWER_MODEL_ARTIFACT_SHA256="$MODEL_SHA256"
+      export AKM_EVAL_ANSWER_MODEL_RUNTIME_IMAGE="$MODEL_RUNTIME"
+      if [ "$dry_run" = "0" ]; then
+        bash "$BIN_DIR/reference-model" verify
+        if ! docker network inspect akm-eval-reference >/dev/null 2>&1; then
+          printf 'reference-eval: model network is absent; run bin/reference-model up first.\n' >&2
+          exit 1
+        fi
+        export AKM_EVAL_DOCKER_NETWORK=akm-eval-reference
+      fi
+      ;;
+  esac
+  exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bash "$REPO_ROOT/bin/reference-eval" "$@"
+fi
+
+cd "$REPO_ROOT"
+export AKM_EVAL_BASELINE_BASE_URL="${AKM_EVAL_BASELINE_BASE_URL:-http://qwen-baseline:8080/v1}"
+export AKM_EVAL_RETRIEVAL_BASE_URL="${AKM_EVAL_RETRIEVAL_BASE_URL:-http://qwen-retrieval:8080/v1}"
+export AKM_EVAL_AGENT_API_KEY="${AKM_EVAL_AGENT_API_KEY:-local}"
+shift
+
+case "$command_name" in
+  verify)
+    exec bun scripts/reference-results.ts verify "$@"
+    ;;
+  compare)
+    exec bun scripts/reference-results.ts compare "$@"
+    ;;
+esac
+
+target_args=()
+out_root=""
+dry_run=0
+confirm_controls=0
+confirm_all=0
+control_arm=""
+if [ "$command_name" = "rerun-control" ]; then
+  control_arm="${1:-}"
+  shift || true
+  case "$control_arm" in
+    baseline|raw-vector) ;;
+    *) printf 'reference-eval: rerun-control requires baseline or raw-vector.\n' >&2; exit 2 ;;
+  esac
+fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --akm-version) target_args+=("--akm-version" "${2:?--akm-version requires a value}"); shift 2 ;;
+    --akm-source) target_args+=("--akm-source" "${2:?--akm-source requires a directory}"); shift 2 ;;
+    --out) out_root="${2:?--out requires a path}"; shift 2 ;;
+    --dry-run) dry_run=1; shift ;;
+    --confirm-control-rerun) confirm_controls=1; shift ;;
+    --confirm-all-rerun) confirm_all=1; shift ;;
+    *) printf 'reference-eval: unexpected argument: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+
+case "$out_root" in
+  runs/*) ;;
+  *) printf 'reference-eval: --out is required and must be beneath runs/.\n' >&2; exit 2 ;;
+esac
+
+bun scripts/reference-results.ts verify >/dev/null
+[ -f datasets/longmemeval/dataset.json ] || {
+  printf 'reference-eval: dataset is absent; run bin/downloads LongMemEval first.\n' >&2
+  exit 1
+}
+
+memory_args=(longmemeval --config "$REFERENCE_CONFIG" --out "$out_root")
+[ "$dry_run" = "0" ] || memory_args+=(--dry-run)
+
+case "$command_name" in
+  run-akm)
+    [ ${#target_args[@]} -gt 0 ] || {
+      printf 'reference-eval: run-akm requires --akm-version or --akm-source.\n' >&2
+      exit 2
+    }
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts preflight --endpoint "$AKM_EVAL_RETRIEVAL_BASE_URL"
+    fi
+    bash bin/memory-eval "${memory_args[@]}" --variant akm-memory-lead "${target_args[@]}"
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts compare \
+        --candidate "$out_root/akm-memory-lead/result.json" \
+        --out "$out_root/comparison-to-$ROUND_ID.json"
+    fi
+    ;;
+  rerun-control)
+    [ ${#target_args[@]} -eq 0 ] || {
+      printf 'reference-eval: a control rerun does not accept an AKM target.\n' >&2
+      exit 2
+    }
+    if [ "$dry_run" = "0" ] && [ "$confirm_controls" != "1" ]; then
+      printf 'reference-eval: refusing an expensive control rerun without --confirm-control-rerun.\n' >&2
+      exit 2
+    fi
+    endpoint="$AKM_EVAL_RETRIEVAL_BASE_URL"
+    [ "$control_arm" != "baseline" ] || endpoint="$AKM_EVAL_BASELINE_BASE_URL"
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts preflight --endpoint "$endpoint"
+    fi
+    bash bin/memory-eval "${memory_args[@]}" --variant "$control_arm"
+    ;;
+  rerun-controls)
+    [ ${#target_args[@]} -eq 0 ] || {
+      printf 'reference-eval: control reruns do not accept an AKM target.\n' >&2
+      exit 2
+    }
+    if [ "$dry_run" = "0" ] && [ "$confirm_controls" != "1" ]; then
+      printf 'reference-eval: refusing expensive control reruns without --confirm-control-rerun.\n' >&2
+      exit 2
+    fi
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts preflight \
+        --endpoint "$AKM_EVAL_BASELINE_BASE_URL" \
+        --endpoint "$AKM_EVAL_RETRIEVAL_BASE_URL"
+    fi
+    bash bin/memory-eval "${memory_args[@]}" \
+      --variant baseline --variant raw-vector --parallel
+    ;;
+  rerun-all)
+    [ ${#target_args[@]} -gt 0 ] || {
+      printf 'reference-eval: rerun-all requires --akm-version or --akm-source.\n' >&2
+      exit 2
+    }
+    if [ "$dry_run" = "0" ] && [ "$confirm_all" != "1" ]; then
+      printf 'reference-eval: refusing an expensive all-arm rerun without --confirm-all-rerun.\n' >&2
+      exit 2
+    fi
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts preflight \
+        --endpoint "$AKM_EVAL_BASELINE_BASE_URL" \
+        --endpoint "$AKM_EVAL_RETRIEVAL_BASE_URL"
+    fi
+    bash bin/memory-eval "${memory_args[@]}" \
+      --variant baseline --variant raw-vector --variant akm-memory-lead \
+      --parallel "${target_args[@]}"
+    if [ "$dry_run" = "0" ]; then
+      bun scripts/reference-results.ts compare \
+        --candidate "$out_root/akm-memory-lead/result.json" \
+        --out "$out_root/comparison-to-$ROUND_ID.json"
+    fi
+    ;;
+  *) usage >&2; exit 2 ;;
+esac

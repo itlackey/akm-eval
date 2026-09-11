@@ -59,7 +59,10 @@ interface RawLongMemEvalItem {
   question_id: string;
   question_type: string;
   question: string;
-  answer: string;
+  // The official cleaned dataset encodes 32 count answers as JSON numbers.
+  // Normalize them at the loader boundary so the pack's internal contract is
+  // truthfully string-only and text diagnostics can handle every question.
+  answer: string | number;
   haystack_sessions: Array<Array<{ role: string; content: string }>>;
   /**
    * Official LongMemEval fields (xiaowu0162/longmemeval-cleaned and upstream
@@ -254,7 +257,7 @@ export async function loadDataset(options: DatasetLoadOptions): Promise<LongMemE
         evidenceSessionIds: item.answer_session_ids ?? [],
         haystackSessionsSynthesized: false,
         question: item.question,
-        expectedAnswer: item.answer,
+        expectedAnswer: String(item.answer),
       };
     });
   }

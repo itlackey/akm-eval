@@ -41,6 +41,14 @@ Every new pack must satisfy all of the following:
 Run these before opening a PR:
 
 ```bash
-bun test
-bun run check:boundary
+bun install --frozen-lockfile
+bun run check
+bun run lint
+bin/reference-eval verify
 ```
+
+`bin/reference-eval verify` is read-only and makes no model/API calls. Changes
+to the LongMemEval prompt contract, judge script, reference config, ledger, or
+evidence bundle must update the corresponding protocol identity intentionally;
+never weaken or bypass the verification to make an old control appear
+compatible.

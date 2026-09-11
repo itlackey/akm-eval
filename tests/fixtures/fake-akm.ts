@@ -255,6 +255,29 @@ interface FakeHit {
   description: string;
   score: number;
   estimatedTokens: number;
+  matchStage: string;
+  selectedRef?: string;
+  parentRef?: string;
+  fragmentOrdinal?: number;
+  fragmentCount?: number;
+  startLine?: number;
+  endLine?: number;
+  previousRef?: string | null;
+  nextRef?: string | null;
+  fragmentChars?: number;
+  fragmentEstimatedTokens?: number;
+  parentChars?: number;
+  parentEstimatedTokens?: number;
+}
+
+const FAKE_FRAGMENT_SEPARATOR = /\n\n<!-- fake-fragment -->\n\n/;
+
+function bodyFromMemoryFile(raw: string): string {
+  return raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").replace(/^\s*#.*\r?\n\r?\n?/, "");
+}
+
+function fakeFragments(body: string): string[] {
+  return body.split(FAKE_FRAGMENT_SEPARATOR).map((part) => `${part.trim()}\n`);
 }
 
 function walkMemoryFiles(dir: string): string[] {
@@ -292,14 +315,38 @@ function cmdSearch(): void {
     const haystack = `${description} ${tags.join(" ")} ${heading}`.toLowerCase();
     if (!query || haystack.includes(query)) {
       const name = path.basename(filePath, ".md");
+      const parentRef = `memories/${name}`;
+      const selectedRef = `${parentRef}${process.env.FAKE_AKM_SEARCH_REF_SUFFIX ?? ""}`;
+      const fragmentMatch = /#akm-fragment-([1-9][0-9]*)-[a-f0-9]{12}$/.exec(selectedRef);
+      const body = bodyFromMemoryFile(raw);
+      const fragments = fakeFragments(body);
+      const fragmentOrdinal = fragmentMatch ? Number(fragmentMatch[1]) : undefined;
+      const selectedFragment = fragmentOrdinal ? fragments[fragmentOrdinal - 1] : undefined;
       hits.push({
         name,
-        ref: `memories/${name}${process.env.FAKE_AKM_SEARCH_REF_SUFFIX ?? ""}`,
+        ref: selectedRef,
         type: "memory",
         path: filePath,
         description,
         score: 1,
-        estimatedTokens: Math.max(1, Math.ceil(raw.length / 4)),
+        estimatedTokens: Math.max(1, Math.ceil((selectedFragment ?? raw).length / 4)),
+        matchStage: "exact",
+        ...(fragmentOrdinal && selectedFragment
+          ? {
+              selectedRef,
+              parentRef,
+              fragmentOrdinal,
+              fragmentCount: fragments.length,
+              startLine: fragmentOrdinal,
+              endLine: fragmentOrdinal,
+              previousRef: fragmentOrdinal > 1 ? `${parentRef}#fake-previous` : null,
+              nextRef: fragmentOrdinal < fragments.length ? `${parentRef}#fake-next` : null,
+              fragmentChars: selectedFragment.length,
+              fragmentEstimatedTokens: Math.max(1, Math.ceil(selectedFragment.length / 4)),
+              parentChars: body.length,
+              parentEstimatedTokens: Math.max(1, Math.ceil(body.length / 4)),
+            }
+          : {}),
       });
     }
   }
@@ -327,13 +374,64 @@ function cmdSearch(): void {
 
 function cmdShow(): void {
   const requestedRef = argv[1] ?? "";
+  const fragmentMatch = /#akm-fragment-([1-9][0-9]*)-[a-f0-9]{12}$/.exec(requestedRef);
   const parentRef = requestedRef.replace(/#akm-fragment-[1-9][0-9]*-[a-f0-9]{12}$/, "");
   const name = parentRef.startsWith("memories/") ? parentRef.slice("memories/".length) : "";
   const filePath = name ? path.join(bundleDir(), "memories", `${name}.md`) : "";
   if (!filePath || !fs.existsSync(filePath)) fail(`not found: ${requestedRef}`);
   const raw = fs.readFileSync(filePath, "utf8");
-  const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").replace(/^\s*#.*\r?\n\r?\n?/, "");
-  printJson({ ref: parentRef, content: body });
+  const body = bodyFromMemoryFile(raw);
+  const fragments = fakeFragments(body);
+  const ordinal = fragmentMatch ? Number(fragmentMatch[1]) : undefined;
+  const selected = ordinal ? fragments[ordinal - 1] : undefined;
+  if (ordinal && !selected) fail(`not found: ${requestedRef}`);
+  const contextMode = flagValue("--context") ?? "exact";
+  if (contextMode !== "exact" && contextMode !== "lead") fail(`invalid context: ${contextMode}`);
+  const requestedBudget = flagValue("--max-chars")
+    ? Number(flagValue("--max-chars"))
+    : flagValue("--max-tokens")
+      ? Number(flagValue("--max-tokens")) * 4
+      : contextMode === "lead"
+        ? 3200
+        : undefined;
+  let content = selected ?? body;
+  let contextTruncated = false;
+  if (selected && contextMode === "lead" && ordinal !== 1) {
+    const label = "\n\n[Selected matching fragment]\n\n";
+    const lead = fragments[0] ?? "";
+    content = `${lead}${label}${selected}`;
+    if (requestedBudget !== undefined && content.length > requestedBudget) {
+      contextTruncated = true;
+      const selectedBlock = `${label}${selected}`;
+      content =
+        selectedBlock.length <= requestedBudget
+          ? `${lead.slice(0, requestedBudget - selectedBlock.length)}${selectedBlock}`
+          : selectedBlock.slice(0, requestedBudget);
+    }
+  }
+  printJson({
+    ref: parentRef,
+    content,
+    ...(selected && ordinal
+      ? {
+          selectedRef: requestedRef,
+          parentRef,
+          fragmentOrdinal: ordinal,
+          fragmentCount: fragments.length,
+          startLine: ordinal,
+          endLine: ordinal,
+          previousRef: ordinal > 1 ? `${parentRef}#fake-previous` : null,
+          nextRef: ordinal < fragments.length ? `${parentRef}#fake-next` : null,
+          fragmentChars: selected.length,
+          fragmentEstimatedTokens: Math.max(1, Math.ceil(selected.length / 4)),
+          parentChars: body.length,
+          parentEstimatedTokens: Math.max(1, Math.ceil(body.length / 4)),
+          contextMode,
+          ...(requestedBudget !== undefined ? { contextMaxChars: requestedBudget } : {}),
+          contextTruncated,
+        }
+      : {}),
+  });
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────

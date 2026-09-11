@@ -173,6 +173,7 @@ async function runCommand(args: string[]): Promise<number> {
     memoryBackendId,
     rootDir,
     path.join(context.outputDir, ".akm-memory"),
+    selectedRun.memoryBackendConfig,
   );
   const result = await pack.run(context, memoryBackend, agentRunner);
   process.stdout.write(toPrettyJson(result));

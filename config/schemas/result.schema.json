@@ -46,6 +46,27 @@
           },
           "additionalProperties": false
         },
+        "context": {
+          "type": "object",
+          "description": "Literal answer retention in the text returned to the agent, distinct from parent/session retrieval.",
+          "required": [
+            "queryCount",
+            "nonAbstentionQueryCount",
+            "literalAnswerContainment",
+            "evidenceHitQueryCount",
+            "evidenceHitContextAnswerContainment",
+            "evidenceHitButAnswerMissingCount"
+          ],
+          "properties": {
+            "queryCount": { "type": "number" },
+            "nonAbstentionQueryCount": { "type": "number" },
+            "literalAnswerContainment": { "type": "number" },
+            "evidenceHitQueryCount": { "type": "number" },
+            "evidenceHitContextAnswerContainment": { "type": "number" },
+            "evidenceHitButAnswerMissingCount": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
         "answer": {
           "type": "object",
           "required": ["exactMatch", "tokenF1", "containsExpected", "judgedPass"],
@@ -73,14 +94,25 @@
     },
     "telemetry": {
       "type": "object",
-      "required": ["promptTokens", "completionTokens", "totalTokens", "estimatedCostUsd", "latencyMs", "logs"],
+      "required": [
+        "promptTokens",
+        "completionTokens",
+        "totalTokens",
+        "estimatedCostUsd",
+        "latencyMs",
+        "logs"
+      ],
       "properties": {
         "promptTokens": { "type": "number" },
         "completionTokens": { "type": "number" },
         "totalTokens": { "type": "number" },
         "estimatedCostUsd": { "type": "number" },
         "latencyMs": { "type": "number" },
-        "logs": { "type": "array", "items": { "type": "string" } }
+        "logs": { "type": "array", "items": { "type": "string" } },
+        "resolvedModels": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
       },
       "additionalProperties": false
     },

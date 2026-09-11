@@ -1,6 +1,8 @@
 # Workflows
 
-- `ci-pr.yml`: runs `bun install`, `bun test`, and `bun run check:boundary` on pull requests.
+- `ci-pr.yml`: runs a frozen-lockfile install, lint, tests, and the repository-boundary check on
+  pull requests and pushes to `main`. The tests reconstruct and checksum the tracked official
+  reference bundle; they do not invoke answer or judge models.
   It never sets `AKM_EVAL_AKM_CMD` — the job has no docker daemon, no real akm CLI, and no sibling
   akm checkout. `tests/memory-backend-akm.integration.test.ts` skips its suite only when running in
   CI *and* that var is unset (`describe.skipIf`), precisely so this job doesn't need one. Locally the

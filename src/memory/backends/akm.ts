@@ -671,6 +671,19 @@ interface AgentSearchHit {
   description?: unknown;
   score?: unknown;
   estimatedTokens?: unknown;
+  matchStage?: unknown;
+  selectedRef?: unknown;
+  parentRef?: unknown;
+  fragmentOrdinal?: unknown;
+  fragmentCount?: unknown;
+  startLine?: unknown;
+  endLine?: unknown;
+  previousRef?: unknown;
+  nextRef?: unknown;
+  fragmentChars?: unknown;
+  fragmentEstimatedTokens?: unknown;
+  parentChars?: unknown;
+  parentEstimatedTokens?: unknown;
 }
 
 /**
@@ -699,6 +712,16 @@ interface SourceRecord {
  * changes caller identity, synthesized tags, heading, body, or metadata. */
 export interface AkmBackendOptions {
   storageNameForDocument?: (document: MemoryDocument, index: number) => string;
+  /**
+   * Opt in to akm >=0.9.15's indexed-safe fragment context expansion.
+   * Undefined preserves the pre-0.9.15 argv exactly (`akm show REF --format
+   * json`), so the same evaluator can still run a 0.9.14 control.
+   */
+  fragmentContext?: {
+    mode: "exact" | "lead";
+    maxTokens?: number;
+    maxChars?: number;
+  };
 }
 
 function safeStorageName(name: string): string {
@@ -978,39 +1001,118 @@ class AkmRuntime {
    * of misleading number the project's trust policy rules out — so this
    * throws instead.
    */
-  private readFragmentHitText(cmd: string[], ref: string): string {
-    const result = this.run(cmd, ["show", ref, "--format", "json"]);
+  private readFragmentHit(
+    cmd: string[],
+    ref: string,
+  ): { text: string; metadata: Record<string, string | number | boolean | null> } {
+    const args = ["show", ref];
+    const context = this.options.fragmentContext;
+    if (context) {
+      args.push("--context", context.mode);
+      if (context.maxTokens !== undefined) args.push("--max-tokens", String(context.maxTokens));
+      if (context.maxChars !== undefined) args.push("--max-chars", String(context.maxChars));
+    }
+    args.push("--format", "json");
+    const result = this.run(cmd, args);
     if (!result.success) {
       throw new BenchmarkRuntimeError(describeFailure(`akm show ("${ref}")`, result));
     }
-    const response = parseJsonStdout<{ content?: unknown }>("akm show", result);
+    const response = parseJsonStdout<Record<string, unknown>>("akm show", result);
     if (typeof response.content !== "string") {
       throw new BenchmarkRuntimeError(
         `akm show for fragment hit "${ref}" did not return string content; refusing to substitute the parent document.`,
       );
     }
-    return response.content.length > MAX_RESULT_TEXT_CHARS
+    const evaluatorTextTruncated = response.content.length > MAX_RESULT_TEXT_CHARS;
+    const text = evaluatorTextTruncated
       ? `${response.content.slice(0, MAX_RESULT_TEXT_CHARS)}…`
       : response.content;
+    const metadata: Record<string, string | number | boolean | null> = {};
+    for (const key of [
+      "selectedRef",
+      "parentRef",
+      "fragmentOrdinal",
+      "fragmentCount",
+      "startLine",
+      "endLine",
+      "previousRef",
+      "nextRef",
+      "fragmentChars",
+      "fragmentEstimatedTokens",
+      "parentChars",
+      "parentEstimatedTokens",
+      "contextMode",
+      "contextMaxChars",
+      "contextTruncated",
+    ]) {
+      const value = response[key];
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        value === null
+      ) {
+        metadata[key] = value;
+      }
+    }
+    if (!("selectedRef" in metadata)) metadata.selectedRef = ref;
+    if (evaluatorTextTruncated) metadata.evaluatorTextTruncated = true;
+    return { text, metadata };
   }
 
   private mapHit(hit: AgentSearchHit, cmd: string[]): MemorySearchResult {
-    const ref = typeof hit.ref === "string" ? hit.ref : "";
-    if (!ref) {
+    const responseRef = typeof hit.ref === "string" ? hit.ref : "";
+    if (!responseRef) {
       throw new BenchmarkRuntimeError(
         `akm search returned a hit without a \`ref\` (name=${JSON.stringify(hit.name)}). This should never happen with --shape agent; never call akm search with --detail normal, which is documented to silently drop ref.`,
       );
     }
 
-    const fragmentMatch = AKM_FRAGMENT_REF.exec(ref);
-    const parentRef = fragmentMatch?.groups?.parent ?? ref;
+    const selectedRef =
+      typeof hit.selectedRef === "string" && AKM_FRAGMENT_REF.test(hit.selectedRef)
+        ? hit.selectedRef
+        : responseRef;
+    const fragmentMatch = AKM_FRAGMENT_REF.exec(selectedRef);
+    const parentRef =
+      typeof hit.parentRef === "string" && hit.parentRef.length > 0
+        ? hit.parentRef
+        : (fragmentMatch?.groups?.parent ?? responseRef);
     const known = this.sourceIndex.get(parentRef);
     if (!known) {
       throw new BenchmarkRuntimeError(
-        `akm search returned a hit (ref=${ref}) that this instance never added. This hermetic bundle should contain only documents this backend instance wrote via add() — reset() strips akm's own seeded skeleton content, so an unrecognized ref here is a contamination signal, not pre-existing content to fall back on.`,
+        `akm search returned a hit (ref=${responseRef}, selectedRef=${selectedRef}) that this instance never added. This hermetic bundle should contain only documents this backend instance wrote via add() — reset() strips akm's own seeded skeleton content, so an unrecognized ref here is a contamination signal, not pre-existing content to fall back on.`,
       );
     }
-    const text = fragmentMatch ? this.readFragmentHitText(cmd, ref) : this.readHitText(hit.path);
+    const fragment = fragmentMatch ? this.readFragmentHit(cmd, selectedRef) : undefined;
+    const text = fragment?.text ?? this.readHitText(hit.path);
+
+    const hitProvenance: Record<string, string | number | boolean | null> = {};
+    for (const key of [
+      "selectedRef",
+      "parentRef",
+      "fragmentOrdinal",
+      "fragmentCount",
+      "startLine",
+      "endLine",
+      "previousRef",
+      "nextRef",
+      "fragmentChars",
+      "fragmentEstimatedTokens",
+      "parentChars",
+      "parentEstimatedTokens",
+      "estimatedTokens",
+      "matchStage",
+    ]) {
+      const value = hit[key as keyof AgentSearchHit];
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        value === null
+      ) {
+        hitProvenance[key] = value;
+      }
+    }
 
     return {
       id: known.sourceId,
@@ -1018,9 +1120,13 @@ class AkmRuntime {
       text,
       metadata: {
         ...(known.metadata as Record<string, string | number | boolean | null> | undefined),
-        ref,
+        ref: selectedRef,
+        parentRef,
+        ...(typeof hit.description === "string" ? { description: hit.description } : {}),
         ...(typeof hit.name === "string" ? { akmName: hit.name } : {}),
         ...(typeof hit.type === "string" ? { akmType: hit.type } : {}),
+        ...hitProvenance,
+        ...(fragment?.metadata ?? {}),
       },
     };
   }

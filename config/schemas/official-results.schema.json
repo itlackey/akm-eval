@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akm-eval.local/official-results.schema.json",
+  "title": "akm-eval official results ledger",
+  "type": "object",
+  "required": ["schemaVersion", "updatedAt", "policy", "rounds"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "akm.eval.official-results.v1" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "policy": {
+      "type": "object",
+      "required": ["canonical", "appendOnly", "tokenUsageScope", "historicalResults"],
+      "properties": {
+        "canonical": { "const": true },
+        "appendOnly": { "const": true },
+        "tokenUsageScope": { "type": "string" },
+        "historicalResults": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "rounds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/round" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "modelCensus": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "integer", "minimum": 1 }
+    },
+    "round": {
+      "type": "object",
+      "required": [
+        "id",
+        "recordedAt",
+        "status",
+        "tier",
+        "benchmark",
+        "answerModel",
+        "judge",
+        "akmCandidate",
+        "protocol",
+        "arms",
+        "comparisons",
+        "notes"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "recordedAt": { "type": "string", "format": "date-time" },
+        "status": { "enum": ["complete", "partial", "retracted"] },
+        "tier": { "enum": ["A", "B"] },
+        "benchmark": {
+          "type": "object",
+          "required": [
+            "id",
+            "datasetSha256",
+            "datasetSourceRevision",
+            "questionCount",
+            "questionIdsSha256",
+            "sample",
+            "evaluatorRepoCommit",
+            "evaluatorCodeSha256",
+            "promptContract"
+          ],
+          "properties": {
+            "id": { "type": "string" },
+            "datasetSha256": { "$ref": "#/$defs/sha256" },
+            "datasetSourceRevision": { "type": "string" },
+            "questionCount": { "type": "integer", "minimum": 1 },
+            "questionIdsSha256": { "$ref": "#/$defs/sha256" },
+            "sample": { "enum": ["full", "seeded", "smoke"] },
+            "evaluatorRepoCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "evaluatorCodeSha256": { "$ref": "#/$defs/sha256" },
+            "promptContract": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "answerModel": {
+          "type": "object",
+          "required": [
+            "requestedModel",
+            "resolvedModels",
+            "artifact",
+            "artifactSha256",
+            "quantization",
+            "parameters",
+            "runtimeImage",
+            "options"
+          ],
+          "properties": {
+            "requestedModel": { "type": "string" },
+            "resolvedModels": { "$ref": "#/$defs/modelCensus" },
+            "artifact": { "type": "string" },
+            "artifactSha256": { "$ref": "#/$defs/sha256" },
+            "quantization": { "type": "string" },
+            "parameters": { "type": "integer", "minimum": 1 },
+            "runtimeImage": { "type": "string" },
+            "options": { "type": "object" }
+          },
+          "additionalProperties": false
+        },
+        "judge": {
+          "type": "object",
+          "required": ["requestedModel", "resolvedModels", "temperature", "usageCaptured"],
+          "properties": {
+            "requestedModel": { "type": "string" },
+            "resolvedModels": { "$ref": "#/$defs/modelCensus" },
+            "temperature": { "type": "number" },
+            "usageCaptured": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "akmCandidate": {
+          "type": "object",
+          "required": [
+            "label",
+            "sourceBranch",
+            "sourceGitSha",
+            "sourceTreeFingerprint",
+            "sourceDirty",
+            "reportedCliVersion"
+          ],
+          "properties": {
+            "label": { "type": "string" },
+            "sourceBranch": { "type": "string" },
+            "sourceGitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "sourceTreeFingerprint": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "sourceDirty": { "type": "boolean" },
+            "reportedCliVersion": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "protocol": {
+          "type": "object",
+          "required": [
+            "topK",
+            "fragmentContext",
+            "configSha256",
+            "configPath",
+            "reproductionConfigPath",
+            "reproductionConfigSha256",
+            "referenceProtocolPath",
+            "referenceProtocolSha256",
+            "artifactManifestPath",
+            "artifactManifestSha256",
+            "artifactRoot",
+            "servingTopology"
+          ],
+          "properties": {
+            "topK": { "type": "integer", "minimum": 1 },
+            "fragmentContext": {
+              "type": "object",
+              "required": ["mode", "maxChars"],
+              "properties": {
+                "mode": { "type": "string" },
+                "maxChars": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            },
+            "configSha256": { "$ref": "#/$defs/sha256" },
+            "configPath": { "type": "string" },
+            "reproductionConfigPath": { "type": "string" },
+            "reproductionConfigSha256": { "$ref": "#/$defs/sha256" },
+            "referenceProtocolPath": { "type": "string" },
+            "referenceProtocolSha256": { "$ref": "#/$defs/sha256" },
+            "artifactManifestPath": { "type": "string" },
+            "artifactManifestSha256": { "$ref": "#/$defs/sha256" },
+            "artifactRoot": { "type": "string" },
+            "servingTopology": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "arms": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/arm" }
+        },
+        "comparisons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/comparison" }
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "arm": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "memoryBackend",
+        "score",
+        "correct",
+        "questionCount",
+        "categoryAccuracy",
+        "retrievalMetrics",
+        "contextMetrics",
+        "tokens",
+        "timing",
+        "retries",
+        "resolvedAnswerModels",
+        "resolvedJudgeModels",
+        "checkpointSignature",
+        "artifacts"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "memoryBackend": { "type": "string" },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "correct": { "type": "integer", "minimum": 0 },
+        "questionCount": { "type": "integer", "minimum": 1 },
+        "categoryAccuracy": {
+          "type": "object",
+          "required": [
+            "single-session",
+            "multi-session",
+            "preference",
+            "temporal",
+            "knowledge-update"
+          ],
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "retrievalMetrics": {
+          "type": "object",
+          "required": ["queryCount", "precisionAtK", "recallAtK", "mrr", "ndcgAtK"],
+          "properties": {
+            "queryCount": { "type": "integer", "minimum": 0 },
+            "precisionAtK": { "type": "number", "minimum": 0, "maximum": 1 },
+            "recallAtK": { "type": "number", "minimum": 0, "maximum": 1 },
+            "mrr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "ndcgAtK": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "contextMetrics": {
+          "type": "object",
+          "required": [
+            "queryCount",
+            "nonAbstentionQueryCount",
+            "literalAnswerContainment",
+            "evidenceHitQueryCount",
+            "evidenceHitContextAnswerContainment",
+            "evidenceHitButAnswerMissingCount"
+          ],
+          "properties": {
+            "queryCount": { "type": "integer", "minimum": 0 },
+            "nonAbstentionQueryCount": { "type": "integer", "minimum": 0 },
+            "literalAnswerContainment": { "type": "number", "minimum": 0, "maximum": 1 },
+            "evidenceHitQueryCount": { "type": "integer", "minimum": 0 },
+            "evidenceHitContextAnswerContainment": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "evidenceHitButAnswerMissingCount": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "tokens": {
+          "type": "object",
+          "required": ["prompt", "completion", "total", "averagePerQuestion", "scope"],
+          "properties": {
+            "prompt": { "type": "integer", "minimum": 0 },
+            "completion": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 },
+            "averagePerQuestion": { "type": "number", "minimum": 0 },
+            "scope": { "const": "answer-model-only" }
+          },
+          "additionalProperties": false
+        },
+        "timing": {
+          "type": "object",
+          "required": ["wallMs", "wallPrecision", "wallBasis", "answerModelLatencyMs"],
+          "properties": {
+            "wallMs": { "type": "integer", "minimum": 1 },
+            "wallPrecision": { "enum": ["exact", "approximate"] },
+            "wallBasis": { "type": "string" },
+            "answerModelLatencyMs": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "retries": { "type": "integer", "minimum": 0 },
+        "resolvedAnswerModels": { "$ref": "#/$defs/modelCensus" },
+        "resolvedJudgeModels": { "$ref": "#/$defs/modelCensus" },
+        "checkpointSignature": { "$ref": "#/$defs/sha256" },
+        "artifacts": {
+          "type": "object",
+          "required": [
+            "resultPath",
+            "resultSha256",
+            "predictionsPath",
+            "predictionsSha256",
+            "judgeLogPath",
+            "judgeLogSha256"
+          ],
+          "properties": {
+            "resultPath": { "type": "string" },
+            "resultSha256": { "$ref": "#/$defs/sha256" },
+            "predictionsPath": { "type": "string" },
+            "predictionsSha256": { "$ref": "#/$defs/sha256" },
+            "judgeLogPath": { "type": "string" },
+            "judgeLogSha256": { "$ref": "#/$defs/sha256" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["left", "right", "scoreDelta", "correctDelta", "tokenReduction"],
+      "properties": {
+        "left": { "type": "string" },
+        "right": { "type": "string" },
+        "scoreDelta": { "type": "number" },
+        "correctDelta": { "type": "integer" },
+        "tokenReduction": { "type": "number" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

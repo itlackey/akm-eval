@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { ArtifactStore } from "../../core/artifact-store.ts";
 import { BenchmarkRuntimeError } from "../../core/errors.ts";
+import { runEvaluatorCommand } from "../../core/evaluator-command.ts";
 import type { RunContext } from "../../core/run-context.ts";
 import type { NormalizedRunResult } from "../../core/types.ts";
 import { describeMemoryProvenance } from "../../memory/provenance.ts";
@@ -11,11 +13,24 @@ import { markdownReportForResult } from "../../reporting/markdown.ts";
 import { requireAgentRunner, requireExistingFile } from "../runtime-requirements.ts";
 import type { PackAdapter } from "../types.ts";
 import {
+  type LongMemEvalCheckpointEntry,
+  type LongMemEvalRetrievalProvenance,
+  appendCheckpoint,
+  createCheckpointIdentity,
+  prepareCheckpoint,
+  resolveCheckpointPath,
+  sha256Text,
+} from "./checkpoint.ts";
+import {
   type LongMemEvalQuestion,
   type LongMemEvalSession,
   loadDataset,
   resolveDatasetFile,
 } from "./dataset.ts";
+import {
+  longMemEvalBackendRuntimeIdentity,
+  longMemEvalEvaluatorCodeSha256,
+} from "./runtime-identity.ts";
 
 interface LongMemEvalPackConfig {
   datasetPath?: string;
@@ -28,14 +43,23 @@ interface LongMemEvalPackConfig {
   predictionsPath?: string;
   evaluationLogPath?: string;
   topK?: number;
+  /** Resume already-paid agent answers from a signature-bound per-question checkpoint (default true). */
+  resume?: boolean;
+  /** Relative path under the run output dir; defaults to a signature-specific `.checkpoints/` file. */
+  checkpointPath?: string;
 }
 
 const DEFAULT_TOP_K = 5;
+
+function sha256File(filePath: string): string {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
 
 interface EvaluationLogEntry {
   question_id?: string;
   autoeval_label?: {
     model?: string;
+    resolved_model?: string;
     label?: boolean;
   };
 }
@@ -48,25 +72,6 @@ function isOpenAICompatibleConfig(
     config !== null &&
     (config as { type?: string }).type === "openai-compatible"
   );
-}
-
-function runCommand(
-  command: string,
-  cwd: string,
-  env: Record<string, string | undefined>,
-): { stdout: string; stderr: string; exitCode: number } {
-  const proc = Bun.spawnSync(["bash", "-lc", command], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env,
-  });
-
-  return {
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
-    exitCode: proc.exitCode,
-  };
 }
 
 /**
@@ -132,6 +137,101 @@ function average(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function normalizedLiteral(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * A transparent diagnostic proxy, not an answer-quality judge. It asks only
+ * whether the normalized reference answer survived in the text handed to the
+ * agent, so correct-parent / wrong-fragment failures are no longer hidden by
+ * healthy session-level retrieval metrics.
+ */
+export function containsLiteralAnswer(context: string, expectedAnswer: string): boolean {
+  const expected = normalizedLiteral(expectedAnswer);
+  return expected.length > 0 && normalizedLiteral(context).includes(expected);
+}
+
+function metadataString(metadata: MemorySearchResult["metadata"], key: string): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function metadataNumber(metadata: MemorySearchResult["metadata"], key: string): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function retrievalProvenance(result: MemorySearchResult): LongMemEvalRetrievalProvenance {
+  const metadata = result.metadata;
+  const description = metadataString(metadata, "description");
+  const nullableRef = (key: "previousRef" | "nextRef"): string | null | undefined => {
+    const value = metadata?.[key];
+    return value === null || typeof value === "string" ? value : undefined;
+  };
+  return {
+    id: result.id,
+    score: result.score,
+    textChars: result.text.length,
+    textEstimatedTokens: Math.max(1, Math.ceil(result.text.length / 4)),
+    textSha256: sha256Text(result.text),
+    ...(metadataString(metadata, "selectedRef")
+      ? { selectedRef: metadataString(metadata, "selectedRef") }
+      : {}),
+    ...(metadataString(metadata, "parentRef")
+      ? { parentRef: metadataString(metadata, "parentRef") }
+      : {}),
+    ...(metadataNumber(metadata, "fragmentOrdinal") !== undefined
+      ? { fragmentOrdinal: metadataNumber(metadata, "fragmentOrdinal") }
+      : {}),
+    ...(metadataNumber(metadata, "fragmentCount") !== undefined
+      ? { fragmentCount: metadataNumber(metadata, "fragmentCount") }
+      : {}),
+    ...(metadataNumber(metadata, "startLine") !== undefined
+      ? { startLine: metadataNumber(metadata, "startLine") }
+      : {}),
+    ...(metadataNumber(metadata, "endLine") !== undefined
+      ? { endLine: metadataNumber(metadata, "endLine") }
+      : {}),
+    ...(nullableRef("previousRef") !== undefined
+      ? { previousRef: nullableRef("previousRef") }
+      : {}),
+    ...(nullableRef("nextRef") !== undefined ? { nextRef: nullableRef("nextRef") } : {}),
+    ...(metadataNumber(metadata, "fragmentChars") !== undefined
+      ? { fragmentChars: metadataNumber(metadata, "fragmentChars") }
+      : {}),
+    ...(metadataNumber(metadata, "fragmentEstimatedTokens") !== undefined
+      ? { fragmentEstimatedTokens: metadataNumber(metadata, "fragmentEstimatedTokens") }
+      : {}),
+    ...(metadataNumber(metadata, "parentChars") !== undefined
+      ? { parentChars: metadataNumber(metadata, "parentChars") }
+      : {}),
+    ...(metadataNumber(metadata, "parentEstimatedTokens") !== undefined
+      ? { parentEstimatedTokens: metadataNumber(metadata, "parentEstimatedTokens") }
+      : {}),
+    ...(metadataString(metadata, "contextMode")
+      ? { contextMode: metadataString(metadata, "contextMode") }
+      : {}),
+    ...(metadataNumber(metadata, "contextMaxChars") !== undefined
+      ? { contextMaxChars: metadataNumber(metadata, "contextMaxChars") }
+      : {}),
+    ...(typeof metadata?.contextTruncated === "boolean"
+      ? { contextTruncated: metadata.contextTruncated }
+      : {}),
+    ...(metadataString(metadata, "matchStage")
+      ? { matchStage: metadataString(metadata, "matchStage") }
+      : {}),
+    ...(description
+      ? { descriptionChars: description.length, descriptionSha256: sha256Text(description) }
+      : {}),
+  };
+}
+
 function resolveEvaluationLogPath(evalStdout: string, fallbackPath: string): string {
   const candidate = evalStdout
     .trim()
@@ -146,12 +246,30 @@ function evaluatorWrapperPath(rootDir: string): string {
   return path.resolve(rootDir, "scripts/longmemeval-evaluator.py");
 }
 
+const FULL_CONTEXT_HEADING = "Conversation history:";
+const RETRIEVED_CONTEXT_HEADING =
+  "Conversation history (retrieved excerpts, not the full haystack):";
 const ANSWER_INSTRUCTIONS = [
   "Answer with only the minimal factual answer needed.",
   "Do not add explanation, markdown, qualifiers, or extra context.",
   "If the answer is not in the conversation history, answer exactly: I don't know",
   "Answer:",
 ];
+
+/** Stable semantic identity for the answer prompts, independent of AKM code. */
+export function longMemEvalPromptProtocolSha256(): string {
+  return sha256Text(
+    JSON.stringify({
+      contract: "longmemeval-v2",
+      fullContextHeading: FULL_CONTEXT_HEADING,
+      retrievedContextHeading: RETRIEVED_CONTEXT_HEADING,
+      turnRendering: "${role}: ${content}",
+      sessionSeparator: "\\n\\n",
+      questionRendering: "Question: ${question}",
+      answerInstructions: ANSWER_INSTRUCTIONS,
+    }),
+  );
+}
 
 /**
  * The disabled-backend (baseline) arm's prompt: the FULL haystack, flattened,
@@ -165,7 +283,7 @@ export function buildFullContextPrompt(question: LongMemEvalQuestion): string {
     .map((turn) => `${turn.role}: ${turn.content}`)
     .join("\n");
   return [
-    "Conversation history:",
+    FULL_CONTEXT_HEADING,
     conversationHistory,
     "",
     `Question: ${question.question}`,
@@ -188,7 +306,7 @@ export function buildRetrievedPrompt(
   searchResults: MemorySearchResult[],
 ): string {
   return [
-    "Conversation history (retrieved excerpts, not the full haystack):",
+    RETRIEVED_CONTEXT_HEADING,
     buildRetrievedContext(searchResults),
     "",
     `Question: ${question.question}`,
@@ -275,6 +393,39 @@ export const longMemEvalAdapter: PackAdapter = {
     const topK =
       typeof packConfig.topK === "number" && packConfig.topK > 0 ? packConfig.topK : DEFAULT_TOP_K;
 
+    const memoryProvenance = describeMemoryProvenance(memory);
+    const backendRuntimeIdentity = longMemEvalBackendRuntimeIdentity(memoryProvenance);
+    const questionIdsSha256 = sha256Text(JSON.stringify(questions.map((question) => question.id)));
+    const datasetSha256 = sha256File(datasetPath);
+    const promptProtocolSha256 = longMemEvalPromptProtocolSha256();
+    const evaluatorCodeSha256 = longMemEvalEvaluatorCodeSha256(memory.id);
+    const checkpointIdentity = createCheckpointIdentity({
+      datasetPath,
+      questions,
+      memoryBackend: memory.id,
+      memoryBackendConfig: context.run.memoryBackendConfig,
+      topK,
+      agentProviderType: context.run.agentProviderConfig?.type,
+      agentBaseURL: context.run.agentProviderConfig?.baseURL,
+      requestedAgentModel: context.run.agentModel,
+      agentProviderOptions: context.run.agentProviderConfig?.options,
+      backendRuntimeIdentity,
+      evaluatorCodeSha256,
+    });
+    const checkpointPath = resolveCheckpointPath(
+      context.outputDir,
+      checkpointIdentity.signature,
+      packConfig.checkpointPath,
+    );
+    const checkpointState = prepareCheckpoint(
+      checkpointPath,
+      checkpointIdentity.manifest,
+      packConfig.resume !== false,
+      new Set(questions.map((question) => question.id)),
+    );
+    const completedEntries = new Map<string, LongMemEvalCheckpointEntry>();
+    let resumedQuestionCount = 0;
+
     const predictions = [] as Array<{
       question_id: string;
       hypothesis: string;
@@ -336,6 +487,11 @@ export const longMemEvalAdapter: PackAdapter = {
     // independently of retrieval quality and makes cross-backend precisionAtK
     // comparisons misleading unless this is visible alongside them.
     let totalResultsReturned = 0;
+    let nonAbstentionContextQueryCount = 0;
+    let literalAnswerPresentCount = 0;
+    let evidenceHitQueryCount = 0;
+    let evidenceHitAnswerPresentCount = 0;
+    const resolvedAgentModels = new Map<string, number>();
     // LongMemEval's "_abs" (abstention) question ids are graded on whether
     // the model correctly declines to answer, not on factual recall -- a
     // question this pack does not otherwise separate out. Disclosed here so
@@ -349,58 +505,121 @@ export const longMemEvalAdapter: PackAdapter = {
     ).length;
 
     for (const question of questions) {
-      let searchResults: MemorySearchResult[] = [];
-      let prompt: string;
-
-      if (memory.kind === "disabled") {
-        prompt = buildFullContextPrompt(question);
+      let completed = checkpointState.entries.get(question.id);
+      if (completed) {
+        resumedQuestionCount += 1;
       } else {
-        // Each LongMemEval question IS its own instance, with its own
-        // haystack -- unlike locomo, where several questions share one
-        // sample's conversation. So the reset()+add() unit here is
-        // per-question, not per-batch: every question gets an isolated
-        // backend state containing only its own haystack sessions.
-        await memory.reset();
-        await memory.add(question.haystackSessions.map(sessionToMemoryDocument));
-        searchResults = await memory.search({ text: question.question, topK });
-        prompt = buildRetrievedPrompt(question, searchResults);
-        retrievalMetrics.push(scoreRetrieval(question.evidenceSessionIds, searchResults, topK));
-        retrievalQueryCount += 1;
-        totalResultsReturned += searchResults.length;
-        if (searchResults.length === 0) zeroHitQueries += 1;
-        if (question.evidenceSessionIds.length === 0) {
-          questionsWithoutEvidence += 1;
+        let searchResults: MemorySearchResult[] = [];
+        let prompt: string;
+        let contextText: string;
+        let retrievalMetric: RetrievalMetrics | undefined;
+        let withoutEvidence = false;
+        let unmatchableEvidence = false;
+
+        if (memory.kind === "disabled") {
+          prompt = buildFullContextPrompt(question);
+          contextText = question.conversation
+            .map((turn) => `${turn.role}: ${turn.content}`)
+            .join("\n");
         } else {
-          const haystackSessionIds = new Set(
-            question.haystackSessions.map((session) => session.sessionId),
-          );
-          if (!question.evidenceSessionIds.some((id) => haystackSessionIds.has(id))) {
-            questionsWithUnmatchableEvidence += 1;
+          // Each LongMemEval question IS its own instance, with its own
+          // haystack -- unlike locomo, where several questions share one
+          // sample's conversation. So the reset()+add() unit here is
+          // per-question, not per-batch: every question gets an isolated
+          // backend state containing only its own haystack sessions.
+          await memory.reset();
+          await memory.add(question.haystackSessions.map(sessionToMemoryDocument));
+          searchResults = await memory.search({ text: question.question, topK });
+          prompt = buildRetrievedPrompt(question, searchResults);
+          contextText = buildRetrievedContext(searchResults);
+          retrievalMetric = scoreRetrieval(question.evidenceSessionIds, searchResults, topK);
+          withoutEvidence = question.evidenceSessionIds.length === 0;
+          if (!withoutEvidence) {
+            const haystackSessionIds = new Set(
+              question.haystackSessions.map((session) => session.sessionId),
+            );
+            unmatchableEvidence = !question.evidenceSessionIds.some((id) =>
+              haystackSessionIds.has(id),
+            );
           }
         }
-        if (question.haystackSessionsSynthesized) questionsWithSynthesizedHaystack += 1;
-      }
 
-      const agentResult = await resolvedAgent.run({ prompt });
-      if (!agentResult.ok) {
-        throw new BenchmarkRuntimeError(
-          `longmemeval agent run failed for ${question.id}: ${agentResult.error ?? "unknown error"}`,
+        const agentResult = await resolvedAgent.run({ prompt });
+        if (!agentResult.ok) {
+          throw new BenchmarkRuntimeError(
+            `longmemeval agent run failed for ${question.id}: ${agentResult.error ?? "unknown error"}. ` +
+              `Completed answers are checkpointed at ${checkpointPath}; rerun the same command to resume them.`,
+          );
+        }
+
+        const nonAbstention = !question.id.endsWith("_abs");
+        const literalAnswerPresent =
+          nonAbstention && containsLiteralAnswer(contextText, question.expectedAnswer);
+        const evidenceSessionHit = question.evidenceSessionIds.some((evidenceId) =>
+          searchResults.some((result) => result.id === evidenceId),
         );
+        completed = {
+          schemaVersion: 1,
+          signature: checkpointIdentity.signature,
+          question_id: question.id,
+          hypothesis: agentResult.text,
+          ...(memory.kind !== "disabled"
+            ? { retrieved_session_ids: searchResults.map((entry) => entry.id) }
+            : {}),
+          agent: {
+            ...(agentResult.usage ? { usage: agentResult.usage } : {}),
+            latencyMs: agentResult.latencyMs,
+            retries: agentResult.retries ?? 0,
+            ...(agentResult.resolvedModel ? { resolvedModel: agentResult.resolvedModel } : {}),
+          },
+          ...(retrievalMetric ? { retrievalMetric } : {}),
+          retrievalProvenance: searchResults.map(retrievalProvenance),
+          context: { nonAbstention, literalAnswerPresent, evidenceSessionHit },
+          counters: {
+            retrievalQueried: memory.kind !== "disabled",
+            zeroHit: memory.kind !== "disabled" && searchResults.length === 0,
+            withoutEvidence,
+            unmatchableEvidence,
+            synthesizedHaystack: memory.kind !== "disabled" && question.haystackSessionsSynthesized,
+          },
+        };
+        appendCheckpoint(checkpointPath, completed);
       }
 
-      agentRetryCount += agentResult.retries ?? 0;
-      totalPromptTokens += agentResult.usage?.input ?? 0;
-      totalCompletionTokens += agentResult.usage?.output ?? 0;
-      totalTokens += agentResult.usage?.total ?? 0;
-      totalLatencyMs += agentResult.latencyMs;
-
+      completedEntries.set(question.id, completed);
       predictions.push({
-        question_id: question.id,
-        hypothesis: agentResult.text,
-        ...(memory.kind !== "disabled"
-          ? { retrieved_session_ids: searchResults.map((entry) => entry.id) }
+        question_id: completed.question_id,
+        hypothesis: completed.hypothesis,
+        ...(completed.retrieved_session_ids
+          ? { retrieved_session_ids: completed.retrieved_session_ids }
           : {}),
       });
+      agentRetryCount += completed.agent.retries;
+      totalPromptTokens += completed.agent.usage?.input ?? 0;
+      totalCompletionTokens += completed.agent.usage?.output ?? 0;
+      totalTokens += completed.agent.usage?.total ?? 0;
+      totalLatencyMs += completed.agent.latencyMs;
+      if (completed.agent.resolvedModel) {
+        resolvedAgentModels.set(
+          completed.agent.resolvedModel,
+          (resolvedAgentModels.get(completed.agent.resolvedModel) ?? 0) + 1,
+        );
+      }
+      if (completed.retrievalMetric) retrievalMetrics.push(completed.retrievalMetric);
+      if (completed.counters.retrievalQueried) retrievalQueryCount += 1;
+      if (completed.counters.zeroHit) zeroHitQueries += 1;
+      if (completed.counters.withoutEvidence) questionsWithoutEvidence += 1;
+      if (completed.counters.unmatchableEvidence) questionsWithUnmatchableEvidence += 1;
+      if (completed.counters.synthesizedHaystack) questionsWithSynthesizedHaystack += 1;
+      totalResultsReturned += completed.retrievalProvenance.length;
+      if (completed.context.nonAbstention) {
+        nonAbstentionContextQueryCount += 1;
+        if (completed.context.literalAnswerPresent) literalAnswerPresentCount += 1;
+        if (completed.context.evidenceSessionHit) {
+          evidenceHitQueryCount += 1;
+          if (completed.context.literalAnswerPresent) evidenceHitAnswerPresentCount += 1;
+        }
+      }
     }
 
     const predictionsPath = path.resolve(
@@ -414,6 +633,7 @@ export const longMemEvalAdapter: PackAdapter = {
       "longmemeval requires a concrete dataset file for the official evaluator.",
     );
 
+    fs.mkdirSync(path.dirname(predictionsPath), { recursive: true });
     fs.writeFileSync(
       predictionsPath,
       `${predictions.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
@@ -429,7 +649,8 @@ export const longMemEvalAdapter: PackAdapter = {
         ? { baseURL: provider.baseURL, apiKey: provider.apiKey }
         : undefined,
     );
-    const evalResult = runCommand(
+    evaluatorEnv.AKM_EVAL_JUDGE_RESUME = packConfig.resume === false ? "0" : "1";
+    const evalResult = runEvaluatorCommand(
       `${evaluatorCommand} ${JSON.stringify(evaluatorModel)} ${JSON.stringify(predictionsPath)} ${JSON.stringify(datasetPath)}`,
       context.rootDir,
       evaluatorEnv,
@@ -473,6 +694,12 @@ export const longMemEvalAdapter: PackAdapter = {
         );
       }
       const passed = entry.autoeval_label?.label === true;
+      const checkpoint = completedEntries.get(questionId);
+      if (!checkpoint) {
+        throw new BenchmarkRuntimeError(
+          `longmemeval internal checkpoint is missing completed question ${questionId}`,
+        );
+      }
       return {
         questionId,
         category: question.category,
@@ -480,8 +707,21 @@ export const longMemEvalAdapter: PackAdapter = {
         actualAnswer:
           predictions.find((prediction) => prediction.question_id === questionId)?.hypothesis ?? "",
         passed,
+        requestedAgentModel: context.run.agentModel ?? null,
+        resolvedAgentModel: checkpoint.agent.resolvedModel ?? null,
+        requestedJudgeModel: entry.autoeval_label?.model ?? evaluatorModel,
+        resolvedJudgeModel:
+          entry.autoeval_label?.resolved_model ?? entry.autoeval_label?.model ?? null,
+        retrievedSessionIds: checkpoint.retrieved_session_ids ?? [],
+        retrievalProvenance: checkpoint.retrievalProvenance,
+        contextSufficiency: checkpoint.context,
       };
     });
+    const resolvedJudgeModels = new Map<string, number>();
+    for (const entry of evaluationEntries) {
+      const model = entry.autoeval_label?.resolved_model ?? entry.autoeval_label?.model;
+      if (model) resolvedJudgeModels.set(model, (resolvedJudgeModels.get(model) ?? 0) + 1);
+    }
 
     const overallAccuracy = average(perQuestion.map((entry) => (entry.passed ? 1 : 0)));
     const categories = new Map<string, number[]>();
@@ -523,6 +763,31 @@ export const longMemEvalAdapter: PackAdapter = {
       // if the backend really does go inert again, that must be
       // machine-visible in result.json/summary.md, not just in docs.
       warnings: [
+        ...(checkpointState.recoveredPartialLine
+          ? [
+              `Recovered and truncated an incomplete final checkpoint line at ${checkpointPath}; all preceding per-question answers were retained.`,
+            ]
+          : []),
+        ...(resolvedAgentModels.size > 1
+          ? [
+              `The answer provider resolved this run to ${resolvedAgentModels.size} different models (${[
+                ...resolvedAgentModels.entries(),
+              ]
+                .map(([model, count]) => `${model}=${count}`)
+                .join(
+                  ", ",
+                )}). Treat an alias such as "auto" as a production-routing run, not a fixed-model causal comparison.`,
+            ]
+          : []),
+        ...(resolvedJudgeModels.size > 1
+          ? [
+              `The judge provider resolved this run to ${resolvedJudgeModels.size} different models (${[
+                ...resolvedJudgeModels.entries(),
+              ]
+                .map(([model, count]) => `${model}=${count}`)
+                .join(", ")}); the score is not attributable to one fixed judge.`,
+            ]
+          : []),
         ...(memory.kind !== "disabled" && retrievalQueryCount === 0
           ? [
               `memory backend "${memory.id}" was configured but NEVER QUERIED: retrievalQueryCount is 0. This should be impossible now that this adapter routes retrieval through MemoryBackend.search() for every non-disabled run -- treat this as a regression in the adapter, not a property of the backend. Do not publish this run as evidence about the backend.`,
@@ -557,6 +822,7 @@ export const longMemEvalAdapter: PackAdapter = {
         `LongMemEval executed ${questions.length} question(s) and scored them with the official evaluator command.`,
         `Overall accuracy: ${(overallAccuracy * 100).toFixed(1)}%`,
         `Evaluator model: ${evaluatorModel}`,
+        `Per-question answer checkpoint: ${checkpointPath} (${resumedQuestionCount}/${questions.length} answer(s) resumed).`,
         memory.kind === "disabled"
           ? "Full-haystack baseline: every question is answered from its entire haystack conversation, flattened into the " +
             'prompt -- not a "no memory" null arm in the retrieval-quality sense, since it differs from the retrieval ' +
@@ -605,6 +871,20 @@ export const longMemEvalAdapter: PackAdapter = {
       ],
       metrics: {
         retrieval: averageRetrieval(retrievalMetrics),
+        context: {
+          queryCount: questions.length,
+          nonAbstentionQueryCount: nonAbstentionContextQueryCount,
+          literalAnswerContainment:
+            nonAbstentionContextQueryCount > 0
+              ? Number((literalAnswerPresentCount / nonAbstentionContextQueryCount).toFixed(6))
+              : 0,
+          evidenceHitQueryCount,
+          evidenceHitContextAnswerContainment:
+            evidenceHitQueryCount > 0
+              ? Number((evidenceHitAnswerPresentCount / evidenceHitQueryCount).toFixed(6))
+              : 0,
+          evidenceHitButAnswerMissingCount: evidenceHitQueryCount - evidenceHitAnswerPresentCount,
+        },
         answer: {
           // Not computed by this pack, so reported as `null` rather than `0`:
           // reporting a metric that was never measured as a number makes it
@@ -633,6 +913,9 @@ export const longMemEvalAdapter: PackAdapter = {
           `questions=${questions.length}`,
           `evaluatorModel=${evaluatorModel}`,
         ],
+        ...(resolvedAgentModels.size > 0
+          ? { resolvedModels: Object.fromEntries([...resolvedAgentModels.entries()].sort()) }
+          : {}),
       },
       artifacts: {
         resultPath: "",
@@ -641,8 +924,19 @@ export const longMemEvalAdapter: PackAdapter = {
       },
       metadata: {
         ...context.run.metadata,
-        ...describeMemoryProvenance(memory),
+        ...memoryProvenance,
         benchmarkId: path.basename(datasetPath, path.extname(datasetPath)),
+        datasetSha256,
+        questionIdsSha256,
+        promptContract: "longmemeval-v2",
+        promptProtocolSha256,
+        evaluatorCodeSha256,
+        judgeScriptSha256: sha256File(evaluatorWrapperPath(context.rootDir)),
+        judgeMaxTokens: Number(process.env.AKM_EVAL_JUDGE_MAX_TOKENS ?? "64"),
+        judgeMaxUnparseableRate: Number(process.env.AKM_EVAL_JUDGE_MAX_UNPARSEABLE_RATE ?? "0.02"),
+        judgeRuntimeFingerprint: process.env.AKM_EVAL_JUDGE_RUNTIME_FINGERPRINT ?? null,
+        answerModelArtifactSha256: process.env.AKM_EVAL_ANSWER_MODEL_ARTIFACT_SHA256 ?? null,
+        answerModelRuntimeImage: process.env.AKM_EVAL_ANSWER_MODEL_RUNTIME_IMAGE ?? null,
         questionCount: questions.length,
         overallAccuracy: score,
         evaluatorCommand,
@@ -651,6 +945,28 @@ export const longMemEvalAdapter: PackAdapter = {
         evaluationLogPath,
         topK,
         agentRetryCount,
+        checkpointPath,
+        checkpointSignature: checkpointIdentity.signature,
+        checkpointResumeEnabled: packConfig.resume !== false,
+        resumedQuestionCount,
+        agentResolvedModelCount: resolvedAgentModels.size,
+        agentResolvedModels:
+          resolvedAgentModels.size > 0
+            ? [...resolvedAgentModels.entries()]
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([model, count]) => `${model}=${count}`)
+                .join(",")
+            : null,
+        judgeResolvedModelCount: resolvedJudgeModels.size,
+        judgeResolvedModels:
+          resolvedJudgeModels.size > 0
+            ? [...resolvedJudgeModels.entries()]
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([model, count]) => `${model}=${count}`)
+                .join(",")
+            : null,
+        contextSufficiencyDefinition:
+          "normalized-literal-answer-containment; evidence-hit rate conditions on a retrieved ground-truth session; abstention questions excluded",
         // `baselineIsLongContext` is per-run but named as a claim about the
         // whole comparison -- on a treatment arm it emits `false`, i.e. the
         // treatment arm's own artifact machine-asserts that the baseline is
@@ -688,6 +1004,29 @@ export const longMemEvalAdapter: PackAdapter = {
               retrievalCeilingQueryTransform: "fixed-deterministic-stopword-strip",
               retrievalCeilingSemanticSearchMode: "off",
               retrievalCeilingSeededCorpusStripped: true,
+              akmFragmentContextMode:
+                (context.run.memoryBackendConfig?.fragmentContext as { mode?: unknown } | undefined)
+                  ?.mode === "lead"
+                  ? "lead"
+                  : "exact",
+              akmFragmentContextMaxChars:
+                typeof (
+                  context.run.memoryBackendConfig?.fragmentContext as
+                    | { maxChars?: unknown }
+                    | undefined
+                )?.maxChars === "number"
+                  ? (context.run.memoryBackendConfig?.fragmentContext as { maxChars: number })
+                      .maxChars
+                  : null,
+              akmFragmentContextMaxTokens:
+                typeof (
+                  context.run.memoryBackendConfig?.fragmentContext as
+                    | { maxTokens?: unknown }
+                    | undefined
+                )?.maxTokens === "number"
+                  ? (context.run.memoryBackendConfig?.fragmentContext as { maxTokens: number })
+                      .maxTokens
+                  : null,
             }
           : {}),
         ...Object.fromEntries(
@@ -705,6 +1044,11 @@ export const longMemEvalAdapter: PackAdapter = {
       evaluatorModel,
       evaluatorStdout: evalResult.stdout,
       evaluatorStderr: evalResult.stderr,
+      checkpointPath,
+      checkpointSignature: checkpointIdentity.signature,
+      resumedQuestionCount,
+      resolvedAgentModels: Object.fromEntries([...resolvedAgentModels.entries()].sort()),
+      resolvedJudgeModels: Object.fromEntries([...resolvedJudgeModels.entries()].sort()),
       results: perQuestion,
       perCategoryAccuracy,
     });

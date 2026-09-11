@@ -39,6 +39,21 @@ export interface RetrievalMetrics {
 }
 
 /**
+ * Whether the text actually returned to the agent retained a literal answer.
+ * This is deliberately separate from parent/session retrieval: a backend can
+ * retrieve the correct evidence session while returning a narrowed fragment
+ * that omits the answer. Rates exclude abstention questions.
+ */
+export interface ContextSufficiencyMetrics {
+  queryCount: number;
+  nonAbstentionQueryCount: number;
+  literalAnswerContainment: number;
+  evidenceHitQueryCount: number;
+  evidenceHitContextAnswerContainment: number;
+  evidenceHitButAnswerMissingCount: number;
+}
+
+/**
  * Answer-side scores for one run.
  *
  * `null` means "this pack does not compute this metric", never "this pack

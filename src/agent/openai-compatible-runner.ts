@@ -150,6 +150,7 @@ export class OpenAICompatibleRunner implements AgentRunner {
       }
 
       const data = (await response.json()) as {
+        model?: unknown;
         choices?: Array<{ message?: { content?: string } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       };
@@ -165,7 +166,18 @@ export class OpenAICompatibleRunner implements AgentRunner {
           }
         : undefined;
 
-      return { kind: "ok", result: { ok: true, text: content, usage, latencyMs } };
+      return {
+        kind: "ok",
+        result: {
+          ok: true,
+          text: content,
+          usage,
+          latencyMs,
+          ...(typeof data.model === "string" && data.model.length > 0
+            ? { resolvedModel: data.model }
+            : {}),
+        },
+      };
     } catch (err) {
       clearTimeout(timeoutId);
       if (abortController.signal.aborted) {
