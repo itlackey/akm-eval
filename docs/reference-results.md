@@ -13,20 +13,27 @@ AKM arm** against them.
 | AKM 0.9.15 candidate (`lead`, 3200 chars) | 36.2% | 181/500 | 1,731,027 | 1h 14m 22s |
 | AKM 0.9.15 published package (`lead`, 3200 chars) | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
 | AKM 0.9.16-alpha.1 published package (`lead`, 3200 chars) | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
+| AKM 0.9.16-alpha.2 `@next` package (`lead`, 3200 chars) | 35.4% | 177/500 | 1,731,173 | 1h 10m 43s |
 
 Token totals are provider-reported **answer-model** usage. The upstream judge
 does not report GPT-4o tokens, so judge usage is not included. The frozen
-three-arm round is Tier A. The two published-package rows are Tier B: their
-checkpointed runs resumed through an operator-approved Bifrost pool mixing two
-CUDA workers and one Intel/SYCL worker, all serving the identical model bytes
-and options. Their displayed wall times are lower-bound operational elapsed
-times from first durable checkpoint through completion, including the
-interruption; they are not controlled latency benchmarks.
+three-arm round is Tier A. The package rows are Tier B. The 0.9.15 and alpha.1
+runs resumed through an operator-approved mixed CUDA/Intel pool. Alpha.2 used
+the pre-existing direct Intel/SYCL service for all 500 answers without changing
+it; its newer runtime and repeat penalty differ from Tier A. Tier B wall times
+are not controlled latency benchmarks.
 
 The published 0.9.16-alpha.1 package gains 3.2 percentage points and 16 correct
 answers over the published 0.9.15 package, while using 2,508,208 more
 answer-model tokens (144.9% more). Against the frozen controls it is +11.0
 points over raw vector and +0.4 points over full context.
+
+Alpha.2's indexer reversion restores the 0.9.15 retrieval surface exactly:
+500/500 retrieval provenance lists, retrieved contexts, and input-token counts
+match. Its observed score is 35.4%, down 4.2 points and 21 answers from alpha.1
+while using 2,508,065 fewer answer-model tokens (59.2% less). The evidence
+bundle records why the newer serving runtime prevents a strict Tier A
+comparison and separates retrieval equivalence from generation/judge variance.
 
 ## Verify the published evidence
 
@@ -38,6 +45,8 @@ bin/reference-eval verify \
   --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.15
 bin/reference-eval verify \
   --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.1
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.2
 ```
 
 These commands verify every file in each immutable `SHA256SUMS` bundle,
@@ -113,8 +122,8 @@ AKM_EVAL_ENV_FILE=/absolute/path/to/akm-eval.env bin/reference-eval verify
 Published package (replace the version and output directory together):
 
 ```bash
-bin/reference-eval run-akm --akm-version 0.9.16-alpha.1 \
-  --out runs/qwen-reference-akm-0.9.16-alpha.1
+bin/reference-eval run-akm --akm-version 0.9.16-alpha.2 \
+  --out runs/qwen-reference-akm-0.9.16-alpha.2
 ```
 
 Unpublished checkout, built inside Docker from Git-tracked and unignored files:

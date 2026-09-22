@@ -98,19 +98,26 @@ GPT-4o judge):
 | AKM 0.9.15 candidate (`lead`, 3200 chars) | 36.2% | 181/500 | 1,731,027 | 1h 14m 22s |
 | AKM 0.9.15 published package (`lead`, 3200 chars) | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
 | AKM 0.9.16-alpha.1 published package (`lead`, 3200 chars) | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
+| AKM 0.9.16-alpha.2 `@next` package (`lead`, 3200 chars) | 35.4% | 177/500 | 1,731,173 | 1h 10m 43s |
 
 The published 0.9.16-alpha.1 package is +11.0 percentage points over raw vector
 and +0.4 points over full context. It is +3.2 points and 16 answers over the
 published 0.9.15 package, with 2,508,208 more answer-model tokens. Judge token
 usage is not included because the upstream evaluator does not report it.
 
+The alpha.2 indexer reversion restores the 0.9.15 retrieval surface exactly:
+all 500 retrieval provenance lists, contexts, and input-token counts match.
+Its 35.4% score is 4.2 points below alpha.1 and 1.0 point below 0.9.15. The
+alpha.2 run used 2,508,065 fewer tokens than alpha.1; see its evidence bundle
+for the generation/runtime and judge-variance audit.
+
 The frozen controls and original source-candidate arm are Tier A. The two
-published-package follow-ups are Tier B because their interrupted runs resumed
-through an operator-approved pool mixing two CUDA workers and one Intel/SYCL
-worker. Every worker served the identical checksum-pinned model and options;
-the tracked routing record shows 609/609 successful post-resume requests and
-zero retries. Their approximate wall times include the interruption and are
-operational lower bounds, not controlled latency measurements.
+0.9.15 and alpha.1 package follow-ups are Tier B because their interrupted
+runs resumed through an operator-approved mixed CUDA/Intel pool. Alpha.2 is
+also Tier B: all 500 answers came from the existing direct Intel/SYCL service,
+whose newer llama.cpp runtime and repeat penalty differ from Tier A. No service
+was reconfigured for alpha.2. Tier B wall times are not controlled hardware
+comparisons.
 
 ## Reproduce the published results
 
@@ -124,6 +131,8 @@ bin/reference-eval verify \
   --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.15
 bin/reference-eval verify \
   --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.1
+bin/reference-eval verify \
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.2
 ```
 
 For a normal AKM release, reuse the verified baseline and raw-vector controls
@@ -134,8 +143,8 @@ bin/downloads LongMemEval
 bin/reference-model fetch
 bin/reference-model up
 export AKM_EVAL_JUDGE_API_KEY=...
-bin/reference-eval run-akm --akm-version 0.9.16-alpha.1 \
-  --out runs/qwen-reference-akm-0.9.16-alpha.1
+bin/reference-eval run-akm --akm-version 0.9.16-alpha.2 \
+  --out runs/qwen-reference-akm-0.9.16-alpha.2
 ```
 
 Control reruns are available but deliberately require an explicit confirmation

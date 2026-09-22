@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "akm.eval.comparison-context.v1",
+  "candidate": "akm-cli@0.9.16-alpha.2",
+  "referenceRound": "longmemeval-qwen35-9b-q4km-131k-v1",
+  "strictReferenceCompatible": false,
+  "strictComparisonBlockers": [
+    "The answer-model runtime is llama.cpp b10920 on Intel/SYCL with --repeat-penalty 1.1, not the frozen Tier A CUDA runtime."
+  ],
+  "controlsRerun": false,
+  "observedComparisons": {
+    "frozenBaseline": {
+      "scoreDelta": -0.038,
+      "correctDelta": -19,
+      "tokenReduction": 0.967846
+    },
+    "frozenRawVector": {
+      "scoreDelta": 0.068,
+      "correctDelta": 34,
+      "tokenReduction": 0.68489
+    },
+    "akm-0.9.16-alpha.1": {
+      "scoreDelta": -0.042,
+      "correctDelta": -21,
+      "tokenReduction": 0.591632
+    },
+    "akm-0.9.15": {
+      "scoreDelta": -0.01,
+      "correctDelta": -5,
+      "tokenReduction": -0.000083
+    }
+  },
+  "indexerReversionAuditAgainstAkm0915": {
+    "identicalRetrievalProvenance": 500,
+    "identicalRetrievedContexts": 500,
+    "identicalInputTokenCounts": 500,
+    "identicalHypotheses": 444,
+    "changedHypotheses": 56,
+    "judgeAgreementOnIdenticalHypotheses": 441,
+    "judgeDisagreementOnIdenticalHypotheses": 3
+  }
+}
