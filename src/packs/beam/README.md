@@ -10,8 +10,8 @@ Requirements:
 - local checkout of the official `mohammadtavakoli78/BEAM` repo
 - repo available via `pack.config.repoPath`, `vendor/BEAM`, or `third_party/BEAM`
 - official dataset directories prepared before running the pack
-- Python available for the upstream evaluator
-- local runtime setup in this repo currently targets a uv-managed Python 3.11 environment at `.akm/evals/venvs/beam` via `scripts/setup-beam-runtime.sh`
+- Docker available on the host; the `beam` image contains pinned Python 3.11
+  dependencies for the upstream evaluator
 - `OPENAI_API_KEY` available for the upstream BEAM judge path
 - pinned upstream/runtime notes live in `docs/beam-runtime.md`
 - each run now records a BEAM runtime fingerprint in `result.json` metadata and `raw-output.json`

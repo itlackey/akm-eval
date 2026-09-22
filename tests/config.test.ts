@@ -739,7 +739,7 @@ describe("config loading", () => {
       "  bin/compare --baseline <dir> --candidate <dir> [--out <path>] [--format markdown|json]",
       "  bin/report --run <dir> [--format markdown|json]",
       "  bin/summary --runs <dir> [--format markdown|json]",
-      "  bin/downloads [DatasetName]",
+      "  bin/downloads [LongMemEval|LoCoMo]",
     ]);
   });
 });

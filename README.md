@@ -1,5 +1,9 @@
 # akm-eval
 
+[![PR CI](https://github.com/itlackey/akm-eval/actions/workflows/ci-pr.yml/badge.svg)](https://github.com/itlackey/akm-eval/actions/workflows/ci-pr.yml)
+[![Scheduled smoke](https://github.com/itlackey/akm-eval/actions/workflows/smoke-schedule.yml/badge.svg)](https://github.com/itlackey/akm-eval/actions/workflows/smoke-schedule.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](./LICENSE)
+
 AKM Eval runs real memory / long-term-recall benchmark packs through authoritative upstream
 harnesses and dataset evaluators, and normalizes the outputs.
 
@@ -31,6 +35,61 @@ hard separation from first-party corpus results — are in
 that currently block publication. Read it before publishing a figure or
 changing a pack.
 
+## Start here
+
+Clone the repo, then verify the published evidence and probe the current AKM
+release. Both commands are deterministic and make **no model or API calls**:
+
+```bash
+git clone https://github.com/itlackey/akm-eval.git
+cd akm-eval
+bin/reference-eval verify
+bin/probe --akm-version 0.9.16
+```
+
+The first invocation builds a pinned Docker image when one is not already
+cached, which can take a few minutes. Later commands reuse the dependency
+layers and versioned images. The probe writes an ignored artifact under
+`runs/probes/`; the evidence verifier does not need credentials, a dataset
+download, or a running model.
+
+To run a small three-arm LoCoMo evaluation of your own:
+
+```bash
+bin/downloads LoCoMo
+cp .env.example ../akm-eval.env
+# Edit ../akm-eval.env and set OPENAI_API_KEY.
+export AKM_EVAL_ENV_FILE="$(cd .. && pwd)/akm-eval.env"
+
+# Validate routing, credentials, config, and the selected AKM version first.
+bin/memory-eval locomo --akm-version 0.9.16 \
+  --config config/common/locomo-akm-ab.json \
+  --out runs/locomo-0.9.16-smoke --dry-run
+
+# Remove --dry-run when the preview is correct.
+bin/memory-eval locomo --akm-version 0.9.16 \
+  --config config/common/locomo-akm-ab.json \
+  --out runs/locomo-0.9.16-smoke
+```
+
+That smoke config evaluates five questions in each of the full-context,
+raw-vector, and AKM arms. It makes real answer-model requests and is useful for
+checking a setup, but a five-question smoke result is not a publishable
+benchmark score. Copy a committed config before changing its provider, model,
+sampling, or evaluator settings; the run artifacts record those choices.
+
+| Command | External model use | Purpose |
+| --- | --- | --- |
+| `bin/reference-eval verify` | None | Reconstruct and checksum published evidence |
+| `bin/probe --akm-version VERSION` | None | Deterministic retrieval regression check |
+| `bin/memory-eval ... --dry-run` | None | Preview exact arms, routing, target, and output |
+| LoCoMo three-arm smoke above | 15 answer generations, plus retries if needed | Validate an end-to-end setup |
+| `bin/reference-eval run-akm ...` | 500 local answers and 500 GPT-4o verdicts, plus retries | Produce a reference-compatible AKM result |
+
+See [`docs/running-evals.md`](./docs/running-evals.md) for custom providers and
+[`docs/reference-results.md`](./docs/reference-results.md) before spending a
+full reference-run budget.
+
 ## Host requirements
 
 For normal `bin/...` usage, the host only needs:
@@ -52,7 +111,7 @@ Docker env file outside the repo:
 ```bash
 cp .env.example ../akm-eval.env  # fill this file; keep it outside the checkout
 AKM_EVAL_ENV_FILE=/absolute/path/to/eval.env \
-  bin/memory-eval longmemeval --akm-version 0.9.15 --dry-run
+  bin/memory-eval longmemeval --akm-version 0.9.16 --dry-run
 ```
 
 The wrapper forwards only documented provider variables (by name, so values do
@@ -159,14 +218,14 @@ contract, resume behavior, AKM-only workflow, control/all-arm commands, and
 publication checklist are in
 [`docs/reference-results.md`](./docs/reference-results.md).
 
-## Quick start
+## Retrieval regression probe
 
 Validating a new akm-cli version? Start here — free and deterministic, with no
 LLM or host toolchain. It builds/selects a version-specific Docker image,
 probes both packs, and grades the result against committed reference values:
 
 ```bash
-bin/probe --akm-version 0.9.15
+bin/probe --akm-version 0.9.16
 ```
 
 For an unpublished checkout, the equivalent path builds locked dependencies
@@ -187,13 +246,13 @@ For release approval, run a `0.9.13` control and an identity-permutation source
 candidate, then use `bin/probe-pair --control <dir> --candidate <dir>`. It
 compares the two matching artifacts and writes a verdict even when it fails.
 
-For a judged run:
+For a single scored smoke run:
 
 ```bash
-bin/build-image --akm-version 0.9.15
-AKM_EVAL_AKM_VERSION=0.9.15 \
+bin/build-image --akm-version 0.9.16
+AKM_EVAL_AKM_VERSION=0.9.16 \
   bin/doctor --pack locomo
-AKM_EVAL_AKM_VERSION=0.9.15 \
+AKM_EVAL_AKM_VERSION=0.9.16 \
   bin/eval --pack locomo --variant baseline --config config/common/locomo-smoke.json
 ```
 

@@ -4,9 +4,6 @@
 FROM oven/bun:1.3.13 AS bun-runtime
 FROM node:22.18.0-bookworm-slim AS core
 
-ARG AKM_CLI_VERSION
-ARG AKM_EVAL_RUNTIME_FINGERPRINT
-
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
@@ -22,9 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && python3 -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
 
 ENV AKM_EVAL_APP_ROOT=/opt/akm-eval \
-  AKM_EVAL_CORE_VENV=/opt/akm-eval/venvs/core \
-  AKM_EVAL_IMAGE_AKM_VERSION=${AKM_CLI_VERSION} \
-  AKM_EVAL_AKM_RUNTIME_FINGERPRINT=${AKM_EVAL_RUNTIME_FINGERPRINT}
+  AKM_EVAL_CORE_VENV=/opt/akm-eval/venvs/core
 ENV PATH="${AKM_EVAL_CORE_VENV}/bin:${AKM_EVAL_APP_ROOT}/node_modules/.bin:${PATH}"
 
 WORKDIR ${AKM_EVAL_APP_ROOT}
@@ -35,6 +30,13 @@ RUN bun install --frozen-lockfile
 COPY requirements-smoke.txt requirements-beam.txt ./
 RUN python3 -m venv "${AKM_EVAL_CORE_VENV}" \
   && "${AKM_EVAL_CORE_VENV}/bin/pip" install --no-cache-dir --requirement requirements-smoke.txt
+
+# Keep release/source identity below the large dependency layers so selecting a
+# new AKM version reuses the pinned OS, Bun, and Python environments.
+ARG AKM_CLI_VERSION
+ARG AKM_EVAL_RUNTIME_FINGERPRINT
+ENV AKM_EVAL_IMAGE_AKM_VERSION=${AKM_CLI_VERSION} \
+  AKM_EVAL_AKM_RUNTIME_FINGERPRINT=${AKM_EVAL_RUNTIME_FINGERPRINT}
 
 # The CLI being evaluated is intentionally a build argument.  Version-specific
 # image tags in bin/_akm_eval_cli_image.sh prevent one target from being reused

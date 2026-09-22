@@ -3,9 +3,9 @@ set -euo pipefail
 
 # One-command memory eval with the credentials wired correctly.
 #
-#   bin/memory-eval longmemeval --akm-version 0.9.15 --out runs/longmemeval-0.9.15
-#   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.15
-#   bin/memory-eval longmemeval --akm-version 0.9.15 --dry-run
+#   bin/memory-eval longmemeval --akm-version 0.9.16 --out runs/longmemeval-0.9.16
+#   bin/memory-eval locomo --variant akm-memory --akm-version 0.9.16
+#   bin/memory-eval longmemeval --akm-version 0.9.16 --dry-run
 #   bin/memory-eval longmemeval --akm-source ../akm --variant akm-memory-lead
 #
 # WHY THIS EXISTS: the judge and answer model may use different credentials and
@@ -245,6 +245,12 @@ else
   out_root="runs/${pack}-full-${stamp}"
 fi
 
+if [ "$pack" = "longmemeval" ]; then
+  judge_summary="$(jq -r '.packs[0].config.evaluatorModel' "$config") via ${JUDGE_BASE_URL:-cloud OpenAI}"
+else
+  judge_summary="deterministic (no LLM judge)"
+fi
+
 cat <<INFO
 
 memory-eval: pack        ${pack}
@@ -252,7 +258,7 @@ memory-eval: config      ${config}
 memory-eval: arms        ${variants[*]}
 memory-eval: execution   $([ "$parallel" = "1" ] && echo parallel || echo sequential)
 memory-eval: agent       ${agent_label}
-memory-eval: judge       $(jq -r '.packs[0].config.evaluatorModel // "deterministic (no judge)"' "$config") $([ -n "$judge_key" ] && echo "via ${JUDGE_BASE_URL:-cloud OpenAI}" || echo "")
+memory-eval: judge       ${judge_summary}
 memory-eval: questions   $(jq -r '.packs[0].config.maxQuestions // "ALL (no subset)"' "$config")
 memory-eval: categories  $(jq -r 'if .packs[0].config.questionCategories then (.packs[0].config.questionCategories|join(",")) else "ALL" end' "$config")
 memory-eval: akm-cli     ${akm_version}
