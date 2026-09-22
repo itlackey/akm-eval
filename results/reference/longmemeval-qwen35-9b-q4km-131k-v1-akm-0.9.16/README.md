@@ -1,9 +1,14 @@
-# AKM 0.9.16-alpha.2 published-package result
+# AKM 0.9.16 published-package result
 
-This immutable evidence bundle records the `akm-cli@next` package after the
-tag resolved to `akm-cli@0.9.16-alpha.2`. It contains the complete 500-question
-AKM arm: answer checkpoints, predictions, official GPT-4o verdicts, normalized
-and raw results, and the wrapper log.
+This evidence bundle is the official `akm-cli@0.9.16` result. The paid run was
+made against `akm-cli@next` when it resolved to `0.9.16-alpha.2`; the final
+release retains the same indexer, retrieval, fragment-selection, and context
+behavior. The source-tag diff adds only version/changelog updates and a
+byte-preserving fix for draining piped stdout documents larger than 64 KiB.
+`release-equivalence.json` records that audit, while `package-provenance.json`
+and the raw artifacts retain the exact package that executed. The bundle
+contains the complete 500-question AKM arm: answer checkpoints, predictions,
+official GPT-4o verdicts, normalized and raw results, and the wrapper log.
 
 The result is **35.4% (177/500)** with **1,731,173 answer-model tokens** and an
 exact wall time of **1h 10m 43s**. The frozen controls were not rerun:
@@ -27,16 +32,16 @@ netted one answer back, producing the observed five-answer difference from
 0.9.15. This isolates the remaining variation to generation/judging under the
 newer serving runtime, not AKM retrieval.
 
-Against 0.9.16-alpha.1, alpha.2 is down 4.2 percentage points and 21 correct
+Against 0.9.16-alpha.1, 0.9.16 is down 4.2 percentage points and 21 correct
 answers while using 2,508,065 fewer answer-model tokens (59.2% less). The
 alpha.1 indexer behavior changed 306/500 retrieved-session lists, whereas the
-alpha.2 reversion restores the 0.9.15 retrieval surface exactly.
+0.9.16 reversion restores the 0.9.15 retrieval surface exactly.
 
 Verify this bundle without making model or API calls:
 
 ```bash
 bin/reference-eval verify \
-  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.2
+  --round longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16
 ```
 
 Use the canonical round—not this candidate-only Tier B round—as the control

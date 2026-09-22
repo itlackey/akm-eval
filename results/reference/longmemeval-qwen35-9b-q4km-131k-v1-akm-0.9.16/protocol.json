@@ -1,7 +1,7 @@
 {
   "$schema": "../../../config/schemas/reference-protocol.schema.json",
   "schemaVersion": "akm.eval.reference-protocol.v1",
-  "id": "longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.2",
+  "id": "longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16",
   "benchmark": {
     "id": "longmemeval",
     "datasetSource": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/98d7416c24c778c2fee6e6f3006e7a073259d48f/longmemeval_s_cleaned.json",
@@ -52,5 +52,5 @@
     "reproductionSha256": "14dc225ce0ae4b5d280d6e90d4b07017dd06506a5d49a1a2de51bf8ec80ddaf2"
   },
   "controls": ["baseline", "raw-vector"],
-  "artifactManifest": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16-alpha.2/SHA256SUMS"
+  "artifactManifest": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/SHA256SUMS"
 }

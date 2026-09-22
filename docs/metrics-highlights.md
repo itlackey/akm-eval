@@ -72,29 +72,32 @@ Older n=200/DeepSeek reports under `runs/` remain historical experiments; they
 are not the current official result. Agentic-coding measurements belong in
 [`akm-bench`](https://github.com/itlackey/akm-bench), not this memory-eval repo.
 
-## Published-package follow-ups (2026-09-11 through 2026-09-21)
+## Published-package follow-ups (2026-09-11 through 2026-09-22)
 
-The 0.9.15, 0.9.16-alpha.1, and 0.9.16-alpha.2 npm packages were subsequently
-run as AKM-only arms against the same frozen controls:
+The 0.9.15 and 0.9.16-alpha.1 packages were run as AKM-only arms against the
+same frozen controls. The completed alpha.2 arm is recorded as the final
+0.9.16 result after a source-diff audit confirmed that the final tag changes
+only version/changelog metadata and byte-preserving piped-stdout transport,
+not score-affecting behavior used by this benchmark:
 
 | Arm | Accuracy | Correct | Answer-model tokens | Operational wall time |
 | --- | ---: | ---: | ---: | ---: |
 | AKM 0.9.15 published package | 36.4% | 182/500 | 1,731,030 | ~1h 33m 32s |
 | AKM 0.9.16-alpha.1 published package | 39.6% | 198/500 | 4,239,238 | ~1h 42m 1s |
-| AKM 0.9.16-alpha.2 `@next` package | 35.4% | 177/500 | 1,731,173 | 1h 10m 43s |
+| AKM 0.9.16 published package | 35.4% | 177/500 | 1,731,173 | 1h 10m 43s |
 
 The alpha improved accuracy by 3.2 percentage points and 16 answers over the
 published 0.9.15 package, but used 2,508,208 more answer-model tokens (144.9%
 more). It scored 11.0 points above raw vector and 0.4 points above full context.
 
-Alpha.2 reverted the alpha.1 indexer behavior and restored the 0.9.15 retrieval
+The 0.9.16 release reverted the alpha.1 indexer behavior and restored the 0.9.15 retrieval
 surface exactly: all 500 provenance lists, contexts, and input-token counts
 match 0.9.15. It scored 35.4%, down 4.2 points from alpha.1 while using 59.2%
 fewer answer-model tokens. Its bundle separates the exact retrieval equivalence
 from generation and judge variance under the newer serving runtime.
 
 These follow-ups are Tier B, not replacements for the Tier A reference round.
-The first two used an operator-approved mixed CUDA/Intel pool. Alpha.2 used the
+The first two used an operator-approved mixed CUDA/Intel pool. 0.9.16 used the
 pre-existing Intel/SYCL endpoint directly without changing it, but that
 service's newer llama.cpp runtime and repeat penalty differ from Tier A. The
 checksum bundles preserve the complete answer/verdict evidence and timing

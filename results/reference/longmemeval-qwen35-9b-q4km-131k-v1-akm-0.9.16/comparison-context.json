@@ -1,6 +1,6 @@
 {
   "schemaVersion": "akm.eval.comparison-context.v1",
-  "candidate": "akm-cli@0.9.16-alpha.2",
+  "candidate": "akm-cli@0.9.16",
   "referenceRound": "longmemeval-qwen35-9b-q4km-131k-v1",
   "strictReferenceCompatible": false,
   "strictComparisonBlockers": [
