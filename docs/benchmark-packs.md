@@ -43,9 +43,11 @@ Current trust policy:
 ### External memory backends
 
 - `none`, `raw-vector`, and `akm` are real, evaluated memory backends today. `akm` is a subprocess
-  integration against the akm CLI (`^0.9`, reachable via `AKM_EVAL_AKM_CMD`); see
-  `docs/memory-backends.md` for its full contract, hermetic layout, and the declared retrieval
-  ceiling its frontmatter-synthesis rule sets.
+  integration against an explicitly selected akm CLI. Published targets are
+  installed into versioned images with `--akm-version`; unpublished checkouts
+  are built into content-addressed images with `--akm-source`. See
+  `docs/memory-backends.md` for its full contract, hermetic layout, and the
+  declared retrieval ceiling its frontmatter-synthesis rule sets.
 
 ### `tau-bench`
 

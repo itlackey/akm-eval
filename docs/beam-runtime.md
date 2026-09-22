@@ -2,7 +2,7 @@
 
 This repo's BEAM integration depends on the upstream evaluator from `mohammadtavakoli78/BEAM`.
 
-This document pins the upstream source and local runtime-setup path used here.
+This document pins the upstream source and container runtime used here.
 
 ## Upstream source
 
@@ -88,7 +88,5 @@ bin/doctor --pack beam
 - Supported judge inputs today:
   - `OPENAI_API_KEY` with the upstream default OpenAI endpoint
   - `OPENAI_BASE_URL` for an OpenAI-compatible local judge endpoint, with any needed API key handled by that endpoint
-
-This reduces wasted runs by surfacing missing credentials before answer generation starts.
 
 This reduces wasted runs by surfacing missing credentials before answer generation starts.

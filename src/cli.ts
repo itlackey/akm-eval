@@ -244,6 +244,10 @@ function summaryCommand(args: string[]): number {
 
 export async function main(): Promise<number> {
   const args = normalizeCliArgs(process.argv);
+  if (args[0] === "-h" || args[0] === "--help" || args[1] === "-h" || args[1] === "--help") {
+    console.log(usage());
+    return 0;
+  }
   if (args.length === 0) {
     console.log(usage());
     return 1;

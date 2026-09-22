@@ -19,24 +19,21 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 
 ## Main Gaps
 
-- `memory.backend: akm` is a real, evaluated adapter (subprocess akm CLI,
-  deterministic frontmatter synthesis, hermetic per-instance state) — see
-  `docs/memory-backends.md`. Published targets use an explicit version-selected
-  image; source targets use `AKM_EVAL_AKM_CMD` plus a read-only source mount.
 - BEAM still needs external dataset prep and a real judge endpoint.
 - `tau-bench` and `longmemeval` still have runner/path asymmetries.
 
 ## External Dependencies
 
 - BEAM needs the upstream checkout, prepared datasets, and judge credentials.
-- AKM memory integration needs an explicit published version or mounted source
-  checkout; it does not require a host CLI installation.
+- AKM memory integration requires an explicit published version or source
+  checkout; both are built into versioned Docker images and do not require a
+  host CLI installation.
 
 ## Doc Gaps
 
-- Status is spread across several docs instead of one compact operator matrix.
 - The BEAM handoff path could be shorter and more procedural.
-- Legacy setup has been removed.
+- More provider-specific, copy-and-edit config examples would make custom
+  OpenAI-compatible deployments easier to start safely.
 
 ## Test Gaps
 
@@ -49,5 +46,5 @@ This repo is scoped to memory / long-term-recall benchmarks. Coding benchmarks
 
 1. Finalize BEAM operator handoff and evidence capture.
 2. Add regression tests for blocked packs and blocked memory backends.
-3. Consolidate operator status into one runnable/blocked matrix.
+3. Add tested provider-specific starter configs without embedding secrets.
 4. Keep smoke configs, pack READMEs, and top-level docs synchronized with actual support.

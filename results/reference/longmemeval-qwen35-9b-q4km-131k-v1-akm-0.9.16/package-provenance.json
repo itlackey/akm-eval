@@ -1,0 +1,12 @@
+{
+  "package": "akm-cli",
+  "requestedDistTag": "next",
+  "resolvedVersion": "0.9.16-alpha.2",
+  "distShasum": "8b870a2da1c05a2eb15bed4da57403e8e7cb4753",
+  "distIntegrity": "sha512-LAOG/iOH4hKPO1dzR2Wab0NnF6Sj4qRHNL6nuDx64SKivHiqMBSzxG8IyvUswkp+ORubsSgNEu0s+9un538yEQ==",
+  "distTarball": "https://registry.npmjs.org/akm-cli/-/akm-cli-0.9.16-alpha.2.tgz",
+  "sourceTag": "v0.9.16-alpha.2",
+  "sourceGitSha": "54a20002c315f4fb55bd4dc490b933809d741369",
+  "sourceTreeFingerprint": "e8602016bff7b9698a501eadcd746f73d67a0fde",
+  "evaluatorImageRuntimeFingerprint": "be8242f150235650afbe901ce9e6f9456a89710b"
+}

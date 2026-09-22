@@ -196,6 +196,24 @@ function runOperatorWrapperWithStubDocker(
 }
 
 describe("docker-first operator wrappers", () => {
+  test("help is available without Docker or a host toolchain", () => {
+    for (const [wrapper, args] of [
+      ["bin/akm-eval", ["--help"]],
+      ["bin/doctor", ["--help"]],
+      ["bin/eval", ["--help"]],
+      ["bin/downloads", ["--help"]],
+      ["bin/matrix", ["--help"]],
+      ["bin/report", ["--help"]],
+      ["bin/summary", ["--help"]],
+      ["bin/compare", ["--help"]],
+    ] as const) {
+      const result = runOperatorWrapperWithStubDocker(wrapper, [...args]);
+      expect(result.status).toBe(0);
+      expect(result.invocations).toEqual([]);
+      expect(result.forbiddenCalls).toEqual([]);
+    }
+  });
+
   test("probe refuses an implicit target before starting Docker", () => {
     const result = runOperatorWrapperWithStubDocker("bin/probe");
     expect(result.status).toBe(2);

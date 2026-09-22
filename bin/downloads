@@ -2,5 +2,9 @@
 set -euo pipefail
 
 BIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  printf '%s\n' 'usage: bin/downloads [LongMemEval|LoCoMo]'
+  exit 0
+fi
 export AKM_EVAL_DATASETS_WRITABLE=1
 exec bash "$BIN_DIR/_akm_eval_cli_image.sh" bun src/cli.ts downloads "$@"

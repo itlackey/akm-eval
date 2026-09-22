@@ -4,6 +4,34 @@ Use `bin/eval` for a single pack/variant and `bin/matrix` to inspect a config.
 All `bin/...` operator commands run in pinned images; the host is not a pack
 runtime.
 
+## Choose a path
+
+| Goal | Start with | Model calls? |
+| --- | --- | --- |
+| Verify the tracked official evidence | `bin/reference-eval verify` | No |
+| Check AKM retrieval behavior | `bin/probe --akm-version 0.9.16` | No |
+| Preview a configured run | Add `--dry-run` to `bin/memory-eval` | No |
+| Try all three memory arms on five LoCoMo questions | `config/common/locomo-akm-ab.json` | Yes: answer model only |
+| Try all three arms on five LongMemEval questions | `config/common/longmemeval-akm-ab.json` | Yes: answer model and GPT-4o judge |
+| Compare a release with the frozen full-500 controls | `bin/reference-eval run-akm` | Yes: local answer model and GPT-4o judge |
+
+For the shortest end-to-end setup check:
+
+```bash
+bin/downloads LoCoMo
+cp .env.example ../akm-eval.env
+# Set OPENAI_API_KEY in the copied file.
+export AKM_EVAL_ENV_FILE="$(cd .. && pwd)/akm-eval.env"
+bin/memory-eval locomo --akm-version 0.9.16 \
+  --config config/common/locomo-akm-ab.json \
+  --out runs/locomo-0.9.16-smoke --dry-run
+```
+
+Review the printed provider, arms, question count, AKM version, and output
+directory. Remove `--dry-run` to execute the five-question-per-arm smoke. A
+smoke confirms wiring; it is not statistically meaningful and must not be
+published as a benchmark score.
+
 ## Default flow
 
 1. Pick a committed config in `config/common/`. For the reusable full-500
@@ -41,6 +69,10 @@ is preinstalled. It never creates a host venv.
   SHA, full tree fingerprint, and dirty state.
 - Use `host.docker.internal` rather than `localhost` for an API server running
   on the host.
+- To use another OpenAI-compatible endpoint, copy a config into the ignored
+  `config/examples/runs/` directory and change that copy's provider `baseURL`,
+  model, and `{env:VARIABLE}` key reference. Add a nonstandard variable name to
+  `AKM_EVAL_ENV_ALLOWLIST`; never put the credential value in the config.
 
 The checkout is mounted read-only. Dedicated nested mounts keep `runs/`
 host-visible and owned by the invoking uid; `datasets/` is read-only during
@@ -95,11 +127,11 @@ invalidate `none` or `raw-vector` controls. Raw-vector's implementation is
 included in its own code hash, so changing it does invalidate vector
 checkpoints.
 
-For the official fixed-model 0.9.15/full-500 path:
+For the current official fixed-model 0.9.16/full-500 path:
 
 ```bash
-bin/reference-eval run-akm --akm-source ../akm \
-  --out runs/qwen-reference-akm-0.9.15
+bin/reference-eval run-akm --akm-version 0.9.16 \
+  --out runs/qwen-reference-akm-0.9.16
 ```
 
 See [`reference-results.md`](./reference-results.md) for model containers,

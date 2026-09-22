@@ -118,6 +118,35 @@ describe("official reference workflow", () => {
     expect(result.stderr).toContain("AKM_EVAL_BASELINE_BASE_URL is unset");
   });
 
+  test("LoCoMo dry-run does not claim that its deterministic scorer uses a cloud judge", () => {
+    const result = spawnSync(
+      "bash",
+      [
+        "bin/memory-eval",
+        "locomo",
+        "--config",
+        "config/common/locomo-akm-ab.json",
+        "--variant",
+        "baseline",
+        "--out",
+        "runs/locomo-dry-run-test",
+        "--dry-run",
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          AKM_EVAL_IN_CONTAINER: "1",
+          OPENAI_API_KEY: "answer-test-placeholder",
+        },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("memory-eval: judge       deterministic (no LLM judge)");
+    expect(result.stdout).not.toContain("judge       deterministic (no LLM judge) via");
+  });
+
   test("strict comparison accepts a fully evidenced compatible AKM artifact", () => {
     const candidateDir = stageCompatibleCandidate();
     try {

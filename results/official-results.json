@@ -1,7 +1,7 @@
 {
   "$schema": "../config/schemas/official-results.schema.json",
   "schemaVersion": "akm.eval.official-results.v1",
-  "updatedAt": "2026-09-11T05:40:56Z",
+  "updatedAt": "2026-09-22T14:25:12Z",
   "policy": {
     "canonical": true,
     "appendOnly": true,
@@ -556,6 +556,148 @@
         "Compared with the published AKM 0.9.15 package arm, 0.9.16-alpha.1 gains 3.2 percentage points and 16 correct answers while using 2,508,208 more answer-model tokens (144.9% more).",
         "The evaluated npm artifact was akm-cli@0.9.16-alpha.1 (dist SHA-1 6af4b2ee710dc61a81fbf0e93c24ed24271ca21f; integrity sha512-mkq4osR3Faf/xgpEOE3dilJDN4g1amNhTET7AvMMkqBDdz3YGeaz8dwBVRkra05qHfitOrErWo7BNFOQznmQCw==), corresponding to tag v0.9.16-alpha.1 at the recorded source commit.",
         "Tier B records the checkpointed serving change: 188 prior direct-CUDA answers plus the authorized three-GPU Bifrost pool. The generated result metadata retains the original configured CUDA runtime field; protocol.json and routing-summary.json provide the complete mixed-runtime attestation.",
+        "The official evaluator log records no judge token usage, so token totals exclude GPT-4o judging."
+      ]
+    },
+    {
+      "id": "longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16",
+      "recordedAt": "2026-09-22T01:52:04Z",
+      "status": "complete",
+      "tier": "B",
+      "benchmark": {
+        "id": "longmemeval",
+        "datasetSha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+        "datasetSourceRevision": "xiaowu0162/longmemeval-cleaned@98d7416c24c778c2fee6e6f3006e7a073259d48f",
+        "questionCount": 500,
+        "questionIdsSha256": "a4849b8afda6b6ed31ead4fc28d00784d2d5fef945be87642f5ce3ab710b21c4",
+        "sample": "full",
+        "evaluatorRepoCommit": "c0086dfe98ded004e2590ef0833aeb5db79e9d29",
+        "evaluatorCodeSha256": "3f1ec16a0696df0b7b5ad52ce1a79908f21236e309d151bc5d1c704cb12ab6c0",
+        "promptContract": "longmemeval-v2"
+      },
+      "answerModel": {
+        "requestedModel": "qwen3.5-9b",
+        "resolvedModels": {
+          "qwen3.5-9b": 500
+        },
+        "artifact": "Qwen3.5-9B-Q4_K_M.gguf",
+        "artifactSha256": "cd76ec205963b3b33350093e6904d9de16c4e666fd104e1f632d25c7f15f2a13",
+        "quantization": "Q4_K_M",
+        "parameters": 8953803264,
+        "runtimeImage": "ghcr.io/ggml-org/llama.cpp@sha256:0e537b170ac50a945dcaf258ba9b157c911abf0c9df18d8f2f9fd9d08bec0b2c (b10920 Intel/SYCL; ctx=32768; parallel=2; repeat-penalty=1.1)",
+        "options": {
+          "temperature": 0,
+          "max_tokens": 256,
+          "seed": 1337,
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        }
+      },
+      "judge": {
+        "requestedModel": "gpt-4o",
+        "resolvedModels": {
+          "gpt-4o-2024-08-06": 500
+        },
+        "temperature": 0,
+        "usageCaptured": false
+      },
+      "akmCandidate": {
+        "label": "AKM 0.9.16 published package",
+        "sourceBranch": "release/0.9.16",
+        "sourceGitSha": "f2c16f624b3e4c47c943ba46771dd9b93b1e3249",
+        "sourceTreeFingerprint": "1b3901f54039b0022e963319c9d038d383ece5e1",
+        "sourceDirty": false,
+        "reportedCliVersion": "0.9.16"
+      },
+      "protocol": {
+        "topK": 5,
+        "fragmentContext": {
+          "mode": "lead",
+          "maxChars": 3200
+        },
+        "configSha256": "1e7579d42b8f681941f1a47cde8da1c3e48fdfbc64449cf6df50f43b1b0f249e",
+        "configPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1/recorded-config.json",
+        "reproductionConfigPath": "config/reference/longmemeval-qwen35-9b-q4km-131k-v1.json",
+        "reproductionConfigSha256": "14dc225ce0ae4b5d280d6e90d4b07017dd06506a5d49a1a2de51bf8ec80ddaf2",
+        "referenceProtocolPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/protocol.json",
+        "referenceProtocolSha256": "943c65742699f86fd015df74cd4d587c965aea07aea63b3da68bf347588a1ba1",
+        "artifactManifestPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/SHA256SUMS",
+        "artifactManifestSha256": "0963c0cfafa3533f18dc3e619ee197fc179c3604b81c50859f663c96bca16bd5",
+        "artifactRoot": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16",
+        "servingTopology": "All 500 answers used the pre-existing krang fast-a770 endpoint directly. The service was not stopped, restarted, reconfigured, repointed, or placed behind temporary routing. It served the checksum-pinned Qwen 3.5 9B GGUF with llama.cpp b10920 on Intel/SYCL, 32,768 context, two slots, and --repeat-penalty 1.1. This differs from the frozen Tier A runtime, so the result is Tier B and wall time is not a controlled hardware comparison."
+      },
+      "arms": [
+        {
+          "id": "akm-memory-lead",
+          "label": "AKM 0.9.16 published package, lead fragments",
+          "memoryBackend": "akm",
+          "score": 0.354,
+          "correct": 177,
+          "questionCount": 500,
+          "categoryAccuracy": {
+            "single-session": 0.777778,
+            "multi-session": 0.142857,
+            "preference": 0.1,
+            "temporal": 0.120301,
+            "knowledge-update": 0.525641
+          },
+          "retrievalMetrics": {
+            "queryCount": 500,
+            "precisionAtK": 0.4805,
+            "recallAtK": 0.8477,
+            "mrr": 0.864267,
+            "ndcgAtK": 0.846663
+          },
+          "contextMetrics": {
+            "queryCount": 500,
+            "nonAbstentionQueryCount": 470,
+            "literalAnswerContainment": 0.47234,
+            "evidenceHitQueryCount": 451,
+            "evidenceHitContextAnswerContainment": 0.485588,
+            "evidenceHitButAnswerMissingCount": 232
+          },
+          "tokens": {
+            "prompt": 1728013,
+            "completion": 3160,
+            "total": 1731173,
+            "averagePerQuestion": 3462.346,
+            "scope": "answer-model-only"
+          },
+          "timing": {
+            "wallMs": 4243400,
+            "wallPrecision": "exact",
+            "wallBasis": "Single uninterrupted container invocation from the normalized result's startedAt through finishedAt, including retrieval, 500 answer calls, and 500 GPT-4o verdicts.",
+            "answerModelLatencyMs": 1348944
+          },
+          "retries": 0,
+          "resolvedAnswerModels": {
+            "qwen3.5-9b": 500
+          },
+          "resolvedJudgeModels": {
+            "gpt-4o-2024-08-06": 500
+          },
+          "checkpointSignature": "552ece4d1dab3cf1e5e2584b446ead152abe01c0135d11335c80bcc7159b65ae",
+          "artifacts": {
+            "resultPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/akm-memory-lead/result.json",
+            "resultSha256": "ddb505ef2dc4413a3e4565a585ca902e5fd4b5bb3a6723e00728980e820b659c",
+            "predictionsPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/akm-memory-lead/predictions.jsonl",
+            "predictionsSha256": "d7fb1bf90a74ce7ed37220ae2687dc04a5b66a74017a29fef9002886d4ae61d2",
+            "judgeLogPath": "results/reference/longmemeval-qwen35-9b-q4km-131k-v1-akm-0.9.16/akm-memory-lead/judge-results.jsonl",
+            "judgeLogSha256": "4d7c065e4a91c7777fdc7ce05e182b3111e8ca0f107a29e110f8cf3092ee14ba"
+          }
+        }
+      ],
+      "comparisons": [],
+      "notes": [
+        "Frozen Tier A baseline and raw-vector controls were reused; neither control was rerun or altered.",
+        "AKM 0.9.16 beats raw-vector by 6.8 percentage points and 34 correct answers while using 68.5% fewer answer-model tokens.",
+        "AKM 0.9.16 trails the full-context baseline by 3.8 percentage points and 19 correct answers while using 96.8% fewer answer-model tokens.",
+        "Compared with 0.9.16-alpha.1, 0.9.16 loses 4.2 percentage points and 21 correct answers while using 2,508,065 fewer answer-model tokens (59.2% less).",
+        "The indexer reversion restores the 0.9.15 retrieval surface exactly: 500/500 retrieval provenance lists, retrieved contexts, and input-token counts match. Of 500 hypotheses, 444 are identical; the 56 changed generations and three judge flips on identical answers explain the remaining five-answer score difference from 0.9.15.",
+        "This score is adopted for the published akm-cli@0.9.16 release (dist SHA-1 79a46f61ce7ed81d43e0064f19a98c7d2d14f0bd; integrity sha512-5PJGaBTN3zVmDA2WKn+WL3Ho31wQoZupAbw1kytd8qRlAUAv/HPkMX/1vSBDl3qpMj4dcPjolQFnrhE3gnggMA==), tag v0.9.16 at f2c16f624b3e4c47c943ba46771dd9b93b1e3249.",
+        "The paid run itself used the immediately preceding akm-cli@next artifact recorded in package-provenance.json. The release-equivalence audit found that v0.9.16 adds only version/changelog updates and a byte-preserving piped-stdout transport fix; it does not change indexing, retrieval, fragment selection, context construction, or the bounded JSON documents exercised by this run. The original package identity remains in the immutable evidence.",
+        "The strict comparison tool correctly refused to mark this result reference-compatible because the answer-model runtime differs from the frozen Tier A control runtime. comparison-context.json records the observed deltas without relabeling them as a strict comparison.",
         "The official evaluator log records no judge token usage, so token totals exclude GPT-4o judging."
       ]
     }

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "akm.eval.wall-time.v1",
+  "startedAt": "2026-09-22T00:33:38.996Z",
+  "finishedAt": "2026-09-22T01:44:22.396Z",
+  "resumedQuestionCount": 0,
+  "wallMs": 4243400,
+  "precision": "exact",
+  "basis": "The normalized result's finishedAt minus startedAt for the single uninterrupted container invocation, including retrieval, 500 answer calls, and 500 GPT-4o verdicts."
+}
