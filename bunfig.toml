@@ -1,0 +1,3 @@
+[test]
+# The tests inside corpus/library belong to its skills. They are not tests of this repository.
+pathIgnorePatterns = ["corpus/**", "private/**"]

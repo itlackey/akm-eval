@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# Makes the private assets of every eval and benchmark in private/. See README.md.
+#
+#   ./generate-assets [--only <name,...>] [--seed <n>]
+#
+# For each evals/<name>/generate and benchmarks/<name>/generate that exists, runs
+#   <script> --seed <seed> --out private/<name>
+set -euo pipefail
+
+die() {
+  echo "generate-assets: $*" >&2
+  exit 2
+}
+
+usage() {
+  cat <<'EOF'
+Usage: ./generate-assets [--only <name,...>] [--seed <n>]
+
+Makes the private assets of every eval and benchmark in private/<name>.
+
+  --only <name,...>  make assets only for these evals or benchmarks
+  --seed <n>         use this seed for this run (private/seed is left as it is)
+
+The first run creates private/ and private/seed, a random 64-bit integer.
+private/ is gitignored. It is never published, so never commit it or upload it.
+EOF
+}
+
+only=""
+seed_arg=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only) [ $# -ge 2 ] || die "--only needs a value"; only="$2"; shift 2 ;;
+    --only=*) only="${1#--only=}"; shift ;;
+    --seed) [ $# -ge 2 ] || die "--seed needs a value"; seed_arg="$2"; shift 2 ;;
+    --seed=*) seed_arg="${1#--seed=}"; shift ;;
+    -h | --help) usage; exit 0 ;;
+    *) usage >&2; die "unknown argument: $1" ;;
+  esac
+done
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# A seed is an unsigned 64-bit integer written in decimal.
+valid_seed() {
+  [[ "$1" =~ ^[0-9]{1,20}$ ]] || return 1
+  [ "${#1}" -lt 20 ] || [ "$1" \< "18446744073709551616" ]
+}
+
+mkdir -p private
+if [ ! -s private/seed ]; then
+  od -An -N8 -tu8 /dev/urandom | tr -d ' \n' > private/seed
+  echo >> private/seed
+  echo "generate-assets: made private/seed"
+fi
+
+if [ -n "$seed_arg" ]; then
+  valid_seed "$seed_arg" || die "--seed must be an integer from 0 to 18446744073709551615"
+  seed="$seed_arg"
+  seed_from="--seed"
+else
+  read -r seed < private/seed || true
+  valid_seed "$seed" || die "private/seed does not hold an integer. Delete it to make a new one."
+  seed_from="private/seed"
+fi
+
+# Find the generate scripts. A name is the folder name under evals/ or benchmarks/.
+shopt -s nullglob
+names=()
+scripts=()
+for script in evals/*/generate benchmarks/*/generate; do
+  name="${script#*/}"
+  name="${name%/generate}"
+  if [ "${#names[@]}" -gt 0 ]; then
+    for seen in "${names[@]}"; do
+      [ "$seen" != "$name" ] || die "two folders are named $name, so both would write to private/$name"
+    done
+  fi
+  names+=("$name")
+  scripts+=("$script")
+done
+
+# --only picks some of them. Each name must be a real folder.
+if [ -n "$only" ]; then
+  wanted=()
+  IFS=',' read -r -a wanted <<< "$only"
+  for w in "${wanted[@]}"; do
+    [[ "$w" =~ ^[A-Za-z0-9._-]+$ && "$w" != "." && "$w" != ".." ]] || die "not a valid name: $w"
+    [ -d "evals/$w" ] || [ -d "benchmarks/$w" ] || die "no eval or benchmark named $w"
+  done
+  picked_names=()
+  picked_scripts=()
+  if [ "${#names[@]}" -gt 0 ]; then
+    for i in "${!names[@]}"; do
+      for w in "${wanted[@]}"; do
+        if [ "${names[$i]}" = "$w" ]; then
+          picked_names+=("${names[$i]}")
+          picked_scripts+=("${scripts[$i]}")
+        fi
+      done
+    done
+  fi
+  for w in "${wanted[@]}"; do
+    found=0
+    if [ "${#picked_names[@]}" -gt 0 ]; then
+      for p in "${picked_names[@]}"; do [ "$p" != "$w" ] || found=1; done
+    fi
+    [ "$found" = 1 ] || echo "generate-assets: $w has no generate script, so it has no private assets"
+  done
+  names=()
+  scripts=()
+  if [ "${#picked_names[@]}" -gt 0 ]; then
+    names=("${picked_names[@]}")
+    scripts=("${picked_scripts[@]}")
+  fi
+fi
+
+if [ "${#names[@]}" -eq 0 ]; then
+  echo "generate-assets: no generate scripts found, so there is nothing to make yet. private/ is ready."
+  exit 0
+fi
+
+made=()
+failed=()
+for i in "${!names[@]}"; do
+  name="${names[$i]}"
+  script="${scripts[$i]}"
+  echo "generate-assets: $script -> private/$name (seed from $seed_from)"
+  mkdir -p "private/$name"
+  if [ ! -x "$script" ]; then
+    echo "generate-assets: $script is not executable" >&2
+    failed+=("$name")
+  elif "$script" --seed "$seed" --out "private/$name"; then
+    made+=("$name")
+  else
+    echo "generate-assets: $script failed" >&2
+    failed+=("$name")
+  fi
+done
+
+if [ "${#made[@]}" -gt 0 ]; then
+  printf 'generate-assets: made'
+  printf ' private/%s' "${made[@]}"
+  printf '\n'
+fi
+if [ "${#failed[@]}" -gt 0 ]; then
+  echo "generate-assets: failed: ${failed[*]}" >&2
+  exit 1
+fi
