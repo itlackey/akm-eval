@@ -1,0 +1,150 @@
+{
+  "api_key_env": "OPENAI_API_KEY",
+  "default_config": "smart_chat",
+
+  "configs": {
+    "smart_chat": {
+      "model": "gpt-4o-mini",
+      "params": {
+        "temperature": 0.7,
+        "max_tokens": 2000
+      },
+      "context_strategy": "relevant"
+    },
+
+    "powerful_chat": {
+      "model": "gpt-4o",
+      "params": {
+        "temperature": 0.7,
+        "max_tokens": 4000
+      },
+      "context_strategy": "full"
+    },
+
+    "reasoning_agent": {
+      "model": "o1-preview",
+      "params": {
+        "max_tokens": 8000
+      },
+      "context_strategy": "full"
+    },
+
+    "fast_embed": {
+      "model": "text-embedding-3-small",
+      "params": {
+        "dimensions": 512
+      },
+      "context_strategy": "minimal"
+    },
+
+    "high_quality_embed": {
+      "model": "text-embedding-3-large",
+      "params": {
+        "dimensions": 3072
+      },
+      "context_strategy": "relevant"
+    },
+
+    "content_safety": {
+      "model": "omni-moderation-latest",
+      "auto_invoke": true
+    }
+  },
+
+  "endpoints": {
+    "embeddings": {
+      "path": "/v1/embeddings",
+      "base_url": "https://api.openai.com",
+      "default_model": "text-embedding-3-small",
+      "description": "Generate embeddings for semantic search and similarity comparison",
+      "required_params": ["input"],
+      "optional_params": ["model", "encoding_format", "dimensions", "user"],
+      "supports_batch": true,
+      "max_batch_size": 2048,
+      "available_models": [
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+        "text-embedding-ada-002"
+      ],
+      "cost_per_1k_tokens": {
+        "text-embedding-3-small": 0.00002,
+        "text-embedding-3-large": 0.00013,
+        "text-embedding-ada-002": 0.0001
+      }
+    },
+
+    "moderation": {
+      "path": "/v1/moderations",
+      "base_url": "https://api.openai.com",
+      "default_model": "omni-moderation-latest",
+      "description": "Check content for policy violations",
+      "required_params": ["input"],
+      "optional_params": ["model"],
+      "supports_batch": false,
+      "available_models": [
+        "omni-moderation-latest",
+        "omni-moderation-2024-09-26",
+        "text-moderation-latest",
+        "text-moderation-stable"
+      ],
+      "output_schema": {
+        "flagged": "boolean",
+        "categories": "object",
+        "category_scores": "object"
+      },
+      "cost_per_1k_tokens": {
+        "omni-moderation-latest": 0.0,
+        "omni-moderation-2024-09-26": 0.0,
+        "text-moderation-latest": 0.0,
+        "text-moderation-stable": 0.0
+      }
+    },
+
+    "chat": {
+      "path": "/v1/chat/completions",
+      "base_url": "https://api.openai.com",
+      "default_model": "gpt-4o",
+      "description": "Generate chat completions for specialized subtasks",
+      "required_params": ["messages"],
+      "optional_params": ["model", "temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"],
+      "supports_streaming": true,
+      "available_models": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "gpt-4",
+        "gpt-3.5-turbo",
+        "o1-preview",
+        "o1-mini"
+      ],
+      "cost_per_1k_tokens": {
+        "gpt-4o": {
+          "input": 0.0025,
+          "output": 0.01
+        },
+        "gpt-4o-mini": {
+          "input": 0.00015,
+          "output": 0.0006
+        },
+        "gpt-4-turbo": {
+          "input": 0.01,
+          "output": 0.03
+        },
+        "gpt-4": {
+          "input": 0.03,
+          "output": 0.06
+        },
+        "gpt-3.5-turbo": {
+          "input": 0.0005,
+          "output": 0.0015
+        }
+      }
+    }
+  },
+
+  "budget": {
+    "max_tokens_per_request": 10000,
+    "max_tokens_per_session": 100000,
+    "warn_at_tokens": 75000
+  }
+}

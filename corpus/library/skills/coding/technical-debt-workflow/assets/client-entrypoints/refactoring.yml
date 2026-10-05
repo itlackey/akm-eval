@@ -1,0 +1,28 @@
+name: Refactoring verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run the same verification used locally
+        run: scripts/skills/coding/technical-debt-workflow/refactoring/verify --current-only
+      - name: Preserve verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refactoring-evidence
+          path: .refactoring/
+          if-no-files-found: ignore
+          retention-days: 14

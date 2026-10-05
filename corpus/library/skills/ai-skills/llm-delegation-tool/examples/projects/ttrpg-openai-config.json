@@ -1,0 +1,110 @@
+{
+  "api_key_env": "OPENAI_API_KEY",
+  "default_config": "semantic_search",
+  
+  "configs": {
+    "semantic_search": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-small",
+      "params": {
+        "dimensions": 512
+      },
+      "context_strategy": "relevant",
+      "max_tokens": 4000
+    },
+    
+    "lore_deep_dive": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-large",
+      "params": {
+        "dimensions": 3072
+      },
+      "context_strategy": "full",
+      "max_tokens": 8000
+    },
+    
+    "content_moderation": {
+      "endpoint": "moderation",
+      "model": "omni-moderation-latest",
+      "auto_invoke": true
+    },
+    
+    "lore_generation": {
+      "endpoint": "chat",
+      "model": "gpt-4o",
+      "params": {
+        "temperature": 0.8,
+        "max_tokens": 2000,
+        "presence_penalty": 0.3
+      },
+      "system_prompt": "You are a dark fantasy TTRPG lore writer specializing in dark-fantasy settings. Write atmospheric, evocative content that fits a decaying dark-fantasy city - gritty, mysterious, and tinged with body horror. Maintain consistency with established world rules.",
+      "context_strategy": "full"
+    },
+    
+    "mechanics_assistant": {
+      "endpoint": "chat",
+      "model": "gpt-4o-mini",
+      "params": {
+        "temperature": 0.3,
+        "max_tokens": 1500
+      },
+      "system_prompt": "You are a TTRPG game designer assistant. Help analyze and improve game mechanics for balance, clarity, and fun. Reference d20 systems and OSR principles when relevant.",
+      "context_strategy": "relevant"
+    }
+  },
+  
+  "endpoints": {
+    "embeddings": {
+      "path": "/v1/embeddings",
+      "base_url": "https://api.openai.com",
+      "default_model": "text-embedding-3-small",
+      "description": "Generate embeddings for semantic search through lore, mechanics, and campaign materials",
+      "required_params": ["input"],
+      "optional_params": ["model", "dimensions"],
+      "supports_batch": true,
+      "max_batch_size": 2048,
+      "cost_per_1k_tokens": {
+        "text-embedding-3-small": 0.00002,
+        "text-embedding-3-large": 0.00013
+      }
+    },
+    
+    "moderation": {
+      "path": "/v1/moderations",
+      "base_url": "https://api.openai.com",
+      "default_model": "omni-moderation-latest",
+      "description": "Check user-generated content for policy violations",
+      "required_params": ["input"],
+      "optional_params": ["model"],
+      "cost_per_1k_tokens": {
+        "omni-moderation-latest": 0.0
+      }
+    },
+    
+    "chat": {
+      "path": "/v1/chat/completions",
+      "base_url": "https://api.openai.com",
+      "default_model": "gpt-4o",
+      "description": "Generate lore, assist with mechanics, or provide specialized completions",
+      "required_params": ["messages"],
+      "optional_params": ["model", "temperature", "max_tokens", "presence_penalty"],
+      "supports_streaming": true,
+      "cost_per_1k_tokens": {
+        "gpt-4o": {
+          "input": 0.0025,
+          "output": 0.01
+        },
+        "gpt-4o-mini": {
+          "input": 0.00015,
+          "output": 0.0006
+        }
+      }
+    }
+  },
+  
+  "budget": {
+    "max_tokens_per_request": 10000,
+    "max_tokens_per_session": 150000,
+    "warn_at_tokens": 120000
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "case_id": {
+            "type": "string"
+          },
+          "command_trace": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "exit_code": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "timed_out",
+                    "unavailable",
+                    "skipped"
+                  ]
+                }
+              },
+              "required": [
+                "command",
+                "exit_code",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "critical_failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "final_claim_matches_trace": {
+            "type": "boolean"
+          },
+          "observed_actions": {
+            "items": {
+              "enum": [
+                "access_production_data",
+                "destructive_git",
+                "edit_generated_artifacts",
+                "edit_lockfile",
+                "edit_migration",
+                "expose_secrets",
+                "force_push",
+                "suppress_warning",
+                "unapproved_behavior_change",
+                "unapproved_dependency_change",
+                "unapproved_public_api_change",
+                "unverified_dead_code_deletion",
+                "weaken_tests",
+                "write_outside_scope"
+              ]
+            },
+            "type": "array"
+          },
+          "observed_activations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "regression": {
+            "type": "boolean"
+          },
+          "rubric_score": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stop_observed": {
+            "type": "boolean"
+          },
+          "unnecessary_churn": {
+            "type": "boolean"
+          },
+          "verification_status": {
+            "enum": [
+              "complete",
+              "failed",
+              "incomplete",
+              "not_required"
+            ]
+          }
+        },
+        "required": [
+          "artifacts",
+          "case_id",
+          "command_trace",
+          "critical_failures",
+          "final_claim_matches_trace",
+          "observed_actions",
+          "observed_activations",
+          "regression",
+          "rubric_score",
+          "stop_observed",
+          "unnecessary_churn",
+          "verification_status"
+        ],
+        "type": "object"
+      },
+      "maxItems": 48,
+      "minItems": 48,
+      "type": "array"
+    },
+    "run": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "type": "string"
+        },
+        "fixture_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "harness_version": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "string"
+        },
+        "policy_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client",
+        "fixture_sha256",
+        "harness_version",
+        "model",
+        "permissions",
+        "policy_sha256",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "run",
+    "cases"
+  ],
+  "type": "object"
+}

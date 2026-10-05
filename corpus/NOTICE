@@ -1,0 +1,83 @@
+NOTICE
+
+Everything in corpus/ is licensed under CC BY 4.0 (see LICENSE in this folder),
+except the items below. Each item keeps the licence named here. This file gives
+their attribution. Upstream licences were checked on 2026-10-05.
+
+Items marked Proprietary in the source library were not copied. See
+library/README.md.
+
+----------------------------------------------------------------------------
+1. OpenCode documentation pages (MIT)
+
+Copyright (c) 2025 opencode
+Source: https://opencode.ai/docs, kept in https://github.com/sst/opencode under
+packages/web/src/content/docs. The repository licence is MIT. Its text is at the
+end of this file.
+
+These 23 files are copies of OpenCode documentation pages, saved as Markdown
+with front matter added.
+
+  In library/skills/ai-skills/opencode-extensions/references/ (22 files):
+    acp.md, agents-docs.md, cli.md, commands.md, config-docs.md,
+    custom-tools.md, ecosystem.md, formatters.md, mcp-servers.md,
+    models.md, network.md, permissions.md, plugins-docs.md, providers.md,
+    rules.md, sdk-docs.md, server.md, share.md, skills.md, tools.md,
+    troubleshooting.md, tui.md
+
+  In library/commands/skills/ai-skills/opencode-extensions/references/ (1 file):
+    commands.md
+
+The other reference files for the same skill are short summaries of these pages.
+They are derived from them and fall under the same notice. They are agents.md,
+config.md, plugins.md and sdk.md in library/skills/ai-skills/opencode-extensions/
+references/, and the files in library/knowledge/skills/ai-skills/
+opencode-extensions/references/.
+
+----------------------------------------------------------------------------
+2. CGATS21_CRPC1.icc (ICC colour profile)
+
+File: library/skills/print/pdfx-print-pipeline/references/CGATS21_CRPC1.icc
+Copyright X-Rite, Inc. Made available by IDEAlliance, with permission of X-Rite,
+Inc.
+
+Licence: stated in the profile's own copyright tag. It may be used, embedded,
+exchanged, included in commercial software and shared without restriction. It
+may not be altered without written permission of IDEAlliance, except for single
+site use.
+
+The file is included unaltered. Do not edit it.
+
+----------------------------------------------------------------------------
+3. agent-cli-tools skill (MIT)
+
+Files: library/skills/ai-skills/agent-cli-tools/ and the files for the same
+skill under library/knowledge/skills/ai-skills/agent-cli-tools/.
+
+The skill marks itself "license: MIT" and names its author as "akm-shared
+contributors". It names no copyright holder. The MIT terms below apply to it.
+
+----------------------------------------------------------------------------
+MIT License text (items 1 and 3)
+
+MIT License
+
+Copyright (c) 2025 opencode
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

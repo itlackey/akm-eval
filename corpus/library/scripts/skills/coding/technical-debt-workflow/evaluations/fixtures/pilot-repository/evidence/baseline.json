@@ -1,0 +1,14 @@
+{
+  "checks": [
+    {
+      "command": "python3 scripts/skills/coding/technical-debt-workflow/run_pilot.py",
+      "exit_code": 0,
+      "name": "normalizer-contract",
+      "status": "passed",
+      "stdout": "6 contract cases passed"
+    }
+  ],
+  "generated_at": "2026-07-26T00:00:00+00:00",
+  "scope": "normalizer.py",
+  "status": "passed"
+}

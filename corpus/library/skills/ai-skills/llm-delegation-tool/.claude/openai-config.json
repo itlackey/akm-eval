@@ -1,0 +1,42 @@
+{
+  "api_key_env": "OPENAI_API_KEY",
+  
+  "configs": {
+    "coder": {
+      "model": "gpt-4o-mini",
+      "params": {
+        "temperature": 0.7,
+        "max_tokens": 2000
+      }
+    },
+    "embeddings": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-small",
+      "params": {
+        "dimensions": 512
+      }
+    }
+  },
+  
+  "endpoints": {
+    "chat": {
+      "path": "/v1/chat/completions",
+      "base_url": "https://api.openai.com",
+      "default_model": "gpt-4o-mini",
+      "required_params": ["messages"],
+      "available_models": ["gpt-4o-mini", "gpt-4o"]
+    },
+    "embeddings": {
+      "path": "/v1/embeddings",
+      "base_url": "https://api.openai.com",
+      "default_model": "text-embedding-3-small",
+      "required_params": ["input"]
+    }
+  },
+  
+  "budget": {
+    "max_tokens_per_request": 5000,
+    "max_tokens_per_session": 50000,
+    "warn_at_tokens": 40000
+  }
+}

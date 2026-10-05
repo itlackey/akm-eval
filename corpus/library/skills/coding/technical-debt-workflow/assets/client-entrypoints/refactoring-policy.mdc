@@ -1,0 +1,8 @@
+---
+description: Applies the canonical evidence-first policy to technical-debt assessment and refactoring work.
+alwaysApply: true
+---
+
+Read `knowledge/coding/technical-debt/refactoring-policy.md` as the canonical
+policy. Route cleanup work through `skills/coding/technical-debt-workflow`. This
+file adds only Cursor discovery metadata.

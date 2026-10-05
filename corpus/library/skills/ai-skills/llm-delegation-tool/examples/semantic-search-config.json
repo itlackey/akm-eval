@@ -1,0 +1,65 @@
+{
+  "api_key_env": "OPENAI_API_KEY",
+  "default_config": "semantic_search",
+  
+  "configs": {
+    "semantic_search": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-small",
+      "params": {
+        "dimensions": 512
+      },
+      "context_strategy": "relevant",
+      "max_tokens": 4000
+    },
+    
+    "deep_search": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-large",
+      "params": {
+        "dimensions": 3072
+      },
+      "context_strategy": "full",
+      "max_tokens": 8000
+    },
+    
+    "quick_embed": {
+      "endpoint": "embeddings",
+      "model": "text-embedding-3-small",
+      "params": {
+        "dimensions": 256
+      },
+      "context_strategy": "minimal",
+      "max_tokens": 1000
+    }
+  },
+  
+  "endpoints": {
+    "embeddings": {
+      "path": "/v1/embeddings",
+      "base_url": "https://api.openai.com",
+      "default_model": "text-embedding-3-small",
+      "description": "Generate embeddings for semantic search and similarity comparison",
+      "required_params": ["input"],
+      "optional_params": ["model", "encoding_format", "dimensions", "user"],
+      "supports_batch": true,
+      "max_batch_size": 2048,
+      "available_models": [
+        "text-embedding-3-small",
+        "text-embedding-3-large",
+        "text-embedding-ada-002"
+      ],
+      "cost_per_1k_tokens": {
+        "text-embedding-3-small": 0.00002,
+        "text-embedding-3-large": 0.00013,
+        "text-embedding-ada-002": 0.0001
+      }
+    }
+  },
+  
+  "budget": {
+    "max_tokens_per_request": 10000,
+    "max_tokens_per_session": 100000,
+    "warn_at_tokens": 75000
+  }
+}

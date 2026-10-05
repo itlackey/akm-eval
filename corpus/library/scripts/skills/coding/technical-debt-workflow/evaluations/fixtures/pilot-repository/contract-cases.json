@@ -1,0 +1,32 @@
+[
+  {
+    "expected": "alpha",
+    "trim": true,
+    "value": " Alpha "
+  },
+  {
+    "expected": " alpha ",
+    "trim": false,
+    "value": " Alpha "
+  },
+  {
+    "expected": "unknown",
+    "trim": true,
+    "value": "   "
+  },
+  {
+    "expected": "   ",
+    "trim": false,
+    "value": "   "
+  },
+  {
+    "expected": "unknown",
+    "trim": true,
+    "value": ""
+  },
+  {
+    "expected": "mixed",
+    "trim": true,
+    "value": "MiXeD"
+  }
+]

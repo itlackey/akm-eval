@@ -1,0 +1,45 @@
+{
+  "api_key_env": "OPENAI_API_KEY",
+  "default_config": "content_check",
+  
+  "configs": {
+    "content_check": {
+      "endpoint": "moderation",
+      "model": "omni-moderation-latest",
+      "auto_invoke": true,
+      "context_strategy": "minimal"
+    },
+    
+    "batch_moderate": {
+      "endpoint": "moderation",
+      "model": "omni-moderation-latest",
+      "context_strategy": "minimal"
+    }
+  },
+  
+  "endpoints": {
+    "moderation": {
+      "path": "/v1/moderations",
+      "base_url": "https://api.openai.com",
+      "default_model": "omni-moderation-latest",
+      "description": "Check content for policy violations",
+      "required_params": ["input"],
+      "optional_params": ["model"],
+      "supports_batch": false,
+      "output_schema": {
+        "flagged": "boolean",
+        "categories": "object",
+        "category_scores": "object"
+      },
+      "cost_per_1k_tokens": {
+        "omni-moderation-latest": 0.0
+      }
+    }
+  },
+  
+  "budget": {
+    "max_tokens_per_request": 5000,
+    "max_tokens_per_session": 50000,
+    "warn_at_tokens": 40000
+  }
+}

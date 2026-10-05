@@ -1,0 +1,15 @@
+--- a/normalizer.py
++++ b/normalizer.py
+@@ -1,11 +1,5 @@
+ def normalize_label(value: str, trim: bool = True) -> str:
+-    if trim:
+-        cleaned = value.strip()
+-        if not cleaned:
+-            return "unknown"
+-        return cleaned.lower()
+-
+-    cleaned = value
++    cleaned = value.strip() if trim else value
+     if not cleaned:
+         return "unknown"
+     return cleaned.lower()
