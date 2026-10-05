@@ -1,0 +1,3 @@
+# the dataset is fetched at run time and never committed
+longmemeval_s_cleaned.json
+*.partial-*
