@@ -50,8 +50,9 @@ describe("consistency", () => {
 
   test("the map records every replacement so labels can be rewritten to match", () => {
     const { map } = rewriteAll([NOTE_A, NOTE_B]);
-    expect(Object.keys(map.words)).toEqual(expect.arrayContaining(["acme", "priya", "sharma", "marcus", "orion", "zephyr"]));
-    expect(map.hosts["orion.lab.acme.dev"]).toBe(`${map.words.orion}.lab.${map.words.acme}.dev`);
+    expect(Object.keys(map.words)).toEqual(expect.arrayContaining(["acme", "priya", "sharma", "marcus", "zephyr"]));
+    expect(Object.keys(map.hostWords)).toEqual(["orion"]); // only ever a hostname label
+    expect(map.hosts["orion.lab.acme.dev"]).toBe(`${map.hostWords.orion}.lab.${map.words.acme}.dev`);
     expect(Object.keys(map.ips)).toEqual(["192.168.1.50"]);
     expect(Object.keys(map.ports).sort()).toEqual(["8443", "9000"]);
     expect(Object.keys(map.uuids)).toEqual(["3f2b8c1a-9d4e-4b6a-8c5d-1e2f3a4b5c6d"]);
@@ -178,6 +179,26 @@ Send mail to noreply@github.com or git@github.com:owner/repo.git.
     expect(again.rewrite(code)).toBe(code);
   });
 
+  test("an ordinary word in a hostname is renamed in the hostname only, not in prose", () => {
+    const text = "The garden service at garden.acme.io stores the release history.\nWater the garden in the evening.\n";
+    const { out, map } = rewriteAll([text]);
+    expect(out[0]).not.toContain("garden.acme.io");
+    expect(out[0]).toContain("The garden service at ");
+    expect(out[0]).toContain("Water the garden in the evening.");
+    expect(map.hostWords.garden).toBeDefined();
+    expect(map.words.garden).toBeUndefined();
+  });
+
+  test("a name seen in prose and in a hostname gets the same replacement in both", () => {
+    const text = "We moved Orion to new disks. Ask about Orion before noon.\nIt answers at orion.example.net today.\n";
+    const { out, map } = rewriteAll([text]);
+    const r = map.words.orion;
+    expect(r).toBeDefined();
+    expect(out[0]).toContain(`${r[0].toUpperCase()}${r.slice(1)} to new disks`);
+    expect(out[0]).toContain(`${r}.example.net`);
+    expect(map.hostWords.orion).toBeUndefined();
+  });
+
   test("hosts under a well-known domain are kept; hosts under a user-content domain lose the name", () => {
     const r = rewriteAll(["See https://learn.microsoft.com/x and https://tara.github.io/site and https://unknown-corp.example.org."]);
     expect(r.out[0]).toContain("https://learn.microsoft.com/x");
@@ -236,7 +257,7 @@ describe("files", () => {
     const w = map.words;
     const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
     const label = readFileSync(join(dir, "out/labels/q.jsonl"), "utf8");
-    expect(label).toBe(`{"q": "Who leads ${cap(w.acme)} Corp?", "a": "${cap(w.priya)} ${cap(w.sharma)}", "host": "${w.orion}.lab.${w.acme}.dev"}\n`);
+    expect(label).toBe(`{"q": "Who leads ${cap(w.acme)} Corp?", "a": "${cap(w.priya)} ${cap(w.sharma)}", "host": "${map.hostWords.orion}.lab.${w.acme}.dev"}\n`);
     expect(JSON.parse(label).host).toBe(map.hosts["orion.lab.acme.dev"]);
   });
 

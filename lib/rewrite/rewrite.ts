@@ -19,6 +19,9 @@ export interface RewriteMap {
   // Lowercase original word -> lowercase replacement. Applies to whole words and to
   // the parts of hostnames and identifiers (acme-corp, AcmeClient, ACME_URL).
   words: Record<string, string>;
+  // Words seen only as hostname labels (garden in garden.acme.io): renamed inside
+  // hostnames, never in prose, where the same word may be an ordinary one.
+  hostWords: Record<string, string>;
   // Informational: full hostname -> rewritten hostname.
   hosts: Record<string, string>;
   ips: Record<string, string>;
@@ -289,7 +292,8 @@ interface Stat {
 
 interface Found {
   words: Map<string, Stat>;
-  forced: Set<string>; // words from hostnames and email addresses: always renamed
+  forced: Set<string>; // words from email addresses: names, renamed everywhere
+  hostForced: Set<string>; // words from hostname labels: renamed inside hostnames only
   hosts: Set<string>;
   ips: Set<string>;
   ports: Set<string>;
@@ -297,7 +301,7 @@ interface Found {
   hex: Set<string>;
 }
 
-const emptyFound = (): Found => ({ words: new Map(), forced: new Set(), hosts: new Set(), ips: new Set(), ports: new Set(), uuids: new Set(), hex: new Set() });
+const emptyFound = (): Found => ({ words: new Map(), forced: new Set(), hostForced: new Set(), hosts: new Set(), ips: new Set(), ports: new Set(), uuids: new Set(), hex: new Set() });
 
 const EMAIL_LOCAL_RE = /([A-Za-z0-9._%+-]+)@(?=[A-Za-z0-9-]+\.[A-Za-z])/g;
 
@@ -333,6 +337,7 @@ export class Rewriter {
       if (existing.seed !== seed) throw new UsageError(`the map was made with seed ${existing.seed}, not ${seed}`);
       this.map = existing;
       this.map.words ??= {};
+      this.map.hostWords ??= {};
       this.map.hosts ??= {};
       this.map.ips ??= {};
       this.map.ports ??= {};
@@ -341,7 +346,7 @@ export class Rewriter {
     } else {
       const shift = new Stream(seed, "date", "shift");
       const days = 30 + shift.next(700);
-      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, words: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
+      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, words: {}, hostWords: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
     }
   }
 
@@ -357,7 +362,7 @@ export class Rewriter {
         for (const label of labels.slice(0, labels.length - protectedLabels(labels))) {
           for (const part of label.split("-")) {
             const r = renamable(part);
-            if (r) f.forced.add(r.word.toLowerCase());
+            if (r) f.hostForced.add(r.word.toLowerCase());
           }
         }
       } else if (h.kind === "ip") {
@@ -412,9 +417,14 @@ export class Rewriter {
   /** Pass 2: give every original that has no replacement yet a replacement. */
   finish(): void {
     const { map, found: f, minCount } = this;
-    const taken = new Set([...Object.keys(map.words), ...Object.values(map.words)]);
+    const taken = new Set([...Object.keys(map.words), ...Object.values(map.words), ...Object.keys(map.hostWords), ...Object.values(map.hostWords)]);
 
     const names = new Set<string>(f.forced);
+    // A hostname word is a name when the text also writes it as one: capitalized mid-sentence and never in lowercase.
+    for (const w of f.hostForced) {
+      const s = f.words.get(w);
+      if (s && s.cap >= 1 && s.mid >= 1 && s.lower === 0) names.add(w);
+    }
     for (const [word, s] of f.words) {
       const person = FIRST_SET.has(baseOf(word)) || SURNAME_SET.has(baseOf(word)); // not blocked by slugs like priya-sharma
       if (s.cap >= 1 && s.mid >= 1 && s.count >= minCount && (s.lower === 0 || person) && /^[a-z]+\d*$/.test(word) && eligible(word) && !hasCommonEnding(word)) names.add(word);
@@ -424,6 +434,14 @@ export class Rewriter {
     for (const w of fresh) {
       const r = this.makeWord(w, taken);
       map.words[w] = r;
+      taken.add(r);
+    }
+    // A hostname word that is not also a name in the text is renamed inside hostnames only.
+    const hostOnly = [...f.hostForced].filter((w) => own(map.words, w) === undefined && own(map.hostWords, w) === undefined).sort(byCode);
+    for (const w of hostOnly) taken.add(w);
+    for (const w of hostOnly) {
+      const r = this.makeWord(w, taken);
+      map.hostWords[w] = r;
       taken.add(r);
     }
 
@@ -523,7 +541,8 @@ export class Rewriter {
         .split("-")
         .map((part) => {
           const r = renamable(part);
-          const replacement = r && own(this.map.words, r.word.toLowerCase());
+          const key = r?.word.toLowerCase();
+          const replacement = key && (own(this.map.words, key) ?? own(this.map.hostWords, key));
           return r && replacement ? matchCase(r.word, replacement) + r.digits : part;
         })
         .join("-");
@@ -753,7 +772,7 @@ export function main(argv: string[]): number {
     const n = (o: Record<string, string>) => Object.keys(o).length;
     console.log(`rewrite: ${files} file${files === 1 ? "" : "s"} written to ${opts.output} (${copied} copied unchanged)`);
     console.log(
-      `rewrite: map ${opts.mapPath}: ${n(map.words)} words, ${n(map.hosts)} hosts, ${n(map.ips)} ips, ${n(map.ports)} ports, ${n(map.uuids)} uuids, ${n(map.hex)} hex ids, dates ${map.dateShiftDays > 0 ? "+" : ""}${map.dateShiftDays} days`,
+      `rewrite: map ${opts.mapPath}: ${n(map.words)} words, ${n(map.hostWords)} hostname words, ${n(map.hosts)} hosts, ${n(map.ips)} ips, ${n(map.ports)} ports, ${n(map.uuids)} uuids, ${n(map.hex)} hex ids, dates ${map.dateShiftDays > 0 ? "+" : ""}${map.dateShiftDays} days`,
     );
     return 0;
   } catch (e) {

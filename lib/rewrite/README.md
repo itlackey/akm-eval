@@ -27,7 +27,8 @@ The same seed and the same input always give the same output. Run `bun test lib/
 ## What it changes
 
 - Person, organisation and project names that are not well-known tools. See "How names are found".
-- Words in hostnames and in the name part of email addresses, unless they are generic (`www`, `api`, `docs`, `lab`). Hosts under well-known domains are left alone.
+- Words in the name part of email addresses: they are names, so they change everywhere.
+- Words in hostnames change inside hostnames. In the text they change only when the text writes them as a name (capitalized mid-sentence, never lowercase), so an ordinary word such as `garden` in `garden.acme.io` stays as it is in prose. Generic labels (`www`, `api`, `docs`, `lab`) and hosts under well-known domains are left alone.
 - Hostnames and URL hosts, IPv4 addresses and ports. An address stays in its class: a private one stays private.
 - UUIDs and long hex ids (16 hex digits or more). They keep their length and case.
 - Dates. Every date moves by the same number of days, so gaps and order are kept.
