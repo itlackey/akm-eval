@@ -120,12 +120,10 @@ copied, with the agents, commands and knowledge files that belong to them:
 - `skills/web-ux/ux-dom-audit`
 - `skills/administrative/agent-team-reporting`
 
-Some assets still refer to them, so those refs do not resolve here:
-
-- `ux-dom-audit`: `skills/web-ux/SKILL.md`, the three judges in `agents/web-ux/`,
-  `knowledge/web-ux/measurable-ux-rubric.md`, and the two `web-ux-validation-gate`
-  workflows.
-- `agent-team-reporting`: the six `report-*` commands in `commands/`.
+The assets built around them stay out as well: for `ux-dom-audit`, the web-ux
+parent skill, its three judges, the measurable UX rubric and the two
+web-ux-validation-gate workflows; for `agent-team-reporting`, the six `report-*`
+commands.
 
 ## Licence
 
