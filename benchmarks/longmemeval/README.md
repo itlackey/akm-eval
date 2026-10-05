@@ -101,4 +101,4 @@ Published LongMemEval numbers use gpt-4o-2024-08-06 as the judge and all 500 que
 
 ## Licence
 
-The code is MPL-2.0. The dataset is MIT, from the LongMemEval authors, and is not part of this repository. See `LICENSE` for the assets folder.
+The code is MPL-2.0, except the judge prompts copied from LongMemEval, which are MIT: see `NOTICE`. The dataset is MIT, from the LongMemEval authors, and is not part of this repository.
