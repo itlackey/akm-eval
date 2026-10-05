@@ -3,3 +3,8 @@ private/
 node_modules
 .venv
 __pycache__
+# run output. The private corpus writes to private/, which is ignored above.
+evals/*/results/*
+benchmarks/*/results/*
+!evals/*/results/.gitkeep
+!benchmarks/*/results/.gitkeep

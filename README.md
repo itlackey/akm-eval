@@ -8,13 +8,13 @@ This layout replaces the earlier harness. The old content stays under the tag `l
 
 ## Evals and benchmarks
 
-Each row is a folder, the question it answers, which corpora it has, and its status. Only the library exists today. The evals and benchmarks are planned, and each will follow the layout and commands below.
+Each row is a folder, the question it answers, which corpora it has, and its status. The library and the evals marked ready exist today. The others are planned, and each will follow the layout and commands below.
 
 | Folder | Question it answers | Corpus | Status |
 |---|---|---|---|
 | `corpus/library` | What does a shared, working akm bundle look like for agents to read? | public | ready |
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | public + private | planned |
-| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | public + private | planned |
+| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | public + private | ready |
 | `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | public + private | planned |
 | `evals/distill` | Do distilled lessons say only what the source memory says? | public + private | planned |
 | `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | public + private | planned |
