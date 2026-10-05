@@ -1,0 +1,34 @@
+# The models to compare in one run:
+#
+#   evals/bakeoff/run --models evals/bakeoff/models.yaml
+#
+# Copy this file to models.yaml and edit it. models.yaml is gitignored.
+#
+#   label        names the model in the results. Letters, digits, dot, dash and underscore.
+#   model        the model name the endpoint expects.
+#   base_url     any OpenAI-compatible endpoint, up to and including /v1.
+#   api_key_env  the name of an environment variable that holds the key. Set it in .env.
+#                Leave it out for a local server that needs no key. Never put a key in this file.
+#
+# Optional, for each model:
+#
+#   temperature  default 0. null leaves it out of the request, for a model that only takes its own.
+#   max_tokens   default 6000. null leaves it out, for a model that takes max_completion_tokens instead.
+#   extra_body   fields merged into every request, for example to turn thinking off.
+#   timeout      seconds for one request. Default 900.
+#   retries      times a request is retried when the endpoint is busy or drops it. Default 5.
+models:
+  - label: local-qwen
+    model: qwen3-27b
+    base_url: http://localhost:8080/v1
+    extra_body:
+      chat_template_kwargs: { enable_thinking: false }
+
+  - label: hosted-model
+    model: the-model-name
+    base_url: https://api.example.com/v1
+    api_key_env: HOSTED_API_KEY
+    temperature: null
+    max_tokens: null
+    extra_body:
+      max_completion_tokens: 8000

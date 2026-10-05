@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Makes this eval's private assets from the public ones. ./generate-assets calls it. See README.md.
+#
+#   evals/bakeoff/generate --seed N --out private/bakeoff
+#
+# The files the cases read are rewritten first, then cases.json with the same map, so every name in
+# the files, the file names and what a correct reply holds changes the same way.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/../.." && pwd)"
+cd "$root"
+
+seed=""
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --seed) [ $# -ge 2 ] || { echo "bakeoff: --seed needs a value" >&2; exit 2; }; seed="$2"; shift 2 ;;
+    --out) [ $# -ge 2 ] || { echo "bakeoff: --out needs a value" >&2; exit 2; }; out="$2"; shift 2 ;;
+    *) echo "Usage: evals/bakeoff/generate --seed N --out private/bakeoff" >&2; exit 2 ;;
+  esac
+done
+[ -n "$seed" ] && [ -n "$out" ] || { echo "Usage: evals/bakeoff/generate --seed N --out private/bakeoff" >&2; exit 2; }
+
+command -v bun > /dev/null || { echo "bakeoff: bun is needed. See https://bun.sh" >&2; exit 2; }
+command -v uv > /dev/null || { echo "bakeoff: uv is needed. See https://docs.astral.sh/uv/" >&2; exit 2; }
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$out" "$work/corpus"
+rm -rf "$out/assets" "$out/map.json"
+
+# The files, without cases.json: the words in it must not decide which names are names.
+cp -R "$here/assets/." "$work/corpus/"
+rm "$work/corpus/cases.json"
+bun lib/rewrite/rewrite.ts --seed "$seed" --map "$out/map.json" "$work/corpus" "$out/assets"
+bun lib/rewrite/rewrite.ts --map "$out/map.json" "$here/assets/cases.json" "$out/assets/cases.json"
+
+uv run --project "$here/src" --frozen python "$here/src/bakeoff.py" check-assets "$out/assets" --against "$here/assets"

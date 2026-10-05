@@ -1,0 +1,1423 @@
+[
+ {
+  "id": "consolidate-memory-pool",
+  "process": "memory_consolidation",
+  "files": ["memories/deploy-drain-primary.md", "memories/deploy-drain-copy.md", "memories/cache-ttl-old.md", "memories/cache-ttl-current.md", "memories/cache-implementation.md", "memories/signed-artifacts.md", "memories/operator-preference.md"],
+  "variant": "plan",
+  "expected": {
+   "merge": [["memories/deploy-drain-copy", "memories/deploy-drain-primary"]],
+   "delete": ["memories/cache-ttl-old"],
+   "promote": ["memories/signed-artifacts"],
+   "protected": ["memories/operator-preference"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "consolidate-duplicate-memories",
+  "process": "memory_consolidation",
+  "files": ["memories/deploy-drain-primary.md", "memories/deploy-drain-copy.md"],
+  "variant": "duplicates",
+  "expected": {
+   "merge": [["memories/deploy-drain-copy", "memories/deploy-drain-primary"]]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "consolidate-superseded-memory",
+  "process": "memory_consolidation",
+  "files": ["memories/cache-ttl-old.md", "memories/cache-ttl-current.md"],
+  "variant": "superseded",
+  "expected": {
+   "delete": ["memories/cache-ttl-old"],
+   "forbidden_ops": ["contradict"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "consolidate-conflicting-memories",
+  "process": "memory_consolidation",
+  "files": ["memories/cache-ttl-conflict.md", "memories/cache-ttl-current.md"],
+  "variant": "conflict",
+  "expected": {
+   "contradict": [["memories/cache-ttl-conflict", "memories/cache-ttl-current"]],
+   "forbidden_ops": ["delete"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "distill-queue-knowledge",
+  "process": "distill",
+  "files": ["knowledge/queue-recovery.md"],
+  "variant": "knowledge",
+  "expected": {
+   "required": ["pause publishers", "both renames", "checkpoint", "prior offset", "three consecutive"],
+   "forbidden": ["resume publishers after two minutes", "advance the checkpoint before"],
+   "max_ratio": 0.78
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "distill-queue-lesson",
+  "process": "distill",
+  "files": ["knowledge/queue-recovery.md"],
+  "variant": "lesson",
+  "expected": {
+   "required": ["both", "rename", "checkpoint", "prior offset"],
+   "forbidden": ["resume publishers after two minutes"],
+   "max_ratio": 0.55
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "distill-architecture-knowledge",
+  "process": "distill",
+  "files": ["knowledge/platform-architecture.md"],
+  "variant": "knowledge",
+  "expected": {
+   "required": ["release controller", "postgresql", "object store", "source of record", "redis"],
+   "forbidden": ["redis is the source of record"],
+   "max_ratio": 0.78
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "distill-backpressure-lesson",
+  "process": "distill",
+  "files": ["knowledge/worker-backpressure.md"],
+  "variant": "lesson",
+  "expected": {
+   "required": ["800", "429", "interactive", "below 300", "ten consecutive", "metrics collector"],
+   "forbidden": ["operators may clear", "all jobs", "inconsistent state tracking"],
+   "max_ratio": 1.25
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "infer-checkpoint-memory",
+  "process": "memory_inference",
+  "files": ["memories/queue-checkpoint.md"],
+  "variant": "derived-memory",
+  "expected": {
+   "required": ["checkpoint", "manifest", "blob", "prior offset"],
+   "date": "2026-02-14"
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "infer-signing-memory",
+  "process": "memory_inference",
+  "files": ["memories/signed-artifacts.md"],
+  "variant": "derived-memory",
+  "expected": {
+   "required": ["signature", "release controller", "worker service", "unsigned"],
+   "forbidden": ["2026-02-12"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "infer-cache-policy-memory",
+  "process": "memory_inference",
+  "files": ["memories/cache-ttl-current.md"],
+  "variant": "derived-memory",
+  "expected": {
+   "required": ["request-cache", "90 seconds", "api gateway"],
+   "forbidden": ["2026-02-01"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "infer-operator-preference-memory",
+  "process": "memory_inference",
+  "files": ["memories/operator-preference.md"],
+  "variant": "derived-memory",
+  "expected": {
+   "required": ["approval", "concise", "image digest"],
+   "forbidden": ["2026-02-22"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-platform-graph",
+  "process": "graph_extraction",
+  "files": ["knowledge/platform-architecture.md"],
+  "variant": "graph",
+  "expected": {
+   "entities": ["api gateway", "metrics collector", "object store", "operations team", "postgresql", "production cluster", "redis", "release controller", "worker service"],
+   "relations": [["api gateway", "postgresql"], ["metrics collector", "api gateway"], ["metrics collector", "worker service"], ["operations team", "release controller"], ["release controller", "worker service"], ["worker service", "object store"], ["worker service", "postgresql"], ["worker service", "production cluster"], ["worker service", "redis"]]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-recovery-graph",
+  "process": "graph_extraction",
+  "files": ["knowledge/queue-recovery.md"],
+  "variant": "graph",
+  "expected": {
+   "entities": ["artifact blob", "artifact manifest", "health check", "metrics collector", "previous worker image", "publishers", "queue checkpoint", "worker service"],
+   "relations": [["health check", "worker image"], ["metrics collector", "worker queue"], ["publishers", "worker queue"], ["queue checkpoint", "artifact blob"], ["queue checkpoint", "artifact manifest"]]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-backpressure-graph",
+  "process": "graph_extraction",
+  "files": ["knowledge/worker-backpressure.md"],
+  "variant": "graph",
+  "expected": {
+   "entities": ["api gateway", "backpressure flag", "batch jobs", "interactive jobs", "metrics collector", "priority queue", "redis", "worker service"],
+   "relations": [["api gateway", "batch jobs"], ["api gateway", "redis"], ["interactive jobs", "priority queue"], ["metrics collector", "backpressure flag"], ["worker service", "backpressure flag"]]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-release-graph",
+  "process": "graph_extraction",
+  "files": ["knowledge/release-procedure.md"],
+  "variant": "graph",
+  "expected": {
+   "entities": ["api gateway", "canary job", "object store", "operations team", "postgresql", "publishers", "release controller", "worker service", "worker-stable"],
+   "relations": [["canary artifact", "object store"], ["canary job", "api gateway"], ["completion state", "postgresql"], ["operations team", "production release"], ["release controller", "worker service"], ["worker-stable", "previous worker service image"]]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enhance-backpressure-metadata",
+  "process": "metadata_enhance",
+  "files": ["knowledge/worker-backpressure.md"],
+  "variant": "metadata",
+  "expected": {
+   "keywords": ["backpressure", "queue", "worker"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enhance-recovery-metadata",
+  "process": "metadata_enhance",
+  "files": ["knowledge/queue-recovery.md"],
+  "variant": "metadata",
+  "expected": {
+   "keywords": ["queue", "checkpoint", "recovery"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enhance-architecture-metadata",
+  "process": "metadata_enhance",
+  "files": ["knowledge/platform-architecture.md"],
+  "variant": "metadata",
+  "expected": {
+   "keywords": ["architecture", "service", "source of record"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enhance-release-metadata",
+  "process": "metadata_enhance",
+  "files": ["knowledge/release-procedure.md"],
+  "variant": "metadata",
+  "expected": {
+   "keywords": ["release", "canary", "rollback"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-strong-lesson",
+  "process": "lesson_quality_gate",
+  "files": ["knowledge/queue-recovery.md", "lessons/queue-recovery-strong.md"],
+  "variant": "pass",
+  "expected": {
+   "band": "pass"
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-weak-lesson",
+  "process": "lesson_quality_gate",
+  "files": ["knowledge/queue-recovery.md", "lessons/queue-recovery-weak.md"],
+  "variant": "reject",
+  "expected": {
+   "band": "reject"
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-strong-backpressure-lesson",
+  "process": "lesson_quality_gate",
+  "files": ["knowledge/worker-backpressure.md", "lessons/backpressure-strong.md"],
+  "variant": "pass",
+  "expected": {
+   "band": "pass"
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-weak-backpressure-lesson",
+  "process": "lesson_quality_gate",
+  "files": ["knowledge/worker-backpressure.md", "lessons/backpressure-weak.md"],
+  "variant": "reject",
+  "expected": {
+   "band": "reject"
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-grounded-reflection",
+  "process": "proposal_quality_gate",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-good.md"],
+  "variant": "pass",
+  "expected": {
+   "band": "pass",
+   "feedback": "Make the rollback order explicit without changing the release facts."
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-unsupported-reflection",
+  "process": "proposal_quality_gate",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-bad.md"],
+  "variant": "reject",
+  "expected": {
+   "band": "reject",
+   "feedback": "Make the rollback order explicit without changing the release facts."
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-grounded-backpressure-reflection",
+  "process": "proposal_quality_gate",
+  "files": ["knowledge/worker-backpressure.md", "knowledge/worker-backpressure-good.md"],
+  "variant": "pass",
+  "expected": {
+   "band": "pass",
+   "feedback": "Clarify who removes backpressure and preserve the interactive-job exception."
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "judge-unsupported-backpressure-reflection",
+  "process": "proposal_quality_gate",
+  "files": ["knowledge/worker-backpressure.md", "knowledge/worker-backpressure-bad.md"],
+  "variant": "reject",
+  "expected": {
+   "band": "reject",
+   "feedback": "Clarify who removes backpressure and preserve the interactive-job exception."
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "detect-cache-contradiction",
+  "process": "memory_contradiction_detection",
+  "files": ["memories/cache-ttl-conflict.md", "memories/cache-ttl-current.md"],
+  "variant": "contradiction",
+  "expected": {
+   "contradicts": true
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reject-related-cache-notes",
+  "process": "memory_contradiction_detection",
+  "files": ["memories/cache-ttl-current.md", "memories/cache-implementation.md"],
+  "variant": "compatible",
+  "expected": {
+   "contradicts": false
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reject-superseded-cache-history",
+  "process": "memory_contradiction_detection",
+  "files": ["memories/cache-ttl-old.md", "memories/cache-ttl-current.md"],
+  "variant": "compatible-history",
+  "expected": {
+   "contradicts": false
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reject-duplicate-deployment-notes",
+  "process": "memory_contradiction_detection",
+  "files": ["memories/deploy-drain-primary.md", "memories/deploy-drain-copy.md"],
+  "variant": "compatible-duplicate",
+  "expected": {
+   "contradicts": false
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-durable-session-insight",
+  "process": "session_extraction",
+  "files": ["sessions/queue-recovery.md"],
+  "variant": "signal",
+  "expected": {
+   "candidate_type": "lesson",
+   "required": ["checkpoint", "manifest", "blob"],
+   "forbidden": ["forced-output"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "leave-routine-session-empty",
+  "process": "session_extraction",
+  "files": ["sessions/routine-cleanup.md"],
+  "variant": "empty",
+  "expected": {},
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-operator-preference",
+  "process": "session_extraction",
+  "files": ["sessions/release-approval-preference.md"],
+  "variant": "signal",
+  "expected": {
+   "candidate_type": "memory",
+   "required": ["approval", "concise", "image digest"],
+   "forbidden": ["delete-all-history"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "extract-backpressure-lesson",
+  "process": "session_extraction",
+  "files": ["sessions/backpressure-incident.md"],
+  "variant": "signal",
+  "expected": {
+   "candidate_type": "lesson",
+   "required": ["below 300", "ten consecutive", "metrics collector"],
+   "forbidden": ["forty seconds is sufficient"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reflect-release-skill",
+  "process": "reflect_proposal",
+  "files": ["skills/release-operator/SKILL.md"],
+  "variant": "revision",
+  "expected": {
+   "feedback": "Make the rollback validation order explicit using facts already present in the skill.",
+   "required": ["worker-stable", "canary", "object store", "postgresql", "three consecutive", "before resuming"],
+   "forbidden": ["two minutes", "automatically reconstruct"],
+   "ordered": ["worker-stable", "canary", "three consecutive", "resum"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reflect-recovery-order",
+  "process": "reflect_proposal",
+  "files": ["knowledge/queue-recovery.md"],
+  "variant": "revision",
+  "expected": {
+   "feedback": "State rename-failure recovery in this order: retain the prior checkpoint, restore the previous image, retry both renames, then commit only after both succeed.",
+   "required": ["prior", "offset", "previous worker image", "both", "rename", "checkpoint", "publishers"],
+   "forbidden": ["advance the checkpoint before"],
+   "ordered": ["prior", "previous worker image", "both", "commit"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reflect-backpressure-order",
+  "process": "reflect_proposal",
+  "files": ["knowledge/worker-backpressure.md"],
+  "variant": "revision",
+  "expected": {
+   "feedback": "State the release gate in this order: below 300, ten consecutive minutes, Metrics Collector transition, and no manual clearing.",
+   "required": ["800", "429", "interactive", "below 300", "ten consecutive", "metrics collector"],
+   "forbidden": ["two minutes", "operators may clear"],
+   "ordered": ["below 300", "ten consecutive", "metrics collector", "manual"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "reflect-source-of-record-order",
+  "process": "reflect_proposal",
+  "files": ["knowledge/platform-architecture.md"],
+  "variant": "revision",
+  "expected": {
+   "feedback": "Clarify sources of record in this order: PostgreSQL state, Object Store bytes, then Redis as a queue rather than a source of record.",
+   "required": ["postgresql", "request", "completion", "object store", "artifact", "redis", "not a source of record"],
+   "forbidden": ["redis is the source of record", "release controller approves"],
+   "ordered": ["postgresql", "object store", "redis"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enrich-checkpoint-memory",
+  "process": "remember_enrich",
+  "files": ["memories/queue-checkpoint.md"],
+  "variant": "enrichment",
+  "expected": {
+   "observed_at": "2026-02-14",
+   "keywords": ["queue", "checkpoint", "recovery"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enrich-signing-memory",
+  "process": "remember_enrich",
+  "files": ["memories/signed-artifacts.md"],
+  "variant": "enrichment",
+  "expected": {
+   "observed_at": null,
+   "keywords": ["artifact", "signature", "worker"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enrich-cache-policy-memory",
+  "process": "remember_enrich",
+  "files": ["memories/cache-ttl-current.md"],
+  "variant": "enrichment",
+  "expected": {
+   "observed_at": null,
+   "keywords": ["cache", "90", "gateway"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "enrich-operator-preference-memory",
+  "process": "remember_enrich",
+  "files": ["memories/operator-preference.md"],
+  "variant": "enrichment",
+  "expected": {
+   "observed_at": null,
+   "keywords": ["approval", "concise", "digest"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "repair-lesson-metadata",
+  "process": "schema_repair",
+  "files": ["lessons/missing-metadata.md"],
+  "variant": "lesson",
+  "expected": {
+   "keywords": ["publisher", "worker", "health"],
+   "trigger": ["deploy", "replace", "release"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "repair-backpressure-metadata",
+  "process": "schema_repair",
+  "files": ["lessons/missing-backpressure-metadata.md"],
+  "variant": "lesson",
+  "expected": {
+   "keywords": ["backpressure", "queue", "batch"],
+   "trigger": ["throttle", "queue", "backpressure"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "repair-signing-metadata",
+  "process": "schema_repair",
+  "files": ["lessons/missing-signing-metadata.md"],
+  "variant": "lesson",
+  "expected": {
+   "keywords": ["artifact", "signature", "unsigned"],
+   "trigger": ["publish", "release", "deploy"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "repair-rollback-metadata",
+  "process": "schema_repair",
+  "files": ["lessons/missing-rollback-metadata.md"],
+  "variant": "lesson",
+  "expected": {
+   "keywords": ["worker-stable", "canary", "health"],
+   "trigger": ["rollback", "fail", "restore"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "triage-accept-grounded-reflection",
+  "process": "proposal_triage",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-good.md"],
+  "variant": "triage",
+  "expected": {
+   "decision": "accept",
+   "ref": "knowledge/release-procedure",
+   "source": "reflect",
+   "defer_reason": "mid-band",
+   "reason_terms": ["rollback", "preserv"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "triage-reject-unsupported-reflection",
+  "process": "proposal_triage",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-bad.md"],
+  "variant": "triage",
+  "expected": {
+   "decision": "reject",
+   "ref": "knowledge/release-procedure",
+   "source": "reflect",
+   "defer_reason": "mid-band",
+   "reason_terms": ["invent", "constraint", "unsupported", "mandatory", "remov"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "triage-reject-duplicate-sibling",
+  "process": "proposal_triage",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-good.md", "knowledge/release-procedure-good.md"],
+  "variant": "triage",
+  "expected": {
+   "decision": "reject",
+   "ref": "knowledge/release-procedure",
+   "source": "reflect",
+   "defer_reason": "possible-dup",
+   "reason_terms": ["duplicate"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "triage-defer-ambiguous-evidence",
+  "process": "proposal_triage",
+  "files": ["knowledge/release-procedure.md", "proposals/ambiguous-release-note.md"],
+  "variant": "triage",
+  "expected": {
+   "decision": "defer",
+   "ref": "knowledge/release-procedure",
+   "source": "propose",
+   "defer_reason": "insufficient-context",
+   "reason_terms": ["context", "evidence"]
+  },
+  "tier": "compact",
+  "track": "focused"
+ },
+ {
+  "id": "deep-bakeoff-c01",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c01-a.md", "bakeoff/c01-b.md", "bakeoff/c01-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c02",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c02-a.md", "bakeoff/c02-b.md", "bakeoff/c02-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c03",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c03-a.md", "bakeoff/c03-b.md", "bakeoff/c03-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c04",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c04-a.md", "bakeoff/c04-b.md", "bakeoff/c04-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c05",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c05-a.md", "bakeoff/c05-b.md", "bakeoff/c05-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c06",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c06-a.md", "bakeoff/c06-b.md", "bakeoff/c06-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c07",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c07-a.md", "bakeoff/c07-b.md", "bakeoff/c07-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c08",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c08-a.md", "bakeoff/c08-b.md", "bakeoff/c08-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c09",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c09-a.md", "bakeoff/c09-b.md", "bakeoff/c09-c.md", "bakeoff/c09-d.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c10",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c10-a.md", "bakeoff/c10-b.md", "bakeoff/c10-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c11",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c11-a.md", "bakeoff/c11-b.md", "bakeoff/c11-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-c12",
+  "process": "memory_consolidation",
+  "files": ["bakeoff/c12-a.md", "bakeoff/c12-b.md", "bakeoff/c12-c.md"],
+  "variant": "grounded_consolidate",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d01",
+  "process": "distill",
+  "files": ["bakeoff/d01.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d02",
+  "process": "distill",
+  "files": ["bakeoff/d02.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d03",
+  "process": "distill",
+  "files": ["bakeoff/d03.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d04",
+  "process": "distill",
+  "files": ["bakeoff/d04.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d05",
+  "process": "distill",
+  "files": ["bakeoff/d05.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d06",
+  "process": "distill",
+  "files": ["bakeoff/d06.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d07",
+  "process": "distill",
+  "files": ["bakeoff/d07.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d08",
+  "process": "distill",
+  "files": ["bakeoff/d08.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d09",
+  "process": "distill",
+  "files": ["bakeoff/d09.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d10",
+  "process": "distill",
+  "files": ["bakeoff/d10.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d11",
+  "process": "distill",
+  "files": ["bakeoff/d11.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-bakeoff-d12",
+  "process": "distill",
+  "files": ["bakeoff/d12.md"],
+  "variant": "grounded_distill",
+  "expected": {},
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-graph-adapters",
+  "process": "graph_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/adapters.md"],
+  "variant": "deep_graph",
+  "expected": {
+   "entities": ["BUILTIN_ADAPTERS", "BundleAdapter", "FileContext", "akm adapter", "claude", "dotenv", "generic-files", "opencode", "parseTaskSource", "task adapters"],
+   "relations": [["BundleAdapter", "FileContext"], ["akm adapter", "BundleAdapter"], ["claude", "BundleAdapter"], ["dotenv", "BundleAdapter"], ["opencode", "BundleAdapter"], ["task adapters", "parseTaskSource"]]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-graph-unit-reuse",
+  "process": "graph_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md"],
+  "variant": "deep_graph",
+  "expected": {
+   "entities": ["WorkListInput", "canonicalJsonString", "computeStepWorkList", "computeUnitInputHash", "frozen step plan", "gateFeedback", "journaled unit", "native-executor", "run-workflow", "taskInputs"],
+   "relations": [["canonicalJsonString", "computeUnitInputHash"], ["computeStepWorkList", "WorkListInput"], ["computeStepWorkList", "frozen step plan"], ["computeUnitInputHash", "gateFeedback"], ["computeUnitInputHash", "taskInputs"], ["native-executor", "computeStepWorkList"], ["run-workflow", "computeStepWorkList"]]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-graph-child-environment",
+  "process": "graph_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md"],
+  "variant": "deep_graph",
+  "expected": {
+   "entities": ["AKM_* context", "EXEC_DEFAULT_ENV_PASSTHROUGH", "IrExecSpec.command", "childEnv", "exec.passEnv", "journal", "redactUnitOutcome", "resolveEnvBinding", "runExecUnit", "runManagedSubprocess"],
+   "relations": [["childEnv", "AKM_* context"], ["childEnv", "EXEC_DEFAULT_ENV_PASSTHROUGH"], ["childEnv", "exec.passEnv"], ["redactUnitOutcome", "journal"], ["resolveEnvBinding", "childEnv"], ["runExecUnit", "IrExecSpec.command"], ["runExecUnit", "runManagedSubprocess"]]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-graph-improvement-loop",
+  "process": "graph_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/improvement.md"],
+  "variant": "deep_graph",
+  "expected": {
+   "entities": ["akm improve", "akm proposal accept", "autonomy gate", "bundle", "consolidate", "distill", "graph extraction", "memory inference", "proposal queue", "reflect", "state.db", "utility policy"],
+   "relations": [["akm improve", "consolidate"], ["akm improve", "distill"], ["akm improve", "reflect"], ["akm proposal accept", "bundle"], ["autonomy gate", "memory inference"], ["consolidate", "proposal queue"], ["distill", "proposal queue"], ["proposal queue", "state.db"], ["reflect", "proposal queue"]]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-reflect-adapters",
+  "process": "reflect_proposal",
+  "files": ["public-akm/v0.9.15/docs/architecture/adapters.md"],
+  "variant": "deep_reflect",
+  "expected": {
+   "feedback": "Add a section titled exactly 'Probe and write boundaries' that explains probe precedence and write allowlists using only the existing facts.",
+   "required": ["probe and write boundaries", "builtin_adapters", "filecontext", "generic-files", "assertakmassetwrite", "parsetasksource"],
+   "forbidden": ["all adapters can write", "inherits the full filesystem"]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-reflect-unit-reuse",
+  "process": "reflect_proposal",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md"],
+  "variant": "deep_reflect",
+  "expected": {
+   "feedback": "Add a section titled exactly 'Resume invariants' that summarizes purity, hash inputs, and deliberate exclusions without dropping the existing provenance.",
+   "required": ["resume invariants", "computestepworklist", "computeunitinputhash", "taskinputs", "gatefeedback", "canonicaljsonstring", "retry", "onerror", "hashversion"],
+   "forbidden": ["resume may ignore changed task inputs"]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-reflect-child-environment",
+  "process": "reflect_proposal",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md"],
+  "variant": "deep_reflect",
+  "expected": {
+   "feedback": "Add a section titled exactly 'Execution security invariants' that makes the environment, containment, capture, and redaction boundaries easy to scan.",
+   "required": ["execution security invariants", "argv", "runmanagedsubprocess", "exec.passenv", "akm_event_source", "http_proxy", "exec_capture_incomplete", "exec_output_limit", "redactunitoutcome"],
+   "forbidden": ["inherits the entire parent environment"]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-reflect-improvement-loop",
+  "process": "reflect_proposal",
+  "files": ["public-akm/v0.9.15/docs/architecture/improvement.md"],
+  "variant": "deep_reflect",
+  "expected": {
+   "feedback": "Add a section titled exactly 'Operator sequence' that summarizes the proposal-only flow and the autonomy boundary without removing implementation details.",
+   "required": ["operator sequence", "utility policy", "autonomy gate", "reflect", "distill", "consolidate", "proposal queue", "state.db", "akm proposal accept", "experimental.improveautonomy"],
+   "forbidden": ["improve writes asset files directly"]
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-judge-health-advisories-update",
+  "process": "proposal_quality_gate",
+  "files": ["public-akm/v0.9.0/docs/architecture/internals/health-advisories.md", "public-akm/v0.9.8/docs/architecture/internals/health-advisories.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "pass",
+   "feedback": "Update the health-advisory reference to current behavior while preserving supported thresholds and remediation guidance."
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-judge-architecture-update",
+  "process": "proposal_quality_gate",
+  "files": ["public-akm/v0.9.0/docs/architecture/README.md", "public-akm/v0.9.2/docs/architecture/README.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "pass",
+   "feedback": "Bring the architecture overview up to date while preserving supported component boundaries and operational constraints."
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-judge-unrelated-workflow-decision",
+  "process": "proposal_quality_gate",
+  "files": ["public-akm/v0.9.15/docs/architecture/adapters.md", "public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "reject",
+   "feedback": "Clarify adapter probe precedence and write boundaries without replacing the adapter reference with unrelated workflow material."
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-judge-unrelated-environment-decision",
+  "process": "proposal_quality_gate",
+  "files": ["public-akm/v0.9.15/docs/architecture/internals/improve-workflow.md", "public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "reject",
+   "feedback": "Clarify the improve workflow without replacing it with unrelated exec-environment documentation."
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-synthesize-workflow-decisions",
+  "process": "memory_consolidation",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md", "public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md", "public-akm/v0.9.15/docs/architecture/decisions/0005-task-result-vocabulary-and-legacy-read-mapping.md", "public-akm/v0.9.15/docs/architecture/decisions/0006-task-source-version-routing.md", "public-akm/v0.9.15/docs/architecture/decisions/0011-engine-run-loop-invariants.md"],
+  "variant": "grounded_consolidate",
+  "expected": {
+   "manifest_id": "composite::workflow-decisions"
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-synthesize-architecture",
+  "process": "memory_consolidation",
+  "files": ["public-akm/v0.9.15/docs/architecture/architecture.md", "public-akm/v0.9.15/docs/architecture/adapters.md", "public-akm/v0.9.15/docs/architecture/internals/functional-contract-patterns.md", "public-akm/v0.9.15/docs/architecture/internals/classification.md"],
+  "variant": "grounded_consolidate",
+  "expected": {
+   "manifest_id": "composite::architecture"
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "deep-synthesize-full-system",
+  "process": "memory_consolidation",
+  "files": ["public-akm/v0.9.15/docs/architecture/architecture.md", "public-akm/v0.9.15/docs/architecture/adapters.md", "public-akm/v0.9.15/docs/architecture/improvement.md", "public-akm/v0.9.15/docs/architecture/internals/improve-workflow.md", "public-akm/v0.9.15/docs/architecture/internals/classification.md", "public-akm/v0.9.15/docs/architecture/internals/functional-contract-patterns.md", "public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md", "public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md"],
+  "variant": "grounded_consolidate",
+  "expected": {
+   "manifest_id": "composite::full-system"
+  },
+  "tier": "deep",
+  "track": "legacy"
+ },
+ {
+  "id": "prod-consolidate-full-pool",
+  "process": "memory_consolidation",
+  "files": ["memories/alert-routing.md", "memories/api-rate-limit.md", "memories/artifact-compression.md", "memories/audit-retention.md", "memories/backup-schedule.md", "memories/build-retention.md", "memories/cache-implementation.md", "memories/cache-ttl-conflict.md", "memories/cache-ttl-current.md", "memories/cache-ttl-old.md", "memories/canary-sample-count.md", "memories/certificate-rotation.md", "memories/database-connection-pool.md", "memories/dependency-pin.md", "memories/deploy-drain-copy.md", "memories/deploy-drain-primary.md", "memories/deployment-window.md", "memories/health-timeout.md", "memories/incident-channel.md", "memories/interactive-priority.md", "memories/log-retention.md", "memories/maintenance-owner.md", "memories/manifest-format.md", "memories/metric-scrape-interval.md", "memories/object-store-region.md", "memories/operator-preference.md", "memories/publisher-batch-size.md", "memories/checkpoint-recovery-observation.md", "memories/queue-partition-count.md", "memories/retry-backoff.md", "memories/rollback-alias.md", "memories/schema-version.md", "memories/artifact-signing-observation.md", "memories/tracing-sample-rate.md", "memories/worker-concurrency.md"],
+  "variant": "production_plan",
+  "expected": {
+   "merge": [["memories/deploy-drain-copy", "memories/deploy-drain-primary"]],
+   "delete": ["memories/cache-ttl-old"],
+   "promote": ["memories/artifact-signing-observation"],
+   "contradict": [["memories/cache-ttl-conflict", "memories/cache-ttl-current"]],
+   "protected": ["memories/operator-preference"],
+   "queued": ["memories/alert-routing", "memories/api-rate-limit", "memories/artifact-compression", "memories/audit-retention", "memories/backup-schedule", "memories/build-retention", "memories/cache-implementation", "memories/canary-sample-count", "memories/certificate-rotation", "memories/database-connection-pool", "memories/dependency-pin", "memories/deployment-window", "memories/health-timeout", "memories/incident-channel", "memories/interactive-priority", "memories/log-retention", "memories/maintenance-owner", "memories/manifest-format", "memories/metric-scrape-interval", "memories/object-store-region", "memories/publisher-batch-size", "memories/checkpoint-recovery-observation", "memories/queue-partition-count", "memories/retry-backoff", "memories/rollback-alias", "memories/schema-version", "memories/tracing-sample-rate", "memories/worker-concurrency"],
+   "strict": true
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-consolidate-noop-pool",
+  "process": "memory_consolidation",
+  "files": ["memories/alert-routing.md", "memories/api-rate-limit.md", "memories/artifact-compression.md", "memories/audit-retention.md", "memories/backup-schedule.md", "memories/build-retention.md", "memories/cache-implementation.md", "memories/canary-sample-count.md", "memories/certificate-rotation.md", "memories/database-connection-pool.md", "memories/dependency-pin.md", "memories/deployment-window.md", "memories/health-timeout.md", "memories/incident-channel.md", "memories/interactive-priority.md", "memories/log-retention.md", "memories/maintenance-owner.md", "memories/manifest-format.md", "memories/metric-scrape-interval.md", "memories/object-store-region.md", "memories/publisher-batch-size.md", "memories/queue-partition-count.md", "memories/retry-backoff.md", "memories/rollback-alias.md", "memories/schema-version.md", "memories/tracing-sample-rate.md", "memories/worker-concurrency.md"],
+  "variant": "production_plan",
+  "expected": {
+   "queued": ["memories/alert-routing", "memories/api-rate-limit", "memories/artifact-compression", "memories/audit-retention", "memories/backup-schedule", "memories/build-retention", "memories/cache-implementation", "memories/canary-sample-count", "memories/certificate-rotation", "memories/database-connection-pool", "memories/dependency-pin", "memories/deployment-window", "memories/health-timeout", "memories/incident-channel", "memories/interactive-priority", "memories/log-retention", "memories/maintenance-owner", "memories/manifest-format", "memories/metric-scrape-interval", "memories/object-store-region", "memories/publisher-batch-size", "memories/queue-partition-count", "memories/retry-backoff", "memories/rollback-alias", "memories/schema-version", "memories/tracing-sample-rate", "memories/worker-concurrency"],
+   "strict": true
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-consolidate-hot-and-queued",
+  "process": "memory_consolidation",
+  "files": ["memories/operator-preference.md", "memories/queue-checkpoint.md", "memories/alert-routing.md", "memories/api-rate-limit.md", "memories/artifact-compression.md", "memories/audit-retention.md", "memories/backup-schedule.md", "memories/build-retention.md", "memories/canary-sample-count.md", "memories/certificate-rotation.md", "memories/database-connection-pool.md", "memories/dependency-pin.md", "memories/deployment-window.md", "memories/health-timeout.md", "memories/incident-channel.md", "memories/interactive-priority.md", "memories/log-retention.md", "memories/maintenance-owner.md", "memories/manifest-format.md", "memories/metric-scrape-interval.md"],
+  "variant": "production_plan",
+  "expected": {
+   "protected": ["memories/operator-preference"],
+   "queued": ["memories/queue-checkpoint", "memories/alert-routing", "memories/api-rate-limit", "memories/artifact-compression", "memories/audit-retention", "memories/backup-schedule", "memories/build-retention", "memories/canary-sample-count", "memories/certificate-rotation", "memories/database-connection-pool", "memories/dependency-pin", "memories/deployment-window", "memories/health-timeout", "memories/incident-channel", "memories/interactive-priority", "memories/log-retention", "memories/maintenance-owner", "memories/manifest-format", "memories/metric-scrape-interval"],
+   "strict": true
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-distill-memory-to-lesson",
+  "process": "distill",
+  "files": ["memories/checkpoint-recovery-observation.md"],
+  "variant": "production_lesson",
+  "expected": {
+   "required": ["checkpoint", "manifest", "blob", "prior offset", "both"],
+   "forbidden": ["manifest rename alone is sufficient", "advance after the manifest"],
+   "max_ratio": 2.5,
+   "feedback": [["positive", "The prior-offset rule prevented an unrecoverable checkpoint advance."], ["negative", "A draft mentioned only the manifest rename and lost the blob requirement."]]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-distill-memory-to-knowledge",
+  "process": "distill",
+  "files": ["memories/artifact-signing-observation.md"],
+  "variant": "production_knowledge",
+  "expected": {
+   "required": ["signature", "release controller", "worker service", "unsigned"],
+   "forbidden": ["optional signature", "retry unsigned"],
+   "max_ratio": 3.5,
+   "feedback": [["positive", "This requirement repeatedly prevented unsigned production payloads."]]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-distill-rejected-retry",
+  "process": "distill",
+  "files": ["memories/checkpoint-recovery-observation.md"],
+  "variant": "production_lesson",
+  "expected": {
+   "required": ["both", "manifest", "blob", "prior offset", "retry"],
+   "forbidden": ["advance the checkpoint after the manifest rename", "manifest rename is enough"],
+   "max_ratio": 2.8,
+   "feedback": [["negative", "The previous proposal advanced the checkpoint before both renames completed."]],
+   "rejected": [{"reason": "It made the manifest rename sufficient and omitted retry safety.", "content": "Advance the checkpoint after the manifest rename, then retry the blob later."}]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-judge-review-lesson",
+  "process": "lesson_quality_gate",
+  "files": ["memories/checkpoint-recovery-observation.md", "lessons/queue-recovery-review.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "review",
+   "reason_terms": ["checkpoint", "missing"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-judge-review-reflection",
+  "process": "proposal_quality_gate",
+  "files": ["knowledge/release-procedure.md", "knowledge/release-procedure-review.md"],
+  "variant": "deep_quality",
+  "expected": {
+   "band": "review",
+   "feedback": "Make the rollback order explicit without changing the release facts.",
+   "reason_terms": ["postgresql", "rollback"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-graph-batch-with-empty",
+  "process": "graph_extraction",
+  "files": ["facts/release-invariants.md", "knowledge/no-graph-note.md"],
+  "variant": "graph_batch",
+  "expected": {
+   "items": [{"entities": ["Object Store", "Operations", "PostgreSQL", "Redis", "Release Controller"], "relations": [["Object Store", "artifact bytes"], ["Operations", "releases"], ["PostgreSQL", "request and completion state"], ["Release Controller", "releases"]], "strict_entities": true, "max_extra_entities": 4, "max_extra_relations": 4}, {"entities": [], "relations": [], "must_be_empty": true}]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-graph-batch-knowledge-memory",
+  "process": "graph_extraction",
+  "files": ["knowledge/platform-architecture.md", "memories/queue-checkpoint.md"],
+  "variant": "graph_batch",
+  "expected": {
+   "items": [{"entities": ["API Gateway", "Object Store", "PostgreSQL", "Redis", "Release Controller", "Worker Service"], "relations": [["API Gateway", "PostgreSQL"], ["Release Controller", "Worker Service"], ["Worker Service", "Object Store"]], "max_extra_relations": 8}, {"entities": ["Worker Service", "artifact blob", "artifact manifest", "queue checkpoint"], "relations": [["queue checkpoint", "artifact blob"], ["queue checkpoint", "artifact manifest"]], "max_extra_entities": 4, "max_extra_relations": 3}]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-graph-chunked-workflow",
+  "process": "graph_extraction",
+  "files": ["workflows/release-validation.md"],
+  "variant": "graph_chunked",
+  "expected": {
+   "entities": ["Metrics Collector", "Object Store", "Operations Team", "PostgreSQL", "Worker Service", "queue checkpoint", "worker-stable"],
+   "relations": [["Metrics Collector", "Worker Service"], ["Operations Team", "production candidate"], ["Worker Service", "Object Store"], ["Worker Service", "PostgreSQL"], ["worker-stable", "Worker Service"]],
+   "minimum_chunks": 3,
+   "max_extra_entities": 6,
+   "max_extra_relations": 10,
+   "forbidden_entities": ["workflow", "system", "process", "step", "input", "output"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-reflect-workflow-preservation",
+  "process": "reflect_proposal",
+  "files": ["workflows/release-validation.md"],
+  "variant": "production_reflect",
+  "expected": {
+   "feedback": "Add a short 'Failure interpretation' section explaining that a timed-out health sample fails and resets the consecutive-green sequence.",
+   "required": ["failure interpretation", "timed-out", "consecutive", "object store", "postgresql"],
+   "forbidden": ["health alone proves", "resume after one health check"],
+   "preserve": ["{{candidate_image}}", "{{image_digest}}", "relayctl workers restore", "| Artifact bytes |"],
+   "append": "## Failure interpretation\n\nA timed-out health sample fails validation and resets the consecutive-green sequence; health never replaces Object Store and PostgreSQL evidence."
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-reflect-skill-preservation",
+  "process": "reflect_proposal",
+  "files": ["skills/incident-recovery/SKILL.md"],
+  "variant": "production_reflect",
+  "expected": {
+   "feedback": "Add a short 'Failure boundary' section that states what to do when either rename still fails.",
+   "required": ["failure boundary", "prior", "both", "rename", "publishers"],
+   "forbidden": ["advance after one rename"],
+   "preserve": ["{{request_id}}", "relayctl artifacts rename --both", "| Preserve |"],
+   "append": "## Failure boundary\n\nIf either rename still fails, keep publishers paused and the checkpoint at its prior offset; do not commit partial progress."
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-reflect-memory-preservation",
+  "process": "reflect_proposal",
+  "files": ["memories/queue-checkpoint.md"],
+  "variant": "production_reflect",
+  "expected": {
+   "feedback": "Clarify that the rule applies to retries without removing the observed date or concrete offset behavior.",
+   "required": ["2026-02-14", "retry", "manifest", "blob", "prior offset"],
+   "forbidden": ["discard the checkpoint"],
+   "preserve": ["Worker Service recovery path"],
+   "append": "This ordering makes every retry safe: partial rename success never moves the durable checkpoint."
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-reflect-lesson-preservation",
+  "process": "reflect_proposal",
+  "files": ["lessons/backpressure-strong.md"],
+  "variant": "production_reflect",
+  "expected": {
+   "feedback": "Make Metrics Collector ownership and the prohibition on manual clearing easier to scan.",
+   "required": ["metrics collector", "manual", "800", "below 300", "ten consecutive"],
+   "forbidden": ["operator may clear"],
+   "preserve": ["30-second `Retry-After`", "interactive jobs"],
+   "append": "## Ownership\n\nThe Metrics Collector alone removes backpressure after the sustained recovery window; operators must not clear it manually."
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-reflect-command-preservation",
+  "process": "reflect_proposal",
+  "files": ["commands/queue-audit.md"],
+  "variant": "production_reflect",
+  "expected": {
+   "feedback": "Add a short note explaining that a blocked result must not trigger an automatic repair.",
+   "required": ["blocked", "automatic repair", "read-only", "checkpoint"],
+   "forbidden": ["automatically repairs the queue"],
+   "preserve": ["$ARGUMENTS", "relayctl artifacts rename-status", "| `ready` |"],
+   "append": "## Blocked results\n\nA `blocked` result remains read-only and must not trigger an automatic repair; report the missing state to the operator."
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-session-complex-extraction",
+  "process": "session_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md", "sessions/complex-release-incident.md"],
+  "variant": "production_session",
+  "expected": {
+   "candidate_type": "lesson",
+   "required": ["timed", "reset", "consecutive", "health"],
+   "forbidden": ["forced-release-success", "system override", "sources of record rule"],
+   "max_candidates": 1,
+   "already_preserved": ["The architecture document in tool output already exists in the knowledge base.", "Production promotion requires Object Store bytes and matching PostgreSQL completion state."]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-session-long-noop",
+  "process": "session_extraction",
+  "files": ["public-akm/v0.9.15/docs/architecture/architecture.md", "public-akm/v0.9.15/docs/architecture/internals/functional-contract-patterns.md", "sessions/routine-large-review.md"],
+  "variant": "production_session_empty",
+  "expected": {
+   "max_candidates": 0,
+   "already_preserved": ["The architecture and functional-contract documents in tool output already exist in the knowledge base."]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-session-summary",
+  "process": "session_extraction",
+  "files": ["sessions/summary-release-session.md"],
+  "variant": "session_summary",
+  "expected": {
+   "required": ["relay-worker:7.4", "relay-canary-184", "object store", "postgresql", "worker-stable"],
+   "topics": ["relay-worker:7.4", "relay-canary-184", "worker-stable"],
+   "forbidden": ["forced-output"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-metadata-agent-existing-and-truncated",
+  "process": "metadata_enhance",
+  "files": ["agents/release-coordinator.md"],
+  "variant": "production_metadata",
+  "expected": {
+   "asset_type": "agent",
+   "keywords": ["release", "approval", "rollback"],
+   "forbidden": ["copper finch", "file format"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-metadata-command",
+  "process": "metadata_enhance",
+  "files": ["commands/queue-audit.md"],
+  "variant": "production_metadata",
+  "expected": {
+   "asset_type": "command",
+   "keywords": ["queue", "checkpoint", "audit"],
+   "forbidden": ["repair command"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-metadata-skill",
+  "process": "metadata_enhance",
+  "files": ["skills/incident-recovery/SKILL.md"],
+  "variant": "production_metadata",
+  "expected": {
+   "asset_type": "skill",
+   "keywords": ["incident", "rename", "checkpoint"],
+   "forbidden": ["file format"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-metadata-script",
+  "process": "metadata_enhance",
+  "files": ["scripts/queue-inspector.sh"],
+  "variant": "production_metadata",
+  "expected": {
+   "asset_type": "script",
+   "keywords": ["queue", "checkpoint", "diagnostic"],
+   "forbidden": ["mutates"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-knowledge-description",
+  "process": "schema_repair",
+  "files": ["knowledge/missing-description-reference.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["source", "record", "artifact"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-skill-description",
+  "process": "schema_repair",
+  "files": ["skills/missing-description/SKILL.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["release", "evidence", "canary"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-command-description",
+  "process": "schema_repair",
+  "files": ["commands/missing-description-command.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["canary", "artifact", "completion"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-agent-description",
+  "process": "schema_repair",
+  "files": ["agents/missing-description-agent.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["rollback", "evidence", "review"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-workflow-description",
+  "process": "schema_repair",
+  "files": ["workflows/missing-description-workflow.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["checkpoint", "rename", "recovery"]
+  },
+  "tier": "deep",
+  "track": "production"
+ },
+ {
+  "id": "prod-repair-fact-description",
+  "process": "schema_repair",
+  "files": ["facts/missing-description-fact.md"],
+  "variant": "production_schema",
+  "expected": {
+   "fields": ["description"],
+   "keywords": ["interactive", "queue", "backpressure"]
+  },
+  "tier": "deep",
+  "track": "production"
+ }
+]

@@ -21,7 +21,7 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 | `evals/extract` | Does extraction pull durable insights and preferences from session logs, and leave routine sessions empty? | public + private | planned |
 | `evals/nightly` | Does a full nightly improve run give good results unattended, with no model-call failures? | public + private | planned |
 | `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | public + private | planned |
-| `evals/bakeoff` | Which model runs akm's model-backed jobs best: valid output, correct facts, real quotes, speed? | public + private | planned |
+| `evals/bakeoff` | Which model runs akm's model-backed jobs best: valid output, correct facts, real quotes, speed? | public + private | ready |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | public (fetched) + private | planned |
 | `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | public (fetched) + private | planned |
 | `benchmarks/skillret` | Given a request, does akm rank the right skills first from a large skill library (SkillRet)? | public (fetched) + private | planned |
@@ -60,6 +60,8 @@ Models come from `.env`. Copy `.env.example` to `.env` and fill it in.
 - `JUDGE_BASE_URL`, `JUDGE_API_KEY` and `JUDGE_MODEL` set the judge.
 
 Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
+
+Each eval's README says what else it needs. An eval with Python code needs [uv](https://docs.astral.sh/uv/). An eval that uses akm needs akm on `PATH`, or `AKM_BIN` set in `.env`.
 
 ## Private assets
 
