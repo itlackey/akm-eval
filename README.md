@@ -2,7 +2,7 @@
 
 One public repository for every akm evaluation and benchmark.
 
-It holds our own evals, the published benchmarks we run akm against, and a shared library of akm assets that agents read during runs. Every eval runs the same way against any OpenAI-compatible model, local or cloud.
+It holds our own evals, the published benchmarks we run akm against, and a public akm library the evals use: a snapshot of the shared bundle our lab's agents read. Every eval runs the same way against any OpenAI-compatible model, local or cloud.
 
 This layout replaces the earlier harness. The old content stays under the tag `legacy-2026-10`.
 
@@ -12,7 +12,7 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 
 | Folder | Question it answers | Corpus | Status |
 |---|---|---|---|
-| `corpus/library` | What does a shared, working akm bundle look like for agents to read? | public | ready |
+| `corpus/library` | The public akm library the evals use: a snapshot of our lab's shared bundle | public | ready |
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | public + private | planned |
 | `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | public + private | ready |
 | `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | public + private | planned |
@@ -85,7 +85,7 @@ Run private evals on a local model, or on an API that does not train on your dat
 - The corpus and the eval assets are CC BY 4.0. See `corpus/LICENSE`. Items under another licence are listed in `corpus/NOTICE`.
 - Third-party benchmark data is fetched when you run the benchmark. It is never committed here and stays under its own licence.
 
-## Use the library as an agent's shared bundle
+## Use the library as an akm bundle
 
 `corpus/library` is a working akm bundle. Add this repository to an agent's akm config as a git bundle, with the component root set to `corpus/library` and the adapter set to `akm`:
 

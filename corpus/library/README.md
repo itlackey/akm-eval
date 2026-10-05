@@ -1,17 +1,19 @@
 # akm-eval library
 
-General akm assets that every agent reads as a shared bundle, so no agent keeps
-its own copy of common skills.
-
-This library used to be the separate repository `akm-shared`. It now lives here,
-in `corpus/library` of [akm-eval](https://github.com/itlackey/akm-eval). Some
-assets still use the old name, for example `author: akm-shared contributors`.
+A public akm library: the shareable assets of the shared bundle our lab's
+agents read, kept here as a snapshot. The evals in
+[akm-eval](https://github.com/itlackey/akm-eval) use it as their public library,
+and anyone can read it as an akm bundle. Some assets still carry the bundle's
+old name, for example `author: akm-shared contributors`.
 
 ## Where it came from
 
-Copied from akm-shared at commit `d7479b0a0d2698fe238de41dfabc7613aaea7a61`
-(2026-09-16). The git history was not copied. Apart from this README and the
-files left out (see "Not in this copy"), every file is unchanged.
+A snapshot of the lab's shared bundle (the private repository
+`fwdslsh-shared-bundle`, formerly `akm-shared`) at commit
+`d7479b0a0d2698fe238de41dfabc7613aaea7a61` (2026-09-16). The lab's bundle stays
+the live copy; a new snapshot replaces this one when the evals need newer
+assets. The git history was not copied. Apart from this README and the files
+left out (see "Not in this copy"), every file is unchanged.
 
 ## Using it
 
@@ -33,14 +35,11 @@ files left out (see "Not in this copy"), every file is unchanged.
   You can also add a filesystem bundle whose path is `corpus/library` in a clone.
   akm resolves a plain ref such as `skills/print/pagedjs` from your own stash
   first, so delete your own copy of an asset when you want the shared one to win.
-  If your agents already have a bundle named `akm-shared`, point that bundle at
-  this repository and keep the name, so refs such as
-  `akm-shared//skills/print/pagedjs` keep working.
 - **Refresh it** on a schedule with `akm bundle update akm-eval-library`. Exit
   code 75 means another akm process holds the index; treat it as "retry next
   time".
-- **Change it** by committing and pushing akm-eval with git. akm cannot write
-  through a git bundle.
+- **Changes** go to the lab's shared bundle first and reach this library with
+  the next snapshot. akm cannot write through a git bundle.
 
 ## What you provide in your own stash
 
