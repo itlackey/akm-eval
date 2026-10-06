@@ -42,6 +42,7 @@ The private data is the same dataset rewritten from a seed by `lib/rewrite`. `./
 - Dates move back by one or two whole years, chosen by the seed. A session date keeps its month and day, and its weekday is recomputed. A date written in full in a chat moves back by 365 or 730 days, which is the same month and day except for a date after February 2024, where it is a day off. A bare year, or a month and a year, is not moved.
 - The rewrite renames the words in host names everywhere, so "food.com" would make "food" a name. Words that occur 20 times or more in lower case are kept to stop that.
 - It changes the names, places and brands in about one question in eight, and every date. Questions with nothing to rename are unchanged. A model that has memorised the public questions may still do better on them.
+- Numbers and versions are kept (`--keep-values`), because the answers are counted from the sessions: how many days, how many times. The names of tools and products are renamed like any name, and the evidence check above passes with them renamed.
 
 ## What it needs from models
 

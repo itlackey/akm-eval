@@ -53,7 +53,7 @@ The eval runs akm in a temporary folder with its own config, so it never reads o
 ## Assets
 
 - `assets/cases.jsonl`: 106 real reflect proposals, each labelled by review. 28 are good and 78 are bad. The fields, the labelling rubric and how the cases were scrubbed are in `assets/README.md`. The cases carry a canary string: do not train on them.
-- `private/judge-gate/assets/cases.jsonl`: the same cases with names, hosts, ids and dates rewritten from a seed by `lib/rewrite`. Labels and diffs are kept. Each case's source, candidate, feedback and label reason are rewritten with one mapping, so a name changes the same way in all of them. It is made by `generate` and never published.
+- `private/judge-gate/assets/cases.jsonl`: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. Labels and diffs are kept. Each case's source, candidate, feedback and label reason are rewritten with one mapping, so a name or a number changes the same way in all of them: what differs between a source and its candidate still differs, and what is the same stays the same. It is made by `generate` and never published.
 
 ## Read the results
 

@@ -64,7 +64,7 @@ MODEL_NAME=qwen3-27b
 
 The jobs are memory consolidation, distillation, memory inference, graph extraction, metadata enhancement, lesson and proposal quality judging, memory contradiction detection, session extraction and summaries, reflect proposals, `remember` enrichment, schema repair and proposal triage.
 
-`private/bakeoff/assets/` is the same suite with names, hosts, ids and dates rewritten from a seed by `lib/rewrite`. The files are rewritten first and `cases.json` after, with one mapping, so a name changes the same way in a file, in a file name and in what a correct reply must hold. It is made by `generate` and never published. `generate` then checks that every term a case expects is still in its files, or still out of them, the way it was in the public assets. The assets were already scrubbed, so the rewrite changes few names, and mostly dates.
+`private/bakeoff/assets/` is the same suite with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. The files are rewritten first and `cases.json` after, with one mapping, so a name changes the same way in a file, in a file name and in what a correct reply must hold. It is made by `generate` and never published. `generate` then checks that every term a case expects is still in its files, or still out of them, the way it was in the public assets. The assets were already scrubbed, so the rewrite changes few names. It mostly changes tool names, numbers, versions and dates. The numbers in `cases.json` itself, such as `max_ratio`, are thresholds and stay as they are: only its strings are rewritten.
 
 ## Read the results
 
