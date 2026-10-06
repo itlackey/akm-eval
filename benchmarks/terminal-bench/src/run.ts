@@ -146,10 +146,13 @@ export function summarize(o: { corpus: Corpus; label: string; model: string; lim
   return summary;
 }
 
-export async function runCorpus(corpus: Corpus, ctx: { model: string; label: string; limit?: number; env: Record<string, string> }): Promise<Summary> {
+/** Where a corpus's runs go: results/ here, or private/terminal-bench/results/. */
+const resultsOf = (corpus: Corpus): string => (corpus === "public" ? join(BENCH_DIR, "results") : join(ROOT, "private", NAME, "results"));
+
+export async function runCorpus(corpus: Corpus, ctx: { model: string; label: string; limit?: number; env: Record<string, string> }, results = resultsOf(corpus)): Promise<Summary> {
   const lock = readLock();
   const tasks = selectTasks(lock, ctx.limit);
-  const dir = makeResultsDir(corpus === "public" ? join(BENCH_DIR, "results") : join(ROOT, "private", NAME, "results"), ctx.label);
+  const dir = makeResultsDir(results, ctx.label);
   const librariesDir = join(dir, "libraries");
   cpSync(libraryOf(corpus), join(librariesDir, LIBRARY), { recursive: true }); // what the akm arm seeds, kept with the run
   const configFile = join(dir, "job.json");

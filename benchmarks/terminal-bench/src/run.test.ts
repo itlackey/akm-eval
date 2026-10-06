@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
 import { PINS } from "../../../lib/harbor/harbor.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
-import { LIBRARY_ASSETS, jobConfig, libraryOf, otherDigests, readLock, selectTasks, sideBySide, summarize } from "./run.ts";
+import { LIBRARY_ASSETS, jobConfig, libraryOf, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
 
 const BENCH_DIR = join(import.meta.dir, "..");
 const lock = readLock();
@@ -146,6 +146,85 @@ describe("summarize", () => {
       expect(summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: lock.sample, dir, exit: 0 }).dataset.tasks_run_with_another_digest).toEqual([one]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runCorpus", () => {
+  /** A `uv` that is not Harbor. Given the job, it leaves the trial folders Harbor would leave and exits as FAKE_UV_EXIT says. FAKE_UV_NOTHING makes it leave none. */
+  function fakeUv(): { root: string; env: Record<string, string> } {
+    const root = mkdtempSync(join(tmpdir(), "terminal-bench-run-"));
+    mkdirSync(join(root, "bin"));
+    writeFileSync(
+      join(root, "bin", "uv"),
+      `#!/usr/bin/env bun
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+const args = Bun.argv.slice(2);
+const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
+if (!process.env.FAKE_UV_NOTHING) {
+  for (const task of job.datasets[0].task_names) {
+    for (const agent of job.agents) {
+      const name = agent.name ?? "akm-opencode";
+      const dir = join(job.jobs_dir, job.job_name, task.split("/")[1] + "__" + name);
+      mkdirSync(join(dir, "agent"), { recursive: true });
+      writeFileSync(join(dir, "result.json"), JSON.stringify({ task_name: task, agent_info: { name }, verifier_result: { rewards: { reward: name === "opencode" ? 0 : 1 } }, started_at: "2026-10-06T04:00:00Z", finished_at: "2026-10-06T04:05:00Z" }));
+    }
+  }
+}
+process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
+`,
+    );
+    chmodSync(join(root, "bin", "uv"), 0o755);
+    return { root, env: { PATH: `${join(root, "bin")}:${process.env.PATH}` } };
+  }
+
+  async function quiet<T>(f: () => Promise<T>): Promise<T> {
+    const log = console.log;
+    console.log = () => {};
+    try {
+      return await f();
+    } finally {
+      console.log = log;
+    }
+  }
+
+  test("writes the job, stages the library, runs Harbor and leaves the summary", async () => {
+    const { root, env } = fakeUv();
+    try {
+      const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+      const dir = s.results_dir;
+      expect(dir).toMatch(/results\/\d{4}-\d{2}-\d{2}-t$/);
+      const job = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
+      expect(job.datasets[0].task_names).toEqual(lock.sample.slice(0, 2).map((t) => `terminal-bench/${t}`));
+      expect(job.agents[1].kwargs.libraries_dir).toBe(join(dir, "libraries"));
+      expect(readdirSync(join(dir, "libraries"))).toEqual(["library"]);
+      expect(existsSync(join(dir, "libraries", "library", "skills"))).toBe(true);
+      expect(s.report.control).toMatchObject({ trials: 2, passed: 0 });
+      expect(s.report.akm).toMatchObject({ trials: 2, passed: 2 });
+      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ eval: "terminal-bench", corpus: "public", limit: 2, n_tasks: 2, harbor_exit: 0 });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("still leaves the summary when Harbor exits with an error, and says so", async () => {
+    const { root, env } = fakeUv();
+    try {
+      await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
+      const [run] = readdirSync(join(root, "results"));
+      expect(JSON.parse(readFileSync(join(root, "results", run, "summary.json"), "utf8")).harbor_exit).toBe(3);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("stops when Harbor left no job at all", async () => {
+    const { root, env } = fakeUv();
+    try {
+      await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_NOTHING: "1" } }, join(root, "results")))).rejects.toThrow("Harbor wrote no job");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
