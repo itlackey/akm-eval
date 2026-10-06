@@ -55,7 +55,7 @@ Two checks keep the akm arm honest. At the end of setup, a warm-up session boots
 
 ## Read the results
 
-A trial is scored when the verifier gave it a reward, 1 or 0. A trial without one is errored: it never got far enough, or the plugin was not shown to be live. Errored trials are left out of the rates and counted, with their exception types, so read that count before the rates. A trial that timed out and was still verified keeps its reward, and its exception is shown.
+A trial is scored when the verifier gave it a reward, 1 or 0. A trial without one is errored: it never got far enough, or the plugin was not shown to be live. Errored trials are left out of the rates and counted, with their exception types, so read that count before the rates. A trial whose agent ran out of time is counted as a timeout, apart from the errors. It is still verified, so it keeps its reward.
 
 | Figure | Meaning |
 |---|---|
@@ -63,6 +63,9 @@ A trial is scored when the verifier gave it a reward, 1 or 0. A trial without on
 | difference | akm minus control, task by task, averaged, with its interval from the same resampling. Only tasks that both arms have a scored trial for count, and their number is printed. |
 | akm called | The share of akm trials in which the agent called at least one of the plugin's tools (`akm_search`, `akm_show`, `akm_curate`, `akm_feedback`, `akm_remember`) or ran the `akm` command in its shell, counted from opencode's own output, and how often each. |
 | called, not called | The akm trials split by that, each split compared with the control on the same tasks. This describes what the model chose. It is not a randomised comparison: whatever made it call akm also made the task what it is. Read the number of tasks before the size of a difference. |
+| did better | The tasks both arms scored, by which arm passed more of its attempts: the akm arm, the control, or neither. |
+| read the curated results | The share of akm trials in which the agent read the file the plugin writes at the start of a session, which is akm reaching it without a tool call. |
+| per scored trial | The mean minutes of a scored trial, the minutes of the agent's own run in it, and the dollars the model reports. |
 
 The control has no plugin and no akm, so it never calls akm. The report warns when it does.
 
