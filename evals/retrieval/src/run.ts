@@ -12,7 +12,6 @@ import * as akm from "./akm.ts";
 import {
   type Abstention,
   DEPTH,
-  type Query,
   RELEVANT,
   type Scored,
   type SystemMetrics,
