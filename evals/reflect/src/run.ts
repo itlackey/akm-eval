@@ -98,6 +98,7 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
+  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
   try {
     writeConfig(sandbox, reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
     const file = join(sandbox.dir, "bundle", c.path);
@@ -109,7 +110,7 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
     const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", STRATEGY, "--json-to-stdout"]);
     const { outcome, reason } = reflectOutcome(improve);
     const served = servedModel(improve);
-    if (outcome !== "proposal") return makeRow(c, { outcome, reason, served, seconds: seconds() });
+    if (outcome !== "proposal") return makeRow(c, { outcome, reason: hide(reason), served, seconds: seconds() });
     const { proposals } = await runAkmJson<{ proposals: { id: string; source: string }[] }>(sandbox, ["proposal", "list"]);
     const mine = proposals.filter((p) => p.source === "reflect");
     if (mine.length !== 1) throw new Error(`reflect made a proposal but the queue holds ${mine.length}`);
@@ -118,7 +119,7 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
     if (typeof content !== "string") throw new Error("the proposal has no content");
     return makeRow(c, { outcome: "proposal", proposal: content, served, seconds: seconds() });
   } catch (e) {
-    return makeRow(c, { outcome: "error", reason: (e as Error).message.slice(0, 300), seconds: seconds() });
+    return makeRow(c, { outcome: "error", reason: hide((e as Error).message).slice(0, 300), seconds: seconds() });
   } finally {
     removeSandbox(sandbox);
   }

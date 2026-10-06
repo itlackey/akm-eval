@@ -44,7 +44,7 @@ else if (cmd === "improve") {
   else if (p.outcome === "none") action("reflect-skipped", { ok: false, reason: "no_change", error: "identical" });
   else if (p.outcome === "refused") action("reflect-failed", { ok: false, reason: "quality_rejected", error: "placeholder_added" });
   else if (p.outcome === "unusable") action("reflect-failed", { ok: false, reason: "parse_error", error: "not JSON" });
-  else if (p.outcome === "provider") action("reflect-failed", { ok: false, reason: "non_zero_exit", error: "HTTP 500" });
+  else if (p.outcome === "provider") action("reflect-failed", { ok: false, reason: "non_zero_exit", error: "HTTP 500 from " + config.engines.reflect.endpoint });
   else if (p.outcome === "two") { state.proposal = { id: "prop-1", source: "reflect", ref, content: "x" }; state.two = true; save(); action("reflect", { ok: true, proposal: { id: "prop-1" } }); }
 }
 else if (cmd === "proposal" && rest[0] === "list") out({ totalCount: state.proposal ? 1 : 0, proposals: state.proposal ? [{ id: state.proposal.id, ref: "bundle//" + state.proposal.ref, source: state.proposal.source }, ...(state.two ? [{ id: "prop-2", ref: "bundle//" + state.proposal.ref, source: "reflect" }] : [])] : [] });
@@ -154,7 +154,7 @@ describe("runCorpus", () => {
     expect(rows[1].served).toBe("other-name");
     expect(rows[6].served).toBeUndefined();
     expect(rows[7].served).toBeUndefined();
-    expect(rows[6].error).toContain("non_zero_exit: HTTP 500");
+    expect(rows[6].error).toBe("non_zero_exit: HTTP 500 from <MODEL_BASE_URL>/chat/completions"); // the endpoint is not in the results
     expect(rows[7].error).toContain("boom");
   });
 

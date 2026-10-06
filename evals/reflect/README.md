@@ -107,6 +107,7 @@ A model may have seen the public cases in training. A much better public score t
 - `description-truncated` and `body-defect` are defects akm's rules reject, but its list of problems does not name them: the prompt tells the model that akm found nothing wrong. Reflect cannot change a body at all, so for `body-defect` the right result is no change.
 - The library has no memories or lessons, so the cases cover knowledge, skills, agents, commands and workflows.
 - What reflect does changes with akm. Compare results only between runs with the same akm version.
+- akm's error messages name the endpoint it called. The eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.
 - A gateway may serve one model name from several providers. `served` in `summary.json` counts the names the responses gave, so you can see when a run was split.
 - The private cases keep their ids, so a private case pairs with its public one by id. `private/reflect/map.json` lists what was renamed.
 
