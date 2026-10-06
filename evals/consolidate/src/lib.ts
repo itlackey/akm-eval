@@ -43,6 +43,7 @@ export interface Row {
   safe: boolean | null; // whether that side was safe to retire
   staged: boolean; // akm staged the retirement, so a triage run would accept it with no one looking
   reason: string; // the judge's reason for a retirement
+  served: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   seconds: number;
   error?: string;
 }
@@ -135,7 +136,7 @@ export function consolidateConfig(baseUrl: string, model: string, hasKey: boolea
 }
 
 export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", seconds, error: message };
+  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", served: {}, seconds, error: message };
 }
 
 interface RetireProposal {
@@ -151,6 +152,14 @@ function retireProposals(listing: unknown): RetireProposal[] {
   return all.filter((p): p is RetireProposal => p?.source === "consolidate-pair" && typeof p?.retirement?.retiredRef === "string");
 }
 
+/** The model names the endpoint reported for the run's calls, from akm's usage report, with the calls each answered. A gateway may serve one name from several providers. */
+function servedModels(improve: unknown): Record<string, number> {
+  const rows = (improve as { usageReport?: { byProcessEngineModel?: unknown } })?.usageReport?.byProcessEngineModel;
+  const served: Record<string, number> = {};
+  if (Array.isArray(rows)) for (const r of rows) if (typeof r?.model === "string") served[r.model] = (served[r.model] ?? 0) + Number(r.calls ?? 0);
+  return served;
+}
+
 /** `bundle//memories/some-name` is the memory `some-name`. */
 const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "");
 
@@ -163,17 +172,16 @@ export function rowFromRun(c: Case, improve: unknown, proposals: unknown, second
   if (!pass || typeof pass !== "object") return errorRow(c, "improve printed no pair pass result. Does this akm have consolidate's pair pass?", seconds);
   const paired = Number(pass.pairsConsidered ?? 0) > 0;
   const judged_as = RELATIONS.find((r) => Number(pass.labelCounts?.[r] ?? 0) > 0) ?? null;
-  const base = { id: c.id, relation: c.relation, safe_sides: c.safe, paired, judged_as, seconds };
-  if (Number(pass.failedJudgments ?? 0) > 0 || (paired && Number(pass.pairsJudged ?? 0) === 0)) {
-    return { ...base, outcome: "error", retired: null, safe: null, staged: false, reason: "", error: "akm paired the notes but its judge gave no verdict" };
-  }
+  const base = { id: c.id, relation: c.relation, safe_sides: c.safe, paired, judged_as, served: servedModels(improve), seconds };
+  const failed = (error: string): Row => ({ ...base, outcome: "error", retired: null, safe: null, staged: false, reason: "", error });
+  if (Number(pass.failedJudgments ?? 0) > 0 || (paired && Number(pass.pairsJudged ?? 0) === 0)) return failed("akm paired the notes but its judge gave no verdict");
   const retired = retireProposals(proposals);
   if (retired.length === 0) return { ...base, outcome: "keep", retired: null, safe: null, staged: false, reason: "" };
-  if (retired.length > 1) return errorRow(c, `akm made ${retired.length} retire proposals for one pair`, seconds);
+  if (retired.length > 1) return failed(`akm made ${retired.length} retire proposals for one pair`);
   const [p] = retired;
   const name = nameOfRef(p.retirement.retiredRef);
   const side: Side | undefined = name === c.a.name ? "a" : name === c.b.name ? "b" : undefined;
-  if (!side) return errorRow(c, `akm retired ${p.retirement.retiredRef}, which is not one of the two notes`, seconds);
+  if (!side) return failed(`akm retired ${p.retirement.retiredRef}, which is not one of the two notes`);
   return { ...base, outcome: "retire", retired: side, safe: c.safe.includes(side), staged: p.gateDecision?.outcome === "staged", reason: p.retirement.judgeReason ?? "" };
 }
 

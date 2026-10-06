@@ -48,7 +48,7 @@ if (cmd === "index") {
   else if (what === "no-verdict") { console.error("[consolidate] chunk 1/1 (2 memories) …"); console.error("Network error: Unable to connect. Is the computer able to access the url?"); console.error("  consolidate  judge  m  2  2  0  0  0  2"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
   else result = pass({ pairsConsidered: 0, pairsJudged: 0, labelCounts: {} });
   writeFileSync(proposals, JSON.stringify(list));
-  json({ ok: true, strategy: "consolidate", consolidation: { pairPass: result, mtimes: notes.map((n) => n.mtime) } });
+  json({ ok: true, strategy: "consolidate", consolidation: { pairPass: result, mtimes: notes.map((n) => n.mtime) }, usageReport: { byProcessEngineModel: [{ process: "consolidate", engine: "consolidate", model: notes.length % 2 === 0 ? "fake-served" : "other", calls: 2 }] } });
 } else if (cmd === "proposal" && args[1] === "list") {
   if (!has("--detail")) { console.error("needs --detail full"); process.exit(2); }
   const list = existsSync(proposals) ? JSON.parse(readFileSync(proposals, "utf8")) : [];
@@ -134,6 +134,8 @@ describe("runCorpus", () => {
     ]);
     const summary = await quiet(() => runCorpus("public", ctx, folders));
     expect(summary).toMatchObject({ eval: "consolidate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 9, n_run: 9, n_scored: 7, n_errored: 2, n_paired: 6 });
+    // the endpoint's names add up over every case that got as far as a run result, errored ones included: 8 cases of 2 calls
+    expect(summary.served_models).toEqual({ "fake-served": 16 });
     expect(summary.metrics.unsafe).toEqual({ n: 1, of: 7, staged: 1 });
     expect(summary.metrics.precision).toEqual({ value: 0.75, safe: 3, retired: 4 });
     expect(summary.metrics.recall).toEqual({ value: 1, retired_safe: 3, of: 3 });

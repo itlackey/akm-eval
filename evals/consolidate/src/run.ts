@@ -45,6 +45,7 @@ interface Summary {
   n_scored: number;
   n_errored: number;
   n_paired: number;
+  served_models: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   metrics: ReturnType<typeof metrics>;
   results_dir: string;
 }
@@ -90,6 +91,8 @@ function printSummary(s: Summary): void {
   console.log(`  retire precision    ${cell(m.precision.safe, m.precision.retired, m.precision.value)}`);
   console.log(`  retire recall       ${cell(m.recall.retired_safe, m.recall.of, m.recall.value)}  of the cases with a safe side`);
   console.log(`  errored             ${s.n_errored}`);
+  const served = Object.entries(s.served_models).map(([name, calls]) => `${name} (${calls} calls)`);
+  if (served.length > 0) console.log(`  served as           ${served.join(", ")}`);
   const rows: string[][] = [["relation", "cases", "paired", "retired safe", "retired unsafe", "kept"]];
   for (const r of RELATIONS) {
     const k = m.classes[r];
@@ -168,6 +171,13 @@ async function runCase(c: Case, ctx: Context): Promise<Row> {
   }
 }
 
+/** The model names the endpoint reported over the whole run, with the calls each answered. */
+function servedModels(rows: Row[]): Record<string, number> {
+  const total: Record<string, number> = {};
+  for (const r of rows) for (const [name, calls] of Object.entries(r.served)) total[name] = (total[name] ?? 0) + calls;
+  return total;
+}
+
 export async function runCorpus(
   corpus: Corpus,
   ctx: Context,
@@ -222,6 +232,7 @@ export async function runCorpus(
     n_scored: rows.length - errored,
     n_errored: errored,
     n_paired: paired,
+    served_models: servedModels(rows),
     metrics: metrics(rows),
     results_dir: dir,
   };

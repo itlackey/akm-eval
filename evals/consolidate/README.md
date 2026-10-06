@@ -34,7 +34,7 @@ The private run reads `private/consolidate/assets/`. Make it first with `./gener
 
 Each run writes two files to `evals/consolidate/results/<UTC date>-<label>/`, or to `private/consolidate/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name, the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name and the names the endpoint reported for its calls (a gateway may serve one name from several providers), the akm version, the corpus and the git commit.
 - `samples.jsonl`: one line per case, with the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason and the time it took.
 
 ## What it needs from a model
@@ -85,6 +85,8 @@ A pair akm never paired is a keep. In the public set five of the ten unrelated p
 Read `judged_as` next to the outcome. akm retires a note only when its judge listed no claim that the note holds alone. A pair labelled `supersedes` or `subsumed` and kept was one where the judge listed a claim for the note, and that costs recall, not safety. An unsafe retirement is a claim the judge missed.
 
 The set is small. One case is 1.7 points of 60, and 10 points of any one relation. Read changes of a case or two as noise, and rerun before you trust a gap.
+
+The notes are short, about 100 words. Real notes run longer, and a judge misses more in a long note, so a clean score here does not promise one on your bundle.
 
 A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
 
