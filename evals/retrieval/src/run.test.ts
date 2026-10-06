@@ -10,38 +10,48 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** What the fake akm answers to each query: the refs `search` and `curate` return, or an error. */
-const ANSWERS: Record<string, { search: string[] | "fail"; curate: string[] | "fail" }> = {
-  alpha: { search: ["a/z", "a/x", "a/q", "a/y"], curate: ["a/x", "a/y", "a/z"] },
-  beta: { search: [], curate: ["b/x#one", "b/x#two", "b/y"] },
-  gamma: { search: ["c/x"], curate: [] },
-  boom: { search: "fail", curate: ["d/x"] },
-  thanks: { search: [], curate: ["x/1"] },
-  "ci passed": { search: ["x/1"], curate: ["x/1"] },
+/**
+ * What the fake akm answers to each query: the refs `search` and `curate` return, or an error, and the same for the
+ * semantic index. "fallback" is a semantic search that akm answers with keyword search.
+ */
+type Reply = string[] | "fail" | "fallback";
+const ANSWERS: Record<string, Partial<Record<"search" | "curate" | "semantic_search" | "semantic_curate", Reply>>> = {
+  alpha: { search: ["a/z", "a/x", "a/q", "a/y"], curate: ["a/x", "a/y", "a/z"], semantic_search: ["a/x", "a/y", "a/z"], semantic_curate: ["a/x", "a/y", "a/z"] },
+  beta: { search: [], curate: ["b/x#one", "b/x#two", "b/y"], semantic_search: ["b/y", "b/x#one"], semantic_curate: ["b/x", "b/y"] },
+  gamma: { search: ["c/x"], curate: [], semantic_search: ["c/x", "c/y"], semantic_curate: [] },
+  boom: { search: "fail", curate: ["d/x"], semantic_search: ["d/x"], semantic_curate: ["d/x"] },
+  thanks: { search: [], curate: ["x/1"], semantic_search: ["x/1"], semantic_curate: ["x/1"] },
+  "ci passed": { search: ["x/1"], curate: ["x/1"], semantic_search: ["x/1"], semantic_curate: ["x/1"] },
+  fallback: { search: ["f/x"], curate: ["f/x"], semantic_search: "fallback", semantic_curate: ["f/x"] },
 };
 
 /**
  * An akm that counts the files of the sandbox's bundle, and of every bundle its config names, as its entries, and
- * answers each query from the table above. It writes the config it was indexed with to `seen-config.json`.
+ * answers each query from the table above. A semantic akm, as its config says, has embedded every entry and answers with
+ * searchMode semantic. It writes the config it was indexed with to `seen-config-keyword.json` or `seen-config-semantic.json`.
  */
 const fakeAkm = (dir: string) => `
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 const answers = ${JSON.stringify(ANSWERS)};
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
+const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
+const semantic = config.semanticSearchMode === "auto";
 if (cmd === "index") {
-  const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
-  writeFileSync(${JSON.stringify(join(dir, "seen-config.json"))}, JSON.stringify(config));
+  writeFileSync(${JSON.stringify(dir)} + "/seen-config-" + (semantic ? "semantic" : "keyword") + ".json", JSON.stringify(config));
   const folders = [process.env.AKM_BUNDLE_DIR, ...Object.values(config.bundles ?? {}).map((b) => b.path)];
-  console.log(JSON.stringify({ ok: true, totalEntries: folders.reduce((n, f) => n + readdirSync(f).length, 0) }));
+  const total = folders.reduce((n, f) => n + readdirSync(f).length, 0);
+  console.log(JSON.stringify({ ok: true, totalEntries: total, verification: { embeddingCount: semantic ? total : 0, message: "embedded" } }));
   process.exit(0);
 }
 const query = rest[rest.indexOf("--") + 1];
-const a = answers[query]?.[cmd];
+const a = answers[query]?.[(semantic ? "semantic_" : "") + cmd];
 if (a === "fail") { console.error("boom"); process.exit(70); }
 if (!a) { console.error("no answer for " + query); process.exit(1); }
-const hits = a.map((ref) => ({ ref }));
-console.log(JSON.stringify(cmd === "search" ? { hits, searchMode: "keyword" } : { items: hits, searchMode: "keyword" }));
+const fellBack = a === "fallback";
+const hits = (fellBack ? [] : a).map((ref) => ({ ref }));
+const answer = { searchMode: fellBack ? "fts-fallback" : semantic ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
+console.log(JSON.stringify(cmd === "search" ? { hits, ...answer } : { items: hits, ...answer }));
 `;
 
 const QUERIES = [
@@ -68,8 +78,8 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, fakeAkm(root));
   const created: string[] = [];
-  const newSandbox = () => {
-    const sandbox = { ...createSandbox("retrieval-test"), cmd: ["bun", script] };
+  const newSandbox = (semantic = false) => {
+    const sandbox = { ...createSandbox("retrieval-test", { semantic }), cmd: ["bun", script] };
     created.push(sandbox.dir);
     return sandbox;
   };
@@ -90,24 +100,48 @@ describe("runCollection", () => {
   test("scores search and curate on the task queries that have a relevant asset", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
-    expect(s).toMatchObject({ eval: "retrieval", corpus: "public", collection: "library", label: "t", akm_version: "0.9.99-test", search_mode: "keyword", depth: 10, relevant_from_grade: 2, limit: null, n_queries: 6, n_assets: 1, n_scored: 3 });
+    expect(s).toMatchObject({ eval: "retrieval", corpus: "public", collection: "library", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 10, relevant_from_grade: 2, limit: null, n_queries: 6, n_assets: 1, n_scored: 3 });
+    expect(Object.keys(s.index_seconds)).toEqual(["keyword", "semantic"]);
 
     // q1 and q2 are scored for search. q4's search call failed, so it is left out and counted.
     const dcg = 1 + 7 / Math.log2(3) + 3 / Math.log2(5);
     const ideal = 7 + 3 / Math.log2(3) + 1 / Math.log2(4);
     expect(s.metrics.search).toMatchObject({ n: 2, p_5: 0.2, success_5: 0.5, mrr: 0.25, recall_10: 0.5, judged_10: 0.875 });
     expect(s.metrics.search.ndcg_10).toBeCloseTo(dcg / ideal / 2, 3);
-    expect(s.errored).toEqual({ search: 1, curate: 0 });
+    expect(s.errored).toEqual({ search: 1, curate: 0, semantic_search: 0, semantic_curate: 0 });
 
     // q1, q2 and q4 are all scored for curate, and curate put every relevant asset first.
     expect(s.metrics.curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
   });
 
+  test("scores the semantic columns from the semantic index: its own answers, its own errors", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection("public", "library", ctx, folders));
+    // semantic search puts b/y, which is not relevant, before b/x for q2, and q4 answers where keyword search failed.
+    expect(s.metrics.semantic_search).toMatchObject({ n: 3, p_5: 0.2667, success_5: 1, mrr: 0.8333, recall_10: 1, judged_10: 1 });
+    expect(s.metrics.semantic_search.ndcg_10).toBeCloseTo((1 + 3 / Math.log2(3) / 3 + 1) / 3, 3);
+    expect(s.metrics.semantic_curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
+    const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[3].search.error).toContain("exited 70");
+    expect(rows[3].semantic_search).toMatchObject({ refs: ["d/x"], grades: [3] });
+    expect(rows[1].semantic_search.refs).toEqual(["b/y", "b/x"]); // the section of b/x folds into it
+  });
+
   test("counts, for non-task inputs and for task queries with no relevant asset, how often akm returned nothing", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
-    expect(s.abstention.non_task).toEqual({ search: { n: 2, abstained: 1, rate: 0.5 }, curate: { n: 2, abstained: 0, rate: 0 } });
-    expect(s.abstention.no_answer).toEqual({ search: { n: 1, abstained: 0, rate: 0 }, curate: { n: 1, abstained: 1, rate: 1 } });
+    expect(s.abstention.non_task).toEqual({
+      search: { n: 2, abstained: 1, rate: 0.5 },
+      curate: { n: 2, abstained: 0, rate: 0 },
+      semantic_search: { n: 2, abstained: 0, rate: 0 },
+      semantic_curate: { n: 2, abstained: 0, rate: 0 },
+    });
+    expect(s.abstention.no_answer).toEqual({
+      search: { n: 1, abstained: 0, rate: 0 },
+      curate: { n: 1, abstained: 1, rate: 1 },
+      semantic_search: { n: 1, abstained: 0, rate: 0 },
+      semantic_curate: { n: 1, abstained: 1, rate: 1 },
+    });
   });
 
   test("writes summary.json and samples.jsonl: what akm returned, each result's grade, and the scores", async () => {
@@ -131,12 +165,35 @@ describe("runCollection", () => {
     expect(rows[4]).toMatchObject({ kind: "chitchat", n_relevant: 0 });
   });
 
-  test("copies the library into the sandbox, and removes the sandbox afterwards", async () => {
+  test("copies the library into the two sandboxes, one for each index, and removes them afterwards", async () => {
     const { ctx, folders, created } = setup();
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(s.n_assets).toBe(1); // the fake akm counts the files in the bundle: the library's one file
-    expect(created).toHaveLength(1);
-    expect(existsSync(created[0])).toBe(false);
+    expect(created).toHaveLength(2);
+    for (const dir of created) expect(existsSync(dir)).toBe(false);
+  });
+
+  test("stops before the queries when akm cannot embed the assets, or answers a first semantic search with keyword search", async () => {
+    const { ctx, folders, root, created } = setup();
+    const withoutEmbeddings = join(root, "no-embeddings-akm.ts");
+    writeFileSync(withoutEmbeddings, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 1, verification: { embeddingCount: 0, message: "Semantic search pending." } }));');
+    const without = (semantic = false) => ({ ...ctx.newSandbox(semantic), cmd: ["bun", withoutEmbeddings] });
+    await expect(quiet(() => runCollection("public", "library", { ...ctx, newSandbox: without }, folders))).rejects.toThrow("akm embedded 0 of 1 assets: Semantic search pending.");
+    const first = setup([{ id: "f", query: "fallback", kind: "direct" }, ...QUERIES], [...QRELS, grade("f", "f/x", 3)]);
+    await expect(quiet(() => runCollection("public", "library", first.ctx, first.folders))).rejects.toThrow("akm cannot search with its embedder: akm search searched with fts-fallback, not semantic");
+    for (const dir of [...created, ...first.created]) expect(existsSync(dir)).toBe(false);
+    expect(existsSync(first.folders.results)).toBe(false);
+  });
+
+  test("counts a semantic call that akm answered with keyword search as an error, and leaves its query out of the semantic column", async () => {
+    const { ctx, folders } = setup([...QUERIES, { id: "q5", query: "fallback", kind: "direct" }], [...QRELS, grade("q5", "f/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", ctx, folders));
+    expect(s.errored).toEqual({ search: 1, curate: 0, semantic_search: 1, semantic_curate: 0 });
+    expect(s.metrics.semantic_search.n).toBe(3);
+    expect(s.metrics.search.n).toBe(3); // q4's keyword search failed, and q5 found f/x
+    const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[6].semantic_search.error).toContain("searched with fts-fallback, not semantic");
+    expect(rows[6].search.refs).toEqual(["f/x"]);
   });
 
   test("runs N queries, in the task and non-task proportion, with --limit", async () => {
@@ -169,6 +226,7 @@ describe("runCollection", () => {
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(s.n_scored).toBe(0);
     expect(s.metrics.search.ndcg_10).toBeNull();
+    expect(s.metrics.semantic_search.ndcg_10).toBeNull();
     expect(s.abstention.no_answer.search.n).toBe(1);
   });
 });
@@ -184,6 +242,8 @@ describe("banned assets", () => {
     expect(s.collection).toBe("books");
     expect(s.metrics.search.banned_above).toBe(0.5);
     expect(s.metrics.curate.banned_above).toBe(0);
+    expect(s.metrics.semantic_search.banned_above).toBe(0.5); // q1 puts a/z, banned, after a/x and a/y, but q2 puts b/y, banned, first
+    expect(s.metrics.semantic_curate.banned_above).toBe(0);
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[0].search.scores.banned_above).toBe(true);
     expect(rows[0].curate.scores.banned_above).toBe(false);
@@ -211,13 +271,16 @@ describe("a set of your own", () => {
     const s = await quiet(() => runCollection("own", "own", ctx, { ...folders, library, bundles }));
     expect(s).toMatchObject({ corpus: "own", collection: "own", n_assets: 2 }); // had the library been copied as well, the fake akm would count 4
     expect(s.results_dir).toEndWith("-t-own");
-    const seen = JSON.parse(readFileSync(join(root, "seen-config.json"), "utf8"));
+    const seen = JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8"));
     expect(seen.semanticSearchMode).toBe("off");
     expect(seen.defaultBundle).toBeUndefined();
     expect(seen.bundles).toEqual({
       one: { path: join(realpathSync(library), "one"), components: { main: { adapter: "akm" } }, writable: false },
       two: { path: join(realpathSync(library), "two"), components: { main: { adapter: "claude" } }, writable: false },
     });
+    // the semantic index has the same bundles, and searches with the embedder as well
+    const semantic = JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8"));
+    expect(semantic).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" }, bundles: seen.bundles });
   });
 
   test("copies a library without bundles.json into the sandbox as one bundle, and follows a link to it", async () => {
@@ -226,7 +289,8 @@ describe("a set of your own", () => {
     symlinkSync(folders.library, link);
     const s = await quiet(() => runCollection("own", "own", ctx, { ...folders, library: link, bundles: join(root, "missing.json") }));
     expect(s.n_assets).toBe(1);
-    expect(JSON.parse(readFileSync(join(root, "seen-config.json"), "utf8")).bundles).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8")).bundles).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8")).bundles).toBeUndefined();
   });
 
   test("says how to make a set when the queries are not in the eval's format", async () => {
