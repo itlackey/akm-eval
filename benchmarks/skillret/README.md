@@ -4,9 +4,9 @@ Given a request, does akm rank the right skills first from a large skill library
 
 [SkillRet](https://github.com/ThakiCloud/SKILLRET) (Kang, Cho and Kim, 2026, [arXiv:2605.05726](https://arxiv.org/abs/2605.05726)) is a published test of exactly that, built by others. Its test split is a library of 6,006 agent skills scraped from public GitHub repositories, and 4,392 requests written for it. A request needs one skill (2,143 requests), two (1,703) or three (546), and the benchmark counts how high a retriever puts them: NDCG, Recall, Completeness (all the skills a request needs are in the first k) and MAP, at k = 5, 10 and 15.
 
-This benchmark writes the skills into akm as assets, asks `akm search` and `akm curate` for the first 15 skills of every request, and scores them with the benchmark's metrics. It prints the result beside the numbers SkillRet's paper reports for BM25 and for embedding models, which are theirs and are not run here.
+This benchmark writes the skills into akm as assets, asks `akm search` and `akm curate` for the first 15 skills of every request, and scores them with the benchmark's metrics. It does so twice: with akm's keyword search, and with its semantic search, which is akm's built-in embedder, bge-small-en-v1.5. It prints the results beside the numbers SkillRet's paper reports for BM25 and for embedding models, among them bge-small-en-v1.5 itself, which are theirs and are not run here.
 
-No model runs when you run it. akm searches with keywords, and the run is deterministic.
+No model service is called when you run it. The embedder is a 133 MB model that akm loads in its own process, and the run is deterministic.
 
 ## Run
 
@@ -18,21 +18,21 @@ benchmarks/skillret/run --limit 200
 ```
 
 - `--corpus` picks the library and the queries. `public` is SkillRet's test split. `private` is a library of the same size drawn from its train split: see "The private corpus". `all` runs both and prints them side by side, never as one number.
-- `--limit N` runs N queries, drawn at random under seed 42 in proportion to how many skills a query needs. It is never the first N. The library stays whole, so a limited run is as hard per query as the full one, only noisier.
+- `--limit N` runs N queries, drawn at random under seed 42 in proportion to how many skills a query needs. It is never the first N. The library stays whole, so a limited run is as hard per query as the full one, only noisier, and it builds both indexes: `--limit 200` takes about 20 minutes, 16 of them for the semantic index.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default label is `akm-<version>`.
 
 Each run writes two files to `benchmarks/skillret/results/<UTC date>-<label>/`, or to `private/skillret/results/` for the private corpus:
 
-- `summary.json`: the metrics of search and of curate at 5, 10 and 15, the same for the queries that need one, two and three skills, the number of failed calls and of queries that got no skill, the akm version and search mode, the dataset revision and checksums, how the sample was drawn, how long indexing and the queries took, and the git commit.
-- `samples.jsonl`: one line per query, in the order of the dataset, with the request, the ids of the skills it needs, the ids that search and curate returned in order, and how long each took.
+- `summary.json`: the metrics of the four lines, search and curate on the keyword index and on the semantic one, at 5, 10 and 15, the same for the queries that need one, two and three skills, the number of failed calls and of queries that got no skill, the akm version, the search mode akm reported for each index and the embedding model, the dataset revision and checksums, how the sample was drawn, how long each index and the queries took, and the git commit.
+- `samples.jsonl`: one line per query, in the order of the dataset, with the request, the ids of the skills it needs, the ids that search and curate returned in order on each index, and how long each took.
 
 ## What it needs
 
-[bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. No model, no key. The network is used once, to fetch the data (see "The data").
+[bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. No model service and no key. The network is used to fetch the data (see "The data"), and once more the first time a run builds a semantic index: akm downloads its embedding model, bge-small-en-v1.5 (133 MB, from the Hugging Face Hub), and the benchmark keeps it in `.cache/models/` at the root of the repository, which git ignores. Every later run reads it from there.
 
-The benchmark gives akm a temporary folder with its own config and folders, writes the 6,006 skills into it, and indexes them with `akm index --full`. It never reads or writes your akm bundle. The folder takes about 50 MB for the skills and 80 MB for akm's index, and is removed when the run ends. `private` reads the 188 MB file of train skills whole, which takes about 1.2 GB of memory for ten seconds.
+The benchmark gives akm two temporary folders, each with its own config and folders, writes the 6,006 skills into both, and indexes them with `akm index --full`: one for keyword search, one with the embedder, which embeds every skill. It never reads or writes your akm bundle. Each folder takes about 50 MB for the skills and 80 MB for akm's index, and is removed when the run ends. A semantic call loads the model in its own akm process, which takes 450 MB of memory, so eight at once take about 4 GB. `private` reads the 188 MB file of train skills whole, which takes about 1.2 GB of memory for ten seconds.
 
-A full run of one corpus takes about 14 minutes: 25 s to write and index the 6,006 skills, then 8,784 calls, eight at a time, in 13.6 minutes for `public` and 12.3 for `private`. The machine had 12 cores and was busy with other work, with a load average between 8 and 27. A search takes 0.3 s on its own, nearly all of it akm starting up. With eight in flight, a search took 0.55 s on average and a curate 0.94 s. `--limit 200` takes about a minute.
+A full run takes 99 minutes for `public` and 63 for `private`. Of the public run, 16 minutes embed the 6,006 skills for the semantic index (10 for the private library) and 24 s index them for keyword search, and the rest is 17,568 calls, eight at a time, in 83 minutes (53 for private). Before the semantic lines a run took 14 minutes. The machine had 12 cores and was busy with other work, with a load average between 10 and 30. A keyword search takes 0.3 s on its own and a semantic one 0.9 s, nearly all of it akm starting up, and for the semantic one loading the model. With eight in flight on that machine a search took 1.0 s on average, a curate 1.6, a semantic search 2.9 and a semantic curate 3.5. A semantic call needs about 1.5 CPU-seconds, so on a busy machine eight at once go no faster than four.
 
 ## The data
 
@@ -46,26 +46,30 @@ The Hub head, `6583d7d` on 2026-10-05 and still on 2026-10-06, differs from `a05
 
 For each skill, one file, `skills/<id>/SKILL.md` in the bundle, holding the `skill_md` field as the dataset has it: the front matter and the body. The id is the dataset's, because skill names are not unique (153 names occur more than once in the test pool). akm names a skill by its directory, so with this layout it indexes the skill's id and not its own name. Naming the directories `<name>-<id>` instead moved NDCG@10 by +0.01 on a sample of 800 queries (measured once, not part of the benchmark), so the layout does not hold akm back.
 
-Then, once:
+Then, once for each of the two indexes:
 
 ```
 akm index --full
 ```
 
-and for each request, as written in the dataset, which is a paragraph or several:
+and for each request, as written in the dataset, which is a paragraph or several, on each index:
 
 ```
 akm search --limit 15 --shape agent --format json -- "<request>"
 akm curate --limit 15 --shape agent --format json -- "<request>"
 ```
 
-akm runs with semantic search off, which is also its default, so the numbers come from its keyword index: SQLite FTS5 with BM25 over each skill's name, description, tags and body, with Porter stemming, and the request's words, minus stopwords, joined with OR. The body is a projection of the file without its front matter, comments, fenced code and link targets, cut at 16,384 characters. akm skips a result whose indexed text equals one it has already returned, and no two skills of either library have the same body, so it never hides a needed skill. Embeddings are not scored. akm 0.9.26's built-in embedder is bge-small-en-v1.5, which it downloads from the Hugging Face Hub (133 MB) when it first builds an index, and this benchmark downloads no model. The paper's bge-small-en-v1.5 row (NDCG@10 54.51) is the nearest published number, though it has no akm around it.
+The keyword index is built with semantic search off, which is akm's default, and its search is SQLite FTS5 with BM25 over each skill's name, description, tags and body, with Porter stemming, and the request's words, minus stopwords, joined with OR. The body is a projection of the file without its front matter, comments, fenced code and link targets, cut at 16,384 characters. akm skips a result whose indexed text equals one it has already returned, and no two skills of either library have the same body, so it never hides a needed skill.
 
-One call of each, for 15 results, serves all three cut-offs: the first 5 and the first 10 of a `--limit 15` list are what `--limit 5` and `--limit 10` return (checked on 40 requests: 160 comparisons, no difference).
+The semantic index is built from the same files with `semanticSearchMode: "auto"` and `embedding.localModel` set to `Xenova/bge-small-en-v1.5`, akm's own default model. akm embeds each skill from the same fields, cut at 512 tokens, and embeds a request with the prompt the BGE models are trained with, `Represent this sentence for searching relevant passages: `, which is the prompt the paper gives bge-small. Its semantic search fuses the keyword ranking with the 100 nearest vectors by reciprocal rank, so the semantic lines are a hybrid and not vectors alone. The paper's bge-small-en-v1.5 row (NDCG@10 54.51) is the same model, though it has no akm and no keyword ranking around it, and it reads `name | description | skill_md` where akm reads its own fields.
+
+akm answers with keyword search alone, `searchMode: "fts-fallback"`, a warning in the output and exit code 0, when it cannot embed a request within `embedding.queryTimeoutMs`, 3 seconds unless the config says more. Each akm process loads the model, and 2 calls of 96 missed the 3 seconds with eight at once on a busy machine. The sandbox allows ten minutes, and the benchmark checks every answer anyway: a call whose answer does not say `searchMode` semantic, or keyword on the keyword index, is a failed call. It is made once more, and one that fails twice is counted in `errored`, left out of that line's numbers, and the run exits with 1. The semantic index is built first, and the run stops in its first minutes when it does not hold an embedding of each skill or when one semantic search does not come back as semantic.
+
+One call of each, for 15 results, serves all three cut-offs: the first 5 and the first 10 of a `--limit 15` list are what `--limit 5` and `--limit 10` return (checked on 40 requests, on the keyword index and on the semantic one: 160 comparisons each, no difference).
 
 curate runs the same search and adds a preview to each result. Its reranker is off by default, so it returns the same skills in the same order as search. It would return nothing for a request that starts with `<` and contains `</`, which it takes for a harness envelope, and none of SkillRet's requests does. Both are scored, so a change in either shows.
 
-**Several calls at a time.** A full run is 8,784 calls, each of which starts akm, so eight run at once against the one index. A search reads the index and writes only its usage log, which does not feed the ranking, and akm 0.9.26 does not re-index on a read: a result depends on the request and the index alone. The rankings of 96 requests were identical with 1, 4, 8 and 12 calls at a time, for search and for curate. A call that fails is made once more, and one that fails twice is counted in `errored` and left out of that command's numbers, and the run exits with 1.
+**Several calls at a time.** A full run is 17,568 calls, each of which starts akm, so eight run at once against each index. A search reads the index and writes only its usage log, which does not feed the ranking, and akm 0.9.26 does not re-index on a read: a result depends on the request and the index alone. The rankings of 96 requests were identical with 1, 4, 8 and 12 calls at a time on the keyword index, and with 1, 4 and 8 on the semantic one, for search and for curate. Semantic calls do not go faster with eight at once than with four, on a machine busy with other work: each takes about 1.5 CPU-seconds, nearly all of it loading the model.
 
 ## The private corpus
 
@@ -94,7 +98,7 @@ The metrics are SkillRet's, at k = 5, 10 and 15. Each is a mean over every query
 
 These are SkillRet's own scoring, by `pytrec_eval`. `score.test.ts` holds pytrec_eval's output for eleven hand-made rankings, with a needed skill at, before and after each cut-off, one to three skills needed, short lists and an empty one, and checks all four metrics against it. Scoring the rankings of SkillRet's own BM25 baseline over the 4,392 queries, `score.ts` gives the published BM25 row to the last digit, and the MAP that pytrec_eval gives, 43.58, 44.74 and 45.10, which the paper does not report.
 
-akm 0.9.26, keyword search, full runs of 2026-10-06 at the pinned revision. Rows marked published are SkillRet's numbers (Table 3 of its paper) for other retrievers, which are theirs and are not run here. The paper has no MAP, so the BM25 cells in italics come from running SkillRet's BM25 code here. Everywhere in this README, "run here" means SkillRet's own `eval_bm25` and `trec_eval` (bm25s 0.3.12 and pytrec-eval-terrier 0.5.10) run once on the pinned files. They are not part of this repository.
+akm 0.9.26, full runs of 2026-10-06 at the pinned revision. The four akm lines are search and curate on the keyword index and on the semantic one. Rows marked published are SkillRet's numbers (Table 3 of its paper) for other retrievers, which are theirs and are not run here. The paper has no MAP, so the BM25 cells in italics come from running SkillRet's BM25 code here. Everywhere in this README, "run here" means SkillRet's own `eval_bm25` and `trec_eval` (bm25s 0.3.12 and pytrec-eval-terrier 0.5.10) run once on the pinned files. They are not part of this repository.
 
 **Public: the test split, 6,006 skills and 4,392 queries.**
 
@@ -102,6 +106,8 @@ akm 0.9.26, keyword search, full runs of 2026-10-06 at the pinned revision. Rows
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | akm search | 47.95 | 50.47 | 51.70 | 51.50 | 58.38 | 62.42 | 36.43 | 43.21 | 47.31 | 42.24 | 43.44 | 43.87 |
 | akm curate | 47.95 | 50.47 | 51.70 | 51.50 | 58.38 | 62.42 | 36.43 | 43.21 | 47.31 | 42.24 | 43.44 | 43.87 |
+| akm search, semantic | 55.43 | 58.00 | 59.23 | 59.28 | 66.18 | 70.20 | 43.53 | 50.64 | 55.03 | 49.39 | 50.65 | 51.11 |
+| akm curate, semantic | 55.43 | 58.00 | 59.23 | 59.28 | 66.18 | 70.20 | 43.53 | 50.64 | 55.03 | 49.39 | 50.65 | 51.11 |
 | BM25, published | 49.31 | 51.69 | 52.75 | 53.03 | 59.41 | 62.92 | 38.21 | 44.56 | 47.93 | *43.58* | *44.74* | *45.10* |
 | bge-small-en-v1.5 (33M), published | 52.57 | 54.51 | 55.45 | 54.73 | 60.01 | 63.07 | 38.96 | 43.97 | 47.11 | - | - | - |
 | bge-large-en-v1.5 (335M), published | 57.04 | 59.00 | 59.80 | 59.19 | 64.37 | 66.95 | 42.96 | 48.34 | 50.80 | - | - | - |
@@ -110,43 +116,52 @@ akm 0.9.26, keyword search, full runs of 2026-10-06 at the pinned revision. Rows
 
 By how many skills a query needs, at 10. The BM25 row is SkillRet's code run here. The last two are from Table 5 of the paper, which reports them for the 0.6B models only.
 
-| | NDCG@10, 1 skill (2,143 queries) | NDCG@10, 2 skills (1,703) | NDCG@10, 3 skills (546) | Completeness@10, 1 | Completeness@10, 2 | Completeness@10, 3 |
+| | NDCG@10, 1 skill (2,143) | NDCG@10, 2 skills (1,703) | NDCG@10, 3 skills (546) | Completeness@10, 1 | Completeness@10, 2 | Completeness@10, 3 |
 |---|---|---|---|---|---|---|
 | akm search | 55.42 | 47.16 | 41.33 | 68.27 | 23.84 | 5.31 |
 | akm curate | 55.42 | 47.16 | 41.33 | 68.27 | 23.84 | 5.31 |
+| akm search, semantic | 64.52 | 53.91 | 45.16 | 77.41 | 31.12 | 6.41 |
+| akm curate, semantic | 64.52 | 53.91 | 45.16 | 77.41 | 31.12 | 6.41 |
 | BM25, run here | 57.74 | 47.77 | 40.13 | 70.51 | 24.49 | 5.31 |
 | Qwen3-Embedding-0.6B, published | 74.0 | 53.6 | 40.6 | 83.8 | 25.8 | 1.8 |
 | SKILLRET-Embedding-0.6B, published | 84.2 | 79.6 | 73.7 | 92.1 | 74.2 | 42.1 |
 
 - akm's keyword search lands just under BM25: NDCG@10 is 50.47 against 51.69, Recall@10 58.38 against 59.41, Completeness@10 43.21 against 44.56. On the same queries akm is 1.22 points of NDCG@10 below BM25, with a 95% interval of 0.71 either way, so the gap is real and small.
-- It is under the four embedding models in the table, by 4 points of NDCG@10 (bge-small-en-v1.5, the model akm's own embedder would use) to 36 points (SkillRet's fine-tuned 8B model). Two of the 19 retrievers in the paper's table score below it: e5-small-v2 (44.66) and F2LLM-v2-80M (48.22).
-- A query that needs more skills is harder. Completeness@10 is 68% when a query needs one skill, 24% for two and 5% for three, and BM25 does the same (71%, 24% and 5%). 964 of the 4,392 queries (22%) get none of their skills in the first 15.
-- search and curate return the same 15 skills in the same order for every query, so their rows are equal. No call failed and every query got 15 skills.
-- The run is deterministic: two full runs, one before the benchmark was committed and one after, gave the same 15 skills in the same order for all 4,392 queries, in both commands.
-- A mean over all 4,392 queries has a 95% interval of about 1.1 points of NDCG@10, since the standard deviation of a query's NDCG@10 is 0.38. A sample of 200 has about 5 points. Use `--limit` to check that a setup runs, or to catch a large change, and not to compare two akm versions.
-- What each retriever reads differs, so the rows are not a like-for-like comparison of ranking methods. bm25s indexes the name, the description and the whole SKILL.md. bge-small and bge-large read the first 512 tokens of a skill, Qwen3-Embedding-8B up to 32,768. akm indexes a projection of the body cut at 16,384 characters.
+- The semantic search adds 7.5 points of NDCG@10 to it: 58.00 against 50.47, with a 95% interval of 0.7 on the same queries. Recall@10 goes from 58.38 to 66.18 and Completeness@10 from 43.21 to 50.64. 635 of the 4,392 queries (14%) get none of their skills in the first 15, against 964 (22%) with keywords.
+- bge-small-en-v1.5 is the model of the semantic search. The paper's row for it, 54.51, is the model alone, and akm's 58.00 is 3.5 points above it: akm fuses the keyword ranking with the vectors. It is a point under bge-large-en-v1.5 (59.00), which has ten times the parameters, 5.6 under Qwen3-Embedding-8B (63.64), and 28 under the model SkillRet fine-tuned (86.44). The two read different text, so these are a guide and not a controlled comparison.
+- A query that needs more skills is harder with either search. With semantic search Completeness@10 is 77% when a query needs one skill, 31% for two and 6% for three, against 68%, 24% and 5% with keywords: the vectors help less as a query needs more skills.
+- search and curate return the same 15 skills in the same order for every query, on both indexes, so their rows are equal. No call failed, every call said it searched as it was asked to, and every query got 15 skills.
+- The run is deterministic. The keyword lines of this run are, to the last digit, those of two earlier full runs with keyword search alone. The semantic search ranked 96 queries the same, in the same order, from two independent builds of its index, and with one, four and eight calls at a time.
+- A mean over all 4,392 queries has a 95% interval of about 1.1 points of NDCG@10, since the standard deviation of a query's NDCG@10 is 0.36 to 0.38. A sample of 200 has about 5 points. Use `--limit` to check that a setup runs, or to catch a large change, and not to compare two akm versions.
+- What each retriever reads differs, so the rows are not a like-for-like comparison of ranking methods. bm25s indexes the name, the description and the whole SKILL.md. bge-small and bge-large read the first 512 tokens of that, Qwen3-Embedding-8B up to 32,768. akm's keyword index holds a projection of the body cut at 16,384 characters, and its embedder reads the first 512 tokens of the name (here the skill's id), the description, the tags and that projection.
 
-**Private: a library from the train split, 6,006 skills and 4,392 queries.** The BM25 rows are SkillRet's BM25 code run here on the same library and queries, to compare akm with something that has seen neither.
+**Private: a library from the train split, 6,006 skills and 4,392 queries.** The BM25 rows are SkillRet's BM25 code run here on the same library and queries, to compare akm with something that has seen neither. The semantic search has no such control: SkillRet's own bge-small run was not repeated on this library.
 
 | | NDCG@5 | NDCG@10 | NDCG@15 | Recall@5 | Recall@10 | Recall@15 | Completeness@5 | Completeness@10 | Completeness@15 | MAP@5 | MAP@10 | MAP@15 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | private, akm search | 70.96 | 72.35 | 73.00 | 70.38 | 74.06 | 76.13 | 51.07 | 55.17 | 57.65 | 64.97 | 65.71 | 65.96 |
 | private, akm curate | 70.96 | 72.35 | 73.00 | 70.38 | 74.06 | 76.13 | 51.07 | 55.17 | 57.65 | 64.97 | 65.71 | 65.96 |
+| private, akm search, semantic | 66.80 | 68.54 | 69.48 | 67.64 | 72.36 | 75.50 | 49.00 | 53.80 | 57.26 | 60.59 | 61.44 | 61.78 |
+| private, akm curate, semantic | 66.80 | 68.54 | 69.48 | 67.64 | 72.36 | 75.50 | 49.00 | 53.80 | 57.26 | 60.59 | 61.44 | 61.78 |
 | private, BM25, run here | 71.70 | 72.89 | 73.47 | 71.22 | 74.35 | 76.22 | 51.73 | 55.31 | 57.67 | 65.62 | 66.26 | 66.49 |
 | public, akm search, for comparison | 47.95 | 50.47 | 51.70 | 51.50 | 58.38 | 62.42 | 36.43 | 43.21 | 47.31 | 42.24 | 43.44 | 43.87 |
+| public, akm search, semantic, for comparison | 55.43 | 58.00 | 59.23 | 59.28 | 66.18 | 70.20 | 43.53 | 50.64 | 55.03 | 49.39 | 50.65 | 51.11 |
 | public, BM25, published, for comparison | 49.31 | 51.69 | 52.75 | 53.03 | 59.41 | 62.92 | 38.21 | 44.56 | 47.93 | *43.58* | *44.74* | *45.10* |
 
-| private | NDCG@10, 1 skill (2,143 queries) | NDCG@10, 2 skills (1,703) | NDCG@10, 3 skills (546) | Completeness@10, 1 | Completeness@10, 2 | Completeness@10, 3 |
+| private | NDCG@10, 1 skill (2,143) | NDCG@10, 2 skills (1,703) | NDCG@10, 3 skills (546) | Completeness@10, 1 | Completeness@10, 2 | Completeness@10, 3 |
 |---|---|---|---|---|---|---|
 | akm search | 84.11 | 63.92 | 52.54 | 90.67 | 27.13 | 3.30 |
 | akm curate | 84.11 | 63.92 | 52.54 | 90.67 | 27.13 | 3.30 |
+| akm search, semantic | 79.22 | 60.93 | 50.31 | 88.43 | 26.13 | 4.21 |
+| akm curate, semantic | 79.22 | 60.93 | 50.31 | 88.43 | 26.13 | 4.21 |
 | BM25, run here | 85.29 | 63.68 | 52.96 | 91.51 | 26.37 | 3.48 |
 
-- akm scores 22 points higher on the private queries than on the public ones (NDCG@10 72.35 against 50.47), and BM25 gains as much (72.89 against 51.69). So the gap comes from the data and not from akm: the private queries are shorter and, the paper says, easier for keyword matching.
-- akm is 0.54 points of NDCG@10 below BM25 on the private queries, with a 95% interval of 0.57 either way, against 1.22 below on the public split. A ranking tuned to the public items would stand better against BM25 there than here, and akm stands slightly worse there.
-- 5% of the private queries (225) get none of their skills in the first 15, against 22% of the public ones.
-- As on the public split, search and curate return the same skills for every query, no call failed, and every query got 15 skills.
+- akm's keyword search scores 22 points higher on the private queries than on the public ones (NDCG@10 72.35 against 50.47), and BM25 gains as much (72.89 against 51.69). So the gap comes from the data and not from akm: the private queries are shorter and, the paper says, easier for keyword matching.
+- akm's keyword search is 0.54 points of NDCG@10 below BM25 on the private queries, with a 95% interval of 0.57 either way, against 1.22 below on the public split. A ranking tuned to the public items would stand better against BM25 there than here, and akm stands slightly worse there.
+- The semantic search does the opposite of what it does on the public split. Its NDCG@10 is 68.54 against 72.35 with keywords, 3.8 points lower with a 95% interval of 0.7 on the same queries, where it was 7.5 points higher on the public queries. NDCG is lower at 5, 10 and 15 (by 4.2, 3.8 and 3.5), and for the queries that need one, two and three skills. Recall and Completeness are lower at 5 and 10 and the same within noise at 15. Keyword search is already strong on these queries, and fusing in the vectors of a small model costs more than it adds. The difference does not depend on the length of a query, in either corpus. So what the vectors add depends on the queries, and a gap between the public and the private numbers of the semantic lines is not a sign of tuning either.
+- 6% of the private queries (261) get none of their skills in the first 15 with semantic search, against 5% (225) with keywords. On the public split it is 14% against 22%.
+- As on the public split, search and curate return the same skills for every query on both indexes, no call failed, every call said it searched as it was asked to, and every query got 15 skills.
 
 ## Licence
 
-The code is MPL-2.0, like the rest of this repository. The dataset is not part of it and is not redistributed. See `../../NOTICE` for SkillRet's credit and licences.
+The code is MPL-2.0, like the rest of this repository. The dataset is not part of it and is not redistributed. See `../../NOTICE` for SkillRet's credit and licences. akm's embedding model is bge-small-en-v1.5 by BAAI, licensed MIT, in the ONNX form that Xenova publishes. A run downloads it when it needs it, and it is not part of this repository either.
