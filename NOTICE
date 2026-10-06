@@ -3,7 +3,7 @@ NOTICE
 Everything in this repository is licensed under MPL-2.0 (see LICENSE), code and
 assets alike, except the third-party items below. Each keeps the licence named
 here, and this file gives their attribution. Upstream licences were checked on
-2026-10-05, and the SkillRet licence on 2026-10-06.
+2026-10-05, and the SkillRet and Terminal-Bench licences on 2026-10-06.
 
 Items marked Proprietary in the source library were not copied. See
 corpus/library/README.md.
@@ -113,6 +113,25 @@ some of the numbers that SkillRet reports for other retrievers (its Tables 3 and
 5), for comparison. They are the authors' results, not ours. The metrics in
 benchmarks/skillret/src/score.ts are written here from their definitions and
 checked against pytrec_eval, as SkillRet's own code uses it. No code is copied.
+
+----------------------------------------------------------------------------
+6. Terminal-Bench 2.1, task names and digests only (Apache-2.0)
+
+Copyright The Terminal-Bench Team
+Source: https://github.com/harbor-framework/terminal-bench-2-1, dataset
+terminal-bench/terminal-bench-2-1 in Harbor's registry. The licence is the Apache
+License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+
+  benchmarks/terminal-bench/assets/ASSETS.lock
+
+That file names the 89 tasks of the dataset, the ten of them in Harbor's
+terminal-bench-sample, and gives the digests Harbor knows the dataset and each task
+by. Nothing else of the benchmark is in this repository: not an instruction, a test,
+a solution or an image. Harbor fetches the tasks when the benchmark runs, and they
+keep their own licence. The maintainers ask that Terminal-Bench tasks never appear
+in training data, and every task file carries a canary string to say so. Keep the
+tasks, and the trial folders in results/jobs/ that quote them, out of the repository
+and out of anything published.
 
 ----------------------------------------------------------------------------
 MIT License text (items 1 and 3)
