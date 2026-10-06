@@ -85,7 +85,7 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
   return { assets, results: join(root, "results") };
 }
 
-const ctx = { config: distillConfig("http://localhost:8080/v1", "the-model", false), version: "0.9.99-test", model: "the-model", label: "t" };
+const ctx = { config: distillConfig("http://localhost:8080/v1", "the-model", false), baseUrl: "http://localhost:8080/v1", version: "0.9.99-test", model: "the-model", label: "t" };
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
   console.log = () => {};
@@ -211,6 +211,19 @@ describe("runCorpus", () => {
     expect(rows[1].verdict).toBe("error");
     expect(rows[1].error).toContain("akm exited 0");
     expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2 });
+  });
+
+  test("keeps the endpoint out of an error, in the row and on the console", async () => {
+    const folders = assetsFor([{ id: "x-url", class: "dated-status", fake: { exit: 78, error: "unreachable: http://localhost:8080/v1/chat/completions refused" } }]);
+    const shown: string[] = [];
+    const log = console.log;
+    console.log = (...a: unknown[]) => void shown.push(a.join(" "));
+    const summary = await runCorpus("public", ctx, folders).finally(() => (console.log = log));
+    const [row] = samplesIn(summary.results_dir);
+    expect(row.error).toBe("akm exited 78: unreachable: <MODEL_BASE_URL>/chat/completions refused (FAKE)");
+    expect(JSON.stringify(row)).not.toContain("localhost:8080");
+    expect(shown.join("\n")).toContain("<MODEL_BASE_URL>/chat/completions");
+    expect(shown.join("\n")).not.toContain("localhost:8080");
   });
 
   test("stops after five cases in a row that errored, and keeps what it has", async () => {

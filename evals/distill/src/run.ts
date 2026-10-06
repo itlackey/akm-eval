@@ -108,12 +108,13 @@ function printSideBySide(a: Summary, b: Summary): void {
 }
 
 /** One case: a new sandbox with the case's bundle, distill run on its memory alone, and the queue read back. */
-export async function runCase(c: LoadedCase, config: Record<string, unknown>): Promise<Row> {
+export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
+  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
-    writeConfig(sandbox, config);
+    writeConfig(sandbox, ctx.config);
     cpSync(c.dir, join(sandbox.dir, "bundle"), { recursive: true });
     const args = ["improve", memoryRef(c), "--strategy", STRATEGY, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
     const { stdout, stderr, code } = await runAkm(sandbox, args, { timeoutMs: IMPROVE_TIMEOUT_MS });
@@ -121,14 +122,14 @@ export async function runCase(c: LoadedCase, config: Record<string, unknown>): P
     try {
       improve = JSON.parse(stdout);
     } catch {
-      return errorRow(c, failureMessage(code, stderr, stdout), seconds());
+      return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds());
     }
-    if (code !== 0) return errorRow(c, failureMessage(code, stderr, stdout), seconds());
+    if (code !== 0) return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds());
     const listed = [];
     for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"])) });
     return scoreCase(c, { improve, proposals: lessonProposals(listed), seconds: seconds() });
   } catch (e) {
-    return errorRow(c, (e as Error).message, seconds());
+    return errorRow(c, hide((e as Error).message), seconds());
   } finally {
     removeSandbox(sandbox);
   }
@@ -136,7 +137,7 @@ export async function runCase(c: LoadedCase, config: Record<string, unknown>): P
 
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { config: Record<string, unknown>; version: string; model: string; label: string; limit?: number },
+  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number },
   folders = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
@@ -154,7 +155,7 @@ export async function runCorpus(
   let aborted: string | undefined;
 
   for (const c of cases) {
-    const row = await runCase(c, ctx.config);
+    const row = await runCase(c, ctx);
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     const shown = row.verdict === "error" ? `error  ${row.error?.slice(0, 120)}` : `${row.verdict.padEnd(6)} ${row.outcome}${row.detail ? ` (${row.detail.slice(0, 60)})` : ""}`;
@@ -229,7 +230,7 @@ async function main(): Promise<void> {
   }
   const config = distillConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim());
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, { config, version, model, label, limit }));
+  for (const c of corpora) summaries.push(await runCorpus(c, { config, baseUrl, version, model, label, limit }));
   if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
 }
 

@@ -5,6 +5,9 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
 
+// The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
+if (typeof Bun.YAML?.parse !== "function") throw new Error("distill: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
+
 export const CLASSES = ["lesson-worthy", "over-claim", "dated-status", "restates-asset", "duplicate-lesson"] as const;
 export type Class = (typeof CLASSES)[number];
 export type Expect = "lesson" | "none";
