@@ -8,7 +8,7 @@ import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CONCURRENT_TRIALS, Fatal, PINS, fail, gitCommit, jobConfig as harborJob, makeResultsDir, preflight, runHarbor, slug } from "../../../lib/harbor/harbor.ts";
-import { type Report, type Trial, buildReport, formatReport, loadTrials } from "../../../lib/harbor/report.ts";
+import { type Report, type Trial, buildReport, formatReport, loadTrials, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 
 const NAME = "agent-ab";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -84,20 +84,7 @@ function printSummary(s: Summary): void {
 }
 
 /** The two summaries as columns, never one pooled number. */
-export function sideBySide(a: Pick<Summary, "corpus" | "report">, b: Pick<Summary, "corpus" | "report">): string[] {
-  const rate = (r: Report["control"]) => (r.pass_rate ? `${r.pass_rate.value.toFixed(3)} [${r.pass_rate.lo.toFixed(3)}, ${r.pass_rate.hi.toFixed(3)}] over ${r.pass_rate.n} tasks` : "n/a");
-  const diff = (r: Report) => (r.delta ? `${r.delta.value >= 0 ? "+" : ""}${r.delta.value.toFixed(3)} [${r.delta.lo.toFixed(3)}, ${r.delta.hi.toFixed(3)}] over ${r.delta.n} tasks` : "n/a");
-  const called = (r: Report) => `${r.engagement.called} of ${r.engagement.trials} akm trials`;
-  const rows: [string, string, string][] = [
-    ["", a.corpus, b.corpus],
-    ["control pass rate", rate(a.report.control), rate(b.report.control)],
-    ["akm pass rate", rate(a.report.akm), rate(b.report.akm)],
-    ["difference", diff(a.report), diff(b.report)],
-    ["akm called in", called(a.report), called(b.report)],
-  ];
-  const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  return [`${NAME}: public and private side by side (not pooled)`, ...rows.map((r) => `  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`)];
-}
+export const sideBySide = (a: Pick<Summary, "corpus" | "report">, b: Pick<Summary, "corpus" | "report">): string[] => sideBySideOf(NAME, a, b);
 
 export async function runCorpus(corpus: Corpus, ctx: { model: string; label: string; limit?: number; env: Record<string, string> }): Promise<Summary> {
   const assets = corpus === "public" ? EVAL_DIR : join(ROOT, "private", NAME, "assets");
