@@ -66,7 +66,15 @@ Each eval's README says what else it needs. An eval with Python code needs [uv](
 
 ## Private assets
 
-Private assets are made from the public ones with a seed. The usual method is to rewrite incidental names, hosts, ids and dates, so the meaning and difficulty stay the same.
+Private assets are made from the public ones with a seed, by the rewrite in `lib/rewrite`, so a model can be tested on assets it cannot have trained on. The rewrite changes:
+
+- names, and the names of tools, products and projects (Docker, GitHub, Qwen, akm), in every form they are written;
+- hosts, addresses, ports, ids and dates;
+- numbers and versions, such as counts, sizes, durations and percentages. Each keeps its order relative to the others, its digits and its range, so "up from 18 to 21" stays an increase and a percentage stays between 0 and 100.
+
+It leaves the ordinary prose, the words a text rests on (programming languages, file formats, protocols, operating systems and core commands: Python, TypeScript, JSON, YAML, Markdown, HTTP, SQL, git, npm, bash), single digits, years, HTTP status codes, step and list numbers, and hosts under well-known domains. Every label, case and expected answer goes through the same mapping as its text, so the meaning and the difficulty stay the same, and the `generate` of each eval whose labels depend on the text checks that they still hold. `lib/rewrite/README.md` has the full lists.
+
+Most of a text is prose, so a private copy differs from its public one by a few percent of its words: about 3 to 5 percent for the evals, about 1 percent for LongMemEval, which keeps its numbers (`--keep-values`) because its answers are counted from the text.
 
 ```
 ./generate-assets                          # make private assets for every eval
