@@ -166,26 +166,28 @@ export function judgeMessages(query: string, asset: Asset, text: string): { role
   ];
 }
 
-/** The grade and reason in a judge's reply, or null when the reply holds no grade from 0 to 3. */
+/**
+ * The grade and reason in a judge's reply, or null when the reply holds no grade from 0 to 3. A reasoning model can
+ * leave its thinking in the reply, so when the whole reply is not the JSON object, the last object in it that
+ * holds a grade is taken.
+ */
 export function parseGrade(reply: string): { grade: number; reason: string } | null {
   const cleaned = reply
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, "")
     .trim();
-  const candidates = [cleaned];
-  if (cleaned.includes("{") && cleaned.includes("}")) candidates.push(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
-  for (const c of candidates) {
+  for (const candidate of [cleaned, ...(cleaned.match(/\{[^{}]*\}/g) ?? []).reverse()]) {
     let value: unknown;
     try {
-      value = JSON.parse(c);
+      value = JSON.parse(candidate);
     } catch {
       continue;
     }
     if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
     const v = value as { grade?: unknown; reason?: unknown };
     const grade = Math.round(Number(v.grade));
-    if (v.grade === null || v.grade === undefined || !(grade >= 0 && grade <= 3)) return null;
-    return { grade, reason: String(v.reason ?? "").trim() };
+    if (v.grade === null || v.grade === undefined || !(grade >= 0 && grade <= 3)) continue;
+    return { grade, reason: String(v.reason ?? "").replace(/\s+/g, " ").trim() };
   }
   return null;
 }

@@ -140,6 +140,14 @@ describe("parseGrade", () => {
     expect(parseGrade('Here you go: {"grade": 2, "reason": "r"} Done.')).toEqual({ grade: 2, reason: "r" });
   });
 
+  test("takes the last object that holds a grade when a reasoning model leaves its thinking in the reply", () => {
+    expect(parseGrade('We must reply {"grade": <integer 0-3>, "reason": "..."}. The asset matches. Final: {"grade": 3, "reason": "exact match"}')).toEqual({ grade: 3, reason: "exact match" });
+    expect(parseGrade('{"grade": 1, "reason": "a"} and then {"grade": 2, "reason": "b"}')).toEqual({ grade: 2, reason: "b" });
+    expect(parseGrade('{"grade": 2, "reason": "a"} then {"grade": 9}')).toEqual({ grade: 2, reason: "a" });
+    expect(parseGrade('{"grade": 3, "reason": "has {braces} inside"}')).toEqual({ grade: 3, reason: "has {braces} inside" });
+    expect(parseGrade('{"grade": 1, "reason": "two\\nlines"}')).toEqual({ grade: 1, reason: "two lines" });
+  });
+
   test("gives nothing for a reply without a grade from 0 to 3", () => {
     for (const reply of ["", "no json", '{"grade": 4, "reason": "x"}', '{"grade": -1}', '{"grade": null}', '{"reason": "x"}', '{"grade": "high"}', "[1]", '["grade"]']) expect(parseGrade(reply)).toBeNull();
   });

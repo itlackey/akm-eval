@@ -35,6 +35,8 @@ class HttpError extends Error {
   constructor(
     readonly status: number,
     body: string,
+    /** How long the server asked us to wait, from its Retry-After header. */
+    readonly retryAfterMs?: number,
   ) {
     super(`HTTP ${status}: ${body.slice(0, 200)}`);
   }
@@ -43,22 +45,34 @@ class HttpError extends Error {
 const RETRY_STATUS = [408, 425, 429, 500, 502, 503, 504];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** The judge as a chat endpoint: temperature 0, no thinking, a JSON schema for the reply, and a retry without the schema when the endpoint refuses it. */
-export function makeJudge(baseUrl: string, apiKey: string, model: string, timeoutMs = 120_000, backoffMs = 2000): Judge {
+/**
+ * The judge as a chat endpoint, for a local server such as llama.cpp: temperature 0, every spelling of "no visible
+ * thinking" that a server might honour, and a JSON schema for the reply. When the endpoint refuses the schema (a 4xx
+ * that is not a 429) the request is sent again without it. max_tokens leaves room for a model that thinks anyway.
+ * A cloud endpoint can answer 400 to the thinking switches: run it through a local gateway.
+ *
+ * When the server says to wait (429 with Retry-After), every request of this judge waits, not only the one refused.
+ */
+export function makeJudge(baseUrl: string, apiKey: string, model: string, timeoutMs = 120_000, backoffMs = 2000, onWait: (ms: number, why: string) => void = () => {}): Judge {
   const base = baseUrl.replace(/\/+$/, "");
   const url = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) };
+  let pausedUntil = 0;
 
   const post = async (payload: unknown): Promise<string> => {
     for (let attempt = 0; ; attempt++) {
+      if (pausedUntil > Date.now()) await sleep(pausedUntil - Date.now());
       try {
         const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(timeoutMs) });
         if (res.ok) return await res.text();
-        throw new HttpError(res.status, await res.text());
+        const wait = Number(res.headers.get("retry-after"));
+        throw new HttpError(res.status, await res.text(), wait > 0 ? Math.min(wait, 120) * 1000 : undefined);
       } catch (e) {
         const retryable = !(e instanceof HttpError) || RETRY_STATUS.includes(e.status);
         if (attempt >= 5 || !retryable) throw e;
-        await sleep(Math.min(backoffMs * 2 ** attempt, 30_000));
+        const delay = (e instanceof HttpError && e.retryAfterMs) || Math.min(backoffMs * 2 ** attempt, 30_000);
+        if (pausedUntil < Date.now()) onWait(delay, (e as Error).message.slice(0, 80));
+        pausedUntil = Math.max(pausedUntil, Date.now() + delay);
       }
     }
   };
@@ -68,8 +82,9 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
       model,
       messages,
       temperature: 0,
+      max_tokens: 2000,
       stream: false,
-      // every spelling of "no visible reasoning" a server might honour
+      // every spelling of "no visible thinking" that a server might honour
       chat_template_kwargs: { enable_thinking: false },
       enable_thinking: false,
       reasoning_effort: "none",
@@ -81,10 +96,9 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
       if (!(e instanceof HttpError) || e.status >= 500 || e.status === 429 || e.status < 400) throw e;
       raw = await post(payload);
     }
-    const message = (JSON.parse(raw) as { choices: { message: { content?: string; reasoning_content?: string } }[] }).choices[0].message;
-    let text = message.content ?? "";
-    if (!text.trim() && message.reasoning_content?.includes("{")) text = message.reasoning_content.slice(message.reasoning_content.indexOf("{"), message.reasoning_content.lastIndexOf("}") + 1);
-    return text;
+    const message = (JSON.parse(raw) as { choices: { message: { content?: string; reasoning_content?: string; reasoning?: string } }[] }).choices[0].message;
+    // A reasoning model that ran out of room can leave its answer in the reasoning text. parseGrade finds it there.
+    return message.content?.trim() ? message.content : (message.reasoning_content ?? message.reasoning ?? "");
   };
 }
 
@@ -115,7 +129,12 @@ export interface Outcome {
   total: number;
   graded: number;
   failed: number;
+  /** Replies that held no grade the first time and were asked for again. */
+  retried: number;
   stopped: boolean;
+  /** The run ended because GIVE_UP_AFTER grades failed one after another. */
+  gaveUp: boolean;
+  lastError?: string;
 }
 
 /** Grades the pairs, `concurrency` at a time, and appends each grade to the qrels file as it arrives. */
@@ -127,7 +146,7 @@ export async function grade(
   opts: { concurrency?: number; stop?: () => boolean; log?: (line: string) => void } = {},
 ): Promise<Outcome> {
   const log = opts.log ?? (() => {});
-  const out: Outcome = { total: todo.length, graded: 0, failed: 0, stopped: false };
+  const out: Outcome = { total: todo.length, graded: 0, failed: 0, retried: 0, stopped: false, gaveUp: false };
   let next = 0;
   let inARow = 0;
   const worker = async () => {
@@ -139,8 +158,13 @@ export async function grade(
       const t = todo[next++];
       const { asset: a, text } = asset(t.ref);
       try {
-        const g = parseGrade(await judge(judgeMessages(t.query, a, text)));
-        if (!g) throw new Error("the reply holds no grade from 0 to 3");
+        const messages = judgeMessages(t.query, a, text);
+        let g = parseGrade(await judge(messages));
+        if (!g) {
+          out.retried++;
+          g = parseGrade(await judge(messages));
+        }
+        if (!g) throw new Error("the reply holds no grade from 0 to 3, twice");
         appendFileSync(qrelsPath, `${JSON.stringify({ id: t.id, ref: t.ref, grade: g.grade, reason: g.reason })}\n`);
         out.graded++;
         inARow = 0;
@@ -148,11 +172,13 @@ export async function grade(
       } catch (e) {
         out.failed++;
         inARow++;
+        out.lastError = (e as Error).message;
         log(`[${out.graded + out.failed}/${todo.length}] ${t.id} FAILED  ${t.ref}  ${(e as Error).message.slice(0, 150)}`);
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(opts.concurrency ?? CONCURRENCY, Math.max(todo.length, 1)) }, worker));
+  out.gaveUp = inARow >= GIVE_UP_AFTER;
   return out;
 }
 
@@ -214,7 +240,8 @@ async function main(): Promise<number> {
         console.log(`\n${sig}: finishing the grades in flight, then stopping. Run it again to resume.`);
       });
     }
-    const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model);
+    const stamp = () => new Date().toTimeString().slice(0, 8);
+    const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
     const started = Date.now();
     const out = await grade(
       todo,
@@ -225,10 +252,11 @@ async function main(): Promise<number> {
       },
       judge,
       qrelsPath,
-      { stop: () => stopping, log: (l) => console.log(`  ${l}`) },
+      { stop: () => stopping, log: (l) => console.log(`  ${stamp()} ${l}`) },
     );
     const minutes = ((Date.now() - started) / 60_000).toFixed(1);
-    console.log(`retrieval label: ${out.graded} graded, ${out.failed} failed, ${todo.length - out.graded - out.failed} left, in ${minutes} min (prompt ${PROMPT_VERSION}, model ${model})`);
+    console.log(`retrieval label: ${out.graded} graded, ${out.failed} failed, ${todo.length - out.graded - out.failed} left, in ${minutes} min (prompt ${PROMPT_VERSION}, model ${model}). ${out.retried} replies had no grade and were asked for again.`);
+    if (out.gaveUp) console.log(`  It stopped after ${GIVE_UP_AFTER} failures in a row. The last error: ${out.lastError}. Run it again to resume.`);
     return out.graded === todo.length ? 0 : 1;
   } finally {
     removeSandbox(sb);

@@ -91,7 +91,7 @@ describe("grade", () => {
       return `{"grade": ${seen.length % 4}, "reason": "reason ${seen.length}"}`;
     };
     const out = await grade(todo, asset, judge, qrels, { concurrency: 1 });
-    expect(out).toEqual({ total: 4, graded: 4, failed: 0, stopped: false });
+    expect(out).toEqual({ total: 4, graded: 4, failed: 0, retried: 0, stopped: false, gaveUp: false });
     expect(seen[0]).toContain("Query: print the pdf\n");
     expect(seen[0]).toContain("Ref: a\n");
     expect(seen[0]).toContain("Content:\ntext of a");
@@ -113,9 +113,19 @@ describe("grade", () => {
     expect(readFileSync(qrels, "utf8").trim().split("\n")).toHaveLength(4);
   });
 
+  test("asks again once when a reply holds no grade, and counts it", async () => {
+    const qrels = join(tmp(), "qrels.jsonl");
+    const replies = ["I need more room to think", '{"grade": 2, "reason": "second try"}', '{"grade": 3, "reason": "r"}'];
+    const judge: Judge = async () => replies.shift() as string;
+    const out = await grade(todo.slice(0, 2), asset, judge, qrels, { concurrency: 1 });
+    expect(out).toMatchObject({ graded: 2, failed: 0, retried: 1 });
+    expect(parseQrels(readFileSync(qrels, "utf8")).map((r) => [r.ref, r.grade, r.reason])).toEqual([["a", 2, "second try"], ["b", 3, "r"]]);
+  });
+
   test("does not append a pair it could not grade, so the next run tries it again", async () => {
     const qrels = join(tmp(), "qrels.jsonl");
-    const replies = ['{"grade": 3, "reason": "r"}', "I cannot say.", "boom", '{"grade": 1, "reason": "r"}'];
+    // a: graded. b: no grade twice. c: the endpoint fails. d: graded.
+    const replies = ['{"grade": 3, "reason": "r"}', "I cannot say.", "Still no JSON.", "boom", '{"grade": 1, "reason": "r"}'];
     const judge: Judge = async () => {
       const r = replies.shift() as string;
       if (r === "boom") throw new Error("HTTP 500");
@@ -123,7 +133,7 @@ describe("grade", () => {
     };
     const lines: string[] = [];
     const out = await grade(todo, asset, judge, qrels, { concurrency: 1, log: (l) => lines.push(l) });
-    expect(out).toMatchObject({ graded: 2, failed: 2 });
+    expect(out).toMatchObject({ graded: 2, failed: 2, retried: 1, gaveUp: false, lastError: "HTTP 500" });
     expect(parseQrels(readFileSync(qrels, "utf8")).map((r) => r.ref)).toEqual(["a", "d"]);
     expect(lines.filter((l) => l.includes("FAILED"))).toHaveLength(2);
   });
@@ -137,7 +147,7 @@ describe("grade", () => {
       throw new Error("connection refused");
     };
     const out = await grade(many, asset, judge, qrels, { concurrency: 2 });
-    expect(out.graded).toBe(0);
+    expect(out).toMatchObject({ graded: 0, gaveUp: true, lastError: "connection refused" });
     expect(calls).toBeLessThan(15);
   });
 });
@@ -149,7 +159,7 @@ describe("makeJudge", () => {
   ];
   const reply = (content: string) => Response.json({ choices: [{ message: { content } }] });
 
-  test("posts a chat request that asks for a plain JSON grade, with the key and no thinking", async () => {
+  test("posts a chat request that asks for a JSON grade, with the key and no visible thinking", async () => {
     const seen: { url: string; auth: string | null; body: any }[] = [];
     server = Bun.serve({
       port: 0,
@@ -164,6 +174,7 @@ describe("makeJudge", () => {
     expect(seen[0].url).toBe("/v1/chat/completions");
     expect(seen[0].auth).toBe("Bearer secret");
     expect(seen[0].body).toMatchObject({ model: "the-model", messages, temperature: 0, stream: false, enable_thinking: false, reasoning_effort: "none", chat_template_kwargs: { enable_thinking: false } });
+    expect(seen[0].body.max_tokens).toBeGreaterThanOrEqual(1000); // room for a model that thinks anyway
     expect(seen[0].body.response_format.json_schema.schema.required).toEqual(["grade", "reason"]);
   });
 
@@ -180,7 +191,7 @@ describe("makeJudge", () => {
     expect(auth).toBeNull();
   });
 
-  test("asks again without the schema when the endpoint refuses one", async () => {
+  test("asks again without the schema when the endpoint refuses one, and not a third time", async () => {
     const bodies: any[] = [];
     server = Bun.serve({
       port: 0,
@@ -192,6 +203,12 @@ describe("makeJudge", () => {
     });
     expect(await makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).toBe('{"grade": 1, "reason": "r"}');
     expect(bodies.map((b) => "response_format" in b)).toEqual([true, false]);
+
+    bodies.length = 0;
+    server.stop(true);
+    server = Bun.serve({ port: 0, fetch: async (req) => (bodies.push(await req.json()), new Response("bad request", { status: 400 })) });
+    await expect(makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).rejects.toThrow("HTTP 400");
+    expect(bodies).toHaveLength(2);
   });
 
   test("retries a server error, then gives up", async () => {
@@ -213,8 +230,36 @@ describe("makeJudge", () => {
     expect(calls).toBe(6);
   });
 
+  test("when the server says to wait, every request waits, not only the one it refused", async () => {
+    const arrivals: number[] = [];
+    server = Bun.serve({
+      port: 0,
+      fetch() {
+        arrivals.push(Date.now());
+        return arrivals.length === 1 ? new Response("slow down", { status: 429, headers: { "Retry-After": "0.3" } }) : reply('{"grade": 1, "reason": "r"}');
+      },
+    });
+    const judge = makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m", 5000, 1);
+    const a = judge(messages);
+    await new Promise((r) => setTimeout(r, 100)); // the first request is refused by now
+    const b = judge(messages);
+    expect(await Promise.all([a, b])).toEqual(['{"grade": 1, "reason": "r"}', '{"grade": 1, "reason": "r"}']);
+    expect(arrivals).toHaveLength(3);
+    expect(arrivals[1] - arrivals[0]).toBeGreaterThanOrEqual(250);
+    expect(arrivals[2] - arrivals[0]).toBeGreaterThanOrEqual(250);
+  });
+
   test("falls back to the reasoning text when the reply has no content", async () => {
-    server = Bun.serve({ port: 0, fetch: () => Response.json({ choices: [{ message: { content: "", reasoning_content: 'thinking... {"grade": 3, "reason": "r"} done' } }] }) });
-    expect(await makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).toBe('{"grade": 3, "reason": "r"}');
+    const text = 'thinking... {"grade": 3, "reason": "r"} done';
+    server = Bun.serve({ port: 0, fetch: () => Response.json({ choices: [{ message: { content: "", reasoning_content: text } }] }) });
+    expect(await makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).toBe(text);
+    server.stop(true);
+    server = Bun.serve({ port: 0, fetch: () => Response.json({ choices: [{ message: { content: null, reasoning: text } }] }) });
+    expect(await makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).toBe(text);
+  });
+
+  test("prefers the content when there is some", async () => {
+    server = Bun.serve({ port: 0, fetch: () => Response.json({ choices: [{ message: { content: '{"grade": 1, "reason": "c"}', reasoning_content: '{"grade": 3, "reason": "r"}' } }] }) });
+    expect(await makeJudge(`http://127.0.0.1:${server.port}/v1`, "", "m")(messages)).toBe('{"grade": 1, "reason": "c"}');
   });
 });
