@@ -62,6 +62,8 @@ export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
 export interface Answer {
   /** The assets in akm's order, sections folded into their asset. */
   refs: string[];
+  /** What akm said of each of them, from its first hit: the type, name, description and file. label needs it for a library it cannot list. */
+  assets: Asset[];
   /** akm's own name for how it searched: keyword, or something else when embeddings are on. */
   mode: string | null;
   seconds: number;
@@ -76,9 +78,10 @@ export interface Answer {
 export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = DEPTH, mode: "keyword" | "semantic" = "keyword"): Promise<Answer> {
   const { stdout, stderr, code, ms } = await runAkm(sb, [system, "--limit", String(limit), "--shape", "agent", "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
   const seconds = () => Number((ms / 1000).toFixed(2));
-  const failed = (error: string): Answer => ({ refs: [], mode: null, seconds: seconds(), error });
+  const failed = (error: string): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
-  let out: { hits?: { ref?: unknown }[]; items?: { ref?: unknown }[]; searchMode?: unknown; warnings?: unknown };
+  type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown };
+  let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown };
   try {
     out = JSON.parse(stdout);
   } catch {
@@ -86,9 +89,12 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   }
   if (typeof out.searchMode === "string" && out.searchMode !== mode) return failed(`akm ${system} searched with ${out.searchMode}, not ${mode}: ${JSON.stringify(out.warnings ?? null).slice(0, 300)}`);
   const refs: string[] = [];
+  const assets = new Map<string, Asset>();
   for (const h of (system === "search" ? out.hits : out.items) ?? []) {
     if (typeof h.ref !== "string") return failed(`akm ${system} returned a result with no ref`);
     refs.push(h.ref);
+    const [ref] = foldRefs([h.ref]);
+    if (ref && !assets.has(ref)) assets.set(ref, { ref, type: String(h.type ?? ""), name: String(h.name ?? ref), description: String(h.description ?? ""), path: String(h.path ?? "") });
   }
-  return { refs: foldRefs(refs), mode: typeof out.searchMode === "string" ? out.searchMode : null, seconds: seconds() };
+  return { refs: foldRefs(refs), assets: [...assets.values()], mode: typeof out.searchMode === "string" ? out.searchMode : null, seconds: seconds() };
 }

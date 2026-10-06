@@ -2,31 +2,39 @@
 // retrieval label: makes assets/qrels.jsonl. For each task query it pools the top 10 of `akm search`, `akm curate`
 // and a plain BM25 over the library, with the assets the author expected, and a judge model grades each pooled
 // asset 0 to 3. A pair that is already in qrels.jsonl is never graded again, so the run can stop and resume.
-// See ../README.md.
+// With --corpus own it does the same for the own set in private/retrieval/own/, from akm's results alone, and only
+// with a judge on this machine or the local network, since the notes go to the judge. See ../README.md.
 //
-//   evals/retrieval/label [--limit N]
+//   evals/retrieval/label [--corpus public|own] [--limit N]
 
+import { lookup } from "node:dns/promises";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
+import { type Folders, collectionsFor } from "./run.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const CONCURRENCY = 2;
 const GIVE_UP_AFTER = 10; // grades that fail one after another, and the endpoint is not answering
+type Corpus = "public" | "own";
 
-const USAGE = `Usage: evals/retrieval/label [--limit N]
+const USAGE = `Usage: evals/retrieval/label [--corpus public|own] [--limit N]
 
 Grades what akm search, akm curate and a plain BM25 return for each task query in assets/queries.jsonl, and the
 assets the author expected, and appends the grades to assets/qrels.jsonl. A pair that already has a grade is
 skipped, so run it again to resume.
 The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root).
 
-  --limit  label only the first N task queries`;
+  --corpus  public (default) grades the public library. own grades your own set in private/retrieval/own/, from what
+            akm search and akm curate return for it (no BM25: the library is too big to list), and appends to its
+            qrels.jsonl. It sends your notes to the judge, so it runs only when JUDGE_BASE_URL's host is, or resolves
+            only to, an address on this machine or the private network.
+  --limit   label only the first N task queries`;
 
 type Message = ReturnType<typeof judgeMessages>[number];
 export type Judge = (messages: Message[]) => Promise<string>;
@@ -100,6 +108,33 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
     // A reasoning model that ran out of room can leave its answer in the reasoning text. parseGrade finds it there.
     return message.content?.trim() ? message.content : (message.reasoning_content ?? message.reasoning ?? "");
   };
+}
+
+/** Whether an address is on this machine (127.x, ::1) or the private network (10.x, 172.16.x to 172.31.x, 192.168.x). */
+export function isPrivateAddress(ip: string): boolean {
+  return ip === "::1" || /^(127|10)(\.\d+){3}$|^192\.168(\.\d+){2}$|^172\.(1[6-9]|2\d|3[01])(\.\d+){2}$/.test(ip);
+}
+
+/**
+ * Whether a judge at this URL may be sent private notes: the host the URL names is localhost or a private address,
+ * or a name that resolves only to private addresses (a gateway on the local network). `localhost.example.com` and
+ * `10.1.2.3.example.com` are names like any other, so they count only if they resolve to the private network.
+ */
+export async function isLocalJudge(baseUrl: string, resolve: (host: string) => Promise<string[]> = lookupAll): Promise<boolean> {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  if (host === "localhost" || isPrivateAddress(host)) return true;
+  if (!host || /^[\d.]+$/.test(host) || host.includes(":")) return false;
+  const addresses = await resolve(host).catch(() => [] as string[]);
+  return addresses.length > 0 && addresses.every(isPrivateAddress);
+}
+
+async function lookupAll(host: string): Promise<string[]> {
+  return (await lookup(host, { all: true })).map((a) => a.address);
 }
 
 /** For each task query, the assets its pool holds: the top `depth` of akm search, akm curate and BM25, and the assets the author expected. */
@@ -182,10 +217,94 @@ export async function grade(
   return out;
 }
 
-async function main(): Promise<number> {
-  let values: { limit?: string; help?: boolean };
+const stamp = () => new Date().toTimeString().slice(0, 8);
+
+/**
+ * Labels one set: pools the results for its task queries, has the judge grade the pairs that have no grade yet, and
+ * appends the grades to the set's qrels.jsonl. Returns the exit code. The public library is listed whole and read, so
+ * its pool holds a plain BM25 over it. The own library is tens of thousands of assets, and akm lists 200 for a call:
+ * its pool is what akm search and akm curate return, and what akm said of an asset is all label knows of it.
+ */
+export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
+  const own = corpus === "own";
+  const name = (file: string) => (own ? `private/retrieval/own/${file}` : `assets/${file}`);
+  const queriesPath = join(folders.assets, "queries.jsonl");
+  const qrelsPath = join(folders.assets, "qrels.jsonl");
+  const missing = [folders.library, queriesPath].find((p) => !existsSync(p));
+  if (missing) {
+    console.error(`retrieval label: ${relative(ROOT, missing)} is missing.${own ? ' Your own set goes in private/retrieval/own/: see "Run your own set" in evals/retrieval/README.md.' : ""}`);
+    return 2;
+  }
+  const queries = parseQueries(readFileSync(queriesPath, "utf8"), name("queries.jsonl"))
+    .filter(isTask)
+    .slice(0, ctx.limit);
+  const done = new Set(existsSync(qrelsPath) ? parseQrels(readFileSync(qrelsPath, "utf8"), name("qrels.jsonl")).map((r) => `${r.id}\t${r.ref}`) : []);
+
+  const stops: (() => void)[] = [];
+  const sb = (ctx.newSandbox ?? (() => createSandbox("retrieval")))();
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { limit: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    const version = await akmVersion(sb);
+    const nAssets = await akm.load(sb, folders.library, folders.bundles);
+    const listing: Asset[] = own ? [] : await akm.assets(sb, nAssets);
+    const byRef = new Map(listing.map((a) => [a.ref, a]));
+    const texts = new Map(listing.map((a) => [a.ref, readFileSync(join(folders.library, a.path), "utf8")]));
+    const bm25 = new Bm25(listing.map((a) => ({ ref: a.ref, text: `${a.ref}\n${texts.get(a.ref)}` })));
+    for (const q of queries) {
+      for (const ref of q.expected ?? []) {
+        if (byRef.has(ref)) continue;
+        console.error(`retrieval label: ${q.id} expects ${ref}, which is not an asset akm indexes in the library${own ? " (the own library is not listed, so expected assets cannot be looked up)" : ""}`);
+        return 2;
+      }
+    }
+    console.log(`retrieval label${own ? " (own)" : ""}: akm ${version}, ${nAssets} assets, ${queries.length} task queries, judge ${ctx.model}, prompt ${PROMPT_VERSION}, first ${MAX_DOC_CHARS} characters of each asset`);
+
+    // The own library has no listing: an asset is known by the first hit akm returned for it.
+    const ask = async (system: "search" | "curate", q: string) => {
+      const a = await akm.ask(sb, system, q);
+      if (own) for (const h of a.assets) if (!byRef.has(h.ref)) byRef.set(h.ref, h);
+      return a;
+    };
+    const pooled = await poolQueries(queries, ask, bm25);
+    const todo = pending(queries, pooled, done);
+    const poolSize = [...pooled.values()].reduce((n, refs) => n + refs.length, 0);
+    console.log(`  ${poolSize} pooled pairs, ${poolSize - todo.length} already graded, ${todo.length} to grade, ${CONCURRENCY} at a time`);
+    if (todo.length === 0) return 0;
+
+    let stopping = false;
+    for (const sig of ["SIGINT", "SIGTERM"] as const) {
+      const onSignal = () => {
+        stopping = true;
+        console.log(`\n${sig}: finishing the grades in flight, then stopping. Run it again to resume.`);
+      };
+      process.on(sig, onSignal);
+      stops.push(() => process.off(sig, onSignal));
+    }
+    const started = Date.now();
+    const out = await grade(
+      todo,
+      (ref) => {
+        const a = byRef.get(ref);
+        if (!a) throw new Error(`akm returned ${ref}, which is not in its own asset listing`);
+        return { asset: a, text: texts.get(ref) ?? readFileSync(resolve(folders.library, a.path), "utf8") };
+      },
+      ctx.judge,
+      qrelsPath,
+      { stop: () => stopping, log: (l) => console.log(`  ${stamp()} ${l}`) },
+    );
+    const minutes = ((Date.now() - started) / 60_000).toFixed(1);
+    console.log(`retrieval label: ${out.graded} graded, ${out.failed} failed, ${todo.length - out.graded - out.failed} left, in ${minutes} min (prompt ${PROMPT_VERSION}, model ${ctx.model}). ${out.retried} replies had no grade and were asked for again.`);
+    if (out.gaveUp) console.log(`  It stopped after ${GIVE_UP_AFTER} failures in a row. The last error: ${out.lastError}. Run it again to resume.`);
+    return out.graded === todo.length ? 0 : 1;
+  } finally {
+    for (const stop of stops) stop();
+    removeSandbox(sb);
+  }
+}
+
+async function main(): Promise<number> {
+  let values: { corpus?: string; limit?: string; help?: boolean };
+  try {
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval label: ${(e as Error).message}\n\n${USAGE}`);
     return 2;
@@ -193,6 +312,11 @@ async function main(): Promise<number> {
   if (values.help) {
     console.log(USAGE);
     return 0;
+  }
+  const corpus = values.corpus ?? "public";
+  if (corpus !== "public" && corpus !== "own") {
+    console.error(`retrieval label: --corpus must be public or own, not "${corpus}"`);
+    return 2;
   }
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
@@ -205,62 +329,12 @@ async function main(): Promise<number> {
     console.error("retrieval label: set JUDGE_BASE_URL and JUDGE_MODEL in .env (and JUDGE_API_KEY if the endpoint needs one). See .env.example.");
     return 2;
   }
-  const qrelsPath = join(EVAL_DIR, "assets", "qrels.jsonl");
-  const queries = parseQueries(readFileSync(join(EVAL_DIR, "assets", "queries.jsonl"), "utf8"), "assets/queries.jsonl")
-    .filter(isTask)
-    .slice(0, limit);
-  const done = new Set(existsSync(qrelsPath) ? parseQrels(readFileSync(qrelsPath, "utf8"), "assets/qrels.jsonl").map((r) => `${r.id}\t${r.ref}`) : []);
-
-  const sb = createSandbox("retrieval");
-  try {
-    const version = await akmVersion(sb);
-    const listing = await akm.assets(sb, await akm.load(sb, join(ROOT, "corpus", "library")));
-    const byRef = new Map(listing.map((a) => [a.ref, a]));
-    const texts = new Map(listing.map((a) => [a.ref, readFileSync(join(ROOT, "corpus", "library", a.path), "utf8")]));
-    const bm25 = new Bm25(listing.map((a) => ({ ref: a.ref, text: `${a.ref}\n${texts.get(a.ref)}` })));
-    for (const q of queries) {
-      for (const ref of q.expected ?? []) {
-        if (byRef.has(ref)) continue;
-        console.error(`retrieval label: ${q.id} expects ${ref}, which is not an asset akm indexes in the library`);
-        return 2;
-      }
-    }
-    console.log(`retrieval label: akm ${version}, ${listing.length} assets, ${queries.length} task queries, judge ${model}, prompt ${PROMPT_VERSION}, first ${MAX_DOC_CHARS} characters of each asset`);
-
-    const pooled = await poolQueries(queries, (system, q) => akm.ask(sb, system, q), bm25);
-    const todo = pending(queries, pooled, done);
-    const poolSize = [...pooled.values()].reduce((n, refs) => n + refs.length, 0);
-    console.log(`  ${poolSize} pooled pairs, ${poolSize - todo.length} already graded, ${todo.length} to grade, ${CONCURRENCY} at a time`);
-    if (todo.length === 0) return 0;
-
-    let stopping = false;
-    for (const sig of ["SIGINT", "SIGTERM"] as const) {
-      process.on(sig, () => {
-        stopping = true;
-        console.log(`\n${sig}: finishing the grades in flight, then stopping. Run it again to resume.`);
-      });
-    }
-    const stamp = () => new Date().toTimeString().slice(0, 8);
-    const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
-    const started = Date.now();
-    const out = await grade(
-      todo,
-      (ref) => {
-        const a = byRef.get(ref);
-        if (!a) throw new Error(`akm returned ${ref}, which is not in its own asset listing`);
-        return { asset: a, text: texts.get(ref) as string };
-      },
-      judge,
-      qrelsPath,
-      { stop: () => stopping, log: (l) => console.log(`  ${stamp()} ${l}`) },
-    );
-    const minutes = ((Date.now() - started) / 60_000).toFixed(1);
-    console.log(`retrieval label: ${out.graded} graded, ${out.failed} failed, ${todo.length - out.graded - out.failed} left, in ${minutes} min (prompt ${PROMPT_VERSION}, model ${model}). ${out.retried} replies had no grade and were asked for again.`);
-    if (out.gaveUp) console.log(`  It stopped after ${GIVE_UP_AFTER} failures in a row. The last error: ${out.lastError}. Run it again to resume.`);
-    return out.graded === todo.length ? 0 : 1;
-  } finally {
-    removeSandbox(sb);
+  if (corpus === "own" && !(await isLocalJudge(baseUrl))) {
+    console.error("retrieval label: --corpus own sends your notes to the judge, so JUDGE_BASE_URL must be localhost, a private-network address (10.*, 172.16.* to 172.31.*, 192.168.*) or a name that resolves only to such addresses. It is not.");
+    return 2;
   }
+  const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
+  return labelCollection(corpus, { model, judge, limit }, collectionsFor(corpus)[0].folders);
 }
 
 if (import.meta.main) process.exit(await main());

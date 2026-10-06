@@ -156,7 +156,7 @@ export interface Asset {
   type: string;
   name: string;
   description: string;
-  /** The file, relative to the library. */
+  /** The file, relative to the library, or absolute where akm names it so (a bundle that is indexed in place). */
   path: string;
 }
 
