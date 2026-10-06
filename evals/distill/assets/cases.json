@@ -1,0 +1,357 @@
+[
+  {
+    "id": "lesson-01",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["networkidle", "network idle", "network is never idle"],
+      ["poll"],
+      ["visible", "toBeVisible", "getByRole", "heading", "locator"]
+    ],
+    "forbidden": [
+      ["networkidle * deprecated", "networkidle * unreliable", "networkidle * broken", "networkidle never works", "avoid waitForLoadState", "never use waitForLoadState"],
+      ["waitForSelector", "waitForResponse", "waitForTimeout", "waitForFunction", "waitForURL"],
+      ["remove * widget", "removing * widget", "disable * widget", "disabling * widget"]
+    ],
+    "good": "Do not wait for networkidle on a page that carries a polling widget. The support chat widget polls every 20 seconds, so the network is never idle and the wait runs until the 30 second test timeout. Wait for a specific element instead, such as the page heading being visible; the order-history test then finished in about two seconds.",
+    "bad": "Playwright's networkidle wait is unreliable, so never use waitForLoadState. Use waitForSelector on the page heading instead, and disable the chat widget in tests.",
+    "note": "A failure with a clear cause and a fix that worked. A good lesson says why networkidle never settled and what to wait for instead, without turning one polling widget into a ban on networkidle."
+  },
+  {
+    "id": "lesson-02",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["30"],
+      ["--limit"],
+      ["truncat", "capped", "cut short", "cut off", "only the first", "silently"]
+    ],
+    "forbidden": [
+      ["every gh command", "all gh command", "every gh list", "all gh list", "every list command", "all list command", "gh run list", "gh repo list", "gh release list"],
+      ["--paginate", "paginate", "pagination", "gh api"],
+      ["--limit 0", "no limit", "unlimited", "--limit 1000"]
+    ],
+    "good": "gh issue list returns only the first 30 results unless --limit is passed, and it gives no warning when it truncates the list, so an audit that counts its output is capped at 30. Pass --limit 200 and treat a result count equal to the limit as possibly truncated. gh pr list has the same default.",
+    "bad": "All gh list commands are capped, so always paginate with gh api --paginate or use --limit 1000 to get everything.",
+    "note": "A tool default that silently truncated an audit. A good lesson states the default of 30, the missing warning and the fix, and stays with gh issue list and gh pr list."
+  },
+  {
+    "id": "lesson-03",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["rgb"],
+      ["text", "#000", "title", "black"],
+      ["ghostscript"],
+      ["preflight", "vendor"]
+    ],
+    "forbidden": [
+      ["all * vendors", "every * vendor", "any * vendor", "vendors reject", "vendors require"],
+      ["images caused", "images were the cause", "images were the problem", "image conversion was the problem", "image conversion failed"],
+      ["imagemagick", "icc profile", "pdf/x", "pdfx", "pdftk"],
+      ["eliminat * redundant", "redundant rgb", "metadata"]
+    ],
+    "good": "Converting images to CMYK is not enough for the vendor's preflight: Chromium exports CSS text colours such as #000 as RGB black, so the cover was still rejected with 'RGB content found'. Convert the finished PDF with Ghostscript (-sColorConversionStrategy=CMYK) and run the preflight again.",
+    "bad": "Every print vendor rejects RGB, so always convert images with ImageMagick and an ICC profile before building the PDF.",
+    "note": "A rejected file whose cause was not the obvious one. A good lesson names the RGB text colour, the Ghostscript conversion of the finished PDF and the repeated preflight, and does not blame the images."
+  },
+  {
+    "id": "lesson-04",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["429"],
+      ["rpm_limit", "rpm limit", "requests per minute", "per minute"],
+      ["whole", "not per model", "shared", "across models", "all models", "both models", "each model"],
+      ["own key", "separate key", "second key", "dedicated key", "its own"]
+    ],
+    "forbidden": [
+      ["tpm_limit", "tpm limit", "tokens per minute"],
+      ["model_rpm_limit", "per-model limits fix", "per-model limits solve", "per model limits fix", "per model limits solve"],
+      ["all * prox", "every * prox", "any prox"]
+    ],
+    "good": "A LiteLLM virtual key's rpm_limit applies to the key as a whole, not to each model, so two models on one key share a single budget. The batch got 429s at about 60 requests a minute although the upstream provider allowed more; giving the classifier its own key with a higher rpm_limit removed them.",
+    "bad": "LiteLLM rate limits are unreliable, so always set tpm_limit and model_rpm_limit on every key to avoid 429s.",
+    "note": "A limit that behaved differently from what the batch assumed. A good lesson says the key's limit is shared across models and that a separate key fixed it, without adding other limit types."
+  },
+  {
+    "id": "lesson-05",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["404"],
+      ["shared drive"],
+      ["member"],
+      ["supportsAllDrives", "supports all drives"]
+    ],
+    "forbidden": [
+      ["domain-wide delegation", "domain wide delegation", "delegation"],
+      ["editor role", "editor access", "manager role", "content manager", "organizer", "requires * editor", "needs * editor"],
+      ["new scope", "additional scope", "extra scope", "drive.readonly", "drive scope"],
+      ["or higher", "or above", "at least viewer", "at least a viewer", "all drive api call", "every drive api call", "all api call", "every api call"]
+    ],
+    "good": "A service account that gets 404 File not found on files in a shared drive must be a member of the shared drive itself; sharing one folder with it did not help. Adding it as a Viewer member fixed the exports, and the Drive API call also needs supportsAllDrives=true. Its key and scopes did not need to change.",
+    "bad": "Shared drive exports need domain-wide delegation and an Editor role for the service account, plus the drive scope.",
+    "note": "An access failure with two separate causes. A good lesson names the shared-drive membership and supportsAllDrives, and does not invent delegation, roles or scopes."
+  },
+  {
+    "id": "lesson-06",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["%23", "encod", "escap"],
+      ["fragment", "everything after", "dropped"],
+      ["no error", "silent", "silently", "without an error", "without error", "never arrived", "did not arrive"]
+    ],
+    "forbidden": [
+      ["all special character", "every special character", "any special character", "all reserved character", "every reserved character", "every url", "all url"],
+      ["bug in apprise", "apprise has a bug", "apprise is broken", "apprise bug"],
+      ["matrix api", "access token", "homeserver"]
+    ],
+    "good": "A # in an Apprise URL starts a fragment and everything after it is dropped, so a Matrix room alias written as #ops-alerts:example.org addressed no room, and notify.sh printed no error. Write the # as %23. A dry run does not catch this, so confirm with a real test message.",
+    "bad": "Always percent-encode every special character in every Apprise URL, because Apprise has a bug that silently drops rooms.",
+    "note": "A silent delivery failure with one specific cause. A good lesson says a # must be written %23, why, and that the failure is silent, without widening it to all special characters."
+  },
+  {
+    "id": "lesson-07",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["runtime", "dynamic", "built from", "builds handler names", "built the name"],
+      ["config"],
+      ["prefix", "pattern"]
+    ],
+    "forbidden": [
+      ["never delete", "never remove", "do not delete any", "never delete any"],
+      ["search is useless", "search is unreliable", "grep is useless", "grep is unreliable", "text search is useless"],
+      ["getattr", "reflection", "importlib", "eval"],
+      ["every format", "all format", "exercise every", "exercise all"]
+    ],
+    "good": "A repository search that finds no references does not prove a function is unused: the nightly job built handler names at runtime from its config, handlers[f'export_{fmt}'], and production still set fmt to legacy_csv. Before deleting a function whose name follows a pattern, search for the prefix and check the config files, not only the full name in code.",
+    "bad": "Never delete a function based on search results, because text search is unreliable; also check getattr and reflection use.",
+    "note": "A removal that looked safe and was not. A good lesson says the handler name is built at runtime from config and tells the reader to search for the prefix and the config, without turning it into a rule never to delete."
+  },
+  {
+    "id": "lesson-08",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["follow-tags", "follow tags"],
+      ["annotated"],
+      ["lightweight"]
+    ],
+    "forbidden": [
+      ["signed tag", "signed tags", "gpg", "sign the tag"],
+      ["push --tags", "push origin --tags", "push the tag explicitly", "push the tag by name"],
+      ["cat-file", "ls-remote", "show-ref", "for-each-ref", "push.followTags", "git config", "git describe", "git verify"]
+    ],
+    "good": "git push --follow-tags pushes annotated tags only, so a lightweight tag made with git tag v2.4.0 stayed local and the tag-triggered release job never started. Create release tags with git tag -a so that --follow-tags pushes them.",
+    "bad": "Release tags must be GPG-signed, and you should always run git push --tags instead of --follow-tags.",
+    "note": "A release that silently did not start. A good lesson says --follow-tags pushes annotated tags only and that the lightweight tag stayed local, without adding signing or other push options."
+  },
+  {
+    "id": "claim-01",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["break-inside"],
+      ["footnote"],
+      ["single-column", "single column", "rulebook"]
+    ],
+    "forbidden": [
+      ["works * all * layout", "works * every * layout", "works * any layout", "applies * all * layout", "applies * every * layout", "applies * any layout", "fixes all", "fixes every", "fix * all * layout", "fix * every * layout", "all layout * affected", "every layout * affected"],
+      ["often cause", "usually cause", "commonly cause", "typically cause", "frequently cause", "always cause"],
+      ["two-column * also fixed", "two-column * same fix", "fixes * two-column", "works * two-column", "applies * two-column", "also fixes"]
+    ],
+    "good": "On the Paged.js rulebook build, long footnotes were clipped at the bottom margin because a break-inside: avoid rule on the footnote area also applied to the call-out boxes; removing it from .footnote-area fixed page 14. This was verified only on the single-column rulebook; the two-column supplement was not rebuilt.",
+    "bad": "break-inside: avoid usually causes clipping in Paged.js, so remove it everywhere; the fix works for all layouts including the two-column supplement.",
+    "note": "A fix checked in one place. A good lesson keeps the scope: the fix was verified on the single-column rulebook only. It must not say the fix holds for all layouts or that the rule usually causes clipping."
+  },
+  {
+    "id": "claim-02",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["retries"],
+      ["flaky", "intermittent", "one run in five", "one in five"],
+      ["runner"],
+      ["not found", "unknown", "untested", "undiagnosed", "unconfirmed", "unverified", "not known", "guess", "suspect", "unproven"]
+    ],
+    "forbidden": [
+      ["autocomplete is the cause", "autocomplete causes", "caused by the autocomplete", "caused by slow", "caused by slower", "due to slow", "due to slower", "because * autocomplete"],
+      ["retries fix", "retries solve", "retries resolve", "retries cure", "retries eliminate", "retries are the fix", "retries are a fix"],
+      ["always add retries", "always use retries", "retries to all", "retries to every", "all flaky tests", "every flaky test"]
+    ],
+    "good": "A Playwright test that failed about one run in five on small CI runners passed 20 runs in a row after retries: 2 was added, but the cause was not found. The suspected slow autocomplete request is untested, and the retries only hide the failures, so the test stays marked @flaky until someone investigates.",
+    "bad": "Flaky Playwright tests are caused by slow autocomplete requests on small runners; retries fix them, so always add retries to every flaky test.",
+    "note": "A symptom hidden, not cured. A good lesson says the retries mask the failures and the cause is unknown. It must not present the autocomplete guess as the cause or retries as the cure."
+  },
+  {
+    "id": "claim-03",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["report-service", "report service"],
+      ["invoice"],
+      ["deprecation"]
+    ],
+    "forbidden": [
+      ["safe to upgrade", "safe upgrade", "upgrade is safe", "is safe", "no breaking", "backward compatible", "backwards compatible", "drop-in", "drop in"],
+      ["all service * can upgrade", "every service * can upgrade", "all service * upgrade * safe", "other service * safe", "other service * can upgrade", "invoice service * safe", "invoice service * can upgrade"]
+    ],
+    "good": "In the report-service, upgrading pdfkit-lite from 3.1.4 to 3.2.0 removed the font subset deprecation warning, the tests passed and three sample reports rendered the same in a manual check. The invoice-service still pins 3.1.4 and was not checked, and the rest of the 3.2.0 changelog was not read.",
+    "bad": "Upgrading pdfkit-lite to 3.2.0 has no breaking changes, so every service can upgrade without checking.",
+    "note": "One service upgraded and one not checked. A good lesson stays with the report-service result and the unchecked invoice-service. It must not call the upgrade safe or free of breaking changes."
+  },
+  {
+    "id": "claim-04",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["4.2"],
+      ["6.8"],
+      ["40"],
+      ["median"]
+    ],
+    "forbidden": [
+      ["better quality", "higher quality", "more accurate", "better answers", "more capable", "fast-8b is better", "deep-27b is better"],
+      ["always faster", "will always", "faster in production", "faster on any", "faster on every", "always prefer", "should prefer", "prefer fast-8b", "recommended", "best choice"]
+    ],
+    "good": "On the 40-prompt review set, fast-8b answered in a median of 4.2 seconds against 6.8 seconds for deep-27b, one request at a time on a shared GPU that a labelling job was also using. Answer quality was not compared, and times on an idle server will differ.",
+    "bad": "fast-8b is faster than deep-27b and gives better quality, so always prefer fast-8b.",
+    "note": "A timing sample, not a ranking. A good lesson reports the two medians on the 40-prompt set with its conditions. It must not claim better quality or a general preference."
+  },
+  {
+    "id": "claim-05",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["0.125"],
+      ["0.25"],
+      ["accepted", "passed"],
+      ["not confirmed", "unconfirmed", "has not been confirmed", "nobody asked", "not asked", "did not ask", "unverified", "not verified", "possible"]
+    ],
+    "forbidden": [
+      ["0.125 is enough", "0.125 is sufficient", "0.125 is the minimum", "0.125 inch is enough", "0.125 inch is sufficient", "0.125 inch is the minimum", "minimum bleed is 0.125", "enough bleed"],
+      ["vendors accept", "vendor accepts 0.125", "vendor requires 0.125", "vendor only requires", "vendors require"],
+      ["template * out of date", "template * outdated", "template * wrong", "template * obsolete"]
+    ],
+    "good": "A print vendor's preflight accepted a PDF with a 0.125 inch bleed although the vendor's template page asks for 0.25 inch. Nobody asked the vendor about the difference, so it is unconfirmed whether 0.125 inch is enough. The two earlier books used 0.25 inch.",
+    "bad": "The vendor only requires 0.125 inch bleed, because its template page is out of date, so 0.125 inch is enough for all books.",
+    "note": "One accepted file, no confirmation. A good lesson reports the accepted 0.125 inch bleed against the 0.25 inch template and says it is unconfirmed. It must not state a new minimum."
+  },
+  {
+    "id": "claim-06",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["60"],
+      ["3600"],
+      ["staging"],
+      ["cpu"]
+    ],
+    "forbidden": [
+      ["safe for production", "safe in production", "safe to use in production", "safe to roll out", "use 60 in production", "lower it in production", "set it to 60 in production"],
+      ["negligible", "no performance impact", "no measurable impact", "minimal impact", "little impact", "no extra load", "no significant"]
+    ],
+    "good": "Lowering PREVIEW_CACHE_TTL on the staging preview server from 3600 to 60 seconds stopped stale previews within a minute and raised CPU use from about 5 percent to about 9 percent. It was tried on staging only and reverted; production still uses 3600, and its CPU cost at ten times the traffic is not known.",
+    "bad": "A 60 second PREVIEW_CACHE_TTL is safe in production because the CPU impact is negligible, so lower it everywhere.",
+    "note": "A staging experiment. A good lesson keeps the result on staging: the CPU rise and the unknown production cost. It must not call the change safe for production or its cost negligible."
+  },
+  {
+    "id": "status-01",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "status-02",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "status-03",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "status-04",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "status-05",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "status-06",
+    "class": "dated-status",
+    "expect": "none",
+    "note": "A snapshot of what was done or is pending on a date. Nothing in it outlives the date, so no lesson is expected."
+  },
+  {
+    "id": "asset-01",
+    "class": "restates-asset",
+    "expect": "none",
+    "note": "The memory repeats rules the library already holds in skills/coding/dependency-simplification, which is in the case. A lesson would restate that asset, so none is expected."
+  },
+  {
+    "id": "asset-02",
+    "class": "restates-asset",
+    "expect": "none",
+    "note": "The memory repeats rules the library already holds in skills/cmyk-image-converter, which is in the case. A lesson would restate that asset, so none is expected."
+  },
+  {
+    "id": "asset-03",
+    "class": "restates-asset",
+    "expect": "none",
+    "note": "The memory repeats rules the library already holds in skills/coding/git-release, which is in the case. A lesson would restate that asset, so none is expected."
+  },
+  {
+    "id": "asset-04",
+    "class": "restates-asset",
+    "expect": "none",
+    "note": "The memory repeats rules the library already holds in skills/coding/documentation-sync, which is in the case. A lesson would restate that asset, so none is expected."
+  },
+  {
+    "id": "asset-05",
+    "class": "restates-asset",
+    "expect": "none",
+    "note": "The memory repeats rules the library already holds in skills/print/pagedjs, which is in the case. A lesson would restate that asset, so none is expected."
+  },
+  {
+    "id": "dup-01",
+    "class": "duplicate-lesson",
+    "expect": "none",
+    "note": "The case holds a lesson at the ref distill would write for this memory, so distill skips it before any model call. No new lesson is expected."
+  },
+  {
+    "id": "dup-02",
+    "class": "duplicate-lesson",
+    "expect": "none",
+    "note": "The case holds a lesson at the ref distill would write for this memory, so distill skips it before any model call. No new lesson is expected."
+  },
+  {
+    "id": "dup-03",
+    "class": "duplicate-lesson",
+    "expect": "none",
+    "note": "The case holds a lesson at the ref distill would write for this memory, so distill skips it before any model call. No new lesson is expected."
+  },
+  {
+    "id": "dup-04",
+    "class": "duplicate-lesson",
+    "expect": "none",
+    "note": "The case holds a lesson under another name that already carries this memory's point. No new lesson is expected."
+  },
+  {
+    "id": "dup-05",
+    "class": "duplicate-lesson",
+    "expect": "none",
+    "note": "The case holds a lesson under another name that already carries this memory's point. No new lesson is expected."
+  }
+]
