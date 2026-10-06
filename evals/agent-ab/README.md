@@ -37,9 +37,9 @@ Each trial runs in its own container, built from the task's image. Harbor remove
 
 ## Cost and time
 
-A trial is one agent session. The last run of an earlier version of these tasks (28 tasks, another model) used 27,000 to 33,000 input tokens per trial, almost all of them cache reads, and about 400 output tokens. A full run is 54 trials, 9 tasks times 2 arms times 3 attempts: about 1.6 million input tokens and 22,000 output tokens, well under a dollar on a small hosted model. The report prints the tokens of the run.
+A trial is one agent session. The last run of an earlier version of these tasks (28 tasks, another model) used 27,000 to 33,000 input tokens per trial, almost all of them cache reads, and about 400 output tokens. A full run is 54 trials, 9 tasks times 2 arms times 3 attempts: about 1.6 million input tokens and 22,000 output tokens, well under a dollar on a small hosted model. The report prints the tokens the run used, and the cost when the model reports one.
 
-Four trials run at a time. With a model that answers at once, setting up an akm trial took about 2 minutes and a control trial about 1.4, and running one took seconds, so `--limit 3` (6 trials) took about 4.5 minutes. A real model adds its latency to every step. Expect about 40 minutes for a full run.
+Four trials run at a time. With a model that answers at once, setting up an akm trial took about 2 minutes and a control trial about 1.4, and running one took seconds, so `--limit 3` (6 trials) took about 4 minutes. A real model adds its latency to every step. Expect about 40 minutes for a full run.
 
 ## The two arms
 

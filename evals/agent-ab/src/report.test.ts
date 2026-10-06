@@ -220,6 +220,7 @@ describe("buildReport", () => {
     expect(text).toContain("pass rate 0.833");
     expect(text).toContain("difference (akm - control, paired by task)  +0.500");
     expect(text).toContain("akm called in 4 of 6 akm trials (67%)");
+    expect(text).toContain("control  6,000 input tokens (4,800 from cache), 600 output");
     expect(text).toContain("t3");
   });
 

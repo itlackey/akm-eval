@@ -265,10 +265,13 @@ export function formatReport(r: Report): string[] {
     return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}   pass rate ${ci(a.pass_rate)}`;
   };
   const e = r.engagement;
+  const n = (x: number) => x.toLocaleString("en-US");
+  const used = (name: string, a: ArmSummary) => `  ${name.padEnd(8)} ${n(a.tokens.input)} input tokens (${n(a.tokens.cache)} from cache), ${n(a.tokens.output)} output${a.tokens.cost_usd === null ? "" : `, ${a.tokens.cost_usd} USD as the model reports it`}`;
   const split = (name: string, s: Split) => `    ${name.padEnd(11)} ${s.passed}/${s.trials} trials passed, difference from the control ${ci(s.delta, true)}`;
   const lines = [row("control", r.control), row("akm", r.akm), `  difference (akm - control, paired by task)  ${ci(r.delta, true)}`];
   lines.push(`  akm called in ${e.called} of ${e.trials} akm trials (${pct(e.rate)})${Object.keys(e.calls).length ? `: ${Object.entries(e.calls).sort().map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}`);
   lines.push(split("called", e.called_split), split("not called", e.not_called_split));
+  lines.push(used("control", r.control), used("akm", r.akm));
   if (e.control_calls) lines.push(`  WARNING: ${e.control_calls} control trials called akm, so the arms were not what they should be`);
   lines.push("", "  task".padEnd(66) + "control    akm     called akm");
   for (const t of r.tasks) lines.push(`  ${t.task.padEnd(64)}${t.control.padEnd(11)}${t.akm.padEnd(8)}${t.called}`);
