@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { type Trial, buildReport } from "./report.ts";
-import { PINS, jobConfig, modelName, modelSettings, selectTasks, sideBySide, taskNames } from "./run.ts";
+import { PINS } from "../../../lib/harbor/harbor.ts";
+import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
+import { jobConfig, selectTasks, sideBySide, taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 
@@ -23,42 +24,6 @@ describe("selectTasks", () => {
 
   test("copes with a family of one task and with a task that has no family", () => {
     expect(selectTasks(["x", "y--1", "y--2"], 2)).toEqual(["x", "y--1"]);
-  });
-});
-
-describe("modelName", () => {
-  test("keeps a name that has a provider and reads one without as an openai model", () => {
-    expect(modelName("openai/gpt-6-luna")).toBe("openai/gpt-6-luna");
-    expect(modelName("gpt-6-luna")).toBe("openai/gpt-6-luna");
-    expect(modelName("anthropic/claude-sonnet-4-5")).toBe("anthropic/claude-sonnet-4-5");
-  });
-});
-
-describe("modelSettings", () => {
-  test("reads an openai model, its key and its endpoint", () => {
-    const r = modelSettings({ MODEL_NAME: "gpt-6-luna", MODEL_API_KEY: "k1", MODEL_BASE_URL: "http://192.0.2.5:8080/v1", PATH: "/bin" });
-    expect(r.model).toBe("openai/gpt-6-luna");
-    expect(r.env).toMatchObject({ OPENAI_API_KEY: "k1", OPENAI_BASE_URL: "http://192.0.2.5:8080/v1", PATH: "/bin" });
-  });
-
-  test("lets OPENAI_API_KEY win over MODEL_API_KEY, and needs no endpoint", () => {
-    const r = modelSettings({ MODEL_NAME: "openai/x", OPENAI_API_KEY: "a", MODEL_API_KEY: "b" });
-    expect(r.env.OPENAI_API_KEY).toBe("a");
-    expect(r.env.OPENAI_BASE_URL).toBeUndefined();
-  });
-
-  test("stops without a model name, without a key, or with an endpoint a container cannot reach", () => {
-    expect(() => modelSettings({ MODEL_API_KEY: "k" })).toThrow("MODEL_NAME");
-    expect(() => modelSettings({ MODEL_NAME: "x", MODEL_API_KEY: " " })).toThrow("no model key");
-    expect(() => modelSettings({ MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://localhost:8080/v1" })).toThrow("container");
-    expect(() => modelSettings({ MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://127.0.0.1:1/v1" })).toThrow("container");
-  });
-
-  test("leaves another provider's key to Harbor", () => {
-    const r = modelSettings({ MODEL_NAME: "anthropic/claude-sonnet-4-5", ANTHROPIC_API_KEY: "a" });
-    expect(r.model).toBe("anthropic/claude-sonnet-4-5");
-    expect(r.env.ANTHROPIC_API_KEY).toBe("a");
-    expect(r.env.OPENAI_API_KEY).toBeUndefined();
   });
 });
 

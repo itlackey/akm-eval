@@ -51,7 +51,7 @@ Both arms get the same model, the same opencode (1.18.34) and the same config: a
 
 Two checks keep the akm arm honest. At the end of setup, a warm-up session boots opencode with the real config and no model key, so the plugin is fetched before the measured run and not in it, and the setup stops unless the plugin logged that it loaded and logged no failure. After the run, the measured session's log is checked the same way. A trial where the plugin was not shown to be live is an error with no reward, not a score: it would read as "the model chose not to call akm" and make the akm arm a second control. The plugin logs a failed hook or helper and carries on, so the exit status cannot tell the two apart.
 
-`agent/akm_opencode.py` is the akm arm: Harbor's own opencode agent plus the above, in about 200 lines. The command to run its tests is at the top of `agent/test_akm_opencode.py`.
+`lib/harbor/akm_opencode.py` is the akm arm: Harbor's own opencode agent plus the above, in about 200 lines. It is shared with `benchmarks/terminal-bench`, and so are the pins, the job and the report (`lib/harbor/`). The command to run the agent's tests is at the top of `lib/harbor/test_akm_opencode.py`.
 
 ## Read the results
 
@@ -105,7 +105,7 @@ uv run --no-project --python 3.12 --with harbor==0.24.0 harbor run -p evals/agen
 
 ## Pins
 
-A run is made of akm-cli 0.9.26, the akm-opencode plugin 0.9.26202610051302 (which depends on exactly that akm-cli), opencode 1.18.34 and Harbor 0.24.0. They are set in `src/run.ts` and written to `summary.json`. The agent relies on how Harbor's opencode agent builds its config and its commands, so move Harbor only with the agent's tests and a smoke run.
+A run is made of akm-cli 0.9.26, the akm-opencode plugin 0.9.26202610051302 (which depends on exactly that akm-cli), opencode 1.18.34 and Harbor 0.24.0. They are set in `lib/harbor/harbor.ts`, shared with `benchmarks/terminal-bench`, and written to `summary.json`. The agent relies on how Harbor's opencode agent builds its config and its commands, so move Harbor only with the agent's tests and a smoke run.
 
 ## Comparing results
 

@@ -2,13 +2,15 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""The treatment arm of the agent A/B: opencode with the akm-opencode plugin.
+"""The treatment arm of the evals that run an agent in Harbor with and without akm (evals/agent-ab, benchmarks/terminal-bench):
+opencode with the akm-opencode plugin.
 
 The control arm is Harbor's own `opencode` agent. This class is that agent plus four things, and nothing else:
 
 1. The plugin, named in opencode's config.
-2. akm itself: akm-cli installed, and an akm bundle seeded from the library the task names with `AKM_TASK_STASH`
-   (set in the task's `[environment.env]`), indexed, and left where the plugin looks for it.
+2. akm itself: akm-cli installed, and an akm bundle seeded from the library `AKM_TASK_STASH` names (set in the task's
+   `[environment.env]`, or for a task that is not ours in this agent's own `env` in the job), indexed, and left where
+   the plugin looks for it.
 3. The AKM_* settings, on every command the agent runs.
 4. A check after the run that the plugin was live. Without it a trial where the plugin failed to load scores like a
    trial where the model chose not to call akm, and the treatment arm quietly becomes a second control arm. Such a
@@ -73,6 +75,8 @@ class AkmOpenCodeOptions(OpenCodeOptions):
     akm_cli_version: str
     akm_plugin_version: str
     libraries_dir: str  # one folder per library, each laid out as an akm bundle
+    # How many assets akm indexes in the library. Without it, one for every file in it, which holds when each file is an asset.
+    library_assets: int | None = None
 
 
 class AkmPluginNotLoadedError(RuntimeError):
@@ -143,18 +147,19 @@ class AkmOpenCode(OpenCode):
     def _install_akm_command(self) -> str:
         return f"set -euo pipefail; {NVM}npm i -g akm-cli@{shlex.quote(self.options.akm_cli_version)} && akm --version"
 
-    @staticmethod
-    def _seed_command() -> str:
+    def _seed_command(self) -> str:
         # A bundle with the fact templates akm scaffolds, then the library's type folders copied in (never loose files
         # such as a README), then a full index. No registry: the agent searches the library and nothing else. Every
-        # asset file of the library must be in the index, apart from the scaffold's facts.
+        # asset of the library must be in the index, apart from the scaffold's facts.
+        assets = self.options.library_assets
+        want = f'"$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"' if assets is None else str(assets)
         return (
             "set -euo pipefail; " + NVM + 'stash="$(printenv AKM_TASK_STASH || true)"; '
             '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
             f'[ -d {LIBRARIES}/"$stash" ] || {{ echo "AKM-SETUP FATAL: no library named $stash" >&2; exit 1; }}; '
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
-            f'want="$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"; rm -rf {LIBRARIES}; '
+            f"want={want}; rm -rf {LIBRARIES}; "
             "akm index --full >/dev/null && "
             "got=$(akm info --format json -q | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
             "const t=JSON.parse(s).indexStats.byType;console.log(Object.entries(t).reduce((n,[k,v])=>n+(k===\"fact\"?0:v),0))})') && "

@@ -4,8 +4,7 @@
 
 """Tests for the akm arm. No Docker and no network. Run them with the Harbor release the eval pins:
 
-    PYTHONPATH=evals/agent-ab/agent uv run --no-project --python 3.12 --with harbor==0.24.0 --with pytest \
-        pytest evals/agent-ab/agent
+    PYTHONPATH=lib/harbor uv run --no-project --python 3.12 --with harbor==0.24.0 --with pytest pytest lib/harbor
 """
 
 import asyncio
@@ -20,7 +19,7 @@ import akm_opencode as m
 CONFIG = {"$schema": "https://opencode.ai/config.json", "autoupdate": False}
 
 
-def make(tmp_path):
+def make(tmp_path, **options):
     return m.AkmOpenCode(
         logs_dir=tmp_path,
         model_name="openai/gpt-6-luna",
@@ -29,6 +28,7 @@ def make(tmp_path):
         akm_plugin_version="0.9.26202610051302",
         libraries_dir="/libraries",
         opencode_config=dict(CONFIG),
+        **options,
     )
 
 
@@ -85,6 +85,14 @@ def test_the_shell_commands_are_valid_bash(tmp_path):
     for command in (agent._install_akm_command(), agent._seed_command(), agent._warm_command(), agent._check_command()):
         done = subprocess.run(["bash", "-n", "-c", command], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
+
+
+def test_the_seed_checks_one_asset_per_file_unless_told_how_many_the_library_has(tmp_path):
+    assert 'want="$(find /opt/akm/libraries/"$stash" -type f' in make(tmp_path)._seed_command()
+    counted = make(tmp_path, library_assets=259)._seed_command()
+    assert "want=259;" in counted
+    assert "find /opt/akm/libraries" not in counted
+    assert subprocess.run(["bash", "-n", "-c", counted], capture_output=True, text=True).returncode == 0
 
 
 def test_the_warm_up_boots_opencode_with_the_plugin_in_the_config(tmp_path):
