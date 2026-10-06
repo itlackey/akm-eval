@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import type { Case, Relation } from "./lib.ts";
-import { runCorpus, writeNotes } from "./run.ts";
+import { failureHint, runCorpus, writeNotes } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -45,7 +45,7 @@ if (cmd === "index") {
   else if (what === "retire-outsider") list = [proposal("not-in-the-pair")];
   else if (what === "keep") result = pass({ labelCounts: { overlap: 1 } });
   else if (what === "promote") { list = [{ id: "p-promote", ref: "bundle//knowledge/x", status: "pending", source: "consolidate" }]; result = pass({ labelCounts: { overlap: 1 } }); }
-  else if (what === "no-verdict") result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} });
+  else if (what === "no-verdict") { console.error("[consolidate] chunk 1/1 (2 memories) …"); console.error("Network error: Unable to connect. Is the computer able to access the url?"); console.error("  consolidate  judge  m  2  2  0  0  0  2"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
   else result = pass({ pairsConsidered: 0, pairsJudged: 0, labelCounts: {} });
   writeFileSync(proposals, JSON.stringify(list));
   json({ ok: true, strategy: "consolidate", consolidation: { pairPass: result, mtimes: notes.map((n) => n.mtime) } });
@@ -111,6 +111,14 @@ describe("writeNotes", () => {
   });
 });
 
+describe("failureHint", () => {
+  test("is the first line akm printed that reads as a failure, and nothing when there is none", () => {
+    expect(failureHint("[consolidate] chunk 1/1\nNetwork error: Unable to connect.\nWarning: x\n  consolidate  m  2  2")).toBe(" (akm said: Network error: Unable to connect.)");
+    expect(failureHint("[improve] usage report\n  process  failures\nWarning: show events not yet in usage_events")).toBe("");
+    expect(failureHint("")).toBe("");
+  });
+});
+
 describe("runCorpus", () => {
   test("reads each pair's retirement back by side, and scores it against the case", async () => {
     const { ctx, folders } = setup([
@@ -146,7 +154,7 @@ describe("runCorpus", () => {
     expect(byId("o2")).toMatchObject({ outcome: "keep", paired: true, judged_as: "overlap" });
     expect(byId("u1")).toMatchObject({ outcome: "keep", paired: false, judged_as: null });
     expect(byId("c1")).toMatchObject({ outcome: "keep", paired: true });
-    expect(byId("e1")).toMatchObject({ outcome: "error", error: "akm paired the notes but its judge gave no verdict" });
+    expect(byId("e1")).toMatchObject({ outcome: "error", error: "akm paired the notes but its judge gave no verdict (akm said: Network error: Unable to connect. Is the computer able to access the url?)" });
     expect(byId("e2").error).toContain("boom");
     expect(byId("e2").error).toContain("exit 70");
   });

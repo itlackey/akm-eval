@@ -7,7 +7,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Case, EMBEDDER_ENV, RELATIONS, type Row, consolidateConfig, errorRow, metrics, noteAges, parseCases, pct, rowFromRun, selectCases } from "./lib.ts";
 
 const NAME = "consolidate";
@@ -27,7 +27,7 @@ engine, and counts the retirements that lose a claim. Settings come from .env at
   --limit   run N cases, taking the first of each relation in turn
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm 0.9.26 or later on PATH, or in AKM_BIN.`;
+Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
 
 type Corpus = "public" | "private";
 
@@ -138,6 +138,12 @@ export function writeNotes(sandbox: Sandbox, c: Case): void {
   }
 }
 
+/** The first line akm printed that looks like a failure, to say why its judge gave no verdict. */
+export function failureHint(stderr: string): string {
+  const line = stderr.split("\n").find((l) => /^[A-Za-z]/.test(l) && /error|fail|refus|unauthori|unable|invalid|timed out|not found/i.test(l));
+  return line ? ` (akm said: ${line.trim().slice(0, 150)})` : "";
+}
+
 type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number };
 
 /** One case: a fresh sandbox with the pair as its bundle, indexed, consolidate run on it, and the proposals read back. */
@@ -150,9 +156,11 @@ async function runCase(c: Case, ctx: Context): Promise<Row> {
     Object.assign(sandbox.env, EMBEDDER_ENV);
     writeNotes(sandbox, c);
     await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: INDEX_TIMEOUT_MS });
-    const improve = await runAkmJson(sandbox, ["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout"], { timeoutMs: IMPROVE_TIMEOUT_MS });
+    const improve = await runAkm(sandbox, ["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"], { timeoutMs: IMPROVE_TIMEOUT_MS });
+    if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
     const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
-    return rowFromRun(c, improve, proposals, seconds());
+    const row = rowFromRun(c, JSON.parse(improve.stdout), proposals, seconds());
+    return row.error ? { ...row, error: row.error + failureHint(improve.stderr) } : row;
   } catch (e) {
     return errorRow(c, (e as Error).message.slice(0, 300), seconds());
   } finally {
@@ -220,7 +228,7 @@ export async function runCorpus(
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (aborted) fail(`the first ${GIVE_UP_AFTER} cases got no verdict, so the run stopped. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm is 0.9.26 or later.`, 1);
+  if (aborted) fail(`the first ${GIVE_UP_AFTER} cases got no verdict, so the run stopped. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm is 0.9.26.`, 1);
   if (summary.n_scored > 0 && paired === 0) fail("akm paired none of the notes, so its judge never ran. Consolidate needs semantic search, which this eval gets from akm's deterministic embedder (AKM_EMBED_DETERMINISTIC). Does this akm still have it?", 1);
   return summary;
 }

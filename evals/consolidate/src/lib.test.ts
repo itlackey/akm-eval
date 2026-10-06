@@ -116,14 +116,15 @@ function embedText(n: { name: string; text: string }, observed: string): string 
   return `${spaced} ${description} ${tags} ${spaced} ${tags} observed_at:${observed} ${body.replace(/```[\s\S]*?```/g, " ")}`;
 }
 
+/** The cosine akm would see for a case's two notes, with the dates the run gives them. */
+const cosine = (c: Case) => {
+  const [oa, ob] = c.older === "a" ? ["2026-10-03", "2026-10-05"] : c.older === "b" ? ["2026-10-05", "2026-10-03"] : ["2026-10-04", "2026-10-04"];
+  return hashCosine(embedText(c.a, oa), embedText(c.b, ob));
+};
+
 describe("the public cases and akm's embedder", () => {
   // The pair pass judges a pair only when the cosine of the two notes' embeddings is 0.93 or more. With the deterministic embedder
   // this can be computed here, so a case that akm would not pair cannot be added by mistake.
-  const cosine = (c: Case) => {
-    const [oa, ob] = c.older === "a" ? ["2026-10-03", "2026-10-05"] : c.older === "b" ? ["2026-10-05", "2026-10-03"] : ["2026-10-04", "2026-10-04"];
-    return hashCosine(embedText(c.a, oa), embedText(c.b, ob));
-  };
-
   test("pairs every case that is about one thing, with room to spare", () => {
     for (const c of publicCases().filter((x) => x.relation !== "unrelated")) expect(cosine(c)).toBeGreaterThan(0.945);
   });
@@ -277,6 +278,39 @@ describe("explode and assemble", () => {
       cpSync(join(dir, "corpus"), join(dir, "corpus-out"), { recursive: true });
       cpSync(join(dir, "labels"), join(dir, "labels-out"), { recursive: true });
       expect(assemble(cases, join(dir, "corpus-out"), join(dir, "labels-out"))).toEqual(cases);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("generate", () => {
+  test("rewrites the made-up names, keeps every deciding claim in its note, and the pairs still pair", () => {
+    const dir = mkdtempSync(join(tmpdir(), "consolidate-generate-"));
+    try {
+      const p = Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", "42", "--out", dir], { stdout: "pipe", stderr: "pipe" });
+      expect(p.stderr.toString()).toBe("");
+      expect(p.exitCode).toBe(0);
+      const text = readFileSync(join(dir, "assets", "cases.jsonl"), "utf8");
+      const made = parseCases(text);
+      const original = publicCases();
+      expect(made).toHaveLength(60);
+      // the same relations, sides and dates, in a different text
+      expect(made.map((c) => [c.id, c.relation, c.older, c.safe, c.canary])).toEqual(original.map((c) => [c.id, c.relation, c.older, c.safe, c.canary]));
+      expect(text).not.toMatch(/tarnwick|ostler|pellam|brackwater|sedgemoor|larkspur|quillon/i);
+      expect(made.map((c) => c.a.text)).not.toEqual(original.map((c) => c.a.text));
+      expect(made.flatMap(claimProblems)).toEqual([]);
+      expect(Object.keys(JSON.parse(readFileSync(join(dir, "map.json"), "utf8")).words)).toContain("tarnwick");
+      // a rewritten name is the same in a case's notes and in its note names
+      const word = made[0].a.name.split("-")[0];
+      expect(word).not.toBe("ostler");
+      expect(made[0].a.text).toContain(word[0].toUpperCase() + word.slice(1));
+      expect(made[0].b.name.split("-")[0]).toBe(word);
+      // and the pairs still pair, and the pairs on different subjects still do not
+      for (const c of made.filter((x) => x.relation !== "unrelated")) expect(cosine(c)).toBeGreaterThan(0.94);
+      const unrelated = made.filter((c) => c.relation === "unrelated").map(cosine);
+      expect(unrelated.filter((x) => x > 0.94)).toHaveLength(5);
+      expect(unrelated.filter((x) => x < 0.6)).toHaveLength(5);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

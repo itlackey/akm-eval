@@ -4,7 +4,7 @@ Does consolidate retire only notes whose every claim the replacement keeps?
 
 `akm improve` runs consolidate on your memories. Its pair pass finds two notes that say nearly the same thing, has a model list the claims each one holds that the other lacks, and proposes retiring one of them. A note is safe to retire when it holds no claim that the other lacks. A retirement that loses a claim loses knowledge, and that is the failure this eval counts. It gives consolidate 60 pairs of notes whose right outcome is known by construction, and counts the retirements it proposes that lose a claim.
 
-The model under test is consolidate's engine. The pair prompt, the rule and the proposals are akm's: the eval runs `akm improve --strategy consolidate` and reads the retire proposals it makes. It needs akm 0.9.26 or later, whose pair judge lists the claims each note holds alone and never retires a note that has one (on `PATH`, or named in `AKM_BIN`). It records the akm version it used.
+The model under test is consolidate's engine. The pair prompt, the rule and the proposals are akm's: the eval runs `akm improve --strategy consolidate` and reads the retire proposals it makes. It is written for akm 0.9.26, whose pair judge lists the claims each note holds alone and never retires a note that has one. Earlier releases have a pair pass with another rule and are not tested. akm is on `PATH`, or named in `AKM_BIN`. The eval records the akm version it used.
 
 ## How consolidate pairs notes
 
