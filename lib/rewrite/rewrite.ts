@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Seeded, consistent rewrite of incidental identifiers. See README.md.
+// Seeded, consistent rewrite of incidental identifiers, numbers and tool names. See README.md.
 //
 //   bun lib/rewrite/rewrite.ts --seed N --map <mapping.json> <in> <out>
 //
@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
-import { COMMON, FIRST, GENERIC_LABELS, KEEP_IPS, KEEP_PORTS, MONTHS_DAYS, SURNAMES, TECH, USER_CONTENT_DOMAINS, WELL_KNOWN_DOMAINS } from "./lexicon.ts";
+import { COMMON, FIRST, GENERIC_LABELS, KEEP_IPS, KEEP_NUMBERS, KEEP_PORTS, MONTHS_DAYS, SURNAMES, TECH, TOOLS, USER_CONTENT_DOMAINS, WELL_KNOWN_DOMAINS } from "./lexicon.ts";
 
 export interface RewriteMap {
   version: 1;
@@ -28,6 +28,8 @@ export interface RewriteMap {
   ports: Record<string, string>;
   uuids: Record<string, string>; // lowercase keys
   hex: Record<string, string>; // lowercase keys
+  // Numbers and versions, keyed by the digits as written without thousands commas (0.9.15, 18, 0.65).
+  numbers: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +84,7 @@ export function normalizeSeed(value: string): string {
 // Finding structured values. Each kind is matched with a regex. Matches never overlap:
 // an earlier kind claims its characters first.
 
-type HitKind = "host" | "ip" | "port" | "uuid" | "hex" | "date";
+type HitKind = "host" | "ip" | "port" | "uuid" | "hex" | "date" | "number";
 interface Hit {
   kind: HitKind;
   start: number;
@@ -110,6 +112,14 @@ const IP_RE = new RegExp(`(?<![\\w.])(${IP4})(?!\\w|\\.\\d)(:\\d{1,5}\\b)?`, "g"
 const HOST_RE = new RegExp(`(?:(?<=@)|(?<![\\w./@-]))((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${TLDS}))(?![\\w-]|\\.\\w)(:\\d{1,5}\\b)?`, "g");
 const PORT_CTX_RE = /(?:\b[Pp][Oo][Rr][Tt][Ss]?\b["']?\s*[:=]?\s*["']?|--port(?:=|\s+)|\blocalhost:|\b0\.0\.0\.0:)(\d{2,5})\b/g;
 const VERSION_BEFORE_RE = /(?:\b(?:version|ver\.?|release|build)\s*:?\s*|[=!<>~]=\s*|[\^~]\s*)$/i;
+// A number: digits with optional thousands commas and dotted parts, and for a version a prerelease like -rc.13. It
+// does not touch a letter, a slash, a colon, a percent sign (%23) or a dash on either side, so dates, times, ranges, ids
+// and identifiers are not numbers. A unit may follow (30s, 512MB, 8px). A leading v is allowed (v0.9.26).
+const UNIT = "(?:ms|us|ns|s|sec|secs|min|mins|h|hr|hrs|d|w|px|pt|em|rem|dpi|fps|x|[kKmMgGtT]i?[bB]|[kKmMbB])";
+const NUMBER_RE = new RegExp(`(?:(?<![\\w.,:/#§%-])|(?<=(?<!\\w)[vV]))(\\d{1,3}(?:,\\d{3})+|\\d+)((?:\\.\\d+)*)(-[A-Za-z]+\\.\\d+)?(?=${UNIT}(?!\\w)|(?!\\w|[.:/-]\\d))`, "g");
+// A number that numbers something: a step, a section, a list item or a heading. These stay as they are.
+const STRUCTURAL_BEFORE_RE = /(?:\b(?:steps?|phase|sections?|chapter|part|figure|fig|table|item|rule|appendix)|[§#])\s*$/i;
+const LINE_MARKS_RE = /^[ \t]*(?:#{1,6}[ \t]+|[-*+>|][ \t]+)*$/;
 
 const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -118,7 +128,24 @@ function touches(claimed: Uint8Array, start: number, end: number): boolean {
   return false;
 }
 
-function findStructured(text: string): { hits: Hit[]; claimed: Uint8Array } {
+/**
+ * Does the number at [start, end) number a step, a section, a list item or a heading? A number that ends a wrapped
+ * line, as in "reaches\n800. It returns", is not a list item: the line before one is blank, or a list item, or an intro.
+ */
+function isStructural(text: string, start: number, end: number): boolean {
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const before = text.slice(lineStart, start);
+  if (STRUCTURAL_BEFORE_RE.test(before)) return true; // Step 12, Phase 3.1, §4.2
+  if (end - start > 5 || !LINE_MARKS_RE.test(before)) return false;
+  if (before.includes("#")) return true; // ## 3.9 Title
+  const after = text.slice(end, end + 3);
+  if (text.slice(start, end).includes(".") && /^[ \t]+[A-Z`]/.test(after)) return true; // 3.1 Title
+  if (!/^[.)](\s|$)/.test(after)) return false; // 12. item
+  const previous = lineStart > 1 ? text.slice(text.lastIndexOf("\n", lineStart - 2) + 1, lineStart - 1) : "";
+  return previous.trim() === "" || /^(?:\s|[-*+#>|]|\d+[.)]\s)/.test(previous) || previous.trimEnd().endsWith(":");
+}
+
+function findStructured(text: string, numbers: boolean): { hits: Hit[]; claimed: Uint8Array } {
   const claimed = new Uint8Array(text.length);
   const hits: Hit[] = [];
   const add = (kind: HitKind, start: number, end: number): void => {
@@ -152,6 +179,9 @@ function findStructured(text: string): { hits: Hit[]; claimed: Uint8Array } {
   }
   for (const m of text.matchAll(PORT_CTX_RE)) {
     add("port", m.index + m[0].length - m[1].length, m.index + m[0].length);
+  }
+  if (numbers) {
+    for (const m of text.matchAll(NUMBER_RE)) if (!isStructural(text, m.index, m.index + m[0].length)) add("number", m.index, m.index + m[0].length);
   }
   hits.sort((a, b) => a.start - b.start);
   return { hits, claimed };
@@ -211,6 +241,68 @@ export function shiftDate(text: string, delta: number): string | null {
     return r && `${r.day}${m[2] ? ordinal(r.nd) : ""}${m[3]}${r.name}${m[5]}${m[6]}${r.ny}`;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Numbers. Each part of a number is changed on its own, under the parts before it: in 0.9.15 the 15 is one of the
+// patch numbers of 0.9. The parts under one prefix keep their order, so 0.9.15 stays below 0.9.21, and a part keeps
+// its number of digits, so a percentage stays a percentage. Single digits, years and the numbers in KEEP_NUMBERS
+// stay as they are, and so does a part with a leading zero (0.05).
+
+interface Parsed {
+  parts: string[]; // 0.9.15 is 0, 9 and 15
+  pre?: { tag: string; n: string }; // the -rc.13 of 0.9.0-rc.13
+}
+
+function parseNumber(key: string): Parsed {
+  const m = /^(\d+)((?:\.\d+)*)(?:-([A-Za-z]+)\.(\d+))?$/.exec(key) as RegExpExecArray;
+  return { parts: [m[1], ...m[2].split(".").slice(1)], pre: m[3] ? { tag: m[3], n: m[4] } : undefined };
+}
+
+/** Each part of a number, with the prefix it is under. A prerelease counter is under the number and its tag. */
+function partsOf(key: string): Array<[string, string]> {
+  const { parts, pre } = parseNumber(key);
+  const out: Array<[string, string]> = parts.map((part, i) => [parts.slice(0, i).join("."), part]);
+  if (pre) out.push([`${parts.join(".")}-${pre.tag}`, pre.n]);
+  return out;
+}
+
+const changeable = (part: string): boolean => /^[1-9]\d{1,11}$/.test(part);
+const isFixed = (n: number): boolean => KEEP_NUMBERS.has(n) || (n >= 1900 && n <= 2199);
+
+/** A factor between 0.65 and 0.9 or between 1.1 and 1.4, so a value is moved by a tenth or more. */
+function nudge(s: Stream): number {
+  const r = s.next(1000) / 1000;
+  return r < 0.5 ? 0.65 + r / 2 : 0.8 + r * 0.6;
+}
+
+/**
+ * New values for `values`, a sorted list of different numbers in [lo, hi]. The new values are different, in the same
+ * order and in the same range. Each value is moved by its own factor, the moved values are put in order and handed out
+ * by rank, and neighbours that are equal are pushed apart by one. A value in `fixed` stays as it is, and the values
+ * between two fixed ones stay between them.
+ */
+export function spread(values: number[], fixed: Set<number>, lo: number, hi: number, factor: (v: number) => number): number[] {
+  const out = [...values];
+  let from = 0;
+  for (let to = 0; to <= values.length; to++) {
+    if (to < values.length && !fixed.has(values[to])) continue;
+    const floor = from > 0 ? out[from - 1] + 1 : lo; // the free values from..to-1 lie between two fixed ones
+    const ceil = to < values.length ? values[to] - 1 : hi;
+    const run = values
+      .slice(from, to)
+      .map((v) => {
+        const f = factor(v);
+        const moved = v * f < floor || v * f > ceil ? v / f : v * f; // a value that would leave the range moves the other way
+        return Math.min(ceil, Math.max(floor, Math.round(moved)));
+      })
+      .sort((a, b) => a - b);
+    for (let i = 0; i < run.length; i++) run[i] = Math.max(run[i], i > 0 ? run[i - 1] + 1 : floor);
+    for (let i = run.length - 1; i >= 0; i--) run[i] = Math.min(run[i], i < run.length - 1 ? run[i + 1] - 1 : ceil);
+    out.splice(from, run.length, ...run);
+    from = to + 1;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +375,16 @@ function hasCommonEnding(word: string): boolean {
   return base.length >= 7 && (COMMON_ENDING.test(base) || (base.length >= 8 && base.endsWith("ly")));
 }
 
+/** Every run of up to three neighbouring parts of an identifier as one lowercase word: GitHubActions has github and hubactions. */
+function runs(humps: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < humps.length; i++) for (let j = i + 1; j <= Math.min(humps.length, i + 3); j++) out.push(humps.slice(i, j).join("").toLowerCase());
+  return out;
+}
+
+/** The tool a word names, without a trailing version digit: qwen for qwen3. */
+const toolOf = (word: string): string | undefined => (TOOLS.has(word) ? word : TOOLS.has(baseOf(word)) ? baseOf(word) : undefined);
+
 interface Stat {
   count: number; // every occurrence, in any case or position
   cap: number; // seen as a plain capitalised word (Acme, not AcmeClient)
@@ -292,16 +394,18 @@ interface Stat {
 
 interface Found {
   words: Map<string, Stat>;
-  forced: Set<string>; // words from email addresses: names, renamed everywhere
+  forced: Set<string>; // words from email addresses and the names of tools: renamed everywhere
   hostForced: Set<string>; // words from hostname labels: renamed inside hostnames only
   hosts: Set<string>;
   ips: Set<string>;
   ports: Set<string>;
   uuids: Set<string>;
   hex: Set<string>;
+  numbers: Set<string>;
+  glued: Set<string>; // identifiers of two or more parts, like assertAkmAssetWrite
 }
 
-const emptyFound = (): Found => ({ words: new Map(), forced: new Set(), hostForced: new Set(), hosts: new Set(), ips: new Set(), ports: new Set(), uuids: new Set(), hex: new Set() });
+const emptyFound = (): Found => ({ words: new Map(), forced: new Set(), hostForced: new Set(), hosts: new Set(), ips: new Set(), ports: new Set(), uuids: new Set(), hex: new Set(), numbers: new Set(), glued: new Set() });
 
 const EMAIL_LOCAL_RE = /([A-Za-z0-9._%+-]+)@(?=[A-Za-z0-9-]+\.[A-Za-z])/g;
 
@@ -324,15 +428,19 @@ function protectedLabels(labels: string[]): number {
 export interface Options {
   /** A capitalised word must be seen this many times to count as a name. Default 2. */
   minCount?: number;
+  /** Keep numbers and versions as they are. Names, hosts, ids and dates are still rewritten. */
+  keepValues?: boolean;
 }
 
 export class Rewriter {
   readonly map: RewriteMap;
   private found = emptyFound();
   private minCount: number;
+  private keepValues: boolean;
 
   constructor(seed: string, existing?: RewriteMap, options: Options = {}) {
     this.minCount = options.minCount ?? 2;
+    this.keepValues = options.keepValues ?? false;
     if (existing) {
       if (existing.seed !== seed) throw new UsageError(`the map was made with seed ${existing.seed}, not ${seed}`);
       this.map = existing;
@@ -343,16 +451,17 @@ export class Rewriter {
       this.map.ports ??= {};
       this.map.uuids ??= {};
       this.map.hex ??= {};
+      this.map.numbers ??= {};
     } else {
       const shift = new Stream(seed, "date", "shift");
       const days = 30 + shift.next(700);
-      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, words: {}, hostWords: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
+      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, words: {}, hostWords: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {}, numbers: {} };
     }
   }
 
   /** Pass 1: read a text so its names and values are known. Call finish() after all texts. */
   collect(text: string): void {
-    const { hits, claimed } = findStructured(text);
+    const { hits, claimed } = findStructured(text, !this.keepValues);
     const f = this.found;
     for (const h of hits) {
       const lower = h.text.toLowerCase();
@@ -371,6 +480,7 @@ export class Rewriter {
         if (!keepPort(h.text)) f.ports.add(h.text);
       } else if (h.kind === "uuid") f.uuids.add(lower);
       else if (h.kind === "hex") f.hex.add(lower);
+      else if (h.kind === "number") f.numbers.add(h.text.replace(/,/g, ""));
     }
     // The words in an email address are names. A lowercase word proves a word is common
     // everywhere except there and in paths (priya@acme.dev, github.com/acme/tool).
@@ -395,6 +505,11 @@ export class Rewriter {
         const lowerToken = token.toLowerCase();
         if (isKnownWord(lowerToken)) continue;
         const humps = token.match(HUMP_RE) ?? [];
+        for (const run of runs(humps)) {
+          const tool = toolOf(run);
+          if (tool) f.forced.add(tool); // the name of a tool is a name in every form
+        }
+        if (humps.length > 1) f.glued.add(token);
         for (const hump of humps) {
           const key = hump.toLowerCase();
           let s = f.words.get(key);
@@ -445,10 +560,20 @@ export class Rewriter {
       taken.add(r);
     }
 
+    // An identifier written in lowercase, such as assertakmassetwrite for assertAkmAssetWrite, is renamed like the identifier.
+    for (const token of [...f.glued].sort(byCode)) {
+      const lower = token.toLowerCase();
+      const renamed = this.rewriteToken(token).toLowerCase();
+      if (renamed !== lower && own(map.words, lower) === undefined) map.words[lower] = renamed;
+    }
+
     this.assign(f.ips, map.ips, "ip", (o, s) => makeIp(o, s));
     this.assign(f.ports, map.ports, "port", (o, s) => makePort(o, s));
     this.assign(f.uuids, map.uuids, "uuid", (o, s) => makeUuid(o, s));
     this.assign(f.hex, map.hex, "hex", (o, s) => s.hex(o.length));
+    // The numbers of a run are changed together, to keep their order. A map that has numbers already keeps them: a
+    // number it does not have, such as one only a label has, is left as it is.
+    if (Object.keys(map.numbers).length === 0) this.assignNumbers(f.numbers);
     for (const h of [...f.hosts].sort(byCode)) {
       const r = this.rewriteHost(h);
       if (r !== h) map.hosts[h] = r;
@@ -470,6 +595,32 @@ export class Rewriter {
     }
   }
 
+  /** Gives each number a new value. The parts of one length under one prefix are changed together, to keep their order. */
+  private assignNumbers(keys: Set<string>): void {
+    const groups = new Map<string, Set<number>>();
+    for (const key of keys) {
+      for (const [prefix, part] of partsOf(key)) {
+        if (!changeable(part)) continue;
+        const group = `${prefix}\0${part.length}`;
+        groups.set(group, (groups.get(group) ?? new Set()).add(Number(part)));
+      }
+    }
+    const images = new Map<string, string>(); // `${prefix}\0${part}` -> its new value
+    for (const [group, set] of [...groups].sort(([a], [b]) => byCode(a, b))) {
+      const [prefix, length] = group.split("\0");
+      const values = [...set].sort((a, b) => a - b);
+      const fixed = new Set(prefix === "" ? values.filter(isFixed) : []);
+      const moved = spread(values, fixed, 10 ** (Number(length) - 1), 10 ** Number(length) - 1, (v) => nudge(new Stream(this.map.seed, "number", `${prefix}\0${v}`)));
+      values.forEach((v, i) => images.set(`${prefix}\0${v}`, String(moved[i])));
+    }
+    const image = (prefix: string, part: string): string => images.get(`${prefix}\0${part}`) ?? part;
+    for (const key of [...keys].sort(byCode)) {
+      const { parts, pre } = parseNumber(key);
+      const changed = parts.map((part, i) => image(parts.slice(0, i).join("."), part)).join(".") + (pre ? `-${pre.tag}.${image(`${parts.join(".")}-${pre.tag}`, pre.n)}` : "");
+      if (changed !== key) this.map.numbers[key] = changed;
+    }
+  }
+
   private makeWord(key: string, taken: Set<string>): string {
     const base = baseOf(key);
     const digits = key.slice(base.length);
@@ -483,7 +634,7 @@ export class Rewriter {
 
   /** Pass 3: rewrite a text. Everything in it must have been collected first. */
   rewrite(text: string): string {
-    const { hits, claimed } = findStructured(text);
+    const { hits, claimed } = findStructured(text, !this.keepValues);
     const edits: Array<[number, number, string]> = [];
     for (const h of hits) {
       const r = this.replacement(h);
@@ -519,16 +670,33 @@ export class Rewriter {
         return matchHexCase(h.text, own(m.hex, h.text.toLowerCase()));
       case "date":
         return shiftDate(h.text, m.dateShiftDays) ?? h.text;
+      case "number": {
+        const r = own(m.numbers, h.text.replace(/,/g, ""));
+        return r === undefined || !h.text.includes(",") ? (r ?? h.text) : r.replace(/^\d+/, (digits) => digits.replace(/\B(?=(\d{3})+$)/g, ","));
+      }
     }
   }
 
+  /** The replacement for a word that is a name, in the case of the word. A trailing digit stays: qwen3 follows qwen. */
+  private rename(word: string): string | undefined {
+    const key = word.toLowerCase();
+    const base = baseOf(key);
+    const r = own(this.map.words, key) ?? (base === key ? undefined : own(this.map.words, base)?.concat(key.slice(base.length)));
+    return r === undefined ? undefined : matchCase(word, r);
+  }
+
+  /** A token is renamed part by part (AcmeClient), except that a run of parts that names a tool goes first (GitHubActions). */
   private rewriteToken(token: string): string {
     const humps = token.match(HUMP_RE) ?? [];
-    const replaced = humps.map((h) => {
-      const r = own(this.map.words, h.toLowerCase());
-      return r === undefined ? h : matchCase(h, r);
-    });
-    return replaced.join("");
+    let out = "";
+    for (let i = 0; i < humps.length; ) {
+      const run = (n: number): string => humps.slice(i, i + n).join("");
+      let n = Math.min(3, humps.length - i);
+      while (n > 1 && (toolOf(run(n).toLowerCase()) === undefined || this.rename(run(n)) === undefined)) n--;
+      out += this.rename(run(n)) ?? run(n);
+      i += n;
+    }
+    return out;
   }
 
   private rewriteHost(host: string): string {
@@ -659,6 +827,26 @@ function pathParts(rel: string): Array<[string, string]> {
   });
 }
 
+const JSON_STRING_RE = /"(?:[^"\\\n]|\\.)*"/g;
+const JSON_KEY_END_RE = /\s*:/y;
+
+/** A .json or .jsonl text with `change` applied to each string value. Keys, numbers and the layout stay as they are. */
+function mapJsonValues(text: string, change: (value: string) => string): string {
+  return text.replace(JSON_STRING_RE, (literal, at: number) => {
+    JSON_KEY_END_RE.lastIndex = at + literal.length;
+    if (JSON_KEY_END_RE.test(text)) return literal;
+    try {
+      const value = JSON.parse(literal) as string;
+      const changed = change(value);
+      return changed === value ? literal : JSON.stringify(changed);
+    } catch {
+      return literal;
+    }
+  });
+}
+
+const isJson = (rel: string): boolean => /\.jsonl?$/i.test(rel);
+
 export interface RunOptions extends Options {
   seed?: string;
   mapPath: string;
@@ -697,7 +885,10 @@ export function run(opts: RunOptions): RunResult {
   });
 
   for (const f of files) {
-    if (f.text !== null) rewriter.collect(f.text);
+    if (f.text !== null) {
+      if (isJson(f.rel)) mapJsonValues(f.text, (value) => (rewriter.collect(value), value));
+      else rewriter.collect(f.text);
+    }
     for (const [stem] of pathParts(f.rel)) rewriter.collect(stem);
   }
   rewriter.finish();
@@ -713,7 +904,7 @@ export function run(opts: RunOptions): RunResult {
     written.add(target);
     mkdirSync(dirname(target), { recursive: true });
     if (f.text === null) copied++;
-    writeFileSync(target, f.text === null ? f.data : rewriter.rewrite(f.text));
+    writeFileSync(target, f.text === null ? f.data : isJson(f.rel) ? mapJsonValues(f.text, (value) => rewriter.rewrite(value)) : rewriter.rewrite(f.text));
     chmodSync(target, f.mode);
   }
 
@@ -724,22 +915,24 @@ export function run(opts: RunOptions): RunResult {
 
 function sortedMap(map: RewriteMap): RewriteMap {
   const sortKeys = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => byCode(a, b)));
-  return { ...map, words: sortKeys(map.words), hosts: sortKeys(map.hosts), ips: sortKeys(map.ips), ports: sortKeys(map.ports), uuids: sortKeys(map.uuids), hex: sortKeys(map.hex) };
+  return { ...map, words: sortKeys(map.words), hosts: sortKeys(map.hosts), ips: sortKeys(map.ips), ports: sortKeys(map.ports), uuids: sortKeys(map.uuids), hex: sortKeys(map.hex), numbers: sortKeys(map.numbers) };
 }
 
 // ---------------------------------------------------------------------------
 // CLI
 
-const USAGE = `Usage: bun lib/rewrite/rewrite.ts --seed <n> --map <mapping.json> [--min-count <n>] <in> <out>
+const USAGE = `Usage: bun lib/rewrite/rewrite.ts --seed <n> --map <mapping.json> [--min-count <n>] [--keep-values] <in> <out>
 
-Rewrites incidental identifiers (names, hostnames, URLs, IPs, ports, UUIDs, long hex
-ids, dates) in <in>, a file or a folder, and writes the result to <out>.
+Rewrites names, tool names, hostnames, URLs, IPs, ports, UUIDs, long hex ids, dates,
+numbers and versions in <in>, a file or a folder, and writes the result to <out>.
 
   --seed <n>        the seed, a non-negative integer. Optional when --map already exists.
   --map <file>      the mapping. Read if it exists, and always written at the end.
                     Pass the same file to rewrite labels, cases and queries to match.
   --min-count <n>   how many times a capitalised word must appear to count as a name
                     (default 2).
+  --keep-values     keep numbers and versions as they are, for data whose answers are
+                    counted from the text. Dates, names and the rest are still rewritten.
 `;
 
 function parseArgs(argv: string[]): RunOptions {
@@ -755,6 +948,7 @@ function parseArgs(argv: string[]): RunOptions {
     if (a === "--seed") opts.seed = value();
     else if (a === "--map") opts.mapPath = value();
     else if (a === "--min-count") opts.minCount = Number(value());
+    else if (a === "--keep-values") opts.keepValues = true;
     else if (a === "-h" || a === "--help") throw new UsageError("");
     else if (a.startsWith("--")) throw new UsageError(`unknown option ${a}`);
     else positional.push(a);
@@ -772,7 +966,7 @@ export function main(argv: string[]): number {
     const n = (o: Record<string, string>) => Object.keys(o).length;
     console.log(`rewrite: ${files} file${files === 1 ? "" : "s"} written to ${opts.output} (${copied} copied unchanged)`);
     console.log(
-      `rewrite: map ${opts.mapPath}: ${n(map.words)} words, ${n(map.hostWords)} hostname words, ${n(map.hosts)} hosts, ${n(map.ips)} ips, ${n(map.ports)} ports, ${n(map.uuids)} uuids, ${n(map.hex)} hex ids, dates ${map.dateShiftDays > 0 ? "+" : ""}${map.dateShiftDays} days`,
+      `rewrite: map ${opts.mapPath}: ${n(map.words)} words, ${n(map.hostWords)} hostname words, ${n(map.hosts)} hosts, ${n(map.ips)} ips, ${n(map.ports)} ports, ${n(map.uuids)} uuids, ${n(map.hex)} hex ids, ${n(map.numbers)} numbers, dates ${map.dateShiftDays > 0 ? "+" : ""}${map.dateShiftDays} days`,
     );
     return 0;
   } catch (e) {

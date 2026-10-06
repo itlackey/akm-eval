@@ -2,10 +2,13 @@
 //
 // COMMON: ordinary English words, and the headings and discourse words that
 // documents capitalise. A capitalised word in this list is never a name.
-// TECH: well-known tools, languages, file formats, protocols and vendors. These
-// are never renamed. Both lists are short on purpose: a word missing from them is
-// only renamed when it also looks like a name (see "How names are found" in the
-// README).
+// TECH: the terms a text's meaning rests on: programming languages, file formats,
+// protocols, operating systems and core commands. These are never renamed.
+// TOOLS: the names of tools, products, vendors and projects. These are always
+// renamed, in every form. A word that is also an ordinary word (next, make,
+// signal, apple) is not in this list.
+// COMMON and TECH are short on purpose: a word missing from them is only renamed
+// when it also looks like a name (see "How names are found" in the README).
 // FIRST and SURNAMES: given names and family names. They are used to spot person
 // names and as the pool that replacement names are drawn from.
 
@@ -140,17 +143,34 @@ monday tuesday wednesday thursday friday saturday sunday mon tue tues wed thu th
 `);
 
 export const TECH = words(`
-python java javascript typescript rust go golang ruby php swift kotlin scala perl lua haskell elixir erlang clojure dart julia bash zsh fish powershell sql html css sass scss markdown yaml json jsonl toml xml csv tsv graphql protobuf latex csharp cpp objective fortran cobol assembly wasm webassembly solidity matlab
-node nodejs bun deno npm pnpm yarn pip pipx uv poetry cargo gradle maven make cmake react vue angular svelte solid next nextjs nuxt remix astro vite webpack rollup esbuild babel eslint prettier biome jest vitest mocha pytest playwright puppeteer selenium cypress storybook tailwind bootstrap express fastify koa hono flask django fastapi rails laravel spring dotnet blazor flutter electron tauri expo numpy pandas scipy sklearn scikit tensorflow pytorch keras jax langchain llamaindex transformers huggingface zod pydantic sqlalchemy prisma drizzle typeorm sequelize mongoose axios lodash
-docker dockerfile compose kubernetes helm terraform ansible puppet chef vagrant packer jenkins github gitlab bitbucket gitea forgejo circleci argo prometheus grafana loki jaeger opentelemetry datadog sentry nginx apache caddy traefik haproxy envoy istio cloudflare vercel netlify heroku fly railway aws azure gcp gcloud ec2 s3 lambda cloudfront dynamodb rds eks ecs fargate
-postgres postgresql mysql mariadb sqlite redis memcached mongodb couchdb cassandra elasticsearch opensearch clickhouse influxdb timescaledb neo4j supabase firebase planetscale cockroachdb duckdb pgvector qdrant pinecone weaviate milvus chroma faiss lancedb kafka rabbitmq nats pulsar zookeeper
-linux ubuntu debian fedora centos rhel arch alpine nixos macos windows android ios chromium chrome firefox safari edge wsl systemd cron crontab ssh ssl tls ntp dns dhcp tcp udp http https ftp smtp imap oauth saml jwt cuda rocm vulkan nvidia amd intel apple arm risc
-google microsoft amazon meta openai anthropic claude gemini gemma llama mistral mixtral qwen deepseek kimi moonshot glm zhipu cohere perplexity groq cerebras together fireworks openrouter litellm ollama lmstudio llamacpp vllm sglang gpt chatgpt copilot codex cursor windsurf cline aider opencode goose zed vscode vim neovim emacs jetbrains intellij pycharm webstorm xcode obsidian notion figma slack discord telegram whatsapp signal matrix zoom teams jira confluence linear asana trello stripe paypal twilio sendgrid mailgun apprise ntfy pushover
-akm gutterpress pagedjs paged playwright harbor longmemeval locomo beam skillret skillsbench terminal bench swe tau appworld agentskills mcp acp lsp
-git grep sed awk curl wget jq yq ripgrep fzf tmux rsync tar gzip unzip chmod chown sudo apt brew yum dnf pacman snap flatpak ninja gcc clang llvm rustc
-readme license licence changelog makefile dockerfile gemfile procfile unicode ascii utf pdf png jpeg jpg gif svg webp mp3 mp4 zip gz tgz iso
-excel word powerpoint outlook onedrive sharepoint promise array map set object string number boolean null undefined
-pillow swagger openapi ghostscript pantone adobe sap wayland webview kerberos grok
+python java javascript typescript rust go golang ruby php swift kotlin scala perl lua haskell elixir erlang clojure dart julia bash zsh fish sh powershell sql html css sass scss csharp cpp objective fortran cobol assembly wasm webassembly solidity matlab
+markdown yaml json jsonl toml xml csv tsv graphql protobuf latex openapi pdf png jpeg jpg gif svg webp mp3 mp4 zip gz tgz iso unicode ascii utf readme license licence changelog makefile dockerfile gemfile procfile
+http https ftp smtp imap oauth saml jwt ssh ssl tls ntp dns dhcp tcp udp grpc websocket kerberos mcp acp lsp
+linux ubuntu debian fedora centos rhel arch alpine nixos macos windows android ios wsl
+git grep sed awk curl wget jq yq tar gzip unzip chmod chown sudo rsync cron crontab systemd apt brew yum dnf pacman snap flatpak make cmake ninja gcc clang llvm rustc node nodejs npm npx pip cargo
+promise array map set object string number boolean null undefined
+`);
+
+// Names of tools and products that are also ordinary words (next, signal, apple, notion, zoom). They are kept
+// as they are: renaming them would change the prose around them.
+for (const w of words(`
+next solid express flask spring rails expo fly railway harbor beam bench swe tau goose zed paged terminal
+compose cursor signal matrix meta edge together teams linear zoom notion slack discord chef puppet vagrant packer
+apple amazon google intel arm risc amd excel word outlook sap grok pillow webview chroma pulsar zookeeper
+prettier bootstrap rollup storybook mocha helm drizzle transformers lambda llama
+`)) TECH.add(w);
+
+export const TOOLS = words(`
+bun deno pnpm yarn pipx uv poetry gradle maven
+react vue angular svelte nuxt nextjs remix astro vite webpack esbuild babel eslint biome jest vitest pytest playwright puppeteer selenium cypress tailwind fastify koa hono django fastapi laravel dotnet blazor flutter electron tauri
+numpy pandas scipy sklearn scikit tensorflow pytorch keras jax langchain llamaindex huggingface zod pydantic sqlalchemy prisma typeorm sequelize mongoose axios lodash
+docker kubernetes kubectl terraform ansible jenkins github gitlab glab bitbucket gitea forgejo circleci argo prometheus grafana loki jaeger opentelemetry datadog sentry nginx apache caddy traefik haproxy envoy istio cloudflare vercel netlify heroku aws azure gcp gcloud ec2 s3 cloudfront dynamodb rds eks ecs fargate certbot gitleaks markdownlint
+postgres postgresql mysql mariadb sqlite redis memcached mongodb couchdb cassandra elasticsearch opensearch clickhouse influxdb timescaledb neo4j supabase firebase planetscale cockroachdb duckdb pgvector qdrant pinecone weaviate milvus faiss lancedb kafka rabbitmq nats
+cuda rocm vulkan nvidia chromium chrome firefox safari
+microsoft openai anthropic claude gemini gemma mistral mixtral qwen deepseek kimi moonshot glm zhipu cohere perplexity groq cerebras fireworks openrouter litellm ollama lmstudio llamacpp vllm sglang gpt chatgpt copilot codex windsurf cline aider opencode
+vscode vim neovim emacs jetbrains intellij pycharm webstorm xcode obsidian figma telegram whatsapp jira confluence asana trello stripe paypal twilio sendgrid mailgun apprise ntfy pushover powerpoint onedrive sharepoint
+ripgrep fzf tmux swagger ghostscript pantone adobe wayland
+akm gutterpress pagedjs openpalm openviking skillhone longmemeval locomo skillret skillsbench appworld agentskills
 `);
 
 export const FIRST = [
@@ -198,3 +218,11 @@ github.io gitlab.io netlify.app vercel.app pages.dev herokuapp.com azurewebsites
 // Ports below 1024 are always kept too. These are the defaults of common datastores, brokers and local model servers.
 export const KEEP_PORTS = new Set([1234, 1433, 1521, 2181, 2375, 2376, 3306, 5432, 5672, 6379, 9092, 9200, 11211, 11434, 27017]);
 export const KEEP_IPS = new Set(["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "172.17.0.1"]);
+
+// Numbers that mean something on their own, so they are never changed: HTTP status codes, process exit codes, round
+// bounds and sizes (powers of two). Years and single digits are kept by a rule in rewrite.ts.
+export const KEEP_NUMBERS = new Set([
+  100, 1000, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
+  200, 201, 202, 204, 206, 301, 302, 304, 307, 308, 400, 401, 403, 404, 405, 406, 408, 409, 410, 413, 415, 418, 422, 423, 429, 451, 500, 501, 502, 503, 504,
+  124, 126, 127, 130, 137, 139, 143,
+]);
