@@ -43,8 +43,13 @@ function setup() {
   writeAssets(assets, TEST, TRAIN);
   const script = fakeAkmScript(root);
   const sandboxes: string[] = [];
-  const newSandbox = () => sandboxRunning(script, sandboxes);
-  return { root, assets, results: join(root, "results"), script, sandboxes, newSandbox, corpus: publicCorpus(assets) };
+  /** A sandbox whose akm is a script. The folder goes into `sandboxes`, to check that a run removes it, and is removed after the test anyway. */
+  const sandboxRunningScript = (akmScript: string) => {
+    const sandbox = sandboxRunning(akmScript, sandboxes);
+    dirs.push(sandbox.dir);
+    return sandbox;
+  };
+  return { root, assets, results: join(root, "results"), script, sandboxes, sandboxRunningScript, newSandbox: () => sandboxRunningScript(script), corpus: publicCorpus(assets) };
 }
 
 const logged = async <T>(f: () => Promise<T>): Promise<{ result: T; lines: string[] }> => {
@@ -184,7 +189,7 @@ describe("runCorpus", () => {
     const s = setup();
     const broken = join(s.root, "short-akm.ts");
     writeFileSync(broken, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 5 }));');
-    const newSandbox = () => sandboxRunning(broken, s.sandboxes);
+    const newSandbox = () => s.sandboxRunningScript(broken);
     const failure = await logged(() => runCorpus(s.corpus, { newSandbox }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((failure as Error).message).toContain("akm indexed 5 assets for 6 skills");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
@@ -192,7 +197,7 @@ describe("runCorpus", () => {
 
   test("stops with a message when akm cannot be run", async () => {
     const s = setup();
-    const newSandbox = () => ({ ...sandboxRunning(s.script, s.sandboxes), cmd: ["/nonexistent/akm"] });
+    const newSandbox = () => ({ ...s.sandboxRunningScript(s.script), cmd: ["/nonexistent/akm"] });
     const failure = await logged(() => runCorpus(s.corpus, { newSandbox }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((failure as Error).message).toContain("could not run");
   });
