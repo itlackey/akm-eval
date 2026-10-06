@@ -54,7 +54,7 @@ MODEL_NAME=qwen3-27b
 
 ## Assets
 
-`assets/cases.json` holds the 120 cases: the files each one reads, what a correct reply holds, its tier and its track. The 141 files beside it are the library the cases draw on: memories, lessons, knowledge, skills, commands, agents, workflows, sessions, 49 anonymised documents from an earlier model bake-off, and copies of akm's own architecture pages. They describe a fictional system or are scrubbed, and are licensed CC BY 4.0.
+`assets/cases.json` holds the 120 cases: the files each one reads, what a correct reply holds, its tier and its track. The 141 files beside it are the library the cases draw on: memories, lessons, knowledge, skills, commands, agents, workflows, sessions, 49 anonymised documents from an earlier model bake-off, and copies of akm's own architecture pages. They describe a fictional system or are scrubbed.
 
 | Tier | Track | Cases | What it asks |
 |---|---|---:|---|
