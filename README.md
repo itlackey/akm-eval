@@ -37,6 +37,7 @@ generate-assets    makes every eval's private assets in private/
 corpus/library/    the shared akm bundle (a working akm library)
 evals/             our evals
 benchmarks/        published benchmarks
+lib/akm/           the akm sandbox the evals that use akm share
 lib/rewrite/       the seeded rewrite the generate scripts share
 reports/           published results: scores only, never private items
 private/           your private assets (gitignored, never published)
