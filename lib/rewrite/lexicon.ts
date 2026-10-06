@@ -172,6 +172,7 @@ vscode vim neovim emacs jetbrains intellij pycharm webstorm xcode obsidian figma
 ripgrep fzf tmux swagger ghostscript pantone adobe wayland
 akm gutterpress pagedjs openpalm openviking skillhone longmemeval locomo skillret skillsbench appworld agentskills
 ledgerline harborlight quillmark rowpack
+drillbit inkwell
 `);
 
 export const FIRST = [
