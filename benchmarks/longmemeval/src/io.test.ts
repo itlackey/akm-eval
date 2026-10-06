@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { akmVersion } from "../../../lib/akm/akm.ts";
 import { Akm } from "./akm.ts";
-import { fakeAkmCommand } from "./fakes.ts";
+import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
 import { chat, chatUrl } from "./llm.ts";
 
 const dirs: string[] = [];
@@ -87,11 +88,10 @@ describe("chat", () => {
 
 describe("Akm", () => {
   test("puts the sessions in a fresh bundle as memories with opaque names, and searches them", async () => {
-    const dir = tmp();
-    const akm = new Akm(fakeAkmCommand(dir), join(dir, "sandbox"));
-    akm.init();
-    expect(JSON.parse(readFileSync(join(dir, "sandbox", "config", "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
-    expect(await akm.version()).toBe("0.9.99-test");
+    const sandbox = sandboxRunning(fakeAkmScript(tmp()), dirs);
+    const akm = new Akm(sandbox);
+    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
+    expect(await akmVersion(sandbox)).toBe("0.9.99-test");
     const sessions = [
       { date: "2023/05/20 (Sat) 02:21", turns: [{ role: "user", content: "My dog Biscuit needs a harness" }] },
       { date: "2023/05/21 (Sun) 10:00", turns: [{ role: "user", content: "Planning a trip to Lisbon" }] },
@@ -99,45 +99,24 @@ describe("Akm", () => {
     const names = await akm.load(sessions, "q1");
     expect(names.size).toBe(2);
     for (const name of names.keys()) expect(name).toMatch(/^m[0-9a-f]{12}$/);
-    const files = readdirSync(join(dir, "sandbox", "bundle", "memories"));
+    const files = readdirSync(join(sandbox.dir, "bundle", "memories"));
     expect(files.sort()).toEqual([...names.keys()].map((n) => `${n}.md`).sort());
-    const text = readFileSync(join(dir, "sandbox", "bundle", "memories", files[0]), "utf8");
+    const text = readFileSync(join(sandbox.dir, "bundle", "memories", files[0]), "utf8");
     expect(text).toStartWith("# Chat session\n\nSession date: 2023/05/2");
     const hits = await akm.search("Which harness does Biscuit need?", 5);
     expect(hits.map((h) => names.get(h))).toEqual([0]);
     // the next question starts from an empty bundle
     const again = await akm.load([sessions[1]], "q2");
-    expect(readdirSync(join(dir, "sandbox", "bundle", "memories"))).toHaveLength(1);
+    expect(readdirSync(join(sandbox.dir, "bundle", "memories"))).toHaveLength(1);
     expect(again.size).toBe(1);
-    expect(existsSync(join(dir, "sandbox", "bundle"))).toBe(true);
-  });
-
-  test("does not pass the caller's AKM_ settings or the eval's keys on, and keeps its own folders", async () => {
-    const dir = tmp();
-    const script = join(dir, "show-env.ts");
-    writeFileSync(script, 'console.log(JSON.stringify({ bundle: process.env.AKM_BUNDLE_DIR, config: process.env.AKM_CONFIG_DIR, other: process.env.AKM_DEBUG ?? null, xdg: process.env.XDG_CONFIG_HOME, keys: [process.env.MODEL_API_KEY ?? null, process.env.JUDGE_API_KEY ?? null] }));');
-    process.env.AKM_DEBUG = "1";
-    process.env.MODEL_API_KEY = "model-secret";
-    process.env.JUDGE_API_KEY = "judge-secret";
-    try {
-      const akm = new Akm(`bun ${script}`, join(dir, "sandbox"));
-      akm.init();
-      // the private runner is what load() and search() go through
-      const out = await (akm as any).run(["x"]);
-      expect(JSON.parse(out.stdout)).toEqual({ bundle: join(dir, "sandbox", "bundle"), config: join(dir, "sandbox", "config"), other: null, xdg: join(dir, "sandbox", "xdg-config"), keys: [null, null] });
-    } finally {
-      delete process.env.AKM_DEBUG;
-      delete process.env.MODEL_API_KEY;
-      delete process.env.JUDGE_API_KEY;
-    }
+    expect(existsSync(join(sandbox.dir, "bundle"))).toBe(true);
   });
 
   test("stops when akm indexes a different number of entries than there are sessions", async () => {
     const dir = tmp();
     const broken = join(dir, "broken.ts");
     writeFileSync(broken, 'console.log(JSON.stringify({ totalEntries: 1 }));');
-    const akm = new Akm(`bun ${broken}`, join(dir, "sandbox"));
-    akm.init();
+    const akm = new Akm(sandboxRunning(broken, dirs));
     await expect(akm.load([{ date: "d", turns: [] }, { date: "d", turns: [] }], "q")).rejects.toThrow("indexed 1 entries for 2 sessions");
   });
 });

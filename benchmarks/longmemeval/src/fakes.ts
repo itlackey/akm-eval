@@ -2,6 +2,7 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 
 /** An akm that is a few lines of TypeScript: it keeps what the bundle holds and answers search from it. */
 const FAKE_AKM = `
@@ -21,8 +22,16 @@ else if (cmd === "search") {
 } else { console.error("unknown command " + cmd); process.exit(1); }
 `;
 
-export const fakeAkmCommand = (dir: string): string => {
+/** Writes the fake akm into `dir`, and returns the path of the script. */
+export const fakeAkmScript = (dir: string): string => {
   const script = join(dir, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  return `bun ${script}`;
+  return script;
+};
+
+/** A sandbox whose akm is this script, run by bun. Its folder goes into `cleanup`, for the test to remove. */
+export const sandboxRunning = (script: string, cleanup: string[]): Sandbox => {
+  const sandbox = { ...createSandbox("longmemeval-test"), cmd: ["bun", script] };
+  cleanup.push(sandbox.dir);
+  return sandbox;
 };

@@ -6,10 +6,10 @@
 //   benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--resume DIR]
 
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
 import { type ChatResult, type Endpoint, chat } from "./llm.ts";
@@ -441,16 +441,15 @@ async function main(): Promise<void> {
   const label = values.label ?? slug(model?.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
-  const sandbox = mkdtempSync(join(tmpdir(), `akm-eval-${NAME}-`));
+  const sandbox = createSandbox(NAME);
   try {
-    const akm = new Akm(process.env.AKM_BIN?.trim() || "akm", sandbox);
-    akm.init();
-    const version = await akm.version().catch((e: Error) => fail(e.message));
+    const akm = new Akm(sandbox);
+    const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     const summaries: Summary[] = [];
     for (const c of corpora) summaries.push(await runCorpus(c, { limit, label, sampleSeed, resume: values.resume }, { akm, model, judge, version }));
     if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 }
 

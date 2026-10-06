@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceKept, explodeQuestion, shiftYears } from "./generate.ts";
-import { fakeAkmCommand } from "./fakes.ts";
+import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
 import { runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -151,8 +151,7 @@ describe("runCorpus", () => {
     const data = JSON.stringify(tinyDataset());
     writeFileSync(join(assets, DATA_FILE), data);
     writeFileSync(join(assets, "ASSETS.lock"), JSON.stringify({ dataset: "tiny", source: "none", licence: "MIT", revision: "r".repeat(40), files: { [DATA_FILE]: { url: "http://unused", bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") } } }));
-    const akm = new Akm(fakeAkmCommand(root), join(root, "sandbox"));
-    akm.init();
+    const akm = new Akm(sandboxRunning(fakeAkmScript(root), dirs));
     return { root, akm, folders: { assets, results: join(root, "results") } };
   }
 
@@ -272,8 +271,7 @@ describe("runCorpus", () => {
     const { root, folders } = setup();
     const broken = join(root, "broken-akm.ts");
     writeFileSync(broken, 'if (process.argv[2] === "--version") console.log("0.9.99"); else { console.error("index is broken"); process.exit(1); }');
-    const akm = new Akm(`bun ${broken}`, join(root, "sandbox2"));
-    akm.init();
+    const akm = new Akm(sandboxRunning(broken, dirs));
     await expect(quiet(() => runCorpus("public", { label: "b", sampleSeed: 1 }, { akm, model: null, judge: null, version: "v" }, folders))).rejects.toThrow("akm could not search the first 3 questions");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
     expect(stored).toMatchObject({ complete: false, n_run: 3, n_scored: 0 });
