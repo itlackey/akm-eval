@@ -93,7 +93,7 @@ For a case that expects a lesson, the eval checks that:
 
 - a lesson was proposed: the queue holds a lesson that distill wrote, in any state. A skip, a judge's rejection and a lesson that is not valid mean none;
 - it states each required fact. A fact is a list of phrases, and any one of them states it;
-- it makes no forbidden claim. A claim is a list of phrases too, and any one of them makes it, unless its sentence denies or doubts it, as in "it is unconfirmed whether 0.125 inch is enough";
+- it makes no forbidden claim. A claim is a list of phrases too, and any one of them makes it, unless a denial or a doubt (`not`, `may`, `whether`, `unconfirmed` and the like) comes within six words before it or three after, as in "it is unconfirmed whether 0.125 inch is enough";
 - it is not much longer than its memory: no more than 1.5 times the words.
 
 Matching ignores case and punctuation. A word in a phrase matches the start of a word, so `retr` matches `retries`. A number matches only itself, and `*` stands for up to three words. The text scored is the lesson's description, `when_to_use` and body, without the keys akm adds, such as the memory's ref. For any other case the check is that no lesson was proposed. A skip counts as correct, and so does a judge's rejection. `samples.jsonl` records which.

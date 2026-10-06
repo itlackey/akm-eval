@@ -128,19 +128,29 @@ export const mentions = (text: string, phrase: string): boolean => pattern(phras
 /** Words that say a sentence does not assert what it holds: it denies it, doubts it or asks about it. */
 const NOT_ASSERTED = /(?<![a-z0-9])(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent|unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
 
+/** How many words around a phrase are read for a denial or a doubt: before it, and after it. */
+const WORDS_BEFORE = 6;
+const WORDS_AFTER = 3;
+
 /**
- * The phrases of `groups` that `text` asserts: one that a sentence holds and does not deny or doubt. A phrase in
- * "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is asserted.
+ * The phrases of `groups` that `text` asserts: one that a sentence holds, with no denial or doubt just before or after
+ * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is
+ * asserted.
  */
 export function claims(text: string, groups: string[][]): string[] {
   const sentences = text.split(/[.!?;]+(?=\s|$)|\n+/).map(normalize).filter(Boolean);
+  const around = (s: string, from: number, to: number): string => {
+    const before = s.slice(0, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE);
+    const after = s.slice(to).split(" ").filter(Boolean).slice(0, WORDS_AFTER);
+    return [...before, ...after].join(" ");
+  };
   const found: string[] = [];
   for (const group of groups) {
     const hit = group.find((phrase) => {
       const re = pattern(phrase);
       return sentences.some((s) => {
         const m = re.exec(s);
-        return m !== null && !NOT_ASSERTED.test(`${s.slice(0, m.index)} ${s.slice(m.index + m[0].length)}`);
+        return m !== null && !NOT_ASSERTED.test(around(s, m.index, m.index + m[0].length));
       });
     });
     if (hit !== undefined) found.push(hit);

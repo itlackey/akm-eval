@@ -158,6 +158,13 @@ describe("claims", () => {
     expect(claims("It was only tried once. It works on all layouts.", groups)).toEqual(["all layouts"]);
   });
 
+  test("a denial or a doubt counts when it is within six words before the phrase or three after, and not when it is farther", () => {
+    expect(claims("It may vary a lot between teams and projects, and the fix works on all layouts.", [["works on all layouts"]])).toEqual(["works on all layouts"]);
+    expect(claims("The fix works on all layouts, which is unconfirmed.", [["works on all layouts"]])).toEqual([]);
+    expect(claims("Ensure test suites explicitly exercise every format defined in production configs, not just the modern ones.", [["exercise every"]])).toEqual(["exercise every"]);
+    expect(claims("We cannot say that the fix works on all layouts.", [["works on all layouts"]])).toEqual([]);
+  });
+
   test("the words of the phrase itself do not count as a denial", () => {
     expect(claims("Upgrading has no limit.", groups)).toEqual(["no limit"]);
   });

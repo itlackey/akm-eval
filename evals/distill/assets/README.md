@@ -23,7 +23,7 @@ The memories are written for this eval. They are in the style and the domains of
 
 `bundles/<id>/` is the case's akm bundle. It holds the memory in `memories/`, and the files the case includes: for `restates-asset`, the library skill that the memory repeats, and for `duplicate-lesson`, the lesson that already makes the memory's point in `lessons/`. The run copies the folder into a new bundle for the case.
 
-A phrase is plain words. Matching ignores case and punctuation. A word matches the start of a word (`retr` matches `retries`), a number matches only itself, and `*` stands for up to three words. A claim is not made by a sentence that denies or doubts it. `../README.md` says how a lesson is scored.
+A phrase is plain words. Matching ignores case and punctuation. A word matches the start of a word (`retr` matches `retries`), a number matches only itself, and `*` stands for up to three words. A claim is not made by words that deny or doubt it, such as "not" or "unconfirmed whether", just before or after it. `../README.md` says how a lesson is scored.
 
 ## Classes
 
