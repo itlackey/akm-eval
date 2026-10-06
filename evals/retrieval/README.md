@@ -64,7 +64,7 @@ A call that fails, such as a timeout, is counted in `errored` and left out of th
 - `assets/qrels.jsonl`: the grade, 0 to 3, of each asset a judge model was shown for each task query.
 - `assets/spotcheck.jsonl`: 40 random pairs from the qrels that the author graded without seeing the judge's grade, next to the judge's.
 - `assets/README.md`: how the queries were written, the mix of kinds, how the judgments were made, the judge model, the date and how well the judge agrees with a person. The assets carry a canary string: do not train on them.
-- `private/retrieval/assets/`: `library/`, `queries.jsonl` and `qrels.jsonl`, the same set with names, hosts, ids and dates rewritten from a seed by `lib/rewrite`. One rewrite run covers the library, the queries and the judgments, so a name changes the same way in all of them, and every grade is kept. The mapping is `private/retrieval/map.json`. They are made by `generate` and never published. `generate` also checks them: every ref in the qrels and every expected asset must name an asset akm indexes in the private library, and every task query must keep its relevant assets.
+- `private/retrieval/assets/`: `library/`, `queries.jsonl` and `qrels.jsonl`, the same set with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. One rewrite run covers the library, the queries and the judgments, so a name changes the same way in all of them, and every grade is kept. akm and the other tools are renamed in the files, in the file names, in the queries and in the refs: 90 of the 259 refs change. About 4% of the words change: 3.5% of the library's and 4.1% of the queries', counting runs of letters and digits. The mapping is `private/retrieval/map.json`. They are made by `generate` and never published. `generate` also checks them: every ref in the qrels and every expected asset must name an asset akm indexes in the private library, and every task query must keep its relevant assets.
 
 ## Make or extend the judgments
 
@@ -88,7 +88,7 @@ Run it again after a change to the library or to akm. The pool takes in the new 
 - Unjudged results count as not relevant. The judgments cover what akm 0.9.26 and a plain BM25 returned in their top 10, and what the author expected. A run on another akm version can return assets nobody graded. `judged_10` shows how large a share of the results that is. When it falls, run `label` before you compare.
 - The judge reads the first 16,000 characters of an asset. The 15 assets that are longer are cut there, and an answer past the cut is not seen.
 - Compare results only between runs with the same akm version, search mode and judgments.
-- A much better public score than private score would point to akm having been tuned to the public names. The private rewrite changes only a few words and the dates: see `private/retrieval/map.json`.
+- A much better public score than private score would point to akm having been tuned to the public names, tool names or numbers. The private copy changes about 4% of the words: see above, and `private/retrieval/map.json` for every name it renamed. Renamed words also change the keyword statistics a little, so a few results in places 4 to 10 differ between a public and a private run, and `judged_10` can read slightly under 100% in the private run.
 
 ## Licence
 
