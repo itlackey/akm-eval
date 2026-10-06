@@ -13,7 +13,7 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 | Folder | Question it answers | Corpus | Status |
 |---|---|---|---|
 | `corpus/library` | The public akm library the evals use: a snapshot of our lab's shared bundle | public | ready |
-| `evals/retrieval` | Does akm search put the assets an agent needs at the top? | public + private | planned |
+| `evals/retrieval` | Does akm search put the assets an agent needs at the top? | public + private | ready |
 | `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | public + private | ready |
 | `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | public + private | ready |
 | `evals/distill` | Do distilled lessons say only what the source memory says? | public + private | ready |
