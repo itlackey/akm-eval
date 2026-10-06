@@ -1,9 +1,11 @@
-// The agent-ab report: what Harbor wrote for each trial, as pass rates, the paired difference and the engagement split.
-// run.ts uses it after the run. It reads trial folders and does no I/O besides that.
+// The report of the evals that run an agent in Harbor with and without akm (evals/agent-ab, benchmarks/terminal-bench):
+// what Harbor wrote for each trial, as pass rates, the paired difference and the engagement split. Their run.ts uses it
+// after the run. It reads trial folders and does no I/O besides that.
 //
 // A trial is one task run once by one arm. The control arm is opencode alone, the akm arm is opencode with the akm
 // plugin. A trial is scored when the verifier gave it a reward, and errored when it did not: it never got far enough,
-// or the plugin was not shown to be live. Errored trials are left out of the rates and counted.
+// or the plugin was not shown to be live. Errored trials are left out of the rates and counted. A trial whose agent ran
+// out of time is counted apart, as a timeout: Harbor still verifies it, so it is usually scored too.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -22,9 +24,15 @@ export interface Trial {
   akm: Record<string, number> | null;
   /** All tool calls of the trial, akm's included. */
   tools: number | null;
+  /** Whether the agent read the curated results the plugin writes at the start of a session. Null for the control, and when the trial left no readable stream. */
+  curated?: boolean | null;
   tokens: { input: number; cache: number; output: number } | null;
   costUsd: number | null;
   seconds: number | null;
+  /** How long the agent's own run took, apart from the setup. */
+  agentSeconds?: number | null;
+  /** The digest of the task the trial ran, as Harbor recorded it for a task fetched from a registry. Null for a task in a folder. */
+  digest?: string | null;
 }
 
 export interface Estimate {
@@ -45,6 +53,10 @@ export interface ArmSummary {
   pass_rate: Estimate | null;
   /** Trials by exception type, scored or not. A trial that timed out and was still verified is in here and in `scored`. */
   exceptions: Record<string, number>;
+  /** Trials whose agent ran out of time. */
+  timeouts: number;
+  /** The mean per scored trial, over those that have the figure: minutes in all, minutes of the agent's own run, and dollars. An errored trial stopped in the setup and says nothing of what a run takes. */
+  per_trial: { minutes: number | null; agent_minutes: number | null; cost_usd: number | null };
   tokens: { input: number; cache: number; output: number; cost_usd: number | null };
 }
 
@@ -60,12 +72,16 @@ export interface Report {
   akm: ArmSummary;
   /** akm minus control, over the tasks both arms have a scored trial for. */
   delta: Estimate | null;
+  /** Those tasks by who did better: the akm arm passed more of its attempts, the control did, or they passed the same share. */
+  better: { akm: number; control: number; same: number };
   engagement: {
     /** Scored akm trials whose stream could be read. */
     trials: number;
     called: number;
     rate: number | null;
     calls: Record<string, number>;
+    /** The scored akm trials in which the agent read the curated results the plugin wrote for it, whether or not it called a tool. */
+    curated_read: number;
     /** akm trials that called an akm tool, and the same trials that did not. */
     called_split: Split;
     not_called_split: Split;
@@ -75,6 +91,7 @@ export interface Report {
   tasks: { task: string; control: string; akm: string; called: string }[];
 }
 
+const EPSILON = 1e-9; // two task means that differ by less are the same
 const RESAMPLES = 10_000;
 const SEED = 1337;
 const ALPHA = 0.05;
@@ -143,7 +160,31 @@ export function toolCalls(stream: string, shell = false): { akm: Record<string, 
   return { akm, tools };
 }
 
+/** Where the plugin writes what it curated for a session: the agent is told to read it. It is akm's other way in, apart from the tools. */
+const CURATED_FILE = /\/akm-opencode\/curated\//;
+
+/** Whether the opencode stream holds a read of the curated results. */
+export function readsCurated(stream: string): boolean {
+  for (const line of stream.split("\n")) {
+    if (!line.startsWith("{") || !line.includes("curated")) continue;
+    try {
+      const event = JSON.parse(line);
+      if (event.type === "tool_use" && event.part?.tool === "read" && CURATED_FILE.test(String(event.part?.state?.input?.filePath ?? ""))) return true;
+    } catch {
+      // a line that is not JSON, such as stderr
+    }
+  }
+  return false;
+}
+
 const num = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) ? x : null);
+
+/** Seconds from one ISO time to another, or null when either is missing. */
+function between(from: unknown, to: unknown): number | null {
+  if (typeof from !== "string" || typeof to !== "string") return null;
+  const seconds = (Date.parse(to) - Date.parse(from)) / 1000;
+  return Number.isFinite(seconds) ? round(seconds, 1) : null;
+}
 
 /** One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json. */
 export function readTrial(dir: string, trial: string): Trial | null {
@@ -153,10 +194,12 @@ export function readTrial(dir: string, trial: string): Trial | null {
   const agent: unknown = r.agent_info?.name;
   const arm: Arm | null = agent === "akm-opencode" ? "akm" : agent === "opencode" ? "control" : null;
   if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode nor akm-opencode`);
-  const stream = join(dir, "agent", "opencode.txt");
-  const calls = existsSync(stream) ? toolCalls(readFileSync(stream, "utf8"), arm === "akm") : null;
+  const streamFile = join(dir, "agent", "opencode.txt");
+  const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;
+  const calls = stream === null ? null : toolCalls(stream, arm === "akm");
   const usage = r.agent_result;
-  const seconds = r.started_at && r.finished_at ? (Date.parse(r.finished_at) - Date.parse(r.started_at)) / 1000 : null;
+  const seconds = between(r.started_at, r.finished_at);
+  const agentSeconds = between(r.agent_execution?.started_at, r.agent_execution?.finished_at);
   return {
     task: String(r.task_name ?? "").replace(/^[^/]*\//, ""),
     arm,
@@ -165,9 +208,12 @@ export function readTrial(dir: string, trial: string): Trial | null {
     error: typeof r.exception_info?.exception_type === "string" ? r.exception_info.exception_type : null,
     akm: calls?.akm ?? null,
     tools: calls?.tools ?? null,
+    curated: arm === "akm" && stream !== null ? readsCurated(stream) : null,
     tokens: usage && num(usage.n_input_tokens) !== null ? { input: num(usage.n_input_tokens) ?? 0, cache: num(usage.n_cache_tokens) ?? 0, output: num(usage.n_output_tokens) ?? 0 } : null,
     costUsd: num(usage?.cost_usd),
-    seconds: seconds !== null && Number.isFinite(seconds) ? round(seconds, 1) : null,
+    seconds,
+    agentSeconds,
+    digest: typeof r.task_id?.ref === "string" ? r.task_id.ref : null,
   };
 }
 
@@ -182,7 +228,11 @@ export function loadTrials(jobDir: string): Trial[] {
   return trials;
 }
 
+/** The exception Harbor records when the agent runs out of time. */
+const TIMEOUT = "AgentTimeoutError";
+
 const scored = (t: Trial): t is Trial & { reward: number } => t.reward !== null;
+const timedOut = (t: Trial): boolean => t.error === TIMEOUT;
 const called = (t: Trial): boolean => t.akm !== null && Object.keys(t.akm).length > 0;
 
 /** Each task's mean reward over the given scored trials. */
@@ -192,9 +242,14 @@ function perTask(trials: Trial[]): Map<string, number> {
   return new Map([...rewards].map(([task, r]) => [task, mean(r)]));
 }
 
+/** akm minus control for each task in both maps. */
+function differences(akm: Map<string, number>, control: Map<string, number>): number[] {
+  return [...akm].filter(([task]) => control.has(task)).map(([task, v]) => v - (control.get(task) as number));
+}
+
 /** akm minus control over the tasks in both maps. */
 function paired(akm: Map<string, number>, control: Map<string, number>): Estimate | null {
-  return estimate([...akm].filter(([task]) => control.has(task)).map(([task, v]) => v - (control.get(task) as number)));
+  return estimate(differences(akm, control));
 }
 
 function summarize(trials: Trial[]): ArmSummary {
@@ -203,6 +258,10 @@ function summarize(trials: Trial[]): ArmSummary {
   for (const t of trials) if (t.error) exceptions[t.error] = (exceptions[t.error] ?? 0) + 1;
   const withTokens = trials.filter((t) => t.tokens);
   const costs = trials.map((t) => t.costUsd).filter((c): c is number => c !== null);
+  const average = (values: (number | null | undefined)[], places: number): number | null => {
+    const known = values.filter((v): v is number => typeof v === "number");
+    return known.length ? round(mean(known), places) : null;
+  };
   return {
     trials: trials.length,
     scored: ok.length,
@@ -211,6 +270,12 @@ function summarize(trials: Trial[]): ArmSummary {
     tasks: new Set(ok.map((t) => t.task)).size,
     pass_rate: estimate([...perTask(trials).values()]),
     exceptions,
+    timeouts: trials.filter(timedOut).length,
+    per_trial: {
+      minutes: average(ok.map((t) => (t.seconds === null ? null : t.seconds / 60)), 1),
+      agent_minutes: average(ok.map((t) => (t.agentSeconds == null ? null : t.agentSeconds / 60)), 1),
+      cost_usd: average(ok.map((t) => t.costUsd), 4),
+    },
     tokens: {
       input: sum(withTokens.map((t) => t.tokens?.input ?? 0)),
       cache: sum(withTokens.map((t) => t.tokens?.cache ?? 0)),
@@ -233,17 +298,20 @@ export function buildReport(trials: Trial[]): Report {
   const names = [...new Set(trials.map((t) => t.task))].sort();
   const cell = (rows: Trial[], keep: (t: Trial) => boolean = () => true) => {
     const ok = rows.filter(scored);
-    return `${ok.filter((t) => keep(t) && t.reward === 1).length}/${ok.filter(keep).length}`;
+    const late = rows.filter(timedOut).length;
+    return `${ok.filter((t) => keep(t) && t.reward === 1).length}/${ok.filter(keep).length}${late ? ` T${late > 1 ? late : ""}` : ""}`;
   };
   return {
     control: summarize(control),
     akm: summarize(akm),
     delta: paired(perTask(akm), controlMeans),
+    better: ((d) => ({ akm: d.filter((x) => x > EPSILON).length, control: d.filter((x) => x < -EPSILON).length, same: d.filter((x) => Math.abs(x) <= EPSILON).length }))(differences(perTask(akm), controlMeans)),
     engagement: {
       trials: akmReadable.length,
       called: nCalled,
       rate: akmReadable.length ? round(nCalled / akmReadable.length) : null,
       calls,
+      curated_read: akmReadable.filter((t) => t.curated).length,
       called_split: split(akmReadable.filter(called)),
       not_called_split: split(akmReadable.filter((t) => !called(t))),
       control_calls: control.filter(called).length,
@@ -261,19 +329,46 @@ const ci = (e: Estimate | null, signed = false): string => (e === null ? "n/a" :
 /** The report as the lines run.ts prints. */
 export function formatReport(r: Report): string[] {
   const row = (name: string, a: ArmSummary) => {
-    const why = Object.entries(a.exceptions).map(([k, v]) => `${k} ${v}`).join(", ");
-    return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}   pass rate ${ci(a.pass_rate)}`;
+    const why = Object.entries(a.exceptions).filter(([k]) => k !== TIMEOUT).map(([k, v]) => `${k} ${v}`).join(", ");
+    return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}, ${a.timeouts} timed out   pass rate ${ci(a.pass_rate)}`;
   };
   const e = r.engagement;
   const n = (x: number) => x.toLocaleString("en-US");
   const used = (name: string, a: ArmSummary) => `  ${name.padEnd(8)} ${n(a.tokens.input)} input tokens (${n(a.tokens.cache)} from cache), ${n(a.tokens.output)} output${a.tokens.cost_usd === null ? "" : `, ${a.tokens.cost_usd} USD as the model reports it`}`;
+  const per = (name: string, a: ArmSummary) => {
+    const p = a.per_trial;
+    const minutes = (x: number | null) => (x === null ? "n/a" : x.toFixed(1));
+    return `  ${name.padEnd(8)} per scored trial: ${minutes(p.minutes)} minutes, ${minutes(p.agent_minutes)} of them the agent's own run${p.cost_usd === null ? "" : `, ${p.cost_usd} USD`}`;
+  };
   const split = (name: string, s: Split) => `    ${name.padEnd(11)} ${s.passed}/${s.trials} trials passed, difference from the control ${ci(s.delta, true)}`;
+  const b = r.better;
   const lines = [row("control", r.control), row("akm", r.akm), `  difference (akm - control, paired by task)  ${ci(r.delta, true)}`];
+  lines.push(`  of those ${b.akm + b.control + b.same} tasks, the akm arm did better on ${b.akm}, the control on ${b.control}, and they did the same on ${b.same}`);
   lines.push(`  akm called in ${e.called} of ${e.trials} akm trials (${pct(e.rate)})${Object.keys(e.calls).length ? `: ${Object.entries(e.calls).sort().map(([k, v]) => `${k} ${v}`).join(", ")}` : ""}`);
+  lines.push(`  the agent read the curated results the plugin wrote for it in ${e.curated_read} of ${e.trials} akm trials`);
   lines.push(split("called", e.called_split), split("not called", e.not_called_split));
-  lines.push(used("control", r.control), used("akm", r.akm));
+  lines.push(used("control", r.control), used("akm", r.akm), per("control", r.control), per("akm", r.akm));
   if (e.control_calls) lines.push(`  WARNING: ${e.control_calls} control trials called akm, so the arms were not what they should be`);
   lines.push("", "  task".padEnd(66) + "control    akm     called akm");
   for (const t of r.tasks) lines.push(`  ${t.task.padEnd(64)}${t.control.padEnd(11)}${t.akm.padEnd(8)}${t.called}`);
+  if (r.tasks.some((t) => /T\d*$/.test(t.control) || /T\d*$/.test(t.akm))) lines.push("  T: the agent ran out of time in that many trials of the task (the verifier still ran)");
   return lines;
+}
+
+/** The two corpora's reports as columns, never one pooled number. */
+export function sideBySide(title: string, a: { corpus: string; report: Report }, b: { corpus: string; report: Report }): string[] {
+  const rate = (r: ArmSummary) => (r.pass_rate ? `${r.pass_rate.value.toFixed(3)} [${r.pass_rate.lo.toFixed(3)}, ${r.pass_rate.hi.toFixed(3)}] over ${r.pass_rate.n} tasks` : "n/a");
+  const diff = (r: Report) => (r.delta ? `${r.delta.value >= 0 ? "+" : ""}${r.delta.value.toFixed(3)} [${r.delta.lo.toFixed(3)}, ${r.delta.hi.toFixed(3)}] over ${r.delta.n} tasks` : "n/a");
+  const called = (r: Report) => `${r.engagement.called} of ${r.engagement.trials} akm trials`;
+  const late = (r: Report) => `${r.control.timeouts} control trials, ${r.akm.timeouts} akm trials`;
+  const rows: [string, string, string][] = [
+    ["", a.corpus, b.corpus],
+    ["control pass rate", rate(a.report.control), rate(b.report.control)],
+    ["akm pass rate", rate(a.report.akm), rate(b.report.akm)],
+    ["difference", diff(a.report), diff(b.report)],
+    ["akm called in", called(a.report), called(b.report)],
+    ["timed out", late(a.report), late(b.report)],
+  ];
+  const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
+  return [`${title}: public and private side by side (not pooled)`, ...rows.map((r) => `  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`)];
 }

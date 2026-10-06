@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Trial, buildReport, estimate, formatReport, loadTrials, readTrial, toolCalls } from "./report.ts";
+import { type Trial, buildReport, estimate, formatReport, loadTrials, readTrial, readsCurated, sideBySide, toolCalls } from "./report.ts";
 
 const trial = (task: string, arm: "control" | "akm", reward: number | null, extra: Partial<Trial> = {}): Trial => ({
   task,
@@ -72,6 +72,21 @@ describe("toolCalls", () => {
   });
 });
 
+describe("readsCurated", () => {
+  const read = (filePath: string) => JSON.stringify({ type: "tool_use", part: { type: "tool", tool: "read", state: { input: { filePath } } } });
+
+  test("is true when the agent read the file the plugin wrote for the session", () => {
+    expect(readsCurated(["stderr line", read("/tmp/akm-opencode/curated/ses_abc.md")].join("\n"))).toBe(true);
+  });
+
+  test("is false for any other read, other tool or text that only mentions the file", () => {
+    const bash = JSON.stringify({ type: "tool_use", part: { type: "tool", tool: "bash", state: { input: { command: "cat /tmp/akm-opencode/curated/x.md" } } } });
+    const said = JSON.stringify({ type: "text", part: { text: "/tmp/akm-opencode/curated/x.md" } });
+    expect(readsCurated([read("/app/curated/notes.md"), read("/app/summary.csv"), bash, said, "{broken curated"].join("\n"))).toBe(false);
+    expect(readsCurated("")).toBe(false);
+  });
+});
+
 describe("reading a Harbor job folder", () => {
   const result = (name: string, over: Record<string, unknown> = {}) => ({
     task_name: "akm-eval/drillbit--backup-policy-train",
@@ -79,8 +94,10 @@ describe("reading a Harbor job folder", () => {
     agent_result: { n_input_tokens: 2000, n_cache_tokens: 1500, n_output_tokens: 300, cost_usd: null },
     verifier_result: { rewards: { reward: 1.0 } },
     exception_info: null,
+    task_id: { org: "terminal-bench", name: "drillbit--backup-policy-train", ref: "sha256:abc123" },
     started_at: "2026-10-06T04:00:00Z",
     finished_at: "2026-10-06T04:01:30Z",
+    agent_execution: { started_at: "2026-10-06T04:00:30Z", finished_at: "2026-10-06T04:01:10Z" },
     ...over,
   });
 
@@ -96,7 +113,7 @@ describe("reading a Harbor job folder", () => {
   }
 
   test("reads the arm, the reward, the tokens and the tool calls", () => {
-    const stream = JSON.stringify({ type: "tool_use", part: { tool: "akm_show" } });
+    const stream = [JSON.stringify({ type: "tool_use", part: { tool: "akm_show" } }), JSON.stringify({ type: "tool_use", part: { tool: "read", state: { input: { filePath: "/tmp/akm-opencode/curated/ses_1.md" } } } })].join("\n");
     const dir = job({ a__1: { result: result("akm-opencode"), stream }, c__1: { result: result("opencode", { verifier_result: { rewards: { reward: 0.0 } } }), stream: "" } });
     try {
       const trials = loadTrials(dir);
@@ -105,9 +122,13 @@ describe("reading a Harbor job folder", () => {
         ["control", 0, "drillbit--backup-policy-train"],
       ]);
       expect(trials[0].akm).toEqual({ akm_show: 1 });
+      expect(trials[0].curated).toBe(true);
       expect(trials[1].akm).toEqual({});
+      expect(trials[1].curated).toBeNull(); // the control has no plugin to curate
       expect(trials[0].tokens).toEqual({ input: 2000, cache: 1500, output: 300 });
       expect(trials[0].seconds).toBe(90);
+      expect(trials[0].agentSeconds).toBe(40);
+      expect(trials[0].digest).toBe("sha256:abc123");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -167,6 +188,20 @@ describe("buildReport", () => {
     // t1 +1, t2 +1, t3 -0.5
     expect(r.delta?.value).toBe(0.5);
     expect(r.delta?.n).toBe(3);
+  });
+
+  test("counts the tasks by which arm did better", () => {
+    expect(buildReport(trials).better).toEqual({ akm: 2, control: 1, same: 0 });
+    const r = buildReport([trial("a", "control", 1), trial("a", "akm", 1), trial("b", "control", 0), trial("b", "akm", 0), trial("c", "control", 0), trial("c", "akm", 1), trial("d", "control", 1)]);
+    expect(r.better).toEqual({ akm: 1, control: 0, same: 2 }); // d has no akm trial
+    expect(formatReport(r).join("\n")).toContain("of those 3 tasks, the akm arm did better on 1, the control on 0, and they did the same on 2");
+    expect(buildReport([]).better).toEqual({ akm: 0, control: 0, same: 0 });
+  });
+
+  test("counts the trials in which the agent read the curated results, apart from those that called akm", () => {
+    const r = buildReport([trial("t1", "akm", 1, { akm: {}, curated: true }), trial("t2", "akm", 1, { akm: { akm_show: 1 }, curated: false }), trial("t3", "akm", 0, { akm: {}, curated: null })]);
+    expect(r.engagement).toMatchObject({ trials: 3, called: 1, curated_read: 1 });
+    expect(formatReport(r).join("\n")).toContain("read the curated results the plugin wrote for it in 1 of 3 akm trials");
   });
 
   test("splits the akm trials by whether they called akm, each against the control on the same tasks", () => {
@@ -229,5 +264,54 @@ describe("buildReport", () => {
     expect(r.delta).toBeNull();
     expect(r.control.pass_rate).toBeNull();
     expect(formatReport(r).join("\n")).toContain("n/a");
+  });
+});
+
+describe("timeouts, minutes and dollars", () => {
+  test("a trial that ran out of time is counted apart, and is scored when it was still verified", () => {
+    const r = buildReport([
+      trial("t1", "control", 1, { error: "AgentTimeoutError" }),
+      trial("t2", "control", null, { error: "AgentTimeoutError" }),
+      trial("t3", "control", null, { error: "SetupError" }),
+      trial("t4", "control", 0),
+    ]);
+    expect(r.control).toMatchObject({ trials: 4, scored: 2, errored: 2, timeouts: 2 });
+    expect(r.control.exceptions).toEqual({ AgentTimeoutError: 2, SetupError: 1 });
+    expect(r.control.pass_rate?.value).toBe(0.5); // t1 passed, t4 failed. The unverified ones are not zeros
+    const row = formatReport(r).find((l) => l.includes("control") && l.includes("pass rate"));
+    expect(row).toContain("2 errored (exceptions: SetupError 1), 2 timed out");
+  });
+
+  test("marks the tasks that timed out in the table, and says what the mark means", () => {
+    const r = buildReport([trial("t1", "control", 1, { error: "AgentTimeoutError" }), trial("t1", "akm", 0), trial("t2", "control", 1), trial("t2", "akm", 1)]);
+    expect(r.tasks).toEqual([
+      { task: "t1", control: "1/1 T", akm: "0/1", called: "0/1" },
+      { task: "t2", control: "1/1", akm: "1/1", called: "0/1" },
+    ]);
+    expect(formatReport(r).join("\n")).toContain("T: the agent ran out of time");
+    expect(formatReport(buildReport([trial("t1", "control", 1)])).join("\n")).not.toContain("T: the agent");
+  });
+
+  test("averages the minutes and the dollars over the scored trials that have them", () => {
+    const r = buildReport([
+      trial("t1", "akm", 1, { seconds: 600, agentSeconds: 300, costUsd: 0.1 }),
+      trial("t2", "akm", 1, { seconds: 1200, agentSeconds: 900, costUsd: 0.3 }),
+      trial("t3", "akm", 0, { seconds: null, agentSeconds: null, costUsd: null }),
+      trial("t4", "akm", null, { seconds: 60, agentSeconds: null, costUsd: null }), // stopped in the setup
+    ]);
+    expect(r.akm.per_trial).toEqual({ minutes: 15, agent_minutes: 10, cost_usd: 0.2 });
+    expect(buildReport([]).control.per_trial).toEqual({ minutes: null, agent_minutes: null, cost_usd: null });
+    expect(formatReport(r).join("\n")).toContain("akm      per scored trial: 15.0 minutes, 10.0 of them the agent's own run, 0.2 USD");
+  });
+});
+
+describe("sideBySide", () => {
+  test("puts the two corpora in columns, with their timeouts, and pools nothing", () => {
+    const a = buildReport([trial("a", "control", 0), trial("a", "akm", 1, { akm: { akm_show: 1 } })]);
+    const b = buildReport([trial("c", "control", 1, { error: "AgentTimeoutError" }), trial("c", "akm", 0)]);
+    const lines = sideBySide("bench", { corpus: "public", report: a }, { corpus: "private", report: b });
+    expect(lines[0]).toBe("bench: public and private side by side (not pooled)");
+    expect(lines.find((l) => l.includes("timed out"))).toContain("1 control trials, 0 akm trials");
+    expect(lines.find((l) => l.includes("akm called in"))).toContain("1 of 1 akm trials");
   });
 });
