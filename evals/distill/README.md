@@ -6,7 +6,7 @@ Do distilled lessons say only what the source memory says?
 
 This eval gives distill 30 fictional memories and checks what it queues. A memory that deserves a lesson should get one that states its facts and claims no more than the memory does. The other memories should get none. The checks are deterministic. There is no judge model.
 
-The model under test is akm's engine: it writes the lesson, and it judges the lesson too. The prompts, the judge and the review rules are akm's own, so the eval follows the distill that your installed akm ships. It needs akm on `PATH`, or named in `AKM_BIN`, and it records the akm version it used. It was built on akm 0.9.26. Compare results only between runs with the same akm version.
+The model under test is akm's engine: it writes the lesson, and it judges the lesson too. The prompts, the judge and the review rules are akm's own, so the eval follows the distill that your installed akm ships. It needs akm on `PATH`, or named in `AKM_BIN`, and a bun that has `Bun.YAML`. It records the akm version it used. It was built on akm 0.9.26. Compare results only between runs with the same akm version.
 
 ## Run
 
@@ -87,9 +87,9 @@ akm runs with keyword search only, so it needs no embedding model. distill's che
 
 `private/distill/assets/` is the same cases with names, hosts, ids and dates rewritten from a seed by `lib/rewrite`. The memories and the library files are rewritten first and `cases.json` after, with one mapping, so a name changes the same way in a memory, in a file name and in what a correct lesson must state. `generate` then checks every case against its public one: each required fact and each forbidden claim is still in the memory, or still out of it; the two example lessons score as before; a lesson at the ref distill writes to is still there. It writes nothing if one check fails. The memories are already fictional, so the rewrite changes few names: the projects and the name of one drive. It moves every date. The facts and claims are plain words, so `cases.json` changes little. It is made by `generate` and never published.
 
-## Read the results
+## The checks
 
-For a case that expects a lesson, the eval checks that:
+No judge model scores a case. akm has its own judge in distill, so it is part of what the eval measures, and not of how it scores. For a case that expects a lesson, the eval checks that:
 
 - a lesson was proposed: the queue holds a lesson that distill wrote, in any state. A skip, a judge's rejection and a lesson that is not valid mean none;
 - it states each required fact. A fact is a list of phrases, and any one of them states it;
@@ -97,6 +97,8 @@ For a case that expects a lesson, the eval checks that:
 - it is not much longer than its memory: no more than 1.5 times the words.
 
 Matching ignores case and punctuation. A word in a phrase matches the start of a word, so `retr` matches `retries`. A number matches only itself, and `*` stands for up to three words. The text scored is the lesson's description, `when_to_use` and body, without the keys akm adds, such as the memory's ref. For any other case the check is that no lesson was proposed. A skip counts as correct, and so does a judge's rejection. `samples.jsonl` records which.
+
+## Read the results
 
 | Metric | Meaning |
 |---|---|
@@ -114,9 +116,15 @@ The set is small. One case that expects a lesson is 7 points of `good_lessons`, 
 
 The checks are a floor. A lesson can over-claim in a way no list foresees, and the lists catch the claims a model is likely to add. Read the lessons in `samples.jsonl` for the cases that failed, and for some that passed.
 
-`served_models` is the name the endpoint says answered. A gateway may serve one name with another model, or with two, so check it before you trust a comparison.
-
 A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
+
+## Notes
+
+- akm's error messages name the endpoint it called. The eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.
+- A gateway may serve one model name from several providers. `served_models` in `summary.json` lists the names the responses gave, so you can see when a run was split.
+- `samples.jsonl` keeps each lesson's text, so a result can be scored again when the checks change.
+- The private cases keep their ids, so a private case pairs with its public one by id. `private/distill/map.json` lists what was renamed.
+- The cases hold no feedback. A memory with feedback reaches the writer's prompt as "what worked" and "what failed", which this eval does not test.
 
 ## Licence
 
