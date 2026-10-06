@@ -4,6 +4,9 @@
 
 import { engineConfig } from "../../../lib/akm/akm.ts";
 
+// The checks read frontmatter with bun's own YAML parser. Without it every result would look like broken YAML.
+if (typeof Bun.YAML?.parse !== "function") throw new Error("reflect: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
+
 export const DEFECTS = ["description-period", "description-quote", "description-truncated", "description-missing", "when-to-use-missing", "title-missing"] as const;
 export const CONTROLS = ["retrieval-miss", "unsupported-ask", "historical", "body-defect"] as const;
 export type Defect = (typeof DEFECTS)[number];
