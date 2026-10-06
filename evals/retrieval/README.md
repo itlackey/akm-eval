@@ -2,7 +2,7 @@
 
 Does akm search put the assets an agent needs at the top?
 
-akm indexes a library of assets: skills, knowledge notes, commands, agents, workflows and scripts. An agent finds them with `akm search`, or asks `akm curate` for a short list for its task. This eval gives akm queries over two public collections. It scores the first 10 results of both commands against graded judgments of which assets answer each query, with akm's keyword search and with its semantic search.
+akm indexes a library of assets: skills, knowledge notes, commands, agents, workflows and scripts. An agent finds them with `akm search`, or asks `akm curate` for a short list for its task. This eval gives akm queries over two public collections. It scores the first 10 results of both commands against graded judgments of which assets answer each query, with akm's keyword search and, in a full run of the public and private collections, with its semantic search too.
 
 - `library`: 111 task queries and 25 non-task inputs over the public library in `corpus/library`.
 - `books`: 51 task queries over 93 assets in three domains: cooking, law and tax, and anatomy and first aid. The judgments come from an earlier experiment. Besides grades, they name assets that must never outrank a relevant one, such as an asset that holds an out-of-date figure.
@@ -20,24 +20,39 @@ evals/retrieval/run --corpus own
 evals/retrieval/run --corpus all
 ```
 
-- `--corpus` picks the assets. `public` runs the library and the books, each on its own, and prints them side by side. `private` runs their private copies. `own` runs your own set: see "Run your own set". `all` runs public and private, and prints the public and the private result of each collection side by side, never as one number.
-- `--limit N` runs N queries of each collection, in the task and non-task proportion of its whole set. Use it to check a setup.
+- `--corpus` picks the assets. `public` runs the library and the books, each on its own, and prints them side by side. `private` runs their private copies. `own` runs your own set, with keyword search only: see "Run your own set". `all` runs public and private, and prints the public and the private result of each collection side by side, never as one number.
+- `--limit N` runs N queries of each collection, in the task and non-task proportion of its whole set. Use it to check a setup. It scores keyword search only, and takes under a minute.
 - `--label NAME` names the results folders, `<UTC date>-<label>-<collection>`. The default label is `akm-<version>`.
 
 The private run reads `private/retrieval/assets/`. Make it first with `./generate-assets --only retrieval`. The run stops with an error when it is missing. The own run reads `private/retrieval/own/`, and stops with an error that says how to make a set when the folder holds none.
 
 Each run writes two files for each collection to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (the collection is `library` or `books`), or to `private/retrieval/results/` for the private corpus and for `own`:
 
-- `summary.json`: the metrics of the four columns, how many queries were scored, the akm version, the search mode akm reported for each index, the embedding model, how long each index took to build, the corpus, the collection and the git commit.
+- `summary.json`: the metrics of the four columns (the two keyword ones when the run has no semantic search), how many queries were scored, the akm version, the search mode akm reported for each index, the embedding model, whether the semantic index was built for the run or kept from an earlier one, how long each index took, the corpus, the collection and the git commit.
 - `samples.jsonl`: one line per query, with what search and curate returned on each index, the grade of each result, the scores and how long each call took.
 
 ## What it needs
 
 [bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. No model service and no key. The network is used once, the first time a run builds a semantic index: akm downloads its embedding model, bge-small-en-v1.5 (133 MB, from the Hugging Face Hub), and the eval keeps it in `.cache/models/` at the root of the repository, which git ignores. Every later run, and every sandbox, reads it from there.
 
-The eval copies the library into two temporary folders, gives akm its own config and folders in each, and indexes it: once for keyword search, and once with the embedder, which embeds every asset. It never reads or writes your akm bundle. Then it makes four calls per query: search and curate, each on both indexes. akm 0.9.26 on a busy 12-core machine took 22 s to build the semantic index of the library's 259 assets and 14 s for the books' 93, about eight assets a second. The library's 136 queries took 5.5 minutes in all and the books' 51 took 3, against a minute and half a minute with keyword search alone: a keyword call takes 0.3 to 0.5 s, and a semantic one 0.8 to 1.2 s, because each akm process loads the model. A library of several bundles (see "Run your own set") is not copied: akm indexes each bundle where it is, read only, and the semantic index embeds every asset of it, at about eight a second. A set of 24,000 assets took 52 minutes to embed, and the whole run 68 minutes, against five with keyword search alone.
+The eval copies the library into a temporary folder, gives akm its own config and folders there, and indexes it for keyword search, which takes under a second. It never reads or writes your akm bundle. The semantic index is kept between runs: see "The semantic index is kept between runs". akm 0.9.26 on a busy 12-core machine took 17 s to build the semantic index of the library's 259 assets and 5 s for the books' 93 (22 and 14 s in an earlier run, when the machine was busier), and 0.2 s to use a kept one. Then the eval makes four calls per query: search and curate, each on both indexes. A keyword call takes 0.2 to 0.3 s and a semantic one 0.7 s, because each akm process loads the model. The library's 136 queries took 4 minutes of calls and the books' 51 took 1.5, against a minute and half a minute with keyword search alone. A run of both collections took 6 minutes with a new semantic index and with a kept one, since indexing 350 assets takes 23 s. A library of several bundles (see "Run your own set") is not copied: akm indexes each bundle where it is, read only.
 
 Keyword search is akm 0.9.26's default: the sandbox config has `semanticSearchMode: "off"`. The semantic index is built with `semanticSearchMode: "auto"` and `embedding.localModel` set to bge-small-en-v1.5, which is also akm's own default model. Semantic search in akm fuses its keyword ranking with the nearest vectors by reciprocal rank, so it is not vectors alone. akm answers a query with keyword search alone, `searchMode: "fts-fallback"`, when it cannot embed it in time (3 seconds by default, which 2 calls of 96 missed at eight at once on a busy machine). The sandbox allows ten minutes, and the eval still takes any answer that does not say `semantic` for a failed call. It also stops before the first query if the index does not hold an embedding of every asset, or if one semantic search does not come back as semantic.
+
+## The semantic index is kept between runs
+
+Embedding a library is most of the time a semantic run takes, so the eval keeps the index it built in `.cache/akm-index/retrieval-<corpus>-<collection>/`, such as `retrieval-public-library/`, which git ignores, and the next run uses it as it is. The folder is akm's whole sandbox for that index, with the copy of the library in its bundle, because akm records the paths of what it indexed and indexes everything again when they move. It takes 11 MB for the library and 2 MB for the books.
+
+A kept index is used again when akm, its embedding model and the folder are the same and every file of the library has the content it had when the index was built. A file that changed, is gone or is new makes the eval build a new index from nothing, and say so. It never updates an index, because akm 0.9.26 does not update an index to what a new one is:
+
+- An asset that was changed or removed stays in the row count and the token totals of the keyword index, which is a contentless FTS5 table, so every BM25 score is a little off from then on. Over the 6,006 skills of the skillret benchmark, 10 changed skills gave 37 of 400 queries another top 15, 10 removed skills gave 25, and 200 changed skills gave 325. Skills that were added did not change one.
+- `akm index --full` on an index that exists counts every asset twice.
+- Updating the index of the public library, with no file changed, gave 15 to 17 of its 259 assets new ids and new embeddings, and 89 of its 136 queries ranked otherwise in one run, 37 of 60 in another.
+- The books' index of 93 assets shows what an update does well. A changed file was the only asset re-embedded (2.6 s for the update, against 22 s for a new index) and 50 of the 51 queries ranked as on a new index of the same files, with nDCG@10 0.9215 against 0.9214. A new file was the only asset embedded, and all 51 queries ranked the same.
+
+So a run on a kept index gives the rankings of the run that built it: the cold and the warm runs of the public collections returned the same results for every query, on all four columns. Before it uses a kept index the eval asks akm what the index holds (`akm info`): the number of assets and the time it was built must be those that the build recorded, and it must hold embeddings. When it does not, the eval says so, builds a new index, and `summary.json` has `"semantic_index": "rebuilt"`. It is `"warm"` for an index that was kept and `"cold"` for one that was built because none was kept. What akm logged of the searches of the earlier run is deleted first, so a run starts with no search history. One run uses an index at a time: a second run stops and says which file to remove if no run is using it.
+
+akm lists the files of a bundle that is inside a git repository with `git ls-files`, which leaves out what the repository ignores, and the repository ignores `.cache/`. An index there would hold no asset, so the eval has git stop looking for a repository at the index's folder, and akm walks the bundle itself. To start over, delete `.cache/akm-index/`.
 
 ## What it asks akm
 
@@ -49,7 +64,7 @@ curate runs one search and attaches a preview and run details to each hit. A rer
 
 ## Read the results
 
-Each metric is given for four columns: `search` and `curate` on the keyword index, and `semantic_search` and `semantic_curate` on the semantic one. A task query is scored when at least one asset has grade 2 or 3 for it ("relevant"). The scores are means over those queries. A task query with no relevant asset is not scored. It is counted, and reported with the abstentions.
+Each metric is given for four columns: `search` and `curate` on the keyword index, and `semantic_search` and `semantic_curate` on the semantic one. A run with `--limit`, and the own corpus, have the two keyword columns only. A task query is scored when at least one asset has grade 2 or 3 for it ("relevant"). The scores are means over those queries. A task query with no relevant asset is not scored. It is counted, and reported with the abstentions.
 
 | Metric | Meaning |
 |---|---|
@@ -90,6 +105,8 @@ Put a labelled set of your own in `private/retrieval/own/` and run it like the o
 
 The run stops with an error that says this when the folder holds no set in this format.
 
+The own set is scored with keyword search alone, which took 6 minutes for a set of about 24,000 assets: its library is large, and embedding it is slow. Semantic search was measured once on such a set, a frozen snapshot of about 24,000 assets with 362 queries, 292 of them scored (akm 0.9.26, 2026-10-06). nDCG@10 was 0.513 against 0.500 with keyword search, 0.013 higher with a 95% interval of 0.020 either way over the same queries, so the semantic search made no clear difference. Success@5 was 88.4% against 86.6% and Recall@10 0.334 against 0.322. Embedding the assets took 52 minutes at about eight assets a second, and the whole run 68 minutes against 6 with keyword search alone. With the index kept, a second run would take about 16 minutes, the queries alone: that is an estimate, not a measurement.
+
 ## Make or extend the judgments
 
 ```
@@ -112,7 +129,7 @@ Run it again after a change to the library or to akm. The pool takes in the new 
 - Unjudged results count as not relevant. The library's judgments cover what akm 0.9.26's keyword search and a plain BM25 returned in their top 10, and what the author expected. A run on another akm version can return assets nobody graded, and so does the semantic search: 71% of its top 10 on the library was judged, against 100% for keyword search. Its library scores are therefore lower bounds, and the keyword and semantic columns are not on equal terms there until the semantic results are graded too. `judged_10` shows how large a share of the results is unjudged. When it falls, run `label` before you compare. `label` pools the keyword results only.
 - The books' judgments name only the relevant assets and the banned ones of each query. Every other asset counts as not relevant, though some may answer a query, and `judged_10` reads about a quarter. They are goldens, not a pooled test collection. `label` does not touch them.
 - The judge reads the first 16,000 characters of an asset. The 15 assets that are longer are cut there, and an answer past the cut is not seen.
-- Compare results only between runs with the same akm version, embedding model and judgments.
+- Compare results only between runs with the same akm version, embedding model and judgments. For the semantic columns of the public library, also the same filesystem. akm's rankings depend on the order in which it indexed the assets, which is the order the filesystem lists their files: two indexes of the library with the same entries and the same vectors, one in a temporary folder on tmpfs and one on the disk of the cache, gave the same top 10 in the same order for 58 of the 136 queries with semantic search, and the same set for 105, and nDCG@10 0.798 against 0.806. The keyword columns and the books did not change. The eval keeps its semantic index in one folder, so its own runs are comparable.
 - A much better public score than private score would point to akm having been tuned to the public names, tool names or numbers. The library's private copy changes about 4% of the words: see above, and `private/retrieval/map.json` for every name it renamed. Renamed words also change the keyword statistics a little, so a few results in places 4 to 10 differ between a public and a private run, and `judged_10` can read slightly under 100% in the private run. The books' private copy changes under 1% of the words, so it tests this much less: with akm 0.9.26 it scores exactly like the public books.
 
 ## Licence
