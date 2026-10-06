@@ -20,7 +20,7 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 | `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | public + private | ready |
 | `evals/extract` | Does extraction pull durable insights and preferences from session logs, and leave routine sessions empty? | public + private | ready |
 | `evals/nightly` | Does a full nightly improve run give good results unattended, with no model-call failures? | public + private | ready |
-| `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | public + private | planned |
+| `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | public + private | ready |
 | `evals/bakeoff` | Which model runs akm's model-backed jobs best: valid output, correct facts, real quotes, speed? | public + private | ready |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | public (fetched) + private | ready |
 | `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | public (fetched) + private | planned |
