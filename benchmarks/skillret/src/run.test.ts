@@ -42,6 +42,7 @@ function setup() {
   const assets = join(root, "assets");
   writeAssets(assets, TEST, TRAIN);
   const script = fakeAkmScript(root);
+  const cacheRoot = join(root, "index-cache");
   const sandboxes: string[] = [];
   /** A sandbox whose akm is a script. The folder goes into `sandboxes`, to check that a run removes it, and is removed after the test anyway. */
   const sandboxRunningScript = (akmScript: string, semantic = false) => {
@@ -49,7 +50,9 @@ function setup() {
     dirs.push(sandbox.dir);
     return sandbox;
   };
-  return { root, assets, results: join(root, "results"), script, sandboxes, sandboxRunningScript, newSandbox: (semantic = false) => sandboxRunningScript(script, semantic), corpus: publicCorpus(assets) };
+  /** What runCorpus is given: the fake akm for the keyword sandbox and for the cached semantic index, which is in the temp folder. */
+  const ctx = (more: Partial<Parameters<typeof runCorpus>[1]> = {}): Parameters<typeof runCorpus>[1] => ({ semantic: true, newSandbox: () => sandboxRunningScript(script), cache: { root: cacheRoot, cmd: ["bun", script] }, ...more });
+  return { root, assets, results: join(root, "results"), script, cacheRoot, sandboxes, sandboxRunningScript, ctx, newSandbox: (semantic = false) => sandboxRunningScript(script, semantic), corpus: publicCorpus(assets) };
 }
 
 /** Runs `f` and returns what it printed, on stdout and on stderr. */
@@ -147,7 +150,7 @@ describe("akm", () => {
 describe("runCorpus", () => {
   test("writes every skill, asks search of both indexes for every query, scores it and writes the results", async () => {
     const s = setup();
-    const { result: summary, lines } = await logged(() => runCorpus(s.corpus, { label: "t", semantic: true, newSandbox: s.newSandbox, workers: 3 }, { assets: s.assets, results: s.results }));
+    const { result: summary, lines } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "t", workers: 3 }), { assets: s.assets, results: s.results }));
     const dir = join(s.results, readdirSync(s.results)[0]);
     expect(dir).toMatch(/\d{4}-\d\d-\d\d-t$/);
     expect(readdirSync(dir).sort()).toEqual(["samples.jsonl", "summary.json"]);
@@ -194,7 +197,7 @@ describe("runCorpus", () => {
   test("gives the same rankings with one worker as with several", async () => {
     const s = setup();
     const run = async (workers: number) => {
-      await logged(() => runCorpus(s.corpus, { label: `w${workers}`, semantic: true, newSandbox: s.newSandbox, workers }, { assets: s.assets, results: s.results }));
+      await logged(() => runCorpus(s.corpus, s.ctx({ label: `w${workers}`, workers }), { assets: s.assets, results: s.results }));
       const dir = readdirSync(s.results).find((d) => d.endsWith(`w${workers}`)) as string;
       return readFileSync(join(s.results, dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((r) => [r.search.ranked, r.semantic_search.ranked]);
     };
@@ -204,14 +207,14 @@ describe("runCorpus", () => {
   test("with a limit, prints no published numbers, which are for the whole public split", async () => {
     const s = setup();
     const corpus = publicCorpus(s.assets, 2);
-    const { lines } = await logged(() => runCorpus(corpus, { label: "l", limit: 2, semantic: false, newSandbox: s.newSandbox }, { assets: s.assets, results: s.results }));
+    const { lines } = await logged(() => runCorpus(corpus, s.ctx({ label: "l", limit: 2, semantic: false }), { assets: s.assets, results: s.results }));
     expect(lines.join("\n")).not.toContain("published by SkillRet");
     expect(JSON.parse(readFileSync(join(s.results, readdirSync(s.results)[0], "summary.json"), "utf8"))).toMatchObject({ n_queries: 2, sample: { limit: 2 } });
   });
 
   test("a run without the semantic index has one sandbox, one line, and no semantic fields", async () => {
     const s = setup();
-    const { result: summary, lines } = await logged(() => runCorpus(s.corpus, { label: "k", semantic: false, newSandbox: s.newSandbox }, { assets: s.assets, results: s.results }));
+    const { result: summary, lines } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "k", semantic: false }), { assets: s.assets, results: s.results }));
     expect(s.sandboxes).toHaveLength(1);
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
     expect(stored.search_mode).toEqual({ keyword: "keyword" });
@@ -234,7 +237,7 @@ describe("runCorpus", () => {
   test("says loudly when curate does not return search's ranking, and records which queries", async () => {
     const s = setup();
     const corpus: Corpus = { ...s.corpus, queries: [...s.corpus.queries, { id: "cd", query: "CURATEDIFF compose containers with docker and migrate the postgres database schema", relevant: ["t2", "t3"] }] };
-    const { result: summary, lines } = await logged(() => runCorpus(corpus, { label: "d", semantic: true, newSandbox: s.newSandbox }, { assets: s.assets, results: s.results }));
+    const { result: summary, lines } = await logged(() => runCorpus(corpus, s.ctx({ label: "d" }), { assets: s.assets, results: s.results }));
     expect(summary.curate_check.keyword).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0 });
     expect(summary.curate_check.semantic).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
@@ -244,6 +247,72 @@ describe("runCorpus", () => {
     expect(table).toContain("!!! CURATE DIFFERS FROM SEARCH on the semantic index: 1 of 5 checked queries, cd");
     expect(table).toContain("the curate lines have to come back");
     expect(table).not.toContain("curate check: on");
+  });
+
+  describe("the semantic index kept between runs", () => {
+    const rankings = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((r) => [r.search.ranked, r.semantic_search.ranked]);
+    const folders = (s: ReturnType<typeof setup>) => ({ assets: s.assets, results: s.results });
+    const runs = (s: ReturnType<typeof setup>) => readFileSync(join(s.cacheRoot, "skillret-public", "data", "index-runs"), "utf8").length;
+
+    test("is used as it is by the next run, which has the same rankings, and akm does not index it again", async () => {
+      const s = setup();
+      const first = await logged(() => runCorpus(s.corpus, s.ctx({ label: "one" }), folders(s)));
+      const second = await logged(() => runCorpus(s.corpus, s.ctx({ label: "two" }), folders(s)));
+      expect(first.result.semantic_index).toBe("cold");
+      expect(second.result.semantic_index).toBe("warm");
+      expect(JSON.parse(readFileSync(join(second.result.results_dir, "summary.json"), "utf8")).semantic_index).toBe("warm");
+      expect(runs(s)).toBe(1); // akm indexed there once: an index that is indexed again is not the index that was built
+      expect(first.lines.join("\n")).toMatch(/indexed for semantic search in \d+ s: a new index\n/);
+      expect(second.lines.join("\n")).toMatch(/indexed for semantic search in \d+ s: kept from an earlier run\n/);
+      expect(second.lines.join("\n")).toMatch(/index \d+ s for keyword search and \d+ s for semantic \(kept from an earlier run\)/);
+      expect(rankings(second.result.results_dir)).toEqual(rankings(first.result.results_dir));
+      expect(readdirSync(s.cacheRoot)).toEqual(["skillret-public"]); // and nothing is locked
+    });
+
+    test("is built again when a skill changed, is gone or is new", async () => {
+      const s = setup();
+      await logged(() => runCorpus(s.corpus, s.ctx(), folders(s)));
+      const more: Corpus = { ...s.corpus, skills: [...s.corpus.skills, { id: "t7", text: "rust cargo workspace crates" }] };
+      const added = await logged(() => runCorpus(more, s.ctx(), folders(s)));
+      expect(added.result.semantic_index).toBe("cold");
+      expect(added.lines.join("\n")).toContain("the index skillret-public in the cache cannot be reused: 0 of its 6 files changed or are gone, and 1 are new");
+      expect(runs(s)).toBe(1); // from nothing
+
+      const edited: Corpus = { ...more, skills: more.skills.map((x) => (x.id === "t2" ? { ...x, text: `${x.text} and swarm` } : x)) };
+      const changed = await logged(() => runCorpus(edited, s.ctx(), folders(s)));
+      expect(changed.result.semantic_index).toBe("cold");
+      expect(changed.lines.join("\n")).toContain("1 of its 7 files changed or are gone, and 0 are new");
+
+      const gone: Corpus = { ...edited, skills: edited.skills.slice(1) };
+      expect((await logged(() => runCorpus(gone, s.ctx(), folders(s)))).result.semantic_index).toBe("cold");
+      expect((await logged(() => runCorpus(gone, s.ctx(), folders(s)))).result.semantic_index).toBe("warm");
+    });
+
+    test("is built again when akm says that it holds other than what it was built with, and the run says so", async () => {
+      const s = setup();
+      await logged(() => runCorpus(s.corpus, s.ctx(), folders(s)));
+      rmSync(join(s.cacheRoot, "skillret-public", "bundle", "skills", "t3"), { recursive: true }); // the fake akm counts the skills of the bundle
+      const again = await logged(() => runCorpus(s.corpus, s.ctx(), folders(s)));
+      expect(again.result.semantic_index).toBe("rebuilt");
+      expect(again.lines.join("\n")).toContain("the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: akm says the index holds 5 assets, and it was built with 6");
+      expect(again.lines.join("\n")).toContain("a new index, because the kept one was not what it was built as");
+      expect(runs(s)).toBe(1);
+      expect(readdirSync(join(s.cacheRoot, "skillret-public", "bundle", "skills")).sort()).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
+    });
+
+    test("is not made, and not touched, by a run without the semantic search", async () => {
+      const s = setup();
+      await logged(() => runCorpus(s.corpus, s.ctx({ semantic: false }), folders(s)));
+      expect(existsSync(s.cacheRoot)).toBe(false);
+    });
+
+    test("is not kept when the run stops because akm did not index every skill", async () => {
+      const s = setup();
+      const short = join(s.root, "short-akm.ts");
+      writeFileSync(short, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 5, verification: { embeddingCount: 5 } }));');
+      await logged(() => runCorpus(s.corpus, s.ctx({ cache: { root: s.cacheRoot, cmd: ["bun", short] } }), folders(s))).catch(() => {});
+      expect(readdirSync(s.cacheRoot)).toEqual([]);
+    });
   });
 
   test("scores the semantic search in a full run, and not with --limit", () => {
@@ -277,7 +346,7 @@ describe("runCorpus", () => {
         { id: "empty", query: "EMPTY docker networking", relevant: ["t2"] },
       ],
     };
-    const { result: summary, lines } = await logged(() => runCorpus(corpus, { semantic: true, newSandbox: s.newSandbox, workers: 2 }, { assets: s.assets, results: s.results }));
+    const { result: summary, lines } = await logged(() => runCorpus(corpus, s.ctx({ workers: 2 }), { assets: s.assets, results: s.results }));
     expect(summary.label).toBe("akm-0.9.99-test");
     expect(summary.errored).toEqual({ search: 2, semantic_search: 2 });
     expect(summary.no_results).toEqual({ search: 1, semantic_search: 1 });
@@ -299,8 +368,7 @@ describe("runCorpus", () => {
     const s = setup();
     const broken = join(s.root, "short-akm.ts");
     writeFileSync(broken, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 5, verification: { embeddingCount: 5 } }));');
-    const newSandbox = (semantic: boolean) => s.sandboxRunningScript(broken, semantic);
-    const failure = await logged(() => runCorpus(s.corpus, { semantic: true, newSandbox }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
+    const failure = await logged(() => runCorpus(s.corpus, s.ctx({ newSandbox: () => s.sandboxRunningScript(broken), cache: { root: s.cacheRoot, cmd: ["bun", broken] } }), { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((failure as Error).message).toContain("akm indexed 5 assets for 6 skills");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
   });
@@ -309,18 +377,17 @@ describe("runCorpus", () => {
     const s = setup();
     const withoutEmbeddings = join(s.root, "no-embeddings-akm.ts");
     writeFileSync(withoutEmbeddings, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 6, verification: { embeddingCount: 0, message: "Semantic search pending." } }));');
-    const first = await logged(() => runCorpus(s.corpus, { semantic: true, newSandbox: (semantic: boolean) => s.sandboxRunningScript(withoutEmbeddings, semantic) }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
+    const first = await logged(() => runCorpus(s.corpus, s.ctx({ newSandbox: () => s.sandboxRunningScript(withoutEmbeddings), cache: { root: s.cacheRoot, cmd: ["bun", withoutEmbeddings] } }), { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((first as Error).message).toContain("akm embedded 0 of 6 skills: Semantic search pending.");
     const corpus: Corpus = { ...s.corpus, queries: [{ id: "q", query: "FALLBACK docker networking", relevant: ["t2"] }, ...s.corpus.queries] };
-    const second = await logged(() => runCorpus(corpus, { semantic: true, newSandbox: s.newSandbox }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
+    const second = await logged(() => runCorpus(corpus, s.ctx(), { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((second as Error).message).toContain("akm cannot search with its embedder: akm search searched with fts-fallback, not semantic");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
   });
 
   test("stops with a message when akm cannot be run", async () => {
     const s = setup();
-    const newSandbox = (semantic: boolean) => ({ ...s.sandboxRunningScript(s.script, semantic), cmd: ["/nonexistent/akm"] });
-    const failure = await logged(() => runCorpus(s.corpus, { semantic: true, newSandbox }, { assets: s.assets, results: s.results })).catch((e: Error) => e);
+    const failure = await logged(() => runCorpus(s.corpus, s.ctx({ newSandbox: () => ({ ...s.sandboxRunningScript(s.script), cmd: ["/nonexistent/akm"] }) }), { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((failure as Error).message).toContain("could not run");
   });
 });

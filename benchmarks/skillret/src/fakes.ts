@@ -15,6 +15,9 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
  * NOEMBED is left out, and answers with every skill, the ones that share no word with the query after the others and
  * each group by id, last first, as a vector search does. It answers with keyword search alone, "fts-fallback", to a
  * query that says FALLBACK.
+ *
+ * It keeps files in its data folder that say how often it has indexed and when it built the index, and answers `akm info`
+ * from them and from its bundle, as akm does.
  */
 const FAKE_AKM = `
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -25,8 +28,16 @@ const ids = (() => { try { return readdirSync(skills).sort(); } catch { return [
 const semantic = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR as string, "config.json"), "utf8")).semanticSearchMode === "auto";
 if (cmd === "--version") console.log("0.9.99-test");
 else if (cmd === "index") {
+  const data = process.env.AKM_DATA_DIR as string;
+  const runs = join(data, "index-runs");
+  const n = (existsSync(runs) ? readFileSync(runs, "utf8").length : 0) + 1;
+  writeFileSync(runs, "x".repeat(n));
+  writeFileSync(join(data, "built-at"), "build " + n);
   const left = ids.filter((id) => readFileSync(join(skills, id, "SKILL.md"), "utf8").includes("NOEMBED")).length;
   console.log(JSON.stringify({ ok: true, totalEntries: ids.length, verification: { embeddingCount: semantic ? ids.length - left : 0, message: "embedded" } }));
+} else if (cmd === "info") {
+  const built = join(process.env.AKM_DATA_DIR as string, "built-at");
+  console.log(JSON.stringify({ ok: true, indexStats: { entryCount: ids.length, lastBuiltAt: existsSync(built) ? readFileSync(built, "utf8") : "never", hasEmbeddings: semantic } }));
 } else if (cmd === "search" || cmd === "curate") {
   const k = Number(rest[rest.indexOf("--limit") + 1]);
   const query = rest[rest.indexOf("--") + 1];

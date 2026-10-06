@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -113,6 +113,22 @@ describe("createSandbox", () => {
     expect(cmdFor("  ")).toEqual(["akm"]);
     expect(cmdFor("bun /path/to/akm/src/cli.ts")).toEqual(["bun", "/path/to/akm/src/cli.ts"]);
     expect(cmdFor(" bun   cli.ts ")).toEqual(["bun", "cli.ts"]);
+  });
+});
+
+describe("sandboxIn", () => {
+  test("makes the sandbox in the folder it is given, which may not exist yet, and leaves the config of a folder that has one", () => {
+    const parent = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(parent);
+    const dir = join(parent, "kept");
+    const sandbox = sandboxIn(dir, { semantic: true });
+    expect(sandbox.dir).toBe(dir);
+    expect(sandbox.env.AKM_BUNDLE_DIR).toBe(join(dir, "bundle"));
+    expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8"))).toMatchObject({ semanticSearchMode: "auto" });
+    writeConfig(sandbox, { semanticSearchMode: "auto", bundles: { notes: { path: "/somewhere" } } });
+    const again = sandboxIn(dir, { semantic: true });
+    expect(again.env).toEqual(sandbox.env);
+    expect(JSON.parse(readFileSync(join(dir, "config", "config.json"), "utf8")).bundles).toEqual({ notes: { path: "/somewhere" } });
   });
 });
 

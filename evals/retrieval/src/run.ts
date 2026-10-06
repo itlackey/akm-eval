@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import * as akm from "./akm.ts";
 import {
   type Abstention,
@@ -55,8 +56,9 @@ const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--l
 For each collection of queries, indexes its library in two sandboxes, for keyword search and for semantic search, asks
 akm search and akm curate of both for the first ${DEPTH} results of every query, and scores them against the collection's
 qrels. Each collection is scored on its own. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL}, which runs
-in the akm process and is downloaded once into .cache/ (133 MB). The own corpus and a run with --limit are scored with
-keyword search only. Needs akm on PATH, or in AKM_BIN.
+in the akm process and is downloaded once into .cache/ (133 MB). The semantic index is kept in .cache/akm-index/ and reused
+by the next run, unless a file of the library changed or akm is not the same. The own corpus and a run with --limit are
+scored with keyword search only. Needs akm on PATH, or in AKM_BIN.
 
   --corpus  public (default) runs the collections in assets/: the library in corpus/library and the books.
             private runs their private copies in private/retrieval/assets/, made by ./generate-assets.
@@ -95,12 +97,14 @@ interface Summary {
   search_mode: { keyword: string; semantic?: string };
   /** The embedder of the semantic index. Absent from a run without one. */
   semantic_model?: string;
+  /** Whether the semantic index was built for this run, or kept from an earlier one: cold, warm, or rebuilt after the kept one failed. */
+  semantic_index?: CachedIndex["state"];
   depth: number;
   relevant_from_grade: number;
   limit: number | null;
   n_queries: number;
   n_assets: number;
-  /** How long writing and indexing the library took, for each index. A semantic index embeds every asset. */
+  /** How long writing and indexing the library took, for each index. A new semantic index embeds every asset. */
   index_seconds: { keyword: number; semantic?: number };
   /** Task queries with at least one relevant asset. Only these have ranking metrics. */
   n_scored: number;
@@ -146,13 +150,16 @@ function makeResultsDir(parent: string, label: string): string {
 /** The width of a column of the table: the longest label, "semantic curate". */
 const COLUMN = 15;
 
+/** How a semantic index came to be, in words. */
+const INDEX_STATE = { cold: "a new index", warm: "kept from an earlier run", rebuilt: "a new index, because the kept one was not what it was built as" } as const;
+
 /** The columns a summary has: the keyword ones, and the semantic ones when the run had the semantic index. */
 const columnsOf = (s: { metrics: Columns<SystemMetrics> }): System[] => SYSTEMS.filter((sys) => s.metrics[sys] !== undefined);
 
 function printSummary(s: Summary): void {
   const systems = columnsOf(s);
   console.log(`\n${NAME} (${where(s.corpus, s.collection)}) | akm ${s.akm_version}, ${s.semantic_model ? `keyword and semantic (${s.semantic_model})` : "keyword"} search | ${s.n_queries} queries, ${s.n_assets} assets`);
-  console.log(`  index ${s.index_seconds.keyword} s for keyword search${s.index_seconds.semantic === undefined ? "" : `, ${s.index_seconds.semantic} s for semantic`}`);
+  console.log(`  index ${s.index_seconds.keyword} s for keyword search${s.index_seconds.semantic === undefined ? "" : `, ${s.index_seconds.semantic} s for semantic (${s.semantic_index ? INDEX_STATE[s.semantic_index] : "unknown"})`}`);
   console.log(`  ranking metrics over the ${s.n_scored} task queries that have a relevant asset (grade ${s.relevant_from_grade}+), first ${s.depth} results`);
   console.log(`  ${"".padEnd(16)}  ${systems.map((sys) => labelOf(sys).padEnd(COLUMN)).join("  ")}`.trimEnd());
   const m = s.metrics;
@@ -228,9 +235,11 @@ export function collectionsFor(corpus: Corpus): { name: string; folders: Folders
 
 /**
  * Scores one collection: its queries and qrels in `folders.assets`, over its library, indexed for keyword search and,
- * unless `ctx.semantic` is false, for semantic search too. `newSandbox` makes the sandbox of one of the two.
+ * unless `ctx.semantic` is false, for semantic search too. The keyword index is made for the run, in the sandbox that
+ * `newSandbox` makes. The semantic index is the one of lib/akm's index cache, which keeps it from run to run: `cache` says
+ * where, and which akm, for tests.
  */
-export async function runCollection(corpus: Corpus, collection: string, ctx: { label?: string; limit?: number; semantic: boolean; newSandbox?: (semantic: boolean) => Sandbox }, folders: Folders): Promise<Summary> {
+export async function runCollection(corpus: Corpus, collection: string, ctx: { label?: string; limit?: number; semantic: boolean; newSandbox?: () => Sandbox; cache?: Pick<IndexSpec, "root" | "cmd"> }, folders: Folders): Promise<Summary> {
   let all: Query[];
   let qrels: Qrel[];
   try {
@@ -251,25 +260,30 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
   /** What a summary has for each column the run has. */
   const columns = <T>(f: (sys: System) => T): Columns<T> => ({ search: f("search"), curate: f("curate"), ...(ctx.semantic ? { semantic_search: f("semantic_search"), semantic_curate: f("semantic_curate") } : {}) });
   const made: Sandbox[] = [];
-  const sandbox = (mode: Mode): Sandbox => {
-    made.push((ctx.newSandbox ?? ((semantic) => createSandbox(NAME, { semantic })))(mode === "semantic"));
-    return made[made.length - 1];
-  };
+  let release = (): void => {};
   try {
-    const boxes = Object.fromEntries(modes.map((mode) => [mode, sandbox(mode)])) as Record<Mode, Sandbox>;
+    const boxes = { keyword: (ctx.newSandbox ?? (() => createSandbox(NAME)))() } as Record<Mode, Sandbox>;
+    made.push(boxes.keyword);
     const version = await akmVersion(boxes.keyword);
-    // The semantic index first: the model download and the embedding are what can go wrong, and what takes the time.
-    const nAssets = { keyword: 0, semantic: 0 };
     const indexSeconds = { keyword: 0, semantic: 0 };
-    for (const mode of [...modes].reverse()) {
-      console.log(`${NAME} (${where(corpus, collection)}): indexing for ${mode} search`);
-      const t0 = performance.now();
-      nAssets[mode] = await akm.load(boxes[mode], folders.library, folders.bundles, mode === "semantic");
-      indexSeconds[mode] = Number(((performance.now() - t0) / 1000).toFixed(1));
-      console.log(`  ${nAssets[mode]} assets indexed in ${indexSeconds[mode]} s`);
-    }
+    const seconds = (t0: number): number => Number(((performance.now() - t0) / 1000).toFixed(1));
+    console.log(`${NAME} (${where(corpus, collection)}): indexing for keyword search`);
+    const t0 = performance.now();
+    const nAssets = await akm.load(boxes.keyword, folders.library, folders.bundles);
+    indexSeconds.keyword = seconds(t0);
+    console.log(`  ${nAssets} assets indexed in ${indexSeconds.keyword} s`);
+    let semanticIndex: CachedIndex["state"] | undefined;
     if (ctx.semantic) {
-      if (nAssets.keyword !== nAssets.semantic) fail(`akm indexed ${nAssets.keyword} assets for keyword search and ${nAssets.semantic} for semantic search.`, 1);
+      console.log(`${NAME} (${where(corpus, collection)}): indexing for semantic search`);
+      const t1 = performance.now();
+      const { files, extra } = akm.libraryFiles(folders.library, folders.bundles);
+      const index = await cachedIndex({ name: `${NAME}-${where(corpus, collection).replace(/ /g, "-")}`, version, files, extra, ...ctx.cache }, (sb) => akm.load(sb, folders.library, folders.bundles, true));
+      release = index.release;
+      boxes.semantic = index.sandbox;
+      semanticIndex = index.state;
+      if (index.entries !== nAssets) fail(`akm indexed ${nAssets} assets for keyword search and ${index.entries} for semantic search.`, 1);
+      indexSeconds.semantic = seconds(t1);
+      console.log(`  ${nAssets} assets indexed in ${indexSeconds.semantic} s: ${INDEX_STATE[index.state]}`);
       const probe = await akm.ask(boxes.semantic, "search", queries[0].query, DEPTH, "semantic");
       if (probe.error) fail(`akm cannot search with its embedder: ${probe.error}`, 1);
     }
@@ -277,7 +291,7 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
     const dir = makeResultsDir(folders.results, `${label}-${collection}`);
     const samples = join(dir, "samples.jsonl");
     writeFileSync(samples, "");
-    console.log(`${NAME} (${where(corpus, collection)}): akm ${version}, ${nAssets.keyword} assets, ${queries.length} of ${all.length} queries`);
+    console.log(`${NAME} (${where(corpus, collection)}): akm ${version}, ${nAssets} assets, ${queries.length} of ${all.length} queries`);
 
     const rows: Row[] = [];
     const seen: Record<Mode, Set<string>> = { keyword: new Set(), semantic: new Set() };
@@ -316,12 +330,12 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
       git_commit: gitCommit(),
       akm_version: version,
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
-      ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL } : {}),
+      ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL, semantic_index: semanticIndex } : {}),
       depth: DEPTH,
       relevant_from_grade: RELEVANT,
       limit: ctx.limit ?? null,
       n_queries: rows.length,
-      n_assets: nAssets.keyword,
+      n_assets: nAssets,
       index_seconds: { keyword: indexSeconds.keyword, ...(ctx.semantic ? { semantic: indexSeconds.semantic } : {}) },
       n_scored: scored.length,
       errored: columns((s) => rows.filter((r) => at(r, s).error).length),
@@ -337,6 +351,7 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
     printSummary(summary);
     return summary;
   } finally {
+    release();
     for (const sb of made) removeSandbox(sb);
   }
 }

@@ -5,10 +5,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Sandbox, runAkm } from "../../../lib/akm/akm.ts";
+import { digest } from "../../../lib/akm/index-cache.ts";
 import type { Skill } from "./dataset.ts";
 
 /** How many results the benchmark asks of search and of curate: the deepest cut-off it scores. */
 export const DEPTH = 15;
+
+/** Where a skill is in the bundle. */
+const pathOf = (skill: Skill): string => join("skills", skill.id, "SKILL.md");
+
+/** What the skills are to lib/akm's index cache: the path of each one's file in the bundle, and the sha256 of its text. */
+export const skillFiles = (skills: Skill[]): Record<string, string> => Object.fromEntries(skills.map((skill) => [pathOf(skill), digest(skill.text)]));
 
 /**
  * Writes each skill as skills/<id>/SKILL.md in the sandbox's bundle and indexes them. Returns how many assets akm found.

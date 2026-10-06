@@ -12,6 +12,7 @@ import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, type Query, SEED, draw, loadCorpus, readLock } from "./dataset.ts";
 import { PUBLISHED } from "./published.ts";
@@ -41,13 +42,14 @@ Writes the skills of SkillRet into two sandboxes as akm assets, indexes them for
 asks akm search of both for the first ${akm.DEPTH} skills of every query, and scores it with the benchmark's metrics: NDCG, Recall,
 Completeness and MAP at 5, 10 and 15. akm curate is asked of ${CURATE_CHECK} of the queries, to check that it returns search's
 ranking. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL}, which runs in the akm process and is
-downloaded once into .cache/ (133 MB). Needs akm on PATH, or in AKM_BIN.
+downloaded once into .cache/ (133 MB). The semantic index is kept in .cache/akm-index/ and reused by the next run, unless
+a skill changed or akm is not the same. Needs akm on PATH, or in AKM_BIN.
 
   --corpus  public (default) is the test split: 6,006 skills and 4,392 queries, fetched into assets/ at the pinned
             revision. private is a library of the same size drawn from the train split, with train queries in the
             test split's mix of one, two and three skills. all runs both.
   --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N. Keyword
-            search only: the semantic index takes most of a run, and a run of a few queries is for checking a setup.
+            search only: a run of a few queries is for checking a setup, and a semantic index takes a quarter of an hour to build.
   --label   names the results folder: <UTC date>-<label>. Default label: akm-<version>.`;
 
 interface SystemRow {
@@ -88,6 +90,8 @@ interface Summary {
   search_mode: { keyword: string; semantic?: string };
   /** The embedder of the semantic index. Absent from a run without one. */
   semantic_model?: string;
+  /** Whether the semantic index was built for this run, or kept from an earlier one: cold, warm, or rebuilt after the kept one failed. */
+  semantic_index?: CachedIndex["state"];
   dataset: Record<string, unknown>;
   sample: Record<string, unknown>;
   depth: number;
@@ -103,7 +107,7 @@ interface Summary {
   by_size: Record<string, { n: number } & Lines<Scores>>;
   /** Whether akm curate returned search's ranking, on the sample of queries it was asked about. */
   curate_check: CurateCheck;
-  /** How long writing and indexing the skills took, for each index. A semantic index embeds every skill. */
+  /** How long writing and indexing the skills took, for each index. A new semantic index embeds every skill. */
   index_seconds: { keyword: number; semantic?: number };
   /** All the calls of the run, the semantic ones and the curate check as well. */
   query_seconds: number;
@@ -168,6 +172,9 @@ function printScores(lines: ([name: string, percent: (number | undefined)[]] | s
   }
 }
 
+/** How a semantic index came to be, in words. */
+const INDEX_STATE = { cold: "a new index", warm: "kept from an earlier run", rebuilt: "a new index, because the kept one was not what it was built as" } as const;
+
 /** The lines of a summary: search on the keyword index, and on the semantic one when the run had it. */
 const linesOf = (s: { metrics: Lines<Scores> }): System[] => SYSTEMS.filter((sys) => s.metrics[sys] !== undefined);
 const at = <T>(lines: Lines<T>, sys: System): T => lines[sys] as T;
@@ -175,7 +182,7 @@ const at = <T>(lines: Lines<T>, sys: System): T => lines[sys] as T;
 function printSummary(s: Summary, withPublished: boolean): void {
   const systems = linesOf(s);
   console.log(`\n${NAME} (${s.corpus}) | akm ${s.akm_version}, ${s.semantic_model ? `keyword and semantic (${s.semantic_model})` : "keyword"} search | ${s.n_queries} queries, ${s.n_skills} skills`);
-  console.log(`  index ${seconds(s.index_seconds.keyword)} for keyword search${s.index_seconds.semantic === undefined ? "" : ` and ${seconds(s.index_seconds.semantic)} for semantic`}, queries ${seconds(s.query_seconds)}`);
+  console.log(`  index ${seconds(s.index_seconds.keyword)} for keyword search${s.index_seconds.semantic === undefined ? "" : ` and ${seconds(s.index_seconds.semantic)} for semantic (${s.semantic_index ? INDEX_STATE[s.semantic_index] : "unknown"})`}, queries ${seconds(s.query_seconds)}`);
   console.log("  the benchmark's metrics in percent, over all queries");
   printScores([
     ...systems.map((sys): [string, number[]] => [labelOf(sys), asPercent(at(s.metrics, sys))]),
@@ -254,21 +261,20 @@ function agreement(rows: Row[], checked: ReadonlySet<string>, mode: Mode): Curat
 /**
  * Runs one corpus: index its skills for keyword search and, unless `ctx.semantic` is false, for semantic search too, ask
  * akm search for every query, ask akm curate for a sample of them and compare it with search, score and write the
- * results. `newSandbox` makes the sandbox of one of the two indexes.
+ * results. The keyword index is made for the run, in the sandbox that `newSandbox` makes. The semantic index is the one of
+ * lib/akm's index cache, which keeps it from run to run: `cache` says where, and which akm, for tests.
  */
-export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: number; semantic: boolean; newSandbox?: (semantic: boolean) => Sandbox; workers?: number }, folders: Folders): Promise<Summary> {
+export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: number; semantic: boolean; newSandbox?: () => Sandbox; cache?: Pick<IndexSpec, "root" | "cmd">; workers?: number }, folders: Folders): Promise<Summary> {
   const workers = ctx.workers ?? WORKERS;
   const modes: readonly Mode[] = ctx.semantic ? MODES : ["keyword"];
   const systems: readonly System[] = ctx.semantic ? SYSTEMS : ["search"];
   /** What a summary has for each line the run has. */
   const lines = <T>(f: (sys: System) => T): Lines<T> => ({ search: f("search"), ...(ctx.semantic ? { semantic_search: f("semantic_search") } : {}) });
   const made: Sandbox[] = [];
-  const sandbox = (mode: Mode): Sandbox => {
-    made.push((ctx.newSandbox ?? ((semantic) => createSandbox(NAME, { semantic })))(mode === "semantic"));
-    return made[made.length - 1];
-  };
+  let release = (): void => {};
   try {
-    const boxes = Object.fromEntries(modes.map((mode) => [mode, sandbox(mode)])) as Record<Mode, Sandbox>;
+    const boxes = { keyword: (ctx.newSandbox ?? (() => createSandbox(NAME)))() } as Record<Mode, Sandbox>;
+    made.push(boxes.keyword);
     const version = await akmVersion(boxes.keyword).catch((e: Error) => fail(e.message));
     const label = ctx.label ?? `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
     const dir = makeResultsDir(folders.results, label);
@@ -279,14 +285,31 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
     const checked = new Set(sample.map((q) => q.id));
     console.log(`${NAME} (${corpus.corpus}): akm ${version}, ${skills.length} skills, ${queries.length} queries, ${workers} akm calls at a time`);
 
-    // The semantic index first: the model download and the embedding are what can go wrong, and what takes the time.
     const indexSeconds = { keyword: 0, semantic: 0 };
-    for (const mode of [...modes].reverse()) {
+    const indexed = (n: number): void => {
+      if (n !== skills.length) fail(`akm indexed ${n} assets for ${skills.length} skills. The skills it left out could not be returned.`, 1);
+    };
+    // The semantic index first: the model download and the embedding are what can go wrong, and what takes the time.
+    let semanticIndex: CachedIndex["state"] | undefined;
+    if (ctx.semantic) {
       const t0 = performance.now();
-      const indexed = await akm.load(boxes[mode], skills, mode === "semantic");
-      if (indexed !== skills.length) fail(`akm indexed ${indexed} assets for ${skills.length} skills. The skills it left out could not be returned.`, 1);
-      indexSeconds[mode] = (performance.now() - t0) / 1000;
-      console.log(`  indexed for ${mode} search in ${seconds(indexSeconds[mode])}`);
+      const index = await cachedIndex({ name: `${NAME}-${corpus.corpus}`, version, files: akm.skillFiles(skills), ...ctx.cache }, async (sb) => {
+        const n = await akm.load(sb, skills, true);
+        indexed(n);
+        return n;
+      });
+      release = index.release;
+      boxes.semantic = index.sandbox;
+      semanticIndex = index.state;
+      indexed(index.entries);
+      indexSeconds.semantic = (performance.now() - t0) / 1000;
+      console.log(`  indexed for semantic search in ${seconds(indexSeconds.semantic)}: ${INDEX_STATE[index.state]}`);
+    }
+    {
+      const t0 = performance.now();
+      indexed(await akm.load(boxes.keyword, skills));
+      indexSeconds.keyword = (performance.now() - t0) / 1000;
+      console.log(`  indexed for keyword search in ${seconds(indexSeconds.keyword)}`);
     }
 
     const known = new Set(skills.map((s) => s.id));
@@ -332,7 +355,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
       git_commit: gitCommit(),
       akm_version: version,
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
-      ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL } : {}),
+      ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL, semantic_index: semanticIndex } : {}),
       dataset: { name: lock.dataset, source: lock.source, revision: lock.revision, licence: lock.licence, sha256: Object.fromEntries(Object.entries(lock.files).map(([name, f]) => [name, f.sha256])) },
       sample: corpus.sample,
       depth: akm.DEPTH,
@@ -361,6 +384,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
     printSummary(summary, corpus.corpus === "public" && ctx.limit === undefined);
     return summary;
   } finally {
+    release();
     for (const sb of made) removeSandbox(sb);
   }
 }

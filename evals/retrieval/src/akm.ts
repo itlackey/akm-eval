@@ -4,11 +4,21 @@
 import { cpSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { type Sandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { digestTree } from "../../../lib/akm/index-cache.ts";
 import { type Asset, DEPTH, foldRefs } from "./lib.ts";
 
 const TYPES = ["skill", "command", "agent", "knowledge", "workflow", "script", "lesson", "fact", "memory"];
 
 const bundleOf = (sb: Sandbox): string => join(sb.dir, "bundle");
+
+/**
+ * What the library is to lib/akm's index cache: each of its files, by path, with the sha256 of its content. A library of
+ * bundles that is indexed where it is has `extra` as well, which says where the bundles are and what adapters they have.
+ */
+export function libraryFiles(library: string, bundles?: string): { files: Record<string, string>; extra?: string } {
+  if (bundles && existsSync(bundles)) return { files: digestTree(realpathSync(library)), extra: JSON.stringify({ root: realpathSync(library), adapters: JSON.parse(readFileSync(bundles, "utf8")) }) };
+  return { files: digestTree(library) };
+}
 
 /**
  * Indexes the library in the sandbox and returns how many assets akm found. The library, or the folder a link points

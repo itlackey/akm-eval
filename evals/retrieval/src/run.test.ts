@@ -31,17 +31,27 @@ const ANSWERS: Record<string, Partial<Record<"search" | "curate" | "semantic_sea
  * searchMode semantic. It writes the config it was indexed with to `seen-config-keyword.json` or `seen-config-semantic.json`.
  */
 const fakeAkm = (dir: string) => `
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 const answers = ${JSON.stringify(ANSWERS)};
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const semantic = config.semanticSearchMode === "auto";
+const data = process.env.AKM_DATA_DIR;
+const folders = [process.env.AKM_BUNDLE_DIR, ...Object.values(config.bundles ?? {}).map((b) => b.path)];
+const total = folders.reduce((n, f) => n + readdirSync(f).length, 0);
 if (cmd === "index") {
   writeFileSync(${JSON.stringify(dir)} + "/seen-config-" + (semantic ? "semantic" : "keyword") + ".json", JSON.stringify(config));
-  const folders = [process.env.AKM_BUNDLE_DIR, ...Object.values(config.bundles ?? {}).map((b) => b.path)];
-  const total = folders.reduce((n, f) => n + readdirSync(f).length, 0);
+  const runs = data + "/index-runs";
+  const n = (existsSync(runs) ? readFileSync(runs, "utf8").length : 0) + 1;
+  writeFileSync(runs, "x".repeat(n));
+  writeFileSync(data + "/built-at", "build " + n);
   console.log(JSON.stringify({ ok: true, totalEntries: total, verification: { embeddingCount: semantic ? total : 0, message: "embedded" } }));
+  process.exit(0);
+}
+if (cmd === "info") {
+  const built = data + "/built-at";
+  console.log(JSON.stringify({ ok: true, indexStats: { entryCount: total, lastBuiltAt: existsSync(built) ? readFileSync(built, "utf8") : "never", hasEmbeddings: semantic } }));
   process.exit(0);
 }
 const query = rest[rest.indexOf("--") + 1];
@@ -78,12 +88,15 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, fakeAkm(root));
   const created: string[] = [];
-  const newSandbox = (semantic = false) => {
-    const sandbox = { ...createSandbox("retrieval-test", { semantic }), cmd: ["bun", script] };
+  const newSandbox = () => {
+    const sandbox = { ...createSandbox("retrieval-test"), cmd: ["bun", script] };
     created.push(sandbox.dir);
     return sandbox;
   };
-  return { ctx: { newSandbox, label: "t", semantic: true }, folders: { library, assets, results: join(root, "results") }, created, root };
+  const cacheRoot = join(root, "index-cache");
+  /** The fake akm for the keyword sandbox, and for the semantic index in the cache, which is in the temp folder. */
+  const ctx = { newSandbox, label: "t", semantic: true, cache: { root: cacheRoot, cmd: ["bun", script] } };
+  return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot };
 }
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -177,20 +190,22 @@ describe("runCollection", () => {
     expect(rows[4]).toMatchObject({ kind: "chitchat", n_relevant: 0 });
   });
 
-  test("copies the library into the two sandboxes, one for each index, and removes them afterwards", async () => {
-    const { ctx, folders, created } = setup();
+  test("copies the library into a sandbox for the keyword index, which it removes afterwards, and into the cache for the semantic one", async () => {
+    const { ctx, folders, created, cacheRoot } = setup();
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(s.n_assets).toBe(1); // the fake akm counts the files in the bundle: the library's one file
-    expect(created).toHaveLength(2);
+    expect(created).toHaveLength(1);
     for (const dir of created) expect(existsSync(dir)).toBe(false);
+    expect(readFileSync(join(cacheRoot, "retrieval-public-library", "bundle", "README.md"), "utf8")).toBe("a library of one file\n");
+    expect(readdirSync(cacheRoot)).toEqual(["retrieval-public-library"]); // and nothing is locked
   });
 
   test("stops before the queries when akm cannot embed the assets, or answers a first semantic search with keyword search", async () => {
     const { ctx, folders, root, created } = setup();
     const withoutEmbeddings = join(root, "no-embeddings-akm.ts");
     writeFileSync(withoutEmbeddings, 'const [cmd] = process.argv.slice(2); if (cmd === "--version") console.log("0.9.99-test"); else console.log(JSON.stringify({ totalEntries: 1, verification: { embeddingCount: 0, message: "Semantic search pending." } }));');
-    const without = (semantic = false) => ({ ...ctx.newSandbox(semantic), cmd: ["bun", withoutEmbeddings] });
-    await expect(quiet(() => runCollection("public", "library", { ...ctx, newSandbox: without }, folders))).rejects.toThrow("akm embedded 0 of 1 assets: Semantic search pending.");
+    const without = { ...ctx, newSandbox: () => ({ ...ctx.newSandbox(), cmd: ["bun", withoutEmbeddings] }), cache: { root: ctx.cache.root, cmd: ["bun", withoutEmbeddings] } };
+    await expect(quiet(() => runCollection("public", "library", without, folders))).rejects.toThrow("akm embedded 0 of 1 assets: Semantic search pending.");
     const first = setup([{ id: "f", query: "fallback", kind: "direct" }, ...QUERIES], [...QRELS, grade("f", "f/x", 3)]);
     await expect(quiet(() => runCollection("public", "library", first.ctx, first.folders))).rejects.toThrow("akm cannot search with its embedder: akm search searched with fts-fallback, not semantic");
     for (const dir of [...created, ...first.created]) expect(existsSync(dir)).toBe(false);
@@ -206,6 +221,72 @@ describe("runCollection", () => {
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[6].semantic_search.error).toContain("searched with fts-fallback, not semantic");
     expect(rows[6].search.refs).toEqual(["f/x"]);
+  });
+
+  describe("the semantic index kept between runs", () => {
+    const rows = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((r) => [r.search.refs, r.semantic_search.refs, r.semantic_curate.refs]);
+    const runs = (cacheRoot: string, name = "retrieval-public-library") => readFileSync(join(cacheRoot, name, "data", "index-runs"), "utf8").length;
+
+    test("is used as it is by the next run, which has the same rankings, and akm does not index it again", async () => {
+      const { ctx, folders, cacheRoot } = setup();
+      const lines: string[] = [];
+      const log = console.log;
+      console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+      let first: Awaited<ReturnType<typeof runCollection>>;
+      let second: Awaited<ReturnType<typeof runCollection>>;
+      try {
+        first = await runCollection("public", "library", ctx, folders);
+        second = await runCollection("public", "library", ctx, folders);
+      } finally {
+        console.log = log;
+      }
+      expect([first.semantic_index, second.semantic_index]).toEqual(["cold", "warm"]);
+      expect(JSON.parse(readFileSync(join(second.results_dir, "summary.json"), "utf8")).semantic_index).toBe("warm");
+      expect(runs(cacheRoot)).toBe(1);
+      expect(lines.join("\n")).toMatch(/1 assets indexed in [\d.]+ s: a new index\n/);
+      expect(lines.join("\n")).toMatch(/1 assets indexed in [\d.]+ s: kept from an earlier run\n/);
+      expect(lines.join("\n")).toMatch(/index [\d.]+ s for keyword search, [\d.]+ s for semantic \(kept from an earlier run\)/);
+      expect(rows(second.results_dir)).toEqual(rows(first.results_dir));
+    });
+
+    test("is built again when a file changed, is gone or is new", async () => {
+      const { ctx, folders, cacheRoot } = setup();
+      await quiet(() => runCollection("public", "library", ctx, folders));
+      mkdirSync(join(folders.library, "skills"));
+      writeFileSync(join(folders.library, "skills", "new.md"), "a new skill\n");
+      const added = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(added.semantic_index).toBe("cold");
+      expect(added.n_assets).toBe(2);
+      expect(runs(cacheRoot)).toBe(1); // from nothing
+      expect(readFileSync(join(cacheRoot, "retrieval-public-library", "bundle", "skills", "new.md"), "utf8")).toBe("a new skill\n");
+
+      writeFileSync(join(folders.library, "README.md"), "a library of one file, edited\n");
+      expect((await quiet(() => runCollection("public", "library", ctx, folders))).semantic_index).toBe("cold");
+      rmSync(join(folders.library, "skills"), { recursive: true });
+      expect((await quiet(() => runCollection("public", "library", ctx, folders))).semantic_index).toBe("cold");
+      expect((await quiet(() => runCollection("public", "library", ctx, folders))).semantic_index).toBe("warm");
+    });
+
+    test("is built again when akm says that it holds other than what it was built with, and the run says so", async () => {
+      const { ctx, folders, cacheRoot } = setup();
+      await quiet(() => runCollection("public", "library", ctx, folders));
+      writeFileSync(join(cacheRoot, "retrieval-public-library", "data", "built-at"), "someone indexed it again");
+      const { result, lines } = await printed(() => runCollection("public", "library", ctx, folders));
+      expect(result.semantic_index).toBe("rebuilt");
+      expect(lines.join("\n")).toContain("the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: akm says the index was built at someone indexed it again, and it was built at build 1");
+      expect(runs(cacheRoot)).toBe(1);
+    });
+
+    test("keeps an index for each collection, and none for a run without the semantic search", async () => {
+      const { ctx, folders, cacheRoot } = setup();
+      await quiet(() => runCollection("public", "library", ctx, folders));
+      await quiet(() => runCollection("public", "books", ctx, folders));
+      await quiet(() => runCollection("private", "books", ctx, folders));
+      expect(readdirSync(cacheRoot).sort()).toEqual(["retrieval-private-books", "retrieval-public-books", "retrieval-public-library"]);
+      const keyword = setup();
+      await quiet(() => runCollection("public", "library", { ...keyword.ctx, semantic: false }, keyword.folders));
+      expect(existsSync(keyword.cacheRoot)).toBe(false);
+    });
   });
 
   test("without the semantic index, makes one sandbox and has the keyword columns only", async () => {
@@ -255,7 +336,7 @@ describe("runCollection", () => {
     const a = await quiet(() => runCollection("public", "library", ctx, folders));
     const b = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(b.results_dir).toBe(`${a.results_dir}-2`);
-    const c = await quiet(() => runCollection("public", "library", { newSandbox: ctx.newSandbox, semantic: true }, folders));
+    const c = await quiet(() => runCollection("public", "library", { newSandbox: ctx.newSandbox, semantic: true, cache: ctx.cache }, folders));
     expect(c.label).toBe("akm-0.9.99-test");
     expect(c.results_dir).toMatch(/-akm-0\.9\.99-test-library$/);
   });
@@ -327,6 +408,27 @@ describe("a set of your own", () => {
     // the semantic index has the same bundles, and searches with the embedder as well
     const semantic = JSON.parse(readFileSync(join(root, "seen-config-semantic.json"), "utf8"));
     expect(semantic).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" }, bundles: seen.bundles });
+  });
+
+  test("keeps the semantic index of bundles that are indexed where they are, and builds it again when a file of one changed or is new", async () => {
+    const { ctx, folders, root, cacheRoot } = setup();
+    const library = join(root, "bundles");
+    mkdirSync(join(library, "one"), { recursive: true });
+    writeFileSync(join(library, "one", "a.md"), "a\n");
+    const bundles = join(root, "bundles.json");
+    writeFileSync(bundles, JSON.stringify({ one: "akm" }));
+    const own = { ...folders, library, bundles };
+    const first = await quiet(() => runCollection("own", "own", ctx, own));
+    const second = await quiet(() => runCollection("own", "own", ctx, own));
+    expect([first.semantic_index, second.semantic_index]).toEqual(["cold", "warm"]);
+    expect(existsSync(join(cacheRoot, "retrieval-own", "bundle", "one"))).toBe(false); // nothing is copied
+    writeFileSync(join(library, "one", "b.md"), "b\n");
+    expect((await quiet(() => runCollection("own", "own", ctx, own))).semantic_index).toBe("cold"); // a file that is new
+    writeFileSync(join(library, "one", "a.md"), "a, edited\n");
+    expect((await quiet(() => runCollection("own", "own", ctx, own))).semantic_index).toBe("cold");
+    writeFileSync(bundles, JSON.stringify({ one: "claude" })); // the same files with another adapter are another index
+    expect((await quiet(() => runCollection("own", "own", ctx, own))).semantic_index).toBe("cold");
+    expect((await quiet(() => runCollection("own", "own", ctx, own))).semantic_index).toBe("warm");
   });
 
   test("copies a library without bundles.json into the sandbox as one bundle, and follows a link to it", async () => {
