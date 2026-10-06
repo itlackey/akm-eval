@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // retrieval: indexes the library in two sandboxes, for keyword search and for semantic search, runs `akm search`
 // and `akm curate` on both for every query, and scores them against the graded assets. The semantic search is akm's
-// built-in embedder, a small model that runs in the akm process. See ../README.md.
+// built-in embedder, a small model that runs in the akm process. A run with --limit, and the own corpus, leave it out.
+// See ../README.md.
 //
 //   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--label NAME]
 
@@ -34,11 +35,15 @@ import {
 const NAME = "retrieval";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-/** The columns of a run: akm's two commands, each asked of the keyword index and of the semantic one. */
+/** The columns of a run: akm's two commands, each asked of the keyword index and, in a run that has it, of the semantic one. */
 const SYSTEMS = ["search", "curate", "semantic_search", "semantic_curate"] as const;
 type System = (typeof SYSTEMS)[number];
 type Mode = "keyword" | "semantic";
+const MODES = ["keyword", "semantic"] as const;
 const modeOf = (sys: System): Mode => (sys.startsWith("semantic_") ? "semantic" : "keyword");
+/** What a run has for each of its columns: the semantic ones are there only when the run has the semantic index. */
+type Columns<T> = { search: T; curate: T; semantic_search?: T; semantic_curate?: T };
+const at = <T>(columns: Columns<T>, sys: System): T => columns[sys] as T;
 const commandOf = (sys: System): "search" | "curate" => (sys.endsWith("curate") ? "curate" : "search");
 const labelOf = (sys: System): string => `${modeOf(sys) === "semantic" ? "semantic " : ""}${commandOf(sys)}`;
 type Corpus = "public" | "private" | "own";
@@ -50,12 +55,13 @@ const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--l
 For each collection of queries, indexes its library in two sandboxes, for keyword search and for semantic search, asks
 akm search and akm curate of both for the first ${DEPTH} results of every query, and scores them against the collection's
 qrels. Each collection is scored on its own. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL}, which runs
-in the akm process and is downloaded once into .cache/ (133 MB). Needs akm on PATH, or in AKM_BIN.
+in the akm process and is downloaded once into .cache/ (133 MB). The own corpus and a run with --limit are scored with
+keyword search only. Needs akm on PATH, or in AKM_BIN.
 
   --corpus  public (default) runs the collections in assets/: the library in corpus/library and the books.
             private runs their private copies in private/retrieval/assets/, made by ./generate-assets.
             own runs your own labelled set in private/retrieval/own/. all runs public and private.
-  --limit   run N queries of each collection, in the task and non-task proportion of the whole set
+  --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only.
   --label   names the results folders: <UTC date>-<label>-<collection>. Default label: akm-<version>.`;
 
 interface SystemRow {
@@ -74,7 +80,7 @@ type Row = {
   query: string;
   /** How many assets have grade 2 or 3 for this query. Zero for a non-task input. */
   n_relevant: number;
-} & Record<System, SystemRow>;
+} & Columns<SystemRow>;
 
 interface Summary {
   eval: string;
@@ -86,21 +92,22 @@ interface Summary {
   git_commit: string;
   akm_version: string;
   /** What akm said it searched with, for each index. A call that says anything else is an error. */
-  search_mode: Record<Mode, string>;
-  semantic_model: string;
+  search_mode: { keyword: string; semantic?: string };
+  /** The embedder of the semantic index. Absent from a run without one. */
+  semantic_model?: string;
   depth: number;
   relevant_from_grade: number;
   limit: number | null;
   n_queries: number;
   n_assets: number;
   /** How long writing and indexing the library took, for each index. A semantic index embeds every asset. */
-  index_seconds: Record<Mode, number>;
+  index_seconds: { keyword: number; semantic?: number };
   /** Task queries with at least one relevant asset. Only these have ranking metrics. */
   n_scored: number;
-  errored: Record<System, number>;
-  metrics: Record<System, SystemMetrics>;
+  errored: Columns<number>;
+  metrics: Columns<SystemMetrics>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
-  abstention: { non_task: Record<System, Abstention>; no_answer: Record<System, Abstention> };
+  abstention: { non_task: Columns<Abstention>; no_answer: Columns<Abstention> };
   results_dir: string;
 }
 
@@ -139,30 +146,35 @@ function makeResultsDir(parent: string, label: string): string {
 /** The width of a column of the table: the longest label, "semantic curate". */
 const COLUMN = 15;
 
+/** The columns a summary has: the keyword ones, and the semantic ones when the run had the semantic index. */
+const columnsOf = (s: { metrics: Columns<SystemMetrics> }): System[] => SYSTEMS.filter((sys) => s.metrics[sys] !== undefined);
+
 function printSummary(s: Summary): void {
-  console.log(`\n${NAME} (${where(s.corpus, s.collection)}) | akm ${s.akm_version}, keyword and semantic (${s.semantic_model}) search | ${s.n_queries} queries, ${s.n_assets} assets`);
-  console.log(`  index ${s.index_seconds.keyword} s for keyword search, ${s.index_seconds.semantic} s for semantic`);
+  const systems = columnsOf(s);
+  console.log(`\n${NAME} (${where(s.corpus, s.collection)}) | akm ${s.akm_version}, ${s.semantic_model ? `keyword and semantic (${s.semantic_model})` : "keyword"} search | ${s.n_queries} queries, ${s.n_assets} assets`);
+  console.log(`  index ${s.index_seconds.keyword} s for keyword search${s.index_seconds.semantic === undefined ? "" : `, ${s.index_seconds.semantic} s for semantic`}`);
   console.log(`  ranking metrics over the ${s.n_scored} task queries that have a relevant asset (grade ${s.relevant_from_grade}+), first ${s.depth} results`);
-  console.log(`  ${"".padEnd(16)}  ${SYSTEMS.map((sys) => labelOf(sys).padEnd(COLUMN)).join("  ")}`.trimEnd());
+  console.log(`  ${"".padEnd(16)}  ${systems.map((sys) => labelOf(sys).padEnd(COLUMN)).join("  ")}`.trimEnd());
   const m = s.metrics;
-  const row = (label: string, f: (x: SystemMetrics) => string) => console.log(`  ${label.padEnd(16)}  ${SYSTEMS.map((sys) => f(m[sys]).padEnd(COLUMN)).join("  ")}`.trimEnd());
+  const row = (label: string, f: (x: SystemMetrics) => string) => console.log(`  ${label.padEnd(16)}  ${systems.map((sys) => f(at(m, sys)).padEnd(COLUMN)).join("  ")}`.trimEnd());
   row("nDCG@10", (x) => fixed(x.ndcg_10));
   row("P@5", (x) => fixed(x.p_5));
   row("Success@5", (x) => pct(x.success_5));
   row("MRR", (x) => fixed(x.mrr));
   row("Recall@10", (x) => fixed(x.recall_10));
   row("judged@10", (x) => pct(x.judged_10));
-  if (SYSTEMS.some((sys) => m[sys].banned_above !== null)) row("banned above", (x) => pct(x.banned_above));
+  if (systems.some((sys) => at(m, sys).banned_above !== null)) row("banned above", (x) => pct(x.banned_above));
   const a = s.abstention;
-  const ab = (g: Record<System, Abstention>) => SYSTEMS.map((sys) => `${g[sys].abstained}/${g[sys].n} ${pct(g[sys].rate)}`.padEnd(COLUMN)).join("  ").trimEnd();
+  const ab = (g: Columns<Abstention>) => systems.map((sys) => `${at(g, sys).abstained}/${at(g, sys).n} ${pct(at(g, sys).rate)}`.padEnd(COLUMN)).join("  ").trimEnd();
   if (a.non_task.search.n > 0) console.log(`  returned nothing, non-task inputs        ${ab(a.non_task)}`);
   if (a.no_answer.search.n > 0) console.log(`  returned nothing, task without answer    ${ab(a.no_answer)}`);
-  if (SYSTEMS.some((sys) => s.errored[sys] > 0)) console.log(`  errored calls: ${SYSTEMS.map((sys) => `${labelOf(sys)} ${s.errored[sys]}`).join(", ")} (left out of the numbers)`);
+  if (systems.some((sys) => at(s.errored, sys) > 0)) console.log(`  errored calls: ${systems.map((sys) => `${labelOf(sys)} ${at(s.errored, sys)}`).join(", ")} (left out of the numbers)`);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
 }
 
 /** The summaries as columns, never one pooled number. The collections of one corpus, or each collection's corpora side by side. */
 function printSideBySide(columns: Summary[]): void {
+  const systems = columnsOf(columns[0]).filter((sys) => columns.every((c) => c.metrics[sys] !== undefined));
   const one = columns.every((c) => c.corpus === columns[0].corpus);
   const metrics: [string, (x: SystemMetrics) => string][] = [
     ["nDCG@10", (x) => fixed(x.ndcg_10)],
@@ -172,15 +184,21 @@ function printSideBySide(columns: Summary[]): void {
     ["Recall@10", (x) => fixed(x.recall_10)],
   ];
   const rows: string[][] = [["", ...columns.map((c) => (one ? c.collection : where(c.corpus, c.collection)))], ["queries (scored)", ...columns.map((c) => `${c.n_queries} (${c.n_scored})`)]];
-  for (const sys of SYSTEMS) {
-    for (const [label, f] of metrics) rows.push([`${labelOf(sys)} ${label}`, ...columns.map((c) => f(c.metrics[sys]))]);
-    if (columns.some((c) => c.metrics[sys].banned_above !== null)) rows.push([`${labelOf(sys)} banned above`, ...columns.map((c) => pct(c.metrics[sys].banned_above))]);
+  for (const sys of systems) {
+    for (const [label, f] of metrics) rows.push([`${labelOf(sys)} ${label}`, ...columns.map((c) => f(at(c.metrics, sys)))]);
+    if (columns.some((c) => at(c.metrics, sys).banned_above !== null)) rows.push([`${labelOf(sys)} banned above`, ...columns.map((c) => pct(at(c.metrics, sys).banned_above))]);
   }
-  for (const sys of SYSTEMS) rows.push([`${labelOf(sys)} abstained, non-task`, ...columns.map((c) => pct(c.abstention.non_task[sys].rate))]);
+  for (const sys of systems) rows.push([`${labelOf(sys)} abstained, non-task`, ...columns.map((c) => pct(at(c.abstention.non_task, sys).rate))]);
   const w = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
   console.log(`\n${NAME}: ${one ? "the collections" : "the collections, public and private"} side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r.map((cell, i) => cell.padEnd(w[i])).join("  ")}`.trimEnd());
 }
+
+/**
+ * Whether a run scores the semantic search as well. A run with --limit is for checking a setup, and the own set is a library
+ * of tens of thousands of assets: both are scored with keyword search alone.
+ */
+export const withSemantic = (corpus: Corpus, limit?: number): boolean => limit === undefined && corpus !== "own";
 
 export interface Folders {
   /** The library to index. */
@@ -209,10 +227,10 @@ export function collectionsFor(corpus: Corpus): { name: string; folders: Folders
 }
 
 /**
- * Scores one collection: its queries and qrels in `folders.assets`, over its library, indexed for keyword search and for
- * semantic search. `newSandbox` makes the sandbox of one of the two.
+ * Scores one collection: its queries and qrels in `folders.assets`, over its library, indexed for keyword search and,
+ * unless `ctx.semantic` is false, for semantic search too. `newSandbox` makes the sandbox of one of the two.
  */
-export async function runCollection(corpus: Corpus, collection: string, ctx: { label?: string; limit?: number; newSandbox?: (semantic: boolean) => Sandbox }, folders: Folders): Promise<Summary> {
+export async function runCollection(corpus: Corpus, collection: string, ctx: { label?: string; limit?: number; semantic: boolean; newSandbox?: (semantic: boolean) => Sandbox }, folders: Folders): Promise<Summary> {
   let all: Query[];
   let qrels: Qrel[];
   try {
@@ -228,27 +246,33 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
     if (isTask(q) && !grades.has(q.id)) fail(`${q.id} has no grades in qrels.jsonl.${corpus === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
   }
 
+  const modes: readonly Mode[] = ctx.semantic ? MODES : ["keyword"];
+  const systems: readonly System[] = ctx.semantic ? SYSTEMS : ["search", "curate"];
+  /** What a summary has for each column the run has. */
+  const columns = <T>(f: (sys: System) => T): Columns<T> => ({ search: f("search"), curate: f("curate"), ...(ctx.semantic ? { semantic_search: f("semantic_search"), semantic_curate: f("semantic_curate") } : {}) });
   const made: Sandbox[] = [];
   const sandbox = (mode: Mode): Sandbox => {
     made.push((ctx.newSandbox ?? ((semantic) => createSandbox(NAME, { semantic })))(mode === "semantic"));
     return made[made.length - 1];
   };
   try {
-    const boxes: Record<Mode, Sandbox> = { keyword: sandbox("keyword"), semantic: sandbox("semantic") };
+    const boxes = Object.fromEntries(modes.map((mode) => [mode, sandbox(mode)])) as Record<Mode, Sandbox>;
     const version = await akmVersion(boxes.keyword);
     // The semantic index first: the model download and the embedding are what can go wrong, and what takes the time.
     const nAssets = { keyword: 0, semantic: 0 };
     const indexSeconds = { keyword: 0, semantic: 0 };
-    for (const mode of ["semantic", "keyword"] as const) {
+    for (const mode of [...modes].reverse()) {
       console.log(`${NAME} (${where(corpus, collection)}): indexing for ${mode} search`);
       const t0 = performance.now();
       nAssets[mode] = await akm.load(boxes[mode], folders.library, folders.bundles, mode === "semantic");
       indexSeconds[mode] = Number(((performance.now() - t0) / 1000).toFixed(1));
       console.log(`  ${nAssets[mode]} assets indexed in ${indexSeconds[mode]} s`);
     }
-    if (nAssets.keyword !== nAssets.semantic) fail(`akm indexed ${nAssets.keyword} assets for keyword search and ${nAssets.semantic} for semantic search.`, 1);
-    const probe = await akm.ask(boxes.semantic, "search", queries[0].query, DEPTH, "semantic");
-    if (probe.error) fail(`akm cannot search with its embedder: ${probe.error}`, 1);
+    if (ctx.semantic) {
+      if (nAssets.keyword !== nAssets.semantic) fail(`akm indexed ${nAssets.keyword} assets for keyword search and ${nAssets.semantic} for semantic search.`, 1);
+      const probe = await akm.ask(boxes.semantic, "search", queries[0].query, DEPTH, "semantic");
+      if (probe.error) fail(`akm cannot search with its embedder: ${probe.error}`, 1);
+    }
     const label = ctx.label ?? `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
     const dir = makeResultsDir(folders.results, `${label}-${collection}`);
     const samples = join(dir, "samples.jsonl");
@@ -256,14 +280,14 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
     console.log(`${NAME} (${where(corpus, collection)}): akm ${version}, ${nAssets.keyword} assets, ${queries.length} of ${all.length} queries`);
 
     const rows: Row[] = [];
-    const modes: Record<Mode, Set<string>> = { keyword: new Set(), semantic: new Set() };
+    const seen: Record<Mode, Set<string>> = { keyword: new Set(), semantic: new Set() };
     for (const q of queries) {
       const g = grades.get(q.id) ?? {};
       const nRelevant = Object.values(g).filter((x) => x >= RELEVANT).length;
-      const answers = {} as Record<System, SystemRow>;
-      for (const sys of SYSTEMS) {
+      const answers = {} as Columns<SystemRow>;
+      for (const sys of systems) {
         const a = await akm.ask(boxes[modeOf(sys)], commandOf(sys), q.query, DEPTH, modeOf(sys));
-        if (a.mode) modes[modeOf(sys)].add(a.mode);
+        if (a.mode) seen[modeOf(sys)].add(a.mode);
         answers[sys] = {
           refs: a.refs,
           grades: a.refs.map((r) => (Object.hasOwn(g, r) ? g[r] : null)),
@@ -275,14 +299,14 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
       const row: Row = { id: q.id, kind: q.kind, query: q.query, n_relevant: nRelevant, ...answers };
       rows.push(row);
       appendFileSync(samples, `${JSON.stringify(row)}\n`);
-      const errors = SYSTEMS.filter((s) => row[s].error);
-      console.log(`  [${String(rows.length).padStart(String(queries.length).length)}/${queries.length}] ${q.id} ${q.kind.padEnd(12)} ${SYSTEMS.map((sys) => `${labelOf(sys)} ${row[sys].refs.length}`).join(" ")}${errors.length ? `  ERROR ${errors.map((s) => `${labelOf(s)}: ${row[s].error}`).join(" | ").slice(0, 150)}` : ""}`);
+      const errors = systems.filter((s) => at(row, s).error);
+      console.log(`  [${String(rows.length).padStart(String(queries.length).length)}/${queries.length}] ${q.id} ${q.kind.padEnd(12)} ${systems.map((sys) => `${labelOf(sys)} ${at(row, sys).refs.length}`).join(" ")}${errors.length ? `  ERROR ${errors.map((s) => `${labelOf(s)}: ${at(row, s).error}`).join(" | ").slice(0, 150)}` : ""}`);
     }
 
     const scored = rows.filter((r) => isTask(r) && r.n_relevant > 0);
     const noAnswer = rows.filter((r) => isTask(r) && r.n_relevant === 0);
     const nonTask = rows.filter((r) => !isTask(r));
-    const ok = (rs: Row[], s: System) => rs.filter((r) => !r[s].error);
+    const ok = (rs: Row[], s: System) => rs.filter((r) => !at(r, s).error);
     const summary: Summary = {
       eval: NAME,
       corpus,
@@ -291,20 +315,20 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
       date: new Date().toISOString(),
       git_commit: gitCommit(),
       akm_version: version,
-      search_mode: { keyword: [...modes.keyword].sort().join(", ") || "unknown", semantic: [...modes.semantic].sort().join(", ") || "unknown" },
-      semantic_model: SEMANTIC_MODEL,
+      search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
+      ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL } : {}),
       depth: DEPTH,
       relevant_from_grade: RELEVANT,
       limit: ctx.limit ?? null,
       n_queries: rows.length,
       n_assets: nAssets.keyword,
-      index_seconds: indexSeconds,
+      index_seconds: { keyword: indexSeconds.keyword, ...(ctx.semantic ? { semantic: indexSeconds.semantic } : {}) },
       n_scored: scored.length,
-      errored: Object.fromEntries(SYSTEMS.map((s) => [s, rows.filter((r) => r[s].error).length])) as Record<System, number>,
-      metrics: Object.fromEntries(SYSTEMS.map((s) => [s, summarize(ok(scored, s).map((r) => r[s].scores as Scored))])) as Record<System, SystemMetrics>,
+      errored: columns((s) => rows.filter((r) => at(r, s).error).length),
+      metrics: columns((s) => summarize(ok(scored, s).map((r) => at(r, s).scores as Scored))),
       abstention: {
-        non_task: Object.fromEntries(SYSTEMS.map((s) => [s, abstention(ok(nonTask, s).map((r) => r[s].refs.length))])) as Record<System, Abstention>,
-        no_answer: Object.fromEntries(SYSTEMS.map((s) => [s, abstention(ok(noAnswer, s).map((r) => r[s].refs.length))])) as Record<System, Abstention>,
+        non_task: columns((s) => abstention(ok(nonTask, s).map((r) => at(r, s).refs.length))),
+        no_answer: columns((s) => abstention(ok(noAnswer, s).map((r) => at(r, s).refs.length))),
       },
       results_dir: dir,
     };
@@ -342,9 +366,9 @@ async function main(): Promise<void> {
     fail(c === "own" ? `private/${NAME}/own/ does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
   }
   const summaries: Summary[] = [];
-  for (const s of sets) summaries.push(await runCollection(s.corpus, s.name, { label: values.label, limit }, s.folders));
+  for (const s of sets) summaries.push(await runCollection(s.corpus, s.name, { label: values.label, limit, semantic: withSemantic(s.corpus, limit) }, s.folders));
   if (summaries.length > 1) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
-  const semanticErrors = summaries.reduce((n, s) => n + s.errored.semantic_search + s.errored.semantic_curate, 0);
+  const semanticErrors = summaries.reduce((n, s) => n + (s.errored.semantic_search ?? 0) + (s.errored.semantic_curate ?? 0), 0);
   if (semanticErrors > 0) fail(`${semanticErrors} semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.`, 1);
 }
 

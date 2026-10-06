@@ -8,7 +8,8 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 /**
  * An akm that counts the skills of its bundle and answers `search` and `curate` by how many words of at least four
  * letters of the query a skill's SKILL.md holds, best first and then by id. A query that says FLAKY fails the first time
- * it is asked, BROKEN always fails, STRAY returns a skill that is not in the library and EMPTY returns nothing.
+ * it is asked, BROKEN always fails, STRAY returns a skill that is not in the library, EMPTY returns nothing and
+ * CURATEDIFF has curate answer in the reverse of search's order.
  *
  * Its config says whether it is semantic. A semantic akm embeds every skill when it indexes, except that a skill that says
  * NOEMBED is left out, and answers with every skill, the ones that share no word with the query after the others and
@@ -39,6 +40,7 @@ else if (cmd === "index") {
   let refs = scored.filter((s) => vectors || s.n > 0).sort((a, b) => b.n - a.n || (vectors ? b.id.localeCompare(a.id) : a.id.localeCompare(b.id))).slice(0, k).map((s) => "skills/" + s.id);
   if (query.includes("STRAY")) refs = ["skills/not-a-skill"];
   if (query.includes("EMPTY")) refs = [];
+  if (cmd === "curate" && query.includes("CURATEDIFF")) refs = refs.reverse();
   const hits = refs.map((ref) => ({ ref }));
   const answer = { searchMode: fellBack ? "fts-fallback" : vectors ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
   console.log(JSON.stringify(cmd === "search" ? { hits, ...answer } : { items: hits, ...answer }));

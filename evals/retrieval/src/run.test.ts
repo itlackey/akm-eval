@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
-import { collectionsFor, runCollection } from "./run.ts";
+import { collectionsFor, runCollection, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -83,7 +83,7 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
     created.push(sandbox.dir);
     return sandbox;
   };
-  return { ctx: { newSandbox, label: "t" }, folders: { library, assets, results: join(root, "results") }, created, root };
+  return { ctx: { newSandbox, label: "t", semantic: true }, folders: { library, assets, results: join(root, "results") }, created, root };
 }
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -91,6 +91,18 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   console.log = () => {};
   try {
     return await f();
+  } finally {
+    console.log = log;
+  }
+};
+
+/** Runs `f` and returns what it printed. */
+const printed = async <T>(f: () => Promise<T>): Promise<{ result: T; lines: string[] }> => {
+  const log = console.log;
+  const lines: string[] = [];
+  console.log = (...a: unknown[]) => void lines.push(a.join(" "));
+  try {
+    return { result: await f(), lines };
   } finally {
     console.log = log;
   }
@@ -119,7 +131,7 @@ describe("runCollection", () => {
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     // semantic search puts b/y, which is not relevant, before b/x for q2, and q4 answers where keyword search failed.
     expect(s.metrics.semantic_search).toMatchObject({ n: 3, p_5: 0.2667, success_5: 1, mrr: 0.8333, recall_10: 1, judged_10: 1 });
-    expect(s.metrics.semantic_search.ndcg_10).toBeCloseTo((1 + 3 / Math.log2(3) / 3 + 1) / 3, 3);
+    expect(s.metrics.semantic_search?.ndcg_10).toBeCloseTo((1 + 3 / Math.log2(3) / 3 + 1) / 3, 3);
     expect(s.metrics.semantic_curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[3].search.error).toContain("exited 70");
@@ -189,11 +201,45 @@ describe("runCollection", () => {
     const { ctx, folders } = setup([...QUERIES, { id: "q5", query: "fallback", kind: "direct" }], [...QRELS, grade("q5", "f/x", 3)]);
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(s.errored).toEqual({ search: 1, curate: 0, semantic_search: 1, semantic_curate: 0 });
-    expect(s.metrics.semantic_search.n).toBe(3);
+    expect(s.metrics.semantic_search?.n).toBe(3);
     expect(s.metrics.search.n).toBe(3); // q4's keyword search failed, and q5 found f/x
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[6].semantic_search.error).toContain("searched with fts-fallback, not semantic");
     expect(rows[6].search.refs).toEqual(["f/x"]);
+  });
+
+  test("without the semantic index, makes one sandbox and has the keyword columns only", async () => {
+    const { ctx, folders, created, root } = setup();
+    const { result: s, lines } = await printed(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+    expect(created).toHaveLength(1);
+    expect(existsSync(join(root, "seen-config-semantic.json"))).toBe(false);
+    expect(s.search_mode).toEqual({ keyword: "keyword" });
+    expect(s.semantic_model).toBeUndefined();
+    expect(Object.keys(s.index_seconds)).toEqual(["keyword"]);
+    for (const columns of [s.metrics, s.errored, s.abstention.non_task, s.abstention.no_answer]) expect(Object.keys(columns)).toEqual(["search", "curate"]);
+    expect(s.metrics.search).toMatchObject({ n: 2, success_5: 0.5 });
+    expect(s.metrics.curate).toMatchObject({ n: 3, success_5: 1 });
+    const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(Object.keys(rows[0]).sort()).toEqual(["curate", "id", "kind", "n_relevant", "query", "search"]);
+    expect(lines.join("\n")).not.toContain("semantic");
+    const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
+    expect(stored.semantic_model).toBeUndefined();
+    for (const dir of created) expect(existsSync(dir)).toBe(false);
+  });
+
+  test("a keyword-only run does not stop at a query that the semantic search would have answered with keyword search", async () => {
+    const { ctx, folders } = setup([{ id: "f", query: "fallback", kind: "direct" }, ...QUERIES], [...QRELS, grade("f", "f/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+    expect(s.metrics.search.n).toBe(3);
+  });
+
+  test("scores the semantic search in a full run of the public and private corpora, and not with --limit or in the own corpus", () => {
+    expect(withSemantic("public")).toBe(true);
+    expect(withSemantic("private")).toBe(true);
+    expect(withSemantic("public", 20)).toBe(false);
+    expect(withSemantic("private", 1)).toBe(false);
+    expect(withSemantic("own")).toBe(false);
+    expect(withSemantic("own", 20)).toBe(false);
   });
 
   test("runs N queries, in the task and non-task proportion, with --limit", async () => {
@@ -209,7 +255,7 @@ describe("runCollection", () => {
     const a = await quiet(() => runCollection("public", "library", ctx, folders));
     const b = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(b.results_dir).toBe(`${a.results_dir}-2`);
-    const c = await quiet(() => runCollection("public", "library", { newSandbox: ctx.newSandbox }, folders));
+    const c = await quiet(() => runCollection("public", "library", { newSandbox: ctx.newSandbox, semantic: true }, folders));
     expect(c.label).toBe("akm-0.9.99-test");
     expect(c.results_dir).toMatch(/-akm-0\.9\.99-test-library$/);
   });
@@ -226,7 +272,7 @@ describe("runCollection", () => {
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
     expect(s.n_scored).toBe(0);
     expect(s.metrics.search.ndcg_10).toBeNull();
-    expect(s.metrics.semantic_search.ndcg_10).toBeNull();
+    expect(s.metrics.semantic_search?.ndcg_10).toBeNull();
     expect(s.abstention.no_answer.search.n).toBe(1);
   });
 });
@@ -242,8 +288,8 @@ describe("banned assets", () => {
     expect(s.collection).toBe("books");
     expect(s.metrics.search.banned_above).toBe(0.5);
     expect(s.metrics.curate.banned_above).toBe(0);
-    expect(s.metrics.semantic_search.banned_above).toBe(0.5); // q1 puts a/z, banned, after a/x and a/y, but q2 puts b/y, banned, first
-    expect(s.metrics.semantic_curate.banned_above).toBe(0);
+    expect(s.metrics.semantic_search?.banned_above).toBe(0.5); // q1 puts a/z, banned, after a/x and a/y, but q2 puts b/y, banned, first
+    expect(s.metrics.semantic_curate?.banned_above).toBe(0);
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[0].search.scores.banned_above).toBe(true);
     expect(rows[0].curate.scores.banned_above).toBe(false);
