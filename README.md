@@ -17,7 +17,7 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 | `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | public + private | ready |
 | `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | public + private | ready |
 | `evals/distill` | Do distilled lessons say only what the source memory says? | public + private | ready |
-| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | public + private | planned |
+| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | public + private | ready |
 | `evals/extract` | Does extraction pull durable insights and preferences from session logs, and leave routine sessions empty? | public + private | planned |
 | `evals/nightly` | Does a full nightly improve run give good results unattended, with no model-call failures? | public + private | planned |
 | `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | public + private | planned |
