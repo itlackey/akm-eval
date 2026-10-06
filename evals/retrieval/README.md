@@ -2,14 +2,14 @@
 
 Does akm search put the assets an agent needs at the top?
 
-akm indexes a library of assets: skills, knowledge notes, commands, agents, workflows and scripts. An agent finds them with `akm search`, or asks `akm curate` for a short list for its task. This eval gives akm queries over two public collections. It scores the first 10 results of both commands against graded judgments of which assets answer each query.
+akm indexes a library of assets: skills, knowledge notes, commands, agents, workflows and scripts. An agent finds them with `akm search`, or asks `akm curate` for a short list for its task. This eval gives akm queries over two public collections. It scores the first 10 results of both commands against graded judgments of which assets answer each query, with akm's keyword search and with its semantic search.
 
 - `library`: 111 task queries and 25 non-task inputs over the public library in `corpus/library`.
 - `books`: 51 task queries over 93 assets in three domains: cooking, law and tax, and anatomy and first aid. The judgments come from an earlier experiment. Besides grades, they name assets that must never outrank a relevant one, such as an asset that holds an out-of-date figure.
 
 Each collection is scored on its own, never pooled with another. A third corpus, `own`, runs a labelled set of yours.
 
-No model runs when you run the eval. A judge model graded the library's assets once, to make `assets/qrels.jsonl`. The books' judgments were made by hand for the earlier experiment. See "Make or extend the judgments" below.
+No model service is called when you run the eval. The semantic search is a small embedding model that akm runs inside its own process. A judge model graded the library's assets once, to make `assets/qrels.jsonl`. The books' judgments were made by hand for the earlier experiment. See "Make or extend the judgments" below.
 
 ## Run
 
@@ -28,28 +28,28 @@ The private run reads `private/retrieval/assets/`. Make it first with `./generat
 
 Each run writes two files for each collection to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (the collection is `library` or `books`), or to `private/retrieval/results/` for the private corpus and for `own`:
 
-- `summary.json`: the metrics, how many queries were scored, the akm version, the search mode, the corpus, the collection and the git commit.
-- `samples.jsonl`: one line per query, with what search and curate returned, the grade of each result, the scores and how long each call took.
+- `summary.json`: the metrics of the four columns, how many queries were scored, the akm version, the search mode akm reported for each index, the embedding model, how long each index took to build, the corpus, the collection and the git commit.
+- `samples.jsonl`: one line per query, with what search and curate returned on each index, the grade of each result, the scores and how long each call took.
 
 ## What it needs
 
-[bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. Nothing else: no model, no key, no network.
+[bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. No model service and no key. The network is used once, the first time a run builds a semantic index: akm downloads its embedding model, bge-small-en-v1.5 (133 MB, from the Hugging Face Hub), and the eval keeps it in `.cache/models/` at the root of the repository, which git ignores. Every later run, and every sandbox, reads it from there.
 
-The eval copies the library into a temporary folder, gives akm its own config and folders there, and indexes it. It never reads or writes your akm bundle. Then it makes two calls per query, which takes about a minute for the library's 136 queries and about half a minute for the books' 51. A library of several bundles (see "Run your own set") is not copied: akm indexes each bundle where it is, read only.
+The eval copies the library into two temporary folders, gives akm its own config and folders in each, and indexes it: once for keyword search, and once with the embedder, which embeds every asset. It never reads or writes your akm bundle. Then it makes four calls per query: search and curate, each on both indexes. akm 0.9.26 on a busy 12-core machine took 22 s to build the semantic index of the library's 259 assets and 14 s for the books' 93, about eight assets a second. The library's 136 queries took 5.5 minutes in all and the books' 51 took 3, against a minute and half a minute with keyword search alone: a keyword call takes 0.3 to 0.5 s, and a semantic one 0.8 to 1.2 s, because each akm process loads the model. A library of several bundles (see "Run your own set") is not copied: akm indexes each bundle where it is, read only, and the semantic index embeds every asset of it.
 
-Search is keyword search. The sandbox config turns semantic search off, which is also akm 0.9.26's default (`semanticSearchMode: "off"`), so there is no embedding model to download. The `akm setup` wizard pre-selects semantic search, which downloads an embedding model. This eval does not score it. The summary records the search mode akm reports for the calls.
+Keyword search is akm 0.9.26's default: the sandbox config has `semanticSearchMode: "off"`. The semantic index is built with `semanticSearchMode: "auto"` and `embedding.localModel` set to bge-small-en-v1.5, which is also akm's own default model. Semantic search in akm fuses its keyword ranking with the nearest vectors by reciprocal rank, so it is not vectors alone. akm answers a query with keyword search alone, `searchMode: "fts-fallback"`, when it cannot embed it in time (3 seconds by default, which 2 calls of 96 missed at eight at once on a busy machine). The sandbox allows ten minutes, and the eval still takes any answer that does not say `semantic` for a failed call. It also stops before the first query if the index does not hold an embedding of every asset, or if one semantic search does not come back as semantic.
 
 ## What it asks akm
 
-For each query: `akm search --limit 10` and `akm curate --limit 10`. curate returns 4 by default. The eval asks for 10, so both commands are scored on the same cut-offs.
+For each query: `akm search --limit 10` and `akm curate --limit 10`, on the keyword index and on the semantic one. curate returns 4 by default. The eval asks for 10, so both commands are scored on the same cut-offs.
 
 A result that names a section of an asset (`ref#section`) counts as the asset, at its first place. The assets that a curate hit links to (`supportRefs`) are not results and are not counted.
 
-curate runs one search and attaches a preview and run details to each hit. A reranker can reorder its candidates first, but it is off by default and the eval leaves it off. So curate returns the same assets in the same order as search. It differs in one way: it abstains on input that is a harness envelope, such as `<task-notification>...</task-notification>`.
+curate runs one search and attaches a preview and run details to each hit. A reranker can reorder its candidates first, but it is off by default and the eval leaves it off. So curate returns the same assets in the same order as search, on either index. It differs in one way: it abstains on input that is a harness envelope, such as `<task-notification>...</task-notification>`.
 
 ## Read the results
 
-A task query is scored when at least one asset has grade 2 or 3 for it ("relevant"). The scores are means over those queries. A task query with no relevant asset is not scored. It is counted, and reported with the abstentions.
+Each metric is given for four columns: `search` and `curate` on the keyword index, and `semantic_search` and `semantic_curate` on the semantic one. A task query is scored when at least one asset has grade 2 or 3 for it ("relevant"). The scores are means over those queries. A task query with no relevant asset is not scored. It is counted, and reported with the abstentions.
 
 | Metric | Meaning |
 |---|---|
@@ -61,9 +61,9 @@ A task query is scored when at least one asset has grade 2 or 3 for it ("relevan
 | `judged_10` | The share of the results among the first 10 that someone graded for the query. This is not a quality score. See "Notes". |
 | `banned_above` | Only where the qrels ban assets, as the books' do. The share of those queries in which a banned asset is among the first 10 and ranks above a relevant one. A relevant asset that is not among the first 10 ranks below every result, so any banned asset that is returned ranks above it. Lower is better. |
 
-Non-task inputs are chit-chat, notifications, log lines and status updates, where the right result is nothing. `abstention.non_task` is how many of them got no result from akm at all, for each command. `abstention.no_answer` is the same count for the task queries that have no relevant asset.
+Non-task inputs are chit-chat, notifications, log lines and status updates, where the right result is nothing. `abstention.non_task` is how many of them got no result from akm at all, for each column. `abstention.no_answer` is the same count for the task queries that have no relevant asset. A semantic search always has nearest vectors to return, so only a command that abstains by rule, curate on a harness envelope, can return nothing on the semantic index.
 
-A call that fails, such as a timeout, is counted in `errored` and left out of that command's numbers.
+A call that fails, such as a timeout, or a semantic call that akm answered with keyword search, is counted in `errored` and left out of that column's numbers. The run exits with 1 when a semantic call failed.
 
 ## Assets
 
@@ -109,10 +109,10 @@ Run it again after a change to the library or to akm. The pool takes in the new 
 
 ## Notes
 
-- Unjudged results count as not relevant. The library's judgments cover what akm 0.9.26 and a plain BM25 returned in their top 10, and what the author expected. A run on another akm version can return assets nobody graded. `judged_10` shows how large a share of the results that is. When it falls, run `label` before you compare.
+- Unjudged results count as not relevant. The library's judgments cover what akm 0.9.26's keyword search and a plain BM25 returned in their top 10, and what the author expected. A run on another akm version can return assets nobody graded, and so does the semantic search: 71% of its top 10 on the library was judged, against 100% for keyword search. Its library scores are therefore lower bounds, and the keyword and semantic columns are not on equal terms there until the semantic results are graded too. `judged_10` shows how large a share of the results is unjudged. When it falls, run `label` before you compare. `label` pools the keyword results only.
 - The books' judgments name only the relevant assets and the banned ones of each query. Every other asset counts as not relevant, though some may answer a query, and `judged_10` reads about a quarter. They are goldens, not a pooled test collection. `label` does not touch them.
 - The judge reads the first 16,000 characters of an asset. The 15 assets that are longer are cut there, and an answer past the cut is not seen.
-- Compare results only between runs with the same akm version, search mode and judgments.
+- Compare results only between runs with the same akm version, embedding model and judgments.
 - A much better public score than private score would point to akm having been tuned to the public names, tool names or numbers. The library's private copy changes about 4% of the words: see above, and `private/retrieval/map.json` for every name it renamed. Renamed words also change the keyword statistics a little, so a few results in places 4 to 10 differ between a public and a private run, and `judged_10` can read slightly under 100% in the private run. The books' private copy changes under 1% of the words, so it tests this much less: with akm 0.9.26 it scores exactly like the public books.
 
 ## Licence

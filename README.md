@@ -41,6 +41,7 @@ lib/akm/           the akm sandbox the evals that use akm share
 lib/rewrite/       the seeded rewrite the generate scripts share
 reports/           published results: scores only, never private items
 private/           your private assets (gitignored, never published)
+.cache/            akm's embedding model, downloaded once (gitignored)
 ```
 
 ## Run an eval
@@ -62,7 +63,7 @@ Models come from `.env`. Copy `.env.example` to `.env` and fill it in.
 
 Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
 
-Each eval's README says what else it needs. An eval with Python code needs [uv](https://docs.astral.sh/uv/). An eval that uses akm needs akm on `PATH`, or `AKM_BIN` set in `.env`.
+Each eval's README says what else it needs. An eval with Python code needs [uv](https://docs.astral.sh/uv/). An eval that uses akm needs akm on `PATH`, or `AKM_BIN` set in `.env`. One that scores akm's semantic search also downloads akm's embedding model (133 MB) the first time, into `.cache/`.
 
 ## Private assets
 
