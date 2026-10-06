@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createSandbox } from "../../../lib/akm/akm.ts";
 import type { Case } from "./lib.ts";
-import { runCorpus, sandboxEnv } from "./run.ts";
+import { runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -35,9 +36,9 @@ function setup(cases: { word: string; label: "good" | "bad"; feedback?: string }
   writeFileSync(join(assets, "cases.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  const sandbox = join(root, "sandbox");
-  mkdirSync(sandbox);
-  const ctx = { akm: ["bun", script], env: { ...(process.env as Record<string, string>), AKM_CONFIG_DIR: join(sandbox, "config") }, sandbox, version: "0.9.99-test", model: "the-model", label: "t" };
+  const sandbox = { ...createSandbox("judge-gate-test"), cmd: ["bun", script] };
+  dirs.push(sandbox.dir);
+  const ctx = { sandbox, version: "0.9.99-test", model: "the-model", label: "t" };
   return { ctx, folders: { assets, results: join(root, "results") } };
 }
 
@@ -50,31 +51,6 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
     console.log = log;
   }
 };
-
-describe("sandboxEnv", () => {
-  test("gives akm its own folders, drops the caller's AKM_ settings and the judge key, and keeps the model key", () => {
-    const keep = { ...process.env };
-    process.env.AKM_BUNDLE_DIR = "/live/bundle";
-    process.env.AKM_DEBUG = "1";
-    process.env.JUDGE_API_KEY = "judge-secret";
-    process.env.MODEL_API_KEY = "model-secret";
-    try {
-      const env = sandboxEnv("/sandbox");
-      expect(env.AKM_BUNDLE_DIR).toBe("/sandbox/bundle");
-      for (const k of ["AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR"]) expect(env[k]).toStartWith("/sandbox/");
-      for (const k of ["XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"]) expect(env[k]).toStartWith("/sandbox/");
-      expect(env.AKM_DEBUG).toBeUndefined();
-      expect(env.JUDGE_API_KEY).toBeUndefined();
-      expect(env.MODEL_API_KEY).toBe("model-secret");
-      expect(env.PATH).toBe(keep.PATH as string);
-    } finally {
-      for (const k of ["AKM_BUNDLE_DIR", "AKM_DEBUG", "JUDGE_API_KEY", "MODEL_API_KEY"]) {
-        if (keep[k] === undefined) delete process.env[k];
-        else process.env[k] = keep[k];
-      }
-    }
-  });
-});
 
 describe("runCorpus", () => {
   test("counts passes per label, keeps review apart from reject, and counts a case with no verdict as errored", async () => {
@@ -113,7 +89,7 @@ describe("runCorpus", () => {
     const row = JSON.parse(readFileSync(join(dir, "samples.jsonl"), "utf8").trim());
     const seen = JSON.parse(row.reason);
     expect(seen.feedback).toBe("[negative] stale\n[positive] fine");
-    expect(seen.env).toBe(ctx.env.AKM_CONFIG_DIR);
+    expect(seen.env).toBe(ctx.sandbox.env.AKM_CONFIG_DIR);
   });
 
   test("stops early when no case gets a verdict, and says what to check", async () => {

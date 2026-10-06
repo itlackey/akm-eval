@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, atLeast, engineConfig, errorRow, failureMessage, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -56,18 +56,31 @@ describe("orderFeedback", () => {
   });
 });
 
-describe("engineConfig", () => {
+describe("judgeConfig", () => {
   test("points the reflect quality gate at one LLM engine", () => {
-    const c = engineConfig("http://localhost:8080/v1/", "m", false) as any;
+    const c = judgeConfig("http://localhost:8080/v1/", "m", false) as any;
     expect(c.engines.judge.endpoint).toBe("http://localhost:8080/v1/chat/completions");
     expect(c.engines.judge.apiKey).toBeUndefined();
+    expect(c.defaults.llmEngine).toBe("judge");
     expect(c.improve.strategies.default.processes.reflect.qualityGate.engine).toBe("judge");
   });
 
   test("names the key by environment variable and never holds it", () => {
-    const c = engineConfig("https://api.example.com/v1/chat/completions", "m", true) as any;
+    const c = judgeConfig("https://api.example.com/v1/chat/completions", "m", true) as any;
     expect(c.engines.judge.endpoint).toBe("https://api.example.com/v1/chat/completions");
     expect(c.engines.judge.apiKey).toBe("$MODEL_API_KEY");
+  });
+
+  test("is the config the eval has always written, key order included", () => {
+    const expected = {
+      configVersion: "0.9.0",
+      semanticSearchMode: "off",
+      registries: [],
+      engines: { judge: { kind: "llm", provider: "openai", endpoint: "http://localhost:8080/v1/chat/completions", model: "qwen3-27b", apiKey: "$MODEL_API_KEY", timeoutMs: 600_000 } },
+      defaults: { llmEngine: "judge", improveStrategy: "default" },
+      improve: { strategies: { default: { engine: "judge", processes: { reflect: { qualityGate: { engine: "judge" } } } } } },
+    };
+    expect(JSON.stringify(judgeConfig("http://localhost:8080/v1/", "qwen3-27b", true), null, 2)).toBe(JSON.stringify(expected, null, 2));
   });
 });
 

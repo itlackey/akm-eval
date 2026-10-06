@@ -4,16 +4,17 @@
 //
 //   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--label NAME]
 
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Case, type Row, atLeast, engineConfig, errorRow, failureMessage, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const CONCURRENCY = 2;
+const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
 const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
 
@@ -80,32 +81,6 @@ function makeResultsDir(parent: string, label: string): string {
   return dir;
 }
 
-/**
- * The environment akm runs in: its own folders under the sandbox, none of the caller's AKM_ settings, and no
- * judge key. The model key stays, because the engine config names it as $MODEL_API_KEY.
- */
-export function sandboxEnv(dir: string): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("AKM_") && k !== "JUDGE_API_KEY") env[k] = v;
-  return {
-    ...env,
-    AKM_BUNDLE_DIR: join(dir, "bundle"),
-    AKM_CONFIG_DIR: join(dir, "config"),
-    AKM_DATA_DIR: join(dir, "data"),
-    AKM_CACHE_DIR: join(dir, "cache"),
-    AKM_STATE_DIR: join(dir, "state"),
-    XDG_CONFIG_HOME: join(dir, "xdg-config"),
-    XDG_DATA_HOME: join(dir, "xdg-data"),
-    XDG_STATE_HOME: join(dir, "xdg-state"),
-  };
-}
-
-async function exec(cmd: string[], env: Record<string, string>, cwd: string, stdin?: string, timeoutMs = 15 * 60_000) {
-  const proc = Bun.spawn(cmd, { env, cwd, stdin: stdin === undefined ? "ignore" : new Blob([stdin]), stdout: "pipe", stderr: "pipe", timeout: timeoutMs, killSignal: "SIGKILL" });
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  return { stdout, stderr, code };
-}
-
 function printSummary(s: Summary): void {
   const m = s.metrics;
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
@@ -133,7 +108,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { akm: string[]; env: Record<string, string>; sandbox: string; version: string; model: string; label: string; limit?: number },
+  ctx: { sandbox: Sandbox; version: string; model: string; label: string; limit?: number },
   folders = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
@@ -155,9 +130,8 @@ export async function runCorpus(
 
   const judge = async (c: Case): Promise<Row> => {
     const input = JSON.stringify({ source: c.source, candidate: c.candidate, feedback: orderFeedback(c.feedback) });
-    const t0 = performance.now();
-    const { stdout, stderr, code } = await exec([...ctx.akm, "improve", "judge", "--format", "json"], ctx.env, ctx.sandbox, input);
-    const seconds = Number(((performance.now() - t0) / 1000).toFixed(1));
+    const { stdout, stderr, code, ms } = await runAkm(ctx.sandbox, ["improve", "judge", "--format", "json"], { stdin: input, timeoutMs: JUDGE_TIMEOUT_MS });
+    const seconds = Number((ms / 1000).toFixed(1));
     let verdict: unknown;
     try {
       verdict = JSON.parse(stdout);
@@ -239,23 +213,18 @@ async function main(): Promise<void> {
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
-  const akm = (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
-  const sandbox = mkdtempSync(join(tmpdir(), `akm-eval-${NAME}-`));
+  const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
-    for (const d of ["bundle", "config", "data", "cache", "state", "xdg-config", "xdg-data", "xdg-state"]) mkdirSync(join(sandbox, d));
-    writeFileSync(join(sandbox, "config", "config.json"), `${JSON.stringify(engineConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()), null, 2)}\n`);
-    const env = sandboxEnv(sandbox);
+    writeConfig(sandbox, judgeConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
 
-    const probe = await exec([...akm, "--version"], env, sandbox, undefined, 60_000).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127 }));
-    const version = probe.stdout.trim().match(/\d+\.\d+\.\d+\S*/)?.[0];
-    if (probe.code !== 0 || !version) fail(`could not run \`${akm.join(" ")} --version\`. Install akm or set AKM_BIN. ${probe.stderr.trim().slice(0, 200)}`);
+    const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     if (!atLeast(version, MIN_AKM)) fail(`akm ${version} has no \`improve judge\` command. This eval needs akm ${MIN_AKM} or later.`);
 
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(await runCorpus(c, { akm, env, sandbox, version, model, label, limit }));
+    for (const c of corpora) summaries.push(await runCorpus(c, { sandbox, version, model, label, limit }));
     if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
   } finally {
-    rmSync(sandbox, { recursive: true, force: true });
+    removeSandbox(sandbox);
   }
 }
 

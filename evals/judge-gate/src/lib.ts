@@ -1,5 +1,7 @@
-// Pure helpers for the judge-gate eval: cases, selection, the akm engine config, metrics.
+// Pure helpers for the judge-gate eval: cases, selection, the akm judge config, metrics.
 // run.ts uses them to run the eval and generate.ts to make the private cases.
+
+import { engineConfig } from "../../../lib/akm/akm.ts";
 
 export interface Case {
   id: string;
@@ -75,26 +77,11 @@ export function orderFeedback(feedback: string): string {
 }
 
 /** The akm config the judge runs under: one LLM engine, named as reflect's quality gate engine. */
-export function engineConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, unknown> {
-  const base = baseUrl.replace(/\/+$/, "");
-  const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
-  return {
-    configVersion: "0.9.0",
-    semanticSearchMode: "off",
-    registries: [],
-    engines: {
-      judge: {
-        kind: "llm",
-        provider: "openai",
-        endpoint,
-        model,
-        ...(hasKey ? { apiKey: "$MODEL_API_KEY" } : {}),
-        timeoutMs: 600_000,
-      },
-    },
-    defaults: { llmEngine: "judge", improveStrategy: "default" },
-    improve: { strategies: { default: { engine: "judge", processes: { reflect: { qualityGate: { engine: "judge" } } } } } },
-  };
+export function judgeConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, unknown> {
+  const config = engineConfig(baseUrl, model, hasKey, "judge");
+  config.defaults.improveStrategy = "default";
+  config.improve = { strategies: { default: { engine: "judge", processes: { reflect: { qualityGate: { engine: "judge" } } } } } };
+  return config;
 }
 
 /** akm's `improve judge` verdict, as printed with --format json. */
