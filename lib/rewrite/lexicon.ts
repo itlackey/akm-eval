@@ -171,6 +171,7 @@ microsoft openai anthropic claude gemini gemma mistral mixtral qwen deepseek kim
 vscode vim neovim emacs jetbrains intellij pycharm webstorm xcode obsidian figma telegram whatsapp jira confluence asana trello stripe paypal twilio sendgrid mailgun apprise ntfy pushover powerpoint onedrive sharepoint
 ripgrep fzf tmux swagger ghostscript pantone adobe wayland
 akm gutterpress pagedjs openpalm openviking skillhone longmemeval locomo skillret skillsbench appworld agentskills
+ledgerline harborlight quillmark rowpack
 `);
 
 export const FIRST = [
