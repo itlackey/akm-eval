@@ -25,7 +25,7 @@ const notes = (existsSync(memories) ? readdirSync(memories) : []).map((f) => ({ 
 notes.sort((x, y) => x.mtime - y.mtime || x.name.localeCompare(y.name));
 const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8"));
 const proposals = join(process.env.AKM_STATE_DIR, "proposals.json");
-const what = /FAKE: ([a-z-]+)/.exec(notes.map((n) => n.text).join("\\n"))?.[1];
+const what = /FAKE: ([a-z0-9-]+)/.exec(notes.map((n) => n.text).join("\\n"))?.[1];
 const has = (flag) => args.includes(flag);
 const json = (o) => console.log(JSON.stringify(o));
 const proposal = (name, extra = {}) => ({ id: "p-" + name, ref: "bundle//memories/" + name, status: "pending", source: "consolidate-pair", retirement: { retiredRef: "memories/" + name, successorRef: "memories/other", judgeLabel: "duplicate", judgeReason: "same claims" }, ...extra });
@@ -45,6 +45,14 @@ if (cmd === "index") {
   else if (what === "retire-outsider") list = [proposal("not-in-the-pair")];
   else if (what === "keep") result = pass({ labelCounts: { overlap: 1 } });
   else if (what === "promote") { list = [{ id: "p-promote", ref: "bundle//knowledge/x", status: "pending", source: "consolidate" }]; result = pass({ labelCounts: { overlap: 1 } }); }
+  else if (what?.startsWith("limited-")) {
+    // the endpoint turns the first N tries of a case away: the count is kept outside the sandbox, which each try makes anew
+    const file = join(process.env.FAKE_COUNTER_DIR, notes[0].name + ".count");
+    const seen = existsSync(file) ? Number(readFileSync(file, "utf8")) : 0;
+    writeFileSync(file, String(seen + 1));
+    if (seen < Number(what.slice(8))) { console.error("LLM request rate limited (429) https://example.test/v1/chat/completions"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
+    else list = [proposal(notes[0].name)];
+  }
   else if (what === "no-verdict") { console.error("[consolidate] chunk 1/1 (2 memories) …"); console.error("Network error: Unable to connect. Is the computer able to access the url?"); console.error("  consolidate  judge  m  2  2  0  0  0  2"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
   else result = pass({ pairsConsidered: 0, pairsJudged: 0, labelCounts: {} });
   writeFileSync(proposals, JSON.stringify(list));
@@ -71,7 +79,8 @@ function setup(cases: Case[]) {
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
   const newSandbox = () => ({ ...createSandbox("consolidate-test", { keepModelKey: true }), cmd: ["bun", script] });
-  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
+  process.env.FAKE_COUNTER_DIR = root;
+  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", rateLimitWaitMs: 1 };
   return { ctx, folders: { assets, results: join(root, "results") }, root };
 }
 
@@ -181,6 +190,31 @@ describe("runCorpus", () => {
     const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 3 }, folders));
     expect(summary).toMatchObject({ limit: 3, n_cases: 4, n_run: 3 });
     expect(resultsOf(folders).rows.map((r) => r.id)).toEqual(["d1", "s1", "o1"]);
+  });
+
+  test("tries a rate limited case again after a wait, and says how many tries it took", async () => {
+    const { ctx, folders } = setup([mk("l1", "duplicate", "limited-2"), mk("d1", "duplicate", "retire-older")]);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(summary).toMatchObject({ n_run: 2, n_scored: 2, n_errored: 0 });
+    const { rows } = resultsOf(folders);
+    expect(rows[0]).toMatchObject({ id: "l1", outcome: "retire", retired: "a", safe: true, retried: 2 });
+    expect(rows[1].retried).toBeUndefined();
+  });
+
+  test("stops the run when the endpoint is still rate limiting after the new tries", async () => {
+    const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older"), mk("l1", "duplicate", "limited-99"), mk("d2", "duplicate", "retire-older")]);
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("still rate limiting after 4 new tries of a case, so the run stopped after 2 of 3 cases");
+    const { rows, summary } = resultsOf(folders);
+    expect(rows.map((r) => r.id)).toEqual(["d1", "l1"]);
+    expect(rows[1]).toMatchObject({ outcome: "error", retried: 4 });
+    expect(rows[1].error).toContain("429");
+    expect(summary).toMatchObject({ n_run: 2, n_scored: 1, n_errored: 1 });
+  });
+
+  test("does not try a case again for any other error", async () => {
+    const { ctx, folders } = setup([mk("e1", "overlap", "crash"), mk("d1", "duplicate", "retire-older")]);
+    await quiet(() => runCorpus("public", ctx, folders));
+    expect(resultsOf(folders).rows[0].retried).toBeUndefined();
   });
 
   test("stops early when no case gets a verdict, and says what to check", async () => {

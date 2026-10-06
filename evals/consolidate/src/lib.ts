@@ -44,7 +44,8 @@ export interface Row {
   staged: boolean; // akm staged the retirement, so a triage run would accept it with no one looking
   reason: string; // the judge's reason for a retirement
   served: Record<string, number>; // the model names the endpoint reported, with the calls each answered
-  seconds: number;
+  seconds: number; // the last try
+  retried?: number; // how many times the case was tried again because the endpoint rate limited it
   error?: string;
 }
 

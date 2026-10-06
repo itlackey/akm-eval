@@ -16,6 +16,8 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const INDEX_TIMEOUT_MS = 2 * 60_000;
 const IMPROVE_TIMEOUT_MS = 30 * 60_000; // up to three model calls on a slow local model
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
+const RATE_LIMIT_TRIES = 4; // times a case is tried again when the endpoint rate limits it
+const RATE_LIMIT_WAIT_MS = 10_000; // the wait before the first new try, doubled before each one after it
 
 const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--label NAME]
 
@@ -143,14 +145,17 @@ export function writeNotes(sandbox: Sandbox, c: Case): void {
 
 /** The first line akm printed that looks like a failure, to say why its judge gave no verdict. */
 export function failureHint(stderr: string): string {
-  const line = stderr.split("\n").find((l) => /^[A-Za-z]/.test(l) && /error|fail|refus|unauthori|unable|invalid|timed out|not found/i.test(l));
+  const line = stderr.split("\n").find((l) => /^[A-Za-z]/.test(l) && /error|fail|refus|unauthori|unable|invalid|timed out|not found|rate.?limit/i.test(l));
   return line ? ` (akm said: ${line.trim().slice(0, 150)})` : "";
 }
 
-type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number };
+type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; rateLimitWaitMs?: number };
 
-/** One case: a fresh sandbox with the pair as its bundle, indexed, consolidate run on it, and the proposals read back. */
-async function runCase(c: Case, ctx: Context): Promise<Row> {
+/** akm says so when the endpoint turns a call away for sending too many. */
+const isRateLimited = (text: string): boolean => /rate.?limit|\(429\)/i.test(text);
+
+/** One try at a case: a fresh sandbox with the pair as its bundle, indexed, consolidate run on it, and the proposals read back. */
+async function tryCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: boolean }> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = ctx.newSandbox();
@@ -163,11 +168,21 @@ async function runCase(c: Case, ctx: Context): Promise<Row> {
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
     const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
     const row = rowFromRun(c, JSON.parse(improve.stdout), proposals, seconds());
-    return row.error ? { ...row, error: row.error + failureHint(improve.stderr) } : row;
+    return { row: row.error ? { ...row, error: row.error + failureHint(improve.stderr) } : row, rateLimited: row.outcome === "error" && isRateLimited(improve.stderr) };
   } catch (e) {
-    return errorRow(c, (e as Error).message.slice(0, 300), seconds());
+    const message = (e as Error).message.slice(0, 300);
+    return { row: errorRow(c, message, seconds()), rateLimited: isRateLimited(message) };
   } finally {
     removeSandbox(sandbox);
+  }
+}
+
+/** A case, tried again after a wait when the endpoint rate limits it. `rateLimited` is true when it still did on the last try. */
+async function runCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: boolean }> {
+  for (let tries = 0; ; tries++) {
+    const { row, rateLimited } = await tryCase(c, ctx);
+    if (!rateLimited || tries === RATE_LIMIT_TRIES) return { row: tries > 0 ? { ...row, retried: tries } : row, rateLimited };
+    await Bun.sleep((ctx.rateLimitWaitMs ?? RATE_LIMIT_WAIT_MS) * 2 ** tries);
   }
 }
 
@@ -198,12 +213,18 @@ export async function runCorpus(
   let consecutiveErrors = 0;
   let anyVerdict = false;
   let aborted: string | undefined;
+  let limited = false;
   for (const c of cases) {
-    const row = await runCase(c, ctx);
+    const { row, rateLimited } = await runCase(c, ctx);
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     const result = row.outcome === "retire" ? `retired ${row.retired} (${row.safe ? "safe" : "UNSAFE"})` : row.outcome;
-    console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.relation.padEnd(10)} ${result.padEnd(20)} ${row.paired ? "paired" : "unpaired"} ${row.seconds}s  ${c.id}${row.error ? `  ${row.error.slice(0, 120)}` : ""}`);
+    console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.relation.padEnd(10)} ${result.padEnd(20)} ${row.paired ? "paired" : "unpaired"} ${row.seconds}s  ${c.id}${row.retried ? `  after ${row.retried} rate limited ${row.retried === 1 ? "try" : "tries"}` : ""}${row.error ? `  ${row.error.slice(0, 120)}` : ""}`);
+    if (rateLimited) {
+      limited = true;
+      aborted = row.error;
+      break;
+    }
     if (row.outcome === "error") {
       consecutiveErrors++;
       if (!anyVerdict && consecutiveErrors >= GIVE_UP_AFTER) {
@@ -239,6 +260,7 @@ export async function runCorpus(
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
+  if (limited) fail(`the endpoint was still rate limiting after ${RATE_LIMIT_TRIES} new tries of a case, so the run stopped after ${rows.length} of ${cases.length} cases. Last error: ${aborted}\nWait and run it again, or use an endpoint with room.`, 1);
   if (aborted) fail(`the first ${GIVE_UP_AFTER} cases got no verdict, so the run stopped. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm is 0.9.26.`, 1);
   if (summary.n_scored > 0 && paired === 0) fail("akm paired none of the notes, so its judge never ran. Consolidate needs semantic search, which this eval gets from akm's deterministic embedder (AKM_EMBED_DETERMINISTIC). Does this akm still have it?", 1);
   return summary;

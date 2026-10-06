@@ -35,7 +35,7 @@ The private run reads `private/consolidate/assets/`. Make it first with `./gener
 Each run writes two files to `evals/consolidate/results/<UTC date>-<label>/`, or to `private/consolidate/results/` for the private corpus:
 
 - `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name and the names the endpoint reported for its calls (a gateway may serve one name from several providers), the akm version, the corpus and the git commit.
-- `samples.jsonl`: one line per case, with the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason and the time it took.
+- `samples.jsonl`: one line per case, with the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason, the time it took and, when the endpoint rate limited the case, how many times it was tried again.
 
 ## What it needs from a model
 
@@ -43,6 +43,7 @@ Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME
 
 - It must follow an instruction to return one JSON object. akm asks for JSON that fits a schema, retries without the schema if the endpoint refuses it, and retries once more when it cannot read the reply. A pair that still gets no verdict counts as errored.
 - A call is about 1k tokens, so any context length will do.
+- A hosted endpoint may rate limit. When akm reports a 429, the eval waits 10 seconds and tries the case again, doubling the wait each time, up to four more times. If the endpoint is still limiting, the run stops and says so.
 - akm asks the server to turn thinking off. A model that thinks anyway is slow. If yours does, turn it off in the server.
 - A case is up to three calls: the pair judge, the second look at a duplicate that is about to be staged, and the other pass's proposal for the memories. On a 27B model a case takes 10 to 25 seconds, and the 60 cases about 15 minutes. The eval runs one case at a time.
 
