@@ -221,7 +221,10 @@ export const lessonFile = (c: Pick<LoadedCase, "name">): string => {
 
 // ---- What akm did ----------------------------------------------------------------------------------------------
 
-/** What distill did: it proposed a lesson, skipped the memory, had the lesson rejected by its judge, made one that is not valid, or failed. */
+/**
+ * What distill did: it proposed a lesson, skipped the memory, had the lesson rejected by its judge, made a lesson
+ * that is not valid or that akm could not queue, or failed.
+ */
 export type Outcome = "lesson" | "skipped" | "rejected" | "invalid" | "error";
 export type Verdict = "good" | "bad" | "missed" | "right" | "wrong" | "error";
 
@@ -276,9 +279,12 @@ export function distillOutcome(improve: unknown): { outcome: Outcome; detail: st
         return { outcome: "rejected", detail: text(result.reason) };
       case "validation_failed":
         return { outcome: "invalid", detail: text(result.error) };
-      case "queued":
       case "review_needed":
-        return { outcome: "error", detail: `akm said it queued a lesson, and the queue holds none` };
+        // akm sends the lesson to review and then queues it. When the proposal is refused, as for a lesson with an
+        // invalid description, it reports review_needed all the same, and the queue holds nothing.
+        return { outcome: "invalid", detail: text(result.reason) || "akm could not queue the lesson for review" };
+      case "queued":
+        return { outcome: "error", detail: "akm said it queued a lesson, and the queue holds none" };
       default:
         return { outcome: "error", detail: text(result.message) || `distill ended ${text(result.outcome)}` };
     }
@@ -303,6 +309,8 @@ export interface Row {
   missing: string[];
   forbidden: string[];
   ratio: number | null;
+  /** The model names the endpoint reported for the case's calls, from akm's usage report. A gateway may serve one name with another model. */
+  served: string[];
   seconds: number;
   error?: string;
 }
@@ -315,12 +323,18 @@ export interface CaseRun {
 }
 
 export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null, seconds, error: message };
+  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null, served: [], seconds, error: message };
+}
+
+/** The model names the endpoint reported for the calls in `akm improve`'s result. */
+export function servedModels(improve: unknown): string[] {
+  const rows = ((improve ?? {}) as { usageReport?: { byProcessEngineModel?: { model?: unknown }[] } }).usageReport?.byProcessEngineModel ?? [];
+  return [...new Set(rows.map((r) => r.model).filter((m): m is string => typeof m === "string" && m !== ""))].sort();
 }
 
 /** Score a case from what akm did. The queue decides whether a lesson was proposed. */
 export function scoreCase(c: LoadedCase, run: CaseRun): Row {
-  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null };
+  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null };
   const proposal = run.proposals[0];
   if (proposal) {
     const lesson = lessonText(proposal.content);

@@ -30,7 +30,8 @@ if (args[0] === "improve") {
   if (fake.exit) { console.error(JSON.stringify({ ok: false, error: fake.error, code: "FAKE" })); process.exit(fake.exit); }
   if (fake.stdout !== undefined) { console.log(fake.stdout); process.exit(0); }
   if (fake.proposal) writeFileSync(join(state, "proposals.json"), JSON.stringify([fake.proposal]));
-  console.log(JSON.stringify({ ok: true, actions: [{ mode: "reflect-skipped", result: { ok: true, reason: "process-disabled" } }, { mode: "distill", result: fake.result }] }));
+  const usageReport = fake.served ? { usageReport: { byProcessEngineModel: fake.served.map((model) => ({ process: "distill", engine: "model", model, calls: 1 })) } } : {};
+  console.log(JSON.stringify({ ok: true, ...usageReport, actions: [{ mode: "reflect-skipped", result: { ok: true, reason: "process-disabled" } }, { mode: "distill", result: fake.result }] }));
   process.exit(0);
 }
 if (args[0] === "proposal" && args[1] === "list") {
@@ -123,8 +124,8 @@ const samplesIn = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf
 
 describe("runCorpus", () => {
   const scenarios: Scenario[] = [
-    { id: "a-good", class: "lesson-worthy", fake: { result: { outcome: "queued" }, proposal: proposal(GOOD) } },
-    { id: "b-over", class: "over-claim", fake: { result: { outcome: "queued" }, proposal: proposal(`${GOOD} ${BAD}`) } },
+    { id: "a-good", class: "lesson-worthy", fake: { result: { outcome: "queued" }, proposal: proposal(GOOD), served: ["served-a"] } },
+    { id: "b-over", class: "over-claim", fake: { result: { outcome: "queued" }, proposal: proposal(`${GOOD} ${BAD}`), served: ["served-b", "served-a"] } },
     { id: "c-missed", class: "lesson-worthy", fake: { result: { outcome: "quality_rejected", reason: "restates the memory", score: 2 } } },
     { id: "d-wrong", class: "dated-status", fake: { result: { outcome: "queued" }, proposal: proposal("A status.") } },
     { id: "e-skip", class: "duplicate-lesson", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
@@ -155,6 +156,8 @@ describe("runCorpus", () => {
     expect(rows[4].detail).toBe("lesson_exists");
     expect(rows[7].error).toBe("no usable output");
     expect(summary).toMatchObject({ eval: "distill", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 8, n_run: 8, n_scored: 7, n_errored: 1, limit: null });
+    expect(rows.map((r) => r.served)).toEqual([["served-a"], ["served-a", "served-b"], [], [], [], [], [], []]);
+    expect(summary.served_models).toEqual(["served-a", "served-b"]);
     expect(summary.metrics.good_lessons).toEqual({ n: 3, good: 1, rate: 0.3333 });
     expect(summary.metrics.wrong_lessons).toEqual({ n: 4, wrong: 2, rate: 0.5 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
@@ -210,19 +213,21 @@ describe("runCorpus", () => {
     expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2 });
   });
 
-  test("stops after five cases in a row that errored, before any that did not", async () => {
+  test("stops after five cases in a row that errored, and keeps what it has", async () => {
     const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("the first 5 cases errored");
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 cases in a row errored, so the run stopped after 5 of 7");
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     expect(samplesIn(dir)).toHaveLength(5);
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
   });
 
-  test("a case that ran before an error does not let the error stop the run", async () => {
-    const folders = assetsFor([
-      { id: "ok", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
-      ...Array.from({ length: 6 }, (_, i) => ({ id: `e${i}`, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } })),
-    ]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
-    expect(summary).toMatchObject({ n_run: 7, n_errored: 6 });
+  test("also stops when the errors start after cases that were scored, but not for errors that are not in a row", async () => {
+    const ok = (id: string) => ({ id, class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } });
+    const bad = (id: string) => ({ id, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } });
+    const late = assetsFor([ok("a"), ...Array.from({ length: 6 }, (_, i) => bad(`e${i}`))]);
+    await expect(quiet(() => runCorpus("public", ctx, late))).rejects.toThrow("stopped after 6 of 7");
+    const scattered = assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")]);
+    const summary = await quiet(() => runCorpus("public", ctx, scattered));
+    expect(summary).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6 });
   });
 });

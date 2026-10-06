@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, checkLesson, claims, distillConfig, distillOutcome, errorRow, failureMessage, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, normalize, scoreCase, selectCases } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, checkLesson, claims, distillConfig, distillOutcome, errorRow, failureMessage, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, normalize, scoreCase, selectCases, servedModels } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -245,6 +245,7 @@ describe("distillConfig", () => {
   test("one LLM engine at temperature 0 with no thinking, and a strategy that runs distill and nothing else", () => {
     const c = distillConfig("http://localhost:8080/v1/", "m", false);
     expect(c.engines.model).toMatchObject({ kind: "llm", endpoint: "http://localhost:8080/v1/chat/completions", model: "m", temperature: 0, enableThinking: false });
+    expect(c.engines.model.supportsJsonSchema).toBeUndefined();
     expect(c.engines.model.apiKey).toBeUndefined();
     expect(c.defaults).toMatchObject({ llmEngine: "model", improveStrategy: "distill-only" });
     const processes = c.improve.strategies["distill-only"].processes;
@@ -292,6 +293,8 @@ describe("what akm did", () => {
     expect(outcome({ ok: false, outcome: "validation_failed", error: "no when_to_use" })).toEqual({ outcome: "invalid", detail: "no when_to_use" });
     expect(outcome({ ok: true, outcome: "llm_failed", message: "no usable output" })).toEqual({ outcome: "error", detail: "no usable output" });
     expect(outcome({ ok: true, outcome: "config_disabled", message: "disabled" })).toEqual({ outcome: "error", detail: "disabled" });
+    expect(outcome({ ok: true, outcome: "review_needed", reason: "invalid description" })).toEqual({ outcome: "invalid", detail: "invalid description" });
+    expect(outcome({ ok: true, outcome: "review_needed" })).toEqual({ outcome: "invalid", detail: "akm could not queue the lesson for review" });
     expect(outcome({ ok: true, outcome: "queued" }).outcome).toBe("error");
     expect(outcome({ ok: true, reason: "process-disabled" }, "distill-skipped")).toEqual({ outcome: "error", detail: "distill did not run: process-disabled" });
     expect(outcome({ ok: false, error: "boom" }, "error")).toEqual({ outcome: "error", detail: "boom" });
@@ -325,6 +328,16 @@ describe("what akm did", () => {
     const review = { outcome: "review_needed", reason: "mean of 3", score: 3 };
     const row = scoreCase(status, run([queued("Body.", { status: "rejected", gate: "deferred/quality-review", reason: null, scores: null })], review));
     expect(row).toMatchObject({ verdict: "wrong", status: "rejected", detail: "deferred/quality-review: mean of 3" });
+  });
+
+  test("servedModels reads the names the endpoint reported from akm's usage report", () => {
+    const usage = (...models: unknown[]) => ({ usageReport: { byProcessEngineModel: models.map((model) => ({ process: "distill", model })) } });
+    expect(servedModels(usage("gpt-oss:120b", "openai/gpt-oss-120b", "gpt-oss:120b"))).toEqual(["gpt-oss:120b", "openai/gpt-oss-120b"]);
+    expect(servedModels(usage(undefined, "", 7))).toEqual([]);
+    expect(servedModels({ usageReport: { noCalls: [] } })).toEqual([]);
+    expect(servedModels(null)).toEqual([]);
+    const row = scoreCase(status, { improve: { ...usage("m-1"), actions: [{ mode: "distill", result: { outcome: "skipped", skipReason: "lesson_exists" } }] }, proposals: [], seconds: 1 });
+    expect(row.served).toEqual(["m-1"]);
   });
 
   test("scoreCase: a failed run is an error, whatever the case expects", () => {

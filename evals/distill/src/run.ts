@@ -15,7 +15,7 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two model calls
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
-const GIVE_UP_AFTER = 5; // consecutive cases that errored, before any case that did not
+const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
 const USAGE = `Usage: evals/distill/run [--corpus public|private|all] [--limit N] [--label NAME]
 
@@ -39,6 +39,8 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The model names the endpoint said answered. A gateway may serve one name with another model. */
+  served_models: string[];
   limit: number | null;
   n_cases: number;
   n_run: number;
@@ -82,7 +84,8 @@ function makeResultsDir(parent: string, label: string): string {
 
 function printSummary(s: Summary): void {
   const m = s.metrics;
-  console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
+  const served = s.served_models.length > 0 && s.served_models.join() !== s.model ? ` (served as ${s.served_models.join(", ")})` : "";
+  console.log(`\n${NAME} (${s.corpus}) | model ${s.model}${served} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
   console.log(`  good lessons   ${m.good_lessons.good}/${m.good_lessons.n}  ${pct(m.good_lessons.rate)}   of the cases that expect a lesson`);
   console.log(`  wrong lessons  ${m.wrong_lessons.wrong}/${m.wrong_lessons.n}  ${pct(m.wrong_lessons.rate)}   of the cases that expect none`);
   for (const [klass, c] of Object.entries(m.by_class)) console.log(`    ${klass.padEnd(16)} ${c.good !== undefined ? `${c.good}/${c.n} good` : `${c.wrong}/${c.n} wrong`}`);
@@ -148,7 +151,6 @@ export async function runCorpus(
 
   const rows: Row[] = [];
   let consecutiveErrors = 0;
-  let anyScored = false;
   let aborted: string | undefined;
 
   for (const c of cases) {
@@ -157,15 +159,10 @@ export async function runCorpus(
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     const shown = row.verdict === "error" ? `error  ${row.error?.slice(0, 120)}` : `${row.verdict.padEnd(6)} ${row.outcome}${row.detail ? ` (${row.detail.slice(0, 60)})` : ""}`;
     console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.id.padEnd(10)} ${row.seconds}s  ${shown}`);
-    if (row.verdict === "error") {
-      consecutiveErrors++;
-      if (!anyScored && consecutiveErrors >= GIVE_UP_AFTER) {
-        aborted = row.error;
-        break;
-      }
-    } else {
-      anyScored = true;
-      consecutiveErrors = 0;
+    consecutiveErrors = row.verdict === "error" ? consecutiveErrors + 1 : 0;
+    if (consecutiveErrors >= GIVE_UP_AFTER) {
+      aborted = row.error;
+      break;
     }
   }
 
@@ -178,6 +175,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    served_models: [...new Set(rows.flatMap((r) => r.served))].sort(),
     limit: ctx.limit ?? null,
     n_cases: all.length,
     n_run: rows.length,
@@ -189,7 +187,7 @@ export async function runCorpus(
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (aborted) fail(`the first ${GIVE_UP_AFTER} cases errored, so the run stopped. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env.`, 1);
+  if (aborted) fail(`${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
   return summary;
 }
 
