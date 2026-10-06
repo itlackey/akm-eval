@@ -109,8 +109,8 @@ benchmarks/skillret fetches it at run time from the revision pinned in
 benchmarks/skillret/assets/ASSETS.lock, and git ignores it.
 
 benchmarks/skillret/src/published.ts and the README of benchmarks/skillret hold
-some of the numbers that SkillRet reports for other retrievers (its Table 3),
-for comparison. They are the authors' results, not ours. The metrics in
+some of the numbers that SkillRet reports for other retrievers (its Tables 3 and
+5), for comparison. They are the authors' results, not ours. The metrics in
 benchmarks/skillret/src/score.ts are written here from their definitions and
 checked against pytrec_eval, as SkillRet's own code uses it. No code is copied.
 
