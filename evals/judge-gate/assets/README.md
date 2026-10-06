@@ -68,4 +68,4 @@ unchanged.
 
 ## License
 
-Like the rest of the assets in this repository, the cases are licensed under CC BY 4.0; see [LICENSE](../../../corpus/LICENSE).
+Like the rest of this repository, the cases are licensed under MPL-2.0; see [LICENSE](../../../LICENSE). They were first published in akm-model-eval under CC BY 4.0.

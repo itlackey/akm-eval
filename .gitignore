@@ -1,4 +1,4 @@
-private/
+/private
 .env
 node_modules
 .venv

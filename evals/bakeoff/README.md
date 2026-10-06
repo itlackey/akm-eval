@@ -99,4 +99,4 @@ The cases, the files and the scorers are from [akm-model-eval](https://github.co
 
 ## Licence
 
-The assets are CC BY 4.0. See `LICENSE`.
+MPL-2.0, like the rest of this repository. See `../../LICENSE`.

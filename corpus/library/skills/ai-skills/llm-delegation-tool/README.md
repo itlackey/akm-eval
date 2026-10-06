@@ -113,4 +113,4 @@ See [references/configuration-examples.md](references/configuration-examples.md)
 
 ## License
 
-CC-BY
+MPL-2.0

@@ -126,9 +126,9 @@ commands.
 
 ## Licence
 
-Everything here is CC BY 4.0. See `../LICENSE`. The items under another licence
-are listed in `../NOTICE`: the OpenCode documentation pages (MIT), one ICC colour
-profile, and the agent-cli-tools skill (MIT).
+Everything here is MPL-2.0, like the rest of this repository. See `../../LICENSE`.
+The items under another licence are listed in `../../NOTICE`: the OpenCode
+documentation pages (MIT) and one ICC colour profile.
 
 ## Conventions for contributors
 

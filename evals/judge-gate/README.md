@@ -52,7 +52,7 @@ The eval runs akm in a temporary folder with its own config, so it never reads o
 
 ## Assets
 
-- `assets/cases.jsonl`: 106 real reflect proposals, each labelled by review. 28 are good and 78 are bad. The fields, the labelling rubric and how the cases were scrubbed are in `assets/README.md`. The cases are licensed CC BY 4.0, and carry a canary string: do not train on them.
+- `assets/cases.jsonl`: 106 real reflect proposals, each labelled by review. 28 are good and 78 are bad. The fields, the labelling rubric and how the cases were scrubbed are in `assets/README.md`. The cases carry a canary string: do not train on them.
 - `private/judge-gate/assets/cases.jsonl`: the same cases with names, hosts, ids and dates rewritten from a seed by `lib/rewrite`. Labels and diffs are kept. Each case's source, candidate, feedback and label reason are rewritten with one mapping, so a name changes the same way in all of them. It is made by `generate` and never published.
 
 ## Read the results
@@ -81,4 +81,4 @@ A model may have seen the public cases in training. A much better public score t
 
 ## Licence
 
-The assets are CC BY 4.0. See `LICENSE`.
+MPL-2.0, like the rest of this repository. See `../../LICENSE`.

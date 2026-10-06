@@ -11,7 +11,7 @@ metadata:
   author: akm-shared contributors
   version: "1.1.0"
   created: 2026-05-22
-license: MIT
+license: MPL-2.0
 compatibility: Requires Bash. Individual tools need their own install (see references/).
 allowed-tools: Bash Read
 updated: 2026-09-15

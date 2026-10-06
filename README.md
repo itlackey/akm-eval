@@ -30,11 +30,11 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 
 ```
 README.md          this file
+LICENSE            MPL-2.0, for everything here
+NOTICE             third-party items under their own licences
 generate-assets    makes every eval's private assets in private/
 .env.example       model and judge settings
 corpus/library/    the shared akm bundle (a working akm library)
-corpus/LICENSE     CC BY 4.0
-corpus/NOTICE      items under another licence, with attribution
 evals/             our evals
 benchmarks/        published benchmarks
 lib/rewrite/       the seeded rewrite the generate scripts share
@@ -79,11 +79,9 @@ Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scr
 
 Run private evals on a local model, or on an API that does not train on your data. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
-## Licences
+## Licence
 
-- Code is MPL-2.0. See `LICENSE`.
-- The corpus and the eval assets are CC BY 4.0. See `corpus/LICENSE`. Items under another licence are listed in `corpus/NOTICE`.
-- Third-party benchmark data is fetched when you run the benchmark. It is never committed here and stays under its own licence.
+Everything here, code and assets alike, is MPL-2.0. See `LICENSE`. The few third-party items keep their own licences and are listed in `NOTICE`. Third-party benchmark data is fetched when you run the benchmark; it is never committed here and stays under its own licence.
 
 ## Use the library as an akm bundle
 
