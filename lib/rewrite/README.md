@@ -4,7 +4,7 @@ A seeded rewrite of the names, tool names, hosts, ids, dates, numbers and versio
 
 The same original always gets the same replacement, in every file of one run. The mapping is written out, so labels, cases and queries can be rewritten to match.
 
-Most of a text is ordinary prose, and the rewrite leaves prose alone. On this repository's own evals it changes about 3 to 5 percent of the words (it changed under 1 percent before numbers, versions and tool names).
+Most of a text is ordinary prose, and the rewrite leaves prose alone. On this repository's own evals it changes about 3 to 5 percent of the words. Before it rewrote numbers, versions and tool names it changed about 1 percent of them in most evals.
 
 ## Use
 
@@ -41,7 +41,7 @@ The same seed and the same input always give the same output. Run `bun test lib/
 - Dates. Every date moves by the same number of days, so gaps and order are kept.
 - File and folder names, with the same map, so links between files still resolve. Extensions are kept.
 
-Every replacement keeps the length of what it replaces: a renamed word has the same number of letters, a number has the same digits, so a field that must be 20 to 400 characters long still is.
+A renamed word has the same number of letters as the word it replaces, and a changed number has the same digits, so a field that must be 20 to 400 characters long still is.
 
 ## What it leaves
 
@@ -55,17 +55,17 @@ Every replacement keeps the length of what it replaces: a renamed word has the s
 
 ## Tool names
 
-A tool, product, vendor or project name is renamed everywhere. A short list of terms is kept, because the text's meaning rests on them: a reader, or a model, has to know what `git rebase`, `YAML` or `HTTP 404` mean for the text to make sense. The list is `TECH` in `lexicon.ts`:
+A tool, product, vendor or project name is renamed everywhere. A short list of terms is kept, because the text's meaning rests on them: a reader, or a model, has to know what `git rebase`, `YAML` or `HTTP 404` mean for the text to make sense. This is the keep list. It is `TECH` in `lexicon.ts`:
 
-- Programming languages and shells: Python, Java, JavaScript, TypeScript, Rust, Go, Ruby, PHP, Swift, Kotlin, bash, zsh, SQL, HTML, CSS and the like.
-- File formats and standard file names: Markdown, YAML, JSON, JSONL, TOML, XML, CSV, PDF, PNG, SVG, README, LICENSE, Dockerfile, Makefile and the like.
-- Protocols and standards: HTTP, HTTPS, FTP, SMTP, SSH, TLS, DNS, TCP, UDP, gRPC, WebSocket, OAuth, SAML, JWT, MCP, LSP and the like.
-- Operating systems: Linux, Ubuntu, Debian, macOS, Windows, Android, iOS and the like.
-- Core commands and package managers: git, grep, sed, awk, curl, wget, jq, tar, sudo, cron, make, node, npm, npx, pip, cargo, apt, brew and the like.
-- The words of programming: string, number, boolean, null, array, object, map, set, promise.
-- Names of tools that are also ordinary words: next, signal, apple, notion, zoom, slack, cursor, terminal, compose, edge and the like. Renaming one would change the prose around it.
+- Programming languages and shells: python java javascript typescript rust go golang ruby php swift kotlin scala perl lua haskell elixir erlang clojure dart julia bash zsh fish sh powershell sql html css sass scss csharp cpp objective fortran cobol assembly wasm webassembly solidity matlab
+- File formats and standard file names: markdown yaml json jsonl toml xml csv tsv graphql protobuf latex openapi pdf png jpeg jpg gif svg webp mp3 mp4 zip gz tgz iso unicode ascii utf readme license licence changelog makefile dockerfile gemfile procfile
+- Protocols and standards: http https ftp smtp imap oauth saml jwt ssh ssl tls ntp dns dhcp tcp udp grpc websocket kerberos mcp acp lsp
+- Operating systems: linux ubuntu debian fedora centos rhel arch alpine nixos macos windows android ios wsl
+- Core commands and package managers: git grep sed awk curl wget jq yq tar gzip unzip chmod chown sudo rsync cron crontab systemd apt brew yum dnf pacman snap flatpak make cmake ninja gcc clang llvm rustc node nodejs npm npx pip cargo
+- The words of programming: promise array map set object string number boolean null undefined
+- Names of tools that are also ordinary words, so renaming one would change the prose around it: next solid express flask spring rails expo fly railway harbor beam bench swe tau goose zed paged terminal compose cursor signal matrix meta edge together teams linear zoom notion slack discord chef puppet vagrant packer apple amazon google intel arm risc amd excel word outlook sap grok pillow webview chroma pulsar zookeeper prettier bootstrap rollup storybook mocha helm drizzle transformers lambda llama
 
-Everything else in `TOOLS` is renamed: runtimes and package managers other than the core ones (Bun, Deno, pnpm, Yarn, uv), frameworks and libraries (React, Svelte, Playwright, Django, NumPy), infrastructure and services (Docker, Kubernetes, GitHub, AWS, Postgres, Redis, Kafka), AI vendors, models and tools (OpenAI, Claude, Qwen, Ollama, Codex), editors and apps, and the projects of this repository's own evals (akm, gutterpress, pagedjs). A tool that is not in the lists is only renamed when it also looks like a name (see "How names are found"). Add a tool to `TOOLS`, or a word to `TECH`, to change what is renamed.
+Everything in `TOOLS` is renamed. That is about 230 names: runtimes and package managers other than the core ones (Bun, Deno, pnpm, Yarn, uv), frameworks and libraries (React, Svelte, Playwright, Django, NumPy), infrastructure and services (Docker, Kubernetes, GitHub, AWS, Postgres, Redis, Kafka), AI vendors, models and tools (OpenAI, Claude, Qwen, Ollama, Codex), editors and apps, and the projects of this repository's own evals (akm, gutterpress, pagedjs). A tool that is in neither list is only renamed when it also looks like a name (see "How names are found"). Add a tool to `TOOLS`, or a word to `TECH`, to change what is renamed.
 
 A renamed tool gets a pronounceable word of the same length. `Qwen3` follows `qwen`: the digit stays.
 
