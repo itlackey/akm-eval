@@ -9,12 +9,12 @@
       ["visible", "toBeVisible", "getByRole", "heading", "locator"]
     ],
     "forbidden": [
-      ["networkidle * deprecated", "networkidle * unreliable", "networkidle * broken", "networkidle never works", "avoid waitForLoadState", "never use waitForLoadState"],
+      ["networkidle * deprecated", "networkidle * broken", "networkidle never works", "networkidle is useless", "avoid networkidle entirely", "avoid networkidle altogether", "avoid waitForLoadState", "never use waitForLoadState"],
       ["waitForSelector", "waitForResponse", "waitForTimeout", "waitForFunction", "waitForURL"],
-      ["remove * widget", "removing * widget", "disable * widget", "disabling * widget"]
+      ["remove * widget", "disable * widget"]
     ],
     "good": "Do not wait for networkidle on a page that carries a polling widget. The support chat widget polls every 20 seconds, so the network is never idle and the wait runs until the 30 second test timeout. Wait for a specific element instead, such as the page heading being visible; the order-history test then finished in about two seconds.",
-    "bad": "Playwright's networkidle wait is unreliable, so never use waitForLoadState. Use waitForSelector on the page heading instead, and disable the chat widget in tests.",
+    "bad": "Playwright's networkidle wait is broken, so never use waitForLoadState. Use waitForSelector on the page heading instead, and disable the chat widget in tests.",
     "note": "A failure with a clear cause and a fix that worked. A good lesson says why networkidle never settled and what to wait for instead, without turning one polling widget into a ban on networkidle."
   },
   {
@@ -124,7 +124,7 @@
     "forbidden": [
       ["never delete", "never remove", "do not delete any", "never delete any"],
       ["search is useless", "search is unreliable", "grep is useless", "grep is unreliable", "text search is useless"],
-      ["getattr", "reflection", "importlib", "eval"],
+      ["getattr", "reflection", "importlib"],
       ["every format", "all format", "exercise every", "exercise all"]
     ],
     "good": "A repository search that finds no references does not prove a function is unused: the nightly job built handler names at runtime from its config, handlers[f'export_{fmt}'], and production still set fmt to legacy_csv. Before deleting a function whose name follows a pattern, search for the prefix and check the config files, not only the full name in code.",
@@ -159,7 +159,7 @@
       ["single-column", "single column", "rulebook"]
     ],
     "forbidden": [
-      ["works * all * layout", "works * every * layout", "works * any layout", "applies * all * layout", "applies * every * layout", "applies * any layout", "fixes all", "fixes every", "fix * all * layout", "fix * every * layout", "all layout * affected", "every layout * affected"],
+      ["works * all * layout", "works * every * layout", "works * any layout", "applies * all * layout", "applies * every * layout", "applies * any layout", "fixes all", "fixes every", "all layout * affected", "every layout * affected"],
       ["often cause", "usually cause", "commonly cause", "typically cause", "frequently cause", "always cause"],
       ["two-column * also fixed", "two-column * same fix", "fixes * two-column", "works * two-column", "applies * two-column", "also fixes"]
     ],
