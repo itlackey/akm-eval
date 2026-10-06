@@ -94,6 +94,7 @@ A model may have seen the public cases in training. A much better public score t
 ## Notes
 
 - The shipped judge changes with akm. Compare results only between runs with the same akm version.
+- akm's errors name the URL it called. The eval writes `<MODEL_BASE_URL>` in its place, in `samples.jsonl` and on the console, so results can be shared.
 - consolidate's other pass also calls the model for each case, and may propose promoting a memory to knowledge. Those proposals are never read, accepted or counted.
 - The notes are dated by file time, 3 days and 1 day old, or 2 days each for a pair from one day, because the sandbox bundle is not a git repository. akm shows its judge each note's date, calls the older note A, and retires the older note of a duplicate or a replacement.
 

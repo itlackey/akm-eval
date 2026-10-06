@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import type { Case, Relation } from "./lib.ts";
-import { failureHint, runCorpus, writeNotes } from "./run.ts";
+import { failureHint, hideEndpoint, runCorpus, writeNotes } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -53,6 +53,8 @@ if (cmd === "index") {
     if (seen < Number(what.slice(8))) { console.error("LLM request rate limited (429) https://example.test/v1/chat/completions"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
     else list = [proposal(notes[0].name)];
   }
+  else if (what === "leaky") { console.error("LLM request failed: http://localhost:1/v1/chat/completions refused"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
+  else if (what === "leaky-crash") { console.error(JSON.stringify({ ok: false, error: "unreachable: http://localhost:1/v1/chat/completions refused" })); process.exit(70); }
   else if (what === "no-verdict") { console.error("[consolidate] chunk 1/1 (2 memories) …"); console.error("Network error: Unable to connect. Is the computer able to access the url?"); console.error("  consolidate  judge  m  2  2  0  0  0  2"); result = pass({ pairsJudged: 0, failedJudgments: 1, labelCounts: {} }); }
   else result = pass({ pairsConsidered: 0, pairsJudged: 0, labelCounts: {} });
   writeFileSync(proposals, JSON.stringify(list));
@@ -117,6 +119,15 @@ describe("writeNotes", () => {
         removeSandbox(sandbox);
       }
     }
+  });
+});
+
+describe("hideEndpoint", () => {
+  test("writes the endpoint as <MODEL_BASE_URL>, with or without a closing slash, and leaves text without it alone", () => {
+    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions refused", "http://localhost:8080/v1")).toBe("failed: <MODEL_BASE_URL>/chat/completions refused");
+    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions", "http://localhost:8080/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
+    expect(hideEndpoint("nothing to hide", "http://localhost:8080/v1")).toBe("nothing to hide");
+    expect(hideEndpoint("anything", "")).toBe("anything");
   });
 });
 
@@ -209,6 +220,20 @@ describe("runCorpus", () => {
     expect(rows[1]).toMatchObject({ outcome: "error", retried: 4 });
     expect(rows[1].error).toContain("429");
     expect(summary).toMatchObject({ n_run: 2, n_scored: 1, n_errored: 1 });
+  });
+
+  test("keeps the endpoint out of an error, in the row and on the console", async () => {
+    const { ctx, folders } = setup([mk("l1", "overlap", "leaky"), mk("l2", "overlap", "leaky-crash")]);
+    const shown: string[] = [];
+    const log = console.log;
+    console.log = (...a: unknown[]) => void shown.push(a.join(" "));
+    await runCorpus("public", ctx, folders).finally(() => (console.log = log));
+    const { rows } = resultsOf(folders);
+    expect(rows[0].error).toBe("akm paired the notes but its judge gave no verdict (akm said: LLM request failed: <MODEL_BASE_URL>/chat/completions refused)");
+    expect(rows[1].error).toContain("<MODEL_BASE_URL>/chat/completions refused");
+    expect(JSON.stringify(rows)).not.toContain("localhost:1");
+    expect(shown.join("\n")).toContain("<MODEL_BASE_URL>/chat/completions");
+    expect(shown.join("\n")).not.toContain("localhost:1");
   });
 
   test("does not try a case again for any other error", async () => {

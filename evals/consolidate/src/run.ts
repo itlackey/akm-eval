@@ -151,6 +151,12 @@ export function failureHint(stderr: string): string {
 
 type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; rateLimitWaitMs?: number };
 
+/** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
+export function hideEndpoint(text: string, baseUrl: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return base ? text.split(base).join("<MODEL_BASE_URL>") : text;
+}
+
 /** akm says so when the endpoint turns a call away for sending too many. */
 const isRateLimited = (text: string): boolean => /rate.?limit|\(429\)/i.test(text);
 
@@ -168,10 +174,10 @@ async function tryCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: 
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
     const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
     const row = rowFromRun(c, JSON.parse(improve.stdout), proposals, seconds());
-    return { row: row.error ? { ...row, error: row.error + failureHint(improve.stderr) } : row, rateLimited: row.outcome === "error" && isRateLimited(improve.stderr) };
+    return { row: row.error ? { ...row, error: hideEndpoint(row.error + failureHint(improve.stderr), ctx.baseUrl) } : row, rateLimited: row.outcome === "error" && isRateLimited(improve.stderr) };
   } catch (e) {
     const message = (e as Error).message.slice(0, 300);
-    return { row: errorRow(c, message, seconds()), rateLimited: isRateLimited(message) };
+    return { row: errorRow(c, hideEndpoint(message, ctx.baseUrl), seconds()), rateLimited: isRateLimited(message) };
   } finally {
     removeSandbox(sandbox);
   }
