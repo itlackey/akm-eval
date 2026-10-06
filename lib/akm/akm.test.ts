@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { type Sandbox, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -76,6 +76,31 @@ describe("createSandbox", () => {
     sandboxes.push(sandbox);
     expect(sandbox.env.MODEL_API_KEY).toBe("model-secret");
     expect(sandbox.env.JUDGE_API_KEY).toBeUndefined();
+  });
+
+  test("with semantic, starts with keyword search fused with the built-in embedder's vectors, and keeps the model in the repository's .cache", () => {
+    const cache = join(import.meta.dir, "..", "..", ".cache", "models");
+    const sandbox = withEnv({ HF_HOME: "/elsewhere" }, () => createSandbox("lib-akm-test", { semantic: true }));
+    sandboxes.push(sandbox);
+    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toEqual({
+      configVersion: "0.9.0",
+      semanticSearchMode: "auto",
+      registries: [],
+      embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 },
+    });
+    expect(SEMANTIC_MODEL).toBe("Xenova/bge-small-en-v1.5");
+    expect(sandbox.env.HF_HOME).toBe(cache);
+    expect(sandbox.env.AKM_BUNDLE_DIR).toBe(join(sandbox.dir, "bundle"));
+    expect(existsSync(cache)).toBe(true);
+    // the model is not in the sandbox, so it outlives it and the next sandbox finds it
+    removeSandbox(sandbox);
+    expect(existsSync(cache)).toBe(true);
+  });
+
+  test("a plain sandbox does not touch HF_HOME", () => {
+    const sandbox = withEnv({ HF_HOME: "/elsewhere" }, () => createSandbox("lib-akm-test"));
+    sandboxes.push(sandbox);
+    expect(sandbox.env.HF_HOME).toBe("/elsewhere");
   });
 
   test("runs akm, or the words of AKM_BIN", () => {

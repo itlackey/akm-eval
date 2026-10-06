@@ -9,6 +9,8 @@
 //   } finally {
 //     removeSandbox(sandbox);
 //   }
+//
+// A sandbox made with { semantic: true } searches with akm's built-in embedder as well as with keywords.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,11 +37,25 @@ const DEFAULT_TIMEOUT_MS = 15 * 60_000; // a command that calls a model can take
 // Keyword search only and no registries: akm needs no model download and never goes to the network.
 const plainConfig = () => ({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
 
+/** The model of akm's built-in embedder, bge-small-en-v1.5, which runs in the akm process: no model service. It is akm 0.9.26's default. */
+export const SEMANTIC_MODEL = "Xenova/bge-small-en-v1.5";
+
+/**
+ * Where every sandbox finds that model: the repository's gitignored .cache/. akm downloads it (133 MB, from the Hugging
+ * Face Hub) the first time an index is built with embeddings, and reads it from here after that.
+ */
+const MODEL_CACHE = join(import.meta.dir, "..", "..", ".cache", "models");
+
+// Keyword search fused with the nearest vectors of the embedder. Each akm process loads the model to embed its query, which
+// takes a second alone and several with eight at once. akm answers with keyword search alone when the query is not embedded
+// within embedding.queryTimeoutMs, 3 seconds unless set: 2 calls of 96 did at eight at once on a busy machine. So the wait is long.
+const semanticConfig = () => ({ ...plainConfig(), semanticSearchMode: "auto", embedding: { localModel: SEMANTIC_MODEL, queryTimeoutMs: 10 * 60_000 } });
+
 /**
  * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no judge
- * key. The model key stays only with `keepModelKey`.
+ * key. The model key stays only with `keepModelKey`. A semantic sandbox keeps the embedder's model in MODEL_CACHE.
  */
-function sandboxEnv(dir: string, keepModelKey: boolean): Record<string, string> {
+function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (v !== undefined && !k.startsWith("AKM_") && k !== "JUDGE_API_KEY" && (keepModelKey || k !== "MODEL_API_KEY")) env[k] = v;
@@ -54,20 +70,25 @@ function sandboxEnv(dir: string, keepModelKey: boolean): Record<string, string> 
     XDG_CONFIG_HOME: join(dir, "xdg-config"),
     XDG_DATA_HOME: join(dir, "xdg-data"),
     XDG_STATE_HOME: join(dir, "xdg-state"),
+    ...(semantic ? { HF_HOME: MODEL_CACHE } : {}),
   };
 }
 
 /**
  * Makes a sandbox in a new temp folder, akm-eval-<name>-<random>. akm is `AKM_BIN`, one or more words such as
  * `bun /path/to/akm/src/cli.ts`, or `akm`. akm gets no MODEL_API_KEY unless `keepModelKey` is set, which a config
- * needs when it names the key as $MODEL_API_KEY, as engineConfig does. The config starts plain: replace it with
- * writeConfig.
+ * needs when it names the key as $MODEL_API_KEY, as engineConfig does. The config starts plain, keyword search only:
+ * replace it with writeConfig. With `semantic`, it starts as keyword search fused with the vectors of akm's built-in
+ * embedder, whose model is kept in the repository's .cache/ and downloaded once. akm answers such a query with
+ * searchMode "semantic", and an eval that scores it has to check that.
  */
-export function createSandbox(name: string, opts: { keepModelKey?: boolean } = {}): Sandbox {
+export function createSandbox(name: string, opts: { keepModelKey?: boolean; semantic?: boolean } = {}): Sandbox {
   const dir = mkdtempSync(join(tmpdir(), `akm-eval-${name}-`));
   for (const folder of FOLDERS) mkdirSync(join(dir, folder));
-  const sandbox = { dir, cmd: (process.env.AKM_BIN?.trim() || "akm").split(/\s+/), env: sandboxEnv(dir, opts.keepModelKey ?? false) };
-  writeConfig(sandbox, plainConfig());
+  const semantic = opts.semantic ?? false;
+  if (semantic) mkdirSync(MODEL_CACHE, { recursive: true });
+  const sandbox = { dir, cmd: (process.env.AKM_BIN?.trim() || "akm").split(/\s+/), env: sandboxEnv(dir, opts.keepModelKey ?? false, semantic) };
+  writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
   return sandbox;
 }
 

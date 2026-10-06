@@ -1,4 +1,6 @@
 /private
+# akm's embedding model, downloaded once and shared by the sandboxes of every semantic run (lib/akm)
+/.cache
 .env
 node_modules
 .venv
