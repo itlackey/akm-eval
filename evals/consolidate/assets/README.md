@@ -40,7 +40,7 @@ The notes of a pair are near copies on purpose. akm judges a pair only when its 
 
 ## Privacy
 
-The notes are made up. Their hosts end in `.internal` or `.test`, or are `localhost`, and their paths and commands are invented. None is ours. There are no addresses or credentials. `src/lib.test.ts` checks the cases for lab hostnames, home paths and real domains.
+The notes are made up. Their hosts end in `.internal` or `.test`, or are `localhost`, and their paths and commands are invented. None is ours. There are no addresses or credentials. `src/lib.test.ts` checks the cases for home paths, addresses and real domains.
 
 ## Score a model with akm
 

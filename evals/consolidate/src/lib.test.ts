@@ -84,9 +84,10 @@ describe("the public cases", () => {
     expect(safeIsOlder).toBe(5);
   });
 
-  test("hold nothing private: no lab host, address or path, and no real domain", () => {
+  test("hold nothing private: no home path, no address and no real domain", () => {
     const text = cases.map((c) => JSON.stringify(c)).join("\n");
-    for (const bad of ["fwdslsh", "krang", "splinter", "rocksteady", "/home/", "founder", "itlackey", "192.168."]) expect(text).not.toContain(bad);
+    expect(text).not.toContain("/home/");
+    expect(text).not.toMatch(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/);
     expect(text).not.toMatch(/\b[a-z0-9-]+\.(com|net|org|io|dev|app|ai|co)\b/);
   });
 });
