@@ -6,9 +6,9 @@
 {"id": "q016", "ref": "skills/coding/dependency-simplification", "judge": 3, "author": 3, "note": "dependency-simplification is exactly dropping unused packages"}
 {"id": "q084", "ref": "knowledge/skills/ai-skills/agent-cli-tools/references/env-setup", "judge": 0, "author": 0, "note": "agent CLI env setup; unrelated to LoRA"}
 {"id": "q080", "ref": "knowledge/skills/ai-skills/opencode-extensions/references/mcp-servers", "judge": 0, "author": 0, "note": "OpenCode MCP OAuth config; not PKCE in an SPA"}
-{"id": "q004", "ref": "agents/print/print-layout-reviewer", "judge": 2, "author": 1, "note": "PDF visual reviewer; not a two-version comparison"}
+{"id": "q004", "ref": "agents/print/print-layout-reviewer", "judge": 1, "author": 1, "note": "PDF visual reviewer; not a two-version comparison"}
 {"id": "q015", "ref": "knowledge/skills/ai-skills/llm-delegation-tool/references/QUICKSTART", "judge": 2, "author": 1, "note": "API key by env var in delegation quickstart; marginal"}
-{"id": "q018", "ref": "knowledge/skills/ai-skills/llm-delegation-tool/references/QUICKSTART", "judge": 2, "author": 2, "note": "delegation quickstart covers OpenAI embeddings/search setup and a test agent"}
+{"id": "q018", "ref": "knowledge/skills/ai-skills/llm-delegation-tool/references/QUICKSTART", "judge": 3, "author": 2, "note": "delegation quickstart covers OpenAI embeddings/search setup and a test agent"}
 {"id": "q108", "ref": "knowledge/skills/ai-skills/agent-cli-tools/references/gemini-cli", "judge": 0, "author": 1, "note": "Gemini CLI headless; wrong tool for Qwen Code"}
 {"id": "q044", "ref": "knowledge/skills/coding/refactoring-plan/references/priority-rubric", "judge": 0, "author": 0, "note": "refactoring priority rubric; unrelated to helm"}
 {"id": "q082", "ref": "knowledge/playwright/test-coverage-rubric", "judge": 0, "author": 0, "note": "Playwright coverage rubric; unrelated to Rust"}
@@ -22,19 +22,19 @@
 {"id": "q059", "ref": "commands/complete-github-issue", "judge": 0, "author": 1, "note": "completes one issue to a PR; does not list or close issues"}
 {"id": "q036", "ref": "scripts/skills/ai-skills/litellm-skill/scripts/users.ts", "judge": 2, "author": 2, "note": "users.ts creates users with budget and key and shows spend; part of the job"}
 {"id": "q002", "ref": "knowledge/skills/administrative/tracker/references/platform-comparison", "judge": 0, "author": 0, "note": "tracker platform comparison; unrelated to Terraform"}
-{"id": "q025", "ref": "agents/report-reviewer", "judge": 0, "author": 1, "note": "report reviewer; the query is about drafting"}
+{"id": "q025", "ref": "agents/report-reviewer", "judge": 2, "author": 1, "note": "report reviewer; the query is about drafting"}
 {"id": "q057", "ref": "knowledge/skills/ai-skills/opencode-extensions/references/config", "judge": 0, "author": 0, "note": "OpenCode config; unrelated to Apprise"}
 {"id": "q062", "ref": "commands/print/qa-spread", "judge": 0, "author": 0, "note": "print spread QA; unrelated to gating shell commands"}
 {"id": "q057", "ref": "commands/skills/ai-skills/opencode-extensions/references/config-docs", "judge": 0, "author": 0, "note": "OpenCode config docs; unrelated to Apprise"}
-{"id": "q045", "ref": "commands/print/publish-pipeline", "judge": 0, "author": 2, "note": "publish pipeline has an accessibility check phase; check-accessibility is the better fit"}
+{"id": "q045", "ref": "commands/print/publish-pipeline", "judge": 2, "author": 2, "note": "publish pipeline has an accessibility check phase; check-accessibility is the better fit"}
 {"id": "q058", "ref": "skills/coding/test-gap-analysis", "judge": 1, "author": 1, "note": "test-gap-analysis is a sibling skill; the query names the execute command"}
 {"id": "q043", "ref": "skills/coding/refactoring-review", "judge": 1, "author": 1, "note": "refactoring-review is a final gate after the work; the query wants test gaps before it"}
 {"id": "q025", "ref": "agents/report-analyst", "judge": 3, "author": 2, "note": "report-analyst turns evidence into decision-ready recommendations; report-writer is the closer fit"}
 {"id": "q009", "ref": "skills/print/pdfx-print-pipeline", "judge": 3, "author": 3, "note": "the skill documents gutterpress doctor"}
-{"id": "q035", "ref": "knowledge/skills/ai-skills/opencode-extensions/references/troubleshooting", "judge": 0, "author": 1, "note": "OpenCode troubleshooting: logs, auth, provider errors; no proxy or certificate guidance"}
+{"id": "q035", "ref": "knowledge/skills/ai-skills/opencode-extensions/references/troubleshooting", "judge": 1, "author": 1, "note": "OpenCode troubleshooting: logs, auth, provider errors; no proxy or certificate guidance"}
 {"id": "q026", "ref": "knowledge/skills/print/pagedjs/references/troubleshooting", "judge": 0, "author": 0, "note": "Paged.js troubleshooting; unrelated to embeddings"}
 {"id": "q041", "ref": "skills/print/pdfx-print-pipeline", "judge": 0, "author": 0, "note": "print pipeline skill; unrelated to package.json"}
 {"id": "q048", "ref": "knowledge/print/visual-review/designer-eye-method", "judge": 3, "author": 2, "note": "designer-eye method: per-spread tiered verdicts and batched review; fix dispatch is another asset"}
-{"id": "q094", "ref": "knowledge/playwright/test-coverage-rubric", "judge": 1, "author": 2, "note": "coverage rubric lists the scenarios a feature needs; it is a gate, not an exploration guide"}
+{"id": "q094", "ref": "knowledge/playwright/test-coverage-rubric", "judge": 3, "author": 2, "note": "coverage rubric lists the scenarios a feature needs; it is a gate, not an exploration guide"}
 {"id": "q107", "ref": "scripts/skills/print/pagedjs/scripts/preview_template.py", "judge": 0, "author": 0, "note": "Paged.js preview template; no such font stack"}
-{"id": "q107", "ref": "knowledge/skills/print/pdf-review/references/print-quality-checklist", "judge": 0, "author": 0, "note": "print quality checklist; unrelated to a font stack"}
+{"id": "q107", "ref": "knowledge/skills/print/pdf-review/references/print-quality-checklist", "judge": 1, "author": 0, "note": "print quality checklist; unrelated to a font stack"}
