@@ -3,7 +3,7 @@
 
 import { type Retrieval, mean, retrievalMetrics } from "../../../lib/ir.ts";
 
-export const NON_TASK_KINDS = ["chitchat", "notification", "log", "status"];
+export const NON_TASK_KINDS = ["chitchat", "notification", "log", "status", "nontask"];
 
 /** The grade from which an asset counts as relevant: 2 is "relevant and clearly useful". */
 export const RELEVANT = 2;
@@ -23,6 +23,8 @@ export interface Qrel {
   ref: string;
   grade: number;
   reason: string;
+  /** The asset must never rank above a relevant one: a decoy, or an asset that is out of date. It has grade 0. */
+  banned?: boolean;
 }
 
 export const isTask = (q: Query): boolean => !NON_TASK_KINDS.includes(q.kind);
@@ -63,8 +65,16 @@ export function parseQrels(text: string, where = "qrels"): Qrel[] {
   return parseLines<Qrel>(text, where, (r) => {
     if (typeof r.id !== "string" || typeof r.ref !== "string") return 'has no string "id" and "ref"';
     if (!Number.isInteger(r.grade) || (r.grade as number) < 0 || (r.grade as number) > 3) return `has grade ${JSON.stringify(r.grade)}, expected 0 to 3`;
+    if (r.banned !== undefined && !(r.banned === true && r.grade === 0)) return 'has a "banned" that is not true on a grade 0 pair';
     return null;
   });
+}
+
+/** Query id to the refs it bans. */
+export function bannedByQuery(qrels: Qrel[]): Map<string, string[]> {
+  const by = new Map<string, string[]>();
+  for (const r of qrels) if (r.banned) by.set(r.id, [...(by.get(r.id) ?? []), r.ref]);
+  return by;
 }
 
 /** Query id to ref to grade. A pair that appears twice keeps its last grade. */
@@ -207,15 +217,26 @@ export interface Scored {
   recall_10: number;
   /** The share of the results among the first 10 that someone graded for this query. 1 when there are no results. */
   judged_10: number;
+  /** A banned asset is among the first 10 and ranks above a relevant one. null when the query bans none. */
+  banned_above: boolean | null;
 }
 
-/** One query's results against its grades. Only the first 10 results count. */
-export function scoreQuery(grades: Record<string, number>, refs: string[]): Scored {
+/**
+ * One query's results against its grades. Only the first 10 results count. A relevant asset that is not among the first
+ * 10 ranks below every result, so any banned asset that is returned ranks above it.
+ */
+export function scoreQuery(grades: Record<string, number>, refs: string[], banned: string[] = []): Scored {
   const at10: Retrieval = retrievalMetrics(grades, refs, 10, RELEVANT);
   const at5: Retrieval = retrievalMetrics(grades, refs, 5, RELEVANT);
   const top = refs.slice(0, 10);
   const judged = top.filter((r) => Object.hasOwn(grades, r)).length;
-  return { ndcg_10: at10.ndcg, p_5: at5.precision, success_5: at5.hit, mrr: at10.mrr, recall_10: at10.recall, judged_10: top.length === 0 ? 1 : judged / top.length };
+  const rank = (ref: string): number => {
+    const i = top.indexOf(ref);
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  const relevant = Object.keys(grades).filter((r) => grades[r] >= RELEVANT);
+  const bannedAbove = banned.length === 0 ? null : Math.min(...banned.map(rank)) < Math.max(...relevant.map(rank));
+  return { ndcg_10: at10.ndcg, p_5: at5.precision, success_5: at5.hit, mrr: at10.mrr, recall_10: at10.recall, judged_10: top.length === 0 ? 1 : judged / top.length, banned_above: bannedAbove };
 }
 
 export interface SystemMetrics {
@@ -226,6 +247,8 @@ export interface SystemMetrics {
   mrr: number | null;
   recall_10: number | null;
   judged_10: number | null;
+  /** The share of the queries that ban an asset where one ranks above a relevant asset. Lower is better. null when no query bans one. */
+  banned_above: number | null;
 }
 
 export function summarize(rows: Scored[]): SystemMetrics {
@@ -237,6 +260,7 @@ export function summarize(rows: Scored[]): SystemMetrics {
     mrr: mean(rows.map((r) => r.mrr)),
     recall_10: mean(rows.map((r) => r.recall_10)),
     judged_10: mean(rows.map((r) => r.judged_10)),
+    banned_above: mean(rows.flatMap((r) => (r.banned_above === null ? [] : [r.banned_above ? 1 : 0]))),
   };
 }
 

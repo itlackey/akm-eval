@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type Query,
   abstention,
+  bannedByQuery,
   foldRefs,
   gradesByQuery,
   isTask,
@@ -35,10 +36,10 @@ describe("parseQueries", () => {
     expect(parseQueries(lines([{ id: "q1", query: "a", kind: "direct", expected: ["a/x"] }, { id: "q2", query: "b", kind: "no-answer", expected: [] }]))[0].expected).toEqual(["a/x"]);
   });
 
-  test("a task is anything that is not chit-chat, a notification, a log line or a status update", () => {
-    const kinds = ["name", "direct", "paraphrase", "multi", "no-answer"].map((kind) => isTask({ id: "x", query: "q", kind }));
-    expect(kinds).toEqual([true, true, true, true, true]);
-    expect(["chitchat", "notification", "log", "status"].map((kind) => isTask({ id: "x", query: "q", kind }))).toEqual([false, false, false, false]);
+  test("a task is anything that is not chit-chat, a notification, a log line, a status update or marked nontask", () => {
+    const kinds = ["name", "direct", "paraphrase", "multi", "no-answer", "lesson", "multihop-declared"].map((kind) => isTask({ id: "x", query: "q", kind }));
+    expect(kinds).toEqual([true, true, true, true, true, true, true]);
+    expect(["chitchat", "notification", "log", "status", "nontask"].map((kind) => isTask({ id: "x", query: "q", kind }))).toEqual([false, false, false, false, false]);
   });
 });
 
@@ -61,6 +62,21 @@ describe("parseQrels and gradesByQuery", () => {
     expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 4, reason: "" }]))).toThrow("expected 0 to 3");
     expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 1.5, reason: "" }]))).toThrow("expected 0 to 3");
     expect(() => parseQrels(lines([{ id: "q1", grade: 1, reason: "" }]))).toThrow('"id" and "ref"');
+  });
+
+  test("reads the assets a query bans, which have grade 0", () => {
+    const qrels = parseQrels(
+      lines([
+        { id: "q1", ref: "a/x", grade: 3, reason: "r" },
+        { id: "q1", ref: "a/old", grade: 0, reason: "r", banned: true },
+        { id: "q1", ref: "a/off", grade: 0, reason: "r", banned: true },
+        { id: "q2", ref: "a/old", grade: 0, reason: "r" },
+      ]),
+    );
+    expect(bannedByQuery(qrels)).toEqual(new Map([["q1", ["a/old", "a/off"]]]));
+    expect(gradesByQuery(qrels).get("q1")).toEqual({ "a/x": 3, "a/old": 0, "a/off": 0 });
+    for (const banned of [false, "yes"]) expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 0, reason: "", banned }]))).toThrow('"banned" that is not true on a grade 0 pair');
+    expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 2, reason: "", banned: true }]))).toThrow('"banned" that is not true on a grade 0 pair');
   });
 });
 
@@ -172,7 +188,31 @@ describe("scoreQuery", () => {
   });
 
   test("scores nothing returned as nothing found", () => {
-    expect(scoreQuery(grades, [])).toEqual({ ndcg_10: 0, p_5: 0, success_5: false, mrr: 0, recall_10: 0, judged_10: 1 });
+    expect(scoreQuery(grades, [])).toEqual({ ndcg_10: 0, p_5: 0, success_5: false, mrr: 0, recall_10: 0, judged_10: 1, banned_above: null });
+  });
+
+  describe("banned assets", () => {
+    const g = { "a/x": 3, "a/y": 2, "a/old": 0, "a/off": 0 };
+    const above = (refs: string[], banned = ["a/old", "a/off"]) => scoreQuery(g, refs, banned).banned_above;
+
+    test("are above a relevant asset when one of them ranks before any relevant one", () => {
+      expect(above(["a/old", "a/x", "a/y"])).toBe(true);
+      expect(above(["a/x", "a/old", "a/y"])).toBe(true); // it outranks the second relevant asset, not only the first
+      expect(above(["a/x", "a/y", "a/old"])).toBe(false);
+      expect(above(["a/q", "a/x", "a/y", "a/q2", "a/off"])).toBe(false);
+    });
+
+    test("outrank a relevant asset that is not among the first 10, which ranks below every result", () => {
+      expect(above(["a/x", "a/q", "a/off"])).toBe(true);
+      expect(above(["a/x", "a/q", "a/q2"])).toBe(false);
+      expect(above([...Array.from({ length: 10 }, (_, i) => `a/q${i}`), "a/x", "a/y", "a/old"])).toBe(false);
+      expect(above(["a/q", "a/x", "a/y"].concat(Array.from({ length: 7 }, (_, i) => `a/p${i}`), "a/old"))).toBe(false); // the banned asset is at place 11
+    });
+
+    test("count only when the query bans some", () => {
+      expect(scoreQuery(g, ["a/old", "a/x"]).banned_above).toBeNull();
+      expect(above(["a/x", "a/y"], [])).toBeNull();
+    });
   });
 });
 
@@ -180,8 +220,14 @@ describe("summarize and abstention", () => {
   test("averages over queries", () => {
     const a = scoreQuery({ "a/x": 3 }, ["a/x"]);
     const b = scoreQuery({ "a/x": 3 }, ["a/q"]);
-    expect(summarize([a, b])).toEqual({ n: 2, ndcg_10: 0.5, p_5: 0.1, success_5: 0.5, mrr: 0.5, recall_10: 0.5, judged_10: 0.5 });
-    expect(summarize([])).toEqual({ n: 0, ndcg_10: null, p_5: null, success_5: null, mrr: null, recall_10: null, judged_10: null });
+    expect(summarize([a, b])).toEqual({ n: 2, ndcg_10: 0.5, p_5: 0.1, success_5: 0.5, mrr: 0.5, recall_10: 0.5, judged_10: 0.5, banned_above: null });
+    expect(summarize([])).toEqual({ n: 0, ndcg_10: null, p_5: null, success_5: null, mrr: null, recall_10: null, judged_10: null, banned_above: null });
+  });
+
+  test("averages the banned check over the queries that ban an asset only", () => {
+    const g = { "a/x": 3, "a/old": 0 };
+    const rows = [scoreQuery(g, ["a/old", "a/x"], ["a/old"]), scoreQuery(g, ["a/x", "a/old"], ["a/old"]), scoreQuery(g, ["a/x"]), scoreQuery(g, ["a/x", "a/q"], ["a/old"])];
+    expect(summarize(rows).banned_above).toBeCloseTo(1 / 3, 4);
   });
 
   test("counts the inputs that got no result", () => {

@@ -1,17 +1,29 @@
 // The akm calls the retrieval eval makes, on a sandbox from lib/akm: load a library, list the assets, search, curate.
 
-import { cpSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
-import { type Sandbox, runAkm } from "../../../lib/akm/akm.ts";
+import { type Sandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Asset, DEPTH, foldRefs } from "./lib.ts";
 
-const TYPES = ["skill", "command", "agent", "knowledge", "workflow", "script"];
+const TYPES = ["skill", "command", "agent", "knowledge", "workflow", "script", "lesson", "fact", "memory"];
 
 const bundleOf = (sb: Sandbox): string => join(sb.dir, "bundle");
 
-/** Copies the library into the sandbox's bundle, indexes it, and returns how many assets akm found. */
-export async function load(sb: Sandbox, library: string): Promise<number> {
-  cpSync(library, bundleOf(sb), { recursive: true });
+/**
+ * Indexes the library in the sandbox and returns how many assets akm found. The library, or the folder a link points
+ * to, is copied into the sandbox's bundle. When `bundles` is a file that exists, the library is instead a folder of
+ * bundles that stays where it is: the file maps each bundle's folder name to its akm adapter, and akm gets one bundle
+ * for each. Their refs then read `<folder>//<path>`.
+ */
+export async function load(sb: Sandbox, library: string, bundles?: string): Promise<number> {
+  if (bundles && existsSync(bundles)) {
+    const adapters = JSON.parse(readFileSync(bundles, "utf8")) as Record<string, string>;
+    const root = realpathSync(library);
+    const config = JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
+    writeConfig(sb, { ...config, bundles: Object.fromEntries(Object.entries(adapters).map(([name, adapter]) => [name, { path: join(root, name), components: { main: { adapter } }, writable: false }])) });
+  } else {
+    cpSync(library, bundleOf(sb), { recursive: true, dereference: true });
+  }
   const { stdout, stderr, code } = await runAkm(sb, ["index", "--full", "--format", "json"], { timeoutMs: 10 * 60_000 });
   if (code !== 0) throw new Error(`akm index failed (exit ${code}): ${stderr.trim().slice(-300)}`);
   const total = (JSON.parse(stdout) as { totalEntries?: number }).totalEntries;

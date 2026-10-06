@@ -24,7 +24,7 @@ const queries: Query[] = [
 ];
 const qrels: Qrel[] = [
   { id: "q1", ref: "knowledge/alice-guide", grade: 3, reason: "Says that Alice owns it." },
-  { id: "q1", ref: "knowledge/other", grade: 0, reason: "Unrelated.\nTwo lines." },
+  { id: "q1", ref: "knowledge/other", grade: 0, reason: "Unrelated.\nTwo lines.", banned: true },
   { id: "q2", ref: "knowledge/other", grade: 1, reason: "Same topic." },
 ];
 
@@ -40,6 +40,7 @@ describe("explode and assemble", () => {
     const back = assemble(queries, qrels, dir);
     expect(back.queries).toEqual(queries);
     expect(back.qrels).toEqual(qrels.map((r) => ({ ...r, reason: r.reason.replace(/\s+/g, " ") })));
+    expect(back.qrels[1].banned).toBe(true); // a banned asset stays banned in the private copy
   });
 
   test("keep the grades, the ids and the kinds, whatever the text becomes", () => {

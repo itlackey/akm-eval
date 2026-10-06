@@ -2,7 +2,7 @@
 // retrieval: indexes the library in a sandbox, runs `akm search` and `akm curate` for every query, and scores
 // them against the graded assets. No model is involved. See ../README.md.
 //
-//   evals/retrieval/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--label NAME]
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -12,10 +12,13 @@ import * as akm from "./akm.ts";
 import {
   type Abstention,
   DEPTH,
+  type Qrel,
+  type Query,
   RELEVANT,
   type Scored,
   type SystemMetrics,
   abstention,
+  bannedByQuery,
   fixed,
   gradesByQuery,
   isTask,
@@ -32,17 +35,21 @@ const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const SYSTEMS = ["search", "curate"] as const;
 type System = (typeof SYSTEMS)[number];
-type Corpus = "public" | "private";
+type Corpus = "public" | "private" | "own";
 
-const USAGE = `Usage: evals/retrieval/run [--corpus public|private|all] [--limit N] [--label NAME]
+const OWN_HELP = `Your own set goes in private/${NAME}/own/: queries.jsonl and qrels.jsonl in the format that evals/${NAME}/assets/README.md describes, and library/, the folder akm should index (a link to it works). A library of several bundles needs bundles.json too.`;
 
-Indexes the library in a sandbox, asks akm search and akm curate for the first ${DEPTH} results of every query in
-assets/queries.jsonl, and scores them against assets/qrels.jsonl. No model is used. Needs akm on PATH, or in AKM_BIN.
+const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--label NAME]
 
-  --corpus  public (default) reads assets/ and corpus/library. private reads private/retrieval/assets/, made by
-            ./generate-assets. all runs both and prints the two results side by side.
-  --limit   run N queries, in the task and non-task proportion of the whole set
-  --label   names the results folder: <UTC date>-<label>. Default: akm-<version>.`;
+For each collection of queries, indexes its library in a sandbox, asks akm search and akm curate for the first ${DEPTH}
+results of every query, and scores them against the collection's qrels. Each collection is scored on its own. No model
+is used. Needs akm on PATH, or in AKM_BIN.
+
+  --corpus  public (default) runs the collections in assets/: the library in corpus/library and the books.
+            private runs their private copies in private/retrieval/assets/, made by ./generate-assets.
+            own runs your own labelled set in private/retrieval/own/. all runs public and private.
+  --limit   run N queries of each collection, in the task and non-task proportion of the whole set
+  --label   names the results folders: <UTC date>-<label>-<collection>. Default label: akm-<version>.`;
 
 interface SystemRow {
   /** The assets akm returned, best first. */
@@ -67,6 +74,8 @@ interface Row {
 interface Summary {
   eval: string;
   corpus: Corpus;
+  /** library or books, or own for the own corpus. */
+  collection: string;
   label: string;
   date: string;
   git_commit: string;
@@ -99,6 +108,9 @@ function fail(message: string, code = 2): never {
   throw new Fatal(message, code);
 }
 
+/** How a collection is named in the output: `public books`, or `own`. */
+const where = (corpus: Corpus, collection: string): string => (corpus === collection ? corpus : `${corpus} ${collection}`);
+
 function gitCommit(): string {
   const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
   const head = run(["rev-parse", "--short", "HEAD"]);
@@ -116,7 +128,7 @@ function makeResultsDir(parent: string, label: string): string {
 }
 
 function printSummary(s: Summary): void {
-  console.log(`\n${NAME} (${s.corpus}) | akm ${s.akm_version}, ${s.search_mode} search | ${s.n_queries} queries, ${s.n_assets} assets`);
+  console.log(`\n${NAME} (${where(s.corpus, s.collection)}) | akm ${s.akm_version}, ${s.search_mode} search | ${s.n_queries} queries, ${s.n_assets} assets`);
   console.log(`  ranking metrics over the ${s.n_scored} task queries that have a relevant asset (grade ${s.relevant_from_grade}+), first ${s.depth} results`);
   console.log("                    search    curate");
   const m = s.metrics;
@@ -127,32 +139,34 @@ function printSummary(s: Summary): void {
   row("MRR", (x) => fixed(x.mrr));
   row("Recall@10", (x) => fixed(x.recall_10));
   row("judged@10", (x) => pct(x.judged_10));
+  if (m.search.banned_above !== null || m.curate.banned_above !== null) row("banned above", (x) => pct(x.banned_above));
   const a = s.abstention;
   const ab = (g: Record<System, Abstention>) => `${g.search.abstained}/${g.search.n} ${pct(g.search.rate)}   ${g.curate.abstained}/${g.curate.n} ${pct(g.curate.rate)}`;
-  console.log(`  returned nothing, non-task inputs        ${ab(a.non_task)}`);
-  console.log(`  returned nothing, task without answer    ${ab(a.no_answer)}`);
+  if (a.non_task.search.n > 0) console.log(`  returned nothing, non-task inputs        ${ab(a.non_task)}`);
+  if (a.no_answer.search.n > 0) console.log(`  returned nothing, task without answer    ${ab(a.no_answer)}`);
   if (s.errored.search + s.errored.curate > 0) console.log(`  errored calls: search ${s.errored.search}, curate ${s.errored.curate} (left out of the numbers)`);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
 }
 
-/** The two summaries as columns, never one pooled number. */
-function printSideBySide(a: Summary, b: Summary): void {
-  const rows: [string, string, string][] = [["", a.corpus, b.corpus]];
+/** The summaries as columns, never one pooled number. The collections of one corpus, or each collection's corpora side by side. */
+function printSideBySide(columns: Summary[]): void {
+  const one = columns.every((c) => c.corpus === columns[0].corpus);
+  const metrics: [string, (x: SystemMetrics) => string][] = [
+    ["nDCG@10", (x) => fixed(x.ndcg_10)],
+    ["P@5", (x) => fixed(x.p_5)],
+    ["Success@5", (x) => pct(x.success_5)],
+    ["MRR", (x) => fixed(x.mrr)],
+    ["Recall@10", (x) => fixed(x.recall_10)],
+  ];
+  const rows: string[][] = [["", ...columns.map((c) => (one ? c.collection : where(c.corpus, c.collection)))], ["queries (scored)", ...columns.map((c) => `${c.n_queries} (${c.n_scored})`)]];
   for (const sys of SYSTEMS) {
-    for (const [label, f] of [
-      ["nDCG@10", (x: SystemMetrics) => fixed(x.ndcg_10)],
-      ["P@5", (x: SystemMetrics) => fixed(x.p_5)],
-      ["Success@5", (x: SystemMetrics) => pct(x.success_5)],
-      ["MRR", (x: SystemMetrics) => fixed(x.mrr)],
-      ["Recall@10", (x: SystemMetrics) => fixed(x.recall_10)],
-    ] as [string, (x: SystemMetrics) => string][]) {
-      rows.push([`${sys} ${label}`, f(a.metrics[sys]), f(b.metrics[sys])]);
-    }
+    for (const [label, f] of metrics) rows.push([`${sys} ${label}`, ...columns.map((c) => f(c.metrics[sys]))]);
+    if (columns.some((c) => c.metrics[sys].banned_above !== null)) rows.push([`${sys} banned above`, ...columns.map((c) => pct(c.metrics[sys].banned_above))]);
   }
-  for (const sys of SYSTEMS) rows.push([`${sys} abstained, non-task`, pct(a.abstention.non_task[sys].rate), pct(b.abstention.non_task[sys].rate)]);
-  const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
-  for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
+  for (const sys of SYSTEMS) rows.push([`${sys} abstained, non-task`, ...columns.map((c) => pct(c.abstention.non_task[sys].rate))]);
+  const w = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
+  console.log(`\n${NAME}: ${one ? "the collections" : "the collections, public and private"} side by side (not pooled)`);
+  for (const r of rows) console.log(`  ${r.map((cell, i) => cell.padEnd(w[i])).join("  ")}`.trimEnd());
 }
 
 export interface Folders {
@@ -162,29 +176,51 @@ export interface Folders {
   assets: string;
   /** Where the results folder goes. */
   results: string;
+  /** bundles.json, when the library is a folder of bundles. */
+  bundles?: string;
 }
 
-export function foldersFor(corpus: Corpus): Folders {
-  return corpus === "public"
-    ? { library: join(ROOT, "corpus", "library"), assets: join(EVAL_DIR, "assets"), results: join(EVAL_DIR, "results") }
-    : { library: join(ROOT, "private", NAME, "assets", "library"), assets: join(ROOT, "private", NAME, "assets"), results: join(ROOT, "private", NAME, "results") };
+/** The collections a corpus holds, in the order they run. A collection is a library with its queries and qrels. */
+export function collectionsFor(corpus: Corpus): { name: string; folders: Folders }[] {
+  const priv = join(ROOT, "private", NAME);
+  if (corpus === "own") {
+    const own = join(priv, "own");
+    return [{ name: "own", folders: { library: join(own, "library"), assets: own, results: join(priv, "results"), bundles: join(own, "bundles.json") } }];
+  }
+  const assets = corpus === "public" ? join(EVAL_DIR, "assets") : join(priv, "assets");
+  const results = corpus === "public" ? join(EVAL_DIR, "results") : join(priv, "results");
+  return [
+    { name: "library", folders: { library: corpus === "public" ? join(ROOT, "corpus", "library") : join(assets, "library"), assets, results } },
+    { name: "books", folders: { library: join(assets, "books", "library"), assets: join(assets, "books"), results } },
+  ];
 }
 
-export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: number; newSandbox?: () => Sandbox }, folders: Folders = foldersFor(corpus)): Promise<Summary> {
-  const all = parseQueries(readFileSync(join(folders.assets, "queries.jsonl"), "utf8"), join(folders.assets, "queries.jsonl"));
-  const grades = gradesByQuery(parseQrels(readFileSync(join(folders.assets, "qrels.jsonl"), "utf8"), join(folders.assets, "qrels.jsonl")));
+/** Scores one collection: its queries and qrels in `folders.assets`, over its library. */
+export async function runCollection(corpus: Corpus, collection: string, ctx: { label?: string; limit?: number; newSandbox?: () => Sandbox }, folders: Folders): Promise<Summary> {
+  let all: Query[];
+  let qrels: Qrel[];
+  try {
+    all = parseQueries(readFileSync(join(folders.assets, "queries.jsonl"), "utf8"), join(folders.assets, "queries.jsonl"));
+    qrels = parseQrels(readFileSync(join(folders.assets, "qrels.jsonl"), "utf8"), join(folders.assets, "qrels.jsonl"));
+  } catch (e) {
+    fail(`${(e as Error).message}${corpus === "own" ? `\n${OWN_HELP}` : ""}`);
+  }
+  const grades = gradesByQuery(qrels);
+  const banned = bannedByQuery(qrels);
   const queries = selectQueries(all, ctx.limit);
-  for (const q of queries) if (isTask(q) && !grades.has(q.id)) fail(`${q.id} has no grades in qrels.jsonl. Run evals/retrieval/label first.`);
+  for (const q of queries) {
+    if (isTask(q) && !grades.has(q.id)) fail(`${q.id} has no grades in qrels.jsonl.${corpus === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
+  }
 
   const sb = (ctx.newSandbox ?? (() => createSandbox(NAME)))();
   try {
     const version = await akmVersion(sb);
-    const nAssets = await akm.load(sb, folders.library);
+    const nAssets = await akm.load(sb, folders.library, folders.bundles);
     const label = ctx.label ?? `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
-    const dir = makeResultsDir(folders.results, label);
+    const dir = makeResultsDir(folders.results, `${label}-${collection}`);
     const samples = join(dir, "samples.jsonl");
     writeFileSync(samples, "");
-    console.log(`${NAME} (${corpus}): akm ${version}, ${nAssets} assets, ${queries.length} of ${all.length} queries`);
+    console.log(`${NAME} (${where(corpus, collection)}): akm ${version}, ${nAssets} assets, ${queries.length} of ${all.length} queries`);
 
     const rows: Row[] = [];
     const modes = new Set<string>();
@@ -200,7 +236,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
           grades: a.refs.map((r) => (Object.hasOwn(g, r) ? g[r] : null)),
           seconds: a.seconds,
           ...(a.error ? { error: a.error } : {}),
-          ...(isTask(q) && nRelevant > 0 && !a.error ? { scores: scoreQuery(g, a.refs) } : {}),
+          ...(isTask(q) && nRelevant > 0 && !a.error ? { scores: scoreQuery(g, a.refs, banned.get(q.id)) } : {}),
         };
       }
       const row: Row = { id: q.id, kind: q.kind, query: q.query, n_relevant: nRelevant, ...answers };
@@ -217,6 +253,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
     const summary: Summary = {
       eval: NAME,
       corpus,
+      collection,
       label,
       date: new Date().toISOString(),
       git_commit: gitCommit(),
@@ -258,21 +295,20 @@ async function main(): Promise<void> {
     return;
   }
   const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "all") fail(`--corpus must be public, private, own or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
-  for (const c of corpora) {
-    const f = foldersFor(c);
-    if (c === "private" && ![f.library, join(f.assets, "queries.jsonl"), join(f.assets, "qrels.jsonl")].every(existsSync)) {
-      fail(`the private assets are missing (private/${NAME}/assets/). Make them with: ./generate-assets --only ${NAME}`);
-    }
+  const sets = corpora.flatMap((c) => collectionsFor(c).map((s) => ({ corpus: c, ...s })));
+  for (const { corpus: c, folders: f } of sets) {
+    if (c === "public" || [f.library, join(f.assets, "queries.jsonl"), join(f.assets, "qrels.jsonl")].every(existsSync)) continue;
+    fail(c === "own" ? `private/${NAME}/own/ does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
   }
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, { label: values.label, limit }));
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  for (const s of sets) summaries.push(await runCollection(s.corpus, s.name, { label: values.label, limit }, s.folders));
+  if (summaries.length > 1) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
 }
 
 if (import.meta.main) {

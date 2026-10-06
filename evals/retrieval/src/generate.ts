@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
-// retrieval generate: makes the private library, queries and qrels from the public ones with lib/rewrite.
+// retrieval generate: makes the private library, queries and qrels of each public collection (the library and the
+// books) from the public ones with lib/rewrite.
 //
 //   evals/retrieval/generate --seed N --out private/retrieval
 //
-// The library, every query and every qrel row go through one rewrite run, so one map renames them all and a
-// name that the queries write means the same name in the library. Then the result is checked: every qrel ref and
-// every expected ref must name an asset akm indexes in the private library, and every query must keep the
-// relevant assets it had.
+// For each collection, the library, every query and every qrel row go through one rewrite run, so one map renames
+// them all and a name that the queries write means the same name in the library. Then the result is checked: every
+// qrel ref and every expected ref must name an asset akm indexes in the private library, and every query must keep
+// the relevant assets it had.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -84,6 +85,60 @@ function rewrite(args: string[]): string {
   return p.stdout.toString().trim();
 }
 
+interface Collection {
+  name: string;
+  /** The public library. */
+  library: string;
+  /** The public queries.jsonl and qrels.jsonl. */
+  source: string;
+  /** Where the private copy goes, under --out. */
+  target: string;
+  /** The rewrite map, under --out. */
+  map: string;
+}
+
+const COLLECTIONS: Collection[] = [
+  { name: "library", library: join(ROOT, "corpus", "library"), source: join(EVAL_DIR, "assets"), target: "assets", map: "map.json" },
+  { name: "books", library: join(EVAL_DIR, "assets", "books", "library"), source: join(EVAL_DIR, "assets", "books"), target: join("assets", "books"), map: "books-map.json" },
+];
+
+/** Makes the private copy of one collection under `out`, and returns the rewrite's summary line and what is wrong with the copy. */
+async function makeCollection(c: Collection, out: string, seed: string): Promise<{ queries: number; qrels: number; summary: string; found: string[] }> {
+  const work = join(out, ".work");
+  const target = join(out, c.target);
+  const map = join(out, c.map);
+
+  const queries = parseQueries(readFileSync(join(c.source, "queries.jsonl"), "utf8"), join(c.source, "queries.jsonl"));
+  const qrels = parseQrels(readFileSync(join(c.source, "qrels.jsonl"), "utf8"), join(c.source, "qrels.jsonl"));
+
+  const publicBox = createSandbox("retrieval");
+  const privateBox = createSandbox("retrieval");
+  try {
+    await akmVersion(publicBox); // before anything is written: the check at the end needs akm
+    rmSync(work, { recursive: true, force: true });
+    rmSync(map, { force: true });
+    cpSync(c.library, join(work, "in", "library"), { recursive: true });
+    explode(queries, qrels, join(work, "in"));
+    const summary = rewrite(["--seed", seed, "--map", map, join(work, "in"), join(work, "out")]);
+    const rewritten = assemble(queries, qrels, join(work, "out"));
+
+    for (const entry of ["library", "queries.jsonl", "qrels.jsonl"]) rmSync(join(target, entry), { recursive: true, force: true });
+    mkdirSync(target, { recursive: true });
+    cpSync(join(work, "out", "library"), join(target, "library"), { recursive: true });
+    writeFileSync(join(target, "queries.jsonl"), `${rewritten.queries.map((q) => JSON.stringify(q)).join("\n")}\n`);
+    writeFileSync(join(target, "qrels.jsonl"), `${rewritten.qrels.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    rmSync(work, { recursive: true, force: true });
+
+    const nAssets = await akm.load(publicBox, c.library);
+    const privateAssets = await akm.assets(privateBox, await akm.load(privateBox, join(target, "library")));
+    const found = problems({ queries, qrels, nAssets }, { queries: rewritten.queries, qrels: rewritten.qrels, refs: new Set(privateAssets.map((a) => a.ref)) });
+    return { queries: rewritten.queries.length, qrels: rewritten.qrels.length, summary: summary.split("\n").pop() as string, found };
+  } finally {
+    removeSandbox(publicBox);
+    removeSandbox(privateBox);
+  }
+}
+
 async function main(): Promise<number> {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
   if (values.seed === undefined || values.out === undefined) {
@@ -91,49 +146,19 @@ async function main(): Promise<number> {
     return 2;
   }
   const out = resolve(values.out);
-  const work = join(out, ".work");
-  const assets = join(out, "assets");
-  const map = join(out, "map.json");
-
-  const queries = parseQueries(readFileSync(join(EVAL_DIR, "assets", "queries.jsonl"), "utf8"), "assets/queries.jsonl");
-  const qrels = parseQrels(readFileSync(join(EVAL_DIR, "assets", "qrels.jsonl"), "utf8"), "assets/qrels.jsonl");
-
-  const publicBox = createSandbox("retrieval");
-  const privateBox = createSandbox("retrieval");
-  let rewritten: ReturnType<typeof assemble>;
-  let summary: string;
-  let found: string[];
-  try {
-    await akmVersion(publicBox); // before anything is written: the check at the end needs akm
-    rmSync(work, { recursive: true, force: true });
-    rmSync(map, { force: true });
-    cpSync(join(ROOT, "corpus", "library"), join(work, "in", "library"), { recursive: true });
-    explode(queries, qrels, join(work, "in"));
-    summary = rewrite(["--seed", values.seed, "--map", map, join(work, "in"), join(work, "out")]);
-    rewritten = assemble(queries, qrels, join(work, "out"));
-
-    rmSync(assets, { recursive: true, force: true });
-    mkdirSync(assets, { recursive: true });
-    cpSync(join(work, "out", "library"), join(assets, "library"), { recursive: true });
-    writeFileSync(join(assets, "queries.jsonl"), `${rewritten.queries.map((q) => JSON.stringify(q)).join("\n")}\n`);
-    writeFileSync(join(assets, "qrels.jsonl"), `${rewritten.qrels.map((r) => JSON.stringify(r)).join("\n")}\n`);
-    rmSync(work, { recursive: true, force: true });
-
-    const nAssets = await akm.load(publicBox, join(ROOT, "corpus", "library"));
-    const privateAssets = await akm.assets(privateBox, await akm.load(privateBox, join(assets, "library")));
-    found = problems({ queries, qrels, nAssets }, { queries: rewritten.queries, qrels: rewritten.qrels, refs: new Set(privateAssets.map((a) => a.ref)) });
-  } finally {
-    removeSandbox(publicBox);
-    removeSandbox(privateBox);
+  let status = 0;
+  for (const c of COLLECTIONS) {
+    const made = await makeCollection(c, out, values.seed);
+    console.log(`retrieval: ${c.name}: ${made.queries} queries, ${made.qrels} qrels and the library written to ${join(values.out, c.target)}`);
+    console.log(made.summary);
+    if (made.found.length) {
+      console.error(`retrieval: the private ${c.name} assets are not sound:\n  ${made.found.join("\n  ")}`);
+      status = 1;
+    } else {
+      console.log(`retrieval: ${c.name}: every qrel ref names an asset in the private library, and every query keeps its relevant assets`);
+    }
   }
-  console.log(`retrieval: ${rewritten.queries.length} queries, ${rewritten.qrels.length} qrels and the library written to ${join(values.out, "assets")}`);
-  console.log(summary.split("\n").pop());
-  if (found.length) {
-    console.error(`retrieval: the private assets are not sound:\n  ${found.join("\n  ")}`);
-    return 1;
-  }
-  console.log("retrieval: every qrel ref names an asset in the private library, and every query keeps its relevant assets");
-  return 0;
+  return status;
 }
 
 if (import.meta.main) process.exit(await main());
