@@ -44,7 +44,7 @@ The Hub head, `6583d7d` on 2026-10-05 and still on 2026-10-06, differs from `a05
 
 ## How akm is used
 
-For each skill, one file, `skills/<id>/SKILL.md` in the bundle, holding the `skill_md` field as the dataset has it: the front matter and the body. The id is the dataset's, because skill names are not unique (153 names occur more than once in the test pool). akm names a skill by its directory, so with this layout it indexes the skill's id and not its own name. Naming the directories `<name>-<id>` instead moved NDCG@10 by +0.01 on a sample of 800 queries (measured once, not part of the benchmark), so the layout does not hold akm back.
+For each skill, one file, `skills/<id>/SKILL.md` in the bundle, holding the `skill_md` field as the dataset has it: the front matter and the body. The id is the dataset's, because skill names are not unique (153 names occur more than once in the test pool). akm names a skill by its directory, so with this layout it indexes the skill's id and not its own name. Naming the directories `<name>-<id>` instead moved NDCG@10 by +0.01 for keyword search on a sample of 800 queries, and by -0.09 for semantic search on a sample of 400 (each measured once, not part of the benchmark), so the layout does not hold akm back.
 
 Then, once for each of the two indexes:
 
