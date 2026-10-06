@@ -126,7 +126,7 @@ function printSummary(s: Summary): void {
   const m = s.metrics;
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
   console.log(`  defects fixed   ${cell(m.defects)}  ${pct(m.defects.rate)}`);
-  console.log(`  controls kept   ${cell(m.controls)}  ${pct(m.controls.rate)}`);
+  console.log(`  controls right  ${cell(m.controls)}  ${pct(m.controls.rate)}`);
   console.log(`  proposals       ${m.proposals.n}, ${m.proposals.touched_body} touched the body`);
   console.log(`  errored         ${s.n_errored}`);
   for (const cls of CLASSES) {
@@ -144,7 +144,7 @@ function printSideBySide(a: Summary, b: Summary): void {
   const rows: [string, string, string][] = [
     ["", a.corpus, b.corpus],
     ["defects fixed", `${cell(a.metrics.defects)}  ${pct(a.metrics.defects.rate)}`, `${cell(b.metrics.defects)}  ${pct(b.metrics.defects.rate)}`],
-    ["controls kept", `${cell(a.metrics.controls)}  ${pct(a.metrics.controls.rate)}`, `${cell(b.metrics.controls)}  ${pct(b.metrics.controls.rate)}`],
+    ["controls right", `${cell(a.metrics.controls)}  ${pct(a.metrics.controls.rate)}`, `${cell(b.metrics.controls)}  ${pct(b.metrics.controls.rate)}`],
     ["touched the body", `${a.metrics.proposals.touched_body} of ${a.metrics.proposals.n}`, `${b.metrics.proposals.touched_body} of ${b.metrics.proposals.n}`],
     ["errored", String(a.n_errored), String(b.n_errored)],
     ...CLASSES.filter((cls) => a.metrics.classes[cls] || b.metrics.classes[cls]).map((cls): [string, string, string] => [`  ${cls}`, cell(a.metrics.classes[cls]), cell(b.metrics.classes[cls])]),

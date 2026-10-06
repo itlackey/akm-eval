@@ -101,13 +101,22 @@ export function hasCopiedFrontmatter(note: string): boolean {
   return splitFrontmatter(note).body.split(/\r?\n/).some((l) => /^\s*(\*\*|__)?\s*(description|when_to_use)\s*(\*\*|__)?\s*:/i.test(l));
 }
 
+/** Descriptions that are a section heading, not a description. akm's `HEADING_FRAGMENT_PATTERNS`. */
+const HEADING = [
+  /^for example\b/i,
+  /^to reduce\b/i,
+  /^key (pitfalls|fixes|points|takeaways|considerations|steps|notes|tips|insights|features|benefits|risks)\b/i,
+  /^(examples?|summary|overview|introduction|takeaways|conclusion|notes?|tips?)$/i,
+];
+
 /** What is wrong with a description as akm's `isValidDescription` sees it, or undefined when nothing is. */
 export function descriptionProblem(value: string): string | undefined {
   const v = value.trim();
   if (v.length < 20 || v.length > 400) return `${v.length} characters, akm wants 20 to 400`;
   if (/^[\d#*\->`]/.test(v)) return "starts with a digit or a markdown mark";
   if (isTruncated(v) || HANGING.has(v.match(/([A-Za-z']+)[.!?]*$/)?.[1]?.toLowerCase() ?? "")) return "ends as if it was cut off";
-  if (/^(for example|to reduce|key (pitfalls|fixes|points|takeaways|steps|notes|tips)|examples?|summary|overview|introduction|takeaways|conclusion|notes?|tips?)\b/i.test(v) && v.split(/\s+/).length < 4) return "is a heading";
+  if (HEADING.some((re) => re.test(v))) return "is a heading";
+  if (/^(def|function|async\s+def|async\s+function|class|const|let|var|export\s+function|export\s+const|export\s+default|import|public|private|protected|fn|func)\s+\S/i.test(v)) return "starts like code";
   if ((v.match(/`/g) ?? []).length % 2 !== 0) return "has an odd number of backticks";
   return undefined;
 }
