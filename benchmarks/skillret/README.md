@@ -30,7 +30,7 @@ Each run writes two files to `benchmarks/skillret/results/<UTC date>-<label>/`, 
 
 [bun](https://bun.sh), and akm on `PATH` or named in `AKM_BIN`. No model, no key. The network is used once, to fetch the data (see "The data").
 
-The benchmark gives akm a temporary folder with its own config and folders, writes the 6,006 skills into it, and indexes them with `akm index --full`. It never reads or writes your akm bundle. The folder takes about 50 MB for the skills and 80 MB for akm's index, and is removed when the run ends.
+The benchmark gives akm a temporary folder with its own config and folders, writes the 6,006 skills into it, and indexes them with `akm index --full`. It never reads or writes your akm bundle. The folder takes about 50 MB for the skills and 80 MB for akm's index, and is removed when the run ends. `private` reads the 188 MB file of train skills whole, which takes about 1.2 GB of memory for ten seconds.
 
 A full run of one corpus takes about 14 minutes: 25 s to write and index the 6,006 skills, then 8,784 calls, eight at a time, in 13.6 minutes for `public` and 12.3 for `private`. The machine had 12 cores and was busy with other work, with a load average between 8 and 27. A search takes 0.3 s on its own, nearly all of it akm starting up. With eight in flight, a search took 0.55 s on average and a curate 0.94 s. `--limit 200` takes about a minute.
 
@@ -77,7 +77,7 @@ SkillRet's train split has a skill pool of its own: 10,123 skills that share no 
 
 `--limit` draws from those 4,392 the same way as for `public`. The draw is deterministic: seed 42 is in `summary.json`, so the same library and the same queries come back. 4,276 of the 6,006 skills are needed by one of the 4,392 queries, against 5,640 in the public library.
 
-The other private corpora in this repository are the public ones with their names and numbers rewritten. This one is a different library with different queries, so it checks whether akm's public score has come from tuning to the public items. It hides nothing: the train split is public, and the seed is in the code.
+The other private corpora in this repository are the public ones with their names and numbers rewritten. This one is a different library with different queries, so it checks whether akm's public score has come from tuning to the public items. It hides nothing: the train split is public, and the seed is in the code. There is nothing for `./generate-assets` to make: the library and the queries are drawn when the run starts.
 
 A private score is not comparable to the public one without care, because the queries differ. The train queries are written by another model (Qwen3.5-122B-A10B, against Claude Opus 4.6 for the test queries) and are shorter: the private queries have a median of 68 words, the public ones 169. SkillRet's paper says the long, scenario-rich test queries are harder for lexical matching. A private score above the public one is what to expect, and says little about tuning on its own. So the results below put SkillRet's BM25 code, run on the same private library and queries, beside akm: the question is whether akm stands the same against it on both corpora.
 
