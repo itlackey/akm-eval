@@ -175,12 +175,13 @@
       ["retries"],
       ["flaky", "intermittent", "one run in five", "one in five"],
       ["runner"],
-      ["not found", "unknown", "untested", "undiagnosed", "unconfirmed", "unverified", "not known", "guess", "suspect", "unproven"]
+      ["not found", "unknown", "untested", "undiagnosed", "unconfirmed", "unverified", "not known", "guess", "suspect", "unproven", "identified", "investigat"]
     ],
     "forbidden": [
       ["autocomplete is the cause", "autocomplete causes", "caused by the autocomplete", "caused by slow", "caused by slower", "due to slow", "due to slower", "because * autocomplete"],
       ["retries fix", "retries solve", "retries resolve", "retries cure", "retries eliminate", "retries are the fix", "retries are a fix"],
-      ["always add retries", "always use retries", "retries to all", "retries to every", "all flaky tests", "every flaky test"]
+      ["always add retries", "always use retries", "retries to all", "retries to every", "all flaky tests", "every flaky test"],
+      ["resource contention", "network latency", "slow network", "network request", "cpu contention", "memory pressure", "race condition", "performance regression"]
     ],
     "good": "A Playwright test that failed about one run in five on small CI runners passed 20 runs in a row after retries: 2 was added, but the cause was not found. The suspected slow autocomplete request is untested, and the retries only hide the failures, so the test stays marked @flaky until someone investigates.",
     "bad": "Flaky Playwright tests are caused by slow autocomplete requests on small runners; retries fix them, so always add retries to every flaky test.",
