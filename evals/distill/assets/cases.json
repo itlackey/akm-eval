@@ -10,7 +10,7 @@
     ],
     "forbidden": [
       ["networkidle * deprecated", "networkidle * broken", "networkidle never works", "networkidle is useless", "avoid networkidle entirely", "avoid networkidle altogether", "avoid waitForLoadState", "never use waitForLoadState"],
-      ["waitForSelector", "waitForResponse", "waitForTimeout", "waitForFunction", "waitForURL"],
+      ["waitForSelector", "waitForResponse", "waitForTimeout", "waitForFunction", "waitForURL", "domcontentloaded", "load instead"],
       ["remove * widget", "disable * widget"]
     ],
     "good": "Do not wait for networkidle on a page that carries a polling widget. The support chat widget polls every 20 seconds, so the network is never idle and the wait runs until the 30 second test timeout. Wait for a specific element instead, such as the page heading being visible; the order-history test then finished in about two seconds.",

@@ -50,7 +50,7 @@ interface Summary {
   results_dir: string;
 }
 
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
+/** A failure that ends the run with a message. */
 class Fatal extends Error {
   constructor(
     message: string,
