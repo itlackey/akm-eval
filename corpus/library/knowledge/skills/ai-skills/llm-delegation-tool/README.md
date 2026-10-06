@@ -117,4 +117,4 @@ See [references/configuration-examples.md](../../../../skills/ai-skills/llm-dele
 - **[scripts/update-models.mjs](../../../../skills/ai-skills/llm-delegation-tool/scripts/update-models.mjs)** - Refresh `available_models` from each endpoint's `/v1/models`
 
 ## License
-CC-BY
+MPL-2.0
