@@ -1,0 +1,136 @@
+{"id": "q001", "query": "break the cleanup into small safe steps that can be rolled back", "kind": "paraphrase", "expected": ["skills/coding/refactoring-plan", "skills/coding/refactoring-executor"]}
+{"id": "q002", "query": "Terraform remote state locking with DynamoDB", "kind": "no-answer", "expected": []}
+{"id": "q003", "query": "decide which cleanup jobs to tackle first", "kind": "paraphrase", "expected": ["skills/coding/refactoring-plan", "knowledge/skills/coding/refactoring-plan/references/priority-rubric"]}
+{"id": "q004", "query": "compare two versions of a PDF to catch visual regressions", "kind": "direct", "expected": ["commands/print/compare-pdf", "skills/print/print-utilities", "scripts/skills/print/print-utilities/scripts/compare-pdf.ts"]}
+{"id": "q005", "query": "validate the local markdown links and image references in a book project", "kind": "direct", "expected": ["commands/print/validate-links"]}
+{"id": "q006", "query": "take a GitHub issue from spec to merged pull request", "kind": "multi", "expected": ["workflows/create-github-issues-from-spec", "workflows/github-issues-parallel-implementer", "commands/complete-github-issue"]}
+{"id": "q007", "query": "verify a Stripe webhook signature", "kind": "no-answer", "expected": []}
+{"id": "q008", "query": "prove nothing else calls this old function before I remove it", "kind": "paraphrase", "expected": ["skills/coding/dead-code-removal", "knowledge/skills/coding/dead-code-removal/references/indirect-usage-checklist"]}
+{"id": "q009", "query": "gutterpress doctor", "kind": "name", "expected": ["skills/print/pdfx-print-pipeline"]}
+{"id": "q010", "query": "playwright-test-reviewer", "kind": "name", "expected": ["agents/playwright/playwright-test-reviewer"]}
+{"id": "q011", "query": "set up credentials for the issue tracker and create a work item in Azure DevOps", "kind": "multi", "expected": ["knowledge/skills/administrative/tracker/references/authentication", "knowledge/skills/administrative/tracker/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET", "knowledge/skills/administrative/tracker/references/azure-devops-cli-first", "skills/administrative/tracker"]}
+{"id": "q012", "query": "report-orchestrator", "kind": "name", "expected": ["agents/report-orchestrator"]}
+{"id": "q013", "query": "write a Playwright test with the page object model pattern", "kind": "direct", "expected": ["agents/playwright/playwright-test-writer", "knowledge/playwright/best-practices", "scripts/skills/e2e-testing/references/playwright-pom-example.ts", "skills/e2e-testing/test-implementation"]}
+{"id": "q014", "query": "check an interior PDF against DriveThruRPG print on demand requirements before submitting", "kind": "direct", "expected": ["commands/print/preflight-print", "knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG", "skills/print/pdfx-print-pipeline"]}
+{"id": "q015", "query": "keep API keys out of the chat while still letting the agent call the service", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/env-setup", "knowledge/skills/ai-skills/agent-cli-tools/references/akm-env-setup", "skills/ai-skills/agent-cli-tools"]}
+{"id": "q016", "query": "drop packages I no longer need from my manifest", "kind": "paraphrase", "expected": ["skills/coding/dependency-simplification"]}
+{"id": "q017", "query": "doom_loop", "kind": "name", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/permissions"]}
+{"id": "q018", "query": "semantic search and content moderation through OpenAI endpoints with example agents and commands", "kind": "multi", "expected": ["skills/ai-skills/llm-delegation-tool", "agents/skills/ai-skills/llm-delegation-tool/examples/agents/semantic-search", "agents/skills/ai-skills/llm-delegation-tool/examples/agents/content-moderator", "commands/skills/ai-skills/llm-delegation-tool/examples/commands/search", "commands/skills/ai-skills/llm-delegation-tool/examples/commands/moderate"]}
+{"id": "q019", "query": "ProviderInitError", "kind": "name", "expected": ["knowledge/skills/ai-skills/opencode-troubleshoot/references/fixes", "knowledge/skills/ai-skills/opencode-troubleshoot/references/symptom-map", "knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis"]}
+{"id": "q020", "query": "the printer says the dark areas hold too much ink", "kind": "paraphrase", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG", "skills/print/pdfx-print-pipeline", "commands/print/preflight-print"]}
+{"id": "q021", "query": "check margins, safe zones, page numbers and typography against TTRPG print standards", "kind": "multi", "expected": ["knowledge/skills/print/pdf-review/references/print-quality-checklist", "knowledge/skills/print/pdf-review/references/ttrpg-standards", "knowledge/skills/print/pdf-layout-reviewer/references/print-standards", "knowledge/skills/print/pdf-layout-reviewer/references/common-issues"]}
+{"id": "q022", "query": "send a Slack message when a long running job finishes", "kind": "direct", "expected": ["skills/notify", "scripts/skills/notify/scripts/notify.sh", "knowledge/skills/notify/examples/usage"]}
+{"id": "q023", "query": "assess the technical debt of an existing repository without changing any code", "kind": "direct", "expected": ["commands/coding/technical-debt/assess-technical-debt", "skills/coding/repository-assessment", "skills/coding/technical-debt-workflow"]}
+{"id": "q024", "query": "write an OpenCode plugin that reacts to session events", "kind": "direct", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/plugins", "knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs", "skills/ai-skills/opencode-extensions"]}
+{"id": "q025", "query": "draft a decision-ready report from finished analysis notes", "kind": "direct", "expected": ["agents/report-writer", "agents/report-analyst"]}
+{"id": "q026", "query": "generate vector embeddings for a list of strings with a configurable model", "kind": "direct", "expected": ["knowledge/skills/ai-skills/llm-delegation-tool/examples/commands/embed", "skills/ai-skills/llm-delegation-tool"]}
+{"id": "q027", "query": "refactoring-orchestrator", "kind": "name", "expected": ["agents/coding/technical-debt/refactoring-orchestrator"]}
+{"id": "q028", "query": "create an Azure DevOps user story from the command line", "kind": "direct", "expected": ["knowledge/skills/administrative/tracker/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET", "knowledge/skills/administrative/tracker/references/azure-devops-cli-first"]}
+{"id": "q029", "query": "decide whether a book layout is good enough to win an award", "kind": "paraphrase", "expected": ["agents/print/visual-design-contest-judge"]}
+{"id": "q030", "query": "send one prompt to a local Ollama or LM Studio server from a script", "kind": "direct", "expected": ["skills/ai-skills/llm-delegation-tool", "knowledge/skills/ai-skills/llm-delegation-tool/README"]}
+{"id": "q031", "query": "yaml-manager.ts", "kind": "name", "expected": ["scripts/skills/ai-skills/litellm-skill/lib/yaml-manager.ts", "scripts/skills/litellm-skill/lib/yaml-manager.ts"]}
+{"id": "q032", "query": "what is the easiest way to hand a screenshot to a command-line coding agent", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/image-input"]}
+{"id": "q033", "query": "build a research pipeline: collect evidence, analyze it, write the report and review it", "kind": "multi", "expected": ["agents/report-researcher", "agents/report-analyst", "agents/report-writer", "agents/report-reviewer", "agents/report-orchestrator"]}
+{"id": "q034", "query": "map module boundaries, dependency cycles and layer violations in a codebase", "kind": "direct", "expected": ["skills/coding/architecture-review"]}
+{"id": "q035", "query": "our company firewall inspects HTTPS so the terminal agent cannot reach its provider", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/network"]}
+{"id": "q036", "query": "manage a LiteLLM proxy: add a model, issue a key, set a budget and watch spend", "kind": "multi", "expected": ["skills/ai-skills/litellm-skill", "scripts/skills/ai-skills/litellm-skill/scripts/models.ts", "scripts/skills/ai-skills/litellm-skill/scripts/keys.ts", "scripts/skills/ai-skills/litellm-skill/scripts/budgets.ts", "scripts/skills/ai-skills/litellm-skill/scripts/spend.ts"]}
+{"id": "q037", "query": "get a skeptical second pair of eyes to approve my write-up", "kind": "paraphrase", "expected": ["agents/report-reviewer"]}
+{"id": "q038", "query": "gws-verify.sh", "kind": "name", "expected": ["scripts/skills/gws-setup/scripts/gws-verify.sh", "skills/gws-setup"]}
+{"id": "q039", "query": "turn a multi-step CLI procedure into a reusable slash command", "kind": "direct", "expected": ["skills/coding/cli-workflow-creator"]}
+{"id": "q040", "query": "write alt text and captions for the illustrations in a rulebook", "kind": "direct", "expected": ["agents/writing/image-describer"]}
+{"id": "q041", "query": "add a script entry to the project's package.json", "kind": "direct", "expected": ["commands/add-package-script"]}
+{"id": "q042", "query": "create and revoke virtual API keys on a LiteLLM proxy", "kind": "direct", "expected": ["skills/ai-skills/litellm-skill", "scripts/skills/ai-skills/litellm-skill/scripts/keys.ts"]}
+{"id": "q043", "query": "find which risky behaviour has no tests before refactoring", "kind": "direct", "expected": ["skills/coding/test-gap-analysis"]}
+{"id": "q044", "query": "helm chart rollout and rollback in Kubernetes", "kind": "no-answer", "expected": []}
+{"id": "q045", "query": "check a manuscript folder for WCAG accessibility problems such as missing alt text", "kind": "direct", "expected": ["commands/print/check-accessibility"]}
+{"id": "q046", "query": "write an atmospheric description of a haunted location for a tabletop game", "kind": "direct", "expected": ["agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer", "knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer"]}
+{"id": "q047", "query": "cap what a team can spend on model calls each month", "kind": "paraphrase", "expected": ["scripts/skills/ai-skills/litellm-skill/scripts/budgets.ts", "scripts/skills/ai-skills/litellm-skill/scripts/teams.ts", "skills/ai-skills/litellm-skill"]}
+{"id": "q048", "query": "QA every spread of a book, run the reviewers and dispatch fixes by tier", "kind": "multi", "expected": ["workflows/print-spread-qa-loop", "knowledge/print/fix-team-dispatch-template", "commands/print/qa-spread", "commands/print/preview-qa-workflow"]}
+{"id": "q049", "query": "produce a print-ready PDF/X from markdown, preflight it for DriveThruRPG and do a visual QA pass", "kind": "multi", "expected": ["skills/print/pdfx-print-pipeline", "commands/print/build-pdf", "commands/print/preflight-print", "skills/print/pdf-review", "agents/print/markdown-pdf-pipeline", "commands/print/publish-pipeline"]}
+{"id": "q050", "query": "tests that can never fail because they assert nothing real", "kind": "paraphrase", "expected": ["agents/playwright/playwright-test-reviewer"]}
+{"id": "q051", "query": "should I use a heavyweight agent CLI or something lighter for a one-off model call", "kind": "paraphrase", "expected": ["skills/ai-skills/llm-delegation-tool", "knowledge/skills/ai-skills/llm-delegation-tool/README"]}
+{"id": "q052", "query": "CGATS21_CRPC1.icc", "kind": "name", "expected": ["skills/cmyk-image-converter", "skills/print/pdfx-print-pipeline"]}
+{"id": "q053", "query": "implement several GitHub issues in parallel on separate git worktrees", "kind": "direct", "expected": ["workflows/github-issues-parallel-implementer"]}
+{"id": "q054", "query": "make a Docker image smaller with multi-stage builds", "kind": "no-answer", "expected": []}
+{"id": "q055", "query": "React Native push notifications on iOS", "kind": "no-answer", "expected": []}
+{"id": "q056", "query": "preflight-print", "kind": "name", "expected": ["commands/print/preflight-print"]}
+{"id": "q057", "query": "APPRISE_NOTIFY_CONFIG", "kind": "name", "expected": ["skills/notify", "scripts/skills/notify/scripts/notify.sh"]}
+{"id": "q058", "query": "execute-refactoring-slice", "kind": "name", "expected": ["commands/coding/technical-debt/execute-refactoring-slice"]}
+{"id": "q059", "query": "list open GitHub issues with the bug label and close the fixed ones", "kind": "direct", "expected": ["skills/administrative/tracker", "scripts/skills/administrative/tracker/scripts/platforms/github.ts"]}
+{"id": "q060", "query": "score how hard my TypeScript modules are to maintain using complexity numbers", "kind": "paraphrase", "expected": ["skills/coding/fta-code-quality", "knowledge/skills/coding/fta-code-quality/references/fta-reference"]}
+{"id": "q061", "query": "measurable design and CSS rules for print books and how to judge them visually", "kind": "multi", "expected": ["knowledge/print/measurable-design-and-css-rubric", "knowledge/print/visual-review/designer-eye-method"]}
+{"id": "q062", "query": "stop the agent from running shell commands until I approve them", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/permissions"]}
+{"id": "q063", "query": "get advice on CSS layout and browser DevTools debugging for a web app", "kind": "direct", "expected": ["agents/development/web-design-expert"]}
+{"id": "q064", "query": "tracker-cli.ts", "kind": "name", "expected": ["scripts/skills/administrative/tracker/scripts/tracker-cli.ts", "skills/administrative/tracker"]}
+{"id": "q065", "query": "give a colleague a link to my conversation with the assistant", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/share"]}
+{"id": "q066", "query": "build a PDF/X-1a file from a gutterpress project", "kind": "direct", "expected": ["skills/print/pdfx-print-pipeline", "commands/print/build-pdf"]}
+{"id": "q067", "query": "configure OpenCode with a custom provider, a default model and a corporate proxy", "kind": "multi", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/providers", "knowledge/skills/ai-skills/opencode-extensions/references/models", "knowledge/skills/ai-skills/opencode-extensions/references/network", "knowledge/skills/ai-skills/opencode-extensions/references/config"]}
+{"id": "q068", "query": "dispatch tasks to several agent CLIs while keeping each service's API key in its own env file", "kind": "multi", "expected": ["skills/ai-skills/agent-cli-tools", "knowledge/skills/ai-skills/agent-cli-tools/references/env-setup", "knowledge/skills/ai-skills/agent-cli-tools/references/akm-env-setup"]}
+{"id": "q069", "query": "turn a heap of raw research into checked notes in my knowledge base", "kind": "paraphrase", "expected": ["workflows/research-to-knowledge"]}
+{"id": "q070", "query": "tune a slow PostgreSQL query with EXPLAIN ANALYZE", "kind": "no-answer", "expected": []}
+{"id": "q071", "query": "turn a feature spec into GitHub issues, epics, stories and tasks", "kind": "direct", "expected": ["workflows/create-github-issues-from-spec"]}
+{"id": "q072", "query": "cut a new release with a semantic version and a changelog", "kind": "direct", "expected": ["skills/coding/git-release"]}
+{"id": "q073", "query": "Convert my RGB cover art to CMYK so DriveThruRPG will print it", "kind": "direct", "expected": ["skills/cmyk-image-converter", "commands/print/audit-assets"]}
+{"id": "q074", "query": "run Claude Code non-interactively from a shell script and capture the output", "kind": "direct", "expected": ["skills/ai-skills/agent-cli-tools", "knowledge/skills/ai-skills/agent-cli-tools/references/claude-code"]}
+{"id": "q075", "query": "env/tracker", "kind": "name", "expected": ["knowledge/skills/administrative/tracker/references/authentication", "skills/administrative/tracker"]}
+{"id": "q076", "query": "write, review and gate Playwright tests, including who judges coverage", "kind": "multi", "expected": ["agents/playwright/playwright-test-writer", "agents/playwright/playwright-test-reviewer", "agents/playwright/test-coverage-judge", "knowledge/playwright/test-coverage-rubric"]}
+{"id": "q077", "query": "dispatch agents to implement and review a list of tasks", "kind": "direct", "expected": ["commands/implement-tasks"]}
+{"id": "q078", "query": "Prometheus alert rules for high memory usage", "kind": "no-answer", "expected": []}
+{"id": "q079", "query": "OpenCode MCP servers keep disconnecting: find the cause in the logs", "kind": "multi", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/mcp-servers", "knowledge/skills/ai-skills/opencode-troubleshoot/references/symptom-map", "knowledge/skills/ai-skills/opencode-troubleshoot/references/fixes", "knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis", "scripts/skills/ai-skills/opencode-troubleshoot/scripts/oc-log-analyzer.sh"]}
+{"id": "q080", "query": "implement the OAuth 2.0 PKCE flow in a single page app", "kind": "no-answer", "expected": []}
+{"id": "q081", "query": "upgrade akm-cli across several 0.9 releases safely", "kind": "direct", "expected": ["skills/akm-migrate"]}
+{"id": "q082", "query": "fix Rust lifetime errors in async code", "kind": "no-answer", "expected": []}
+{"id": "q083", "query": "add an MCP server to OpenCode", "kind": "direct", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/mcp-servers"]}
+{"id": "q084", "query": "fine-tune a LoRA adapter on my own dataset", "kind": "no-answer", "expected": []}
+{"id": "q085", "query": "oc-healthcheck.sh", "kind": "name", "expected": ["scripts/skills/ai-skills/opencode-troubleshoot/scripts/oc-healthcheck.sh", "skills/ai-skills/opencode-troubleshoot"]}
+{"id": "q086", "query": "set up Google Workspace CLI authentication on a headless CI machine", "kind": "direct", "expected": ["skills/gws-setup", "knowledge/skills/gws-setup/references/auth-methods", "scripts/skills/gws-setup/scripts/gws-export.sh"]}
+{"id": "q087", "query": "copy edit a game manuscript for consistency and house style", "kind": "direct", "expected": ["agents/writing/copy-editor"]}
+{"id": "q088", "query": "bring the docs back in line with the code after a refactor", "kind": "paraphrase", "expected": ["skills/coding/documentation-sync"]}
+{"id": "q089", "query": "work out how wide a paperback cover has to be, spine included", "kind": "paraphrase", "expected": ["commands/print/cover-wrap", "knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG"]}
+{"id": "q090", "query": "run a complete technical debt cleanup from baseline assessment to final review", "kind": "multi", "expected": ["workflows/coding/technical-debt-lifecycle", "skills/coding/technical-debt-workflow", "agents/coding/technical-debt/refactoring-orchestrator", "skills/coding/refactoring-review"]}
+{"id": "q091", "query": "reuse a logged-in browser session across many end-to-end tests", "kind": "paraphrase", "expected": ["scripts/skills/e2e-testing/references/playwright-auth-fixture.ts", "skills/e2e-testing/test-implementation", "knowledge/playwright/best-practices"]}
+{"id": "q092", "query": "write an OpenCode extension with a custom tool, a subagent and a slash command", "kind": "multi", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/custom-tools", "skills/ai-skills/opencode-extensions", "knowledge/skills/ai-skills/opencode-extensions/references/agents", "commands/skills/ai-skills/opencode-extensions/references/commands"]}
+{"id": "q093", "query": "old cached extension code keeps running after I changed it", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-troubleshoot/references/symptom-map", "knowledge/skills/ai-skills/opencode-troubleshoot/references/fixes"]}
+{"id": "q094", "query": "explore a web application and list the end-to-end test scenarios it needs", "kind": "direct", "expected": ["agents/playwright/playwright-explorer", "skills/e2e-testing/app-exploration"]}
+{"id": "q095", "query": "agents for a game studio: one writes rules text, one copy edits, one describes the pictures", "kind": "multi", "expected": ["agents/writing/content-writer", "agents/writing/copy-editor", "agents/writing/image-describer"]}
+{"id": "q096", "query": "AZURE_DEVOPS_WORKITEM_CHEATSHEET", "kind": "name", "expected": ["knowledge/skills/administrative/tracker/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET"]}
+{"id": "q097", "query": "ov-client.ts", "kind": "name", "expected": ["scripts/skills/ai-skills/openviking/scripts/ov-client.ts", "skills/ai-skills/openviking"]}
+{"id": "q098", "query": "TRIM_SIZES", "kind": "name", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/TRIM_SIZES"]}
+{"id": "q099", "query": "does my test suite really touch every page and flow of the site", "kind": "paraphrase", "expected": ["agents/playwright/test-coverage-judge", "knowledge/playwright/test-coverage-rubric", "workflows/playwright-full-coverage"]}
+{"id": "q100", "query": "let my editor talk to the coding assistant through a standard protocol", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/acp"]}
+{"id": "q101", "query": "test-coverage-rubric", "kind": "name", "expected": ["knowledge/playwright/test-coverage-rubric"]}
+{"id": "q102", "query": "inkcov", "kind": "name", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG", "skills/print/pdfx-print-pipeline", "commands/print/preflight-print"]}
+{"id": "q103", "query": "a table keeps splitting across two pages in my book layout", "kind": "paraphrase", "expected": ["skills/print/pagedjs", "knowledge/skills/print/pagedjs/references/css-patterns", "knowledge/skills/print/pagedjs/references/troubleshooting"]}
+{"id": "q104", "query": "find unused code that is safe to delete", "kind": "direct", "expected": ["skills/coding/dead-code-removal"]}
+{"id": "q105", "query": "keep my code tidy automatically each time a file is saved", "kind": "paraphrase", "expected": ["knowledge/skills/ai-skills/opencode-extensions/references/formatters"]}
+{"id": "q106", "query": "review a print-ready PDF page by page for layout problems", "kind": "direct", "expected": ["skills/print/pdf-review", "commands/print/review-pdf", "skills/print/pdf-layout-reviewer"]}
+{"id": "q107", "query": "Palatino Linotype Book Antiqua font stack", "kind": "name", "expected": ["knowledge/skills/print/pdfx-print-pipeline/references/CSS_PRINT"]}
+{"id": "q108", "query": "Alibaba's Qwen Code CLI in headless mode", "kind": "direct", "expected": ["knowledge/skills/ai-skills/agent-cli-tools/references/qwen-code"]}
+{"id": "q109", "query": "fix trapped white space and rivers in a print layout", "kind": "direct", "expected": ["knowledge/skills/print/pdf-layout-reviewer/references/common-issues"]}
+{"id": "q110", "query": "what goes in the Executive Takeaways section of a report", "kind": "direct", "expected": ["agents/report-writer"]}
+{"id": "q111", "query": "judge a tabletop book against Ennie Award winners", "kind": "paraphrase", "expected": ["agents/print/visual-design-contest-judge"]}
+{"id": "n01", "query": "Build 1523 finished in 42s with 3 warnings and 0 errors.", "kind": "status"}
+{"id": "n02", "query": "WARN [consumer] group rebalance took 12041ms", "kind": "log"}
+{"id": "n03", "query": "Disk usage on build-02 reached 91 percent, above the 90 percent warning threshold", "kind": "notification"}
+{"id": "n04", "query": "haha nice, that is exactly what I wanted", "kind": "chitchat"}
+{"id": "n05", "query": "Standup: yesterday I fixed the flaky login test, today I am pairing on the cache bug, no blockers.", "kind": "status"}
+{"id": "n06", "query": "Update: the outage was caused by an expired certificate and is now resolved.", "kind": "status"}
+{"id": "n07", "query": "Reminder: team standup starts in 10 minutes", "kind": "notification"}
+{"id": "n08", "query": "<task-notification> <task-id>b9k2x7q4m</task-id> <status>completed</status> <summary>Background command \"bun test\" completed (exit code 0)</summary> </task-notification>", "kind": "notification"}
+{"id": "n09", "query": "never mind, I figured it out myself", "kind": "chitchat"}
+{"id": "n10", "query": "Still waiting for the vendor to send the signed contract, nothing else is blocked.", "kind": "status"}
+{"id": "n11", "query": "CI run 482 passed on the main branch", "kind": "notification"}
+{"id": "n12", "query": "ok sounds good, go ahead", "kind": "chitchat"}
+{"id": "n13", "query": "hey, are you still there?", "kind": "chitchat"}
+{"id": "n14", "query": "Deployed v2.4.1 to staging at 14:05 and the smoke tests passed.", "kind": "status"}
+{"id": "n15", "query": "2026-10-05T13:21:44Z INFO worker[3] connection reset by peer, retrying in 5s", "kind": "log"}
+{"id": "n16", "query": "npm WARN deprecated inflight@1.0.6: This module is not supported, and it leaks memory.", "kind": "log"}
+{"id": "n17", "query": "thanks, that worked!", "kind": "chitchat"}
+{"id": "n18", "query": "GET /healthz 200 3ms", "kind": "log"}
+{"id": "n19", "query": "You have 3 unread messages in the general channel", "kind": "notification"}
+{"id": "n20", "query": "[2026-10-05 13:22:01] worker-7 exited with code 137 (SIGKILL)", "kind": "log"}
+{"id": "n21", "query": "Traceback (most recent call last): File \"app.py\", line 42, in <module> ValueError: invalid literal for int() with base 10: 'abc'", "kind": "log"}
+{"id": "n22", "query": "good morning! ready when you are", "kind": "chitchat"}
+{"id": "n23", "query": "great, let's call it a day", "kind": "chitchat"}
+{"id": "n24", "query": "Finished the billing table migration; tests are green and the PR is up for review.", "kind": "status"}
+{"id": "n25", "query": "Calendar update: sprint planning moved to Thursday at 2:00 PM", "kind": "notification"}
