@@ -311,13 +311,21 @@ function addedTitle(before: string, after: string): string | undefined {
   return m && after.slice(m[0].length) === before.replace(/^(\r?\n)+/, "") ? m[1] : undefined;
 }
 
-/** Words in a changed value that name something: a digit, two capitals, a path or a dotted name. Each must be in the note. */
-function ungrounded(value: string, note: string): string[] {
-  const haystack = note.toLowerCase();
+/** The words of a value that name something: a digit, two capitals, a path or a dotted name. Spaces, hyphens and dashes of every kind split words. */
+function specifics(value: string): string[] {
   return value
-    .split(/[\s-]+/)
+    .split(/[\s\u2010-\u2015\u2212-]+/)
     .map((t) => t.replace(/^[^\w`]+|[^\w`]+$/g, "").replace(/`/g, ""))
-    .filter((t) => t !== "" && /\d|[A-Z].*[A-Z]|[a-z][/_.][a-z]/.test(t) && !haystack.includes(t.toLowerCase()));
+    .filter((t) => t !== "" && /\d|[A-Z].*[A-Z]|[a-z][/_.][a-z]/.test(t));
+}
+
+/** The specific words of a changed value that the note does not hold. */
+const ungrounded = (value: string, note: string): string[] => specifics(value).filter((t) => !note.toLowerCase().includes(t.toLowerCase()));
+
+/** Does `after` still hold every name, number and path `before` had, however they are spelled or joined? Other words may change. */
+function keepsNames(before: string, after: string): boolean {
+  const kept = new Set(wordsOf(after));
+  return specifics(before).every((t) => wordsOf(t).every((w) => kept.has(w)));
 }
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -373,7 +381,7 @@ function isFixed(c: Case, before: Note, after: Note, title: string | undefined):
     case "description-quote":
       return ok && !hasEscapedQuote(now) && keeps(was, now);
     case "description-truncated":
-      return ok && keeps(withoutTail(was), now);
+      return ok && keepsNames(withoutTail(was), now);
     case "description-missing":
       return ok && now !== derivedDescription(before); // the model's own description, not the one akm falls back to
     case "when-to-use-missing": {
@@ -532,6 +540,15 @@ export function reflectOutcome(improve: unknown): { outcome: Outcome; reason: st
   return { outcome: "error", reason: why };
 }
 
+/**
+ * The model that answered reflect, as the response names it, from the usage report in the improve result. A gateway that
+ * serves one name from several providers may answer with a different name each time.
+ */
+export function servedModel(improve: unknown): string | undefined {
+  const usage = (improve as { usageReport?: { byProcessEngineModel?: { process?: string; model?: string }[] } } | null)?.usageReport;
+  return usage?.byProcessEngineModel?.find((p) => p.process === "reflect")?.model;
+}
+
 export interface Row {
   id: string;
   class: CaseClass;
@@ -541,17 +558,22 @@ export interface Row {
   changed: string[];
   values: Record<string, string>;
   reason: string;
+  /** The model that answered, as the response names it. */
+  served?: string;
+  /** What the note would be if the proposal were accepted, so a result can be scored again when the checks change. */
+  proposal?: string;
   seconds: number;
   error?: string;
 }
 
 /** A row for a case. An error has no verdict. A reply akm could not use, or an edit its own filter refused, is never correct. */
-export function makeRow(c: Case, run: { outcome: Outcome; proposal?: string; reason?: string; seconds: number; error?: string }): Row {
-  const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", seconds: run.seconds };
+export function makeRow(c: Case, run: { outcome: Outcome; proposal?: string; reason?: string; served?: string; seconds: number; error?: string }): Row {
+  // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
+  const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
   if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason };
   const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
   const correct = (run.outcome === "proposal" || run.outcome === "none") && Object.values(checks).every(Boolean);
-  return { ...base, correct, checks, changed, values };
+  return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };
 }
 
 export interface Stats {

@@ -22,8 +22,8 @@ The private run reads `private/reflect/assets/`. Make it first with `./generate-
 
 Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the akm version, the corpus and the git commit.
-- `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and the new text, akm's reason when it made no proposal, and the time it took.
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version, the corpus and the git commit.
+- `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and their new text, the proposal itself, the model name that answered, akm's reason when it made no proposal, and the time it took. The proposal's text lets you score a result again when the checks change.
 
 ## How a case runs
 
@@ -75,7 +75,7 @@ No judge model scores a case. Each check looks at the proposal and the note.
 | Check | Applies to | Passes when |
 |---|---|---|
 | `body_kept` | every case | The body is the note's body, byte for byte. The one heading akm adds for a missing title is allowed there. |
-| `defect_fixed` | defects | The defect is repaired and what the note said stays. The per-class rule is in `assets/README.md`. |
+| `defect_fixed` | defects | The defect is repaired and what the note said stays. A split or escaped-quote description keeps every word, because akm tells the model to repair only the break. A cut-off one keeps its names, numbers and paths, and a restatement in other words is fine. The rest of the per-class rules are in `assets/README.md`. |
 | `no_extra_change` | every case | No field changes except the one the class allows. A change to any other field is churn. A `type:` line akm adds does not count. |
 | `no_invented` | every case | Each number, name with two capitals, path or dotted name in a new value is in the note, and the new values hold none of the case's forbidden terms. |
 | `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical. Leaving it alone passes. |
@@ -107,6 +107,7 @@ A model may have seen the public cases in training. A much better public score t
 - `description-truncated` and `body-defect` are defects akm's rules reject, but its list of problems does not name them: the prompt tells the model that akm found nothing wrong. Reflect cannot change a body at all, so for `body-defect` the right result is no change.
 - The library has no memories or lessons, so the cases cover knowledge, skills, agents, commands and workflows.
 - What reflect does changes with akm. Compare results only between runs with the same akm version.
+- A gateway may serve one model name from several providers. `served` in `summary.json` counts the names the responses gave, so you can see when a run was split.
 - The private cases keep their ids, so a private case pairs with its public one by id. `private/reflect/map.json` lists what was renamed.
 
 ## Licence

@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
-import { type Case, type Metrics, type Row, CLASSES, STRATEGY, atLeast, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases } from "./lib.ts";
+import { type Case, type Metrics, type Row, CLASSES, STRATEGY, atLeast, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel } from "./lib.ts";
 
 const NAME = "reflect";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -43,6 +43,8 @@ interface Summary {
   n_run: number;
   n_scored: number;
   n_errored: number;
+  /** The model names that answered, as the responses give them, with how many cases each answered. */
+  served: Record<string, number>;
   metrics: Metrics;
   results_dir: string;
 }
@@ -104,15 +106,17 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
     const ref = refOf(c.path);
     await runAkmJson(sandbox, ["index"]);
     await runAkmJson(sandbox, ["feedback", ref, "--negative", "--reason", c.feedback]);
-    const { outcome, reason } = reflectOutcome(await runAkmJson(sandbox, ["improve", ref, "--strategy", STRATEGY, "--json-to-stdout"]));
-    if (outcome !== "proposal") return makeRow(c, { outcome, reason, seconds: seconds() });
+    const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", STRATEGY, "--json-to-stdout"]);
+    const { outcome, reason } = reflectOutcome(improve);
+    const served = servedModel(improve);
+    if (outcome !== "proposal") return makeRow(c, { outcome, reason, served, seconds: seconds() });
     const { proposals } = await runAkmJson<{ proposals: { id: string; source: string }[] }>(sandbox, ["proposal", "list"]);
     const mine = proposals.filter((p) => p.source === "reflect");
     if (mine.length !== 1) throw new Error(`reflect made a proposal but the queue holds ${mine.length}`);
     const shown = await runAkmJson<{ proposal: { payload?: { content?: unknown } } }>(sandbox, ["proposal", "show", mine[0]?.id ?? "", "--detail", "full"]);
     const content = shown.proposal.payload?.content;
     if (typeof content !== "string") throw new Error("the proposal has no content");
-    return makeRow(c, { outcome: "proposal", proposal: content, seconds: seconds() });
+    return makeRow(c, { outcome: "proposal", proposal: content, served, seconds: seconds() });
   } catch (e) {
     return makeRow(c, { outcome: "error", reason: (e as Error).message.slice(0, 300), seconds: seconds() });
   } finally {
@@ -129,6 +133,7 @@ function printSummary(s: Summary): void {
   console.log(`  controls right  ${cell(m.controls)}  ${pct(m.controls.rate)}`);
   console.log(`  proposals       ${m.proposals.n}, ${m.proposals.touched_body} touched the body`);
   console.log(`  errored         ${s.n_errored}`);
+  if (Object.keys(s.served).length > 0) console.log(`  served by       ${Object.entries(s.served).map(([name, n]) => `${name} ${n}`).join(", ")}`);
   for (const cls of CLASSES) {
     const k = m.classes[cls];
     if (!k) continue;
@@ -206,6 +211,7 @@ export async function runCorpus(
     n_run: rows.length,
     n_scored: rows.length - errored,
     n_errored: errored,
+    served: rows.reduce<Record<string, number>>((n, r) => (r.served ? { ...n, [r.served]: (n[r.served] ?? 0) + 1 } : n), {}),
     metrics: metrics(rows),
     results_dir: dir,
   };

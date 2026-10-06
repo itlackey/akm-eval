@@ -24,6 +24,7 @@ import {
   refOf,
   score,
   selectCases,
+  servedModel,
   splitFrontmatter,
 } from "./lib.ts";
 
@@ -275,6 +276,33 @@ describe("score", () => {
     expect(score(c, c.source).checks.defect_fixed).toBe(false);
   });
 
+  test("a cut-off description may be reworded, but it keeps the names and numbers it had", () => {
+    const source = NOTE.replace(/^description:.*$/m, "description: Generates TTRPG lore for the v2.1 tool including locations, creatures and history in a");
+    const c = mk("description-truncated", source);
+    const fixed = (d: string) => score(c, source.replace(/^description:.*$/m, `description: ${d}`)).checks;
+    expect(fixed("Generates TTRPG lore for the v2.1 tool, such as locations, creatures and history.").defect_fixed).toBe(true); // reworded
+    expect(fixed("Writes lore for TTRPG settings and the v2.1 tool.").defect_fixed).toBe(true); // reworded more
+    expect(fixed("Generates TTRPG lore for the tool, with locations, creatures and history.").defect_fixed).toBe(false); // lost v2.1
+    expect(fixed("Generates lore for the v2.1 tool, with locations, creatures and history.").defect_fixed).toBe(false); // lost TTRPG
+  });
+
+  test("a name may be joined another way: GO/FIX/NO-GO as a list", () => {
+    const source = NOTE.replace(/^description:.*$/m, "description: Run the pipeline with explicit GO/FIX/NO-GO gates and");
+    const c = mk("description-truncated", source);
+    const fixed = (d: string) => score(c, source.replace(/^description:.*$/m, `description: ${d}`)).checks.defect_fixed;
+    expect(fixed("Run the pipeline with explicit GO, FIX, and NO\u2011GO gates and one report.")).toBe(true);
+    expect(fixed("Run the pipeline with explicit pass and fail gates and one report.")).toBe(false);
+  });
+
+  test("a hyphen of any kind is a hyphen: a non-breaking one does not make a word the note lacks", () => {
+    const note = NOTE.replace("Rotate the keys", "Gate each run on GO/FIX/NO-GO. Rotate the keys");
+    const c = mk("when-to-use-missing", inject("when-to-use-missing", note) as string);
+    const withWhen = (w: string) => c.source.replace("updated:", `when_to_use: ${w}\nupdated:`);
+    expect(score(c, withWhen("Use when you need a GO/FIX/NO\u2011GO verdict on a key.")).checks.no_invented).toBe(true);
+    expect(score(c, withWhen("Use when you need a GO/FIX/NO-GO verdict on a key.")).checks.no_invented).toBe(true);
+    expect(score(c, withWhen("Use when you need a GO/FIX/NO\u2011STOP verdict on a key.")).checks.no_invented).toBe(false);
+  });
+
   test("a missing description needs one the model wrote: akm's own fallback from the heading does not count", () => {
     const c = defect("description-missing");
     const withDescription = (d: string) => c.source.replace("name: key-rotation", `name: key-rotation\ndescription: ${d}`);
@@ -380,6 +408,13 @@ describe("makeRow", () => {
     expect(makeRow(fix, { outcome: "proposal", proposal: NOTE, seconds: 1 })).toMatchObject({ correct: true, changed: ["when_to_use"], values: { when_to_use: "Use when a signing key is about to expire or may have leaked." } });
   });
 
+  test("keeps the proposal's text, so a result can be scored again, and nothing else", () => {
+    const fix = mk("when-to-use-missing", inject("when-to-use-missing", NOTE) as string);
+    expect(makeRow(fix, { outcome: "proposal", proposal: NOTE, seconds: 1 }).proposal).toBe(NOTE);
+    expect(makeRow(c, { outcome: "none", seconds: 1 }).proposal).toBeUndefined();
+    expect(makeRow(c, { outcome: "refused", seconds: 1 }).proposal).toBeUndefined();
+  });
+
   test("a reply akm could not use, or an edit its own filter refused, is never correct", () => {
     expect(makeRow(c, { outcome: "unusable", reason: "parse_error", seconds: 1 })).toMatchObject({ correct: false, outcome: "unusable" });
     expect(makeRow(c, { outcome: "refused", reason: "quality_rejected", seconds: 1 })).toMatchObject({ correct: false });
@@ -436,6 +471,16 @@ describe("reflectOutcome", () => {
     expect(reflectOutcome(improve("reflect-failed", { ok: false, reason: "timeout", error: "x" })).outcome).toBe("error");
     expect(reflectOutcome({ ok: true, actions: [] })).toEqual({ outcome: "error", reason: "reflect did not run on the asset" });
     expect(reflectOutcome(null).outcome).toBe("error");
+  });
+});
+
+describe("servedModel", () => {
+  test("is the model name the response gave for reflect, from the usage report", () => {
+    const improve = { usageReport: { byProcessEngineModel: [{ process: "distill", model: "a" }, { process: "reflect", model: "gpt-oss:120b" }] } };
+    expect(servedModel(improve)).toBe("gpt-oss:120b");
+    expect(servedModel({ usageReport: { byProcessEngineModel: [] } })).toBeUndefined();
+    expect(servedModel({})).toBeUndefined();
+    expect(servedModel(null)).toBeUndefined();
   });
 });
 

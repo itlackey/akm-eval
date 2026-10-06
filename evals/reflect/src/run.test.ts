@@ -38,7 +38,7 @@ else if (cmd === "improve") {
   const ref = rest[0];
   if (!state.fed.includes(ref)) { console.error("no feedback was recorded for " + ref); process.exit(2); }
   const p = plan[ref] ?? { outcome: "none" };
-  const action = (mode, result) => out({ ok: true, actions: [{ ref, mode, result }] });
+  const action = (mode, result) => out({ ok: true, actions: [{ ref, mode, result }], usageReport: { byProcessEngineModel: [{ process: "reflect", engine: "reflect", model: p.served ?? "served-model", calls: 1 }] } });
   if (p.outcome === "crash") { console.error(JSON.stringify({ error: "boom", code: "INTERNAL" })); process.exit(70); }
   else if (p.outcome === "proposal") { state.proposal = { id: "prop-1", source: "reflect", ref, content: p.content }; save(); action("reflect", { ok: true, proposal: { id: "prop-1" } }); }
   else if (p.outcome === "none") action("reflect-skipped", { ok: false, reason: "no_change", error: "identical" });
@@ -112,7 +112,7 @@ describe("runCorpus", () => {
   ];
   const plan = {
     "knowledge/a": { outcome: "proposal", content: NOTE },
-    "knowledge/b": { outcome: "none" },
+    "knowledge/b": { outcome: "none", served: "other-name" },
     "skills/c": { outcome: "none" },
     "knowledge/d": { outcome: "proposal", content: NOTE.replace("Use when", "Use if") },
     "knowledge/e": { outcome: "refused" },
@@ -130,6 +130,7 @@ describe("runCorpus", () => {
     expect(summary.metrics.classes["retrieval-miss"]).toMatchObject({ n: 4, correct: 1, outcomes: { none: 1, proposal: 1, refused: 1, unusable: 1, error: 2 }, failed: { no_extra_change: 1 } });
     expect(summary.metrics.classes["when-to-use-missing"]).toMatchObject({ n: 2, correct: 1, outcomes: { proposal: 1, none: 1 }, failed: { defect_fixed: 1 } });
     expect(summary.metrics.proposals).toEqual({ n: 2, touched_body: 0 });
+    expect(summary.served).toEqual({ "served-model": 5, "other-name": 1 }); // an error, whether akm crashed or the provider failed, answered nothing
 
     const dir = join(folders.results, readdirSync(folders.results)[0] as string);
     expect(dir).toMatch(/\d{4}-\d{2}-\d{2}-t$/);
@@ -147,7 +148,12 @@ describe("runCorpus", () => {
       ["provider", "error", null],
       ["crash", "error", null],
     ]);
-    expect(rows[0]).toMatchObject({ changed: ["when_to_use"], values: { when_to_use: "Use when a signing key is about to expire or may have leaked." } });
+    expect(rows[0]).toMatchObject({ changed: ["when_to_use"], values: { when_to_use: "Use when a signing key is about to expire or may have leaked." }, served: "served-model" });
+    expect(rows[0].proposal).toBe(NOTE);
+    expect(rows[1].proposal).toBeUndefined();
+    expect(rows[1].served).toBe("other-name");
+    expect(rows[6].served).toBeUndefined();
+    expect(rows[7].served).toBeUndefined();
     expect(rows[6].error).toContain("non_zero_exit: HTTP 500");
     expect(rows[7].error).toContain("boom");
   });
