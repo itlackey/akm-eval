@@ -26,6 +26,8 @@ Each row is a folder, the question it answers, which corpora it has, and its sta
 | `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | public (fetched) + private | ready |
 | `benchmarks/skillret` | Given a request, does akm rank the right skills first from a large skill library (SkillRet)? | public (fetched) + private | ready |
 
+Older evals and experiments that were retired instead of moved in are summarised in [`reports/retired-evals.md`](reports/retired-evals.md): what each asked, what it found, why it ended, and what covers the question now.
+
 ## Layout
 
 ```
