@@ -3,7 +3,7 @@ NOTICE
 Everything in this repository is licensed under MPL-2.0 (see LICENSE), code and
 assets alike, except the third-party items below. Each keeps the licence named
 here, and this file gives their attribution. Upstream licences were checked on
-2026-10-05.
+2026-10-05, and the SkillRet licence on 2026-10-06.
 
 Items marked Proprietary in the source library were not copied. See
 corpus/library/README.md.
@@ -89,6 +89,30 @@ repository and are not fetched.
     https://github.com/philschatz/anatomy-book, commit eadaa6b2992f
     Copyright 2014 OpenStax College. Creative Commons Attribution 3.0 Unported,
     https://creativecommons.org/licenses/by/3.0/
+
+----------------------------------------------------------------------------
+5. SkillRet dataset and published numbers (credit only, nothing copied)
+
+SkillRet: A Large-Scale Benchmark for Skill Retrieval in LLM Agents, by
+Ryangkyung Kang, Hongcheol Cho and Youngeun Kim (arXiv:2605.05726).
+  Paper: https://arxiv.org/abs/2605.05726
+  Data:  https://huggingface.co/datasets/ThakiCloud/SKILLRET
+  Code:  https://github.com/ThakiCloud/SKILLRET
+
+The benchmark's metadata, queries and taxonomy are licensed Apache-2.0 by its
+authors, as the dataset card says. The skill texts in it are scraped from public
+GitHub repositories. Each skill record names its repository and its licence, MIT
+or Apache-2.0, and keeps it.
+
+The dataset is not part of this repository and is not redistributed.
+benchmarks/skillret fetches it at run time from the revision pinned in
+benchmarks/skillret/assets/ASSETS.lock, and git ignores it.
+
+benchmarks/skillret/src/published.ts and the README of benchmarks/skillret hold
+some of the numbers that SkillRet reports for other retrievers (its Table 3),
+for comparison. They are the authors' results, not ours. The metrics in
+benchmarks/skillret/src/score.ts are written here from their definitions and
+checked against pytrec_eval, as SkillRet's own code uses it. No code is copied.
 
 ----------------------------------------------------------------------------
 MIT License text (items 1 and 3)
