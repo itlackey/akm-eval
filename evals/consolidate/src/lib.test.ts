@@ -175,7 +175,13 @@ describe("consolidateConfig", () => {
 describe("rowFromRun", () => {
   const pass = (over: Record<string, unknown> = {}) => ({
     consolidation: { pairPass: { initiators: 2, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 }, retired: [], ...over } },
-    usageReport: { byProcessEngineModel: [{ process: "consolidate", engine: "consolidate", model: "served-a", calls: 2 }, { process: "consolidate", engine: "consolidate", model: "served-b", calls: 1 }] },
+    usageReport: {
+      byProcessEngineModel: [
+        { process: "consolidate", engine: "consolidate", model: "served-a", calls: 2, failures: 0 },
+        { process: "consolidate", engine: "consolidate", model: "served-b", calls: 2, failures: 1 },
+        { process: "consolidate", engine: "consolidate", model: "asked-for", calls: 1, failures: 1 },
+      ],
+    },
   });
   const proposal = (retiredRef: string, over: Record<string, unknown> = {}) => ({
     id: "p1",
@@ -194,7 +200,7 @@ describe("rowFromRun", () => {
     expect(row).toMatchObject({ id: "d", relation: "duplicate", safe_sides: ["a", "b"], outcome: "retire", paired: true, judged_as: "duplicate", retired: "b", safe: true, staged: true, reason: "same claims", seconds: 4.2 });
   });
 
-  test("keeps the model names the endpoint reported, with their calls, on every row it makes from a run", () => {
+  test("keeps the model names the endpoint reported, with the calls they answered, on every row it makes from a run", () => {
     expect(rowFromRun(dup, pass(), listing(), 1).served).toEqual({ "served-a": 2, "served-b": 1 });
     expect(rowFromRun(dup, pass({ failedJudgments: 1 }), listing(), 1).served).toEqual({ "served-a": 2, "served-b": 1 });
     expect(rowFromRun(dup, pass(), listing(proposal("memories/elsewhere")), 1).served).toEqual({ "served-a": 2, "served-b": 1 });

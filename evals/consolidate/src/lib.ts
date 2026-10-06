@@ -153,11 +153,20 @@ function retireProposals(listing: unknown): RetireProposal[] {
   return all.filter((p): p is RetireProposal => p?.source === "consolidate-pair" && typeof p?.retirement?.retiredRef === "string");
 }
 
-/** The model names the endpoint reported for the run's calls, from akm's usage report, with the calls each answered. A gateway may serve one name from several providers. */
+/**
+ * The model names the endpoint reported for the run's calls, from akm's usage report, with the calls each answered. A gateway may
+ * serve one name from several providers. A call that got no answer has no reported name, and akm files it under the name that was
+ * asked for, so only the calls that were answered count.
+ */
 function servedModels(improve: unknown): Record<string, number> {
   const rows = (improve as { usageReport?: { byProcessEngineModel?: unknown } })?.usageReport?.byProcessEngineModel;
   const served: Record<string, number> = {};
-  if (Array.isArray(rows)) for (const r of rows) if (typeof r?.model === "string") served[r.model] = (served[r.model] ?? 0) + Number(r.calls ?? 0);
+  if (Array.isArray(rows)) {
+    for (const r of rows) {
+      const answered = Number(r?.calls ?? 0) - Number(r?.failures ?? 0);
+      if (typeof r?.model === "string" && answered > 0) served[r.model] = (served[r.model] ?? 0) + answered;
+    }
+  }
   return served;
 }
 

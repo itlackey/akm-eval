@@ -182,7 +182,9 @@ async function runCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: 
   for (let tries = 0; ; tries++) {
     const { row, rateLimited } = await tryCase(c, ctx);
     if (!rateLimited || tries === RATE_LIMIT_TRIES) return { row: tries > 0 ? { ...row, retried: tries } : row, rateLimited };
-    await Bun.sleep((ctx.rateLimitWaitMs ?? RATE_LIMIT_WAIT_MS) * 2 ** tries);
+    const wait = (ctx.rateLimitWaitMs ?? RATE_LIMIT_WAIT_MS) * 2 ** tries;
+    console.log(`  ${c.id}: the endpoint rate limited it, so it will be tried again in ${wait / 1000}s`);
+    await Bun.sleep(wait);
   }
 }
 
