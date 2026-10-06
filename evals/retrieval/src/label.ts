@@ -12,7 +12,7 @@ import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
-import { type Asset, DEPTH, GRADE_SCHEMA, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
+import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -225,7 +225,7 @@ async function main(): Promise<number> {
         return 2;
       }
     }
-    console.log(`retrieval label: akm ${version}, ${listing.length} assets, ${queries.length} task queries, judge ${model}`);
+    console.log(`retrieval label: akm ${version}, ${listing.length} assets, ${queries.length} task queries, judge ${model}, prompt ${PROMPT_VERSION}, first ${MAX_DOC_CHARS} characters of each asset`);
 
     const pooled = await poolQueries(queries, (system, q) => akm.ask(sb, system, q), bm25);
     const todo = pending(queries, pooled, done);

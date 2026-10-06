@@ -79,14 +79,14 @@ Set `JUDGE_BASE_URL`, `JUDGE_API_KEY` and `JUDGE_MODEL` in `.env`, for any OpenA
 
 The request is made for a local server such as llama.cpp: temperature 0, room for 2000 tokens, every spelling of "no visible thinking", and a JSON schema for the reply. If the server refuses the schema, the request is sent again without it. A cloud endpoint can answer 400 to the thinking switches, and a gateway that routes between providers can put the others on cooldown for it: run such an endpoint through a local gateway. When the server answers 429 with `Retry-After`, every request waits that long. A reply with no grade in it is asked for once more. A pair that still has no grade, or that fails, is not written, and the next run tries it again. After 10 failures in a row the run stops and says why. Use one judge for all the grades of a set. `label` reads only the public library and queries, so nothing private goes to the judge: the private grades are the public ones, carried over by `generate`.
 
-The prompt is `umbrela-akm-v1`, from our lab's earlier retrieval harness: one asset at a time, with its type, ref, name, description and first 1500 characters. Grade 3 is exactly the asset an agent should load. 2 is relevant and clearly useful, though not the best. 1 is the same topic but would not help with this query. 0 is unrelated.
+The prompt is `umbrela-akm-v1`, from our lab's earlier retrieval harness: one asset at a time, with its type, ref, name, description and the first 16,000 characters of its text (the harness read 1,500, which is too little for this library: most assets are longer). That is up to about 5,000 tokens, and 244 of the 259 assets fit whole. Grading all 1,521 pairs took 78 minutes on one local GPU. Grade 3 is exactly the asset an agent should load. 2 is relevant and clearly useful, though not the best. 1 is the same topic but would not help with this query. 0 is unrelated.
 
 Run it again after a change to the library or to akm. The pool takes in the new top 10, and only the pairs that are new get a grade.
 
 ## Notes
 
 - Unjudged results count as not relevant. The judgments cover what akm 0.9.26 and a plain BM25 returned in their top 10, and what the author expected. A run on another akm version can return assets nobody graded. `judged_10` shows how large a share of the results that is. When it falls, run `label` before you compare.
-- The judge saw the first 1500 characters of each asset, not all of it. An asset whose answer is deep in a long file can be graded low.
+- The judge reads the first 16,000 characters of an asset. The 15 assets that are longer are cut there, and an answer past the cut is not seen.
 - Compare results only between runs with the same akm version, search mode and judgments.
 - A much better public score than private score would point to akm having been tuned to the public names. The private rewrite changes only a few words and the dates: see `private/retrieval/map.json`.
 

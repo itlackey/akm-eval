@@ -115,14 +115,15 @@ describe("the judge's input", () => {
     expect(stripFrontmatter("")).toBe("");
   });
 
-  test("is the umbrela-akm-v1 prompt, the query, the asset's fields and the first 1500 characters", () => {
-    const [system, user] = judgeMessages("how do I y", asset, `---\nname: y\n---\n${"z".repeat(3000)}`);
+  test("is the umbrela-akm-v1 prompt, the query, the asset's fields and the first 16,000 characters", () => {
+    const [system, user] = judgeMessages("how do I y", asset, `---\nname: y\n---\n${"z".repeat(20_000)}`);
     expect(system.role).toBe("system");
     expect(system.content).toStartWith("You are grading search-and-retrieval results for an AI coding agent's knowledge base (the akm tool).");
     expect(system.content).toEndWith('Reply with ONLY a JSON object: {"grade": <integer 0-3>, "reason": "<=25 words"}.');
     expect(user.role).toBe("user");
     expect(user.content).toStartWith("Query: how do I y\n\nCandidate asset:\nType: knowledge\nRef: knowledge/x/y\nName: x/y\nDescription: About y.\n\nContent:\n");
-    expect(user.content.split("Content:\n")[1]).toBe("z".repeat(1500));
+    expect(user.content.split("Content:\n")[1]).toBe("z".repeat(16_000));
+    expect(judgeMessages("q", asset, "short body")[1].content).toEndWith("Content:\nshort body");
   });
 });
 

@@ -115,7 +115,12 @@ export function pool(lists: string[][], depth: number): string[] {
 // a time, pointwise, grades 0 to 3.
 
 export const PROMPT_VERSION = "umbrela-akm-v1";
-export const MAX_DOC_CHARS = 1500;
+/**
+ * How much of an asset the judge reads. The lab's earlier harness read 1500 characters. In this library 80% of the
+ * assets are longer, and the part that answers a query is often further in, so the judge reads 16,000: 95% of the
+ * assets whole.
+ */
+export const MAX_DOC_CHARS = 16_000;
 
 export const JUDGE_SYSTEM_PROMPT =
   "You are grading search-and-retrieval results for an AI coding agent's knowledge base " +
