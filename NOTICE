@@ -65,6 +65,32 @@ The LongMemEval dataset is not part of this repository. It is fetched at run tim
 the LongMemEval authors.
 
 ----------------------------------------------------------------------------
+4. Three public books (credit only, nothing copied)
+
+The 93 assets in evals/retrieval/assets/books/library were written for an earlier
+akm experiment, E6, which indexed three public books beside them. They copy no
+passage from those books: at most 11 of the 4,326 six-word sequences of a
+domain's assets occur in its book, and those are standard terms or definitions.
+The assets are MPL-2.0 like the rest of this repository. The books are credited
+here because the assets cover their subjects, and because each licence below
+would allow derived assets with this attribution. The books are not part of this
+repository and are not fetched.
+
+  Cooking: HowToCook, by Anduin2017 and contributors
+    https://github.com/Anduin2017/HowToCook, commit 1ee86394482e
+    The Unlicense, a public domain dedication. https://unlicense.org
+
+  Law and tax: Principles of Economics, by OpenStax College, as published in
+    https://github.com/philschatz/economics-book, commit d3f319e7a162
+    Copyright 2014 OpenStax College. Creative Commons Attribution 3.0 Unported,
+    https://creativecommons.org/licenses/by/3.0/
+
+  Anatomy and first aid: Anatomy & Physiology, by OpenStax College, as published in
+    https://github.com/philschatz/anatomy-book, commit eadaa6b2992f
+    Copyright 2014 OpenStax College. Creative Commons Attribution 3.0 Unported,
+    https://creativecommons.org/licenses/by/3.0/
+
+----------------------------------------------------------------------------
 MIT License text (items 1 and 3)
 
 MIT License

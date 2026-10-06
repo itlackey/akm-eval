@@ -1,0 +1,179 @@
+{"id":"culinary-sear-steaming-not-browning","ref":"lessons/dont-crowd-the-pan","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-sear-steaming-not-browning","ref":"knowledge/maillard-reaction","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-sear-steaming-not-browning","ref":"skills/pasta-from-scratch","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-sear-steaming-not-browning","ref":"commands/plate-dessert","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-standard-deduction-current","ref":"memories/standard-deduction-current-year","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-standard-deduction-current","ref":"knowledge/standard-deduction-basics","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-standard-deduction-current","ref":"memories/standard-deduction-2023-figures","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"legal-standard-deduction-current","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-cardiac-cycle-heart-sounds","ref":"knowledge/cardiac-cycle-overview","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-cardiac-cycle-heart-sounds","ref":"knowledge/renal-nephron-function","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-cardiac-cycle-heart-sounds","ref":"facts/normal-adult-vital-sign-ranges","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-chicken-safe-temp","ref":"facts/safe-internal-temperatures","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-chicken-safe-temp","ref":"lessons/rest-the-meat","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-chicken-safe-temp","ref":"knowledge/mother-sauces","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-chicken-safe-temp","ref":"skills/knife-sharpening","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-extension-payment-deadline","ref":"lessons/extension-does-not-extend-payment-deadline","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-extension-payment-deadline","ref":"skills/tax-filing-checklist","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-extension-payment-deadline","ref":"knowledge/contract-formation-elements","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-extension-payment-deadline","ref":"commands/draft-demand-letter","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-cpr-compression-rate-memory-gate","ref":"memories/cpr-compression-rate-current","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-cpr-compression-rate-memory-gate","ref":"skills/first-aid-response","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-cpr-compression-rate-memory-gate","ref":"lessons/verify-airway-before-compressions","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-cpr-compression-rate-memory-gate","ref":"memories/cpr-compression-rate-2005-guideline","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-cpr-compression-rate-memory-gate","ref":"knowledge/bone-structure-remodeling","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-steak-searing-best-method","ref":"memories/steak-searing-current","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-steak-searing-best-method","ref":"lessons/dont-crowd-the-pan","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-steak-searing-best-method","ref":"memories/steak-searing-seals-juices-myth","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"culinary-steak-searing-best-method","ref":"workflows/dinner-party-menu","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-counteroffer-effect","ref":"lessons/counteroffer-terminates-original-offer","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-counteroffer-effect","ref":"knowledge/contract-formation-elements","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-counteroffer-effect","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-counteroffer-effect","ref":"commands/estimate-tax-liability","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-scene-safety-lesson","ref":"lessons/confirm-scene-safety-before-aid","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-scene-safety-lesson","ref":"skills/first-aid-response","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-scene-safety-lesson","ref":"knowledge/immune-response-innate-adaptive","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-scene-safety-lesson","ref":"facts/blood-type-compatibility-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-mise-en-place-exact-name","ref":"memories/mise-en-place-workflow","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-mise-en-place-exact-name","ref":"memories/mise-en-place-workflow.derived","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-mise-en-place-exact-name","ref":"knowledge/stock-and-broth-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-mise-en-place-exact-name","ref":"facts/salt-percentage-brining","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-citation-convention","ref":"facts/citation-convention-tax-figures","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-citation-convention","ref":"knowledge/standard-deduction-basics","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-citation-convention","ref":"knowledge/statute-of-limitations-overview","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-citation-convention","ref":"commands/draft-demand-letter","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-normal-vital-signs-fact","ref":"facts/normal-adult-vital-sign-ranges","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-normal-vital-signs-fact","ref":"skills/patient-vitals-charting","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-normal-vital-signs-fact","ref":"knowledge/bone-structure-remodeling","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-normal-vital-signs-fact","ref":"memories/food-pyramid-dietary-guidance","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"culinary-pasta-from-scratch-dispatch","ref":"skills/pasta-from-scratch","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-pasta-from-scratch-dispatch","ref":"knowledge/pasta-dough-ratios","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-pasta-from-scratch-dispatch","ref":"facts/safe-internal-temperatures","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-pasta-from-scratch-dispatch","ref":"memories/knife-storage-best-practice","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-practice-scope","ref":"facts/firm-practice-area-scope","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-practice-scope","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-practice-scope","ref":"skills/contract-review-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-blood-type-compatibility-fact","ref":"facts/blood-type-compatibility-basics","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-blood-type-compatibility-fact","ref":"knowledge/immune-response-innate-adaptive","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-blood-type-compatibility-fact","ref":"knowledge/renal-nephron-function","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-plate-dessert-dispatch","ref":"commands/plate-dessert","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-plate-dessert-dispatch","ref":"skills/knife-sharpening","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-plate-dessert-dispatch","ref":"knowledge/stock-and-broth-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-tax-filing-checklist-exact","ref":"skills/tax-filing-checklist","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-tax-filing-checklist-exact","ref":"commands/estimate-tax-liability","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-tax-filing-checklist-exact","ref":"knowledge/standard-deduction-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-exact-name-renal-nephron","ref":"knowledge/renal-nephron-function","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-exact-name-renal-nephron","ref":"knowledge/cardiac-cycle-overview","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-exact-name-renal-nephron","ref":"facts/normal-adult-vital-sign-ranges","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-sous-chef-service-timing","ref":"agents/sous-chef","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-sous-chef-service-timing","ref":"workflows/dinner-party-menu","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-sous-chef-service-timing","ref":"lessons/rest-the-meat","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-sous-chef-service-timing","ref":"knowledge/mother-sauces","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-estimate-tax-liability","ref":"commands/estimate-tax-liability","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-estimate-tax-liability","ref":"scripts/bracket-calc.sh","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-estimate-tax-liability","ref":"knowledge/standard-deduction-basics","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-estimate-tax-liability","ref":"commands/draft-demand-letter","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-estimate-tax-liability","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-exact-name-first-aid-response-skill","ref":"skills/first-aid-response","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-exact-name-first-aid-response-skill","ref":"skills/patient-vitals-charting","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-exact-name-first-aid-response-skill","ref":"commands/triage-symptoms","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-dinner-party-menu-planning","ref":"workflows/dinner-party-menu","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-dinner-party-menu-planning","ref":"agents/sous-chef","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-dinner-party-menu-planning","ref":"commands/meal-prep-week","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-dinner-party-menu-planning","ref":"skills/pasta-from-scratch","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-dinner-party-menu-planning","ref":"facts/safe-internal-temperatures","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-tax-compliance-review","ref":"agents/tax-compliance-advisor","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-tax-compliance-review","ref":"skills/tax-filing-checklist","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-tax-compliance-review","ref":"commands/draft-demand-letter","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-tax-compliance-review","ref":"knowledge/fiscal-policy-and-budget-deficits","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-patient-vitals-charting-skill","ref":"skills/patient-vitals-charting","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-patient-vitals-charting-skill","ref":"facts/normal-adult-vital-sign-ranges","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-patient-vitals-charting-skill","ref":"knowledge/skeletal-muscle-contraction","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-patient-vitals-charting-skill","ref":"memories/hydration-guidance-daily-fluid-intake","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-knife-sharpening-maintenance","ref":"skills/knife-sharpening","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-knife-sharpening-maintenance","ref":"memories/knife-storage-best-practice","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"culinary-knife-sharpening-maintenance","ref":"knowledge/maillard-reaction","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-knife-sharpening-maintenance","ref":"memories/bread-proofing-fixed-2hour-rule","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"legal-return-intake-workflow","ref":"workflows/individual-tax-return-intake-to-file","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-return-intake-workflow","ref":"skills/tax-filing-checklist","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-return-intake-workflow","ref":"commands/estimate-tax-liability","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-return-intake-workflow","ref":"commands/draft-demand-letter","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-return-intake-workflow","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-triage-symptoms-command","ref":"commands/triage-symptoms","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-triage-symptoms-command","ref":"skills/first-aid-response","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-triage-symptoms-command","ref":"commands/med-dosage-calc","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-triage-symptoms-command","ref":"knowledge/bone-structure-remodeling","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-mother-sauces-five","ref":"knowledge/mother-sauces","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-mother-sauces-five","ref":"scripts/convert-units.sh","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-mother-sauces-five","ref":"memories/mise-en-place-workflow","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-nexus-general-rule","ref":"memories/client-nexus-exposure-review.derived","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-nexus-general-rule","ref":"memories/client-nexus-exposure-review","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-nexus-general-rule","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-nexus-general-rule","ref":"memories/legacy-e-file-vendor-procedure","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-clinical-educator-agent","ref":"agents/clinical-educator","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-clinical-educator-agent","ref":"knowledge/immune-response-innate-adaptive","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-clinical-educator-agent","ref":"scripts/bmi-calculator.sh","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-convert-units-script","ref":"scripts/convert-units.sh","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-convert-units-script","ref":"agents/sous-chef","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-convert-units-script","ref":"knowledge/stock-and-broth-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-demand-letter-draft","ref":"commands/draft-demand-letter","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-demand-letter-draft","ref":"knowledge/statute-of-limitations-overview","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"legal-demand-letter-draft","ref":"knowledge/monetary-policy-tools","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-demand-letter-draft","ref":"memories/legacy-e-file-vendor-procedure","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-first-aid-incident-response-workflow","ref":"workflows/first-aid-incident-response","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-first-aid-incident-response-workflow","ref":"skills/first-aid-response","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-first-aid-incident-response-workflow","ref":"lessons/confirm-scene-safety-before-aid","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-first-aid-incident-response-workflow","ref":"commands/med-dosage-calc","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-first-aid-incident-response-workflow","ref":"knowledge/renal-nephron-function","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-brine-salt-percentage","ref":"facts/salt-percentage-brining","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-brine-salt-percentage","ref":"commands/meal-prep-week","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-brine-salt-percentage","ref":"skills/pasta-from-scratch","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-privilege-investigation-memos","ref":"memories/privilege-preservation-in-investigation-memos","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-privilege-investigation-memos","ref":"knowledge/contract-formation-elements","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-privilege-investigation-memos","ref":"commands/estimate-tax-liability","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-wound-care-general-principle","ref":"memories/wound-care-cleaning-protocol","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-wound-care-general-principle","ref":"memories/wound-care-cleaning-protocol.derived","grade":2,"reason":"The golden lists it as relevant, after its first choice."}
+{"id":"medical-wound-care-general-principle","ref":"memories/food-pyramid-dietary-guidance","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-wound-care-general-principle","ref":"knowledge/skeletal-muscle-contraction","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-knife-skills-cutting-technique","ref":"knowledge/knife-skills-basics","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-knife-skills-cutting-technique","ref":"commands/plate-dessert","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-knife-skills-cutting-technique","ref":"memories/bread-proofing-fixed-2hour-rule","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"legal-rmd-start-age-adversarial","ref":"memories/mandatory-payout-clock-verified","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-rmd-start-age-adversarial","ref":"memories/mandatory-payout-clock-obsolete","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-hydration-guidance-query","ref":"memories/hydration-guidance-daily-fluid-intake","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-hydration-guidance-query","ref":"memories/food-pyramid-dietary-guidance","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"medical-hydration-guidance-query","ref":"facts/blood-type-compatibility-basics","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-bone-stock-from-scratch","ref":"knowledge/stock-and-broth-basics","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-bone-stock-from-scratch","ref":"skills/pasta-from-scratch","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-bone-stock-from-scratch","ref":"memories/steak-searing-current","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-mailbox-rule-adversarial","ref":"lessons/contract-timing-note-central","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-mailbox-rule-adversarial","ref":"knowledge/contract-timing-note-general","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-adv-belief-state-bp-threshold","ref":"memories/bp-treatment-threshold-current","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-adv-belief-state-bp-threshold","ref":"memories/bp-treatment-threshold-2003-guideline","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"culinary-onion-caramelization-belief-state","ref":"memories/kitchen-memory-alpha","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-onion-caramelization-belief-state","ref":"memories/kitchen-memory-beta","grade":0,"banned":true,"reason":"The golden bans it: a superseded or contradicted note on the same topic, which must not outrank a relevant asset."}
+{"id":"culinary-onion-caramelization-belief-state","ref":"memories/candy-syrup-color-stages","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-onion-caramelization-belief-state","ref":"skills/knife-sharpening","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-statute-overview-exact-adversarial","ref":"knowledge/statute-of-limitations-overview","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-statute-overview-exact-adversarial","ref":"knowledge/tolling-and-repose-exceptions-explainer","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-adv-lesson-strength-delayed-head-injury","ref":"lessons/monitor-for-delayed-head-injury-symptoms","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-adv-lesson-strength-delayed-head-injury","ref":"knowledge/delayed-symptom-monitoring-windows-reference","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-spice-toasting-lesson-strength","ref":"lessons/reference-lesson-alpha","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-spice-toasting-lesson-strength","ref":"knowledge/reference-knowledge-beta","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-spice-toasting-lesson-strength","ref":"memories/anchor-spice-decoy","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-spice-toasting-lesson-strength","ref":"memories/anchor-spice-decoy-worst","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-spice-toasting-lesson-strength","ref":"commands/plate-dessert","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"legal-conflict-check-adversarial","ref":"facts/new-matter-conflict-check","grade":3,"reason":"The golden puts it first."}
+{"id":"legal-conflict-check-adversarial","ref":"knowledge/conflict-check-before-new-engagement","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-adv-exact-name-renal-nephron-vs-stuffed-distractor","ref":"knowledge/renal-nephron-function","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-adv-exact-name-renal-nephron-vs-stuffed-distractor","ref":"knowledge/urinary-filtration-terminology-notes","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-beurre-noisette-exact-name","ref":"knowledge/beurre-noisette-technique","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-beurre-noisette-exact-name","ref":"knowledge/pan-sauce-building-blocks","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-beurre-noisette-exact-name","ref":"facts/salt-percentage-brining","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"medical-adv-pinned-fact-cpr-ratio","ref":"facts/cpr-compression-ventilation-ratio-core","grade":3,"reason":"The golden puts it first."}
+{"id":"medical-adv-pinned-fact-cpr-ratio","ref":"knowledge/single-rescuer-breathing-notes","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-kitchen-fire-pinned-fact","ref":"facts/safety-fact-alpha","grade":3,"reason":"The golden puts it first."}
+{"id":"culinary-kitchen-fire-pinned-fact","ref":"knowledge/safety-knowledge-beta","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-kitchen-fire-pinned-fact","ref":"memories/anchor-fire-decoy","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-kitchen-fire-pinned-fact","ref":"memories/anchor-fire-decoy-worst","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}
+{"id":"culinary-kitchen-fire-pinned-fact","ref":"workflows/dinner-party-menu","grade":0,"banned":true,"reason":"The golden bans it: it must not outrank a relevant asset."}

@@ -1,0 +1,51 @@
+{"id":"culinary-sear-steaming-not-browning","query":"my steak is steaming and turning gray instead of browning in the pan","kind":"lesson"}
+{"id":"legal-standard-deduction-current","query":"what's the current standard deduction amount I should tell a client","kind":"memory"}
+{"id":"medical-cardiac-cycle-heart-sounds","query":"why do we hear two heart sounds during a heartbeat","kind":"knowledge"}
+{"id":"culinary-chicken-safe-temp","query":"what internal temperature is safe for cooked chicken breast","kind":"fact"}
+{"id":"legal-extension-payment-deadline","query":"the client thinks filing an extension gives them more time to pay the taxes owed","kind":"lesson"}
+{"id":"medical-cpr-compression-rate-memory-gate","query":"what is the current recommended chest compression rate for adult CPR","kind":"memory"}
+{"id":"culinary-steak-searing-best-method","query":"what is the current best method to sear a thick steak","kind":"memory"}
+{"id":"legal-counteroffer-effect","query":"the other party sent back different terms and now wants to accept the original contract offer","kind":"lesson"}
+{"id":"medical-scene-safety-lesson","query":"what should I check before I approach and start helping someone injured","kind":"lesson"}
+{"id":"culinary-mise-en-place-exact-name","query":"mise en place workflow","kind":"memory"}
+{"id":"legal-citation-convention","query":"how should I cite a tax dollar figure so it stays auditable","kind":"fact"}
+{"id":"medical-normal-vital-signs-fact","query":"normal resting heart rate and blood pressure ranges for a healthy adult","kind":"fact"}
+{"id":"culinary-pasta-from-scratch-dispatch","query":"make fresh pasta dough from scratch and roll it out","kind":"skill"}
+{"id":"legal-practice-scope","query":"what practice areas and jurisdictions does this engagement cover","kind":"fact"}
+{"id":"medical-blood-type-compatibility-fact","query":"which blood types can safely receive type O negative blood","kind":"fact"}
+{"id":"culinary-plate-dessert-dispatch","query":"plate a restaurant style dessert with sauce and garnish","kind":"command"}
+{"id":"legal-tax-filing-checklist-exact","query":"tax filing checklist","kind":"skill"}
+{"id":"medical-exact-name-renal-nephron","query":"renal nephron function","kind":"knowledge"}
+{"id":"culinary-sous-chef-service-timing","query":"coordinate kitchen timing like a sous chef so every dish finishes together","kind":"agent"}
+{"id":"legal-estimate-tax-liability","query":"estimate how much federal income tax I owe this year","kind":"command"}
+{"id":"medical-exact-name-first-aid-response-skill","query":"first aid response","kind":"skill"}
+{"id":"culinary-dinner-party-menu-planning","query":"plan a multi course dinner party menu end to end","kind":"workflow"}
+{"id":"legal-tax-compliance-review","query":"review my tax situation for compliance risk and missed deductions","kind":"agent"}
+{"id":"medical-patient-vitals-charting-skill","query":"how do I chart a patient's vital signs consistently so I don't miss a trend","kind":"skill"}
+{"id":"culinary-knife-sharpening-maintenance","query":"how do I sharpen and hone my kitchen knives","kind":"skill"}
+{"id":"legal-return-intake-workflow","query":"intake a client's tax documents and prepare their return for filing","kind":"workflow"}
+{"id":"medical-triage-symptoms-command","query":"quickly sort a batch of reported symptoms to see who needs care first","kind":"command"}
+{"id":"culinary-mother-sauces-five","query":"what are the five French mother sauces","kind":"knowledge"}
+{"id":"legal-nexus-general-rule","query":"general rule for when a multi-state seller has to register for sales tax without a physical presence","kind":"memory"}
+{"id":"medical-clinical-educator-agent","query":"explain a difficult anatomy and physiology concept to a nursing student in plain language","kind":"agent"}
+{"id":"culinary-convert-units-script","query":"convert cups of flour to grams for a recipe","kind":"script"}
+{"id":"legal-demand-letter-draft","query":"draft a formal letter demanding payment before we file suit","kind":"command"}
+{"id":"medical-first-aid-incident-response-workflow","query":"walk through the full incident response steps for treating an injured person at the scene from arrival to handoff","kind":"workflow"}
+{"id":"culinary-brine-salt-percentage","query":"what salt percentage should I use to brine a turkey","kind":"fact"}
+{"id":"legal-privilege-investigation-memos","query":"how do we keep witness interview memos privileged during an internal investigation","kind":"memory"}
+{"id":"medical-wound-care-general-principle","query":"what's the general order of priorities when treating a wound safely","kind":"memory"}
+{"id":"culinary-knife-skills-cutting-technique","query":"correct technique to julienne dice and mince vegetables","kind":"knowledge"}
+{"id":"legal-rmd-start-age-adversarial","query":"required minimum distributions starting age retirement accounts","kind":"memory"}
+{"id":"medical-hydration-guidance-query","query":"how much water should a healthy adult drink each day","kind":"memory"}
+{"id":"culinary-bone-stock-from-scratch","query":"make a rich bone stock from scratch","kind":"knowledge"}
+{"id":"legal-mailbox-rule-adversarial","query":"mailbox rule acceptance effective dispatch versus receipt","kind":"lesson"}
+{"id":"medical-adv-belief-state-bp-threshold","query":"what is the current blood pressure treatment threshold for most adults","kind":"memory"}
+{"id":"culinary-onion-caramelization-belief-state","query":"onion caramelization cooking gives deep amber color sweet caramelized result","kind":"memory"}
+{"id":"legal-statute-overview-exact-adversarial","query":"statute of limitations overview","kind":"knowledge"}
+{"id":"medical-adv-lesson-strength-delayed-head-injury","query":"what should I watch for after someone bumps their head and seems fine right now","kind":"lesson"}
+{"id":"culinary-spice-toasting-lesson-strength","query":"toast whole spices dry pan before grinding bloom essential oils deepen flavor","kind":"lesson"}
+{"id":"legal-conflict-check-adversarial","query":"do we need to run a conflict check before opening a new matter","kind":"fact"}
+{"id":"medical-adv-exact-name-renal-nephron-vs-stuffed-distractor","query":"renal nephron function","kind":"knowledge"}
+{"id":"culinary-beurre-noisette-exact-name","query":"beurre noisette technique","kind":"knowledge"}
+{"id":"medical-adv-pinned-fact-cpr-ratio","query":"what is the standard compression to ventilation ratio for adult CPR","kind":"fact"}
+{"id":"culinary-kitchen-fire-pinned-fact","query":"never pour water grease fire smother flames","kind":"fact"}
