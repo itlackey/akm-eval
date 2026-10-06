@@ -87,7 +87,7 @@ Read `judged_as` next to the outcome. akm retires a note only when its judge lis
 
 The set is small. One case is 1.7 points of 60, and 10 points of any one relation. Read changes of a case or two as noise, and rerun before you trust a gap.
 
-The notes are short, about 100 words. Real notes run longer, and a judge misses more in a long note, so a clean score here does not promise one on your bundle.
+The notes are short, about 100 words. Real notes run longer and messier, and a judge has more to miss in them, so a clean score here does not promise one on your bundle.
 
 A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
 
