@@ -1,5 +1,6 @@
 // The akm calls the benchmark makes, on a sandbox from lib/akm: load the skills as assets and index them, then search
-// and curate.
+// and curate. A semantic sandbox has akm embed the skills as it indexes them, and every call has to say that it searched
+// with them.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,17 +10,22 @@ import type { Skill } from "./dataset.ts";
 /** How many results the benchmark asks of search and of curate: the deepest cut-off it scores. */
 export const DEPTH = 15;
 
-/** Writes each skill as skills/<id>/SKILL.md in the sandbox's bundle and indexes them. Returns how many assets akm found. */
-export async function load(sb: Sandbox, skills: Skill[]): Promise<number> {
+/**
+ * Writes each skill as skills/<id>/SKILL.md in the sandbox's bundle and indexes them. Returns how many assets akm found.
+ * A semantic index takes minutes, the time akm needs to embed every skill, and has to hold an embedding of each.
+ */
+export async function load(sb: Sandbox, skills: Skill[], semantic = false): Promise<number> {
   for (const skill of skills) {
     const dir = join(sb.dir, "bundle", "skills", skill.id);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "SKILL.md"), skill.text);
   }
-  const { stdout, stderr, code } = await runAkm(sb, ["index", "--full", "--format", "json"], { timeoutMs: 30 * 60_000 });
+  const { stdout, stderr, code } = await runAkm(sb, ["index", "--full", "--format", "json"], { timeoutMs: semantic ? 4 * 3600_000 : 30 * 60_000 });
   if (code !== 0) throw new Error(`akm index failed (exit ${code}): ${stderr.trim().slice(-300)}`);
-  const total = (JSON.parse(stdout) as { totalEntries?: number }).totalEntries;
+  const out = JSON.parse(stdout) as { totalEntries?: number; verification?: { embeddingCount?: number; message?: string } };
+  const total = out.totalEntries;
   if (typeof total !== "number") throw new Error("akm index did not say how many entries it found");
+  if (semantic && out.verification?.embeddingCount !== total) throw new Error(`akm embedded ${out.verification?.embeddingCount} of ${total} skills: ${out.verification?.message}`);
   return total;
 }
 
@@ -36,8 +42,10 @@ export interface Answer {
 /**
  * One `akm search` or `akm curate` call. A call that fails is made once more, and one that fails again is an answer
  * with an error and no results. `known` are the skill ids of the library: a result that is not one of them is a failure.
+ * So is an answer that says it searched another way than `mode` (keyword or semantic): when akm cannot embed a query it
+ * answers with keyword search, `fts-fallback`, and that is not the semantic result.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, known: ReadonlySet<string>): Promise<Answer> {
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, known: ReadonlySet<string>, mode: "keyword" | "semantic" = "keyword"): Promise<Answer> {
   let seconds = 0;
   let error = "";
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -47,11 +55,15 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
       error = `akm ${system} exited ${run.code}: ${(run.stderr.trim() || run.stdout.trim()).slice(-300)}`;
       continue;
     }
-    let out: { hits?: { ref?: unknown }[]; items?: { ref?: unknown }[]; searchMode?: unknown };
+    let out: { hits?: { ref?: unknown }[]; items?: { ref?: unknown }[]; searchMode?: unknown; warnings?: unknown };
     try {
       out = JSON.parse(run.stdout);
     } catch {
       error = `akm ${system} printed no JSON: ${run.stdout.slice(0, 200)}`;
+      continue;
+    }
+    if (typeof out.searchMode === "string" && out.searchMode !== mode) {
+      error = `akm ${system} searched with ${out.searchMode}, not ${mode}: ${JSON.stringify(out.warnings ?? null).slice(0, 300)}`;
       continue;
     }
     const hits = (system === "search" ? out.hits : out.items) ?? [];

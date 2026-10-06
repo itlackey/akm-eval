@@ -9,6 +9,11 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
  * An akm that counts the skills of its bundle and answers `search` and `curate` by how many words of at least four
  * letters of the query a skill's SKILL.md holds, best first and then by id. A query that says FLAKY fails the first time
  * it is asked, BROKEN always fails, STRAY returns a skill that is not in the library and EMPTY returns nothing.
+ *
+ * Its config says whether it is semantic. A semantic akm embeds every skill when it indexes, except that a skill that says
+ * NOEMBED is left out, and answers with every skill, the ones that share no word with the query after the others and
+ * each group by id, last first, as a vector search does. It answers with keyword search alone, "fts-fallback", to a
+ * query that says FALLBACK.
  */
 const FAKE_AKM = `
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,9 +21,12 @@ import { join } from "node:path";
 const [cmd, ...rest] = process.argv.slice(2);
 const skills = join(process.env.AKM_BUNDLE_DIR as string, "skills");
 const ids = (() => { try { return readdirSync(skills).sort(); } catch { return []; } })();
+const semantic = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR as string, "config.json"), "utf8")).semanticSearchMode === "auto";
 if (cmd === "--version") console.log("0.9.99-test");
-else if (cmd === "index") console.log(JSON.stringify({ ok: true, totalEntries: ids.length }));
-else if (cmd === "search" || cmd === "curate") {
+else if (cmd === "index") {
+  const left = ids.filter((id) => readFileSync(join(skills, id, "SKILL.md"), "utf8").includes("NOEMBED")).length;
+  console.log(JSON.stringify({ ok: true, totalEntries: ids.length, verification: { embeddingCount: semantic ? ids.length - left : 0, message: "embedded" } }));
+} else if (cmd === "search" || cmd === "curate") {
   const k = Number(rest[rest.indexOf("--limit") + 1]);
   const query = rest[rest.indexOf("--") + 1];
   const seen = join(process.env.AKM_STATE_DIR as string, "flaky-" + cmd);
@@ -26,11 +34,14 @@ else if (cmd === "search" || cmd === "curate") {
   if (query.includes("BROKEN")) { console.error("boom"); process.exit(70); }
   const words = query.toLowerCase().split(/\\W+/).filter((w) => w.length > 3);
   const scored = ids.map((id) => { const text = readFileSync(join(skills, id, "SKILL.md"), "utf8").toLowerCase(); return { id, n: words.filter((w) => text.includes(w)).length }; });
-  let refs = scored.filter((s) => s.n > 0).sort((a, b) => b.n - a.n || a.id.localeCompare(b.id)).slice(0, k).map((s) => "skills/" + s.id);
+  const fellBack = semantic && query.includes("FALLBACK");
+  const vectors = semantic && !fellBack;
+  let refs = scored.filter((s) => vectors || s.n > 0).sort((a, b) => b.n - a.n || (vectors ? b.id.localeCompare(a.id) : a.id.localeCompare(b.id))).slice(0, k).map((s) => "skills/" + s.id);
   if (query.includes("STRAY")) refs = ["skills/not-a-skill"];
   if (query.includes("EMPTY")) refs = [];
   const hits = refs.map((ref) => ({ ref }));
-  console.log(JSON.stringify(cmd === "search" ? { hits, searchMode: "keyword" } : { items: hits, searchMode: "keyword" }));
+  const answer = { searchMode: fellBack ? "fts-fallback" : vectors ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
+  console.log(JSON.stringify(cmd === "search" ? { hits, ...answer } : { items: hits, ...answer }));
 } else { console.error("unknown command " + cmd); process.exit(1); }
 `;
 
@@ -41,9 +52,9 @@ export function fakeAkmScript(dir: string): string {
   return script;
 }
 
-/** A sandbox whose akm is this script, run by bun. Its folder goes into `cleanup`, for the test to remove. */
-export function sandboxRunning(script: string, cleanup: string[]): Sandbox {
-  const sandbox = { ...createSandbox("skillret-test"), cmd: ["bun", script] };
+/** A sandbox whose akm is this script, run by bun, with keyword search or semantic. Its folder goes into `cleanup`, for the test to remove. */
+export function sandboxRunning(script: string, cleanup: string[], semantic = false): Sandbox {
+  const sandbox = { ...createSandbox("skillret-test", { semantic }), cmd: ["bun", script] };
   cleanup.push(sandbox.dir);
   return sandbox;
 }
