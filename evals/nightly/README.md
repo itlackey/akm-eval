@@ -4,7 +4,7 @@ Does a whole nightly improve run give good results unattended, with no model-cal
 
 The other evals test one process of `akm improve` at a time, each on cases of its own. A real night runs them all on one library, one after another, and nobody reads the result before the morning. This eval runs one full night on a library of 29 planted items whose right outcome is known in advance, and checks every one: pairs of notes for consolidate to retire or keep, notes with a defect and notes that should stay as they are for reflect, memories for distill to turn into lessons or leave, an exact fix, and notes that nothing should touch. It then checks three things about the library as a whole: nothing outside the items changed, no distilled lesson was accepted without a person, and every model call akm made got an answer.
 
-The model under test is the engine of every process: consolidate's pair judge, reflect and its quality judge, distill and its judge. The strategy, the prompts, the gates and the drain are akm's own: the eval drives the installed akm CLI the way the lab's nightly does. It is written for akm 0.9.26 and records the akm version it used. akm is on `PATH`, or named in `AKM_BIN`.
+The model under test is the engine of every process: consolidate's pair judge, reflect and its quality judge, distill and its judge. The strategy, the prompts, the gates and the drain are akm's own: the eval drives the installed akm CLI the way the lab's nightly does. It needs akm 0.9.26 or later, the first release with the pair judge's claim lists, exact fixes and lessons that wait for review, and records the akm version it used. akm is on `PATH`, or named in `AKM_BIN`.
 
 ## The night
 

@@ -9,9 +9,11 @@ import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { atLeast } from "../../reflect/src/lib.ts";
 import { type CallRow, EMBEDDER_ENV, type Feedback, type Item, KINDS, type Metrics, type Night, type Row, callStats, loadNight, metrics, nightlyConfig, noteAges, outsideChanges, parseProposals, pct, readLibrary, scoreItem, selectItems } from "./lib.ts";
 
 const NAME = "nightly";
+export const MIN_AKM = "0.9.26"; // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const STEP_TIMEOUT_MS = 5 * 60_000; // an akm command that calls no model
@@ -31,7 +33,7 @@ repository root.
   --limit   plant only N items, taking the first of each kind in turn
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
+Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
 
 type Corpus = "public" | "private";
 
@@ -337,6 +339,8 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
+
+  if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
 
   const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit };
   const summaries: Summary[] = [];

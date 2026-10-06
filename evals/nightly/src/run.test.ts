@@ -301,3 +301,36 @@ describe("runCorpus", () => {
     await expect(quiet(() => runCorpus("public", ctx, folders))).resolves.toBeDefined();
   });
 });
+
+describe("the command", () => {
+  // Bun loads the .env of its working folder, and the repository's holds the model settings. So the command runs in a folder of its own
+  // and with an akm that does not exist, and never reaches a model, whatever .env says.
+  const run = (args: string[], env: Record<string, string> = {}) => {
+    const { MODEL_BASE_URL: _u, MODEL_NAME: _m, AKM_BIN: _a, ...rest } = process.env;
+    const cwd = mkdtempSync(join(tmpdir(), "nightly-run-"));
+    dirs.push(cwd);
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd, env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+  const model = { MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" };
+
+  test("says what is wrong with its arguments and its settings, and exits 2", () => {
+    expect(run(["--corpus", "public"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--limit", "0"], model)).toMatchObject({ code: 2 });
+    expect(run(["--limit", "0"], model).err).toContain("--limit must be a positive integer");
+    expect(run(["--corpus", "some"], model).err).toContain('--corpus must be public, private or all, not "some"');
+    expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
+    expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
+    expect(run([]).err).toContain("set MODEL_BASE_URL and MODEL_NAME in .env");
+    expect(run(["--help"]).out).toContain("Needs akm 0.9.26 or later");
+  });
+
+  test("refuses an akm older than the one it is written for", () => {
+    const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
+    dirs.push(root);
+    writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
+    const done = run([], { ...model, AKM_BIN: `bun ${join(root, "old-akm.ts")}` });
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("akm 0.9.25 is older than this eval is written for. It needs akm 0.9.26 or later.");
+  });
+});
