@@ -1,69 +1,7 @@
-// Retrieval metrics against the dataset's evidence sessions, and the paired difference between the two arms.
+// The rates the benchmark reports, and the paired difference between the two arms. The retrieval metrics, scored
+// against the dataset's evidence sessions, are in lib/ir.ts.
 
 const round = (x: number): number => Number(x.toFixed(4));
-
-export interface Retrieval {
-  returned: number;
-  /** An evidence session is among the results. */
-  hit: boolean;
-  /** The share of the evidence sessions among the results. */
-  recall: number;
-  /** The share of the k places that hold an evidence session. Fewer than k results leave places empty. */
-  precision: number;
-  /** One over the rank of the first evidence session, or 0. */
-  mrr: number;
-  ndcg: number;
-}
-
-/** `retrieved` is the dataset session ids in rank order. Only the first k count. */
-export function retrievalMetrics(evidence: string[], retrieved: string[], k: number): Retrieval {
-  const relevant = new Set(evidence);
-  const results = retrieved.slice(0, k);
-  const found = results.filter((id) => relevant.has(id));
-  let dcg = 0;
-  let firstRank = 0;
-  results.forEach((id, i) => {
-    if (!relevant.has(id)) return;
-    dcg += 1 / Math.log2(i + 2);
-    if (firstRank === 0) firstRank = i + 1;
-  });
-  let ideal = 0;
-  for (let i = 0; i < Math.min(relevant.size, k); i++) ideal += 1 / Math.log2(i + 2);
-  return {
-    returned: results.length,
-    hit: found.length > 0,
-    recall: relevant.size === 0 ? 0 : round(new Set(found).size / relevant.size),
-    precision: round(found.length / k),
-    mrr: firstRank === 0 ? 0 : round(1 / firstRank),
-    ndcg: ideal === 0 ? 0 : round(dcg / ideal),
-  };
-}
-
-export interface RetrievalSummary {
-  k: number;
-  n: number;
-  zero_hit_rate: number | null;
-  hit_rate: number | null;
-  recall: number | null;
-  precision: number | null;
-  mrr: number | null;
-  ndcg: number | null;
-}
-
-const mean = (xs: number[]): number | null => (xs.length === 0 ? null : round(xs.reduce((a, b) => a + b, 0) / xs.length));
-
-export function summarizeRetrieval(rows: Retrieval[], k: number): RetrievalSummary {
-  return {
-    k,
-    n: rows.length,
-    zero_hit_rate: mean(rows.map((r) => (r.returned === 0 ? 1 : 0))),
-    hit_rate: mean(rows.map((r) => (r.hit ? 1 : 0))),
-    recall: mean(rows.map((r) => r.recall)),
-    precision: mean(rows.map((r) => r.precision)),
-    mrr: mean(rows.map((r) => r.mrr)),
-    ndcg: mean(rows.map((r) => r.ndcg)),
-  };
-}
 
 export interface Rate {
   n: number;

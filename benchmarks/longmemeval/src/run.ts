@@ -10,10 +10,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeF
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
 import { type ChatResult, type Endpoint, chat } from "./llm.ts";
-import { type PairedDifference, type Rate, type Retrieval, type RetrievalSummary, pairedDifference, rate, retrievalMetrics, summarizeRetrieval } from "./metrics.ts";
+import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
 import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from "./prompts.ts";
 
 const NAME = "longmemeval";
