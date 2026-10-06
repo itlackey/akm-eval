@@ -5,6 +5,8 @@
 //
 // The text of each question (the question, the answer and every turn of every session) goes through one
 // rewrite map, so a name or a place changes the same way in the sessions, the question and the answer.
+// Numbers and versions are kept (--keep-values): the answers count days, times and items in the sessions.
+// Tool and product names are renamed, and the check below shows the answers stay in their evidence.
 // Dates move back by whole years, so month and day still agree with dates written in the chats.
 
 import { createHash } from "node:crypto";
@@ -146,7 +148,7 @@ async function main(): Promise<void> {
   const keep = commonWords(texts);
   const initial = { version: 1, seed, dateShiftDays: -365 * yearsBack, words: Object.fromEntries(keep.map((w) => [w, w])), hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
   writeFileSync(map, JSON.stringify(initial));
-  console.log(rewrite(["--seed", seed, "--map", map, join(work, "in"), join(work, "out")]).split("\n").pop());
+  console.log(rewrite(["--seed", seed, "--map", map, "--keep-values", join(work, "in"), join(work, "out")]).split("\n").pop());
   const finalMap = JSON.parse(readFileSync(map, "utf8")) as { words: Record<string, string> };
 
   const names = readdirSync(join(work, "out")).sort();
