@@ -25,7 +25,7 @@ akm proposal list --status rejected --detail full        # the judge's reason fo
 - No command queues a proposal without a model, so the eval writes the rows into the `proposals` table of the sandbox's `state.db`, in the shape akm writes them, and checks that akm lists them all as pending.
 - The config names one LLM engine, the model under test, and a strategy `promotion` whose triage block is the lab's: enabled, judgment on. It differs in one setting, `applyMode: queue`. A proposal the judge accepts is then staged, and not written. The tier decides the same either way, because the judge only judges: promote mode writes what it accepted afterwards, and promotion lint prints its findings and does not block (akm 0.9.26). Every proposal is judged against the same bundle, so the order does not matter, and no accepted note joins the neighbours of the next.
 - A proposal is *accepted* when akm stages it, *rejected* when the judge rejects it, and *deferred* when the judge defers or gives no usable reply. A deferred proposal waits for a person, which is not an accept. A model call that fails is an error and is left out of the counts.
-- akm 0.9.26 keeps the judge's reason only for a rejection.
+- akm 0.9.26 keeps the judge's reason only for a rejection; from 0.9.27-alpha.2 akm keeps it for accepts and defers too, and the eval records all three.
 
 ## Run
 
@@ -44,7 +44,7 @@ evals/promotion/run --corpus all
 Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for `own`:
 
 - `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported), the model name, the akm version, the corpus and the git commit.
-- `samples.jsonl`: one line per proposal, with its label and category, the ref, what the tier did, the judge's reason for a rejection, and the error when a call failed.
+- `samples.jsonl`: one line per proposal, with its label and category, the ref, what the tier did, the judge's reason (for a rejection, and from akm 0.9.27-alpha.2 for an accept or a defer too), and the error when a call failed.
 
 ## What it needs from a model
 
