@@ -1,0 +1,10 @@
+version: 4
+name: akm-improve-proactive-verdict-monthly
+run: akm env run env/fwdslsh --
+  bun ~/akm/scripts/akm-proactive-verdict-discord.ts
+schedule: 0 6 1 * *
+description: "Monthly: run the real-query retrieval suite + proactive
+  kill-criterion verdict, post PASS/FAIL/INCONCLUSIVE + metrics + recommendation
+  to Discord. FAIL => recommends disabling akm-improve-proactive-weekly (compute
+  must earn its cycles)."
+timeout: 1800000

@@ -8,7 +8,7 @@ Read-only tools that measured whether `akm improve` worked: shell wrappers in `b
 
 - A case runner and its suites: `akm-eval-run`, `-compare`, `-trend`, `-collect` and the deterministic `-replay`, with the suites `improve-smoke`, `improve-effectiveness`, `memory-regression`, `workflow-compliance` and `judge-calibration` in `cases/`, and an example library in `example-stash/`.
 - The twin experiment: `akm-eval-snapshot`, `akm-eval-twin` and `akm-eval-twin-docker`.
-- The monthly real-query verdict: `src/gen-real-query-suite.ts` and `akm-eval-proactive-verdict`.
+- The monthly real-query verdict: `src/gen-real-query-suite.ts` and `akm-eval-proactive-verdict`, run each month by the task and the Discord script in `library/`.
 - The state analyzers: `akm-eval-attribution-rollup`, `akm-eval-recombine-analyze` and `akm-eval-graph-ablation`.
 - `akm-eval-curate-bench`, a rank-aware benchmark of `akm curate` and `akm search`, and `akm-eval-consolidation-fidelity`.
 
@@ -18,7 +18,7 @@ Read-only tools that measured whether `akm improve` worked: shell wrappers in `b
 
 akm commit `f57a7fd44b37bbee4c18d5ae7f79efdba880ca57`, the tip of `main` on 2026-10-06, when the toolkit was copied here. The tag `v0.9.27-alpha.1` holds the same code, with a version bump.
 
-The folders keep akm's own paths:
+The folders keep akm's own paths, except `library/`:
 
 | Here | Files |
 |---|---|
@@ -26,9 +26,12 @@ The folders keep akm's own paths:
 | `tests/integration/akm-eval/`, `tests/fixtures/akm-eval/` | 14 and 1: its integration tests and their fixture |
 | `tests/akm-eval-*.test.ts`, `tests/curate-metrics.test.ts` | 4 and 1: its unit tests |
 | `tests/fixtures/stashes/curate-golden/` | 18: the golden corpus and hand-labeled judgments that `akm-eval-curate-bench` scored against |
+| `library/scripts/`, `library/tasks/` | 1 and 1: the two files of the maintainer's own akm library that ran the verdict each month. They are not from the akm repository: see below. |
 | `ci/akm-eval-smoke.yml` | 1: the CI job that replayed a recorded smoke run. It was `.github/workflows/akm-eval-smoke.yml` in akm. Here it is a file to read, and GitHub does not run it. |
 
-Every file is byte for byte the one at that commit, except `scripts/akm-eval/cases/consolidation-fidelity/README.md`, where a private-network address and a person's first name are replaced by a placeholder. The copy was taken from the commit, not from a working tree, so no ignored file came with it. (akm ignored the real-query suite, because it is mined from a personal index.)
+Every file outside `library/` is byte for byte the one at that commit, except `scripts/akm-eval/cases/consolidation-fidelity/README.md`, where a private-network address and a person's first name are replaced by a placeholder. The copy was taken from the commit, not from a working tree, so no ignored file came with it. (akm ignored the real-query suite, because it is mined from a personal index.)
+
+`library/` was copied on 2026-10-07 from the maintainer's own akm library. `library/scripts/akm-proactive-verdict-discord.ts` ran `akm-eval-run --suite real-query` and `akm-eval-proactive-verdict`, then posted the verdict to Discord. `library/tasks/akm-improve-proactive-verdict-monthly.yml` is the task that ran it at 06:00 on the first of each month; it was disabled when it was copied. The script reads the webhook from the environment (`DISCORD_WEBHOOK_ID` and `DISCORD_WEBHOOK_TOKEN`, which `akm env run` injected from an env asset of that library, not copied here), so neither file holds a webhook, a token or a host. The script is byte for byte the library's. In the task, the maintainer's home directory in the command's path is replaced by `~`. Both call `scripts/akm-eval/bin/*` in an akm checkout, so they work only where the toolkit does.
 
 ## It runs only inside akm, at that commit
 
