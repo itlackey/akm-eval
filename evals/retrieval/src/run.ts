@@ -40,7 +40,6 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const SYSTEMS = ["search", "curate", "semantic_search", "semantic_curate"] as const;
 type System = (typeof SYSTEMS)[number];
 type Mode = "keyword" | "semantic";
-const MODES = ["keyword", "semantic"] as const;
 const modeOf = (sys: System): Mode => (sys.startsWith("semantic_") ? "semantic" : "keyword");
 /** What a run has for each of its columns: the semantic ones are there only when the run has the semantic index. */
 type Columns<T> = { search: T; curate: T; semantic_search?: T; semantic_curate?: T };
@@ -255,7 +254,6 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
     if (isTask(q) && !grades.has(q.id)) fail(`${q.id} has no grades in qrels.jsonl.${corpus === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
   }
 
-  const modes: readonly Mode[] = ctx.semantic ? MODES : ["keyword"];
   const systems: readonly System[] = ctx.semantic ? SYSTEMS : ["search", "curate"];
   /** What a summary has for each column the run has. */
   const columns = <T>(f: (sys: System) => T): Columns<T> => ({ search: f("search"), curate: f("curate"), ...(ctx.semantic ? { semantic_search: f("semantic_search"), semantic_curate: f("semantic_curate") } : {}) });
