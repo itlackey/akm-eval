@@ -4,7 +4,7 @@ Twelve older evals and experiments were retired instead of moved into this repos
 
 The numbers are the ones the runs recorded, with the date of the run. They describe akm and the models of that day, not akm today. No run was repeated for this page, except the fragment contract (once, on akm 0.9.26). A figure that the saved reports did not state, such as the evolve tallies or the per-question AUCs, was worked out again from the saved files. A result that rests on private notes or queries is given as counts and scores only.
 
-The old harness of this repository stays under the tag `legacy-2026-10`. The code of the others stays where it was: in the akm and akm-bench repositories, with the skills they test, or in the maintainer's own archive. Where nothing here covers a question, the entry says when to reopen it.
+The old harness of this repository stays under the tag `legacy-2026-10`. The code of the others stays where it was: in the akm and akm-bench repositories, with the skills they test, or in the maintainer's own archive. The exception is the toolkit that lived in akm as `scripts/akm-eval`, which held the twin experiment, the monthly real-query verdict and the state analyzers: its code is kept here, to read and not to run, in [`retired/akm-scripts-akm-eval/`](../retired/akm-scripts-akm-eval/README.md). Where nothing here covers a question, the entry says when to reopen it.
 
 | Retired | Headline result | Covered now by |
 |---|---|---|

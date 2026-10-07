@@ -43,6 +43,7 @@ lib/akm/           the akm sandbox the evals that use akm share
 lib/harbor/        the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
 lib/rewrite/       the seeded rewrite the generate scripts share
 reports/           published results: scores only, never private items
+retired/           code of retired evals, kept to read and never run here
 private/           your private assets (gitignored, never published)
 .cache/            akm's embedding model, downloaded once, and the semantic indexes the evals keep between runs (gitignored)
 ```
