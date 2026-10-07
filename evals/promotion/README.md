@@ -14,16 +14,18 @@ Each run makes a temporary folder with its own akm config and bundle, and:
 
 ```
 copies the library's knowledge notes into the bundle, without the note each proposal would write
-akm index --full
+writes each proposal's note as the memory its promotion names: memories/<name>
+akm index --full                                          # with akm's embedding model, bge-small-en-v1.5
 (writes each proposal into the pending queue, as a promotion of consolidate)
 akm proposal drain --judgment --strategy promotion --yes
 akm proposal list --status rejected --detail full        # the judge's reason for each rejection
 ```
 
+- The bundle is indexed with embeddings, as in the retrieval eval. A judge that is shown the nearest knowledge notes of a promotion (akm after #1067) finds them from the stored vector of the promotion's source memory: it looks that memory up in the index, and takes the 5 knowledge notes nearest to it. A run needs that memory in the bundle, and the cases do not carry it, so the eval writes each proposal's note as the memory (`memories/<name>`, the `promotionSource` of the queued row). A real promotion is a rewrite of its memory, so this is close to it, and for a duplicate it puts the note it repeats among the nearest. The run stops if akm did not embed every asset.
 - No command queues a proposal without a model, so the eval writes the rows into the `proposals` table of the sandbox's `state.db`, in the shape akm writes them, and checks that akm lists them all as pending.
 - The config names one LLM engine, the model under test, and a strategy `promotion` whose triage block is the lab's: enabled, judgment on. It differs in one setting, `applyMode: queue`. A proposal the judge accepts is then staged, and not written. The tier decides the same either way, because the judge only judges: promote mode writes what it accepted afterwards, and promotion lint prints its findings and does not block (akm 0.9.26). Every proposal is judged against the same bundle, so the order does not matter, and no accepted note joins the neighbours of the next.
 - A proposal is *accepted* when akm stages it, *rejected* when the judge rejects it, and *deferred* when the judge defers or gives no usable reply. A deferred proposal waits for a person, which is not an accept. A model call that fails is an error and is left out of the counts.
-- akm keeps the judge's reason only for a rejection.
+- akm 0.9.26 keeps the judge's reason only for a rejection.
 
 ## Run
 
@@ -103,7 +105,7 @@ A model may have seen the public proposals in training. A much better public sco
 
 ## Baseline
 
-akm 0.9.26, the model `chat/qwen3.8-27b` (27B, on the lab's GPUs, through its gateway, thinking off), 2026-10-07, commit `f53402d`. The two corpora are never pooled.
+Indexed with keywords only. akm 0.9.26, the model `chat/qwen3.8-27b` (27B, on the lab's GPUs, through its gateway, thinking off), 2026-10-07, commit `f53402d`. The two corpora are never pooled.
 
 | | public (20) | own (65) |
 |---|---:|---:|
@@ -122,14 +124,49 @@ akm 0.9.26, the model `chat/qwen3.8-27b` (27B, on the lab's GPUs, through its ga
 - On the own set the tier accepted 44 of 65 proposals, and 40 of them are ones the owner rejected. 9 of every 10 acceptances were wrong. On the real queue it accepted 71 of 89 (80%, against 68% here), so the sandbox is close to what the lab saw. The judge rejected 2 of the 61 bad proposals and deferred 19: it almost never says no.
 - It accepted the duplicates as often as the others, 67.5% against 65.6% for all bad ones. That is what the prompt allows: it does not show the notes of the bundle, so a duplicate looks like any new note. The 2 bad proposals it rejected on the own set were rejected for the commit hashes and test counts in their text, not for repeating a note.
 - On the public set, whose bad proposals say in their text that they are superseded or a status snapshot, it rejected 7 of 14 and accepted 6. It accepted 2 of the 4 that say they are deprecated, in the first run, and 1 in the second.
-- It accepted every good proposal in the own set, and 4 of 6 in the public one. With 4 good proposals, the recall of 100% says little. Of the public proposals it rejected, a good one and a duplicate were rejected as cut off: the note ends in a code block, and akm wraps the proposal in a ``` fence, so the fence ends early and the note looks cut off to the judge. A real promotion was rejected for the same reason on 2 October.
+- It accepted every good proposal in the own set, and 4 of 6 in the public one. With 4 good proposals, the recall of 100% says little. Of the public proposals it rejected, a good one was rejected as cut off: `good-05` ends in an empty ```markdown block, as the library note it was made from does. That one is cut off. akm also wraps the proposal in a ``` fence, so a note that holds a closed code block can look cut off to the judge, and a real promotion was rejected for that on 2 October. Whether this set shows it is not clear.
 - A rerun differs. The same run before the code was committed (akm 0.9.26, the same model) accepted 40 of the 65, with 36 of the 61 bad: stale 6/14 against 9/14 now. On the public set it accepted the same 10, with stale 2/4 and ephemeral 0/4. Read differences of 4 proposals or fewer as noise.
+
+## With the nearest notes shown to the judge
+
+akm 0.9.26 does not show the judge the notes of the bundle. [akm#1067](https://github.com/itlackey/akm/pull/1067) does: for a promotion it takes the 5 knowledge notes nearest to the promotion's source memory, by their stored vectors, and the judge is told to reject a promotion that these notes already cover. [akm#1068](https://github.com/itlackey/akm/pull/1068) fences each block of that prompt with more backticks than the block holds, so that a note with a code block in it does not look cut off, and keeps the judge's reason on every verdict. The sandbox is indexed with embeddings for this (see "What a run does"). Same model as the baseline, `chat/qwen3.8-27b`, same day, 2026-10-07, eval commit `a86c84b` with the semantic index. The akm of the second and third run reports the version 0.9.26 too, since #1067 changed no version: the second is `main` at `6e2782827`, which is #1067 merged, and the third is #1068's branch (`fix/judgment-prompt-fence`) on top of it, both run as `AKM_BIN="bun <checkout>/src/cli.ts"`.
+
+| | 0.9.26, keywords (baseline) | 0.9.26, semantic | #1067 | #1067 and #1068 |
+|---|---:|---:|---:|---:|
+| **own (65: 4 good, 61 bad)** | | | | |
+| accepted | 44: 4 good, 40 bad | 44: 4 good, 40 bad | 15: 3 good, 12 bad | 16: 3 good, 13 bad |
+| recall | 4/4 (100%) | 4/4 (100%) | 3/4 (75.0%) | 3/4 (75.0%) |
+| precision | 4/44 (9.1%) | 4/44 (9.1%) | 3/15 (20.0%) | 3/16 (18.8%) |
+| bad accepted | 40/61 (65.6%) | 40/61 (65.6%) | 12/61 (19.7%) | 13/61 (21.3%) |
+| duplicate accepted | 27/40 (67.5%) | 29/40 (72.5%) | 2/40 (5.0%) | 2/40 (5.0%) |
+| stale accepted | 9/14 (64.3%) | 8/14 (57.1%) | 6/14 (42.9%) | 7/14 (50.0%) |
+| ephemeral accepted | 4/7 (57.1%) | 3/7 (42.9%) | 4/7 (57.1%) | 4/7 (57.1%) |
+| bad rejected, deferred | 2, 19 | 2, 19 | 49, 0 | 47, 1 |
+| seconds | 527 | 528 | 952 | 1,041 |
+| **public (20: 6 good, 14 bad)** | | | | |
+| accepted | 10: 4 good, 6 bad | 11: 4 good, 7 bad | 6: 5 good, 1 bad | 6: 4 good, 2 bad |
+| recall | 4/6 (66.7%) | 4/6 (66.7%) | 5/6 (83.3%) | 4/6 (66.7%) |
+| precision | 4/10 (40.0%) | 4/11 (36.4%) | 5/6 (83.3%) | 4/6 (66.7%) |
+| bad accepted | 6/14 (42.9%) | 7/14 (50.0%) | 1/14 (7.1%) | 2/14 (14.3%) |
+| duplicate accepted | 4/6 | 4/6 | 1/6 | 2/6 |
+| stale accepted | 1/4 | 3/4 | 0/4 | 0/4 |
+| ephemeral accepted | 1/4 | 0/4 | 0/4 | 0/4 |
+| bad rejected, deferred | 7, 1 | 4, 3 | 12, 1 | 11, 1 |
+| seconds | 238 | 163 | 233 | 245 |
+
+No model call failed in any run (0 of 85 in each).
+
+- **The semantic index does not move akm 0.9.26.** It accepted the same 44 of 65 and the same 40 bad ones on the own set, and 7 against 6 bad ones on the public set. That is the same as the keyword baseline, within the noise of a run (a few proposals): the old prompt never reads the index.
+- **#1067 cuts the bad acceptances on the own set from 40 of 61 to 12.** The duplicates, which the prompt could not see, went from 29 of 40 accepted to 2. It also almost stopped deferring: the judge deferred 19 bad proposals on 0.9.26 and 0 or 1 under #1067, and it rejects most of what it used to leave for a person. The cost is one good proposal of the 4, which it rejects as largely redundant with its neighbours. Stale and ephemeral proposals are not helped much: 6 of 14 and 4 of 7 are still accepted, since the neighbours say nothing about whether a note is out of date. On the public set, whose duplicates are copies of notes that are in the library, it is 1 of 14 bad accepted, from 7.
+- **#1068 changes nothing that this eval can measure.** 13 against 12 bad accepted on the own set, 2 against 1 on the public set, one proposal each way, which is noise. The judge rejected one good public proposal as cut off, `good-05`, in every run on this page. Its note really does end in an empty ```markdown block: the library note it was made from is cut off there, so that rejection is right, and it is not an example of the fence bug. The fence bug needs a note with a closed code block, and the lab's real case of 2 October is not in the set. Read the effect of #1068 from its test, not from this table.
+- On this set the neighbours are easier to find than in a real bundle: `private/promotion/own/library` holds each case's nearest notes by tf-idf and the notes its reason names, and the eval writes the proposal as its own source memory, so the note it repeats is among the 5 nearest by construction. In the lab's 8,000 notes the nearest 5 may not hold the note a promotion repeats. The 5 nearest of a real promotion's memory, which is what akm uses, were not measured here.
+- The proposals are judged in one drain, in queue mode: no accepted note joins the neighbours of the next. A real drain in promote mode writes each accepted note, and a later promotion of the same night sees it.
 
 ## Notes
 
 - The shipped tier changes with akm. Compare results only between runs with the same akm version and the same model.
 - Every proposal is judged in one drain, against one bundle. A proposal for a ref that another proposal also names would show that one to the judge as a sibling. The cases have a ref each, so none does.
-- The bundle is indexed with keyword search. akm's embedding model is not loaded, so a tier that finds the nearest notes by embedding falls back to keywords in this eval.
+- The bundle is indexed with akm's embedding model, bge-small-en-v1.5, which akm downloads once (133 MB) into `.cache/models/` at the root of the repository, as in the retrieval eval. The first baseline, below, was indexed with keywords alone. akm 0.9.26 does not look at the index when it judges, so the semantic index changes nothing for it, which the second table shows.
 - akm's errors name the endpoint it called. The eval writes `<MODEL_BASE_URL>` in its place in `samples.jsonl` and on the console, so results can be shared.
 - The tier judges every proposal that no quality gate has passed: promotions, but also feedback fixes and extract memories. This eval queues promotions only.
 - A promotion that the judge accepts can still fail when akm writes it, if the note does not validate. Queue mode does not write it, so the eval does not see that.

@@ -2,7 +2,7 @@
 // did with each one, and the metrics. run.ts uses them to run the eval and build.ts to make the public cases.
 
 import { createHash } from "node:crypto";
-import { engineConfig } from "../../../lib/akm/akm.ts";
+import { engineConfig, semanticConfig } from "../../../lib/akm/akm.ts";
 
 export const BAD = ["duplicate", "stale", "ephemeral"] as const;
 export type Bad = (typeof BAD)[number];
@@ -88,12 +88,20 @@ export const STRATEGY = "promotion";
  * The akm config of a run: the model under test as the one engine, and a strategy whose triage block is the one the lab runs,
  * judgment on, except that it stages what the judge accepts and does not write it. The drain decides the same either way: the
  * judgment tier only judges, and promotion lint does not block (akm 0.9.26 prints its findings as non-blocking).
+ * The bundle is indexed with akm's built-in embedder, as retrieval and skillret do, because a judge that is shown the nearest
+ * notes of a promotion's source memory finds them by their stored vectors.
  */
 export function promotionConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, "judge");
+  const { semanticSearchMode, embedding } = semanticConfig();
+  config.semanticSearchMode = semanticSearchMode;
+  config.embedding = embedding;
   config.improve = { strategies: { [STRATEGY]: { engine: "judge", processes: { triage: { enabled: true, applyMode: "queue", judgment: { enabled: true } } } } } };
   return config;
 }
+
+/** The memory a case's promotion names as its source, `memories/<name>.md` in the bundle. */
+export const memoryOf = (c: Case): string => `memories/${c.ref.split("/").pop()}.md`;
 
 /** The values of one row of akm's `proposals` table, for a pending promotion of consolidate, as akm itself writes it. */
 export function proposalRow(c: Case, bundleDir: string, now: string): (string | null)[] {
@@ -102,7 +110,7 @@ export function proposalRow(c: Case, bundleDir: string, now: string): (string | 
     proposedTarget: { source: BUNDLE, root: bundleDir },
     sourceRun: "promotion-eval",
     confidence: 0.95,
-    promotionSource: `memories/${c.ref.split("/").pop()}`,
+    promotionSource: memoryOf(c).replace(/\.md$/, ""),
   };
   return [uuidOf(c.id), bundleDir, `${BUNDLE}//${c.ref}`, "pending", "consolidate", now, now, c.content, null, JSON.stringify(meta)];
 }

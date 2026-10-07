@@ -29,7 +29,13 @@ if (args[0] === "index") {
   const db = new Database(dbPath);
   db.run("CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, stash_dir TEXT NOT NULL, ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', frontmatter_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}')");
   db.run("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, ts TEXT NOT NULL, ref TEXT, metadata_json TEXT NOT NULL DEFAULT '{}')");
-  out({ ok: true });
+  // Like akm's index: how many assets it found, and how many it embedded. The embedder is off unless the config turns it on.
+  const count = (d) => existsSync(d) ? readdirSync(d, { recursive: true }).filter((f) => String(f).endsWith(".md")).length : 0;
+  const total = count(join(process.env.AKM_BUNDLE_DIR, "knowledge")) + count(join(process.env.AKM_BUNDLE_DIR, "memories"));
+  const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8"));
+  const embedded = config.semanticSearchMode === "auto" && config.embedding?.localModel ? total : 0;
+  writeFileSync(join(data, "indexed.json"), JSON.stringify({ memories: existsSync(join(process.env.AKM_BUNDLE_DIR, "memories")) ? readdirSync(join(process.env.AKM_BUNDLE_DIR, "memories")).sort() : [] }));
+  out({ ok: true, totalEntries: total, verification: { embeddingCount: embedded, message: "embedded" } });
   process.exit(0);
 }
 const db = new Database(dbPath);
@@ -71,7 +77,7 @@ function setup(cases: Case[]) {
   writeFileSync(join(root, "cases.jsonl"), cases.map((c) => `${JSON.stringify(c)}\n`).join(""));
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  const sandbox = { ...createSandbox("promotion-test"), cmd: ["bun", script] };
+  const sandbox = { ...createSandbox("promotion-test", { semantic: true }), cmd: ["bun", script] };
   dirs.push(sandbox.dir);
   writeConfig(sandbox, promotionConfig("http://localhost:1/v1", "the-model", false));
   const ctx = { sandbox, version: "0.9.99-test", model: "the-model", baseUrl: "http://localhost:1/v1", label: "t" };
@@ -137,6 +143,21 @@ describe("runCorpus", () => {
     const seen = JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "seen.json"), "utf8"));
     expect(seen.library).toEqual(["kept.md"]);
     expect(seen.config.improve.strategies.promotion.processes.triage).toEqual({ enabled: true, applyMode: "queue", judgment: { enabled: true } });
+  });
+
+  test("indexes the bundle with embeddings and writes each case's note as the memory its promotion names", async () => {
+    const { ctx, sandbox, folders } = setup(cases);
+    await quiet(() => runCorpus("public", ctx, folders));
+    expect(sandbox.env.HF_HOME).toContain(".cache");
+    expect(JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "indexed.json"), "utf8")).memories).toEqual(cases.map((c) => `${c.id}.md`).sort());
+    const seen = JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "seen.json"), "utf8"));
+    expect(seen.config).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+  });
+
+  test("stops when akm embedded fewer assets than it indexed", async () => {
+    const { ctx, sandbox, folders } = setup(cases);
+    writeConfig(sandbox, { ...promotionConfig("http://localhost:1/v1", "the-model", false), semanticSearchMode: "off" });
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("embedded 0 of 9 assets");
   });
 
   test("a limit queues a mix of the categories", async () => {

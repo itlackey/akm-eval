@@ -55,6 +55,7 @@ describe("promotionConfig", () => {
   test("names the model as the one engine and turns triage's judgment on, in queue mode", () => {
     const config = promotionConfig("http://localhost:8080/v1/", "m", true);
     expect(config.engines.judge).toMatchObject({ kind: "llm", model: "m", endpoint: "http://localhost:8080/v1/chat/completions", apiKey: "$MODEL_API_KEY" });
+    expect(config).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
     expect(config.improve.strategies.promotion).toEqual({ engine: "judge", processes: { triage: { enabled: true, applyMode: "queue", judgment: { enabled: true } } } });
   });
 });

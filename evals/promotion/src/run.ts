@@ -10,7 +10,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { isLocalJudge } from "../../retrieval/src/label.ts"; // the rule that keeps private notes on this machine or the local network
-import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
+import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
 
 const NAME = "promotion";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -108,12 +108,17 @@ function failureMessage(what: string, code: number, stderr: string): string {
  * Makes the bundle the proposals are judged against and queues them. The bundle is the library's knowledge/ folder without the
  * notes the cases would write: a proposal creates its note, and the notes already there are what it may duplicate. Each case
  * is queued as a pending promotion of consolidate, in akm's own table, since no command queues a proposal without a model.
+ * A promotion names the memory it was made from, and a judge that is shown the nearest notes finds them from that memory's
+ * vector, so each case's note is also written as that memory, `memories/<name>`, before the bundle is indexed with embeddings.
  */
 export async function plant(sandbox: Sandbox, cases: Case[], libraryDir: string): Promise<void> {
   const bundle = join(sandbox.dir, "bundle");
   cpSync(join(libraryDir, "knowledge"), join(bundle, "knowledge"), { recursive: true });
   for (const c of cases) rmSync(join(bundle, `${c.ref}.md`), { force: true });
-  await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: STEP_TIMEOUT_MS }); // makes state.db and indexes the notes
+  mkdirSync(join(bundle, "memories"), { recursive: true });
+  for (const c of cases) writeFileSync(join(bundle, memoryOf(c)), c.content);
+  const indexed = await runAkmJson<{ totalEntries?: number; verification?: { embeddingCount?: number; message?: string } }>(sandbox, ["index", "--full"], { timeoutMs: STEP_TIMEOUT_MS }); // makes state.db and indexes the notes
+  if (typeof indexed.totalEntries !== "number" || indexed.verification?.embeddingCount !== indexed.totalEntries) fail(`akm embedded ${indexed.verification?.embeddingCount ?? "no"} of ${indexed.totalEntries ?? "an unknown number of"} assets: ${indexed.verification?.message}. Its embedding model may not have downloaded: see .cache/models.`, 1);
   const stash = realpathSync(bundle);
   const now = new Date().toISOString();
   const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"));
@@ -266,7 +271,7 @@ async function main(): Promise<void> {
 
   const summaries: Summary[] = [];
   for (const c of corpora) {
-    const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
+    const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
     try {
       writeConfig(sandbox, promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
       const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
