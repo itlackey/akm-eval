@@ -8,7 +8,7 @@ The model under test is consolidate's engine. The pair prompt, the rule and the 
 
 ## How consolidate pairs notes
 
-Consolidate has two passes. The eval is about the pair pass. The other proposes promoting memories to knowledge, and its proposals are ignored here.
+Consolidate has two passes. The eval is about the pair pass. The other proposes promoting memories to knowledge, and its proposals are ignored here (see `../promotion/README.md` for what happens to them).
 
 - The pair pass reads memories, lessons and flat knowledge notes. The eval uses memories, the type consolidate works on.
 - It does not compare every pair. For each note it takes the nearest neighbours by embedding, at most 5, and keeps those with a cosine of 0.93 or more. The floor is 0.95 for an older note that it has not judged before. A note less than a week old, by git or by file time, gets 0.93, and the eval's notes are 1 to 3 days old.
@@ -95,7 +95,7 @@ A model may have seen the public cases in training. A much better public score t
 
 - The shipped judge changes with akm. Compare results only between runs with the same akm version.
 - akm's errors name the URL it called. The eval writes `<MODEL_BASE_URL>` in its place, in `samples.jsonl` and on the console, so results can be shared.
-- consolidate's other pass also calls the model for each case, and may propose promoting a memory to knowledge. Those proposals are never read, accepted or counted.
+- consolidate's other pass also calls the model for each case, and may propose promoting a memory to knowledge. The eval never reads, accepts or counts them. That does not make them safe: under a triage config with `applyMode: promote` and judgment on, the drain's judgment tier accepts promotions with no one looking. `../promotion/README.md` tests that tier.
 - The notes are dated by file time, 3 days and 1 day old, or 2 days each for a pair from one day, because the sandbox bundle is not a git repository. akm shows its judge each note's date, calls the older note A, and retires the older note of a duplicate or a replacement.
 
 ## Licence
