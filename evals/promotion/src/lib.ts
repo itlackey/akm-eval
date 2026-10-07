@@ -131,7 +131,7 @@ export function dispatchFailures(stderr: string): Map<string, string> {
   return new Map([...stderr.matchAll(DISPATCH_FAILED)].map((m) => [m[1], m[2].trim()]));
 }
 
-/** One row per case: what the drain did with its proposal. `reasons` holds the judge's reason for each rejection, by proposal id. */
+/** One row per case: what the drain did with its proposal. `reasons` holds the judge's reason for each rejection, accept and defer, by proposal id. */
 export function rowsFromDrain(cases: Case[], drained: Drained, reasons: Map<string, string>, failures: Map<string, string>): Row[] {
   const accepted = new Set([...(drained.staged ?? []), ...(drained.promoted ?? [])]);
   const rejected = new Set(drained.rejected ?? []);
@@ -142,9 +142,9 @@ export function rowsFromDrain(cases: Case[], drained: Drained, reasons: Map<stri
     const base = { id: c.id, label: c.label, category: c.category, ref: c.ref, reason: "" };
     const failure = failures.get(id) ?? failed.get(id);
     if (failure !== undefined) return { ...base, outcome: "error", error: failure };
-    if (accepted.has(id)) return { ...base, outcome: "accept" };
+    if (accepted.has(id)) return { ...base, outcome: "accept", reason: reasons.get(id) ?? "" };
     if (rejected.has(id)) return { ...base, outcome: "reject", reason: reasons.get(id) ?? "" };
-    if (deferred.has(id)) return { ...base, outcome: "defer" };
+    if (deferred.has(id)) return { ...base, outcome: "defer", reason: reasons.get(id) ?? "" };
     return { ...base, outcome: "error", error: "the drain did not list the proposal" };
   });
 }

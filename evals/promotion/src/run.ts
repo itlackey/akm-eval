@@ -210,6 +210,12 @@ export async function runCorpus(
   }
   const rejected = await runAkmJson<{ proposals?: { id: string; review?: { reason?: string } }[] }>(ctx.sandbox, ["proposal", "list", "--status", "rejected", "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS });
   const reasons = new Map((rejected.proposals ?? []).map((p) => [p.id, p.review?.reason ?? ""]));
+  // An accepted or deferred proposal stays pending, with the judge's reason in its gate decision (and, for a defer, akm's own reason: a reply it could not read, or a failed call).
+  const pending = await runAkmJson<{ proposals?: { id: string; gateDecision?: { reason?: string; judgeReason?: string } }[] }>(ctx.sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS });
+  for (const p of pending.proposals ?? []) {
+    const why = p.gateDecision?.judgeReason || p.gateDecision?.reason;
+    if (why) reasons.set(p.id, why);
+  }
   const seconds = Number(((performance.now() - t0) / 1000).toFixed(1));
 
   // akm names the endpoint in some of its errors, and rows get shared, so no row carries it.
