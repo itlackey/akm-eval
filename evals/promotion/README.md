@@ -52,7 +52,7 @@ Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME
 - A call is the proposal plus about 300 tokens of prompt, so a note of 9 KB is about 3k tokens and 8k of context is safe.
 - akm asks the server to turn thinking off. A model that thinks anyway is slow. If yours does, turn it off in the server.
 - Cloud endpoints that reject unknown request fields may refuse the thinking switches akm sends. Run those through a local gateway, or expect failed calls.
-- One call a proposal, one at a time. On a 27B model on a local GPU a call took 8 seconds, so 20 proposals took 3 minutes, and 65 took about as many minutes as the run says in the baseline below.
+- One call a proposal, one at a time. On a 27B model on a local GPU a call took 8 to 12 seconds: 20 proposals took 3 to 4 minutes and 65 took 9 to 13.
 
 To serve a model locally with llama.cpp:
 
@@ -100,6 +100,30 @@ For scale: a tier that accepts everything has a recall of 100%, a precision equa
 The set is small. One good proposal is 25 points of recall in the own set and 17 in the public one, so read changes of a case or two as noise, and rerun before you trust a gap. A rerun can differ by a case or two, because the model judges again.
 
 A model may have seen the public proposals in training. A much better public score than own score points to that, and to the cues that make the public ones easy.
+
+## Baseline
+
+akm 0.9.26, the model `chat/qwen3.8-27b` (27B, on the lab's GPUs, through its gateway, thinking off), 2026-10-07, commit `f53402d`. The two corpora are never pooled.
+
+| | public (20) | own (65) |
+|---|---:|---:|
+| good proposals | 6 (30%) | 4 (6.2%) |
+| accepted | 10: 4 good, 6 bad | 44: 4 good, 40 bad |
+| recall | 4/6 (66.7%) | 4/4 (100%) |
+| precision | 4/10 (40.0%) | 4/44 (9.1%) |
+| bad accepted | 6/14 (42.9%) | 40/61 (65.6%) |
+| duplicate accepted | 4/6 | 27/40 (67.5%) |
+| stale accepted | 1/4 | 9/14 (64.3%) |
+| ephemeral accepted | 1/4 | 4/7 (57.1%) |
+| bad rejected, deferred | 7, 1 | 2, 19 |
+| model calls failed | 0 of 20 | 0 of 65 |
+| seconds | 238 | 527 |
+
+- On the own set the tier accepted 44 of 65 proposals, and 40 of them are ones the owner rejected. 9 of every 10 acceptances were wrong. On the real queue it accepted 71 of 89 (80%, against 68% here), so the sandbox is close to what the lab saw. The judge rejected 2 of the 61 bad proposals and deferred 19: it almost never says no.
+- It accepted the duplicates as often as the others, 67.5% against 65.6% for all bad ones. That is what the prompt allows: it does not show the notes of the bundle, so a duplicate looks like any new note. The 2 bad proposals it rejected on the own set were rejected for the commit hashes and test counts in their text, not for repeating a note.
+- On the public set, whose bad proposals say in their text that they are superseded or a status snapshot, it rejected 7 of 14 and accepted 6. It accepted 2 of the 4 that say they are deprecated, in the first run, and 1 in the second.
+- It accepted every good proposal in the own set, and 4 of 6 in the public one. With 4 good proposals, the recall of 100% says little. Of the public proposals it rejected, a good one and a duplicate were rejected as cut off: the note ends in a code block, and akm wraps the proposal in a ``` fence, so the fence ends early and the note looks cut off to the judge. A real promotion was rejected for the same reason on 2 October.
+- A rerun differs. The same run before the code was committed (akm 0.9.26, the same model) accepted 40 of the 65, with 36 of the 61 bad: stale 6/14 against 9/14 now. On the public set it accepted the same 10, with stale 2/4 and ephemeral 0/4. Read differences of 4 proposals or fewer as noise.
 
 ## Notes
 
