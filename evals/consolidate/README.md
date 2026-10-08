@@ -34,7 +34,7 @@ The private run reads `private/consolidate/assets/`. Make it first with `./gener
 
 Each run writes two files to `evals/consolidate/results/<UTC date>-<label>/`, or to `private/consolidate/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name and the names the endpoint reported for its calls (a gateway may serve one name from several providers), the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name and the names the endpoint reported for its calls (a gateway may serve one name from several providers), the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per case, with the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason, the time it took and, when the endpoint rate limited the case, how many times it was tried again.
 
 ## What it needs from a model

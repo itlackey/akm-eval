@@ -17,9 +17,6 @@ import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
 import { type Folders, collectionsFor } from "./run.ts";
 
-// evals/distill/src/run.ts still imports isLocalJudge from here. It lives in lib/local-model.ts: switch distill, then drop this line.
-export { isLocalJudge } from "../../../lib/local-model.ts";
-
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const CONCURRENCY = 2;

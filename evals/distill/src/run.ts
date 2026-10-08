@@ -7,8 +7,8 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
-import { isLocalJudge } from "../../retrieval/src/label.ts"; // the rule that keeps private notes on this machine or the local network
+import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { type LoadedCase, type Metrics, type Row, STRATEGY, distillConfig, errorRow, failureMessage, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases } from "./lib.ts";
 
 const NAME = "distill";
@@ -42,6 +42,9 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   /** The model names the endpoint said answered. A gateway may serve one name with another model. */
   served_models: string[];
   limit: number | null;
@@ -184,6 +187,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    ...akmBuild(),
     served_models: [...new Set(rows.flatMap((r) => r.served))].sort(),
     limit: ctx.limit ?? null,
     n_cases: all.length,
@@ -229,8 +233,9 @@ async function main(): Promise<void> {
   const baseUrl = process.env.MODEL_BASE_URL?.trim();
   const model = process.env.MODEL_NAME?.trim();
   if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
-  if (corpora.some((c) => c === "own" || c === "own-feedback") && !(await isLocalJudge(baseUrl))) {
-    fail(`--corpus ${corpus} sends your memories to the model, so MODEL_BASE_URL must be localhost, a private-network address (10.*, 172.16.* to 172.31.*, 192.168.*) or a name that resolves only to such addresses. It is not.`);
+  if (corpora.some((c) => c === "own" || c === "own-feedback")) {
+    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", `--corpus ${corpus}`, "memories", "model");
+    if (refusal) fail(refusal);
   }
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
