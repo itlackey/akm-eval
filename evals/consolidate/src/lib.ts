@@ -43,6 +43,8 @@ export interface Row {
   safe: boolean | null; // whether that side was safe to retire
   staged: boolean; // akm staged the retirement, so a triage run would accept it with no one looking
   reason: string; // the judge's reason for a retirement
+  only_in_retired: string[] | null; // the claims the judge found only in the retired note, null when akm did not retire one or its build does not record them
+  only_in_successor: string[] | null; // the claims the judge found only in the note akm kept, null likewise
   served: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   seconds: number; // the last try
   retried?: number; // how many times the case was tried again because the endpoint rate limited it
@@ -137,12 +139,12 @@ export function consolidateConfig(baseUrl: string, model: string, hasKey: boolea
 }
 
 export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", served: {}, seconds, error: message };
+  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null, served: {}, seconds, error: message };
 }
 
 interface RetireProposal {
   source: string;
-  retirement: { retiredRef: string; judgeReason?: string };
+  retirement: { retiredRef: string; judgeReason?: string; onlyInRetired?: unknown; onlyInSuccessor?: unknown };
   gateDecision?: { outcome?: string };
 }
 
@@ -170,6 +172,9 @@ function servedModels(improve: unknown): Record<string, number> {
   return served;
 }
 
+/** A claim list from the retirement, or null when this akm build did not record one. */
+const claimList = (x: unknown): string[] | null => (Array.isArray(x) && x.every((k) => typeof k === "string") ? x : null);
+
 /** `bundle//memories/some-name` is the memory `some-name`. */
 const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "");
 
@@ -183,16 +188,16 @@ export function rowFromRun(c: Case, improve: unknown, proposals: unknown, second
   const paired = Number(pass.pairsConsidered ?? 0) > 0;
   const judged_as = RELATIONS.find((r) => Number(pass.labelCounts?.[r] ?? 0) > 0) ?? null;
   const base = { id: c.id, relation: c.relation, safe_sides: c.safe, paired, judged_as, served: servedModels(improve), seconds };
-  const failed = (error: string): Row => ({ ...base, outcome: "error", retired: null, safe: null, staged: false, reason: "", error });
+  const failed = (error: string): Row => ({ ...base, outcome: "error", retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null, error });
   if (Number(pass.failedJudgments ?? 0) > 0 || (paired && Number(pass.pairsJudged ?? 0) === 0)) return failed("akm paired the notes but its judge gave no verdict");
   const retired = retireProposals(proposals);
-  if (retired.length === 0) return { ...base, outcome: "keep", retired: null, safe: null, staged: false, reason: "" };
+  if (retired.length === 0) return { ...base, outcome: "keep", retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null };
   if (retired.length > 1) return failed(`akm made ${retired.length} retire proposals for one pair`);
   const [p] = retired;
   const name = nameOfRef(p.retirement.retiredRef);
   const side: Side | undefined = name === c.a.name ? "a" : name === c.b.name ? "b" : undefined;
   if (!side) return failed(`akm retired ${p.retirement.retiredRef}, which is not one of the two notes`);
-  return { ...base, outcome: "retire", retired: side, safe: c.safe.includes(side), staged: p.gateDecision?.outcome === "staged", reason: p.retirement.judgeReason ?? "" };
+  return { ...base, outcome: "retire", retired: side, safe: c.safe.includes(side), staged: p.gateDecision?.outcome === "staged", reason: p.retirement.judgeReason ?? "", only_in_retired: claimList(p.retirement.onlyInRetired), only_in_successor: claimList(p.retirement.onlyInSuccessor) };
 }
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));

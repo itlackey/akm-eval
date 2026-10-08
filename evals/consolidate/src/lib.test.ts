@@ -201,6 +201,13 @@ describe("rowFromRun", () => {
     expect(row).toMatchObject({ id: "d", relation: "duplicate", safe_sides: ["a", "b"], outcome: "retire", paired: true, judged_as: "duplicate", retired: "b", safe: true, staged: true, reason: "same claims", seconds: 4.2 });
   });
 
+  test("a retirement carries the claim lists akm recorded, and null when its build records none", () => {
+    const withLists = proposal("memories/d-two", { retirement: { retiredRef: "memories/d-two", judgeReason: "r", onlyInRetired: [], onlyInSuccessor: ["port 8080"] } });
+    expect(rowFromRun(dup, pass(), listing(withLists), 1)).toMatchObject({ only_in_retired: [], only_in_successor: ["port 8080"] });
+    expect(rowFromRun(dup, pass(), listing(proposal("memories/d-two")), 1)).toMatchObject({ outcome: "retire", only_in_retired: null, only_in_successor: null });
+    expect(rowFromRun(dup, pass(), listing(), 1)).toMatchObject({ outcome: "keep", only_in_retired: null, only_in_successor: null });
+  });
+
   test("keeps the model names the endpoint reported, with the calls they answered, on every row it makes from a run", () => {
     expect(rowFromRun(dup, pass(), listing(), 1).served).toEqual({ "served-a": 2, "served-b": 1 });
     expect(rowFromRun(dup, pass({ failedJudgments: 1 }), listing(), 1).served).toEqual({ "served-a": 2, "served-b": 1 });

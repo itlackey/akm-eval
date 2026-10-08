@@ -28,7 +28,7 @@ const proposals = join(process.env.AKM_STATE_DIR, "proposals.json");
 const what = /FAKE: ([a-z0-9-]+)/.exec(notes.map((n) => n.text).join("\\n"))?.[1];
 const has = (flag) => args.includes(flag);
 const json = (o) => console.log(JSON.stringify(o));
-const proposal = (name, extra = {}) => ({ id: "p-" + name, ref: "bundle//memories/" + name, status: "pending", source: "consolidate-pair", retirement: { retiredRef: "memories/" + name, successorRef: "memories/other", judgeLabel: "duplicate", judgeReason: "same claims" }, ...extra });
+const proposal = (name, extra = {}) => ({ id: "p-" + name, ref: "bundle//memories/" + name, status: "pending", source: "consolidate-pair", retirement: { retiredRef: "memories/" + name, successorRef: "memories/other", judgeLabel: "duplicate", judgeReason: "same claims", onlyInRetired: [], onlyInSuccessor: ["a kept claim"] }, ...extra });
 const pass = (over) => ({ initiators: 2, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 }, retired: [], ...over });
 
 if (cmd === "index") {
@@ -168,7 +168,7 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).results_dir).toBeUndefined();
     const byId = (id: string) => rows.find((r) => r.id === id);
     // d1: the older note is a, and akm retired it. d2: the older note is b.
-    expect(byId("d1")).toMatchObject({ outcome: "retire", retired: "a", safe: true, staged: true, judged_as: "duplicate", reason: "same claims" });
+    expect(byId("d1")).toMatchObject({ outcome: "retire", retired: "a", safe: true, staged: true, judged_as: "duplicate", reason: "same claims", only_in_retired: [], only_in_successor: ["a kept claim"] });
     expect(byId("d2")).toMatchObject({ outcome: "retire", retired: "b", safe: true });
     // s1: the newer note is b, and it is the subset
     expect(byId("s1")).toMatchObject({ retired: "b", safe: true, staged: false, judged_as: "subsumed" });

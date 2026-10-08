@@ -322,6 +322,8 @@ export interface Row {
   gate: string | null;
   /** The judge's criterion scores: from the queued lesson's gate decision, or from akm's result when the judge rejected the lesson or sent it to review. */
   scores: Record<string, number> | null;
+  /** The lesson text the judge rejected or sent to review, as akm's result reports it (cut to 2000 characters), null when akm queued the lesson or its build does not report it. */
+  rejected_lesson: string | null;
   missing: string[];
   forbidden: string[];
   ratio: number | null;
@@ -339,7 +341,7 @@ export interface CaseRun {
 }
 
 export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null, served: [], seconds, error: message };
+  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null, served: [], seconds, error: message };
 }
 
 /** The model names the endpoint reported for the calls in `akm improve`'s result. */
@@ -350,7 +352,7 @@ export function servedModels(improve: unknown): string[] {
 
 /**
  * The judge's criterion scores as akm's distill result reports them. Only a lesson the judge rejected or sent to review has them there. A
- * rejected lesson is queued nowhere, so its text is not available to the eval at all, only these scores and the reason.
+ * rejected lesson is queued nowhere, so its text comes from `rejectedContent` in the same result (see rejectedLesson).
  */
 function judgeScores(improve: unknown): Record<string, number> | null {
   const result = distillAction(improve)?.result;
@@ -359,9 +361,16 @@ function judgeScores(improve: unknown): Record<string, number> | null {
   return judged && criteria && typeof criteria === "object" ? (criteria as Record<string, number>) : null;
 }
 
+/** The lesson text the judge turned away, from akm's distill result. Present on a rejection or a review, when this akm build reports it. */
+function rejectedLesson(improve: unknown): string | null {
+  const result = distillAction(improve)?.result;
+  const judged = result?.outcome === "quality_rejected" || result?.outcome === "review_needed";
+  return judged && typeof result?.rejectedContent === "string" ? result.rejectedContent : null;
+}
+
 /** Score a case from what akm did. The queue decides whether a lesson was proposed. */
 export function scoreCase(c: LoadedCase, run: CaseRun): Row {
-  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null };
+  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), lesson: null, status: null, gate: null, scores: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null };
   const proposal = run.proposals[0];
   if (proposal) {
     const lesson = lessonText(proposal.content);
@@ -375,7 +384,7 @@ export function scoreCase(c: LoadedCase, run: CaseRun): Row {
   }
   const { outcome, detail } = distillOutcome(run.improve);
   if (outcome === "error") return errorRow(c, detail, run.seconds);
-  return { ...base, scores: judgeScores(run.improve), verdict: c.expect === "none" ? "right" : "missed", outcome, detail };
+  return { ...base, scores: judgeScores(run.improve), rejected_lesson: rejectedLesson(run.improve), verdict: c.expect === "none" ? "right" : "missed", outcome, detail };
 }
 
 // ---- Metrics ---------------------------------------------------------------------------------------------------

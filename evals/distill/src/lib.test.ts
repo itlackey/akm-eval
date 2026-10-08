@@ -348,6 +348,15 @@ describe("what akm did", () => {
     expect(scoreCase(c, run([], { outcome: "skipped", skipReason: "x", score: 4, criteria: { novelty: 4 } }))).toMatchObject({ outcome: "skipped", scores: null });
   });
 
+  test("scoreCase: the text of a rejected lesson comes from akm's result, null when its build does not report it or the lesson was queued", () => {
+    const rejected = { outcome: "quality_rejected", reason: "r", score: 2, criteria: { novelty: 2 }, rejectedContent: "---\ndescription: d\n---\nthe lesson" };
+    expect(scoreCase(c, run([], rejected)).rejected_lesson).toBe("---\ndescription: d\n---\nthe lesson");
+    const { rejectedContent: _t, ...older } = rejected;
+    expect(scoreCase(c, run([], older)).rejected_lesson).toBeNull();
+    expect(scoreCase(c, run([], { outcome: "skipped", skipReason: "x", rejectedContent: "t" })).rejected_lesson).toBeNull();
+    expect(scoreCase(status, run([queued("Body.")], { outcome: "review_needed", reason: "r", rejectedContent: "t" })).rejected_lesson).toBeNull();
+  });
+
   test("scoreCase: a lesson sent to review with no gate scores gets the judge's from akm's result", () => {
     const review = { outcome: "review_needed", reason: "mean of 3", score: 3, criteria: { novelty: 3 } };
     expect(scoreCase(status, run([queued("Body.", { scores: null })], review))).toMatchObject({ scores: { novelty: 3 } });
