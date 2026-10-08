@@ -7,15 +7,18 @@
 //
 //   evals/retrieval/label [--corpus public|own] [--limit N]
 
-import { lookup } from "node:dns/promises";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { localModelError } from "../../../lib/local-model.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
 import { type Folders, collectionsFor } from "./run.ts";
+
+// evals/distill/src/run.ts still imports isLocalJudge from here. It lives in lib/local-model.ts: switch distill, then drop this line.
+export { isLocalJudge } from "../../../lib/local-model.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -108,33 +111,6 @@ export function makeJudge(baseUrl: string, apiKey: string, model: string, timeou
     // A reasoning model that ran out of room can leave its answer in the reasoning text. parseGrade finds it there.
     return message.content?.trim() ? message.content : (message.reasoning_content ?? message.reasoning ?? "");
   };
-}
-
-/** Whether an address is on this machine (127.x, ::1) or the private network (10.x, 172.16.x to 172.31.x, 192.168.x). */
-export function isPrivateAddress(ip: string): boolean {
-  return ip === "::1" || /^(127|10)(\.\d+){3}$|^192\.168(\.\d+){2}$|^172\.(1[6-9]|2\d|3[01])(\.\d+){2}$/.test(ip);
-}
-
-/**
- * Whether a judge at this URL may be sent private notes: the host the URL names is localhost or a private address,
- * or a name that resolves only to private addresses (a gateway on the local network). `localhost.example.com` and
- * `10.1.2.3.example.com` are names like any other, so they count only if they resolve to the private network.
- */
-export async function isLocalJudge(baseUrl: string, resolve: (host: string) => Promise<string[]> = lookupAll): Promise<boolean> {
-  let host: string;
-  try {
-    host = new URL(baseUrl).hostname.replace(/^\[|\]$/g, "");
-  } catch {
-    return false;
-  }
-  if (host === "localhost" || isPrivateAddress(host)) return true;
-  if (!host || /^[\d.]+$/.test(host) || host.includes(":")) return false;
-  const addresses = await resolve(host).catch(() => [] as string[]);
-  return addresses.length > 0 && addresses.every(isPrivateAddress);
-}
-
-async function lookupAll(host: string): Promise<string[]> {
-  return (await lookup(host, { all: true })).map((a) => a.address);
 }
 
 /** For each task query, the assets its pool holds: the top `depth` of akm search, akm curate and BM25, and the assets the author expected. */
@@ -329,8 +305,9 @@ async function main(): Promise<number> {
     console.error("retrieval label: set JUDGE_BASE_URL and JUDGE_MODEL in .env (and JUDGE_API_KEY if the endpoint needs one). See .env.example.");
     return 2;
   }
-  if (corpus === "own" && !(await isLocalJudge(baseUrl))) {
-    console.error("retrieval label: --corpus own sends your notes to the judge, so JUDGE_BASE_URL must be localhost, a private-network address (10.*, 172.16.* to 172.31.*, 192.168.*) or a name that resolves only to such addresses. It is not.");
+  const refusal = corpus === "own" ? await localModelError(baseUrl, "JUDGE_BASE_URL", "--corpus own", "notes", "judge") : undefined;
+  if (refusal) {
+    console.error(`retrieval label: ${refusal}`);
     return 2;
   }
   const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));

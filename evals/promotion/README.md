@@ -43,7 +43,7 @@ evals/promotion/run --corpus all
 
 Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for `own`:
 
-- `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported), the model name, the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per proposal, with its label and category, the ref, what the tier did, the judge's reason (for a rejection, and from akm 0.9.27-alpha.2 for an accept or a defer too), and the error when a call failed.
 
 ## What it needs from a model

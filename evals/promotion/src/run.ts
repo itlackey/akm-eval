@@ -8,8 +8,8 @@ import { Database } from "bun:sqlite";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
-import { isLocalJudge } from "../../retrieval/src/label.ts"; // the rule that keeps private notes on this machine or the local network
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
 
 const NAME = "promotion";
@@ -51,6 +51,9 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   limit: number | null;
   n_cases: number;
   n_run: number;
@@ -230,6 +233,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    ...akmBuild(),
     limit: ctx.limit ?? null,
     n_cases: all.length,
     n_run: rows.length,
@@ -272,7 +276,8 @@ async function main(): Promise<void> {
   if (corpora.includes("own")) {
     const f = foldersFor("own");
     if (!existsSync(f.cases) || !existsSync(join(f.library, "knowledge"))) fail(`the own set is missing (${relative(ROOT, f.cases)} and ${relative(ROOT, f.library)}/knowledge/). See "Run your own set" in evals/promotion/README.md.`);
-    if (!(await isLocalJudge(baseUrl))) fail("--corpus own sends your notes to the model, so MODEL_BASE_URL must be localhost, a private-network address (10.*, 172.16.* to 172.31.*, 192.168.*) or a name that resolves only to such addresses. It is not.");
+    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", "--corpus own", "notes", "model");
+    if (refusal) fail(refusal);
   }
 
   const summaries: Summary[] = [];

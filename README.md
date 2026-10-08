@@ -41,6 +41,7 @@ corpus/library/    the shared akm bundle (a working akm library)
 evals/             our evals
 benchmarks/        published benchmarks
 lib/akm/           the akm sandbox the evals that use akm share
+lib/local-model.ts the check that keeps your own notes off a model that is not on this machine or your network
 lib/harbor/        the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
 lib/rewrite/       the seeded rewrite the generate scripts share
 reports/           published results: scores only, never private items
@@ -70,6 +71,27 @@ Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
 
 Each eval's README says what else it needs. An eval with Python code needs [uv](https://docs.astral.sh/uv/). An eval that uses akm needs akm on `PATH`, or `AKM_BIN` set in `.env`. One that scores akm's semantic search also downloads akm's embedding model (133 MB) the first time, into `.cache/`, and keeps the semantic index it builds there, in `.cache/akm-index/`, for the next run.
 
+## Test an unreleased akm
+
+To run an eval against a checkout or a worktree of akm, set `AKM_BIN` to the command that runs it, in `.env` or for one run (a variable that is already set wins over `.env`):
+
+```
+AKM_BIN="bun ~/code/github/itlackey/akm/src/cli.ts" evals/retrieval/run --corpus public --label pr1071-1
+```
+
+`summary.json` records `akm_version`, which is the version akm prints, so a PR branch and the release it branched from can show the same one. It also records `akm_bin` (the `AKM_BIN` command, with your home folder written as `~`) and `akm_build` (`git describe --always --dirty` of the checkout that command runs from, or null for an installed release). Read those to tell two builds apart, and compare only runs of the same build. Also put the build in `--label`, and keep a notes file next to the results of a set of runs, saying what each label tested. The results folder is `<UTC date>-<label>`: in the evening in the Americas the UTC date is already tomorrow's, and the same label on another day is another folder, so a glob on the label can match both.
+
+## Run from a worktree
+
+A new git worktree of this repository has no `.env` (gitignored) and no `private/` link, so `run` fails until you copy the first and link the second:
+
+```
+cp ~/code/github/itlackey/akm-eval/.env .env
+ln -s ~/code/github/itlackey/akm-eval/private private
+```
+
+Public results are written inside the worktree, under `evals/<name>/results/`, and removing the worktree removes them. Commit them to akm-eval-private or copy them out first. Private and own results are written through the link, to `private/`, and stay there uncommitted until you commit them.
+
 ## Private assets
 
 Private assets are made from the public ones with a seed, by the rewrite in `lib/rewrite`, so a model can be tested on assets it cannot have trained on. The rewrite changes:
@@ -92,7 +114,7 @@ The first run creates `private/` and `private/seed`, a random 64-bit integer. `p
 
 Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scripts share the rewrite in `lib/rewrite`. It needs [bun](https://bun.sh).
 
-Run private evals on a local model, or on an API that does not train on your data. A model may have seen the public assets in training. A gap between the public and private scores points to that.
+Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, with the check in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
 ## Licence
 
