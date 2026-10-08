@@ -320,6 +320,7 @@ export interface Row {
   lesson: string | null;
   status: string | null;
   gate: string | null;
+  /** The judge's criterion scores: from the queued lesson's gate decision, or from akm's result when the judge rejected the lesson or sent it to review. */
   scores: Record<string, number> | null;
   missing: string[];
   forbidden: string[];
@@ -347,6 +348,17 @@ export function servedModels(improve: unknown): string[] {
   return [...new Set(rows.map((r) => r.model).filter((m): m is string => typeof m === "string" && m !== ""))].sort();
 }
 
+/**
+ * The judge's criterion scores as akm's distill result reports them. Only a lesson the judge rejected or sent to review has them there. A
+ * rejected lesson is queued nowhere, so its text is not available to the eval at all, only these scores and the reason.
+ */
+function judgeScores(improve: unknown): Record<string, number> | null {
+  const result = distillAction(improve)?.result;
+  const judged = result?.outcome === "quality_rejected" || result?.outcome === "review_needed";
+  const criteria = result?.criteria;
+  return judged && criteria && typeof criteria === "object" ? (criteria as Record<string, number>) : null;
+}
+
 /** Score a case from what akm did. The queue decides whether a lesson was proposed. */
 export function scoreCase(c: LoadedCase, run: CaseRun): Row {
   const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), lesson: null, status: null, gate: null, scores: null, missing: [], forbidden: [], ratio: null };
@@ -359,11 +371,11 @@ export function scoreCase(c: LoadedCase, run: CaseRun): Row {
     const action = distillAction(run.improve)?.result;
     const reason = proposal.reason ?? (action?.outcome === "review_needed" && typeof action.reason === "string" ? action.reason : "");
     const detail = [proposal.gate ?? proposal.status, reason].filter(Boolean).join(": ");
-    return { ...base, ...ours, verdict, outcome: "lesson", detail, lesson, status: proposal.status, gate: proposal.gate, scores: proposal.scores };
+    return { ...base, ...ours, verdict, outcome: "lesson", detail, lesson, status: proposal.status, gate: proposal.gate, scores: proposal.scores ?? judgeScores(run.improve) };
   }
   const { outcome, detail } = distillOutcome(run.improve);
   if (outcome === "error") return errorRow(c, detail, run.seconds);
-  return { ...base, verdict: c.expect === "none" ? "right" : "missed", outcome, detail };
+  return { ...base, scores: judgeScores(run.improve), verdict: c.expect === "none" ? "right" : "missed", outcome, detail };
 }
 
 // ---- Metrics ---------------------------------------------------------------------------------------------------

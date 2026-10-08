@@ -30,7 +30,7 @@ A case takes 10 to 40 seconds on a 27B model, or 2 seconds when distill skips it
 Each run writes two files to `evals/distill/results/<UTC date>-<label>/`, or to `private/distill/results/` for the private corpus:
 
 - `summary.json`: the metrics, how many cases ran, were scored and errored, the model name and the names the endpoint reports, the akm version, the corpus and the git commit.
-- `samples.jsonl`: one line per case, with its class, what distill did, the verdict, the lesson as queued, the facts it missed, the claims it made, its length ratio, the gate's decision, the time and the names the endpoint reported.
+- `samples.jsonl`: one line per case, with its class, what distill did, the verdict, the lesson as queued, the facts it missed, the claims it made, its length ratio, the gate's decision, the judge's scores (`scores`), the time and the names the endpoint reported. A lesson the judge rejected is queued nowhere, so akm's result gives the eval its scores and its reason (in `detail`) but not the lesson's text, and the row has `lesson: null`.
 
 ## How distill is run
 

@@ -337,6 +337,23 @@ describe("what akm did", () => {
     expect(row).toMatchObject({ verdict: "wrong", status: "rejected", detail: "deferred/quality-review: mean of 3" });
   });
 
+  test("scoreCase: a lesson the judge rejected keeps the judge's scores and reason, and the rest of the row is as before", () => {
+    const rejected = { outcome: "quality_rejected", reason: "restates the memory", score: 2.3, criteria: { novelty: 2, nonRedundancy: 1, grounding: 4 } };
+    const row = scoreCase(c, run([], rejected));
+    expect(row).toMatchObject({ verdict: "missed", outcome: "rejected", detail: "restates the memory", lesson: null, status: null, gate: null, scores: { novelty: 2, nonRedundancy: 1, grounding: 4 } });
+    // without the new fields the row has the same verdict, outcome and detail
+    const { criteria: _c, score: _s, ...bare } = rejected;
+    expect(scoreCase(c, run([], bare))).toMatchObject({ verdict: row.verdict, outcome: row.outcome, detail: row.detail, scores: null });
+    // a skip carries no judge evidence, whatever else the result holds
+    expect(scoreCase(c, run([], { outcome: "skipped", skipReason: "x", score: 4, criteria: { novelty: 4 } }))).toMatchObject({ outcome: "skipped", scores: null });
+  });
+
+  test("scoreCase: a lesson sent to review with no gate scores gets the judge's from akm's result", () => {
+    const review = { outcome: "review_needed", reason: "mean of 3", score: 3, criteria: { novelty: 3 } };
+    expect(scoreCase(status, run([queued("Body.", { scores: null })], review))).toMatchObject({ scores: { novelty: 3 } });
+    expect(scoreCase(status, run([queued("Body.", { scores: { novelty: 4 } })], review))).toMatchObject({ scores: { novelty: 4 } });
+  });
+
   test("servedModels reads the names the endpoint reported from akm's usage report", () => {
     const usage = (...models: unknown[]) => ({ usageReport: { byProcessEngineModel: models.map((model) => ({ process: "distill", model })) } });
     expect(servedModels(usage("gpt-oss:120b", "openai/gpt-oss-120b", "gpt-oss:120b"))).toEqual(["gpt-oss:120b", "openai/gpt-oss-120b"]);
