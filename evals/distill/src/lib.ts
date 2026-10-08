@@ -30,6 +30,8 @@ export interface Case {
   bad?: string;
   /** What a correct result is, in a sentence. */
   note: string;
+  /** Feedback recorded about the memory before distill runs (`akm feedback`), in order. Optional: the public cases have none. */
+  feedback?: { signal: "positive" | "negative"; reason?: string }[];
 }
 
 export interface LoadedCase extends Case {

@@ -2,7 +2,7 @@
 // distill: runs akm's distill on the memory of each case, with the model under test as akm's engine, and scores
 // the lessons it queues. See ../README.md.
 //
-//   evals/distill/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--label NAME]
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -17,19 +17,21 @@ const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two 
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/distill/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--label NAME]
 
 Runs akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME
 as akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.
 
   --corpus  public (default) reads assets/. private reads private/distill/assets/, made by
-            ./generate-assets. all runs both and prints the two results side by side.
+            ./generate-assets. own reads private/distill/own/assets/, labelled real memories (never published).
+            own-feedback reads private/distill/own/assets-feedback/: real memories that carry the feedback recorded about them.
+            all runs public and private and prints the two results side by side.
   --limit   run N cases, taken from each class in turn
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
 
-type Corpus = "public" | "private";
+type Corpus = "public" | "private" | "own" | "own-feedback";
 
 interface Summary {
   eval: string;
@@ -116,6 +118,11 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
   try {
     writeConfig(sandbox, ctx.config);
     cpSync(c.dir, join(sandbox.dir, "bundle"), { recursive: true });
+    if (c.feedback?.length) await runAkm(sandbox, ["index"]); // akm records feedback only against an indexed asset
+    for (const f of c.feedback ?? []) {
+      const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
+      if (fb.code !== 0) return errorRow(c, hide(failureMessage(fb.code, fb.stderr, fb.stdout)), seconds());
+    }
     const args = ["improve", memoryRef(c), "--strategy", STRATEGY, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
     const { stdout, stderr, code } = await runAkm(sandbox, args, { timeoutMs: IMPROVE_TIMEOUT_MS });
     let improve: unknown;
@@ -139,8 +146,8 @@ export async function runCorpus(
   corpus: Corpus,
   ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number },
   folders = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
+    assets: corpus === "public" ? join(EVAL_DIR, "assets") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "assets" : "assets-feedback") : join(ROOT, "private", NAME, "assets"),
+    results: corpus === "public" ? join(EVAL_DIR, "results") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "results" : "results-feedback") : join(ROOT, "private", NAME, "results"),
   },
 ): Promise<Summary> {
   const all = loadCases(folders.assets);
@@ -205,12 +212,15 @@ async function main(): Promise<void> {
     return;
   }
   const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "own-feedback" && corpus !== "all") fail(`--corpus must be public, private, own, own-feedback or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
+    if ((c === "own" || c === "own-feedback") && !existsSync(join(ROOT, "private", NAME, "own", c === "own" ? "assets" : "assets-feedback", "cases.json"))) {
+      fail(`the ${c} assets are missing (private/${NAME}/own/)`);
+    }
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
       fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
     }

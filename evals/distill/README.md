@@ -13,10 +13,13 @@ The model under test is akm's engine: it writes the lesson, and it judges the le
 ```
 evals/distill/run --corpus public
 evals/distill/run --corpus private
+evals/distill/run --corpus own
+evals/distill/run --corpus own-feedback
 evals/distill/run --corpus all
 ```
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
+- `own` and `own-feedback` read your own labelled memories from `private/distill/own/assets/` and `private/distill/own/assets-feedback/` (never published; results go to `private/distill/own/results/` and `results-feedback/`). They use the same cases format as the public corpus, so a lesson case needs `required` and `forbidden` lists too. A case in `own-feedback` may also carry `"feedback": [{"signal": "positive"|"negative", "reason": "..."}]`, recorded with `akm feedback` before distill runs, so the writer and the judge see it as in a real run.
 - `--limit N` runs N cases, taken from each class in turn, in file order, so a short run covers every class. Use it to check a setup.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
@@ -46,7 +49,7 @@ What distill does in akm 0.9.26:
 - It then asks the model to judge the lesson on novelty, non-redundancy and grounding, with the three lessons most like it in the bundle. A lesson that scores 4 or more on both of the first two is queued for review. A middling score, a judge that fails, or a lesson with a format fault is queued for review too. A low score queues nothing, and the memory waits 30 days.
 - A queued lesson is a `pending` proposal with a gate decision `deferred`: reason `distill-review` when the judge passed it, `quality-review` when the judge was unsure. Both wait for a person. akm never accepts a distilled lesson by itself.
 
-Naming the memory bypasses akm's planner. The planner skips a memory that was flagged wrong, or that has only a positive with no reason, and picks memories by their feedback. None of that applies here: every memory is distilled, and none has feedback.
+Naming the memory bypasses akm's planner. The planner skips a memory that was flagged wrong, or that has only a positive with no reason, and picks memories by their feedback. None of that applies here: every memory is distilled.
 
 ## What it needs from a model
 
@@ -124,7 +127,7 @@ A model may have seen the public cases in training. A much better public score t
 - A gateway may serve one model name from several providers. `served_models` in `summary.json` lists the names the responses gave, so you can see when a run was split.
 - `samples.jsonl` keeps each lesson's text, so a result can be scored again when the checks change.
 - The private cases keep their ids, so a private case pairs with its public one by id. `private/distill/map.json` lists what was renamed.
-- The cases hold no feedback. A memory with feedback reaches the writer's prompt as "what worked" and "what failed", which this eval does not test.
+- The public cases hold no feedback. A memory with feedback reaches the writer's prompt as "what worked" and "what failed"; `own-feedback` cases can carry it.
 
 ## Licence
 
