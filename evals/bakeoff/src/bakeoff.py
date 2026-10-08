@@ -17,11 +17,13 @@ prompts and the scorers are here. Python 3.10 or newer, and PyYAML for --models.
 from __future__ import annotations
 
 import argparse
+import atexit
 import datetime
 import json
 import os
 import pathlib
 import re
+import signal
 import statistics
 import subprocess
 import sys
@@ -2693,6 +2695,23 @@ def git_commit():
     return head.stdout.strip() + ("-dirty" if dirty else "")
 
 
+# The same marker as lib/results.ts: while this process runs, the results folder holds `.running` with its pid.
+RUNNING = ".running"
+_marked = []
+
+
+def _clear_markers():
+    for path in _marked:
+        (path / RUNNING).unlink(missing_ok=True)
+    _marked.clear()
+
+
+def _on_sigterm(signum, frame):
+    _clear_markers()
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
 def make_results_dir(parent, label):
     base = parent / f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}-{label}"
     path, n = base, 2
@@ -2700,6 +2719,11 @@ def make_results_dir(parent, label):
         path = pathlib.Path(f"{base}-{n}")
         n += 1
     path.mkdir(parents=True)
+    (path / RUNNING).write_text(f"{os.getpid()}\n", encoding="utf-8")
+    if not _marked:
+        atexit.register(_clear_markers)
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    _marked.append(path)
     return path
 
 

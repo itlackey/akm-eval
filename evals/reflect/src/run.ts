@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, type Metrics, type Row, CLASSES, STRATEGY, atLeast, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel } from "./lib.ts";
 
 const NAME = "reflect";
@@ -84,14 +85,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 /**
  * One case in a bundle of its own: the note, the negative feedback recorded, reflect run on that asset alone, and the

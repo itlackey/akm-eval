@@ -153,7 +153,7 @@ describe("runCorpus", () => {
     const { result: summary, lines } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "t", workers: 3 }), { assets: s.assets, results: s.results }));
     const dir = join(s.results, readdirSync(s.results)[0]);
     expect(dir).toMatch(/\d{4}-\d\d-\d\d-t$/);
-    expect(readdirSync(dir).sort()).toEqual(["samples.jsonl", "summary.json"]);
+    expect(readdirSync(dir).sort()).toEqual([".running", "samples.jsonl", "summary.json"]);
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     expect(stored).toMatchObject({ eval: "skillret", corpus: "public", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 15, workers: 3, n_skills: 6, n_queries: 4 });
     expect(stored.errored).toEqual({ search: 0, semantic_search: 0 });

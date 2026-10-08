@@ -2,7 +2,7 @@
 // promotion: plants labelled promotion proposals in akm's queue, runs akm's drain with its judgment tier, with the model
 // under test as the judge, and counts which proposals it accepts. See ../README.md.
 //
-//   evals/promotion/run [--corpus public|own|all] [--limit N] [--label NAME]
+//   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
 
 import { Database } from "bun:sqlite";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -10,6 +10,8 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
+import { repeatRuns } from "../../../lib/repeat.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
 
 const NAME = "promotion";
@@ -18,14 +20,19 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
-const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
 
 Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
 
   --corpus  public (default) reads assets/ and corpus/library. own reads private/promotion/own/, and runs only against a
             model on this machine or the local network. all runs both and prints the two results side by side.
+  --cases   DIR: run the own corpus from DIR (cases.jsonl and library/, the format of private/promotion/own/) in place of
+            private/promotion/own/. Like own, it runs only against a model on this machine or the local network. A relative
+            DIR is from the repository root. Results go where own results go.
   --limit   run N proposals, one of each category in turn
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -38,10 +45,11 @@ interface Folders {
   results: string;
 }
 
-export const foldersFor = (corpus: Corpus): Folders =>
+/** The folders of a corpus. `casesDir` is the own corpus somewhere else than private/promotion/own/. */
+export const foldersFor = (corpus: Corpus, casesDir = join(ROOT, "private", NAME, "own")): Folders =>
   corpus === "public"
     ? { cases: join(EVAL_DIR, "assets", "cases.jsonl"), library: join(ROOT, "corpus", "library"), results: join(EVAL_DIR, "results") }
-    : { cases: join(ROOT, "private", NAME, "own", "cases.jsonl"), library: join(ROOT, "private", NAME, "own", "library"), results: join(ROOT, "private", NAME, "results") };
+    : { cases: join(casesDir, "cases.jsonl"), library: join(casesDir, "library"), results: join(ROOT, "private", NAME, "results") };
 
 interface Summary {
   eval: string;
@@ -87,14 +95,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 /** What akm said when a command failed: the last lines of stderr, which is a JSON error object for most failures. */
 function failureMessage(what: string, code: number, stderr: string): string {
@@ -251,9 +251,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, cases: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`promotion: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -262,10 +262,14 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
+  if (values.cases !== undefined && values.corpus !== undefined && values.corpus !== "own") fail("--cases is an own corpus: use it alone or with --corpus own");
+  const casesDir = values.cases === undefined ? undefined : resolve(values.cases);
+  const corpus = values.corpus ?? (casesDir ? "own" : "public");
   if (corpus !== "public" && corpus !== "own" && corpus !== "all") fail(`--corpus must be public, own or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const corpora: Corpus[] = corpus === "all" ? ["public", "own"] : [corpus];
 
   const baseUrl = process.env.MODEL_BASE_URL?.trim();
@@ -274,27 +278,30 @@ async function main(): Promise<void> {
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   if (corpora.includes("own")) {
-    const f = foldersFor("own");
+    const f = foldersFor("own", casesDir);
     if (!existsSync(f.cases) || !existsSync(join(f.library, "knowledge"))) fail(`the own set is missing (${relative(ROOT, f.cases)} and ${relative(ROOT, f.library)}/knowledge/). See "Run your own set" in evals/promotion/README.md.`);
-    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", "--corpus own", "notes", "model");
+    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", casesDir ? "--cases" : "--corpus own", "notes", "model");
     if (refusal) fail(refusal);
   }
 
   const summaries: Summary[] = [];
   for (const c of corpora) {
-    const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
-    try {
-      writeConfig(sandbox, promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
-      const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
-      summaries.push(await runCorpus(c, { sandbox, version, model, baseUrl, label, limit }));
-    } catch (e) {
-      if (e instanceof Fatal) throw e;
-      return fail(hideEndpoint((e as Error).message, baseUrl), 1); // a failed akm command: its message, not a stack
-    } finally {
-      removeSandbox(sandbox);
-    }
+    const runs = await repeatRuns(repeat, label, async (runLabel) => {
+      const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
+      try {
+        writeConfig(sandbox, promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
+        const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
+        return await runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit }, foldersFor(c, casesDir));
+      } catch (e) {
+        if (e instanceof Fatal) throw e;
+        return fail(hideEndpoint((e as Error).message, baseUrl), 1); // a failed akm command: its message, not a stack
+      } finally {
+        removeSandbox(sandbox);
+      }
+    });
+    summaries.push(...runs);
   }
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 
 if (import.meta.main) {

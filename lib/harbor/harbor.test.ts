@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PINS, jobConfig, makeResultsDir, modelName, modelSettings, slug } from "./harbor.ts";
+import { PINS, jobConfig, modelName, modelSettings, slug } from "./harbor.ts";
 
 describe("modelName", () => {
   test("keeps a name that has a provider and reads one without as an openai model", () => {
@@ -70,20 +67,7 @@ describe("jobConfig", () => {
   });
 });
 
-describe("makeResultsDir and slug", () => {
-  test("makes <date>-<label> and a numbered sibling when the name is taken", () => {
-    const parent = mkdtempSync(join(tmpdir(), "harbor-lib-test-"));
-    try {
-      const first = makeResultsDir(parent, "run");
-      const second = makeResultsDir(parent, "run");
-      expect(first).toMatch(/\/\d{4}-\d{2}-\d{2}-run$/);
-      expect(second).toBe(`${first}-2`);
-      expect(existsSync(second)).toBe(true);
-    } finally {
-      rmSync(parent, { recursive: true, force: true });
-    }
-  });
-
+describe("slug", () => {
   test("slug keeps letters and digits", () => {
     expect(slug("openai/gpt-6-luna")).toBe("openai-gpt-6-luna");
   });

@@ -4,10 +4,11 @@
 //
 //   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--label NAME]
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
@@ -75,14 +76,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 function printSummary(s: Summary): void {
   const m = s.metrics;

@@ -2,7 +2,7 @@
 // Harbor itself. evals/agent-ab and benchmarks/terminal-bench both run opencode alone and with the akm plugin on the
 // same tasks, and both import this. The akm arm is akm_opencode.py beside it, and report.ts reads what the run leaves.
 
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { join, resolve } from "node:path";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
@@ -33,15 +33,6 @@ export function gitCommit(root: string): string {
 }
 
 export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-/** A new folder `<UTC date>-<label>` under `parent`, with `-2`, `-3` and so on when the name is taken. */
-export function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 /** A model name as opencode takes it. One without a provider is an openai model. */
 export function modelName(name: string): string {

@@ -6,11 +6,12 @@
 //   benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--resume DIR]
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
 import { type ChatResult, type Endpoint, chat } from "./llm.ts";
@@ -132,14 +133,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 const failedArm = (error: string, partial: Partial<Arm> = {}): Arm => ({ ok: false, correct: null, hypothesis: null, verdict: null, decidable: null, error, seconds: null, prompt_tokens: null, completion_tokens: null, finish_reason: null, model: null, judge_model: null, ...partial });
 

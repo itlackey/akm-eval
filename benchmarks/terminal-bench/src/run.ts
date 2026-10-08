@@ -7,8 +7,9 @@
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { CONCURRENT_TRIALS, Fatal, PINS, fail, gitCommit, jobConfig as harborJob, makeResultsDir, preflight, runHarbor, slug } from "../../../lib/harbor/harbor.ts";
+import { CONCURRENT_TRIALS, Fatal, PINS, fail, gitCommit, jobConfig as harborJob, preflight, runHarbor, slug } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, buildReport, formatReport, loadTrials, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 
 const NAME = "terminal-bench";
 const BENCH_DIR = resolve(import.meta.dir, "..");

@@ -33,10 +33,14 @@ akm proposal list --status rejected --detail full        # the judge's reason fo
 evals/promotion/run --corpus public
 evals/promotion/run --corpus own
 evals/promotion/run --corpus all
+evals/promotion/run --cases ~/notes/night-2026-10-07
+evals/promotion/run --corpus public --repeat 4
 ```
 
 - `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on `corpus/library`. `own` is your own set in `private/promotion/own/`: see "Run your own set". `all` runs both and prints the two results side by side, never as one number.
+- `--cases DIR` runs the own corpus from DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. It is an own corpus in every way: it holds real notes, so it runs only against a local model (the same check as `own`, which says `--cases` in its refusal), and its results go to `private/promotion/results/` and report the corpus as `own`. A relative DIR is from the repository root. It cannot be combined with `--corpus public` or `all`.
 - `--limit N` runs N proposals, taking one of each category in turn: good, duplicate, stale, ephemeral. Use it to check a setup.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. Each run plants its own sandbox. See "Repeat a run" in the root README.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
 `own` sends your notes to the model, so it runs only when `MODEL_BASE_URL` is localhost, a private-network address (`10.*`, `172.16.*` to `172.31.*`, `192.168.*`) or a name that resolves only to such addresses, such as a gateway on your network. It stops with an error otherwise.

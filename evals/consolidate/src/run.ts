@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeF
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, EMBEDDER_ENV, RELATIONS, type Row, consolidateConfig, errorRow, metrics, noteAges, parseCases, pct, rowFromRun, selectCases } from "./lib.ts";
 
 const NAME = "consolidate";
@@ -78,14 +79,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 const cell = (n: number, of: number, x: number | null) => `${n}/${of}  ${pct(x)}`;
 

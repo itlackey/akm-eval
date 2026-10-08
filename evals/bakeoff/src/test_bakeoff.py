@@ -4,8 +4,12 @@ import contextlib
 import http.server
 import io
 import json
+import os
 import pathlib
 import shutil
+import signal
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -239,6 +243,30 @@ class ChatTest(unittest.TestCase):
         self.assertEqual((summary["n_run"], summary["n_scored"], summary["n_errored"]), (2, 1, 1))
         self.assertEqual(summary["metrics"]["valid_output"], {"n": 1, "passed": 0, "rate": 0.0})
         self.assertEqual(summary["observed_models"], ["m-observed"])
+
+
+class RunningMarkerTest(unittest.TestCase):
+    """The .running marker of lib/results.ts: the pid while the run is alive, gone when it ends."""
+
+    def start(self, parent, after):
+        code = f"import bakeoff, pathlib, time\nprint(bakeoff.make_results_dir(pathlib.Path({str(parent)!r}), 'x'), flush=True)\n{after}"
+        proc = subprocess.Popen([sys.executable, "-c", code], cwd=pathlib.Path(__file__).parent, stdout=subprocess.PIPE, text=True)
+        self.addCleanup(proc.stdout.close)
+        return pathlib.Path(proc.stdout.readline().strip()), proc
+
+    def test_marker_holds_the_pid_and_is_gone_after_a_normal_end(self):
+        with tempfile.TemporaryDirectory() as parent:
+            folder, proc = self.start(parent, "time.sleep(0.3)")
+            self.assertEqual((folder / ".running").read_text().strip(), str(proc.pid))
+            self.assertEqual(proc.wait(), 0)
+            self.assertFalse((folder / ".running").exists())
+
+    def test_kill_of_the_pid_in_the_file_stops_the_run_and_removes_it(self):
+        with tempfile.TemporaryDirectory() as parent:
+            folder, proc = self.start(parent, "time.sleep(60)")
+            os.kill(int((folder / ".running").read_text()), signal.SIGTERM)
+            self.assertEqual(proc.wait(), -signal.SIGTERM)
+            self.assertFalse((folder / ".running").exists())
 
 
 if __name__ == "__main__":

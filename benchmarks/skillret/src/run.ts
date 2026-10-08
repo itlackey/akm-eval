@@ -7,12 +7,13 @@
 //
 //   benchmarks/skillret/run [--corpus public|private|all] [--limit N] [--label NAME]
 
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, type Query, SEED, draw, loadCorpus, readLock } from "./dataset.ts";
 import { PUBLISHED } from "./published.ts";
@@ -138,14 +139,6 @@ function gitCommit(): string {
   if (head.exitCode !== 0) return "unknown";
   const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
   return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
 }
 
 /** Runs `work` for every item, `workers` at a time. */

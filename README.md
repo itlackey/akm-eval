@@ -81,6 +81,25 @@ AKM_BIN="bun ~/code/github/itlackey/akm/src/cli.ts" evals/retrieval/run --corpus
 
 `summary.json` records `akm_version`, which is the version akm prints, so a PR branch and the release it branched from can show the same one. It also records `akm_bin` (the `AKM_BIN` command, with your home folder written as `~`) and `akm_build` (`git describe --always --dirty` of the checkout that command runs from, or null for an installed release). Read those to tell two builds apart, and compare only runs of the same build. Also put the build in `--label`, and keep a notes file next to the results of a set of runs, saying what each label tested. The results folder is `<UTC date>-<label>`: in the evening in the Americas the UTC date is already tomorrow's, and the same label on another day is another folder, so a glob on the label can match both.
 
+## Repeat a run
+
+A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `evals/promotion` and `evals/distill` take `--repeat N`, which runs the corpus N times, each a whole run into its own results folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the same `metrics` as a summary, with every number replaced by its `min`, `max` and `mean` over the runs. A run without `--repeat` is unchanged. With `--repeat` the side-by-side table of `--corpus all` is not printed; read each corpus's repeat summary. The code is `lib/repeat.ts`.
+
+```
+evals/promotion/run --corpus public --repeat 4 --label pr1071-2
+```
+
+## Stop or wait for a run
+
+While a run is alive, its results folder holds a `.running` file with the pid of the process that writes it, and the process removes the file when it ends, however it ends (a failure, Ctrl-C, `kill`). Every eval and benchmark that makes a results folder does this (`lib/results.ts`, and the same few lines in `evals/bakeoff`). With `--repeat`, every folder of the set keeps its file until the last run ends.
+
+```
+kill $(cat evals/promotion/results/<UTC date>-<label>/.running)         # stop the run
+while [ -e evals/promotion/results/<UTC date>-<label>/.running ]; do sleep 10; done   # wait for it
+```
+
+A run that was killed with `kill -9`, or by a power cut, leaves the file behind: `kill -0 $(cat <dir>/.running)` fails when no such process is alive. A folder with no `.running` and no `summary.json` is a run that stopped before it wrote its result.
+
 ## Run from a worktree
 
 A new git worktree of this repository has no `.env` (gitignored) and no `private/` link, so `run` fails until you copy the first and link the second:
@@ -114,7 +133,7 @@ The first run creates `private/` and `private/seed`, a random 64-bit integer. `p
 
 Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scripts share the rewrite in `lib/rewrite`. It needs [bun](https://bun.sh).
 
-Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, with the check in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one. A model may have seen the public assets in training. A gap between the public and private scores points to that.
+Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, with the check in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
 ## Licence
 

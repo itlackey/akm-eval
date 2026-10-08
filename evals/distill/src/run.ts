@@ -2,13 +2,15 @@
 // distill: runs akm's distill on the memory of each case, with the model under test as akm's engine, and scores
 // the lessons it queues. See ../README.md.
 //
-//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--label NAME]
+//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--label NAME]
 
-import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
+import { repeatRuns } from "../../../lib/repeat.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, distillConfig, errorRow, failureMessage, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases } from "./lib.ts";
 
 const NAME = "distill";
@@ -18,7 +20,7 @@ const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two 
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--label NAME]
 
 Runs akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME
 as akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.
@@ -28,6 +30,8 @@ as akm's engine, and scores the lessons it queues. Settings come from .env at th
             own-feedback reads private/distill/own/assets-feedback/: real memories that carry the feedback recorded about them.
             all runs public and private and prints the two results side by side.
   --limit   run N cases, taken from each class in turn
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -79,14 +83,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 function printSummary(s: Summary): void {
   const m = s.metrics;
@@ -205,9 +201,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`distill: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -220,6 +216,8 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "own-feedback" && corpus !== "all") fail(`--corpus must be public, private, own, own-feedback or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -249,8 +247,8 @@ async function main(): Promise<void> {
   }
   const config = distillConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim());
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, { config, baseUrl, version, model, label, limit }));
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit }))));
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 
 if (import.meta.main) {

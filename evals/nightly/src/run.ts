@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type CallRow, EMBEDDER_ENV, type Feedback, type Item, KINDS, type Metrics, type Night, type Row, callStats, loadNight, metrics, nightlyConfig, noteAges, outsideChanges, parseProposals, pct, readLibrary, scoreItem, selectItems } from "./lib.ts";
 
@@ -92,14 +93,6 @@ function gitCommit(): string {
 }
 
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-function makeResultsDir(parent: string, label: string): string {
-  const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 /** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
 export function hideEndpoint(text: string, baseUrl: string): string {

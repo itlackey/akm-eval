@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Case, promotionConfig } from "./lib.ts";
-import { callStats, runCorpus } from "./run.ts";
+import { callStats, foldersFor, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -178,5 +178,49 @@ describe("runCorpus", () => {
     const { ctx, sandbox, folders } = setup(cases);
     sandbox.env.AKM_BUNDLE_DIR = join(sandbox.dir, "elsewhere"); // the fake lists the proposals of the folder it is told
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("pending proposals");
+  });
+});
+
+describe("--cases", () => {
+  const RUN = join(import.meta.dir, "run.ts");
+  const cli = async (args: string[], env: Record<string, string>) => {
+    const proc = Bun.spawn(["bun", RUN, ...args], { env: { ...process.env, MODEL_NAME: "m", MODEL_API_KEY: "", ...env }, stdout: "pipe", stderr: "pipe" });
+    const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+    return { out, err, code };
+  };
+
+  test("reads the own corpus from the folder it names, and writes results where own results go", () => {
+    const own = foldersFor("own");
+    const elsewhere = foldersFor("own", "/some/notes");
+    expect(elsewhere).toEqual({ cases: "/some/notes/cases.jsonl", library: "/some/notes/library", results: own.results });
+    expect(own.cases).toEndWith("private/promotion/own/cases.jsonl");
+  });
+
+  test("a folder of notes is refused before it is read when the model is not on this machine or the network", async () => {
+    const { folders } = setup(cases);
+    const dir = join(folders.cases, "..");
+    const refused = await cli(["--cases", dir], { MODEL_BASE_URL: "http://8.8.8.8/v1" });
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("--cases sends your notes to the model, so MODEL_BASE_URL must be localhost");
+  });
+
+  test("is an own corpus, so it cannot be combined with another corpus, and a folder without a set is named", async () => {
+    const { folders } = setup(cases);
+    const dir = join(folders.cases, "..");
+    expect((await cli(["--cases", dir, "--corpus", "public"], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" })).err).toContain("--cases is an own corpus");
+    const empty = mkdtempSync(join(tmpdir(), "promotion-empty-"));
+    dirs.push(empty);
+    const missing = await cli(["--cases", empty], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" });
+    expect(missing.code).toBe(2);
+    expect(missing.err).toContain("the own set is missing");
+  });
+});
+
+describe("--repeat", () => {
+  test("must be a positive integer", async () => {
+    const proc = Bun.spawn(["bun", join(import.meta.dir, "run.ts"), "--repeat", "0"], { env: { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m" }, stdout: "pipe", stderr: "pipe" });
+    const err = await new Response(proc.stderr).text();
+    expect(await proc.exited).toBe(2);
+    expect(err).toContain("--repeat must be a positive integer");
   });
 });

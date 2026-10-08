@@ -172,7 +172,7 @@ describe("runCollection", () => {
   test("writes summary.json and samples.jsonl: what akm returned, each result's grade, and the scores", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection("public", "library", ctx, folders));
-    expect(readdirSync(s.results_dir).sort()).toEqual(["samples.jsonl", "summary.json"]);
+    expect(readdirSync(s.results_dir).sort()).toEqual([".running", "samples.jsonl", "summary.json"]);
     expect(s.results_dir).toMatch(/\/\d{4}-\d{2}-\d{2}-t-library$/);
     const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
     expect(stored.results_dir).toBeUndefined();
