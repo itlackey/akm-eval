@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNNING, makeResultsDir } from "./results.ts";
+import { RUNNING, clearRunning, makeResultsDir } from "./results.ts";
 
 const parents: string[] = [];
 const tmp = () => {
@@ -22,6 +22,18 @@ describe("makeResultsDir", () => {
     expect(first).toMatch(/\/\d{4}-\d{2}-\d{2}-run$/);
     expect(second).toBe(`${first}-2`);
     for (const dir of [first, second]) expect(readFileSync(join(dir, RUNNING), "utf8").trim()).toBe(String(process.pid));
+  });
+});
+
+describe("clearRunning", () => {
+  test("removes the marker of a folder whose run is done, and only that folder's", () => {
+    const parent = tmp();
+    const done = makeResultsDir(parent, "done");
+    const going = makeResultsDir(parent, "going");
+    clearRunning(done);
+    expect(existsSync(join(done, RUNNING))).toBe(false);
+    expect(existsSync(join(going, RUNNING))).toBe(true);
+    clearRunning(done); // twice is fine
   });
 });
 

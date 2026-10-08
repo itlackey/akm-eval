@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repeatRuns, spreadOf } from "./repeat.ts";
+import { RUNNING, makeResultsDir } from "./results.ts";
 
 const DAY = new Date().toISOString().slice(0, 10);
 const parents: string[] = [];
@@ -35,9 +36,8 @@ describe("spreadOf", () => {
 
 describe("repeatRuns", () => {
   const make = (parent: string) => async (label: string) => {
-    const results_dir = join(parent, `${DAY}-${label}`);
-    mkdirSync(results_dir);
-    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    const results_dir = makeResultsDir(parent, label);
+    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
   };
 
   test("without --repeat runs once under the label and writes nothing else", async () => {
@@ -55,6 +55,24 @@ describe("repeatRuns", () => {
     expect(runs).toHaveLength(2);
     const files = readdirSync(parent).sort();
     expect(files).toEqual([`${DAY}-base-r1`, `${DAY}-base-r2`, expect.stringMatching(/^\d{4}-\d{2}-\d{2}-base-repeat-summary\.json$/)]);
-    expect(JSON.parse(readFileSync(join(parent, files[2]), "utf8"))).toEqual({ eval: "t", corpus: "public", label: "base", repeat: 2, model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, runs: [`${DAY}-base-r1`, `${DAY}-base-r2`], metrics: { score: { min: 1, max: 3, mean: 2 } } });
+    const stored = JSON.parse(readFileSync(join(parent, files[2]), "utf8"));
+    expect(stored).toMatchObject({ eval: "t", corpus: "public", label: "base", repeat: 2, model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, runs: [`${DAY}-base-r1`, `${DAY}-base-r2`], n_errored: { min: 0, max: 2, mean: 1 }, metrics: { score: { min: 1, max: 3, mean: 2 } } });
+    expect(stored.seconds.min).toBeGreaterThanOrEqual(0); // wall time of each run
+    expect(stored.seconds.max).toBeGreaterThanOrEqual(stored.seconds.min);
+  });
+
+  test("each run's .running file is gone when that run is done, while the next run is still going", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
+    parents.push(parent);
+    const marker = (label: string) => join(parent, `${DAY}-${label}`, RUNNING);
+    const seen: boolean[] = [];
+    await repeatRuns(3, "base", async (label) => {
+      const run = await make(parent)(label);
+      if (label.endsWith("r2")) seen.push(existsSync(marker("base-r1")), existsSync(marker("base-r2")));
+      if (label.endsWith("r3")) seen.push(existsSync(marker("base-r2")), existsSync(marker("base-r3")));
+      return run;
+    });
+    expect(seen).toEqual([false, true, false, true]);
+    expect(existsSync(marker("base-r3"))).toBe(false);
   });
 });

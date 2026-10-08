@@ -83,7 +83,7 @@ AKM_BIN="bun ~/code/github/itlackey/akm/src/cli.ts" evals/retrieval/run --corpus
 
 ## Repeat a run
 
-A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `evals/promotion` and `evals/distill` take `--repeat N`, which runs the corpus N times, each a whole run into its own results folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the same `metrics` as a summary, with every number replaced by its `min`, `max` and `mean` over the runs. A run without `--repeat` is unchanged. With `--repeat` the side-by-side table of `--corpus all` is not printed; read each corpus's repeat summary. The code is `lib/repeat.ts`.
+A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `evals/promotion` and `evals/distill` take `--repeat N`, which runs the corpus N times, each a whole run into its own results folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the same `metrics` as a summary, with every number replaced by its `min`, `max` and `mean` over the runs, and the same three for `n_errored` and `seconds` (the wall time of each run), because a spread over runs that had errors misleads without them. A run without `--repeat` is unchanged. With `--repeat` the side-by-side table of `--corpus all` is not printed; read each corpus's repeat summary. The code is `lib/repeat.ts`.
 
 ```
 evals/promotion/run --corpus public --repeat 4 --label pr1071-2
@@ -91,7 +91,7 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 
 ## Stop or wait for a run
 
-While a run is alive, its results folder holds a `.running` file with the pid of the process that writes it, and the process removes the file when it ends, however it ends (a failure, Ctrl-C, `kill`). Every eval and benchmark that makes a results folder does this (`lib/results.ts`, and the same few lines in `evals/bakeoff`). With `--repeat`, every folder of the set keeps its file until the last run ends.
+While a run is alive, its results folder holds a `.running` file with the pid of the process that writes it, and the process removes the file when it ends, however it ends (a failure, Ctrl-C, `kill`). Every eval and benchmark that makes a results folder does this (`lib/results.ts`, and the same few lines in `evals/bakeoff`). With `--repeat`, each folder loses its file when that run is done, so a script that waits for `-r1` sees it end while `-r2` runs.
 
 ```
 kill $(cat evals/promotion/results/<UTC date>-<label>/.running)         # stop the run

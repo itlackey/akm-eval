@@ -16,6 +16,12 @@ function clearMarkers(): void {
   marked.clear();
 }
 
+/** Removes the marker of a folder whose run has ended, for a run that is one of several in a process. A single run leaves it to the exit. */
+export function clearRunning(dir: string): void {
+  rmSync(join(dir, RUNNING), { force: true });
+  marked.delete(dir);
+}
+
 let armed = false;
 
 /** Removes the markers when the process exits, however it ends, and on SIGINT and SIGTERM, which skip the exit event unless something handles them. */
