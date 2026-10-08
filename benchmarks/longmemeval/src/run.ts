@@ -9,7 +9,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
@@ -101,6 +101,9 @@ interface Summary {
   observed_models: string[];
   observed_judge_models: string[];
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   top_k: number;
   retrieval_only: boolean;
   dataset: Record<string, unknown>;
@@ -229,6 +232,7 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     observed_models: [...new Set([...seen("without_akm", "model"), ...seen("with_akm", "model")])],
     observed_judge_models: observedJudges,
     akm_version: ctx.version,
+    ...akmBuild(),
     top_k: TOP_K,
     retrieval_only: retrievalOnly,
     dataset: ctx.dataset,

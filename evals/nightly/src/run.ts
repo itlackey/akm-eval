@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type CallRow, EMBEDDER_ENV, type Feedback, type Item, KINDS, type Metrics, type Night, type Row, callStats, loadNight, metrics, nightlyConfig, noteAges, outsideChanges, parseProposals, pct, readLibrary, scoreItem, selectItems } from "./lib.ts";
 
@@ -45,6 +45,9 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   limit: number | null;
   n_items: number;
   n_planted: number;
@@ -283,6 +286,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    ...akmBuild(),
     limit: ctx.limit ?? null,
     n_items: night.items.length,
     n_planted: items.length,

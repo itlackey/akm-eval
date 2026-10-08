@@ -13,9 +13,9 @@
 // A sandbox made with { semantic: true } searches with akm's built-in embedder as well as with keywords. Embedding a library
 // takes minutes to an hour, so index-cache.ts keeps the semantic index of a collection between runs.
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 export interface Sandbox {
   dir: string; // the temp folder, and the working folder of every akm run
@@ -81,6 +81,9 @@ function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Reco
   };
 }
 
+/** The akm command: the words of AKM_BIN, or `akm`. */
+const akmCommand = (): string[] => (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
+
 /**
  * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, one or more
  * words such as `bun /path/to/akm/src/cli.ts`, or `akm`. akm gets no MODEL_API_KEY unless `keepModelKey` is set, which a
@@ -93,7 +96,7 @@ export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?
   for (const folder of FOLDERS) mkdirSync(join(dir, folder), { recursive: true });
   const semantic = opts.semantic ?? false;
   if (semantic) mkdirSync(MODEL_CACHE, { recursive: true });
-  const sandbox = { dir, cmd: (process.env.AKM_BIN?.trim() || "akm").split(/\s+/), env: sandboxEnv(dir, opts.keepModelKey ?? false, semantic) };
+  const sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, opts.keepModelKey ?? false, semantic) };
   if (!existsSync(join(dir, "config", "config.json"))) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
   return sandbox;
 }
@@ -143,6 +146,27 @@ export async function akmVersion(sandbox: Sandbox): Promise<string> {
   const version = stdout.trim().match(/\d+\.\d+\.\d+\S*/)?.[0];
   if (code !== 0 || !version) throw new Error(`could not run \`${sandbox.cmd.join(" ")} --version\`. Install akm or set AKM_BIN. ${stderr.trim().slice(0, 200)}`);
   return version;
+}
+
+/**
+ * Which akm ran, for summary.json, next to akm_version: `akm_bin` is the AKM_BIN command (or `akm`) with the home folder
+ * written as `~`, and `akm_build` is `git describe --always --dirty` of the git checkout that command runs from, or null
+ * when it does not run from one (an installed release). Two builds of one version, such as a PR branch and the release it
+ * branched from, differ here and not in akm_version. Spread it into the summary: `...akmBuild()`.
+ */
+export function akmBuild(): { akm_bin: string; akm_build: string | null } {
+  const cmd = akmCommand();
+  const home = homedir();
+  const akm_bin = cmd.map((w) => (w === home || w.startsWith(`${home}/`) ? `~${w.slice(home.length)}` : w)).join(" ");
+  for (const word of cmd) {
+    const path = word.includes("/") ? word : Bun.which(word);
+    if (!path || !existsSync(path)) continue;
+    const real = realpathSync(path);
+    const dir = statSync(real).isDirectory() ? real : dirname(real);
+    const git = Bun.spawnSync(["git", "-C", dir, "describe", "--always", "--dirty"], { stdout: "pipe", stderr: "ignore" });
+    if (git.exitCode === 0) return { akm_bin, akm_build: git.stdout.toString().trim() };
+  }
+  return { akm_bin, akm_build: null };
 }
 
 /**

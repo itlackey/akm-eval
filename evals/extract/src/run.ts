@@ -7,7 +7,7 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, errorRow, extractConfig, failureMessage, loadCases, metrics, pct, savedMemories, scoreCase, selectCases } from "./lib.ts";
 
 const NAME = "extract";
@@ -38,6 +38,9 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   limit: number | null;
   n_cases: number;
   n_run: number;
@@ -186,6 +189,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    ...akmBuild(),
     limit: ctx.limit ?? null,
     n_cases: all.length,
     n_run: rows.length,

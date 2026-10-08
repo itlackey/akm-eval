@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -235,5 +235,34 @@ describe("akmVersion", () => {
     await expect(akmVersion(missing)).rejects.toThrow("could not run `no-such-akm-binary-here --version`. Install akm or set AKM_BIN.");
     await expect(akmVersion(fakeSandbox({}, 'console.error("bad"); process.exit(1);'))).rejects.toThrow("Install akm or set AKM_BIN. bad");
     await expect(akmVersion(fakeSandbox({}, 'console.log("no number here");'))).rejects.toThrow("Install akm or set AKM_BIN.");
+  });
+});
+
+describe("akmBuild", () => {
+  const git = (dir: string, ...args: string[]) =>
+    Bun.spawnSync(["git", "-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { stdout: "pipe", stderr: "pipe" });
+
+  test("names the git build of the checkout AKM_BIN runs from, and marks a changed one dirty", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lib-akm-build-"));
+    dirs.push(dir);
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "cli.ts"), "");
+    git(dir, "init", "-q");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "x");
+    const sha = git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim();
+    const bin = `bun ${join(dir, "src", "cli.ts")}`;
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: sha });
+    writeFileSync(join(dir, "src", "cli.ts"), "// changed");
+    expect(withEnv({ AKM_BIN: bin }, akmBuild).akm_build).toBe(`${sha}-dirty`);
+  });
+
+  test("has no build for a command outside a git checkout, and writes the home folder as ~", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lib-akm-build-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "akm"), "");
+    expect(withEnv({ AKM_BIN: join(dir, "akm") }, akmBuild).akm_build).toBeNull();
+    expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
+    expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
   });
 });

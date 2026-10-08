@@ -45,7 +45,7 @@ The private run reads `private/nightly/assets/`. Make it first with `./generate-
 
 Each run writes two files to `evals/nightly/results/<UTC date>-<label>/`, or to `private/nightly/results/` for the private corpus:
 
-- `summary.json`: the metrics, the seconds each step took, the akm version, the model name, the corpus and the git commit. It also holds what the drain did, the pair judge's labels, the paths that changed outside the items, and the model calls by process and by the model name the endpoint reported.
+- `summary.json`: the metrics, the seconds each step took, the akm version and build (`akm_bin`, `akm_build`), the model name, the corpus and the git commit. It also holds what the drain did, the pair judge's labels, the paths that changed outside the items, and the model calls by process and by the model name the endpoint reported.
 - `samples.jsonl`: one line per item, with the checks it passed and failed, what the night did to it in a few words, and the facts behind the checks: the lesson as queued, the fields a reflect edit changed and their new text, the proposal's gate and the judge's reason, and the error when a model call failed. The texts let you score a result again when the checks change.
 
 A night is about 40 model calls, one at a time. A full night took about 100 seconds on a hosted 120B model, whose distill calls all failed. 12 items took 85 seconds on a 27B model on a local GPU, 18 calls in all, so a full night on that model should take about five minutes. The budget akm gets for the run is 45 minutes. When it runs out, akm skips the refs it has not reached: their items show `not reached`, and the first of them carries the error.

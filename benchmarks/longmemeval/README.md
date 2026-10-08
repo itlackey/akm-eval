@@ -29,7 +29,7 @@ benchmarks/longmemeval/run --retrieval-only
 
 Each run writes two files to `benchmarks/longmemeval/results/<UTC date>-<label>/`, or to `private/longmemeval/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many questions ran, were scored and errored, the model and judge names and the names the endpoint reports, the akm version, the dataset revision and checksum, the sample, the corpus and the git commit. For the private corpus it holds the checksum of the private file and the public revision it came from, and not the seed. It is rewritten after every question, so a run you stop still has one, with `"complete": false`.
+- `summary.json`: the metrics, how many questions ran, were scored and errored, the model and judge names and the names the endpoint reports, the akm version and build (`akm_bin`, `akm_build`), the dataset revision and checksum, the sample, the corpus and the git commit. For the private corpus it holds the checksum of the private file and the public revision it came from, and not the seed. It is rewritten after every question, so a run you stop still has one, with `"complete": false`.
 - `samples.jsonl`: one line per question, with the question, the key, what akm returned, and for each arm the answer, the judge's verdict, the time and the token counts.
 
 ## The data

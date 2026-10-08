@@ -7,7 +7,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
 import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
@@ -40,6 +40,9 @@ interface Summary {
   git_commit: string;
   model: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   limit: number | null;
   n_cases: number;
   n_run: number;
@@ -169,6 +172,7 @@ export async function runCorpus(
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
+    ...akmBuild(),
     limit: ctx.limit ?? null,
     n_cases: all.length,
     n_run: rows.length,

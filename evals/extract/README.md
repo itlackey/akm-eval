@@ -26,7 +26,7 @@ A session takes about 15 seconds on a 27B model on a local GPU, 30 for the longe
 
 Each run writes two files to `evals/extract/results/<UTC date>-<label>/`, or to `private/extract/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many sessions ran, were scored and errored, the model name, the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many sessions ran, were scored and errored, the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per session, with its class, what extract did, whether it was correct, the memories it saved with their text, type and confidence, the facts they missed, the planted claims they made, the model's reason when it saved nothing, and the time.
 
 ## How extract is run

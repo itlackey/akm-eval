@@ -22,7 +22,7 @@ The private run reads `private/reflect/assets/`. Make it first with `./generate-
 
 Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and their new text, the proposal itself, the model name that answered, akm's reason when it made no proposal, and the time it took. The proposal's text lets you score a result again when the checks change.
 
 ## How a case runs

@@ -23,7 +23,7 @@ benchmarks/skillret/run --limit 200
 
 Each run writes two files to `benchmarks/skillret/results/<UTC date>-<label>/`, or to `private/skillret/results/` for the private corpus:
 
-- `summary.json`: the metrics of the two lines, search on the keyword index and on the semantic one, at 5, 10 and 15, the same for the queries that need one, two and three skills, the number of failed calls and of queries that got no skill, the curate check (see "How akm is used"), the akm version, the search mode akm reported for each index and the embedding model, whether the semantic index was built for the run or kept from an earlier one, the dataset revision and checksums, how the sample was drawn, how long each index and the queries took, and the git commit. A run with `--limit` has the keyword line only.
+- `summary.json`: the metrics of the two lines, search on the keyword index and on the semantic one, at 5, 10 and 15, the same for the queries that need one, two and three skills, the number of failed calls and of queries that got no skill, the curate check (see "How akm is used"), the akm version and build (`akm_bin`, `akm_build`), the search mode akm reported for each index and the embedding model, whether the semantic index was built for the run or kept from an earlier one, the dataset revision and checksums, how the sample was drawn, how long each index and the queries took, and the git commit. A run with `--limit` has the keyword line only.
 - `samples.jsonl`: one line per query, in the order of the dataset, with the request, the ids of the skills it needs, the ids that search returned in order on each index, how long each call took and, for the 200 queries of the curate check, the same for curate.
 
 ## What it needs

@@ -28,7 +28,7 @@ The private run reads `private/retrieval/assets/`. Make it first with `./generat
 
 Each run writes two files for each collection to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (the collection is `library` or `books`), or to `private/retrieval/results/` for the private corpus and for `own`:
 
-- `summary.json`: the metrics of the four columns (the two keyword ones when the run has no semantic search), how many queries were scored, the akm version, the search mode akm reported for each index, the embedding model, whether the semantic index was built for the run or kept from an earlier one, how long each index took, the corpus, the collection and the git commit.
+- `summary.json`: the metrics of the four columns (the two keyword ones when the run has no semantic search), how many queries were scored, the akm version and build (`akm_bin`, `akm_build`), the search mode akm reported for each index, the embedding model, whether the semantic index was built for the run or kept from an earlier one, how long each index took, the corpus, the collection and the git commit.
 - `samples.jsonl`: one line per query, with what search and curate returned on each index, the grade of each result, the scores and how long each call took.
 
 ## What it needs

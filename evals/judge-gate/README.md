@@ -22,7 +22,7 @@ The private run reads `private/judge-gate/assets/`. Make it first with `./genera
 
 Each run writes two files to `evals/judge-gate/results/<UTC date>-<label>/`, or to `private/judge-gate/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the akm version, the corpus and the git commit.
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per case, with the label, akm's outcome, its criterion scores, its reason and the time it took.
 
 ## What it needs from a model

@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { SEMANTIC_MODEL, type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, type Query, SEED, draw, loadCorpus, readLock } from "./dataset.ts";
@@ -86,6 +86,9 @@ interface Summary {
   date: string;
   git_commit: string;
   akm_version: string;
+  /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
+  akm_bin: string;
+  akm_build: string | null;
   /** What akm said it searched with, for each index. The run stops at a call that says anything else. */
   search_mode: { keyword: string; semantic?: string };
   /** The embedder of the semantic index. Absent from a run without one. */
@@ -354,6 +357,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
       date: new Date().toISOString(),
       git_commit: gitCommit(),
       akm_version: version,
+      ...akmBuild(),
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
       ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL, semantic_index: semanticIndex } : {}),
       dataset: { name: lock.dataset, source: lock.source, revision: lock.revision, licence: lock.licence, sha256: Object.fromEntries(Object.entries(lock.files).map(([name, f]) => [name, f.sha256])) },
