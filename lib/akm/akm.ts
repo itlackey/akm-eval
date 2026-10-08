@@ -151,14 +151,15 @@ export async function akmVersion(sandbox: Sandbox): Promise<string> {
 /**
  * Which akm ran, for summary.json, next to akm_version: `akm_bin` is the AKM_BIN command (or `akm`) with the home folder
  * written as `~`, and `akm_build` is `git describe --always --dirty` of the git checkout that command runs from, or null
- * when it does not run from one (an installed release). Two builds of one version, such as a PR branch and the release it
+ * when it does not run from one (an installed release). The words are tried from the last: the script identifies the build, and the
+ * runtime before it (`bun`) must never be the one reported, even when it sits inside a repository. Two builds of one version, such as a PR branch and the release it
  * branched from, differ here and not in akm_version. Spread it into the summary: `...akmBuild()`.
  */
 export function akmBuild(): { akm_bin: string; akm_build: string | null } {
   const cmd = akmCommand();
   const home = homedir();
   const akm_bin = cmd.map((w) => (w === home || w.startsWith(`${home}/`) ? `~${w.slice(home.length)}` : w)).join(" ");
-  for (const word of cmd) {
+  for (const word of [...cmd].reverse()) {
     const path = word.includes("/") ? word : Bun.which(word);
     if (!path || !existsSync(path)) continue;
     const real = realpathSync(path);

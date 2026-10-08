@@ -257,6 +257,23 @@ describe("akmBuild", () => {
     expect(withEnv({ AKM_BIN: bin }, akmBuild).akm_build).toBe(`${sha}-dirty`);
   });
 
+  test("reports the checkout of the script, not of the runtime before it", () => {
+    const repo = (name: string, file: string) => {
+      const dir = mkdtempSync(join(tmpdir(), `lib-akm-build-${name}-`));
+      dirs.push(dir);
+      writeFileSync(join(dir, file), "");
+      git(dir, "init", "-q");
+      git(dir, "add", ".");
+      git(dir, "commit", "-q", "-m", name);
+      return { path: join(dir, file), sha: git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim() };
+    };
+    const runtime = repo("runtime", "bun");
+    const script = repo("script", "cli.ts");
+    const bin = `${runtime.path} ${script.path}`;
+    expect(runtime.sha).not.toBe(script.sha);
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: script.sha });
+  });
+
   test("has no build for a command outside a git checkout, and writes the home folder as ~", () => {
     const dir = mkdtempSync(join(tmpdir(), "lib-akm-build-"));
     dirs.push(dir);
