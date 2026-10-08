@@ -19,7 +19,7 @@ evals/distill/run --corpus all
 ```
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
-- `own` and `own-feedback` read your own labelled memories from `private/distill/own/assets/` and `private/distill/own/assets-feedback/` (never published; results go to `private/distill/own/results/` and `results-feedback/`). They use the same cases format as the public corpus, so a lesson case needs `required` and `forbidden` lists too. A case in `own-feedback` may also carry `"feedback": [{"signal": "positive"|"negative", "reason": "..."}]`, recorded with `akm feedback` before distill runs, so the writer and the judge see it as in a real run.
+- `own` and `own-feedback` read your own labelled memories from `private/distill/own/assets/` and `private/distill/own/assets-feedback/` (never published; results go to `private/distill/own/results/` and `results-feedback/`). They use the same cases format as the public corpus, so a lesson case needs `required` and `forbidden` lists too. A case in `own-feedback` may also carry `"feedback": [{"signal": "positive"|"negative", "reason": "..."}]`, recorded with `akm feedback` before distill runs, so the writer and the judge see it as in a real run. They send your memories to the model, so they run only when `MODEL_BASE_URL` is localhost, a private-network address or a name that resolves only to such addresses; the run stops with an error otherwise.
 - `--limit N` runs N cases, taken from each class in turn, in file order, so a short run covers every class. Use it to check a setup.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
