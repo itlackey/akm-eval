@@ -2,12 +2,13 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
@@ -19,7 +20,7 @@ const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
 const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
 
-const USAGE = `Usage: evals/judge-gate/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
 
 Runs akm's reflect quality judge, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
 judge, on labelled proposals. Settings come from .env at the repository root.
@@ -27,6 +28,8 @@ judge, on labelled proposals. Settings come from .env at the repository root.
   --corpus  public (default) reads assets/. private reads private/judge-gate/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   run N cases, in the good/bad proportion of the whole set
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.`;
@@ -182,9 +185,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`judge-gate: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -197,6 +200,8 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -218,8 +223,8 @@ async function main(): Promise<void> {
     if (!atLeast(version, MIN_AKM)) fail(`akm ${version} has no \`improve judge\` command. This eval needs akm ${MIN_AKM} or later.`);
 
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(await runCorpus(c, { sandbox, version, model, label, limit }));
-    if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+    for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { sandbox, version, model, label: runLabel, limit }))));
+    if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
   } finally {
     removeSandbox(sandbox);
   }

@@ -11,7 +11,7 @@ import { clearRunning } from "./results.ts";
 interface Summarized {
   eval: string;
   corpus: string;
-  model: string;
+  model?: string; // an eval that runs no model, such as retrieval, has none
   akm_version: string;
   akm_bin: string;
   akm_build: string | null;

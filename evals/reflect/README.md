@@ -16,6 +16,9 @@ evals/reflect/run --corpus all
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
 - `--limit N` runs the first N cases. The first ten hold each class once and the first five mix defects and controls. Use it to check a setup.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
+- `--strategy NAME` runs the akm strategy NAME in place of `reflect-only`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
+- `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
 The private run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing.

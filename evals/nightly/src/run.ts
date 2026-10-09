@@ -3,17 +3,20 @@
 // feedback, `akm improve` with the default strategy, then `akm proposal drain`, as the lab's nightly does. It checks every
 // item, what changed outside the items, the lessons accepted and the model calls that failed. See ../README.md.
 //
-//   evals/nightly/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type CallRow, EMBEDDER_ENV, type Feedback, type Item, KINDS, type Metrics, type Night, type Row, callStats, loadNight, metrics, nightlyConfig, noteAges, outsideChanges, parseProposals, pct, readLibrary, scoreItem, selectItems } from "./lib.ts";
 
 const NAME = "nightly";
+const STRATEGY = "default"; // the strategy akm ships, and the one the lab runs
 export const MIN_AKM = "0.9.26"; // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -23,7 +26,7 @@ const IMPROVE_TIMEOUT_MS = IMPROVE_BUDGET_MS + 10 * 60_000; // and this ends akm
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const DAY_MS = 86_400_000;
 
-const USAGE = `Usage: evals/nightly/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
 of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
@@ -32,6 +35,9 @@ repository root.
   --corpus  public (default) reads assets/. private reads private/nightly/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   plant only N items, taking the first of each kind in turn
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
@@ -50,8 +56,13 @@ interface Summary {
   akm_bin: string;
   akm_build: string | null;
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
   n_items: number;
   n_planted: number;
+  /** Items akm reports an error for: a model call failed, or the run's budget ran out at them. */
+  n_errored: number;
   /** Wall-clock seconds of each step of the night. */
   seconds: { index: number; feedback: number; improve: number; drain: number; total: number };
   /** What akm says of the improve run: false when it did not run to its end. */
@@ -139,7 +150,7 @@ export function feedbackArgs(f: Feedback): string[] {
   return args;
 }
 
-type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number };
+type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; overrides?: Overrides };
 
 const seconds = (ms: number): number => Number((ms / 1000).toFixed(1));
 
@@ -157,7 +168,8 @@ async function haveNight(items: Item[], files: Map<string, string>, ctx: Context
 }
 
 async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, string>, ctx: Context) {
-  writeConfig(sandbox, nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  writeConfig(sandbox, patchedConfig(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey), overrides));
   Object.assign(sandbox.env, EMBEDDER_ENV);
   plant(sandbox, items, files);
   const bundle = join(sandbox.dir, "bundle");
@@ -173,7 +185,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
   const [, feedback] = await step("feedback", async () => {
     for (const item of items) for (const f of item.feedback) await runAkmJson(sandbox, feedbackArgs(f), { timeoutMs: STEP_TIMEOUT_MS });
   });
-  const improveArgs = ["improve", "--strategy", "default", "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
+  const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
   const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: IMPROVE_TIMEOUT_MS }));
   if (improved.code !== 0) fail(hideEndpoint(failureMessage(improveArgs, improved.code, improved.stderr), ctx.baseUrl), 1);
   let improve: unknown;
@@ -183,7 +195,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
     fail("akm improve printed no JSON result", 1);
   }
   type Drained = { promoted?: unknown[]; rejected?: unknown[]; deferred?: unknown[]; failed?: unknown[] };
-  const [drained, drain] = await step("drain", () => runAkmJson<Drained>(sandbox, ["proposal", "drain", "--promote", "--strategy", "default", "--yes"], { timeoutMs: STEP_TIMEOUT_MS }));
+  const [drained, drain] = await step("drain", () => runAkmJson<Drained>(sandbox, ["proposal", "drain", "--promote", "--strategy", overrides.strategy, "--yes"], { timeoutMs: STEP_TIMEOUT_MS }));
   const listed = [];
   for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS })) });
   const count = (x: unknown[] | undefined) => (Array.isArray(x) ? x.length : 0);
@@ -281,8 +293,10 @@ export async function runCorpus(
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
     n_items: night.items.length,
     n_planted: items.length,
+    n_errored: rows.filter((r) => r.error).length,
     seconds: { ...done.seconds, total },
     improve_ok: result.ok !== false,
     skipped_processes: (result.skippedProcesses ?? []).map((p) => String(p.process)),
@@ -300,9 +314,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -315,6 +329,9 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -339,10 +356,10 @@ async function main(): Promise<void> {
 
   if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
 
-  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit };
+  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, ctx));
-  if (summaries.length === 2) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
 }
 
 if (import.meta.main) {

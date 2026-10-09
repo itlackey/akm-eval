@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { type Case, atLeast, inject, parseCases, refOf } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -175,6 +176,24 @@ describe("runCorpus", () => {
     for (const b of bundles) expect(existsSync(b)).toBe(false);
     expect(new Set(log.map((c) => c.cwd)).size).toBe(3);
     expect(log.every((c) => c.model === "the-model" && c.key === "model-secret")).toBe(true);
+  });
+
+  test("runs the strategy it is given, with the config patch merged into the config, and records both", async () => {
+    const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
+    const root = mkdtempSync(join(tmpdir(), "reflect-patch-"));
+    dirs.push(root);
+    writeFileSync(join(root, "patch.json"), JSON.stringify({ engines: { reflect: { model: "patched-model" } } }));
+    const configPatch = loadConfigPatch("patch.json", root);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "reflect-judged", configPatch } }, folders));
+    const log = calls();
+    expect(log.find((c) => c.args[0] === "improve").args).toEqual(["improve", "knowledge/a", "--strategy", "reflect-judged", "--json-to-stdout", "--format", "json"]);
+    expect(log.filter((c) => c.args[0] !== "--version").every((c) => c.model === "patched-model")).toBe(true);
+    expect(summary).toMatchObject({ strategy: "reflect-judged", config_patch: { path: "patch.json", sha256: configPatch.sha256 } });
+  });
+
+  test("without the flags it records its own strategy and no patch", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 1), plan);
+    expect(await quiet(() => runCorpus("public", ctx, folders))).toMatchObject({ strategy: "reflect-only", config_patch: null });
   });
 
   test("a limit runs the first cases", async () => {

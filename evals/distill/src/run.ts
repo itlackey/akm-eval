@@ -2,12 +2,13 @@
 // distill: runs akm's distill on the memory of each case, with the model under test as akm's engine, and scores
 // the lessons it queues. See ../README.md.
 //
-//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--label NAME]
+//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -20,7 +21,7 @@ const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two 
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--label NAME]
+const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME
 as akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.
@@ -32,6 +33,7 @@ as akm's engine, and scores the lessons it queues. Settings come from .env at th
   --limit   run N cases, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -52,6 +54,9 @@ interface Summary {
   /** The model names the endpoint said answered. A gateway may serve one name with another model. */
   served_models: string[];
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
@@ -110,7 +115,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 }
 
 /** One case: a new sandbox with the case's bundle, distill run on its memory alone, and the queue read back. */
-export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string }): Promise<Row> {
+export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; overrides?: Overrides }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
@@ -123,7 +128,7 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
       const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
       if (fb.code !== 0) return errorRow(c, hide(failureMessage(fb.code, fb.stderr, fb.stdout)), seconds());
     }
-    const args = ["improve", memoryRef(c), "--strategy", STRATEGY, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
+    const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
     const { stdout, stderr, code } = await runAkm(sandbox, args, { timeoutMs: IMPROVE_TIMEOUT_MS });
     let improve: unknown;
     try {
@@ -144,7 +149,7 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
 
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number },
+  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number; overrides?: Overrides },
   folders = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "assets" : "assets-feedback") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "results" : "results-feedback") : join(ROOT, "private", NAME, "results"),
@@ -186,6 +191,7 @@ export async function runCorpus(
     ...akmBuild(),
     served_models: [...new Set(rows.flatMap((r) => r.served))].sort(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
@@ -201,9 +207,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`distill: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -218,6 +224,7 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -245,9 +252,9 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
-  const config = distillConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim());
+  const config = patchedConfig(distillConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()), overrides);
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit }))));
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit, overrides }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 

@@ -4,13 +4,14 @@
 // built-in embedder, a small model that runs in the akm process. A run with --limit, and the own corpus, leave it out.
 // See ../README.md.
 //
-//   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--label NAME]
+//   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import {
@@ -51,7 +52,7 @@ type Corpus = "public" | "private" | "own";
 
 const OWN_HELP = `Your own set goes in private/${NAME}/own/: queries.jsonl and qrels.jsonl in the format that evals/${NAME}/assets/README.md describes, and library/, the folder akm should index (a link to it works). A library of several bundles needs bundles.json too.`;
 
-const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME]
 
 For each collection of queries, indexes its library in two sandboxes, for keyword search and for semantic search, asks
 akm search and akm curate of both for the first ${DEPTH} results of every query, and scores them against the collection's
@@ -64,6 +65,8 @@ scored with keyword search only. Needs akm on PATH, or in AKM_BIN.
             private runs their private copies in private/retrieval/assets/, made by ./generate-assets.
             own runs your own labelled set in private/retrieval/own/. all runs public and private.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only.
+  --repeat  run each collection N times, into <label>-r1-<collection> to <label>-rN-<collection>, and write the min, max and mean of each metric to
+            <UTC date>-<label>-<collection>-repeat-summary.json beside them
   --label   names the results folders: <UTC date>-<label>-<collection>. Default label: akm-<version>.`;
 
 interface SystemRow {
@@ -111,6 +114,8 @@ interface Summary {
   index_seconds: { keyword: number; semantic?: number };
   /** Task queries with at least one relevant asset. Only these have ranking metrics. */
   n_scored: number;
+  /** Queries with at least one errored call, in any column. */
+  n_errored: number;
   errored: Columns<number>;
   metrics: Columns<SystemMetrics>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
@@ -130,6 +135,9 @@ class Fatal extends Error {
 function fail(message: string, code = 2): never {
   throw new Fatal(message, code);
 }
+
+/** The label of a run without --label. */
+const defaultLabel = (version: string): string => `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 
 /** How a collection is named in the output: `public books`, or `own`. */
 const where = (corpus: Corpus, collection: string): string => (corpus === collection ? corpus : `${corpus} ${collection}`);
@@ -281,7 +289,7 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
       const probe = await akm.ask(boxes.semantic, "search", queries[0].query, DEPTH, "semantic");
       if (probe.error) fail(`akm cannot search with its embedder: ${probe.error}`, 1);
     }
-    const label = ctx.label ?? `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
+    const label = ctx.label ?? defaultLabel(version);
     const dir = makeResultsDir(folders.results, `${label}-${collection}`);
     const samples = join(dir, "samples.jsonl");
     writeFileSync(samples, "");
@@ -333,6 +341,7 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
       n_assets: nAssets,
       index_seconds: { keyword: indexSeconds.keyword, ...(ctx.semantic ? { semantic: indexSeconds.semantic } : {}) },
       n_scored: scored.length,
+      n_errored: rows.filter((r) => systems.some((s) => at(r, s).error)).length,
       errored: columns((s) => rows.filter((r) => at(r, s).error).length),
       metrics: columns((s) => summarize(ok(scored, s).map((r) => at(r, s).scores as Scored))),
       abstention: {
@@ -352,9 +361,9 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -367,6 +376,8 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "all") fail(`--corpus must be public, private, own or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
@@ -376,8 +387,22 @@ async function main(): Promise<void> {
     fail(c === "own" ? `private/${NAME}/own/ does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
   }
   const summaries: Summary[] = [];
-  for (const s of sets) summaries.push(await runCollection(s.corpus, s.name, { label: values.label, limit, semantic: withSemantic(s.corpus, limit) }, s.folders));
-  if (summaries.length > 1) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
+  let label = values.label;
+  if (repeat !== undefined && label === undefined) {
+    const probe = createSandbox(NAME);
+    try {
+      label = defaultLabel(await akmVersion(probe).catch((e: Error) => fail(e.message)));
+    } finally {
+      removeSandbox(probe);
+    }
+  }
+  for (const s of sets) {
+    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(s.corpus, limit) }, s.folders);
+    // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
+    if (repeat === undefined) summaries.push(await run(label));
+    else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));
+  }
+  if (summaries.length > 1 && repeat === undefined) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
   const semanticErrors = summaries.reduce((n, s) => n + (s.errored.semantic_search ?? 0) + (s.errored.semantic_curate ?? 0), 0);
   if (semanticErrors > 0) fail(`${semanticErrors} semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.`, 1);
 }

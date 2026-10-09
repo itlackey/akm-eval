@@ -39,6 +39,9 @@ evals/nightly/run --corpus all
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number. It sends both to the one model in `.env`, so use a local model for it.
 - `--limit N` plants only N items, taking the first of each kind in turn, in the order pair, reflect, distill, fix, untouched. Use it to check a setup. `--limit 3` is a duplicate pair, a reflect defect and a distill memory.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
+- `--strategy NAME` runs the akm strategy NAME in place of `default`, in `improve` and in the drain. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
+- `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
 The private run reads `private/nightly/assets/`. Make it first with `./generate-assets --only nightly`. The run stops with an error when it is missing.

@@ -2,13 +2,14 @@
 // promotion: plants labelled promotion proposals in akm's queue, runs akm's drain with its judgment tier, with the model
 // under test as the judge, and counts which proposals it accepts. See ../README.md.
 //
-//   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
+//   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { Database } from "bun:sqlite";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -20,7 +21,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
-const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
+const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
@@ -33,6 +34,7 @@ MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts
   --limit   run N proposals, one of each category in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -63,6 +65,9 @@ interface Summary {
   akm_bin: string;
   akm_build: string | null;
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
   n_cases: number;
   n_run: number;
   n_errored: number;
@@ -191,7 +196,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { sandbox: Sandbox; version: string; model: string; baseUrl: string; label: string; limit?: number },
+  ctx: { sandbox: Sandbox; version: string; model: string; baseUrl: string; label: string; limit?: number; overrides?: Overrides },
   folders: Folders = foldersFor(corpus),
 ): Promise<Summary> {
   const all = parseCases(readFileSync(folders.cases, "utf8"), folders.cases);
@@ -202,7 +207,7 @@ export async function runCorpus(
   const t0 = performance.now();
   await plant(ctx.sandbox, cases, folders.library);
   console.log("  planted; the judge reads them one at a time");
-  const args = ["proposal", "drain", "--judgment", "--strategy", STRATEGY, "--yes"];
+  const args = ["proposal", "drain", "--judgment", "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--yes"];
   const drain = await runAkm(ctx.sandbox, [...args, "--format", "json"], { timeoutMs: DRAIN_TIMEOUT_MS });
   if (drain.code !== 0) fail(hideEndpoint(failureMessage("akm proposal drain", drain.code, drain.stderr), ctx.baseUrl), 1);
   let drained: Drained;
@@ -235,6 +240,7 @@ export async function runCorpus(
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
     n_cases: all.length,
     n_run: rows.length,
     n_errored: errored,
@@ -251,9 +257,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, cases: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, cases: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`promotion: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -270,6 +276,7 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "own"] : [corpus];
 
   const baseUrl = process.env.MODEL_BASE_URL?.trim();
@@ -289,9 +296,9 @@ async function main(): Promise<void> {
     const runs = await repeatRuns(repeat, label, async (runLabel) => {
       const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
       try {
-        writeConfig(sandbox, promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
+        writeConfig(sandbox, patchedConfig(promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()), overrides));
         const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
-        return await runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit }, foldersFor(c, casesDir));
+        return await runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit, overrides }, foldersFor(c, casesDir));
       } catch (e) {
         if (e instanceof Fatal) throw e;
         return fail(hideEndpoint((e as Error).message, baseUrl), 1); // a failed akm command: its message, not a stack

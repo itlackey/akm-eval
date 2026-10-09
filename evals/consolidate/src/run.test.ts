@@ -36,7 +36,7 @@ if (cmd === "index") {
   if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
   json({ ok: true, totalEntries: notes.length });
 } else if (cmd === "improve") {
-  if (args[1] !== "--strategy" || args[2] !== "consolidate" || !has("--no-sync") || !has("--json-to-stdout")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (args[1] !== "--strategy" || args[2] !== (process.env.FAKE_STRATEGY ?? "consolidate") || !has("--no-sync") || !has("--json-to-stdout")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   if (what === "crash") { console.error(JSON.stringify({ ok: false, error: "boom", code: "BOOM" })); process.exit(70); }
   let list = [];
   let result = pass({});
@@ -179,6 +179,23 @@ describe("runCorpus", () => {
     expect(byId("e1")).toMatchObject({ outcome: "error", error: "akm paired the notes but its judge gave no verdict (akm said: Network error: Unable to connect. Is the computer able to access the url?)" });
     expect(byId("e2").error).toContain("boom");
     expect(byId("e2").error).toContain("exit 70");
+  });
+
+  test("runs the strategy it is given, and records it with the config patch's path and SHA-256", async () => {
+    process.env.FAKE_STRATEGY = "lab-strategy";
+    try {
+      const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")]);
+      const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "lab-strategy", configPatch: { path: "patches/p.json", sha256: "abc123", patch: {} } } }, folders));
+      expect(summary).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
+      expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
+    } finally {
+      delete process.env.FAKE_STRATEGY;
+    }
+  });
+
+  test("without the flags it runs its own strategy and records no patch", async () => {
+    const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")]);
+    expect(await quiet(() => runCorpus("public", ctx, folders))).toMatchObject({ strategy: "consolidate", config_patch: null });
   });
 
   test("gives akm what it needs: semantic search, the deterministic embedder, and notes dated by file time", async () => {
