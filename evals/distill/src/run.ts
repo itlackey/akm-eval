@@ -95,7 +95,8 @@ function printSummary(s: Summary): void {
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model}${served} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
   console.log(`  good lessons   ${m.good_lessons.good}/${m.good_lessons.n}  ${pct(m.good_lessons.rate)}   of the cases that expect a lesson`);
   console.log(`  wrong lessons  ${m.wrong_lessons.wrong}/${m.wrong_lessons.n}  ${pct(m.wrong_lessons.rate)}   of the cases that expect none`);
-  for (const [klass, c] of Object.entries(m.by_class)) console.log(`    ${klass.padEnd(16)} ${c.good !== undefined ? `${c.good}/${c.n} good` : `${c.wrong}/${c.n} wrong`}`);
+  if (m.lesson_updates.n > 0) console.log(`  lesson updates ${m.lesson_updates.right}/${m.lesson_updates.n}  ${pct(m.lesson_updates.rate)}   of the cases that expect an update to a lesson the library holds`);
+  for (const [klass, c] of Object.entries(m.by_class)) console.log(`    ${klass.padEnd(16)} ${c.good !== undefined ? `${c.good}/${c.n} good` : c.right !== undefined ? `${c.right}/${c.n} right` : `${c.wrong}/${c.n} wrong`}`);
   console.log(`  errored        ${s.n_errored}`);
   console.log(`  results        ${relative(ROOT, s.results_dir)}/`);
 }
@@ -107,6 +108,7 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["", a.corpus, b.corpus],
     ["good lessons", cell(a.metrics.good_lessons.good, a.metrics.good_lessons.n, a.metrics.good_lessons.rate), cell(b.metrics.good_lessons.good, b.metrics.good_lessons.n, b.metrics.good_lessons.rate)],
     ["wrong lessons", cell(a.metrics.wrong_lessons.wrong, a.metrics.wrong_lessons.n, a.metrics.wrong_lessons.rate), cell(b.metrics.wrong_lessons.wrong, b.metrics.wrong_lessons.n, b.metrics.wrong_lessons.rate)],
+    ["lesson updates", cell(a.metrics.lesson_updates.right, a.metrics.lesson_updates.n, a.metrics.lesson_updates.rate), cell(b.metrics.lesson_updates.right, b.metrics.lesson_updates.n, b.metrics.lesson_updates.rate)],
     ["errored", String(a.n_errored), String(b.n_errored)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));

@@ -9,7 +9,7 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type LoadedCase, checkLesson, lessonFile, loadCases, memoryBody, mentions } from "./lib.ts";
+import { type LoadedCase, checkLesson, checkUpdate, lessonFile, loadCases, memoryBody, mentions } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -41,8 +41,14 @@ export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[
     });
     for (const key of ["good", "bad"] as const) {
       if (b[key] === undefined) continue;
-      const was = checkLesson(b, b[key] as string, b.memory).good;
-      const now = checkLesson(a, a[key] as string, a.memory).good;
+      // An update case's example is the whole updated body, scored against the existing lesson's body.
+      const passes = (c: LoadedCase) => {
+        if (c.expect !== "update") return checkLesson(c, c[key] as string, c.memory).good;
+        const r = checkUpdate(c, c.existingBody ?? "", c[key] as string);
+        return r.dropped.length === 0 && r.missing.length === 0 && r.forbidden.length === 0;
+      };
+      const was = passes(b);
+      const now = passes(a);
       if (was !== now) note(`the ${key} example lesson ${now ? "now passes" : "no longer passes"}`);
     }
     if (existsSync(join(b.dir, lessonFile(b))) !== existsSync(join(a.dir, lessonFile(a)))) note("the lesson at the ref distill writes to was lost or added");

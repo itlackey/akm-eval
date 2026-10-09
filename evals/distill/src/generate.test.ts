@@ -18,12 +18,12 @@ function generate(seed: string, out = mkdtempSync(join(tmpdir(), "distill-genera
 }
 
 describe("generate", () => {
-  test("writes the 30 cases and the map, with names changed and every check kept", () => {
+  test("writes the 38 cases and the map, with names changed and every check kept", () => {
     const { out, code, stdout } = generate("42");
     expect(code).toBe(0);
-    expect(stdout).toContain("30 cases written");
+    expect(stdout).toContain("38 cases written");
     const cases = loadCases(join(out, "assets"));
-    expect(cases).toHaveLength(30);
+    expect(cases).toHaveLength(38);
     expect(checkRewrite(loadCases(PUBLIC), cases)).toEqual([]);
     const words = JSON.parse(readFileSync(join(out, "map.json"), "utf8")).words as Record<string, string>;
     expect(Object.keys(words)).toEqual(expect.arrayContaining(["tallowmere", "marrowgate", "quillfeather", "fennwick"]));
@@ -81,11 +81,20 @@ describe("checkRewrite", () => {
     expect(checkRewrite(before, worse)).toEqual(["lesson-01: the bad example lesson now passes"]);
   });
 
+  test("an update case: a new fact the memory no longer states, and an example body that scores differently", () => {
+    const after = copy("upd-02", (c) => ({ memory: c.memory.replace("version 4.2", "version 5") }));
+    expect(checkRewrite(before, after)).toEqual(['upd-02: the required fact "4.2" is no longer in its memory']);
+    const dropped = copy("upd-02", (c) => ({ good: (c.good as string).split("\n").slice(1).join("\n") }));
+    expect(checkRewrite(before, dropped)).toEqual(["upd-02: the good example lesson no longer passes"]);
+    const passes = copy("upd-02", () => ({ bad: "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has sorted the test files by name since version 4.2." }));
+    expect(checkRewrite(before, passes)).toEqual(["upd-02: the bad example lesson now passes"]);
+  });
+
   test("a lesson at the ref distill writes to that is lost, and a case that came back changed", () => {
     const dup = before.find((c) => c.id === "dup-01") as LoadedCase;
     const lost = copy("dup-01", () => ({ name: `${dup.name}-renamed` }));
     expect(checkRewrite(before, lost)).toEqual(["dup-01: the lesson at the ref distill writes to was lost or added"]);
     expect(checkRewrite(before, copy("dup-01", () => ({ id: "dup-99" })))).toEqual(["dup-01: came back as dup-99, duplicate-lesson"]);
-    expect(checkRewrite(before, before.slice(1))).toEqual(["29 cases were written, and there are 30"]);
+    expect(checkRewrite(before, before.slice(1))).toEqual(["37 cases were written, and there are 38"]);
   });
 });

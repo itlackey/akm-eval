@@ -69,6 +69,15 @@ const GOOD = "The default is 30, so pass --limit 200.";
 const BAD = "Every command is capped, so use --limit 1000.";
 const LESSON = { required: [["30"], ["--limit"]], forbidden: [["every command"]], good: GOOD, bad: BAD };
 
+const OLD = "The default is 30.";
+const UPDATE = { existing: "old", required: [["60 s"]], forbidden: [["every command"]], good: `${OLD}\nThe ceiling is 60 s.`, bad: `${OLD}\nThe ceiling is 60 s for every command.` };
+const updateProposal = (body: string, extra: Record<string, unknown> = {}) => ({
+  ...proposal("x", extra),
+  ref: "bundle//lessons/old",
+  gateDecision: { outcome: "deferred", reason: "distill-update", scores: { novelty: 4, nonRedundancy: 4, grounding: 5 }, judgeReason: "adds a limit" },
+  payload: { content: `---\ndescription: d\nwhen_to_use: w\ntype: lesson\n---\n${body}\n` },
+});
+
 /** An assets folder: one case per scenario, with its memory and the fake.json that tells the fake akm what to do. */
 function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
   const root = mkdtempSync(join(tmpdir(), "distill-run-"));
@@ -76,10 +85,15 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
   const assets = join(root, "assets");
   const cases = scenarios.map((s) => {
     const expectsLesson = s.class === "lesson-worthy" || s.class === "over-claim";
+    const expectsUpdate = s.class === "lesson-update";
     mkdirSync(join(assets, "bundles", s.id, "memories"), { recursive: true });
+    if (expectsUpdate) {
+      mkdirSync(join(assets, "bundles", s.id, "lessons"), { recursive: true });
+      writeFileSync(join(assets, "bundles", s.id, "lessons", "old.md"), `---\ndescription: d\nwhen_to_use: w\ntype: lesson\n---\n${OLD}\n`);
+    }
     writeFileSync(join(assets, "bundles", s.id, "memories", "m.md"), memory(`The memory of ${s.id}, with enough words in it to compare. ${"More words. ".repeat(10)}`));
     writeFileSync(join(assets, "bundles", s.id, "fake.json"), JSON.stringify(s.fake));
-    return { id: s.id, class: s.class, expect: expectsLesson ? "lesson" : "none", ...(expectsLesson ? LESSON : {}), note: "n" };
+    return { id: s.id, class: s.class, expect: expectsLesson ? "lesson" : expectsUpdate ? "update" : "none", ...(expectsLesson ? LESSON : {}), ...(expectsUpdate ? UPDATE : {}), note: "n" };
   });
   writeFileSync(join(assets, "cases.json"), JSON.stringify(cases));
   return { assets, results: join(root, "results") };
@@ -163,6 +177,34 @@ describe("runCorpus", () => {
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
     expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, too_long: 0 });
     expect(stored.results_dir).toBeUndefined();
+  });
+
+  test("an update to an existing lesson is its own outcome: right for an update case, wrong for a duplicate case, and counted apart", async () => {
+    const folders = assetsFor([
+      { id: "u-right", class: "lesson-update", fake: { result: { outcome: "queued", updatesExisting: true }, proposal: updateProposal(UPDATE.good) } },
+      { id: "u-claim", class: "lesson-update", fake: { result: { outcome: "queued", updatesExisting: true }, proposal: updateProposal(UPDATE.bad) } },
+      { id: "u-new", class: "lesson-update", fake: { result: { outcome: "queued" }, proposal: proposal("A new lesson.") } },
+      { id: "u-none", class: "lesson-update", fake: { result: { outcome: "skipped", skipReason: "nothing_reusable" } } },
+      { id: "d-update", class: "duplicate-lesson", fake: { result: { outcome: "queued", updatesExisting: true }, proposal: updateProposal(UPDATE.good) } },
+      { id: "d-skip", class: "duplicate-lesson", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
+    ]);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const rows = samplesIn(summary.results_dir);
+    expect(rows.map((r) => [r.id, r.verdict, r.outcome])).toEqual([
+      ["u-right", "right", "update"],
+      ["u-claim", "bad", "update"],
+      ["u-new", "bad", "lesson"],
+      ["u-none", "missed", "skipped"],
+      ["d-update", "wrong", "update"],
+      ["d-skip", "right", "skipped"],
+    ]);
+    expect(rows[0]).toMatchObject({ gate: "deferred/distill-update", status: "pending", added: ["The ceiling is 60 s."], checks: { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true } });
+    expect(rows[1].checks).toMatchObject({ update_proposed: true, no_extra_claims: false });
+    expect(summary.metrics.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 2, no_extra_claims: 1, no_new_lesson: 3 } });
+    expect(summary.metrics.good_lessons).toEqual({ n: 0, good: 0, rate: null });
+    expect(summary.metrics.wrong_lessons).toEqual({ n: 2, wrong: 1, rate: 0.5 });
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(stored.metrics.lesson_updates.right).toBe(1);
   });
 
   test("akm gets its own folders, a config with the model, the case's files and none of the caller's settings", async () => {
