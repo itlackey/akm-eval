@@ -85,7 +85,7 @@ Notes on reading it:
 - akm retires one note per chain in a run: a note used as a successor cannot be retired in the same run, and a note already retired cannot be a successor. So a triple of duplicates ends the run with one retirement and two failed judgments, and the next night takes the rest. That is why `recall` counts clusters.
 - The pool is small enough for one run to be noise: one cluster is 5 points of the recall. Repeat a run before you trust a gap.
 - The notes are 1 to 3 days old, so akm pairs them at its floor of 0.93 for new material. A pool of old notes with no ledger row needs 0.95, which this one does not test.
-- Time: the pair pass makes about one judge call per pair plus a second look at each duplicate it stages, and the promote pass about 7 chunks. See the smoke result below for what that took.
+- Time and calls: with akm 0.9.30 and a 27B model on the local gateway, one run took about 4.5 minutes and 56 model calls (31 pairs judged, 7 promote chunks). The default akm budget is 2 hours, so the run is never cut. A 120 second `--timeout-ms` took 2 minutes: akm's pair pass ran to the end on the budget, so it judged the same pairs and made the same retirements, and by then too little of the budget was left for the promote pass, so akm cut the pool for that pass to 0 memories ("cold-start budget"; nothing was chunked and antiCollapse injected nothing). `consolidate.p90ChunkSecondsDefault` affects the promote pass only, not the pair pass.
 
 ## What it needs from a model
 
