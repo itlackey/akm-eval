@@ -32,6 +32,7 @@ evals/consolidate/run --corpus all
 - `--strategy NAME` runs the akm strategy NAME in place of `consolidate`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
+- `--pool` runs the whole pool in one sandbox instead of the cases. See the next section.
 
 The private run reads `private/consolidate/assets/`. Make it first with `./generate-assets --only consolidate`. The run stops with an error when it is missing.
 
@@ -39,6 +40,52 @@ Each run writes two files to `evals/consolidate/results/<UTC date>-<label>/`, or
 
 - `summary.json`: the metrics, how many cases ran, were scored, errored and paired, the model name and the names the endpoint reported for its calls (a gateway may serve one name from several providers), the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
 - `samples.jsonl`: one line per case, with the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason, the claims it found only in the retired note and only in the kept one (`only_in_retired`, `only_in_successor`; null for a kept pair and on an akm build that does not record them), the time it took and, when the endpoint rate limited the case, how many times it was tried again.
+
+## Run on a whole pool (`--pool`)
+
+The per-case run gives consolidate one pair at a time. A real night gives it a whole pool: the pair pass finds the pairs among all the notes, the promote pass cuts the pool into chunks, and akm adds a few random notes to the chunks (`consolidate.antiCollapse`, which does nothing for a bundle of two memories or fewer, so it never acts in a case). `--pool` measures that:
+
+```
+evals/consolidate/run --pool
+evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
+evals/consolidate/run --pool --strategy catchup --label catchup
+evals/consolidate/run --pool --config-patch antiCollapse-off.json --repeat 3
+```
+
+It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/pool.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
+
+`--timeout-ms N` is akm's own wall-clock budget for the run (akm's default is 2 hours). A short one makes akm cut the pool to what the budget covers, using `consolidate.p90ChunkSecondsDefault` (30 seconds a chunk unless set), and akm says so in its "cold-start budget" warning. Without it that warning cannot appear.
+
+The pool has 47 clusters, each with a known right outcome (`assets/pool/README.md`): 7 pairs of duplicates, 2 triples of duplicates, 5 subsumed pairs, 5 supersedes pairs, 7 near-duplicates that each hold a claim of their own, 2 contradictions, 3 look-alikes of different things, and 16 notes on their own subject. A retirement is scored against the labels:
+
+- safe: the cluster allows that note to be retired, for the successor akm named;
+- wrong successor: the cluster allows the note, but akm kept another note than the allowed ones;
+- unsafe: the note holds a claim no other note has, or is a single note. This is the number to watch, as in the per-case run.
+
+`summary.json` has `mode: "pool"` and the keys of the per-case summary where they apply. `n_cases`, `n_run` and `n_scored` count the one pool run, `n_errored` is 1 when the run failed (a failed akm command, a timeout, or a result without a pair pass), and `n_paired` is the pairs akm's judge looked at. `metrics`:
+
+| Metric | Meaning |
+|---|---|
+| `unsafe` | `n` of `of` retirements akm proposed lost a claim; `staged` is how many akm staged for unattended retirement. |
+| `precision` | Of the retirements proposed, the share that were safe: `safe` of `retired`. |
+| `recall` | Of the clusters that have a note to retire (19 of 47), the share where akm proposed at least one safe retirement. A cluster counts once, so a triple is hit by one retirement. |
+| `wrong_successor` | Retirements of an allowed note for a note outside the allowed ones. |
+| `classes` | For each kind of cluster: `clusters`, `with_safe_retirement`, `hit`, `retired_safe`, `retired_unsafe`, `wrong_successor` and `untouched` (clusters akm proposed nothing for). |
+| `pairs` | `initiators`, `considered`, `judged` and `failed` pairs, and the labels the judge gave. A judgment fails when the model gives no verdict, and also when akm refuses a retirement because one of its notes already took part in another this run (below). |
+| `calls` | Model calls, failures and tokens, from akm's usage report for the whole run: the pair judge, the second look at a staged duplicate and the promote pass. |
+| `chunks` | The promote pass: `total` chunks, `failed`, `deferred_memories` and `promote_ops`, which are not scored. |
+| `anti_collapse_injected` | N of akm's warning "Anti-collapse: injected N ...", or null when it did not say so (antiCollapse off). |
+| `cold_start_budget` | `from`, `to` and `safe_chunks` of akm's "cold-start budget" warning, or null. |
+| `warnings` | Every warning akm printed for the consolidation. |
+
+`samples.jsonl` has one line per cluster: its kind, the notes akm may retire, the worst verdict (`kept` when akm proposed nothing), and each retirement with the judge's label, reason and claim lists. `improve.json` is akm's own result, for reading what the summary leaves out.
+
+Notes on reading it:
+
+- akm retires one note per chain in a run: a note used as a successor cannot be retired in the same run, and a note already retired cannot be a successor. So a triple of duplicates ends the run with one retirement and two failed judgments, and the next night takes the rest. That is why `recall` counts clusters.
+- The pool is small enough for one run to be noise: one cluster is 5 points of the recall. Repeat a run before you trust a gap.
+- The notes are 1 to 3 days old, so akm pairs them at its floor of 0.93 for new material. A pool of old notes with no ledger row needs 0.95, which this one does not test.
+- Time and calls: with akm 0.9.30 and a 27B model on the local gateway, one run took about 4.5 minutes and 56 model calls (31 pairs judged, 7 promote chunks). The default akm budget is 2 hours, so the run is never cut. A 120 second `--timeout-ms` took 2 minutes: akm's pair pass ran to the end on the budget, so it judged the same pairs and made the same retirements, and by then too little of the budget was left for the promote pass, so akm cut the pool for that pass to 0 memories ("cold-start budget"; nothing was chunked and antiCollapse injected nothing). `consolidate.p90ChunkSecondsDefault` affects the promote pass only, not the pair pass.
 
 ## What it needs from a model
 
@@ -69,6 +116,7 @@ Each case runs in a temporary folder with its own akm config and the pair as its
 ## Assets
 
 - `assets/cases.jsonl`: 60 pairs of fictional memory notes, 10 for each relation, each with the sides that are safe to retire and the claims that decide it. The fields, how the pairs were made and what each relation means are in `assets/README.md`. The cases carry a canary string: do not train on them.
+- `assets/pool/`: 80 fictional memories in 47 clusters with their labels, for `--pool`. See `assets/pool/README.md`. There is no private copy of it.
 - `private/consolidate/assets/cases.jsonl`: the same cases with the made-up names, the names of tools, hosts, ports, numbers and versions rewritten from a seed by `lib/rewrite`. Relations, safe sides, which note is older and ids are kept. Each case's notes, names, claims and reasons are rewritten with one mapping, so a name changes the same way in all of them, and the claims may not add names to it. `generate` then checks that each deciding claim is still in the note it belongs to and in no other, and writes nothing if one is not. The mapping is in `private/consolidate/map.json`. A made-up command name that the notes write only in lowercase (such as `jobq` and `plm`) is left as it is, because the rewrite finds names by their capital letters or by its list of well-known tools. It is made by `generate` and never published.
 
 ## Read the results

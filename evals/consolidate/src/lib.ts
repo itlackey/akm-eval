@@ -142,14 +142,14 @@ export function errorRow(c: Case, message: string, seconds: number): Row {
   return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null, served: {}, seconds, error: message };
 }
 
-interface RetireProposal {
+export interface RetireProposal {
   source: string;
-  retirement: { retiredRef: string; judgeReason?: string; onlyInRetired?: unknown; onlyInSuccessor?: unknown };
+  retirement: { retiredRef: string; successorRef?: string; judgeReason?: string; onlyInRetired?: unknown; onlyInSuccessor?: unknown };
   gateDecision?: { outcome?: string };
 }
 
 /** The retire proposals of consolidate's pair pass in `akm proposal list --detail full --format json`. Its other proposals are promotions. */
-function retireProposals(listing: unknown): RetireProposal[] {
+export function retireProposals(listing: unknown): RetireProposal[] {
   const all = (listing as { proposals?: unknown })?.proposals;
   if (!Array.isArray(all)) return [];
   return all.filter((p): p is RetireProposal => p?.source === "consolidate-pair" && typeof p?.retirement?.retiredRef === "string");
@@ -160,7 +160,7 @@ function retireProposals(listing: unknown): RetireProposal[] {
  * serve one name from several providers. A call that got no answer has no reported name, and akm files it under the name that was
  * asked for, so only the calls that were answered count.
  */
-function servedModels(improve: unknown): Record<string, number> {
+export function servedModels(improve: unknown): Record<string, number> {
   const rows = (improve as { usageReport?: { byProcessEngineModel?: unknown } })?.usageReport?.byProcessEngineModel;
   const served: Record<string, number> = {};
   if (Array.isArray(rows)) {
@@ -176,7 +176,7 @@ function servedModels(improve: unknown): Record<string, number> {
 const claimList = (x: unknown): string[] | null => (Array.isArray(x) && x.every((k) => typeof k === "string") ? x : null);
 
 /** `bundle//memories/some-name` is the memory `some-name`. */
-const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "");
+export const nameOfRef = (ref: string): string => ref.replace(/^.*\/\//, "").replace(/^memories\//, "");
 
 /**
  * Turns what akm printed for one case into a row. `improve` is the run's JSON result, which reports the pair pass, and `proposals`

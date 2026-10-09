@@ -3,6 +3,7 @@
 // its engine, and counts the notes it proposes to retire that held a claim the other lacked. See ../README.md.
 //
 //   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+//   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -11,6 +12,7 @@ import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAk
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
+import { clusterRows, loadPool, type Pool, type PoolMetrics, POOL_STRATEGY, poolImproveArgs, scorePool, writePoolNotes } from "./pool.ts";
 import { type Case, EMBEDDER_ENV, RELATIONS, type Row, consolidateConfig, errorRow, metrics, noteAges, parseCases, pct, rowFromRun, selectCases } from "./lib.ts";
 
 const NAME = "consolidate";
@@ -23,7 +25,12 @@ const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdic
 const RATE_LIMIT_TRIES = 4; // times a case is tried again when the endpoint rate limits it
 const RATE_LIMIT_WAIT_MS = 10_000; // the wait before the first new try, doubled before each one after it
 
+const POOL_DIR = join(EVAL_DIR, "assets", "pool");
+const POOL_DEFAULT_BUDGET_MS = 2 * 60 * 60_000; // akm improve's own wall-clock budget when --timeout-ms is not given
+const POOL_KILL_SLACK_MS = 10 * 60_000; // how long past akm's budget the eval waits before it kills akm
+
 const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+       evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.
@@ -35,6 +42,10 @@ engine, and counts the retirements that lose a claim. Settings come from .env at
             <UTC date>-<label>-repeat-summary.json beside them
 ${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
+  --pool    one sandbox with the whole pool in assets/pool (80 memories) and a single improve run, as a real night
+            consolidates, instead of a sandbox per pair. Public pool only; not with --corpus or --limit.
+  --timeout-ms  with --pool: akm's wall-clock budget for the run, in milliseconds (akm's default is 2 hours). A short one
+            makes akm cut the pool to what the budget covers (its "cold-start budget" warning).
 
 Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
 
@@ -282,10 +293,130 @@ export async function runCorpus(
   return summary;
 }
 
-async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+type PoolContext = Context & { overrides: Overrides; timeoutMs?: number };
+
+interface PoolSummary {
+  eval: string;
+  mode: "pool";
+  corpus: "public";
+  label: string;
+  date: string;
+  git_commit: string;
+  model: string;
+  akm_version: string;
+  akm_bin: string;
+  akm_build: string | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
+  timeout_ms: number | null; // akm's --timeout-ms, null when akm's own default applied
+  limit: null;
+  n_notes: number;
+  n_clusters: number;
+  n_cases: number; // the one pool run
+  n_run: number;
+  n_scored: number;
+  n_errored: number;
+  n_paired: number; // pairs akm's judge looked at
+  seconds: number; // wall time of the improve run
+  served_models: Record<string, number>;
+  metrics: PoolMetrics | null;
+  error?: string;
+  results_dir: string;
+}
+
+function printPool(s: PoolSummary): void {
+  console.log(`\n${NAME} --pool | model ${s.model} | akm ${s.akm_version} | ${s.n_notes} notes in ${s.n_clusters} clusters | strategy ${s.strategy}${s.config_patch ? ` + ${s.config_patch.path}` : ""}${s.timeout_ms ? ` | --timeout-ms ${s.timeout_ms}` : ""}`);
+  const m = s.metrics;
+  if (!m) {
+    console.log(`  errored             ${s.error}`);
+    console.log(`  results             ${relative(ROOT, s.results_dir)}/`);
+    return;
+  }
+  console.log(`  unsafe retirements  ${m.unsafe.n} of ${m.unsafe.of} proposed, ${m.unsafe.staged} of them staged for unattended retirement`);
+  console.log(`  wrong successor     ${m.wrong_successor}`);
+  console.log(`  retire precision    ${cell(m.precision.safe, m.precision.retired, m.precision.value)}`);
+  console.log(`  retire recall       ${cell(m.recall.retired_safe, m.recall.of, m.recall.value)}  of the clusters with a note to retire`);
+  console.log(`  pairs               ${m.pairs.judged} judged of ${m.pairs.considered} considered, ${m.pairs.failed} failed; labels ${Object.entries(m.pairs.labels).filter(([, n]) => n > 0).map(([l, n]) => `${l} ${n}`).join(", ") || "none"}`);
+  console.log(`  model calls         ${m.calls.calls}, ${m.calls.failures} failed, ${m.calls.prompt_tokens + m.calls.completion_tokens} tokens`);
+  console.log(`  promote pass        ${m.chunks.total} chunks (${m.chunks.failed} failed), ${m.chunks.deferred_memories} memories deferred, ${m.chunks.promote_ops} promote ops (not scored)`);
+  console.log(`  anti-collapse       ${m.anti_collapse_injected === null ? "no warning" : `injected ${m.anti_collapse_injected}`}`);
+  console.log(`  cold-start budget   ${m.cold_start_budget ? `pool cut from ${m.cold_start_budget.from} to ${m.cold_start_budget.to} (${m.cold_start_budget.safe_chunks} safe chunks)` : "no warning"}`);
+  console.log(`  seconds             ${s.seconds}`);
+  const rows: string[][] = [["kind", "clusters", "hit", "retired safe", "retired unsafe", "wrong successor", "untouched"]];
+  for (const [kind, k] of Object.entries(m.classes)) if (k.clusters > 0) rows.push([kind, String(k.clusters), `${k.hit}/${k.with_safe_retirement}`, String(k.retired_safe), String(k.retired_unsafe), String(k.wrong_successor), String(k.untouched)]);
+  const w = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
+  for (const r of rows) console.log(`  ${r.map((x, i) => (i === 0 ? x.padEnd(w[i]) : x.padStart(w[i]))).join("  ")}`);
+  console.log(`  results             ${relative(ROOT, s.results_dir)}/`);
+}
+
+/**
+ * One run on the whole pool: a sandbox with every note of the pool as a memory, indexed, one `akm improve` with the strategy (consolidate unless --strategy says
+ * another), the proposals read back and scored against the labels. Not tried again on a rate limit: the run is one long call
+ * sequence, and the calls the endpoint turned away show in `calls.failures`.
+ */
+export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR), resultsParent = join(EVAL_DIR, "results")): Promise<PoolSummary> {
+  const dir = makeResultsDir(resultsParent, ctx.label);
+  console.log(`${NAME} --pool: ${Object.keys(pool.texts).length} notes in ${pool.clusters.length} clusters, one improve run (${ctx.overrides.strategy})`);
+  const sandbox = ctx.newSandbox();
+  let result: ReturnType<typeof scorePool>;
+  let improveJson: unknown = null;
+  let seconds = 0;
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    writeConfig(sandbox, patchedConfig(consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides));
+    Object.assign(sandbox.env, EMBEDDER_ENV);
+    writePoolNotes(sandbox, pool);
+    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: INDEX_TIMEOUT_MS });
+    const improve = await runAkm(sandbox, poolImproveArgs(ctx.overrides.strategy, ctx.timeoutMs), { timeoutMs: (ctx.timeoutMs ?? POOL_DEFAULT_BUDGET_MS) + POOL_KILL_SLACK_MS });
+    seconds = Number((improve.ms / 1000).toFixed(1));
+    if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
+    improveJson = JSON.parse(improve.stdout);
+    const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
+    result = scorePool(pool, improveJson, proposals);
+  } catch (e) {
+    result = { error: hideEndpoint((e as Error).message.slice(0, 300), ctx.baseUrl), metrics: null, retirements: [], served_models: {} };
+  } finally {
+    removeSandbox(sandbox);
+  }
+  const summary: PoolSummary = {
+    eval: NAME,
+    mode: "pool",
+    corpus: "public",
+    label: ctx.label,
+    date: new Date().toISOString(),
+    git_commit: gitCommit(),
+    model: ctx.model,
+    akm_version: ctx.version,
+    ...akmBuild(),
+    ...overrideSummary(ctx.overrides),
+    timeout_ms: ctx.timeoutMs ?? null,
+    limit: null,
+    n_notes: Object.keys(pool.texts).length,
+    n_clusters: pool.clusters.length,
+    n_cases: 1,
+    n_run: 1,
+    n_scored: result.error ? 0 : 1,
+    n_errored: result.error ? 1 : 0,
+    n_paired: result.metrics?.pairs.judged ?? 0,
+    seconds,
+    served_models: result.served_models,
+    metrics: result.metrics,
+    ...(result.error ? { error: result.error } : {}),
+    results_dir: dir,
+  };
+  writeFileSync(join(dir, "samples.jsonl"), pool.clusters.length > 0 ? `${clusterRows(pool, result.retirements).map((r) => JSON.stringify(r)).join("\n")}\n` : "");
+  if (improveJson) writeFileSync(join(dir, "improve.json"), `${hideEndpoint(JSON.stringify(improveJson, null, 2), ctx.baseUrl)}\n`);
+  const { results_dir: _dir, ...stored } = summary;
+  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
+  printPool(summary);
+  if (result.error) fail(`the pool run failed: ${result.error}`, 1);
+  return summary;
+}
+
+async function main(): Promise<void> {
+  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
+  try {
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -300,8 +431,12 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
-  const overrides = parseOverrides(values, STRATEGY, fail);
+  const overrides = parseOverrides(values, values.pool ? POOL_STRATEGY : STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
+  const timeoutMs = values["timeout-ms"] === undefined ? undefined : Number(values["timeout-ms"]);
+  if (timeoutMs !== undefined && !(Number.isInteger(timeoutMs) && timeoutMs > 0)) fail("--timeout-ms must be a positive integer");
+  if (timeoutMs !== undefined && !values.pool) fail("--timeout-ms is for --pool");
+  if (values.pool && (corpus !== "public" || limit !== undefined)) fail("--pool runs the public pool: leave out --corpus private, --corpus all and --limit");
 
   for (const c of corpora) {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.jsonl"))) {
@@ -311,7 +446,7 @@ async function main(): Promise<void> {
   const baseUrl = process.env.MODEL_BASE_URL?.trim();
   const model = process.env.MODEL_NAME?.trim();
   if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
-  const label = values.label ?? slug(model);
+  const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
   const newSandbox = () => createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
@@ -324,6 +459,10 @@ async function main(): Promise<void> {
   }
 
   const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
+  if (values.pool) {
+    await repeatRuns(repeat, label, (runLabel) => runPool({ ...ctx, label: runLabel, overrides, timeoutMs }));
+    return;
+  }
   const summaries: Summary[] = [];
   for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
