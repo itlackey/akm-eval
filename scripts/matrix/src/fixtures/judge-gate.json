@@ -1,0 +1,47 @@
+{
+  "eval": "judge-gate",
+  "corpus": "public",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:30:47.624Z",
+  "git_commit": "e8d6ee1",
+  "model": "gpt-5.6-terra",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "limit": null,
+  "n_cases": 106,
+  "n_run": 106,
+  "n_scored": 106,
+  "n_errored": 0,
+  "metrics": {
+    "good": {
+      "n": 28,
+      "passed": 2,
+      "rate": 0.0714
+    },
+    "bad": {
+      "n": 78,
+      "passed": 3,
+      "rate": 0.0385
+    },
+    "precision": {
+      "value": 0.4,
+      "passed_good": 2,
+      "passed": 5
+    },
+    "outcomes": {
+      "good": {
+        "pass": 2,
+        "review": 11,
+        "reject": 15,
+        "error": 0
+      },
+      "bad": {
+        "pass": 3,
+        "review": 25,
+        "reject": 50,
+        "error": 0
+      }
+    }
+  }
+}

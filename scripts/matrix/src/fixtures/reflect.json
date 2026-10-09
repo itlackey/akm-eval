@@ -1,0 +1,176 @@
+{
+  "eval": "reflect",
+  "corpus": "public",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:27:56.876Z",
+  "git_commit": "e8d6ee1",
+  "model": "gpt-5.6-terra",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "limit": null,
+  "n_cases": 50,
+  "n_run": 50,
+  "n_scored": 50,
+  "n_errored": 0,
+  "served": {
+    "gpt-5.6-terra": 50
+  },
+  "metrics": {
+    "defects": {
+      "n": 32,
+      "correct": 30,
+      "rate": 0.9375
+    },
+    "controls": {
+      "n": 18,
+      "correct": 11,
+      "rate": 0.6111
+    },
+    "classes": {
+      "description-period": {
+        "n": 6,
+        "correct": 6,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 6,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "description-quote": {
+        "n": 5,
+        "correct": 5,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 5,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "description-truncated": {
+        "n": 5,
+        "correct": 4,
+        "rate": 0.8,
+        "outcomes": {
+          "proposal": 5,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "defect_fixed": 1
+        }
+      },
+      "description-missing": {
+        "n": 5,
+        "correct": 4,
+        "rate": 0.8,
+        "outcomes": {
+          "proposal": 5,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_invented": 1
+        }
+      },
+      "when-to-use-missing": {
+        "n": 6,
+        "correct": 6,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 6,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "title-missing": {
+        "n": 5,
+        "correct": 5,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 5,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "retrieval-miss": {
+        "n": 5,
+        "correct": 5,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 5,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "unsupported-ask": {
+        "n": 5,
+        "correct": 2,
+        "rate": 0.4,
+        "outcomes": {
+          "proposal": 3,
+          "none": 2,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "no_extra_change": 3
+        }
+      },
+      "historical": {
+        "n": 5,
+        "correct": 1,
+        "rate": 0.2,
+        "outcomes": {
+          "proposal": 4,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "not_current": 4,
+          "no_extra_change": 2
+        }
+      },
+      "body-defect": {
+        "n": 3,
+        "correct": 3,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 3,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      }
+    },
+    "proposals": {
+      "n": 39,
+      "touched_body": 0
+    }
+  }
+}

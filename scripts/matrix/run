@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs a matrix of eval configurations in two stages and writes a decision table. See README.md ("Run a matrix").
+#
+#   scripts/matrix/run MATRIX.json --stage screen|confirm|report [--parallel N] [--out DIR] [--prefix NAME] [--only A,B] [--min-delta X] [--force] [--dry-run]
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v bun > /dev/null || { echo "matrix: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/run.ts" "$@"

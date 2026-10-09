@@ -1,0 +1,121 @@
+{
+  "eval": "retrieval",
+  "corpus": "public",
+  "collection": "library",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:36:46.257Z",
+  "git_commit": "e8d6ee1",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_queries": 136,
+  "n_assets": 260,
+  "index_seconds": {
+    "keyword": 1.1,
+    "semantic": 180.6
+  },
+  "n_scored": 101,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "metrics": {
+    "search": {
+      "n": 101,
+      "ndcg_10": 0.7957,
+      "p_5": 0.5446,
+      "success_5": 0.9703,
+      "mrr": 0.9016,
+      "recall_10": 0.8305,
+      "judged_10": 0.9594,
+      "banned_above": null
+    },
+    "curate": {
+      "n": 101,
+      "ndcg_10": 0.7957,
+      "p_5": 0.5446,
+      "success_5": 0.9703,
+      "mrr": 0.9016,
+      "recall_10": 0.8305,
+      "judged_10": 0.9594,
+      "banned_above": null
+    },
+    "semantic_search": {
+      "n": 101,
+      "ndcg_10": 0.802,
+      "p_5": 0.5564,
+      "success_5": 0.9604,
+      "mrr": 0.9392,
+      "recall_10": 0.8125,
+      "judged_10": 0.695,
+      "banned_above": null
+    },
+    "semantic_curate": {
+      "n": 101,
+      "ndcg_10": 0.802,
+      "p_5": 0.5564,
+      "success_5": 0.9604,
+      "mrr": 0.9392,
+      "recall_10": 0.8125,
+      "judged_10": 0.695,
+      "banned_above": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 25,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 25,
+        "abstained": 1,
+        "rate": 0.04
+      },
+      "semantic_search": {
+        "n": 25,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 25,
+        "abstained": 1,
+        "rate": 0.04
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 10,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 10,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 10,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 10,
+        "abstained": 0,
+        "rate": 0
+      }
+    }
+  }
+}
