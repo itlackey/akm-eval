@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, checkLesson, claims, distillConfig, distillOutcome, errorRow, failureMessage, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, normalize, scoreCase, selectCases, servedModels } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, checkLesson, checkUpdate, claims, diffBody, distillConfig, distillOutcome, errorRow, failureMessage, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, scoreCase, selectCases, servedModels } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -19,20 +19,25 @@ function assetsWith(cases: Record<string, unknown>[], memories: Record<string, s
     const files = memories[c.id as string] ?? ["m"];
     mkdirSync(join(root, "bundles", c.id as string, "memories"), { recursive: true });
     for (const f of files) writeFileSync(join(root, "bundles", c.id as string, "memories", `${f}.md`), `---\ndescription: d\n---\nThe memory ${f}.\n`);
+    if (c.expect === "update" && c.existing !== "missing" && c.existing !== undefined) {
+      mkdirSync(join(root, "bundles", c.id as string, "lessons"), { recursive: true });
+      writeFileSync(join(root, "bundles", c.id as string, "lessons", `${c.existing}.md`), "---\ndescription: d\n---\nThe old rule.\n");
+    }
   }
   return root;
 }
 
 const lessonCase = (extra: Record<string, unknown> = {}) => ({ id: "l1", class: "lesson-worthy", expect: "lesson", required: [["a fact"]], forbidden: [["a claim"]], good: "g", bad: "b", note: "n", ...extra });
+const updateCase = (extra: Record<string, unknown> = {}) => ({ id: "u1", class: "lesson-update", expect: "update", existing: "old", required: [["a new fact"]], forbidden: [["a claim"]], good: "g", bad: "b", note: "n", ...extra });
 const noneCase = (extra: Record<string, unknown> = {}) => ({ id: "n1", class: "dated-status", expect: "none", note: "n", ...extra });
 
 describe("loadCases", () => {
-  test("reads the public cases: 30, in five classes", () => {
+  test("reads the public cases: 38, in six classes", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(30);
+    expect(cases).toHaveLength(38);
     const count = (k: Class) => cases.filter((c) => c.class === k).length;
-    expect(CLASSES.map(count)).toEqual([8, 6, 6, 5, 5]);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(30);
+    expect(CLASSES.map(count)).toEqual([8, 6, 6, 5, 5, 8]);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(38);
     for (const c of cases) expect(c.memory.startsWith("---\n")).toBe(true);
   });
 
@@ -42,6 +47,10 @@ describe("loadCases", () => {
         expect(c.required.length).toBeGreaterThanOrEqual(3);
         expect(c.forbidden.length).toBeGreaterThanOrEqual(2);
         expect(c.good && c.bad).toBeTruthy();
+      } else if (c.expect === "update") {
+        expect(c.required.length).toBeGreaterThanOrEqual(1);
+        expect(c.forbidden.length).toBeGreaterThanOrEqual(3);
+        expect(c.good && c.bad && c.existing && c.existingBody).toBeTruthy();
       } else {
         expect([c.required, c.forbidden, c.good, c.bad]).toEqual([[], [], undefined, undefined]);
       }
@@ -53,7 +62,12 @@ describe("loadCases", () => {
       const files = readdirSync(c.dir, { recursive: true }).map(String).filter((f) => f.endsWith(".md"));
       if (c.class === "restates-asset") expect(files.filter((f) => f.startsWith("skills/") || f.startsWith("knowledge/")).length).toBeGreaterThanOrEqual(1);
       if (c.class === "duplicate-lesson") expect(files.filter((f) => f.startsWith("lessons/")).length).toBe(1);
+      if (c.class === "lesson-update") expect(files.filter((f) => f.startsWith("lessons/"))).toEqual([`lessons/${c.existing}.md`]);
     }
+  });
+
+  test("an update case holds its lesson under another name, so distill does not skip the memory", () => {
+    for (const c of loadCases(PUBLIC).filter((c) => c.class === "lesson-update")) expect(existsSync(join(c.dir, lessonFile(c)))).toBe(false);
   });
 
   test("some duplicate cases hold the lesson where distill would write it, and some under another name", () => {
@@ -77,6 +91,12 @@ describe("loadCases", () => {
     fails([lessonCase({ required: [[]] })], "list of lists");
     fails([lessonCase({ bad: undefined })], '"bad" example');
     fails([noneCase({ required: [["x"]] })], "no required or forbidden");
+    expect(loadCases(assetsWith([updateCase()]))[0]).toMatchObject({ expect: "update", existing: "old", existingBody: "The old rule." });
+    fails([updateCase({ existing: undefined })], '"existing"');
+    fails([updateCase({ existing: "memory-m-lesson" })], "would skip the memory");
+    fails([updateCase({ existing: "missing" })], '"existing"');
+    fails([updateCase({ required: [] })], "expects an update");
+    fails([updateCase({ expect: "lesson" })], "expects update");
     fails([lessonCase({ note: " " })], "no note");
     fails([lessonCase(), lessonCase()], "repeats an id");
     fails([lessonCase({ id: "Bad Id" })], "lower case");
@@ -92,13 +112,14 @@ describe("selectCases", () => {
   test("takes one case from each class in turn, in file order", () => {
     expect(selectCases(cases, 5).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01", "asset-01", "dup-01"]);
     expect(selectCases(cases, 3).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01"]);
-    expect(selectCases(cases, 7).map((c) => c.id)).toEqual(["lesson-01", "lesson-02", "claim-01", "claim-02", "status-01", "asset-01", "dup-01"]);
+    expect(selectCases(cases, 6).map((c) => c.id)).toEqual(["lesson-01", "claim-01", "status-01", "asset-01", "dup-01", "upd-01"]);
+    expect(selectCases(cases, 7).map((c) => c.id)).toEqual(["lesson-01", "lesson-02", "claim-01", "status-01", "asset-01", "dup-01", "upd-01"]);
   });
 
   test("a limit at or above the size runs everything", () => {
-    expect(selectCases(cases, 30)).toHaveLength(30);
-    expect(selectCases(cases, 99)).toHaveLength(30);
-    expect(selectCases(cases)).toHaveLength(30);
+    expect(selectCases(cases, 38)).toHaveLength(38);
+    expect(selectCases(cases, 99)).toHaveLength(38);
+    expect(selectCases(cases)).toHaveLength(38);
   });
 });
 
@@ -248,6 +269,68 @@ describe("the public cases check themselves", () => {
   }
 });
 
+describe("the public update cases check themselves", () => {
+  for (const c of loadCases(PUBLIC).filter((c) => c.expect === "update")) {
+    describe(c.id, () => {
+      const body = memoryBody(c.memory);
+      const existing = c.existingBody as string;
+
+      test("every new fact is in the memory and not in the existing lesson, and no forbidden claim is in either", () => {
+        for (const fact of c.required) {
+          expect(fact.some((p) => mentions(body, p)), `in the memory: ${fact[0]}`).toBe(true);
+          expect(fact.some((p) => mentions(existing, p)), `already in the lesson: ${fact[0]}`).toBe(false);
+        }
+        for (const group of c.forbidden) for (const p of group) expect([mentions(body, p), mentions(existing, p)], `forbidden: ${p}`).toEqual([false, false]);
+      });
+
+      test("the memory restates the lesson, so it shares words with it", () => {
+        const lessonWords = new Set(normalize(existing).split(" ").filter((w) => w.length > 3));
+        const shared = normalize(body).split(" ").filter((w) => lessonWords.has(w));
+        expect(new Set(shared).size).toBeGreaterThanOrEqual(3);
+      });
+
+      test("the good body keeps every line and adds the facts; the bad one adds a forbidden claim", () => {
+        expect(checkUpdate(c, existing, c.good as string)).toMatchObject({ dropped: [], missing: [], forbidden: [] });
+        const bad = checkUpdate(c, existing, c.bad as string);
+        expect(bad.dropped).toEqual([]);
+        expect(bad.forbidden.length).toBeGreaterThan(0);
+      });
+    });
+  }
+});
+
+describe("diffBody and checkUpdate", () => {
+  const existing = "- Wait for the first row.\n- A sleep hides the race.\n";
+
+  test("a body that keeps every line and adds some drops nothing; the added lines are as written", () => {
+    expect(diffBody(existing, "- Wait for the first row.\n- A sleep hides the race.\n- The export takes 10 s.\n")).toEqual({ dropped: [], added: ["- The export takes 10 s."] });
+  });
+
+  test("lines match in any case and spacing, and wherever they sit in the body", () => {
+    expect(diffBody(existing, "A  sleep hides THE race!\nNew line.\nWait for the first row\n")).toEqual({ dropped: [], added: ["New line."] });
+  });
+
+  test("a reworded, shortened or dropped line is dropped", () => {
+    expect(diffBody(existing, "- Wait for the first table row.\n- A sleep hides the race.\n").dropped).toEqual(["wait for the first row"]);
+    expect(diffBody(existing, "- Wait for the first row.\n").dropped).toEqual(["a sleep hides the race"]);
+    expect(diffBody(existing, "").dropped).toHaveLength(2);
+  });
+
+  test("nothing added is an empty list", () => {
+    expect(diffBody(existing, existing).added).toEqual([]);
+  });
+
+  const c = { required: [["10 s", "10 seconds"], ["ceiling"]], forbidden: [["always"]] };
+
+  test("the new facts are looked for in the added lines only, and so are the claims", () => {
+    expect(checkUpdate(c, existing, `${existing}The export has a 10 s ceiling.\n`)).toMatchObject({ missing: [], forbidden: [] });
+    expect(checkUpdate(c, existing, `${existing}The export has a ceiling.\n`).missing).toEqual(["10 s"]);
+    expect(checkUpdate(c, existing, `${existing}A 10 s ceiling, always.\n`).forbidden).toEqual(["always"]);
+    // the fact is in an existing line, not an added one
+    expect(checkUpdate({ required: [["race"]], forbidden: [] }, existing, `${existing}Nothing new.\n`).missing).toEqual(["race"]);
+  });
+});
+
 describe("distillConfig", () => {
   test("one LLM engine at temperature 0 with no thinking, and a strategy that runs distill and nothing else", () => {
     const c = distillConfig("http://localhost:8080/v1/", "m", false);
@@ -291,6 +374,16 @@ describe("what akm did", () => {
     expect(lessonProposals([{ status: "pending", proposals: [proposal({ gateDecision: undefined })] }])[0]).toMatchObject({ gate: null, scores: null, reason: null });
   });
 
+  test("lessonProposals marks the proposals that extend an existing lesson: the gate reason is distill-update", () => {
+    const found = lessonProposals([
+      { status: "pending", proposals: [proposal(), proposal({ ref: "bundle//lessons/old", gateDecision: { outcome: "deferred", reason: "distill-update", judgeReason: "adds a limit" } })] },
+    ]);
+    expect(found.map((p) => [p.ref, p.update, p.gate])).toEqual([
+      ["bundle//lessons/memory-m-lesson", false, "deferred/distill-review"],
+      ["bundle//lessons/old", true, "deferred/distill-update"],
+    ]);
+  });
+
   const improve = (action: Record<string, unknown>) => ({ ok: true, actions: [{ mode: "reflect-skipped", result: { ok: true, reason: "process-disabled" } }, action] });
 
   test("distillOutcome reads the distill action", () => {
@@ -311,7 +404,7 @@ describe("what akm did", () => {
 
   const c = loadCases(PUBLIC).find((x) => x.id === "lesson-02") as LoadedCase;
   const status = loadCases(PUBLIC).find((x) => x.id === "status-01") as LoadedCase;
-  const queued = (content: string, extra: Partial<Proposal> = {}): Proposal => ({ ref: "bundle//lessons/x", status: "pending", gate: "deferred/distill-review", scores: { novelty: 4 }, reason: "ok", content, ...extra });
+  const queued = (content: string, extra: Partial<Proposal> = {}): Proposal => ({ ref: "bundle//lessons/x", status: "pending", gate: "deferred/distill-review", scores: { novelty: 4 }, reason: "ok", content, update: false, ...extra });
   const run = (proposals: Proposal[], result: Record<string, unknown> = { outcome: "skipped", skipReason: "lesson_exists" }): CaseRun => ({ improve: improve({ mode: "distill", result }), proposals, seconds: 1.5 });
 
   test("scoreCase: a case that expects a lesson is good, bad or missed", () => {
@@ -373,6 +466,65 @@ describe("what akm did", () => {
     expect(row.served).toEqual(["m-1"]);
   });
 
+  describe("scoreCase: a lesson-update case", () => {
+    const u = loadCases(PUBLIC).find((x) => x.id === "upd-02") as LoadedCase;
+    const front = "---\ndescription: d\nwhen_to_use: w\ntype: lesson\nxrefs:\n  - memories/m\n---\n";
+    const update = (body: string, extra: Partial<Proposal> = {}): Proposal => queued(front + body, { ref: `bundle//lessons/${u.existing}`, gate: "deferred/distill-update", update: true, ...extra });
+    const all: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true };
+
+    test("right when one pending update on the existing lesson keeps every line, adds the facts and claims nothing else", () => {
+      const row = scoreCase(u, run([update(u.good as string)]));
+      expect(row).toMatchObject({ verdict: "right", outcome: "update", checks: all, gate: "deferred/distill-update", status: "pending", missing: [], forbidden: [], ratio: null });
+      expect(row.added).toEqual(["The runner has sorted the test files by name since version 4.2, which is when the order changed."]);
+    });
+
+    test("bad, naming the check that failed: a dropped line, a missing fact, a claim", () => {
+      const lines = (u.good as string).split("\n");
+      expect(scoreCase(u, run([update(lines.slice(1).join("\n"))]))).toMatchObject({ verdict: "bad", checks: { ...all, existing_kept: false } });
+      expect(scoreCase(u, run([update(`${lines.slice(0, 2).join("\n")}\nThe order changed.`)]))).toMatchObject({ verdict: "bad", checks: { ...all, new_facts: false }, missing: ["sorted * by name", "4.2"] });
+      const over = scoreCase(u, run([update(u.bad as string)]));
+      expect(over).toMatchObject({ verdict: "bad", checks: { ...all, no_extra_claims: false } });
+      expect(over.forbidden.length).toBeGreaterThan(0);
+    });
+
+    test("an update that adds nothing has no new facts", () => {
+      const row = scoreCase(u, run([update(`${(u.good as string).split("\n").slice(0, 2).join("\n")}\n`)]));
+      expect(row).toMatchObject({ verdict: "bad", checks: { ...all, new_facts: false }, added: [] });
+    });
+
+    test("a new lesson instead of the update is bad, and so is a new lesson beside it", () => {
+      const lesson = queued("---\ndescription: d\nwhen_to_use: w\n---\nCreate its own data.");
+      expect(scoreCase(u, run([lesson]))).toMatchObject({ verdict: "bad", outcome: "lesson", checks: { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: false } });
+      expect(scoreCase(u, run([update(u.good as string), lesson]))).toMatchObject({ verdict: "bad", outcome: "update", checks: { ...all, no_new_lesson: false } });
+    });
+
+    test("an update on another lesson, or one that is not pending, is not the update", () => {
+      expect(scoreCase(u, run([update(u.good as string, { ref: "bundle//lessons/another" })])).checks).toMatchObject({ update_proposed: false, existing_kept: null });
+      expect(scoreCase(u, run([update(u.good as string, { status: "rejected" })])).checks).toMatchObject({ update_proposed: false });
+    });
+
+    test("no proposal is missed, for a skip and for a judge's rejection; that is the result of akm without #1090 too", () => {
+      expect(scoreCase(u, run([], { outcome: "skipped", skipReason: "nothing_reusable" }))).toMatchObject({ verdict: "missed", outcome: "skipped", checks: { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: true }, added: null });
+      expect(scoreCase(u, run([], { outcome: "quality_rejected", reason: "redundant" }))).toMatchObject({ verdict: "missed", outcome: "rejected" });
+    });
+  });
+
+  test("scoreCase: an update proposal is its own outcome. It is wrong for a case that expects none, and missed for a case that expects a new lesson", () => {
+    const update = queued("---\ndescription: d\nwhen_to_use: w\n---\nBody.", { gate: "deferred/distill-update", update: true });
+    expect(scoreCase(status, run([update]))).toMatchObject({ verdict: "wrong", outcome: "update", gate: "deferred/distill-update" });
+    const row = scoreCase(c, run([update]));
+    expect(row).toMatchObject({ verdict: "missed", outcome: "update", missing: [], forbidden: [], ratio: null });
+    expect(row.lesson).toContain("Body.");
+  });
+
+  test("modelCalls adds up the calls in akm's usage report, and is null without one", () => {
+    expect(modelCalls({ usageReport: { byProcessEngineModel: [{ model: "a", calls: 3 }, { model: "b", calls: 1 }] } })).toBe(4);
+    expect(modelCalls({ usageReport: { byProcessEngineModel: [] } })).toBe(0);
+    expect(modelCalls({ ok: true })).toBeNull();
+    expect(modelCalls(null)).toBeNull();
+    expect(scoreCase(c, { improve: { usageReport: { byProcessEngineModel: [{ model: "a", calls: 2 }] }, actions: [{ mode: "distill", result: { outcome: "skipped", skipReason: "nothing_reusable" } }] }, proposals: [], seconds: 1 }).calls).toBe(2);
+  });
+
   test("scoreCase: a failed run is an error, whatever the case expects", () => {
     expect(scoreCase(c, run([], { outcome: "llm_failed", message: "timeout" }))).toMatchObject({ verdict: "error", outcome: "error", error: "timeout" });
     expect(errorRow(status, "akm exited 78", 2)).toMatchObject({ verdict: "error", expect: "none", class: "dated-status", seconds: 2, error: "akm exited 78" });
@@ -381,7 +533,7 @@ describe("what akm did", () => {
 
 describe("metrics", () => {
   const row = (id: string, klass: Class, verdict: Row["verdict"], extra: Partial<Row> = {}): Row => ({
-    ...errorRow({ id, class: klass, expect: klass === "lesson-worthy" || klass === "over-claim" ? "lesson" : "none" } as LoadedCase, "", 1),
+    ...errorRow({ id, class: klass, expect: klass === "lesson-worthy" || klass === "over-claim" ? "lesson" : klass === "lesson-update" ? "update" : "none" } as LoadedCase, "", 1),
     verdict,
     outcome: verdict === "good" || verdict === "bad" || verdict === "wrong" ? "lesson" : verdict === "right" ? "skipped" : verdict === "missed" ? "rejected" : "error",
     error: undefined,
@@ -409,8 +561,31 @@ describe("metrics", () => {
       "duplicate-lesson": { n: 0, wrong: 0, rate: null },
     });
     expect(m.bad_by).toEqual({ missing_fact: 1, forbidden_claim: 1, too_long: 1 });
-    expect(m.outcomes.lesson).toEqual({ lesson: 3, skipped: 0, rejected: 1, invalid: 0, error: 0 });
-    expect(m.outcomes.none).toEqual({ lesson: 1, skipped: 2, rejected: 0, invalid: 0, error: 1 });
+    expect(m.outcomes.lesson).toEqual({ lesson: 3, update: 0, skipped: 0, rejected: 1, invalid: 0, error: 0 });
+    expect(m.outcomes.none).toEqual({ lesson: 1, update: 0, skipped: 2, rejected: 0, invalid: 0, error: 1 });
+    expect(m.lesson_updates).toMatchObject({ n: 0, right: 0, rate: null });
+  });
+
+  test("lesson updates are counted apart: they are in neither good_lessons nor wrong_lessons", () => {
+    const ok: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true };
+    const upd = (id: string, verdict: Row["verdict"], outcome: Row["outcome"], checks: UpdateChecks | null) => ({ ...row(id, "lesson-update", verdict, { outcome, checks }), expect: "update" as const });
+    const m = metrics([
+      row("a", "lesson-worthy", "good"),
+      row("b", "duplicate-lesson", "right"),
+      row("c", "duplicate-lesson", "wrong", { outcome: "update" }),
+      upd("u1", "right", "update", ok),
+      upd("u2", "bad", "update", { ...ok, new_facts: false }),
+      upd("u3", "bad", "lesson", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: false }),
+      upd("u4", "missed", "skipped", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: true }),
+      upd("u5", "error", "error", null),
+    ]);
+    expect(m.good_lessons).toEqual({ n: 1, good: 1, rate: 1 });
+    expect(m.wrong_lessons).toEqual({ n: 2, wrong: 1, rate: 0.5 });
+    expect(m.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 1, no_extra_claims: 2, no_new_lesson: 3 } });
+    expect(m.by_class["lesson-update"]).toEqual({ n: 4, right: 1, rate: 0.25 });
+    expect(m.outcomes.update).toEqual({ lesson: 1, update: 2, skipped: 1, rejected: 0, invalid: 0, error: 1 });
+    expect(m.outcomes.none.update).toBe(1);
+    expect(m.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 0, too_long: 0 });
   });
 
   test("an empty run has no rates", () => {

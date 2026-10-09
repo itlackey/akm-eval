@@ -354,5 +354,157 @@
     "class": "duplicate-lesson",
     "expect": "none",
     "note": "The case holds a lesson under another name that already carries this memory's point. No new lesson is expected."
+  },
+  {
+    "id": "upd-01",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "export-with-the-vendor-colour-profile",
+    "required": [
+      ["output tab", "under the output"],
+      ["toward purple", "shifted * purple", "purple"]
+    ],
+    "forbidden": [
+      ["every vendor", "all vendors", "any vendor"],
+      ["srgb"],
+      ["spot colour", "spot color", "pantone"],
+      ["convert * cmyk", "cmyk"]
+    ],
+    "good": "Export the PDF with the print vendor's own colour profile, not the default one.\nA file in the wrong profile comes back from the vendor's preflight with shifted colours.\nThe profile is set in the export dialog, under the Output tab.\nWith the default profile the blues of the Hollin Reach cover shifted toward purple.",
+    "bad": "Export the PDF with the print vendor's own colour profile, not the default one.\nA file in the wrong profile comes back from the vendor's preflight with shifted colours.\nThe profile is set in the export dialog, under the Output tab.\nWith the default profile the blues of the Hollin Reach cover shifted toward purple.\nThe profile is set under the Output tab. Every vendor needs its own profile, and the default is sRGB, which always shifts blues toward purple.",
+    "note": "The memory restates the lesson's rule and adds where the profile is set and the symptom. A good update keeps both lesson lines and adds those two facts, without claiming that every vendor needs a profile or naming the default one."
+  },
+  {
+    "id": "upd-02",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "create-the-data-a-test-needs-inside-the-test",
+    "required": [
+      ["sorted * by name", "sorts * by name", "by name"],
+      ["4.2"]
+    ],
+    "forbidden": [
+      ["in parallel", "parallel"],
+      ["random order", "randomize", "randomise", "shuffle"],
+      ["reset the database", "truncate", "database reset"]
+    ],
+    "good": "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has sorted the test files by name since version 4.2, which is when the order changed.",
+    "bad": "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has sorted the test files by name since version 4.2, which is when the order changed.\nThe runner has sorted the test files by name since version 4.2. Run the tests in parallel with a random order, and reset the database between tests.",
+    "note": "The memory restates the lesson's rule and adds why the order changed: the runner sorts files by name since 4.2. A good update adds that one fact and no fix beyond creating the data in the test."
+  },
+  {
+    "id": "upd-03",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "link-the-fix-before-closing-a-ticket",
+    "required": [
+      ["an hour", "1 hour", "one hour"],
+      ["only * regression", "regression"]
+    ],
+    "forbidden": [
+      ["every ticket", "all tickets", "any ticket"],
+      ["mandatory", "always required"],
+      ["reopen"],
+      ["automatic", "automatically"]
+    ],
+    "good": "Link the commit or change that fixes a ticket before closing it.\nA ticket closed without a link cannot be checked later.\nFinding the fix for TRK-212 by searching the history took an hour.\nThe tracker's close form requires a link only for tickets labelled regression.",
+    "bad": "Link the commit or change that fixes a ticket before closing it.\nA ticket closed without a link cannot be checked later.\nFinding the fix for TRK-212 by searching the history took an hour.\nThe tracker's close form requires a link only for tickets labelled regression.\nFinding the fix by searching the history took an hour. The close form requires a link for every ticket, and the tracker reopens a ticket automatically when the link is missing.",
+    "note": "The memory restates the lesson's rule and adds what the missing link cost (an hour) and where the tracker asks for a link (only for regression tickets). A good update adds those facts without making the link mandatory for every ticket."
+  },
+  {
+    "id": "upd-04",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "name-the-files-a-delegated-task-may-touch",
+    "required": [
+      ["two files", "billing"],
+      ["large model * without a list", "large model * in scope", "stayed in scope"]
+    ],
+    "forbidden": [
+      ["all small models", "small models * always", "small models tend", "smaller models"],
+      ["every model", "all models"],
+      ["review the diff", "code review"],
+      ["sandbox", "read-only", "read only"]
+    ],
+    "good": "Name the files a delegated task may touch in the task itself.\nA model told only the goal edits files outside the task.\nThe small model also rewrote two files in the billing module when the task said only to tidy the notifications code.\nThe large model stayed in scope on the same task without a list.",
+    "bad": "Name the files a delegated task may touch in the task itself.\nA model told only the goal edits files outside the task.\nThe small model also rewrote two files in the billing module when the task said only to tidy the notifications code.\nThe large model stayed in scope on the same task without a list.\nThe small model rewrote two files in the billing module. All small models stray like this, so every model needs a read-only sandbox and a review of the diff.",
+    "note": "The memory restates the lesson's rule and adds the damage (two billing files) and a limit (the large model stayed in scope without a list). A good update adds those facts and does not say small models always stray."
+  },
+  {
+    "id": "upd-05",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "share-files-with-a-group-not-each-person",
+    "required": [
+      ["direct entry"],
+      ["ten minutes", "10 minutes"]
+    ],
+    "forbidden": [
+      ["instantly", "immediately", "at once"],
+      ["shared drive", "shared drives"],
+      ["oauth", "revoke * token"],
+      ["every file", "all files"]
+    ],
+    "good": "Share a Drive file with a group, not with each person.\nA person who leaves the team keeps access to the files shared with them directly.\nAdding the group did not close the access; removing the direct entry did.\nA change to the group reaches the files within about ten minutes.",
+    "bad": "Share a Drive file with a group, not with each person.\nA person who leaves the team keeps access to the files shared with them directly.\nAdding the group did not close the access; removing the direct entry did.\nA change to the group reaches the files within about ten minutes.\nRemove the direct entry. A change to the group reaches every file instantly, so move all files into shared drives and revoke the OAuth tokens.",
+    "note": "The memory restates the lesson's rule and adds the step that closed the access (removing the direct entry, not just adding the group) and the delay of a group change (about ten minutes). A good update adds those facts and does not say the change is instant."
+  },
+  {
+    "id": "upd-06",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "send-one-alert-per-incident",
+    "required": [
+      ["41"],
+      ["incident * label", "label * incident"],
+      ["no label * alone", "without a label * alone", "no label"]
+    ],
+    "forbidden": [
+      ["rate limit", "throttl"],
+      ["escalat"],
+      ["across incidents", "across services"],
+      ["silence", "snooze"]
+    ],
+    "good": "Send one alert per incident, not one per failing check.\nRepeated alerts for the same incident train people to mute the channel.\nDuring the queue outage the pager sent 41 alerts in 20 minutes.\nThe alert tool groups by the incident label, and a check with no label is still sent alone.",
+    "bad": "Send one alert per incident, not one per failing check.\nRepeated alerts for the same incident train people to mute the channel.\nDuring the queue outage the pager sent 41 alerts in 20 minutes.\nThe alert tool groups by the incident label, and a check with no label is still sent alone.\nThe pager sent 41 alerts in 20 minutes. The alert tool groups by the incident label and groups across services, so rate limit the pager and snooze the rest.",
+    "note": "The memory restates the lesson's rule and adds the count (41 alerts in 20 minutes) and how grouping works (the incident label; an unlabelled check is sent alone). A good update adds those facts without proposing a rate limit or escalation."
+  },
+  {
+    "id": "upd-07",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "stop-a-script-at-the-first-failed-step",
+    "required": [
+      ["28"],
+      ["yesterday"]
+    ],
+    "forbidden": [
+      ["retry", "retries"],
+      ["pipefail"],
+      ["email", "alert"],
+      ["every tool", "all tools"]
+    ],
+    "good": "Check the exit code of every command the script runs, and stop on a non-zero one.\nA script that ignores a failed step reports success on a broken result.\nThe nightly export printed done after its upload failed with exit code 28, a timeout, so the bucket held yesterday's file.",
+    "bad": "Check the exit code of every command the script runs, and stop on a non-zero one.\nA script that ignores a failed step reports success on a broken result.\nThe nightly export printed done after its upload failed with exit code 28, a timeout, so the bucket held yesterday's file.\nThe upload failed with exit code 28, so the bucket held yesterday's file. Retry the upload on every timeout, and set pipefail and email the team on every failure.",
+    "note": "The memory restates the lesson's rule and adds the exit code (28, a timeout) and the consequence (the bucket held yesterday's file). A good update adds those facts and no retry or alert."
+  },
+  {
+    "id": "upd-08",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "keep-a-heading-with-its-paragraph",
+    "required": [
+      ["break-after: avoid", "break after avoid"],
+      ["flex container", "flex"]
+    ],
+    "forbidden": [
+      ["orphans", "widows"],
+      ["every browser", "all browsers"],
+      ["break-inside"],
+      ["fixed in * later", "newer version", "upgrade"]
+    ],
+    "good": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings.\nThe property has no effect inside a flex container in Paged.js 0.4.",
+    "bad": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings.\nThe property has no effect inside a flex container in Paged.js 0.4.\nUse break-after: avoid on headings. It never works in flex containers in any browser, so set orphans and widows and break-inside: avoid, or upgrade Paged.js.",
+    "note": "The memory restates the lesson's rule and adds the property to use and its limit (no effect inside a flex container in Paged.js 0.4). A good update adds those facts and does not generalise the limit."
   }
 ]
