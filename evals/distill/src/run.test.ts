@@ -180,6 +180,15 @@ describe("runCorpus", () => {
     expect(existsSync(improve.bundle.replace(/\/bundle$/, ""))).toBe(false); // the sandbox is removed
   });
 
+  test("runs the strategy it is given, and records it with the config patch's path and SHA-256", async () => {
+    const overrides = { strategy: "lab-strategy", configPatch: { path: "patches/p.json", sha256: "abc123", patch: {} } };
+    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides }, assetsFor(scenarios.slice(0, 1))));
+    expect(calls().filter((c) => c.args[0] === "improve").at(-1).args.slice(0, 4)).toEqual(["improve", "memories/m", "--strategy", "lab-strategy"]);
+    expect(summary).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
+    const plain = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
+    expect(plain).toMatchObject({ strategy: "distill-only", config_patch: null });
+  });
+
   test("each case has a sandbox of its own, and the queue is read back for every state", async () => {
     const before = calls().length;
     await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 2))));

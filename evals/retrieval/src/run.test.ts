@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { collectionsFor, runCollection, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
@@ -137,6 +138,26 @@ describe("runCollection", () => {
 
     // q1, q2 and q4 are all scored for curate, and curate put every relevant asset first.
     expect(s.metrics.curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
+  });
+
+  test("counts the queries with an errored call in any column as n_errored", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection("public", "library", ctx, folders));
+    expect(s.errored.search).toBe(1);
+    expect(s.n_errored).toBe(1); // q4, whose search call failed
+    const clean = setup(QUERIES.filter((q) => q.id !== "q4"), QRELS.filter((r) => r.id !== "q4"));
+    expect((await quiet(() => runCollection("public", "library", clean.ctx, clean.folders))).n_errored).toBe(0);
+  });
+
+  test("repeatRuns runs a collection N times into <label>-rN-<collection> and writes the spread beside them", async () => {
+    const { ctx, folders } = setup();
+    const runs = await quiet(() => repeatRuns(2, "t-library", (runLabel) => runCollection("public", "library", { ...ctx, label: `t-r${runLabel.slice(-1)}` }, folders)));
+    expect(runs.map((r) => r.label)).toEqual(["t-r1", "t-r2"]);
+    const day = new Date().toISOString().slice(0, 10);
+    expect(readdirSync(folders.results).sort()).toEqual([`${day}-t-library-repeat-summary.json`, `${day}-t-r1-library`, `${day}-t-r2-library`]);
+    const spread = JSON.parse(readFileSync(join(folders.results, `${day}-t-library-repeat-summary.json`), "utf8"));
+    expect(spread).toMatchObject({ eval: "retrieval", repeat: 2, n_errored: { min: 1, max: 1, mean: 1 }, metrics: { search: { n: { min: 2, max: 2, mean: 2 } } } });
+    expect(spread.model).toBeUndefined();
   });
 
   test("scores the semantic columns from the semantic index: its own answers, its own errors", async () => {

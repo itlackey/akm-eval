@@ -2,16 +2,19 @@
 // consolidate: runs akm's consolidate on pairs of notes whose right outcome is known, with the model under test as
 // its engine, and counts the notes it proposes to retire that held a claim the other lacked. See ../README.md.
 //
-//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, EMBEDDER_ENV, RELATIONS, type Row, consolidateConfig, errorRow, metrics, noteAges, parseCases, pct, rowFromRun, selectCases } from "./lib.ts";
 
 const NAME = "consolidate";
+const STRATEGY = "consolidate"; // the strategy akm ships for consolidate alone
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const INDEX_TIMEOUT_MS = 2 * 60_000;
@@ -20,7 +23,7 @@ const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdic
 const RATE_LIMIT_TRIES = 4; // times a case is tried again when the endpoint rate limits it
 const RATE_LIMIT_WAIT_MS = 10_000; // the wait before the first new try, doubled before each one after it
 
-const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.
@@ -28,6 +31,9 @@ engine, and counts the retirements that lose a claim. Settings come from .env at
   --corpus  public (default) reads assets/. private reads private/consolidate/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   run N cases, taking the first of each relation in turn
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
@@ -46,6 +52,9 @@ interface Summary {
   akm_bin: string;
   akm_build: string | null;
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
@@ -145,7 +154,7 @@ export function failureHint(stderr: string): string {
   return line ? ` (akm said: ${line.trim().slice(0, 150)})` : "";
 }
 
-type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; rateLimitWaitMs?: number };
+type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; rateLimitWaitMs?: number; overrides?: Overrides };
 
 /** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
 export function hideEndpoint(text: string, baseUrl: string): string {
@@ -162,11 +171,12 @@ async function tryCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: 
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = ctx.newSandbox();
   try {
-    writeConfig(sandbox, consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+    const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+    writeConfig(sandbox, patchedConfig(consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey), overrides));
     Object.assign(sandbox.env, EMBEDDER_ENV);
     writeNotes(sandbox, c);
     await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: INDEX_TIMEOUT_MS });
-    const improve = await runAkm(sandbox, ["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"], { timeoutMs: IMPROVE_TIMEOUT_MS });
+    const improve = await runAkm(sandbox, ["improve", "--strategy", overrides.strategy, "--no-sync", "--json-to-stdout", "--format", "json"], { timeoutMs: IMPROVE_TIMEOUT_MS });
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
     const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
     const row = rowFromRun(c, JSON.parse(improve.stdout), proposals, seconds());
@@ -253,6 +263,7 @@ export async function runCorpus(
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
@@ -272,9 +283,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -287,6 +298,9 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -309,10 +323,10 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
 
-  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit };
+  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, ctx));
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 
 if (import.meta.main) {

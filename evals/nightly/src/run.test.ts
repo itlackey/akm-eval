@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, wr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { type Item, applyFix, loadNight, refOf } from "./lib.ts";
+import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
+import { type Item, applyFix, loadNight, nightlyConfig, refOf } from "./lib.ts";
 import { feedbackArgs, hideEndpoint, plant, runCorpus } from "./run.ts";
 
 const night = loadNight(join(import.meta.dir, "..", "assets"));
@@ -45,13 +47,14 @@ if (cmd === "index") {
   json({ ok: true });
 } else if (cmd === "improve") {
   const strategy = args[args.indexOf("--strategy") + 1];
-  if (strategy !== "default" || !has("--require-engines") || !has("--no-sync") || !has("--json-to-stdout") || !has("--timeout-ms")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  writeFileSync(process.env.FAKE_LOG + ".config", JSON.stringify(config));
+  if (strategy !== (scenario.strategy ?? "default") || !has("--require-engines") || !has("--no-sync") || !has("--json-to-stdout") || !has("--timeout-ms")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   if (scenario.improveFails) { console.error(JSON.stringify({ ok: false, error: scenario.improveFails })); process.exit(78); }
   apply(scenario.improveWrites);
   writeFileSync(state, JSON.stringify((scenario.proposals ?? []).map((p) => ({ ...p, status: "pending" }))));
   json(scenario.improve);
 } else if (cmd === "proposal" && sub === "drain") {
-  if (!has("--promote") || !has("--yes") || args[args.indexOf("--strategy") + 1] !== "default") { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (!has("--promote") || !has("--yes") || args[args.indexOf("--strategy") + 1] !== (scenario.strategy ?? "default")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   apply(scenario.drain?.apply);
   const accepted = new Set(scenario.drain?.accept ?? []);
   writeFileSync(state, JSON.stringify(proposals().map((p) => (accepted.has(p.id) ? { ...p, status: "accepted" } : p))));
@@ -220,6 +223,53 @@ describe("runCorpus", () => {
     expect(summary).toMatchObject({ eval: "nightly", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_items: 6, n_planted: 6, improve_ok: true, skipped_processes: [] });
   });
 
+  test("passes the strategy to improve and to the drain, merges the config patch into the config, and records both", async () => {
+    const { ctx, folders, root, commands } = setup(IDS, { ...good(), strategy: "lab-night" });
+    writeFileSync(join(root, "patch.json"), JSON.stringify({ semanticSearchMode: "auto", improve: { strategies: { "lab-night": { engine: "nightly", processes: { reflect: { enabled: false } } } } }, registries: ["x"] }));
+    const configPatch = loadConfigPatch("patch.json", root);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "lab-night", configPatch } }, folders));
+    const log = commands();
+    expect(log.find((l) => l.startsWith("improve "))).toContain("--strategy lab-night ");
+    expect(log.find((l) => l.startsWith("proposal drain"))).toBe("proposal drain --promote --strategy lab-night --yes --format json");
+    const seen = JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"));
+    expect(seen).toEqual({ ...nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey), registries: ["x"], improve: { strategies: { "lab-night": { engine: "nightly", processes: { reflect: { enabled: false } } } } } }); // arrays replace
+    expect(summary).toMatchObject({ strategy: "lab-night", config_patch: { path: "patch.json", sha256: configPatch.sha256 } });
+    expect(resultsOf(folders).summary).toMatchObject({ strategy: "lab-night", config_patch: { path: "patch.json", sha256: configPatch.sha256 } });
+  });
+
+  test("without the flags it runs the default strategy and the eval's own config, and records the strategy and no patch", async () => {
+    const { ctx, folders, root } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(summary).toMatchObject({ strategy: "default", config_patch: null });
+    expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+    const same = setup(IDS, good());
+    await quiet(() => runCorpus("public", { ...same.ctx, overrides: defaultOverrides("default") }, same.folders));
+    expect(JSON.parse(readFileSync(`${join(same.root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+  });
+
+  test("counts the items akm reports an error for as n_errored, 0 for a night without one", async () => {
+    const clean = setup(IDS, good());
+    expect((await quiet(() => runCorpus("public", clean.ctx, clean.folders))).n_errored).toBe(0);
+    const failing = good();
+    (failing.improve as { actions: unknown[] }).actions.unshift({ ref: "agents/playwright/playwright-explorer", mode: "reflect-failed", result: { reason: "provider_error", error: "HTTP 500" } });
+    const { ctx, folders } = setup(IDS, failing);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(summary.n_errored).toBe(1);
+    expect(resultsOf(folders).rows.filter((r) => r.error).map((r) => r.id)).toEqual(["retrieval-miss-01"]);
+  });
+
+  test("repeatRuns runs the night N times into <label>-r1 to -rN and writes the spread of its metrics and n_errored", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const runs = await quiet(() => repeatRuns(2, "t", (label) => runCorpus("public", { ...ctx, label }, folders)));
+    expect(runs).toHaveLength(2);
+    const files = readdirSync(folders.results).sort();
+    const day = new Date().toISOString().slice(0, 10);
+    expect(files).toEqual([`${day}-t-r1`, `${day}-t-r2`, `${day}-t-repeat-summary.json`]);
+    const spread = JSON.parse(readFileSync(join(folders.results, files[2] as string), "utf8"));
+    expect(spread).toMatchObject({ eval: "nightly", repeat: 2, label: "t", n_errored: { min: 0, max: 0, mean: 0 }, metrics: { items: { ok: { min: 6, max: 6, mean: 6 } } } });
+    expect(readdirSync(join(folders.results, files[0] as string))).not.toContain(".running");
+  });
+
   test("scores a good night: every item right, no harm, no failed call, and the timing, the drain and the pair pass in the summary", async () => {
     const { ctx, folders } = setup(IDS, good());
     await quiet(() => runCorpus("public", ctx, folders));
@@ -321,8 +371,21 @@ describe("the command", () => {
     expect(run(["--corpus", "some"], model).err).toContain('--corpus must be public, private or all, not "some"');
     expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
     expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
+    expect(run(["--repeat", "0"], model).err).toContain("--repeat must be a positive integer");
+    expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
+    expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
+    expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
     expect(run([]).err).toContain("set MODEL_BASE_URL and MODEL_NAME in .env");
     expect(run(["--help"]).out).toContain("Needs akm 0.9.26 or later");
+    expect(run(["--help"]).out).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
+  });
+
+  test("takes --strategy, --config-patch and --repeat, and goes on to the akm check", () => {
+    const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
+    dirs.push(root);
+    writeFileSync(join(root, "patch.json"), "{}");
+    const done = run(["--strategy", "thorough", "--config-patch", join(root, "patch.json"), "--repeat", "2"], model);
+    expect(done.err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
   test("refuses an akm older than the one it is written for", () => {

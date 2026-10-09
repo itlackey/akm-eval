@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the promotion eval. See README.md.
 #
-#   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
+#   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
