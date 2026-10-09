@@ -69,6 +69,8 @@ Models come from `.env`. Copy `.env.example` to `.env` and fill it in.
 
 Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
 
+`nightly`, `consolidate`, `distill`, `reflect` and `promotion` also take `--strategy NAME` and `--config-patch FILE`, to run an akm strategy or a config other than the eval's own; `summary.json` records both.
+
 Each eval's README says what else it needs. An eval with Python code needs [uv](https://docs.astral.sh/uv/). An eval that uses akm needs akm on `PATH`, or `AKM_BIN` set in `.env`. One that scores akm's semantic search also downloads akm's embedding model (133 MB) the first time, into `.cache/`, and keeps the semantic index it builds there, in `.cache/akm-index/`, for the next run.
 
 ## Test an unreleased akm
@@ -83,7 +85,7 @@ AKM_BIN="bun ~/code/github/itlackey/akm/src/cli.ts" evals/retrieval/run --corpus
 
 ## Repeat a run
 
-A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `evals/promotion` and `evals/distill` take `--repeat N`, which runs the corpus N times, each a whole run into its own results folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the same `metrics` as a summary, with every number replaced by its `min`, `max` and `mean` over the runs, and the same three for `n_errored` and `seconds` (the wall time of each run), because a spread over runs that had errors misleads without them. A run without `--repeat` is unchanged. With `--repeat` the side-by-side table of `--corpus all` is not printed; read each corpus's repeat summary. The code is `lib/repeat.ts`.
+A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `retrieval`, `judge-gate`, `reflect`, `distill`, `consolidate`, `extract`, `nightly` and `promotion` under `evals/` take `--repeat N`, which runs the corpus N times, each a whole run into its own results folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the same `metrics` as a summary, with every number replaced by its `min`, `max` and `mean` over the runs, and the same three for `n_errored` and `seconds` (the wall time of each run), because a spread over runs that had errors misleads without them. A run without `--repeat` is unchanged. With `--repeat` the side-by-side table of `--corpus all` is not printed; read each corpus's repeat summary. The code is `lib/repeat.ts`.
 
 ```
 evals/promotion/run --corpus public --repeat 4 --label pr1071-2

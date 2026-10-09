@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the consolidate eval. See README.md.
 #
-#   evals/consolidate/run [--corpus public|private|all] [--limit N] [--label NAME]
+#   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+#   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"

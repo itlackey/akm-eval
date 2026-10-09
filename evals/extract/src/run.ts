@@ -2,12 +2,13 @@
 // extract: runs akm's extract on each session, with the model under test as akm's engine, and scores the memories it
 // saves. See ../README.md.
 //
-//   evals/extract/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, errorRow, extractConfig, failureMessage, loadCases, metrics, pct, savedMemories, scoreCase, selectCases } from "./lib.ts";
 
@@ -17,7 +18,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
 
 Runs akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 akm's engine, and scores the memories it saves. Settings come from .env at the repository root.
@@ -25,6 +26,8 @@ akm's engine, and scores the memories it saves. Settings come from .env at the r
   --corpus  public (default) reads assets/. private reads private/extract/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   run N sessions, taken from each class in turn
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -199,9 +202,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`extract: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -214,6 +217,8 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -236,8 +241,8 @@ async function main(): Promise<void> {
   }
   const config = extractConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim());
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, { config, baseUrl, version, model, label, limit }));
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit }))));
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 
 if (import.meta.main) {

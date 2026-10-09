@@ -22,6 +22,7 @@ evals/retrieval/run --corpus all
 
 - `--corpus` picks the assets. `public` runs the library and the books, each on its own, and prints them side by side. `private` runs their private copies. `own` runs your own set, with keyword search only: see "Run your own set". `all` runs public and private, and prints the public and the private result of each collection side by side, never as one number.
 - `--limit N` runs N queries of each collection, in the task and non-task proportion of its whole set. Use it to check a setup. It scores keyword search only, and takes under a minute.
+- `--repeat N` runs each collection N times into `<label>-r1-<collection>` to `<label>-rN-<collection>` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-<collection>-repeat-summary.json` beside them. Retrieval has no model, so the spread is of the timings; the semantic index is kept between the runs. See "Repeat a run" in the root README.
 - `--label NAME` names the results folders, `<UTC date>-<label>-<collection>`. The default label is `akm-<version>`.
 
 The private run reads `private/retrieval/assets/`. Make it first with `./generate-assets --only retrieval`. The run stops with an error when it is missing. The own run reads `private/retrieval/own/`, and stops with an error that says how to make a set when the folder holds none.

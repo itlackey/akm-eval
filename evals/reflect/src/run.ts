@@ -2,12 +2,14 @@
 // reflect: runs akm's reflect on one asset at a time, with the model under test as its engine, and scores what it
 // proposes with checks that need no judge. See ../README.md.
 //
-//   evals/reflect/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, type Metrics, type Row, CLASSES, STRATEGY, atLeast, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel } from "./lib.ts";
 
@@ -17,7 +19,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 export const MIN_AKM = "0.9.25-alpha.3"; // the first release where reflect changes only the frontmatter
 const GIVE_UP_AFTER = 5; // consecutive cases that error, before any case gets an outcome
 
-const USAGE = `Usage: evals/reflect/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's reflect on each case's note, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 its engine, and scores the proposal. Settings come from .env at the repository root.
@@ -25,6 +27,9 @@ its engine, and scores the proposal. Settings come from .env at the repository r
   --corpus  public (default) reads assets/. private reads private/reflect/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   run the first N cases. The first ten hold each class once.
+  --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
@@ -43,6 +48,9 @@ interface Summary {
   akm_bin: string;
   akm_build: string | null;
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
@@ -60,6 +68,7 @@ interface Ctx {
   version: string;
   label: string;
   limit?: number;
+  overrides?: Overrides;
 }
 
 /** A failure that ends the run with a message. It is thrown, so what the run holds is cleaned up on the way out. */
@@ -90,20 +99,21 @@ const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").
  * One case in a bundle of its own: the note, the negative feedback recorded, reflect run on that asset alone, and the
  * proposal read back from the queue. akm exits 0 whatever reflect did, so what reflect did comes from the result.
  */
-export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey">): Promise<Row> {
+export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides">): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
   try {
-    writeConfig(sandbox, reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+    const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+    writeConfig(sandbox, patchedConfig(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey), overrides));
     const file = join(sandbox.dir, "bundle", c.path);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, c.source);
     const ref = refOf(c.path);
     await runAkmJson(sandbox, ["index"]);
     await runAkmJson(sandbox, ["feedback", ref, "--negative", "--reason", c.feedback]);
-    const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", STRATEGY, "--json-to-stdout"]);
+    const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", overrides.strategy, "--json-to-stdout"]);
     const { outcome, reason } = reflectOutcome(improve);
     const served = servedModel(improve);
     if (outcome !== "proposal") return makeRow(c, { outcome, reason: hide(reason), served, seconds: seconds() });
@@ -205,6 +215,7 @@ export async function runCorpus(
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
@@ -221,9 +232,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`reflect: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -236,6 +247,9 @@ async function main(): Promise<void> {
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
@@ -258,10 +272,10 @@ async function main(): Promise<void> {
   }
   if (!atLeast(version, MIN_AKM)) fail(`akm ${version} still rewrites the body. This eval needs akm ${MIN_AKM} or later.`);
 
-  const ctx: Ctx = { baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit };
+  const ctx: Ctx = { baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(await runCorpus(c, ctx));
-  if (summaries.length === 2) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
 }
 
 if (import.meta.main) {

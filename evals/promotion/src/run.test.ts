@@ -46,7 +46,7 @@ if (args[0] === "proposal" && args[1] === "list" && args[args.indexOf("--status"
   process.exit(0);
 }
 if (args[0] === "proposal" && args[1] === "drain") {
-  if (!has("--judgment") || args[args.indexOf("--strategy") + 1] !== "promotion" || has("--promote")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (!has("--judgment") || args[args.indexOf("--strategy") + 1] !== (process.env.FAKE_STRATEGY ?? "promotion") || has("--promote")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   const bundle = process.env.AKM_BUNDLE_DIR;
   writeFileSync(join(data, "seen.json"), JSON.stringify({ config: JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8")), library: existsSync(join(bundle, "knowledge")) ? readdirSync(join(bundle, "knowledge")).sort() : [] }));
   const result = { ok: true, staged: [], rejected: [], deferred: [], failed: [] };
@@ -126,6 +126,23 @@ describe("runCorpus", () => {
     const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.map((r) => r.outcome)).toEqual(["accept", "defer", "reject", "accept", "reject", "accept", "error", "reject"]);
     expect(rows[2].reason).toBe("a duplicate of a note");
+  });
+
+  test("runs the strategy it is given, and records it with the config patch's path and SHA-256", async () => {
+    process.env.FAKE_STRATEGY = "lab-strategy";
+    try {
+      const { ctx, folders } = setup(cases);
+      const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "lab-strategy", configPatch: { path: "patches/p.json", sha256: "abc123", patch: {} } } }, folders));
+      expect(summary).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
+      expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
+    } finally {
+      delete process.env.FAKE_STRATEGY;
+    }
+  });
+
+  test("without the flags it runs its own strategy and records no patch", async () => {
+    const { ctx, folders } = setup(cases);
+    expect(await quiet(() => runCorpus("public", ctx, folders))).toMatchObject({ strategy: "promotion", config_patch: null });
   });
 
   test("writes the endpoint of a failed call as <MODEL_BASE_URL>", async () => {

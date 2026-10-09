@@ -28,6 +28,9 @@ evals/consolidate/run --corpus all
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
 - `--limit N` runs N cases, taking the first case of each relation in turn. Use it to check a setup.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
+- `--strategy NAME` runs the akm strategy NAME in place of `consolidate`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
+- `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 - `--pool` runs the whole pool in one sandbox instead of the cases. See the next section.
 
@@ -45,9 +48,11 @@ The per-case run gives consolidate one pair at a time. A real night gives it a w
 ```
 evals/consolidate/run --pool
 evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
+evals/consolidate/run --pool --strategy catchup --label catchup
+evals/consolidate/run --pool --config-patch antiCollapse-off.json --repeat 3
 ```
 
-It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/pool.ts`. `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
+It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/pool.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
 
 `--timeout-ms N` is akm's own wall-clock budget for the run (akm's default is 2 hours). A short one makes akm cut the pool to what the budget covers, using `consolidate.p90ChunkSecondsDefault` (30 seconds a chunk unless set), and akm says so in its "cold-start budget" warning. Without it that warning cannot appear.
 

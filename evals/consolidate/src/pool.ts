@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { Sandbox } from "../../../lib/akm/akm.ts";
 import { nameOfRef, retireProposals, servedModels } from "./lib.ts";
 
-/** The strategy the pool run gives akm. The one place to change it. */
+/** The strategy the pool run gives akm unless --strategy names another. The one place to change it. */
 export const POOL_STRATEGY = "consolidate";
 
 export const KINDS = ["duplicate", "triple", "subsumed", "supersedes", "overlap", "contradicts", "lookalike", "single"] as const;
@@ -88,8 +88,8 @@ export function writePoolNotes(sandbox: Sandbox, pool: Pool, now = Date.now()): 
 }
 
 /** The arguments of the one akm run. `--timeout-ms` is akm's wall-clock budget for the run; leave it out for akm's own 2 hours. */
-export function poolImproveArgs(timeoutMs?: number): string[] {
-  return ["improve", "--strategy", POOL_STRATEGY, "--no-sync", "--json-to-stdout", "--format", "json", ...(timeoutMs ? ["--timeout-ms", String(timeoutMs)] : [])];
+export function poolImproveArgs(strategy: string, timeoutMs?: number): string[] {
+  return ["improve", "--strategy", strategy, "--no-sync", "--json-to-stdout", "--format", "json", ...(timeoutMs ? ["--timeout-ms", String(timeoutMs)] : [])];
 }
 
 export type Verdict = "safe" | "unsafe" | "wrong_successor";

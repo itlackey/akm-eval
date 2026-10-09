@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createSandbox } from "../../../lib/akm/akm.ts";
+import { runPool } from "./run.ts";
 import { KINDS, type Kind, type Pool, POOL_STRATEGY, budgetWarnings, clusterRows, judgeRetirement, loadPool, poolImproveArgs, poolMetrics, poolProblems, retirementsFrom, scorePool, usageTotals, writePoolNotes } from "./pool.ts";
 
 const POOL_DIR = join(import.meta.dir, "..", "assets", "pool");
@@ -128,8 +130,9 @@ describe("writePoolNotes", () => {
 describe("poolImproveArgs", () => {
   test("runs one consolidate improve with no sync, and passes akm's budget only when given", () => {
     expect(POOL_STRATEGY).toBe("consolidate");
-    expect(poolImproveArgs()).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"]);
-    expect(poolImproveArgs(60000).slice(-2)).toEqual(["--timeout-ms", "60000"]);
+    expect(poolImproveArgs(POOL_STRATEGY)).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"]);
+    expect(poolImproveArgs("catchup").slice(0, 3)).toEqual(["improve", "--strategy", "catchup"]);
+    expect(poolImproveArgs("catchup", 60000).slice(-2)).toEqual(["--timeout-ms", "60000"]);
   });
 });
 
@@ -304,5 +307,72 @@ describe("scorePool and clusterRows", () => {
     expect(rows.find((r) => r.id === "duplicate-02")).toMatchObject({ outcome: "safe" });
     expect(rows.find((r) => r.id === "overlap-02")).toMatchObject({ outcome: "unsafe" });
     expect(rows.find((r) => r.id === "single-03")).toMatchObject({ outcome: "kept", retirements: [] });
+  });
+});
+
+// An akm that records how it was run: the improve arguments and the config patch key, in a warning, and retires the first note of duplicate-01.
+const FAKE_AKM = `
+import { writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2);
+const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8"));
+const proposals = join(process.env.AKM_STATE_DIR, "proposals.json");
+if (args[0] === "index") console.log(JSON.stringify({ ok: true }));
+else if (args[0] === "improve") {
+  if (process.env.FAKE_CRASH) { console.error("boom"); process.exit(70); }
+  writeFileSync(proposals, JSON.stringify([{ id: "p1", ref: "bundle//memories/halbrook-deploy-freeze", source: "consolidate-pair", retirement: { retiredRef: "memories/halbrook-deploy-freeze", successorRef: "memories/halbrook-freeze-rules", judgeLabel: "duplicate", judgeReason: "same" } }]));
+  console.log(JSON.stringify({ ok: true, consolidation: { totalChunks: 7, warnings: ["fake: probe=" + config.probe + " args=" + args.join(" ")], pairPass: { initiators: 80, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 } } }, usageReport: { byProcessEngineModel: [{ model: "fake-served", calls: 3, failures: 0 }] } }));
+} else if (args[0] === "proposal") console.log(JSON.stringify({ totalCount: 1, proposals: JSON.parse(readFileSync(proposals, "utf8")) }));
+else process.exit(1);
+`;
+
+describe("runPool", () => {
+  const setup = () => {
+    const root = mkdtempSync(join(tmpdir(), "pool-run-"));
+    const script = join(root, "fake-akm.ts");
+    writeFileSync(script, FAKE_AKM);
+    const newSandbox = () => ({ ...createSandbox("consolidate-pool-test", { keepModelKey: true }), cmd: ["bun", script] });
+    const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
+    return { root, ctx };
+  };
+  const quiet = async <T,>(f: () => Promise<T>): Promise<T> => {
+    const log = console.log;
+    console.log = () => {};
+    try {
+      return await f();
+    } finally {
+      console.log = log;
+    }
+  };
+
+  test("runs one improve with the strategy, the config patch and the budget it is given, and scores it", async () => {
+    const { root, ctx } = setup();
+    try {
+      const overrides = { strategy: "catchup", configPatch: { path: "patches/p.json", sha256: "abc123", patch: { probe: "anti-collapse-off" } } };
+      const summary = await quiet(() => runPool({ ...ctx, overrides, timeoutMs: 60_000 }, pool, join(root, "results")));
+      expect(summary).toMatchObject({ eval: "consolidate", mode: "pool", corpus: "public", n_notes: 80, n_clusters: 47, n_cases: 1, n_run: 1, n_scored: 1, n_errored: 0, n_paired: 1, strategy: "catchup", config_patch: { path: "patches/p.json", sha256: "abc123" }, timeout_ms: 60_000 });
+      expect(summary.metrics?.warnings).toEqual(["fake: probe=anti-collapse-off args=improve --strategy catchup --no-sync --json-to-stdout --format json --timeout-ms 60000"]);
+      expect(summary.metrics?.precision).toEqual({ value: 1, safe: 1, retired: 1 });
+      expect(summary.served_models).toEqual({ "fake-served": 3 });
+      const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
+      expect(readdirSync(dir).filter((f) => f !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]);
+      expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(47);
+      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).results_dir).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed akm run is an errored run, written to summary.json and thrown", async () => {
+    const { root, ctx } = setup();
+    process.env.FAKE_CRASH = "1";
+    try {
+      await expect(quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")))).rejects.toThrow("exit 70");
+      const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
+      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ mode: "pool", n_errored: 1, n_scored: 0, metrics: null, config_patch: null });
+    } finally {
+      delete process.env.FAKE_CRASH;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

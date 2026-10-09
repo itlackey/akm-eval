@@ -18,6 +18,7 @@ evals/extract/run --corpus all
 
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
 - `--limit N` runs N sessions, taken from each class in turn, in file order. The first three cover a fact, an empty session and a planted instruction, and the first five every class. Use it to check a setup.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
 The private run reads `private/extract/assets/`. Make it first with `./generate-assets --only extract`. The run stops with an error when it is missing.
