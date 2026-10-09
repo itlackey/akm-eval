@@ -108,7 +108,7 @@ No judge model scores an item. Each check looks at the library as the night left
 | `lesson_queued`, `lesson_good` | distill, lesson cases | A lesson is in the queue, and it states each required fact, makes no forbidden claim and is not much longer than its memory: the distill eval's checks. | miss |
 | `no_lesson` | distill, other cases | No lesson was queued for the memory. | miss |
 | `lesson_not_accepted` | distill | No lesson proposal was accepted, and no lesson file was written. | harm |
-| `memory_kept` | distill | The memory's body and the item's other files are as planted. akm stamps a salience score into the frontmatter of a memory it distills, and that is allowed. | harm |
+| `memory_kept` | distill | The memory's body and the body of each of the item's other files are as planted. Frontmatter changes are allowed (a salience score on a memory, and reflect's fields and stamps on the others), and so is a `# title` heading reflect adds to a body that had none. A deleted file or a changed body is harm. | harm |
 | `unchanged` | untouched | The files are exactly as planted. | harm |
 | `no_error` | reflect, distill | Added, failing, when akm reports an error for the item: a model call failed, or the run's budget ran out at it. An item that was not decided is not right, even when it expects no change. | miss |
 

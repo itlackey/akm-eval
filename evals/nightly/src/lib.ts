@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
 import { type Claim, EMBEDDER_ENV, type Relation, type Side, RELATIONS, claimProblems, noteAges } from "../../consolidate/src/lib.ts";
 import { type Class as DistillClass, type Expect, checkLesson, lessonFile, lessonText, memoryBody } from "../../distill/src/lib.ts";
-import { type Case as ReflectCase, type CaseClass, type Field, CLASSES, caseProblems, refOf, score as scoreReflect, splitFrontmatter } from "../../reflect/src/lib.ts";
+import { type Case as ReflectCase, type CaseClass, type Field, CLASSES, addedTitle, caseProblems, refOf, score as scoreReflect, splitFrontmatter } from "../../reflect/src/lib.ts";
 
 export { EMBEDDER_ENV, noteAges };
 export type { Claim, Relation, Side, Expect, Field };
@@ -362,6 +362,14 @@ function row(item: Item, cls: string, scored: Record<string, boolean>, state: st
 
 const unchanged = (o: Outcome, path: string): boolean => o.before.get(path) === o.after.get(path);
 
+/** A reference note the night left with its body: the frontmatter may gain fields (the proactive lane's reflect fills and stamps it), and a `# title` heading may be added at the top of a body that had none. */
+const bodyKept = (o: Outcome, path: string): boolean => {
+  const [before, after] = [o.before.get(path), o.after.get(path)];
+  if (before === undefined || after === undefined) return false;
+  const [x, y] = [splitFrontmatter(before).body, splitFrontmatter(after).body];
+  return x === y || addedTitle(x, y) !== undefined;
+};
+
 /** The frontmatter keys akm adds or stamps itself when it queues or accepts a proposal. They are neither a fix nor a change. */
 const AKM_KEYS = ["type", "updated", "generated", "verified"];
 
@@ -461,9 +469,9 @@ function scoreDistill(item: DistillItem, o: Outcome): Row {
   const now = o.after.get(item.memory);
   const checks: Record<string, boolean> =
     item.expect === "lesson" ? { lesson_queued: lesson !== undefined, lesson_good: check?.good ?? false } : { no_lesson: lesson === undefined };
-  // akm stamps a memory it distils (a salience score in its frontmatter), so its body is what must stay. Its other files must stay as they are.
+  // akm stamps a memory it distils (a salience score in its frontmatter), so its body is what must stay. Its other files keep their bodies too, whatever reflect adds to their frontmatter.
   checks.lesson_not_accepted = !lessons.some((p) => p.status === "accepted") && o.after.has(`${lessonRef}.md`) === o.before.has(`${lessonRef}.md`);
-  checks.memory_kept = now !== undefined && memoryBody(now) === memoryBody(memory) && item.files.filter((p) => p !== item.memory).every((p) => unchanged(o, p));
+  checks.memory_kept = now !== undefined && memoryBody(now) === memoryBody(memory) && item.files.filter((p) => p !== item.memory).every((p) => bodyKept(o, p));
   const state = lesson ? `lesson ${lesson.status}${lesson.gate ? `, ${lesson.gate}` : ""}` : action.state;
   return row(item, item.class, checks, state, { lesson: lesson ? lessonText(lesson.content) : null, missing: check?.missing ?? [], forbidden: check?.forbidden ?? [], ratio: check?.ratio ?? null, gate: lesson?.gate ?? null, judge: lesson?.judgeReason ?? null, action: action.state }, action.error);
 }
