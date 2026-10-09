@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { buildNight, itemsText } from "./build.ts";
+import { splitFrontmatter } from "../../reflect/src/lib.ts";
 import {
   type DistillItem,
   type FixItem,
@@ -404,6 +405,21 @@ describe("scoring a distill memory", () => {
     const asset = find<DistillItem>("asset-01");
     const skill = asset.files.find((p) => p.startsWith("skills/")) as string;
     expect(scoreItem(asset, quiet({ after: new Map(night.files).set(skill, "changed") }))).toMatchObject({ harm: true, checks: { memory_kept: false } });
+  });
+
+  test("a restated skill whose frontmatter reflect filled keeps its body, with a title heading added; a body edit, or a deleted file, is harm", () => {
+    const asset = find<DistillItem>("asset-01");
+    const skill = asset.files.find((p) => p.startsWith("skills/")) as string;
+    const text = night.files.get(skill) as string;
+    const { fm, body } = splitFrontmatter(text);
+    const filled = `---\n${fm}\nwhen_to_use: When trimming dependencies.\ntype: skill\ngenerated: true\nverified: true\n---\n${body}`;
+    const titled = `---\n${fm}\ntype: skill\ngenerated: true\n---\n\n# Dependency simplification\n\n${body.replace(/^(\r?\n)+/, "")}`;
+    for (const after of [filled, titled]) expect(scoreItem(asset, quiet({ after: new Map(night.files).set(skill, after) })).checks.memory_kept).toBe(true);
+    const edited = scoreItem(asset, quiet({ after: new Map(night.files).set(skill, `${filled}\nA new line.\n`) }));
+    expect(edited).toMatchObject({ harm: true, checks: { memory_kept: false } });
+    const gone = new Map(night.files);
+    gone.delete(skill);
+    expect(scoreItem(asset, quiet({ after: gone }))).toMatchObject({ harm: true, checks: { memory_kept: false } });
   });
 
   test("a model call that failed leaves the item not right, even when it expects no lesson", () => {

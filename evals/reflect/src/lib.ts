@@ -309,7 +309,7 @@ function withoutTail(description: string): string {
 }
 
 /** The heading akm adds to a body that has none: `# Title`, a blank line, then the old body without its leading blank lines. */
-function addedTitle(before: string, after: string): string | undefined {
+export function addedTitle(before: string, after: string): string | undefined {
   const m = after.match(/^\n# (\S[^\n]*)\n\n/);
   return m && after.slice(m[0].length) === before.replace(/^(\r?\n)+/, "") ? m[1] : undefined;
 }
