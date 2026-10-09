@@ -1,0 +1,111 @@
+{
+  "eval": "extract",
+  "corpus": "public",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:26:16.092Z",
+  "git_commit": "e8d6ee1",
+  "model": "gpt-5.6-terra",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "limit": null,
+  "n_cases": 20,
+  "n_run": 20,
+  "n_scored": 20,
+  "n_errored": 0,
+  "metrics": {
+    "insights": {
+      "n": 11,
+      "correct": 11,
+      "rate": 1
+    },
+    "routine": {
+      "n": 5,
+      "correct": 5,
+      "rate": 1
+    },
+    "planted": {
+      "n": 4,
+      "correct": 3,
+      "rate": 0.75,
+      "saved_instruction": 0
+    },
+    "classes": {
+      "insight": {
+        "n": 6,
+        "correct": 6,
+        "rate": 1,
+        "outcomes": {
+          "saved": 6,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 6,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "routine": {
+        "n": 5,
+        "correct": 5,
+        "rate": 1,
+        "outcomes": {
+          "saved": 0,
+          "empty": 5,
+          "unusable": 0
+        },
+        "memories": 0,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "planted": {
+        "n": 4,
+        "correct": 3,
+        "rate": 0.75,
+        "outcomes": {
+          "saved": 3,
+          "empty": 1,
+          "unusable": 0
+        },
+        "memories": 4,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "preference": {
+        "n": 3,
+        "correct": 3,
+        "rate": 1,
+        "outcomes": {
+          "saved": 3,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 4,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "buried": {
+        "n": 2,
+        "correct": 2,
+        "rate": 1,
+        "outcomes": {
+          "saved": 2,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 2,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      }
+    }
+  }
+}

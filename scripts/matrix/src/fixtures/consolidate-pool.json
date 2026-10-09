@@ -1,0 +1,150 @@
+{
+  "eval": "consolidate",
+  "mode": "pool",
+  "corpus": "public",
+  "label": "smoke-pool",
+  "date": "2026-10-09T15:32:43.324Z",
+  "git_commit": "ca72440-dirty",
+  "model": "chat/qwen3.8-27b",
+  "akm_version": "0.9.30",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "strategy": "consolidate",
+  "timeout_ms": null,
+  "limit": null,
+  "n_notes": 80,
+  "n_clusters": 47,
+  "n_cases": 1,
+  "n_run": 1,
+  "n_scored": 1,
+  "n_errored": 0,
+  "n_paired": 31,
+  "seconds": 266.5,
+  "served_models": {
+    "qwen3.8-27b": 56
+  },
+  "metrics": {
+    "unsafe": {
+      "n": 0,
+      "of": 14,
+      "staged": 0
+    },
+    "precision": {
+      "value": 1,
+      "safe": 14,
+      "retired": 14
+    },
+    "recall": {
+      "value": 0.7368,
+      "retired_safe": 14,
+      "of": 19
+    },
+    "wrong_successor": 0,
+    "classes": {
+      "duplicate": {
+        "clusters": 7,
+        "with_safe_retirement": 7,
+        "hit": 6,
+        "retired_safe": 6,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 1
+      },
+      "triple": {
+        "clusters": 2,
+        "with_safe_retirement": 2,
+        "hit": 2,
+        "retired_safe": 2,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 0
+      },
+      "subsumed": {
+        "clusters": 5,
+        "with_safe_retirement": 5,
+        "hit": 5,
+        "retired_safe": 5,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 0
+      },
+      "supersedes": {
+        "clusters": 5,
+        "with_safe_retirement": 5,
+        "hit": 1,
+        "retired_safe": 1,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 4
+      },
+      "overlap": {
+        "clusters": 7,
+        "with_safe_retirement": 0,
+        "hit": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 7
+      },
+      "contradicts": {
+        "clusters": 2,
+        "with_safe_retirement": 0,
+        "hit": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 2
+      },
+      "lookalike": {
+        "clusters": 3,
+        "with_safe_retirement": 0,
+        "hit": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 3
+      },
+      "single": {
+        "clusters": 16,
+        "with_safe_retirement": 0,
+        "hit": 0,
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "wrong_successor": 0,
+        "untouched": 16
+      }
+    },
+    "pairs": {
+      "initiators": 80,
+      "judged": 31,
+      "considered": 35,
+      "failed": 4,
+      "labels": {
+        "duplicate": 10,
+        "subsumed": 6,
+        "supersedes": 9,
+        "contradicts": 0,
+        "overlap": 8,
+        "unrelated": 2
+      }
+    },
+    "calls": {
+      "calls": 56,
+      "failures": 0,
+      "prompt_tokens": 54039,
+      "completion_tokens": 8522
+    },
+    "chunks": {
+      "total": 7,
+      "failed": 0,
+      "deferred_memories": 0,
+      "promote_ops": 52
+    },
+    "anti_collapse_injected": 4,
+    "cold_start_budget": null,
+    "warnings": [
+      "Anti-collapse: injected 4 random (non-similarity-driven) cluster member(s) into consolidation pool (fraction=0.05).",
+      "Promote: skipped memories/kiln-7-firing → knowledge/pottery-studio-kiln-7-schedule — slug-variant of pending proposal 14f813cf-8813-420b-b29f-419aa26ad34b (bundle//knowledge/pottery-studio-kiln-3-schedule)."
+    ]
+  }
+}

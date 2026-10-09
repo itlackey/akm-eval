@@ -1,0 +1,108 @@
+{
+  "eval": "nightly",
+  "corpus": "public",
+  "label": "full-gptoss",
+  "date": "2026-10-06T04:38:40.799Z",
+  "git_commit": "8c214b7",
+  "model": "freellm/openai/gpt-oss-120b",
+  "akm_version": "0.9.26",
+  "limit": null,
+  "n_items": 29,
+  "n_planted": 29,
+  "seconds": {
+    "index": 0.3,
+    "feedback": 3.5,
+    "improve": 90.5,
+    "drain": 0.3,
+    "total": 95.4
+  },
+  "improve_ok": true,
+  "skipped_processes": [],
+  "drain": {
+    "promoted": 6,
+    "rejected": 0,
+    "deferred": 15,
+    "failed": 0
+  },
+  "outside_changed": [],
+  "pair_pass": {
+    "pairs_judged": 7,
+    "failed_judgments": 0,
+    "labels": {
+      "duplicate": 2,
+      "subsumed": 1,
+      "overlap": 4
+    }
+  },
+  "calls_by": [
+    {
+      "process": "consolidate",
+      "model": "gpt-oss:120b",
+      "calls": 11,
+      "failures": 0,
+      "prompt_tokens": 12405,
+      "completion_tokens": 7556
+    },
+    {
+      "process": "reflect",
+      "model": "gpt-oss:120b",
+      "calls": 18,
+      "failures": 0,
+      "prompt_tokens": 41318,
+      "completion_tokens": 10353
+    },
+    {
+      "process": "distill",
+      "model": "freellm/openai/gpt-oss-120b",
+      "calls": 14,
+      "failures": 14,
+      "prompt_tokens": 0,
+      "completion_tokens": 0
+    }
+  ],
+  "metrics": {
+    "items": {
+      "n": 29,
+      "ok": 19,
+      "rate": 0.6552
+    },
+    "by_kind": {
+      "pair": {
+        "n": 7,
+        "ok": 6
+      },
+      "reflect": {
+        "n": 10,
+        "ok": 8
+      },
+      "distill": {
+        "n": 7,
+        "ok": 0
+      },
+      "fix": {
+        "n": 1,
+        "ok": 1
+      },
+      "untouched": {
+        "n": 4,
+        "ok": 4
+      }
+    },
+    "failed": {
+      "right_outcome": 1,
+      "defect_fixed": 2,
+      "lesson_queued": 3,
+      "lesson_good": 3,
+      "no_error": 7
+    },
+    "harm": {
+      "items": 0,
+      "outside_changed": 0,
+      "lessons_accepted": 0
+    },
+    "calls": {
+      "n": 43,
+      "failures": 14
+    }
+  }
+}

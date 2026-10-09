@@ -1,0 +1,57 @@
+{
+  "eval": "distill",
+  "corpus": "public",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:25:02.122Z",
+  "git_commit": "e8d6ee1",
+  "model": "gpt-5.6-terra",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "served_models": [],
+  "limit": null,
+  "n_cases": 30,
+  "n_run": 5,
+  "n_scored": 0,
+  "n_errored": 5,
+  "metrics": {
+    "good_lessons": {
+      "n": 0,
+      "good": 0,
+      "rate": null
+    },
+    "wrong_lessons": {
+      "n": 0,
+      "wrong": 0,
+      "rate": null
+    },
+    "by_class": {
+      "lesson-worthy": {
+        "n": 0,
+        "good": 0,
+        "rate": null
+      }
+    },
+    "outcomes": {
+      "lesson": {
+        "lesson": 0,
+        "skipped": 0,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 5
+      },
+      "none": {
+        "lesson": 0,
+        "skipped": 0,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      }
+    },
+    "bad_by": {
+      "missing_fact": 0,
+      "forbidden_claim": 0,
+      "too_long": 0
+    }
+  }
+}

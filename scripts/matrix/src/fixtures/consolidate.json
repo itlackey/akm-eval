@@ -1,0 +1,135 @@
+{
+  "eval": "consolidate",
+  "corpus": "public",
+  "label": "sweep010-base-terra",
+  "date": "2026-10-09T15:32:17.517Z",
+  "git_commit": "e8d6ee1",
+  "model": "gpt-5.6-terra",
+  "akm_version": "0.9.30",
+  "akm_bin": "bun ~/code/github/itlackey/akm/.claude/worktrees/sweep-010/src/cli.ts",
+  "akm_build": "v0.9.0-beta.60-2648-g9f6ad3461",
+  "limit": null,
+  "n_cases": 60,
+  "n_run": 60,
+  "n_scored": 60,
+  "n_errored": 0,
+  "n_paired": 55,
+  "served_models": {
+    "gpt-5.6-terra": 154
+  },
+  "metrics": {
+    "unsafe": {
+      "n": 10,
+      "of": 60,
+      "staged": 6
+    },
+    "precision": {
+      "value": 0.7436,
+      "safe": 29,
+      "retired": 39
+    },
+    "recall": {
+      "value": 0.9667,
+      "retired_safe": 29,
+      "of": 30
+    },
+    "classes": {
+      "duplicate": {
+        "n": 10,
+        "error": 0,
+        "paired": 10,
+        "judged_as": {
+          "duplicate": 10,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 10,
+        "retired_unsafe": 0,
+        "kept": 0
+      },
+      "subsumed": {
+        "n": 10,
+        "error": 0,
+        "paired": 10,
+        "judged_as": {
+          "duplicate": 1,
+          "subsumed": 9,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 10,
+        "retired_unsafe": 0,
+        "kept": 0
+      },
+      "supersedes": {
+        "n": 10,
+        "error": 0,
+        "paired": 10,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 10,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 9,
+        "retired_unsafe": 0,
+        "kept": 1
+      },
+      "contradicts": {
+        "n": 10,
+        "error": 0,
+        "paired": 10,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 10,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 10,
+        "kept": 0
+      },
+      "overlap": {
+        "n": 10,
+        "error": 0,
+        "paired": 10,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 10,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 10
+      },
+      "unrelated": {
+        "n": 10,
+        "error": 0,
+        "paired": 5,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 5,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 10
+      }
+    }
+  }
+}

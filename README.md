@@ -44,6 +44,7 @@ lib/akm/           the akm sandbox the evals that use akm share
 lib/local-model.ts the check that keeps your own notes off a model that is not on this machine or your network
 lib/harbor/        the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
 lib/rewrite/       the seeded rewrite the generate scripts share
+scripts/matrix/    runs a matrix of eval configurations in two stages and writes a decision table
 reports/           published results: scores only, never private items
 retired/           code of retired evals, kept to read and never run here
 private/           your private assets (gitignored, never published)
@@ -90,6 +91,48 @@ A model's answers differ by a case or two from one run to the next, so one run c
 ```
 evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 ```
+
+## Run a matrix
+
+`scripts/matrix/run` runs a baseline and a list of configurations of the evals, and says which configurations beat the baseline. It is for comparing akm settings, strategies or builds, and for checking a change against the last good run. It holds no configuration of its own: the matrix file, and the config patches it names, live wherever you keep them (a sweep folder under `private/`, for one).
+
+```json
+{
+  "prefix": "sweep",
+  "baseline": [
+    { "name": "base", "eval": "reflect" },
+    { "name": "base-pool", "eval": "consolidate", "args": ["--pool"] }
+  ],
+  "configs": [
+    { "name": "low-value", "eval": "reflect", "args": ["--config-patch", "patches/low-value.json"] },
+    { "name": "short-budget", "eval": "consolidate", "args": ["--pool", "--timeout-ms", "150000"] }
+  ],
+  "screen": { "limit": { "reflect": 20 } },
+  "repeats": 3
+}
+```
+
+`args` are the eval's own flags. A relative `--config-patch` path is from the matrix file's folder. Leave out `--label` and `--repeat`: the runner sets them. A config is compared with the baseline that runs the same cases (the same eval, `--corpus`, `--pool`, `--cases` and `--limit`), so give one baseline per eval and mode; the corpora are never pooled. `screen.limit` is a number for every eval, or one per eval, and does not apply to `--pool` runs. The model and the akm build come from the environment, as for any run (`.env`, `AKM_BIN`).
+
+```
+scripts/matrix/run sweep.json --stage screen                  # every row once, label <prefix>-<name>-s
+scripts/matrix/run sweep.json --stage confirm                 # --repeat 3 for the rows that differ, label <prefix>-<name>-c
+scripts/matrix/run sweep.json --stage confirm --only low-value
+scripts/matrix/run sweep.json --stage report
+```
+
+`--parallel N` runs rows of different evals at the same time; two runs of one eval never overlap. A stage skips a row it already ran with the same arguments (`--force` runs it again), so a stopped sweep resumes. `--dry-run` prints what a stage would run. `--min-delta X` sets how much a screen result must move to count as different (default 0: any change in a main or harm metric); `--only A,B` confirms the named configs whatever the screen said.
+
+Each stage writes `decision.md` and `decision.json`, beside `state.json` and the runs' `logs/`, in `<matrix name>-results/` next to the matrix file (or `--out`). One row per config: the main metrics and the harm metrics, baseline against config, as mean and min-max over the repeats, the model calls and seconds, the akm build and the model, and a verdict. The metrics of each eval are in `EVAL_METRICS` in `scripts/matrix/src/lib.ts`, each with its direction: nightly `items.rate`; consolidate (also `--pool`) `recall.value` and `precision.value`, harm `unsafe.n`; distill `good_lessons.rate`, harm `wrong_lessons.rate`; reflect `defects.rate`, harm `controls.rate` falling and `proposals.touched_body`; promotion `precision.value` and `recall.value`, harm `bad_accepted.value`; judge-gate `precision.value` and `good.rate`, harm `bad.rate`; extract `insights.rate`, harm `routine.rate` falling and `planted.saved_instruction`; retrieval `ndcg_10` of each column, per collection.
+
+The decision rule is the plan's for akm's 0.10 defaults:
+
+- better: a main metric's min-max range over the repeats does not overlap the baseline's, on the better side, and no harm metric rose (a harm metric whose range is clearly lower also counts as better);
+- worse: a main metric clearly below, or a harm metric above the baseline's mean (harm must not rise);
+- mixed: both a better and a worse metric;
+- no difference: neither;
+- screen only: a run with one repeat. A screen cannot tell a change from noise, so it only picks what to confirm;
+- no result (a run wrote no scored summary) and not comparable (the baseline and the config ran another model or akm build) are the other two.
 
 ## Stop or wait for a run
 
