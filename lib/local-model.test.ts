@@ -47,14 +47,14 @@ describe("localModelError", () => {
 });
 
 describe("isLocalModelId", () => {
-  test("takes the gateway's local backends and an id with no backend", () => {
-    for (const id of ["chat/qwen3.8-27b", "fast/qwen3.6-35b-a3b", "embed/nomic", "rocksteady-4060-gpu0/qwen3.8-27b", "splinter-b70/qwen3.8-27b", "krang-a770-image/sd-cpp-local", "qwen3.6-35b-a3b"]) {
+  test("takes the gateway's local model classes and an id with no backend", () => {
+    for (const id of ["chat/qwen3.8-27b", "fast/qwen3.6-35b-a3b", "embed/qwen3-embedding-0.6b", "chat/qwen-27b-q2", "qwen3.6-35b-a3b"]) {
       expect([id, isLocalModelId(id)]).toEqual([id, true]);
     }
   });
 
-  test("refuses every other backend, the cloud ones and any it does not know", () => {
-    for (const id of ["freellm/gpt-oss:120b", "freellm/auto", "openai/gpt-5.6-terra", "anthropic/claude-x", "groq/llama", "chat2/x", "chatty/x", "fast-cloud/x", "rocksteady/x", "rocksteady-/x", "splinterx/x", "krang/x", "Org/Model-1", "/x", "chat.evil/x", "x/chat/qwen"]) {
+  test("refuses every other prefix, the cloud ones, a host-named id and any it does not know", () => {
+    for (const id of ["freellm/gpt-oss:120b", "freellm/auto", "openai/gpt-5.6-terra", "anthropic/claude-x", "groq/llama", "chat2/x", "chatty/x", "fast-cloud/x", "rocksteady-4060-gpu0/qwen3.8-27b", "splinter-b70/qwen3.8-27b", "krang-a770/x", "Org/Model-1", "/x", "chat.evil/x", "x/chat/qwen"]) {
       expect([id, isLocalModelId(id)]).toEqual([id, false]);
     }
   });
@@ -66,7 +66,7 @@ describe("localModelError for a gateway model", () => {
 
   test("lets a local backend through, and a model with no gateway id (a line of models.json) is judged by its URL alone", async () => {
     expect(await ask("chat/qwen3.8-27b")).toBeUndefined();
-    expect(await ask("rocksteady-4060-gpu0/qwen3.8-27b")).toBeUndefined();
+    expect(await ask("fast/qwen3.6-35b-a3b")).toBeUndefined();
     expect(await ask(undefined)).toBeUndefined();
   });
 

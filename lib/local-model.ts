@@ -37,14 +37,14 @@ async function lookupAll(host: string): Promise<string[]> {
 }
 
 /**
- * The gateway's model ids start with the backend that serves them: `chat/qwen3.8-27b`, `rocksteady-4060-gpu0/qwen3.8-27b`,
- * `freellm/gpt-oss:120b`. The gateway is on the local network, so its URL passes isLocalJudge whichever backend an id names, and some
- * backends are cloud providers. The backends below run on our own machines; every other prefix counts as cloud. A new local backend
- * is a line here.
+ * The gateway's model ids start with the class of model that serves them: `chat/qwen3.8-27b`, `fast/qwen3.6-35b-a3b`,
+ * `embed/qwen3-embedding-0.6b`, `freellm/gpt-oss:120b`. The gateway hides which machine runs a model, so ids name no host. The gateway is
+ * on the local network, so its URL passes isLocalJudge whichever prefix an id names, and some prefixes are cloud providers. The classes
+ * below run on our own machines; every other prefix counts as cloud. A new local class is a word here.
  */
-export const LOCAL_BACKENDS = /^(chat|fast|embed|(rocksteady|splinter|krang)-[^/]+)$/;
+export const LOCAL_BACKENDS = /^(chat|fast|embed)$/;
 
-/** Whether a gateway model id is served on our own machines: its backend is in LOCAL_BACKENDS. An id with no backend names a model on the endpoint itself. */
+/** Whether a gateway model id is served on our own machines: its prefix is in LOCAL_BACKENDS. An id with no backend names a model on the endpoint itself. */
 export function isLocalModelId(id: string): boolean {
   const slash = id.indexOf("/");
   return slash < 0 || LOCAL_BACKENDS.test(id.slice(0, slash));
@@ -61,7 +61,7 @@ export async function localModelError(baseUrl: string, envVar: string, flag: str
     return `${flag} sends your ${what} to the ${to}, so ${envVar} must be localhost, a private-network address (10.*, 172.16.* to 172.31.*, 192.168.*) or a name that resolves only to such addresses. It is not.`;
   }
   if (gatewayId !== undefined && !isLocalModelId(gatewayId)) {
-    return `${flag} sends your ${what} to the ${to}, but the gateway sends "${gatewayId}" to ${gatewayId.slice(0, gatewayId.indexOf("/"))}, which is not one of our own machines (chat/, fast/, embed/, rocksteady-*/, splinter-*/, krang-*/). Pick a local model. A server on this network whose own model name has a slash goes in models.json.`;
+    return `${flag} sends your ${what} to the ${to}, but the gateway sends "${gatewayId}" to ${gatewayId.slice(0, gatewayId.indexOf("/"))}, which is not a local model class (chat/, fast/, embed/). Pick a local model. A server on this network whose own model name has a slash goes in models.json.`;
   }
   return undefined;
 }
