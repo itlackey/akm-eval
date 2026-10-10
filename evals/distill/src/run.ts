@@ -8,9 +8,8 @@ import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
+import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, distillConfig, errorRow, failureMessage, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases } from "./lib.ts";
@@ -241,9 +240,10 @@ async function main(): Promise<void> {
     }
   }
   useAkm(values, fail);
-  const { baseUrl, name: model, hasKey, gatewayId } = useModel(values, fail);
+  const settings = useModel(values, fail);
+  const { baseUrl, name: model, hasKey } = settings;
   if (corpora.some((c) => c === "own" || c === "own-feedback")) {
-    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", `--corpus ${corpus}`, "memories", "model", gatewayId);
+    const refusal = privateModelError(settings, `--corpus ${corpus}`, "memories");
     if (refusal) fail(refusal);
   }
   const label = values.label ?? slug(model);

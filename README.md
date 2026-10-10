@@ -41,8 +41,7 @@ corpus/library/    the shared akm bundle (a working akm library)
 evals/             our evals
 benchmarks/        published benchmarks
 lib/akm/           the akm sandbox the evals that use akm share
-lib/local-model.ts the check that keeps your own notes off a model that is not on this machine or your network
-lib/models.ts      --model, --judge-model and models.json: which model a run uses
+lib/models.ts      --model, --judge-model and models.json: which model a run uses, and whether it may see your private notes
 lib/harbor/        the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
 lib/rewrite/       the seeded rewrite the generate scripts share
 scripts/matrix/    runs a matrix of eval configurations in two stages and writes a decision table
@@ -73,25 +72,17 @@ Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
 
 ### Pick the model and the akm build of a run
 
-Point `.env` at one gateway, such as the lab's (`MODEL_BASE_URL=https://ai.lab.fwdslsh.dev/v1`), and name the model of each run with `--model`, the gateway's model id. No script or environment override is needed to switch models:
+Point `.env` at one gateway, such as `MODEL_BASE_URL=https://gateway.example.com/v1`, and name the model of each run with `--model`, the gateway's model id. No script or environment override is needed to switch models:
 
 ```
-evals/consolidate/run --corpus public --model freellm/gpt-oss:120b --repeat 3
-evals/reflect/run --model fast/qwen3.6-35b-a3b --akm "bun ~/code/akm/src/cli.ts" --label pr1100-1
-benchmarks/longmemeval/run --model chat/qwen3.8-27b --judge-model fast/qwen3.6-35b-a3b
+evals/consolidate/run --corpus public --model my-cloud-model --repeat 3
+evals/reflect/run --model my-small-model --akm "bun ~/code/akm/src/cli.ts" --label pr1100-1
+benchmarks/longmemeval/run --model my-model --judge-model my-small-model
 ```
-
-A model id names a class of model, never a machine: the gateway decides where it runs. Three tiers cover most runs:
-
-- `fast/qwen3.6-35b-a3b` for quick iteration.
-- `chat/qwen-27b-q2` for a verification run, which must not swap quantizations (`chat/qwen3.8-27b` is the 27B pool, Q2 and Q4, fine when that does not matter).
-- `freellm/gpt-oss:120b` as the cloud second opinion. It is cloud, so it cannot take `--corpus own`.
-
-`embed/qwen3-embedding-0.6b` is the embedding model.
 
 - `--model ID` is on every eval and benchmark that runs a model, `--judge-model ID` on the ones that grade with one (`benchmarks/longmemeval`, `evals/retrieval/label`), and `--akm COMMAND` on every one that runs akm. They win over `MODEL_NAME`, `JUDGE_MODEL` and `AKM_BIN`, which still work. `summary.json` records the model and the akm build as before.
 - A judge with no `JUDGE_BASE_URL` uses the model's endpoint and key.
-- A model that is not behind the gateway (another provider, a server of its own) takes a line in `models.json` beside `.env`, gitignored, copied from `models.example.json`: `{ "name": { "base_url": "...", "api_key_env": "OPENAI_API_KEY", "model": "..." } }`. `--model name` then goes to that URL with the key held in that environment variable (set it in `.env`). `model` is the name the endpoint expects, if it is not the line's name. A key never goes in `models.json`.
+- A model that is not behind the gateway (another provider, a server of its own), or a gateway model that may see your private notes (a line with the gateway's `base_url`), takes a line in `models.json` beside `.env`, gitignored, copied from `models.example.json`: `{ "name": { "base_url": "...", "api_key_env": "OPENAI_API_KEY", "model": "...", "private": true } }`. `--model name` then goes to that URL with the key held in that environment variable (set it in `.env`). `model` is the name the endpoint expects, if it is not the line's name. A key never goes in `models.json`. `"private": true` says that your private notes may go to this model (see the private evals below); it is false when left out.
 - In a matrix file, `"model"` and `"akm"` at the top set `--model` and `--akm` for every row (`model` not for retrieval, which uses none). A row's own `--model` or `--akm` in its `args` wins.
 - `evals/bakeoff` compares models from its own `--models FILE`. `evals/agent-ab` and `benchmarks/terminal-bench` take `--model` as opencode names the model.
 - `AKM_BIN` and `--akm` take a command, and a leading `~/` in a word is your home folder.
@@ -125,7 +116,7 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 ```json
 {
   "prefix": "sweep",
-  "model": "freellm/gpt-oss:120b",
+  "model": "my-cloud-model",
   "baseline": [
     { "name": "base", "eval": "reflect" },
     { "name": "base-pool", "eval": "consolidate", "args": ["--pool"] }
@@ -205,7 +196,7 @@ The first run creates `private/` and `private/seed`, a random 64-bit integer. `p
 
 Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scripts share the rewrite in `lib/rewrite`. It needs [bun](https://bun.sh).
 
-Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, and, behind the gateway, any model id whose prefix is not a local model class (`chat/`, `fast/`, `embed/`; `freellm/` and every other prefix is cloud). The gateway is on the local network, so its URL alone cannot tell; the id does. The checks are in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
+Run private evals on a local model, or on an API that does not train on your data. A private-corpus eval (`--corpus own`) uses a model only if its line in `models.json` says `"private": true`, and refuses any other, including a gateway model with no line. Nothing infers it from a URL or a name: you say which models may see your notes. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
 ## Licence
 

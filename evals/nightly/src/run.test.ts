@@ -383,10 +383,10 @@ describe("the command", () => {
   test("takes the model from --model with no MODEL_NAME, and the akm from --akm over AKM_BIN", () => {
     const gateway = { MODEL_BASE_URL: "http://localhost:1/v1" };
     expect(run([], gateway).err).toContain("name the model: pass --model ID");
-    const named = run(["--model", "chat/qwen3.8-27b", "--akm", "no-such-akm-from-the-flag"], gateway);
+    const named = run(["--model", "my-model", "--akm", "no-such-akm-from-the-flag"], gateway);
     expect(named.code).toBe(2);
     expect(named.err).toContain("could not run `no-such-akm-from-the-flag --version`");
-    expect(run(["--model", "chat/x"], {}).err).toContain("chat/x is sent to the gateway: set MODEL_BASE_URL in .env");
+    expect(run(["--model", "my-x"], {}).err).toContain("my-x is sent to the gateway: set MODEL_BASE_URL in .env");
     expect(run(["--help"]).out).toMatch(/--model[\s\S]*MODEL_NAME[\s\S]*--akm[\s\S]*AKM_BIN/);
   });
 

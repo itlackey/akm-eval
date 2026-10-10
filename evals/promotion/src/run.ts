@@ -9,9 +9,8 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
+import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
@@ -283,13 +282,14 @@ async function main(): Promise<void> {
   const corpora: Corpus[] = corpus === "all" ? ["public", "own"] : [corpus];
 
   useAkm(values, fail);
-  const { baseUrl, name: model, hasKey, gatewayId } = useModel(values, fail);
+  const settings = useModel(values, fail);
+  const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   if (corpora.includes("own")) {
     const f = foldersFor("own", casesDir);
     if (!existsSync(f.cases) || !existsSync(join(f.library, "knowledge"))) fail(`the own set is missing (${relative(ROOT, f.cases)} and ${relative(ROOT, f.library)}/knowledge/). See "Run your own set" in evals/promotion/README.md.`);
-    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", casesDir ? "--cases" : "--corpus own", "notes", "model", gatewayId);
+    const refusal = privateModelError(settings, casesDir ? "--cases" : "--corpus own", "notes");
     if (refusal) fail(refusal);
   }
 

@@ -213,22 +213,12 @@ describe("--cases", () => {
     expect(own.cases).toEndWith("private/promotion/own/cases.jsonl");
   });
 
-  test("a folder of notes is refused before it is read when the model is not on this machine or the network", async () => {
+  test("a folder of notes is refused before it is read when the model is not marked private in models.json", async () => {
     const { folders } = setup(cases);
     const dir = join(folders.cases, "..");
-    const refused = await cli(["--cases", dir], { MODEL_BASE_URL: "http://8.8.8.8/v1" });
+    const refused = await cli(["--cases", dir], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" });
     expect(refused.code).toBe(2);
-    expect(refused.err).toContain("--cases sends your notes to the model, so MODEL_BASE_URL must be localhost");
-  });
-
-  test("a cloud model behind a local gateway is refused: the gateway's URL is local, the backend its id names is not", async () => {
-    const { folders } = setup(cases);
-    const dir = join(folders.cases, "..");
-    const refused = await cli(["--cases", dir, "--model", "freellm/gpt-oss:120b"], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" });
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('the gateway sends "freellm/gpt-oss:120b" to freellm');
-    const viaEnv = await cli(["--cases", dir], { MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "freellm/auto" });
-    expect(viaEnv.err).toContain('the gateway sends "freellm/auto" to freellm');
+    expect(refused.err).toContain('--cases sends your notes to m, which is not marked "private": true in models.json');
   });
 
   test("is an own corpus, so it cannot be combined with another corpus, and a folder without a set is named", async () => {

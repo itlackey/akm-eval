@@ -5,7 +5,7 @@
   "label": "smoke-pool",
   "date": "2026-10-09T15:32:43.324Z",
   "git_commit": "ca72440-dirty",
-  "model": "chat/qwen3.8-27b",
+  "model": "my-model",
   "akm_version": "0.9.30",
   "akm_bin": "akm",
   "akm_build": null,
@@ -21,7 +21,7 @@
   "n_paired": 31,
   "seconds": 266.5,
   "served_models": {
-    "qwen3.8-27b": 56
+    "my-model": 56
   },
   "metrics": {
     "unsafe": {

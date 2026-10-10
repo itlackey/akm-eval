@@ -11,8 +11,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
-import { localModelError } from "../../../lib/local-model.ts";
-import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
+import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, privateModelError, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
@@ -312,7 +311,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const { baseUrl, name: model } = judgeSettings;
-  const refusal = corpus === "own" ? await localModelError(baseUrl, "JUDGE_BASE_URL", "--corpus own", "notes", "judge", judgeSettings.gatewayId) : undefined;
+  const refusal = corpus === "own" ? privateModelError(judgeSettings, "--corpus own", "notes") : undefined;
   if (refusal) {
     console.error(`retrieval label: ${refusal}`);
     return 2;
