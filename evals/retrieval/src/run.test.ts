@@ -36,6 +36,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 const answers = ${JSON.stringify(ANSWERS)};
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
+if (cmd === "search" && process.argv[3] === "--help") { console.log("--detail=<detail> Detail level, or agent"); process.exit(0); }
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const semantic = config.semanticSearchMode === "auto";
 const data = process.env.AKM_DATA_DIR;

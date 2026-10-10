@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Sandbox, runAkmJson } from "../../../lib/akm/akm.ts";
+import { type Sandbox, agentDetailArgs, runAkmJson } from "../../../lib/akm/akm.ts";
 import type { SessionView } from "./prompts.ts";
 
 const AKM_TIMEOUT_MS = 120_000; // for the index and for each search
@@ -39,7 +39,7 @@ export class Akm {
 
   /** The memory names akm returns for the query, best first. */
   async search(query: string, k: number): Promise<string[]> {
-    const found = await runAkmJson<{ hits?: { ref?: string }[] }>(this.sandbox, ["search", "--limit", String(k), "--shape", "agent", "--", query], { timeoutMs: AKM_TIMEOUT_MS });
+    const found = await runAkmJson<{ hits?: { ref?: string }[] }>(this.sandbox, ["search", "--limit", String(k), ...(await agentDetailArgs(this.sandbox)), "--", query], { timeoutMs: AKM_TIMEOUT_MS });
     const hits = found.hits ?? [];
     return hits.map((h) => {
       if (typeof h.ref !== "string") throw new Error("akm returned a hit with no ref");
