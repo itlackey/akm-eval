@@ -159,6 +159,36 @@ export async function akmVersion(sandbox: Sandbox): Promise<string> {
   return version;
 }
 
+/** The flag words that ask search for its agent projection, from the text of `akm search --help`: 0.9.x has `--shape agent`, 0.10 folds it into `--detail agent`. Null when the text names neither. */
+export function agentDetailFrom(help: string): string[] | null {
+  if (/--shape[= ]/.test(help)) return ["--shape", "agent"];
+  return /--detail[= ]/.test(help) ? ["--detail", "agent"] : null;
+}
+
+const agentDetailCache = new Map<string, Promise<string[]>>();
+
+/**
+ * The flag words that ask `akm search` for the agent projection, in the spelling of the akm under test, asked once per akm
+ * command. They come from the help, not from `--version`, because a pre-release 0.10 build still prints a 0.9.x version.
+ * Later breaking spellings go here too. When the help cannot be read, it answers with the 0.10 spelling and says so on stderr, once.
+ */
+export function agentDetailArgs(sandbox: Sandbox): Promise<string[]> {
+  const key = sandbox.cmd.join(" ");
+  let known = agentDetailCache.get(key);
+  if (!known) {
+    known = runAkm(sandbox, ["search", "--help"], { timeoutMs: 60_000 })
+      .then(({ stdout, stderr }) => agentDetailFrom(stdout + stderr))
+      .catch(() => null)
+      .then((found) => {
+        if (found) return found;
+        console.error(`could not tell how \`${key}\` spells the agent projection of search; using --detail agent`);
+        return ["--detail", "agent"];
+      });
+    agentDetailCache.set(key, known);
+  }
+  return known;
+}
+
 /**
  * Which akm ran, for summary.json, next to akm_version: `akm_bin` is the AKM_BIN command (or `akm`) with the home folder
  * written as `~`, and `akm_build` is `git describe --always --dirty` of the git checkout that command runs from, or null

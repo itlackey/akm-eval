@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -235,6 +235,38 @@ describe("akmVersion", () => {
     await expect(akmVersion(missing)).rejects.toThrow("could not run `no-such-akm-binary-here --version`. Install akm or set AKM_BIN.");
     await expect(akmVersion(fakeSandbox({}, 'console.error("bad"); process.exit(1);'))).rejects.toThrow("Install akm or set AKM_BIN. bad");
     await expect(akmVersion(fakeSandbox({}, 'console.log("no number here");'))).rejects.toThrow("Install akm or set AKM_BIN.");
+  });
+});
+
+describe("agentDetailFrom", () => {
+  test("0.9.x help lists --shape, 0.10 help lists --detail agent only, anything else is unknown", () => {
+    expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full\n--shape=<shape>  Output projection: human|agent")).toEqual(["--shape", "agent"]);
+    expect(agentDetailFrom("--detail=<detail>  Detail level: brief|normal|full, or agent")).toEqual(["--detail", "agent"]);
+    expect(agentDetailFrom("usage: akm search")).toBeNull();
+  });
+});
+
+describe("agentDetailArgs", () => {
+  const withHelp = (help: string) => fakeSandbox({}, `console.log(${JSON.stringify(help)});`);
+
+  test("asks the akm under test once and remembers", async () => {
+    const old = withHelp("--shape=<shape> Output projection");
+    expect(await agentDetailArgs(old)).toEqual(["--shape", "agent"]);
+    writeFileSync(old.cmd[1], 'console.log("--detail=<detail> Detail level, or agent");');
+    expect(await agentDetailArgs(old)).toEqual(["--shape", "agent"]);
+    expect(await agentDetailArgs(withHelp("--detail=<detail> Detail level, or agent"))).toEqual(["--detail", "agent"]);
+  });
+
+  test("uses the 0.10 spelling, and says so on stderr, when the help names neither", async () => {
+    const written: string[] = [];
+    const real = console.error;
+    console.error = (m: string) => void written.push(m);
+    try {
+      expect(await agentDetailArgs(withHelp("nothing useful"))).toEqual(["--detail", "agent"]);
+    } finally {
+      console.error = real;
+    }
+    expect(written).toHaveLength(1);
   });
 });
 

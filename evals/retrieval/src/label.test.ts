@@ -280,6 +280,7 @@ import { join } from "node:path";
 const [cmd, ...rest] = process.argv.slice(2);
 appendFileSync(${JSON.stringify(calls)}, JSON.stringify([cmd, ...rest]) + "\\n");
 if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
+if (cmd === "search" && process.argv[3] === "--help") { console.log("--detail=<detail> Detail level, or agent"); process.exit(0); }
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const roots = config.bundles ? Object.entries(config.bundles).map(([name, b]) => [name + "//", b.path]) : [["", process.env.AKM_BUNDLE_DIR]];
 const entries = roots.flatMap(([prefix, dir]) => readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => ({ ref: prefix + "knowledge/" + f.slice(0, -3), type: "knowledge", name: f.slice(0, -3), description: "about " + f.slice(0, -3), path: join(dir, f) })));

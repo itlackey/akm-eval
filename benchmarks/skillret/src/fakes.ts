@@ -27,6 +27,7 @@ const skills = join(process.env.AKM_BUNDLE_DIR as string, "skills");
 const ids = (() => { try { return readdirSync(skills).sort(); } catch { return []; } })();
 const semantic = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR as string, "config.json"), "utf8")).semanticSearchMode === "auto";
 if (cmd === "--version") console.log("0.9.99-test");
+else if (cmd === "search" && process.argv[3] === "--help") console.log("--detail=<detail> Detail level, or agent");
 else if (cmd === "index") {
   const data = process.env.AKM_DATA_DIR as string;
   const runs = join(data, "index-runs");

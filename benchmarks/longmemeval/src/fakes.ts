@@ -12,6 +12,7 @@ const [cmd, ...rest] = process.argv.slice(2);
 const dir = join(process.env.AKM_BUNDLE_DIR as string, "memories");
 const files = (() => { try { return readdirSync(dir).sort(); } catch { return []; } })();
 if (cmd === "--version") console.log("0.9.99-test");
+else if (cmd === "search" && process.argv[3] === "--help") console.log("--detail=<detail> Detail level, or agent");
 else if (cmd === "index") console.log(JSON.stringify({ ok: true, totalEntries: files.length }));
 else if (cmd === "search") {
   const k = Number(rest[rest.indexOf("--limit") + 1]);

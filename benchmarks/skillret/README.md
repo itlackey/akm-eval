@@ -55,7 +55,7 @@ akm index --full
 and for each request, as written in the dataset, which is a paragraph or several, on each index:
 
 ```
-akm search --limit 15 --detail agent --format json -- "<request>"
+akm search --limit 15 --detail agent --format json   # akm 0.9.x: --shape agent -- "<request>"
 ```
 
 The keyword index is built with semantic search off, which is akm's default, and its search is SQLite FTS5 with BM25 over each skill's name, description, tags and body, with Porter stemming, and the request's words, minus stopwords, joined with OR. The body is a projection of the file without its front matter, comments, fenced code and link targets, cut at 16,384 characters. akm skips a result whose indexed text equals one it has already returned, and no two skills of either library have the same body, so it never hides a needed skill.

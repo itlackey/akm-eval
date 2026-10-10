@@ -3,7 +3,7 @@
 
 import { cpSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
-import { type Sandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, agentDetailArgs, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
 import { type Asset, DEPTH, foldRefs } from "./lib.ts";
 
@@ -49,7 +49,7 @@ export async function load(sb: Sandbox, library: string, bundles?: string, seman
 export async function assets(sb: Sandbox, expected: number): Promise<Asset[]> {
   const found: Asset[] = [];
   for (const type of TYPES) {
-    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", "--detail", "agent", "--format", "json"]);
+    const { stdout, stderr, code } = await runAkm(sb, ["search", "", "--type", type, "--limit", "5000", ...(await agentDetailArgs(sb)), "--format", "json"]);
     if (code !== 0) throw new Error(`akm search --type ${type} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
     for (const h of (JSON.parse(stdout) as { hits?: Record<string, string>[] }).hits ?? []) {
       found.push({ ref: h.ref, type: h.type, name: h.name ?? h.ref, description: h.description ?? "", path: relative(bundleOf(sb), h.path) });
@@ -76,7 +76,7 @@ export interface Answer {
  * search, `fts-fallback`, and that is not the semantic result.
  */
 export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = DEPTH, mode: "keyword" | "semantic" = "keyword"): Promise<Answer> {
-  const { stdout, stderr, code, ms } = await runAkm(sb, [system, "--limit", String(limit), "--detail", "agent", "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
+  const { stdout, stderr, code, ms } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
   const seconds = () => Number((ms / 1000).toFixed(2));
   const failed = (error: string): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
