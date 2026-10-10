@@ -103,13 +103,13 @@ describe("screenJobs", () => {
 });
 
 describe("a model and an akm build for the whole file", () => {
-  const file = { ...withNightly, model: "freellm/gpt-oss:120b", akm: "bun ~/akm/src/cli.ts", baseline: [...withNightly.baseline, { name: "base-r", eval: "retrieval" }], configs: [...withNightly.configs, { name: "own-model", eval: "reflect", args: ["--model", "chat/qwen3.8-27b"] }] };
+  const file = { ...withNightly, model: "cloud/some-model", akm: "bun ~/akm/src/cli.ts", baseline: [...withNightly.baseline, { name: "base-r", eval: "retrieval" }], configs: [...withNightly.configs, { name: "own-model", eval: "reflect", args: ["--model", "my-model"] }] };
 
   test("every row gets --model and --akm first, retrieval only --akm, and a row's own flag wins", () => {
     const jobs = screenJobs(parse(file));
-    expect(jobs[0].args).toEqual(["--model", "freellm/gpt-oss:120b", "--akm", "bun ~/akm/src/cli.ts", "--limit", "10", "--label", "sw-base-s"]);
+    expect(jobs[0].args).toEqual(["--model", "cloud/some-model", "--akm", "bun ~/akm/src/cli.ts", "--limit", "10", "--label", "sw-base-s"]);
     expect(jobs.find((j) => j.row.name === "base-r")?.args).toEqual(["--akm", "bun ~/akm/src/cli.ts", "--label", "sw-base-r-s"]);
-    expect(jobs.find((j) => j.row.name === "own-model")?.args).toEqual(["--akm", "bun ~/akm/src/cli.ts", "--model", "chat/qwen3.8-27b", "--limit", "10", "--label", "sw-own-model-s"]);
+    expect(jobs.find((j) => j.row.name === "own-model")?.args).toEqual(["--akm", "bun ~/akm/src/cli.ts", "--model", "my-model", "--limit", "10", "--label", "sw-own-model-s"]);
   });
 
   test("without them the arguments are the row's, and an empty one is refused", () => {

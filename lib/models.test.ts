@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODEL_OPTIONS, type ModelEntry, loadModels, resolveModel, useJudge, useModel } from "./models.ts";
+import { MODEL_OPTIONS, type ModelEntry, loadModels, privateModelError, resolveModel, useJudge, useModel } from "./models.ts";
 
 const GATEWAY = "https://gateway.example/v1";
-const ENV = { MODEL_BASE_URL: GATEWAY, MODEL_API_KEY: "gw-key", MODEL_NAME: "chat/qwen3.8-27b" };
+const ENV = { MODEL_BASE_URL: GATEWAY, MODEL_API_KEY: "gw-key", MODEL_NAME: "my-model" };
 const NONE: Record<string, ModelEntry> = {};
 const TERRA: Record<string, ModelEntry> = { "gpt-5.6-terra": { base_url: "https://api.openai.com/v1", api_key_env: "OPENAI_API_KEY" } };
 const stop = (message: string): never => {
@@ -14,25 +14,25 @@ const stop = (message: string): never => {
 
 describe("resolveModel", () => {
   test("the id is the flag, else MODEL_NAME, and goes to the gateway of .env with its key", () => {
-    expect(resolveModel("model", "freellm/gpt-oss:120b", ENV, NONE)).toEqual({ name: "freellm/gpt-oss:120b", baseUrl: GATEWAY, apiKey: "gw-key", gatewayId: "freellm/gpt-oss:120b" });
-    expect(resolveModel("model", undefined, ENV, NONE).name).toBe("chat/qwen3.8-27b");
-    expect(resolveModel("model", " fast/qwen3.6-35b-a3b ", ENV, NONE).name).toBe("fast/qwen3.6-35b-a3b");
+    expect(resolveModel("model", "cloud/some-model", ENV, NONE)).toEqual({ name: "cloud/some-model", baseUrl: GATEWAY, apiKey: "gw-key", private: false });
+    expect(resolveModel("model", undefined, ENV, NONE).name).toBe("my-model");
+    expect(resolveModel("model", " my-small-model ", ENV, NONE).name).toBe("my-small-model");
   });
 
   test("a gateway that needs no key gives an empty one", () => {
-    expect(resolveModel("model", "chat/x", { MODEL_BASE_URL: GATEWAY }, NONE).apiKey).toBe("");
+    expect(resolveModel("model", "my-x", { MODEL_BASE_URL: GATEWAY }, NONE).apiKey).toBe("");
   });
 
   test("a line of models.json goes to its own URL with the key its api_key_env names, and has no gateway id", () => {
     const m = resolveModel("model", "gpt-5.6-terra", { ...ENV, OPENAI_API_KEY: "oa-key" }, TERRA);
-    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key", gatewayId: undefined });
-    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "", gatewayId: undefined });
+    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key", private: false });
+    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "", private: false });
   });
 
   test("says what to set when the id, the endpoint or an entry's key is missing, and never prints a key", () => {
     expect(() => resolveModel("model", undefined, { MODEL_BASE_URL: GATEWAY }, NONE)).toThrow("pass --model ID, or set MODEL_NAME");
     expect(() => resolveModel("model", "  ", ENV, NONE)).toThrow("--model needs a model id");
-    expect(() => resolveModel("model", "chat/x", {}, NONE)).toThrow("set MODEL_BASE_URL in .env");
+    expect(() => resolveModel("model", "my-x", {}, NONE)).toThrow("set MODEL_BASE_URL in .env");
     expect(() => resolveModel("model", "gpt-5.6-terra", ENV, TERRA)).toThrow('takes its key from OPENAI_API_KEY, which is not set');
     try {
       resolveModel("model", "gpt-5.6-terra", ENV, TERRA);
@@ -41,14 +41,21 @@ describe("resolveModel", () => {
     }
   });
 
+  test("a private-corpus eval may use a line marked private: true, and refuses one without the flag and a model with no line", () => {
+    const entries: Record<string, ModelEntry> = { mine: { base_url: "http://localhost:8080/v1", private: true }, other: { base_url: "https://api.example.com/v1" } };
+    expect(privateModelError(resolveModel("model", "mine", ENV, entries), "--corpus own", "notes")).toBeUndefined();
+    expect(privateModelError(resolveModel("model", "other", ENV, entries), "--corpus own", "notes")).toBe('--corpus own sends your notes to other, which is not marked "private": true in models.json.');
+    expect(privateModelError(resolveModel("model", "my-model", ENV, entries), "--corpus own", "notes")).toContain('"private": true');
+  });
+
   test("an id such as constructor is not a line of models.json", () => {
-    expect(resolveModel("model", "constructor", ENV, NONE).gatewayId).toBe("constructor");
+    expect(resolveModel("model", "constructor", ENV, NONE).private).toBe(false);
   });
 
   test("the judge uses its own endpoint and key when set, and otherwise the model's", () => {
-    expect(resolveModel("judge", "chat/j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "chat/j", baseUrl: "http://judge/v1", apiKey: "jk", gatewayId: "chat/j" });
-    expect(resolveModel("judge", "chat/j", ENV, NONE)).toEqual({ name: "chat/j", baseUrl: GATEWAY, apiKey: "gw-key", gatewayId: "chat/j" });
-    expect(resolveModel("judge", undefined, { ...ENV, JUDGE_MODEL: "fast/j" }, NONE).name).toBe("fast/j");
+    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "my-j", baseUrl: "http://judge/v1", apiKey: "jk", private: false });
+    expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key", private: false });
+    expect(resolveModel("judge", undefined, { ...ENV, JUDGE_MODEL: "my-j2" }, NONE).name).toBe("my-j2");
     expect(() => resolveModel("judge", undefined, ENV, NONE)).toThrow("pass --judge-model ID, or set JUDGE_MODEL");
   });
 });
@@ -59,20 +66,20 @@ describe("useModel", () => {
     const m = useModel({ model: "gpt-5.6-terra" }, stop, env, TERRA);
     expect(m).toMatchObject({ baseUrl: "https://api.openai.com/v1", name: "gpt-5.6-terra", hasKey: true });
     expect([env.MODEL_BASE_URL, env.MODEL_NAME, env.MODEL_API_KEY]).toEqual(["https://api.openai.com/v1", "gpt-5.6-terra", "oa-key"]);
-    const keyless = useModel({ model: "chat/x" }, stop, { MODEL_BASE_URL: GATEWAY }, NONE);
+    const keyless = useModel({ model: "my-x" }, stop, { MODEL_BASE_URL: GATEWAY }, NONE);
     expect(keyless.hasKey).toBe(false);
   });
 
   test("without the flag it is the environment's model, as before", () => {
     const env: Record<string, string | undefined> = { ...ENV };
-    expect(useModel({}, stop, env, NONE)).toMatchObject({ baseUrl: GATEWAY, name: "chat/qwen3.8-27b", hasKey: true });
+    expect(useModel({}, stop, env, NONE)).toMatchObject({ baseUrl: GATEWAY, name: "my-model", hasKey: true });
   });
 
   test("fails through the caller's fail, and useJudge writes nothing", () => {
     expect(() => useModel({}, stop, {}, NONE)).toThrow("pass --model ID");
     const env: Record<string, string | undefined> = { ...ENV };
-    expect(useJudge({ "judge-model": "fast/j" }, stop, env, NONE).name).toBe("fast/j");
-    expect(env.MODEL_NAME).toBe("chat/qwen3.8-27b");
+    expect(useJudge({ "judge-model": "my-j2" }, stop, env, NONE).name).toBe("my-j2");
+    expect(env.MODEL_NAME).toBe("my-model");
   });
 });
 
@@ -100,7 +107,7 @@ describe("loadModels", () => {
 describe("the flags", () => {
   test("--model is a string option that parseArgs takes", async () => {
     const { parseArgs } = await import("node:util");
-    expect(parseArgs({ args: ["--model", "fast/x", "--model=chat/y"], options: MODEL_OPTIONS, strict: true }).values.model).toBe("chat/y");
+    expect(parseArgs({ args: ["--model", "my-x2", "--model=my-y"], options: MODEL_OPTIONS, strict: true }).values.model).toBe("my-y");
     expect(() => parseArgs({ args: ["--model"], options: MODEL_OPTIONS, strict: true })).toThrow();
   });
 });

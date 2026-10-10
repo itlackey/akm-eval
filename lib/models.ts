@@ -1,11 +1,11 @@
 // Which model a run uses: one rule for every eval, set by a flag.
 //
-//   evals/consolidate/run --model freellm/gpt-oss:120b
-//   benchmarks/longmemeval/run --model chat/qwen3.8-27b --judge-model fast/qwen3.6-35b-a3b
+//   evals/consolidate/run --model my-model
+//   benchmarks/longmemeval/run --model my-model --judge-model my-judge
 //
-// `--model ID` (and `--judge-model ID`, for the two that grade with a model) is sent to the one endpoint in .env, the lab gateway:
+// `--model ID` (and `--judge-model ID`, for the two that grade with a model) is sent to the one endpoint in .env, a gateway:
 // ID is the gateway's model id, so a model needs no setting of its own. Without the flag the id is MODEL_NAME (JUDGE_MODEL), as before.
-// Only a model that is not behind the gateway needs a line in `models.json`, beside .env (see models.example.json):
+// A model that is not behind the gateway, or that a private-corpus eval may use (`"private": true`), needs a line in `models.json`, beside .env (see models.example.json):
 //
 //   { "gpt-5.6-terra": { "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY" } }
 //
@@ -23,7 +23,7 @@ export const MODEL_OPTIONS = { model: { type: "string" } } as const;
 export const JUDGE_OPTIONS = { "judge-model": { type: "string" } } as const;
 
 /** The lines of an eval's usage text. */
-export const modelUsage = `  --model         the model, as the gateway names it, such as chat/qwen3.8-27b. Default: MODEL_NAME in .env.`;
+export const modelUsage = `  --model         the model, as the gateway names it, such as my-model. Default: MODEL_NAME in .env.`;
 export const judgeUsage = `  --judge-model   the judge, as the gateway names it. Default: JUDGE_MODEL in .env.`;
 
 /** One line of models.json: a model that is not behind the gateway. */
@@ -33,6 +33,8 @@ export interface ModelEntry {
   base_url: string;
   /** The name of the environment variable that holds the key (set it in .env). Leave it out for a server that needs none. Never put a key in models.json. */
   api_key_env?: string;
+  /** True when your private notes may be sent to this model: you run it, or its provider does not keep or train on what it gets. Left out, false: a private-corpus eval refuses the model. */
+  private?: boolean;
 }
 
 export interface ModelSettings {
@@ -40,8 +42,8 @@ export interface ModelSettings {
   name: string;
   baseUrl: string;
   apiKey: string;
-  /** The gateway id the name was sent as, or undefined for a line of models.json, whose URL is the whole story. This is what the privacy guard reads. */
-  gatewayId: string | undefined;
+  /** The `private` flag of the model's line in models.json. A model with no line is not private. */
+  private: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -60,6 +62,7 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     const e = entry as Partial<ModelEntry> | null;
     if (typeof e !== "object" || e === null || typeof e.base_url !== "string" || !e.base_url.trim()) throw new Error(`models.json: "${id}" needs a base_url`);
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
+    if (e.private !== undefined && typeof e.private !== "boolean") throw new Error(`models.json: "${id}": private must be true or false`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);
   }
   return json as Record<string, ModelEntry>;
@@ -79,13 +82,18 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
   if (entry) {
     const key = entry.api_key_env ? env[entry.api_key_env]?.trim() : "";
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
-    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", gatewayId: undefined };
+    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", private: entry.private === true };
   }
   // The judge falls back to the model's endpoint and key when it names none of its own.
   const [urlName, keyName] = role === "judge" && !env.JUDGE_BASE_URL?.trim() ? (["MODEL_BASE_URL", "MODEL_API_KEY"] as const) : ([urlVar, keyVar] as const);
   const baseUrl = env[urlName]?.trim();
   if (!baseUrl) throw new Error(`${id} is sent to the gateway: set ${urlName} in .env (and ${keyName} if it needs a key). See .env.example.`);
-  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim(), gatewayId: id };
+  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim(), private: false };
+}
+
+/** The refusal for a private-corpus eval (`flag`) that would send your `what` (notes, memories) to a model whose models.json line is not `"private": true`, or undefined when it may. */
+export function privateModelError(m: ModelSettings, flag: string, what: string): string | undefined {
+  return m.private ? undefined : `${flag} sends your ${what} to ${m.name}, which is not marked "private": true in models.json.`;
 }
 
 /**

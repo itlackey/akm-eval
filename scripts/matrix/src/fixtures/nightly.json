@@ -4,7 +4,7 @@
   "label": "full-gptoss",
   "date": "2026-10-06T04:38:40.799Z",
   "git_commit": "8c214b7",
-  "model": "freellm/openai/gpt-oss-120b",
+  "model": "cloud/gpt-oss-120b",
   "akm_version": "0.9.26",
   "limit": null,
   "n_items": 29,
@@ -53,7 +53,7 @@
     },
     {
       "process": "distill",
-      "model": "freellm/openai/gpt-oss-120b",
+      "model": "cloud/gpt-oss-120b",
       "calls": 14,
       "failures": 14,
       "prompt_tokens": 0,

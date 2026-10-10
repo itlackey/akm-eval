@@ -467,15 +467,12 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
-  test("refuses to send the own set to a judge that is not local, before it reads or runs anything", () => {
-    // Hosts that never resolve: were the check gone, the command would run on the real own set, and its notes would still go nowhere.
-    for (const url of ["https://judge.example.invalid/v1", "http://10.1.2.3.example.invalid:8080/v1", "https://localhost.example.invalid/v1"]) {
-      const done = run(["--corpus", "own"], { JUDGE_BASE_URL: url, JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" });
-      expect(done.code).toBe(2);
-      expect(done.err).toContain("--corpus own sends your notes to the judge");
-      expect(done.err).not.toContain("secret");
-      expect(done.out).toBe("");
-    }
+  test("refuses to send the own set to a judge that models.json does not mark private, before it reads or runs anything", () => {
+    const done = run(["--corpus", "own"], { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" });
+    expect(done.code).toBe(2);
+    expect(done.err).toContain('--corpus own sends your notes to m, which is not marked "private": true in models.json');
+    expect(done.err).not.toContain("secret");
+    expect(done.out).toBe("");
   });
 
   test("says what is wrong with its arguments, and exits 2", () => {
