@@ -3,12 +3,13 @@
 // feedback, `akm improve` with the default strategy, then `akm proposal drain`, as the lab's nightly does. It checks every
 // item, what changed outside the items, the lessons accepted and the model calls that failed. See ../README.md.
 //
-//   evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+//   evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -26,7 +27,7 @@ const IMPROVE_TIMEOUT_MS = IMPROVE_BUDGET_MS + 10 * 60_000; // and this ends akm
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const DAY_MS = 86_400_000;
 
-const USAGE = `Usage: evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+const USAGE = `Usage: evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
 of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
@@ -38,6 +39,8 @@ repository root.
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
 ${overridesUsage(STRATEGY)}
+${modelUsage}
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
@@ -314,9 +317,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -339,9 +342,8 @@ async function main(): Promise<void> {
       fail(`the private assets are missing (private/${NAME}/assets/items.jsonl). Make them with: ./generate-assets --only ${NAME}`);
     }
   }
-  const baseUrl = process.env.MODEL_BASE_URL?.trim();
-  const model = process.env.MODEL_NAME?.trim();
-  if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
+  useAkm(values, fail);
+  const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -356,7 +358,7 @@ async function main(): Promise<void> {
 
   if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
 
-  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
+  const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides };
   const summaries: Summary[] = [];
   for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);

@@ -53,6 +53,9 @@ export interface Matrix {
   /** `--limit` for the screen stage, by eval. */
   screenLimit: Record<string, number>;
   repeats: number;
+  /** `--model` and `--akm` of every row that does not name its own: the file's "model" (not for retrieval, which uses none) and "akm". */
+  model?: string;
+  akm?: string;
 }
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -119,7 +122,8 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
   if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < 2) throw new Error("repeats must be an integer of 2 or more");
   const p = prefix ?? (typeof json.prefix === "string" ? json.prefix : basename(file, extname(file)));
   if (!NAME_RE.test(p)) throw new Error("prefix must use letters, digits, dot, dash and underscore");
-  const out: Matrix = { file: resolve(file), prefix: p, baselines, configs, screenLimit, repeats };
+  for (const k of ["model", "akm"] as const) if (json[k] !== undefined && (typeof json[k] !== "string" || !(json[k] as string).trim())) throw new Error(`${k} must be a non-empty string`);
+  const out: Matrix = { file: resolve(file), prefix: p, baselines, configs, screenLimit, repeats, model: json.model as string | undefined, akm: json.akm as string | undefined };
   for (const c of configs) baselineFor(out, c); // every config has exactly one baseline
   return out;
 }
@@ -161,6 +165,8 @@ export const labelOf = (prefix: string, name: string, stage: Stage): string => `
 function makeJob(m: Matrix, row: Row, stage: Stage): Job {
   const label = labelOf(m.prefix, row.name, stage);
   const args = [...row.args];
+  if (m.akm && !hasFlag(args, "--akm")) args.unshift("--akm", m.akm);
+  if (m.model && row.eval !== "retrieval" && !hasFlag(args, "--model")) args.unshift("--model", m.model);
   let repeat: number | null = null;
   if (stage === "screen") {
     const limit = m.screenLimit[row.eval];

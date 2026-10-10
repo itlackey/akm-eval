@@ -9,7 +9,8 @@
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { JUDGE_OPTIONS, MODEL_OPTIONS, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { Akm } from "./akm.ts";
@@ -30,6 +31,7 @@ const BENCHMARK_JUDGE = "gpt-4o-2024-08-06"; // the judge the benchmark's evalua
 
 const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
                                   [--sample-seed N] [--retrieval-only] [--resume DIR]
+                                  [--model ID] [--judge-model ID] [--akm COMMAND]
 
 Answers LongMemEval questions with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME, twice: with
 the whole chat history, and with only the sessions akm retrieves. The judge in JUDGE_BASE_URL, JUDGE_API_KEY
@@ -45,6 +47,9 @@ and JUDGE_MODEL grades both answers. Settings come from .env at the repository r
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
   --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge and
                     sample settings, it asks only the questions that are not done
+${modelUsage}
+${judgeUsage}
+${akmUsage}
 
 Needs akm on PATH, or in AKM_BIN.`;
 
@@ -401,17 +406,10 @@ export async function runCorpus(
   return summary;
 }
 
-function endpointFromEnv(prefix: "MODEL" | "JUDGE", modelVar: "MODEL_NAME" | "JUDGE_MODEL"): Endpoint {
-  const baseUrl = process.env[`${prefix}_BASE_URL`]?.trim();
-  const model = process.env[modelVar]?.trim();
-  if (!baseUrl || !model) fail(`set ${prefix}_BASE_URL and ${modelVar} in .env (and ${prefix}_API_KEY if the endpoint needs one). See .env.example.`);
-  return { baseUrl: baseUrl as string, model: model as string, apiKey: process.env[`${prefix}_API_KEY`]?.trim() ?? "" };
-}
-
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; resume?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`longmemeval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -434,8 +432,10 @@ async function main(): Promise<void> {
     }
   }
   const retrievalOnly = values["retrieval-only"] === true;
-  const model = retrievalOnly ? null : endpointFromEnv("MODEL", "MODEL_NAME");
-  const judge = retrievalOnly ? null : endpointFromEnv("JUDGE", "JUDGE_MODEL");
+  useAkm(values, fail);
+  const endpoint = (m: { name: string; baseUrl: string; apiKey: string }): Endpoint => ({ baseUrl: m.baseUrl, model: m.name, apiKey: m.apiKey });
+  const judge = retrievalOnly ? null : endpoint(useJudge(values, fail)); // before useModel, which writes the model's endpoint to MODEL_*
+  const model = retrievalOnly ? null : endpoint(useModel(values, fail));
   const label = values.label ?? slug(model?.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 

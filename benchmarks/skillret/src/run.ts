@@ -5,13 +5,13 @@
 // to check that it returns search's ranking. The semantic search is akm's built-in embedder, a small model that runs in
 // the akm process, and a run with --limit leaves it out. See ../README.md.
 //
-//   benchmarks/skillret/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   benchmarks/skillret/run [--corpus public|private|all] [--limit N] [--label NAME] [--akm COMMAND]
 
 import { appendFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
@@ -37,7 +37,7 @@ type CorpusName = "public" | "private";
 /** akm calls in flight at once. A search only reads the index, so they can share it. */
 const WORKERS = Math.min(8, availableParallelism());
 
-const USAGE = `Usage: benchmarks/skillret/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: benchmarks/skillret/run [--corpus public|private|all] [--limit N] [--label NAME] [--akm COMMAND]
 
 Writes the skills of SkillRet into two sandboxes as akm assets, indexes them for keyword search and for semantic search,
 asks akm search of both for the first ${akm.DEPTH} skills of every query, and scores it with the benchmark's metrics: NDCG, Recall,
@@ -51,6 +51,7 @@ a skill changed or akm is not the same. Needs akm on PATH, or in AKM_BIN.
             test split's mix of one, two and three skills. all runs both.
   --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N. Keyword
             search only: a run of a few queries is for checking a setup, and a semantic index takes a quarter of an hour to build.
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default label: akm-<version>.`;
 
 interface SystemRow {
@@ -387,9 +388,9 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; limit?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`skillret: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -398,6 +399,7 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
+  useAkm(values, fail);
   const corpus = values.corpus ?? "public";
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);

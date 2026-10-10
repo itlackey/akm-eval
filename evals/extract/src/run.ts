@@ -2,12 +2,13 @@
 // extract: runs akm's extract on each session, with the model under test as akm's engine, and scores the memories it
 // saves. See ../README.md.
 //
-//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
+//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, errorRow, extractConfig, failureMessage, loadCases, metrics, pct, savedMemories, scoreCase, selectCases } from "./lib.ts";
@@ -18,7 +19,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
+const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 akm's engine, and scores the memories it saves. Settings come from .env at the repository root.
@@ -28,6 +29,8 @@ akm's engine, and scores the memories it saves. Settings come from .env at the r
   --limit   run N sessions, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${modelUsage}
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -202,9 +205,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`extract: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -226,9 +229,8 @@ async function main(): Promise<void> {
       fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
     }
   }
-  const baseUrl = process.env.MODEL_BASE_URL?.trim();
-  const model = process.env.MODEL_NAME?.trim();
-  if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
+  useAkm(values, fail);
+  const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -239,7 +241,7 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
-  const config = extractConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim());
+  const config = extractConfig(baseUrl, model, hasKey);
   const summaries: Summary[] = [];
   for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);

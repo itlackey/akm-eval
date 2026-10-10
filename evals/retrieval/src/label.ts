@@ -5,13 +5,14 @@
 // With --corpus own it does the same for the own set in private/retrieval/own/, from akm's results alone, and only
 // with a judge on this machine or the local network, since the notes go to the judge. See ../README.md.
 //
-//   evals/retrieval/label [--corpus public|own] [--limit N]
+//   evals/retrieval/label [--corpus public|own] [--limit N] [--judge-model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { localModelError } from "../../../lib/local-model.ts";
+import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
@@ -23,18 +24,21 @@ const CONCURRENCY = 2;
 const GIVE_UP_AFTER = 10; // grades that fail one after another, and the endpoint is not answering
 type Corpus = "public" | "own";
 
-const USAGE = `Usage: evals/retrieval/label [--corpus public|own] [--limit N]
+const USAGE = `Usage: evals/retrieval/label [--corpus public|own] [--limit N] [--judge-model ID] [--akm COMMAND]
 
 Grades what akm search, akm curate and a plain BM25 return for each task query in assets/queries.jsonl, and the
 assets the author expected, and appends the grades to assets/qrels.jsonl. A pair that already has a grade is
 skipped, so run it again to resume.
-The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root).
+The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root), or the one --judge-model names.
 
   --corpus  public (default) grades the public library. own grades your own set in private/retrieval/own/, from what
             akm search and akm curate return for it (no BM25: the library is too big to list), and appends to its
             qrels.jsonl. It sends your notes to the judge, so it runs only when JUDGE_BASE_URL's host is, or resolves
-            only to, an address on this machine or the private network.
-  --limit   label only the first N task queries`;
+            only to, an address on this machine or the private network, and a gateway model is one of ours (chat/, fast/,
+            embed/, rocksteady-*/, splinter-*/, krang-*/).
+  --limit   label only the first N task queries
+${judgeUsage}
+${akmUsage}`;
 
 type Message = ReturnType<typeof judgeMessages>[number];
 export type Judge = (messages: Message[]) => Promise<string>;
@@ -275,9 +279,9 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
 }
 
 async function main(): Promise<number> {
-  let values: { corpus?: string; limit?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; "judge-model"?: string; akm?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval label: ${(e as Error).message}\n\n${USAGE}`);
     return 2;
@@ -296,18 +300,24 @@ async function main(): Promise<number> {
     console.error("retrieval label: --limit must be a positive integer");
     return 2;
   }
-  const baseUrl = process.env.JUDGE_BASE_URL?.trim();
-  const model = process.env.JUDGE_MODEL?.trim();
-  if (!baseUrl || !model) {
-    console.error("retrieval label: set JUDGE_BASE_URL and JUDGE_MODEL in .env (and JUDGE_API_KEY if the endpoint needs one). See .env.example.");
+  let judgeSettings: ModelSettings;
+  try {
+    const stop = (message: string): never => {
+      throw new Error(message);
+    };
+    useAkm(values, stop);
+    judgeSettings = useJudge(values, stop);
+  } catch (e) {
+    console.error(`retrieval label: ${(e as Error).message}`);
     return 2;
   }
-  const refusal = corpus === "own" ? await localModelError(baseUrl, "JUDGE_BASE_URL", "--corpus own", "notes", "judge") : undefined;
+  const { baseUrl, name: model } = judgeSettings;
+  const refusal = corpus === "own" ? await localModelError(baseUrl, "JUDGE_BASE_URL", "--corpus own", "notes", "judge", judgeSettings.gatewayId) : undefined;
   if (refusal) {
     console.error(`retrieval label: ${refusal}`);
     return 2;
   }
-  const judge = makeJudge(baseUrl, process.env.JUDGE_API_KEY?.trim() ?? "", model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
+  const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
   return labelCollection(corpus, { model, judge, limit }, collectionsFor(corpus)[0].folders);
 }
 

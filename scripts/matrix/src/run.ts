@@ -11,7 +11,7 @@ const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 const USAGE = `Usage: scripts/matrix/run MATRIX.json --stage screen|confirm|report [--parallel N] [--out DIR] [--prefix NAME] [--only A,B] [--min-delta X] [--force] [--dry-run]
 
-Runs the evals of a matrix file with the model in .env (or the environment). Stages:
+Runs the evals of a matrix file with the model in .env (or the environment), or the file's "model" and "akm". Stages:
 
   --stage screen   runs the baseline and every config once, with the label <prefix>-<name>-s, and the --limit of the file's
                    "screen.limit" for its eval

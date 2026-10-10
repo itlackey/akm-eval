@@ -2,12 +2,13 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
+//   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type Case, type Row, atLeast, errorRow, failureMessage, judgeConfig, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
@@ -20,7 +21,7 @@ const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
 const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
 
-const USAGE = `Usage: evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
+const USAGE = `Usage: evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's reflect quality judge, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
 judge, on labelled proposals. Settings come from .env at the repository root.
@@ -30,6 +31,8 @@ judge, on labelled proposals. Settings come from .env at the repository root.
   --limit   run N cases, in the good/bad proportion of the whole set
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${modelUsage}
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.`;
@@ -185,9 +188,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`judge-gate: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -209,15 +212,14 @@ async function main(): Promise<void> {
       fail(`the private assets are missing (private/${NAME}/assets/cases.jsonl). Make them with: ./generate-assets --only ${NAME}`);
     }
   }
-  const baseUrl = process.env.MODEL_BASE_URL?.trim();
-  const model = process.env.MODEL_NAME?.trim();
-  if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
+  useAkm(values, fail);
+  const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
-    writeConfig(sandbox, judgeConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()));
+    writeConfig(sandbox, judgeConfig(baseUrl, model, hasKey));
 
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     if (!atLeast(version, MIN_AKM)) fail(`akm ${version} has no \`improve judge\` command. This eval needs akm ${MIN_AKM} or later.`);

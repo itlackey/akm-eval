@@ -4,12 +4,12 @@
 // built-in embedder, a small model that runs in the akm process. A run with --limit, and the own corpus, leave it out.
 // See ../README.md.
 //
-//   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME]
+//   evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -52,7 +52,7 @@ type Corpus = "public" | "private" | "own";
 
 const OWN_HELP = `Your own set goes in private/${NAME}/own/: queries.jsonl and qrels.jsonl in the format that evals/${NAME}/assets/README.md describes, and library/, the folder akm should index (a link to it works). A library of several bundles needs bundles.json too.`;
 
-const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME]
+const USAGE = `Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
 
 For each collection of queries, indexes its library in two sandboxes, for keyword search and for semantic search, asks
 akm search and akm curate of both for the first ${DEPTH} results of every query, and scores them against the collection's
@@ -67,6 +67,7 @@ scored with keyword search only. Needs akm on PATH, or in AKM_BIN.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only.
   --repeat  run each collection N times, into <label>-r1-<collection> to <label>-rN-<collection>, and write the min, max and mean of each metric to
             <UTC date>-<label>-<collection>-repeat-summary.json beside them
+${akmUsage}
   --label   names the results folders: <UTC date>-<label>-<collection>. Default label: akm-<version>.`;
 
 interface SystemRow {
@@ -361,9 +362,9 @@ export async function runCollection(corpus: Corpus, collection: string, ctx: { l
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -372,6 +373,7 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
+  useAkm(values, fail);
   const corpus = values.corpus ?? "public";
   if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "all") fail(`--corpus must be public, private, own or all, not "${corpus}"`);
   const limit = values.limit === undefined ? undefined : Number(values.limit);

@@ -375,9 +375,19 @@ describe("the command", () => {
     expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
-    expect(run([]).err).toContain("set MODEL_BASE_URL and MODEL_NAME in .env");
+    expect(run([]).err).toContain("name the model: pass --model ID, or set MODEL_NAME in .env");
     expect(run(["--help"]).out).toContain("Needs akm 0.9.26 or later");
     expect(run(["--help"]).out).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
+  });
+
+  test("takes the model from --model with no MODEL_NAME, and the akm from --akm over AKM_BIN", () => {
+    const gateway = { MODEL_BASE_URL: "http://localhost:1/v1" };
+    expect(run([], gateway).err).toContain("name the model: pass --model ID");
+    const named = run(["--model", "chat/qwen3.8-27b", "--akm", "no-such-akm-from-the-flag"], gateway);
+    expect(named.code).toBe(2);
+    expect(named.err).toContain("could not run `no-such-akm-from-the-flag --version`");
+    expect(run(["--model", "chat/x"], {}).err).toContain("chat/x is sent to the gateway: set MODEL_BASE_URL in .env");
+    expect(run(["--help"]).out).toMatch(/--model[\s\S]*MODEL_NAME[\s\S]*--akm[\s\S]*AKM_BIN/);
   });
 
   test("takes --strategy, --config-patch and --repeat, and goes on to the akm check", () => {
