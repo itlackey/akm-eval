@@ -76,7 +76,7 @@ For each question, a fresh bundle is made in the sandbox. Each session becomes o
 
 ```
 akm index --full
-akm search --limit 5 --shape agent --format json -- "<the question>"
+akm search --limit 5 --detail agent --format json -- "<the question>"
 ```
 
 akm runs with semantic search off, so the numbers come from its keyword index. Embeddings would need a model download. The question goes in as it is. The sessions it returns, in rank order, go into the same prompt as the baseline's, in the same format with their dates. The two arms differ only in which sessions the model sees.

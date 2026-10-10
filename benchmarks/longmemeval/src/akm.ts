@@ -39,7 +39,7 @@ export class Akm {
 
   /** The memory names akm returns for the query, best first. */
   async search(query: string, k: number): Promise<string[]> {
-    const found = await runAkmJson<{ hits?: { ref?: string }[] }>(this.sandbox, ["search", "--limit", String(k), "--shape", "agent", "--", query], { timeoutMs: AKM_TIMEOUT_MS });
+    const found = await runAkmJson<{ hits?: { ref?: string }[] }>(this.sandbox, ["search", "--limit", String(k), "--detail", "agent", "--", query], { timeoutMs: AKM_TIMEOUT_MS });
     const hits = found.hits ?? [];
     return hits.map((h) => {
       if (typeof h.ref !== "string") throw new Error("akm returned a hit with no ref");

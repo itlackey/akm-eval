@@ -56,7 +56,7 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   let seconds = 0;
   let error = "";
   for (let attempt = 0; attempt < 2; attempt++) {
-    const run = await runAkm(sb, [system, "--limit", String(DEPTH), "--shape", "agent", "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
+    const run = await runAkm(sb, [system, "--limit", String(DEPTH), "--detail", "agent", "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
     seconds += run.ms / 1000;
     if (run.code !== 0) {
       error = `akm ${system} exited ${run.code}: ${(run.stderr.trim() || run.stdout.trim()).slice(-300)}`;
