@@ -77,9 +77,17 @@ Point `.env` at one gateway, such as the lab's (`MODEL_BASE_URL=https://ai.lab.f
 
 ```
 evals/consolidate/run --corpus public --model freellm/gpt-oss:120b --repeat 3
-evals/reflect/run --model rocksteady-4060-gpu0/qwen3.8-27b --akm "bun ~/code/akm/src/cli.ts" --label pr1100-1
+evals/reflect/run --model fast/qwen3.6-35b-a3b --akm "bun ~/code/akm/src/cli.ts" --label pr1100-1
 benchmarks/longmemeval/run --model chat/qwen3.8-27b --judge-model fast/qwen3.6-35b-a3b
 ```
+
+A model id names a class of model, never a machine: the gateway decides where it runs. Three tiers cover most runs:
+
+- `fast/qwen3.6-35b-a3b` for quick iteration.
+- `chat/qwen-27b-q2` for a verification run, which must not swap quantizations (`chat/qwen3.8-27b` is the 27B pool, Q2 and Q4, fine when that does not matter).
+- `freellm/gpt-oss:120b` as the cloud second opinion. It is cloud, so it cannot take `--corpus own`.
+
+`embed/qwen3-embedding-0.6b` is the embedding model.
 
 - `--model ID` is on every eval and benchmark that runs a model, `--judge-model ID` on the ones that grade with one (`benchmarks/longmemeval`, `evals/retrieval/label`), and `--akm COMMAND` on every one that runs akm. They win over `MODEL_NAME`, `JUDGE_MODEL` and `AKM_BIN`, which still work. `summary.json` records the model and the akm build as before.
 - A judge with no `JUDGE_BASE_URL` uses the model's endpoint and key.
@@ -197,7 +205,7 @@ The first run creates `private/` and `private/seed`, a random 64-bit integer. `p
 
 Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scripts share the rewrite in `lib/rewrite`. It needs [bun](https://bun.sh).
 
-Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, and, behind the gateway, any model id whose backend is not one of our own machines (`chat/`, `fast/`, `embed/`, `rocksteady-*/`, `splinter-*/`, `krang-*/`; `freellm/` and every other prefix is cloud). The gateway is on the local network, so its URL alone cannot tell; the id does. The checks are in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
+Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, and, behind the gateway, any model id whose prefix is not a local model class (`chat/`, `fast/`, `embed/`; `freellm/` and every other prefix is cloud). The gateway is on the local network, so its URL alone cannot tell; the id does. The checks are in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
 ## Licence
 

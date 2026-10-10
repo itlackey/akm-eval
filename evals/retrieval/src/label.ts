@@ -35,7 +35,7 @@ The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at
             akm search and akm curate return for it (no BM25: the library is too big to list), and appends to its
             qrels.jsonl. It sends your notes to the judge, so it runs only when JUDGE_BASE_URL's host is, or resolves
             only to, an address on this machine or the private network, and a gateway model is one of ours (chat/, fast/,
-            embed/, rocksteady-*/, splinter-*/, krang-*/).
+            embed/).
   --limit   label only the first N task queries
 ${judgeUsage}
 ${akmUsage}`;
