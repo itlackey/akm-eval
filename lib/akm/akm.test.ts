@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -281,5 +281,33 @@ describe("akmBuild", () => {
     expect(withEnv({ AKM_BIN: join(dir, "akm") }, akmBuild).akm_build).toBeNull();
     expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
     expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
+  });
+});
+
+describe("useAkm", () => {
+  const stop = (message: string): never => {
+    throw new Error(message);
+  };
+
+  test("--akm sets AKM_BIN for the sandboxes, and wins over the one already there", () => {
+    const env: Record<string, string | undefined> = { AKM_BIN: "akm" };
+    useAkm({ akm: " bun /work/akm/src/cli.ts " }, stop, env);
+    expect(env.AKM_BIN).toBe("bun /work/akm/src/cli.ts");
+    const sandbox = withEnv({ AKM_BIN: env.AKM_BIN }, () => createSandbox("lib-akm-test"));
+    sandboxes.push(sandbox);
+    expect(sandbox.cmd).toEqual(["bun", "/work/akm/src/cli.ts"]);
+  });
+
+  test("writes your home folder for a leading ~/ in a word, and nothing for a flag that is not given", () => {
+    const env: Record<string, string | undefined> = { AKM_BIN: "akm" };
+    useAkm({ akm: "bun ~/code/akm/src/cli.ts" }, stop, env);
+    expect(env.AKM_BIN).toBe(`bun ${homedir()}/code/akm/src/cli.ts`);
+    const kept: Record<string, string | undefined> = { AKM_BIN: "akm-from-env" };
+    useAkm({}, stop, kept);
+    expect(kept.AKM_BIN).toBe("akm-from-env");
+  });
+
+  test("refuses an empty command", () => {
+    expect(() => useAkm({ akm: "  " }, stop, {})).toThrow("--akm needs the command that runs akm");
   });
 });

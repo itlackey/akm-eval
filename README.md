@@ -42,6 +42,7 @@ evals/             our evals
 benchmarks/        published benchmarks
 lib/akm/           the akm sandbox the evals that use akm share
 lib/local-model.ts the check that keeps your own notes off a model that is not on this machine or your network
+lib/models.ts      --model, --judge-model and models.json: which model a run uses
 lib/harbor/        the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
 lib/rewrite/       the seeded rewrite the generate scripts share
 scripts/matrix/    runs a matrix of eval configurations in two stages and writes a decision table
@@ -69,6 +70,23 @@ Models come from `.env`. Copy `.env.example` to `.env` and fill it in.
 - `JUDGE_BASE_URL`, `JUDGE_API_KEY` and `JUDGE_MODEL` set the judge.
 
 Any OpenAI-compatible endpoint works, local or cloud. `.env` is gitignored.
+
+### Pick the model and the akm build of a run
+
+Point `.env` at one gateway, such as the lab's (`MODEL_BASE_URL=https://ai.lab.fwdslsh.dev/v1`), and name the model of each run with `--model`, the gateway's model id. No script or environment override is needed to switch models:
+
+```
+evals/consolidate/run --corpus public --model freellm/gpt-oss:120b --repeat 3
+evals/reflect/run --model rocksteady-4060-gpu0/qwen3.8-27b --akm "bun ~/code/akm/src/cli.ts" --label pr1100-1
+benchmarks/longmemeval/run --model chat/qwen3.8-27b --judge-model fast/qwen3.6-35b-a3b
+```
+
+- `--model ID` is on every eval and benchmark that runs a model, `--judge-model ID` on the ones that grade with one (`benchmarks/longmemeval`, `evals/retrieval/label`), and `--akm COMMAND` on every one that runs akm. They win over `MODEL_NAME`, `JUDGE_MODEL` and `AKM_BIN`, which still work. `summary.json` records the model and the akm build as before.
+- A judge with no `JUDGE_BASE_URL` uses the model's endpoint and key.
+- A model that is not behind the gateway (another provider, a server of its own) takes a line in `models.json` beside `.env`, gitignored, copied from `models.example.json`: `{ "name": { "base_url": "...", "api_key_env": "OPENAI_API_KEY", "model": "..." } }`. `--model name` then goes to that URL with the key held in that environment variable (set it in `.env`). `model` is the name the endpoint expects, if it is not the line's name. A key never goes in `models.json`.
+- In a matrix file, `"model"` and `"akm"` at the top set `--model` and `--akm` for every row (`model` not for retrieval, which uses none). A row's own `--model` or `--akm` in its `args` wins.
+- `evals/bakeoff` compares models from its own `--models FILE`. `evals/agent-ab` and `benchmarks/terminal-bench` take `--model` as opencode names the model.
+- `AKM_BIN` and `--akm` take a command, and a leading `~/` in a word is your home folder.
 
 `nightly`, `consolidate`, `distill`, `reflect` and `promotion` also take `--strategy NAME` and `--config-patch FILE`, to run an akm strategy or a config other than the eval's own; `summary.json` records both.
 
@@ -99,6 +117,7 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 ```json
 {
   "prefix": "sweep",
+  "model": "freellm/gpt-oss:120b",
   "baseline": [
     { "name": "base", "eval": "reflect" },
     { "name": "base-pool", "eval": "consolidate", "args": ["--pool"] }
@@ -112,7 +131,7 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 }
 ```
 
-`args` are the eval's own flags. A relative `--config-patch` path is from the matrix file's folder. Leave out `--label` and `--repeat`: the runner sets them. A config is compared with the baseline that runs the same cases (the same eval, `--corpus`, `--pool`, `--cases` and `--limit`), so give one baseline per eval and mode; the corpora are never pooled. `screen.limit` is a number for every eval, or one per eval, and does not apply to `--pool` runs. The model and the akm build come from the environment, as for any run (`.env`, `AKM_BIN`).
+`args` are the eval's own flags. A relative `--config-patch` path is from the matrix file's folder. Leave out `--label` and `--repeat`: the runner sets them. A config is compared with the baseline that runs the same cases (the same eval, `--corpus`, `--pool`, `--cases` and `--limit`), so give one baseline per eval and mode; the corpora are never pooled. `screen.limit` is a number for every eval, or one per eval, and does not apply to `--pool` runs. The model and the akm build are the run's own: `.env` and `AKM_BIN`, or the file's top-level `"model"` and `"akm"`, which become `--model` and `--akm` of every row (see "Pick the model and the akm build of a run").
 
 ```
 scripts/matrix/run sweep.json --stage screen                  # every row once, label <prefix>-<name>-s
@@ -178,7 +197,7 @@ The first run creates `private/` and `private/seed`, a random 64-bit integer. `p
 
 Each eval's `generate` script gets `--seed <seed> --out private/<name>`. The scripts share the rewrite in `lib/rewrite`. It needs [bun](https://bun.sh).
 
-Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, with the check in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
+Run private evals on a local model, or on an API that does not train on your data. A set of your own real notes (`--corpus own`) goes only to a model on this machine or your network: the run refuses any other `MODEL_BASE_URL` or `JUDGE_BASE_URL`, and, behind the gateway, any model id whose backend is not one of our own machines (`chat/`, `fast/`, `embed/`, `rocksteady-*/`, `splinter-*/`, `krang-*/`; `freellm/` and every other prefix is cloud). The gateway is on the local network, so its URL alone cannot tell; the id does. The checks are in `lib/local-model.ts`. An eval that adds a corpus of real notes calls that check before it reads one, and a test in `lib/local-model.test.ts` fails when the `run.ts` of an eval reads an own corpus (a corpus named `own`, or `own-...`) and does not call it. An eval that reads one and sends none of it to a model (retrieval) is named in that test, with the reason. A model may have seen the public assets in training. A gap between the public and private scores points to that.
 
 ## Licence
 

@@ -102,6 +102,23 @@ describe("screenJobs", () => {
   });
 });
 
+describe("a model and an akm build for the whole file", () => {
+  const file = { ...withNightly, model: "freellm/gpt-oss:120b", akm: "bun ~/akm/src/cli.ts", baseline: [...withNightly.baseline, { name: "base-r", eval: "retrieval" }], configs: [...withNightly.configs, { name: "own-model", eval: "reflect", args: ["--model", "chat/qwen3.8-27b"] }] };
+
+  test("every row gets --model and --akm first, retrieval only --akm, and a row's own flag wins", () => {
+    const jobs = screenJobs(parse(file));
+    expect(jobs[0].args).toEqual(["--model", "freellm/gpt-oss:120b", "--akm", "bun ~/akm/src/cli.ts", "--limit", "10", "--label", "sw-base-s"]);
+    expect(jobs.find((j) => j.row.name === "base-r")?.args).toEqual(["--akm", "bun ~/akm/src/cli.ts", "--label", "sw-base-r-s"]);
+    expect(jobs.find((j) => j.row.name === "own-model")?.args).toEqual(["--akm", "bun ~/akm/src/cli.ts", "--model", "chat/qwen3.8-27b", "--limit", "10", "--label", "sw-own-model-s"]);
+  });
+
+  test("without them the arguments are the row's, and an empty one is refused", () => {
+    expect(screenJobs(parse())[0].args).toEqual(["--limit", "10", "--label", "sw-base-s"]);
+    expect(() => parse({ ...withNightly, model: " " })).toThrow("model must be a non-empty string");
+    expect(() => parse({ ...withNightly, akm: 3 })).toThrow("akm must be a non-empty string");
+  });
+});
+
 // ---- fixtures: results written the way the evals write them ----------------------------------------------------------------
 
 const fixture = (name: string): any => JSON.parse(readFileSync(join(import.meta.dir, "fixtures", `${name}.json`), "utf8"));

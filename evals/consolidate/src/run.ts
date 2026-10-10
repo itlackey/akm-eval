@@ -2,13 +2,14 @@
 // consolidate: runs akm's consolidate on pairs of notes whose right outcome is known, with the model under test as
 // its engine, and counts the notes it proposes to retire that held a claim the other lacked. See ../README.md.
 //
-//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
-//   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -29,7 +30,7 @@ const POOL_DIR = join(EVAL_DIR, "assets", "pool");
 const POOL_DEFAULT_BUDGET_MS = 2 * 60 * 60_000; // akm improve's own wall-clock budget when --timeout-ms is not given
 const POOL_KILL_SLACK_MS = 10 * 60_000; // how long past akm's budget the eval waits before it kills akm
 
-const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
        evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its
@@ -41,6 +42,8 @@ engine, and counts the retirements that lose a claim. Settings come from .env at
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
 ${overridesUsage(STRATEGY)}
+${modelUsage}
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
   --pool    one sandbox with the whole pool in assets/pool (80 memories) and a single improve run, as a real night
             consolidates, instead of a sandbox per pair. Public pool only; not with --corpus or --limit.
@@ -414,9 +417,9 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -443,9 +446,8 @@ async function main(): Promise<void> {
       fail(`the private assets are missing (private/${NAME}/assets/cases.jsonl). Make them with: ./generate-assets --only ${NAME}`);
     }
   }
-  const baseUrl = process.env.MODEL_BASE_URL?.trim();
-  const model = process.env.MODEL_NAME?.trim();
-  if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
+  useAkm(values, fail);
+  const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -458,7 +460,7 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
 
-  const ctx = { newSandbox, baseUrl, model, hasKey: !!process.env.MODEL_API_KEY?.trim(), version, label, limit, overrides };
+  const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides };
   if (values.pool) {
     await repeatRuns(repeat, label, (runLabel) => runPool({ ...ctx, label: runLabel, overrides, timeoutMs }));
     return;

@@ -2,13 +2,14 @@
 // promotion: plants labelled promotion proposals in akm's queue, runs akm's drain with its judgment tier, with the model
 // under test as the judge, and counts which proposals it accepts. See ../README.md.
 //
-//   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+//   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { Database } from "bun:sqlite";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { localModelError } from "../../../lib/local-model.ts"; // the rule that keeps private notes on this machine or the local network
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -21,7 +22,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
-const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
@@ -35,6 +36,8 @@ MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
 ${overridesUsage(STRATEGY)}
+${modelUsage}
+${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs akm on PATH, or in AKM_BIN.`;
@@ -257,9 +260,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, cases: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, cases: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`promotion: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -279,15 +282,14 @@ async function main(): Promise<void> {
   const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "own"] : [corpus];
 
-  const baseUrl = process.env.MODEL_BASE_URL?.trim();
-  const model = process.env.MODEL_NAME?.trim();
-  if (!baseUrl || !model) fail("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one). See .env.example.");
+  useAkm(values, fail);
+  const { baseUrl, name: model, hasKey, gatewayId } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   if (corpora.includes("own")) {
     const f = foldersFor("own", casesDir);
     if (!existsSync(f.cases) || !existsSync(join(f.library, "knowledge"))) fail(`the own set is missing (${relative(ROOT, f.cases)} and ${relative(ROOT, f.library)}/knowledge/). See "Run your own set" in evals/promotion/README.md.`);
-    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", casesDir ? "--cases" : "--corpus own", "notes", "model");
+    const refusal = await localModelError(baseUrl, "MODEL_BASE_URL", casesDir ? "--cases" : "--corpus own", "notes", "model", gatewayId);
     if (refusal) fail(refusal);
   }
 
@@ -296,7 +298,7 @@ async function main(): Promise<void> {
     const runs = await repeatRuns(repeat, label, async (runLabel) => {
       const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
       try {
-        writeConfig(sandbox, patchedConfig(promotionConfig(baseUrl, model, !!process.env.MODEL_API_KEY?.trim()), overrides));
+        writeConfig(sandbox, patchedConfig(promotionConfig(baseUrl, model, hasKey), overrides));
         const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
         return await runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit, overrides }, foldersFor(c, casesDir));
       } catch (e) {

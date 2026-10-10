@@ -84,6 +84,17 @@ function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Reco
 /** The akm command: the words of AKM_BIN, or `akm`. */
 const akmCommand = (): string[] => (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
 
+/** `--akm`, for parseArgs, and its line of an eval's usage text. */
+export const AKM_OPTIONS = { akm: { type: "string" } } as const;
+export const akmUsage = `  --akm           the command that runs akm, such as "bun ~/code/akm/src/cli.ts". Default: AKM_BIN in .env, else akm on PATH.`;
+
+/** Runs this process's akm as `--akm` says, which wins over AKM_BIN. A leading ~/ in a word is your home folder. `fail` ends the run with a message. */
+export function useAkm(values: { akm?: string }, fail: (message: string) => never, env: Record<string, string | undefined> = process.env): void {
+  if (values.akm === undefined) return;
+  if (!values.akm.trim()) fail("--akm needs the command that runs akm");
+  env.AKM_BIN = values.akm.trim().replace(/(^|\s)~\//g, `$1${homedir()}/`);
+}
+
 /**
  * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, one or more
  * words such as `bun /path/to/akm/src/cli.ts`, or `akm`. akm gets no MODEL_API_KEY unless `keepModelKey` is set, which a

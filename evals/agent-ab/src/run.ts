@@ -9,6 +9,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CONCURRENT_TRIALS, Fatal, PINS, fail, gitCommit, jobConfig as harborJob, preflight, runHarbor, slug } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, buildReport, formatReport, loadTrials, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
+import { MODEL_OPTIONS } from "../../../lib/models.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 
 const NAME = "agent-ab";
@@ -17,7 +18,7 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 
 const ATTEMPTS = 3; // per task and arm in a full run. A run with --limit makes one, to check a setup.
 
-const USAGE = `Usage: evals/agent-ab/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: evals/agent-ab/run [--corpus public|private|all] [--limit N] [--label NAME] [--model NAME]
 
 Runs each task with opencode alone and with opencode plus the akm plugin, in Harbor, on the model in MODEL_NAME.
 Settings come from .env at the repository root.
@@ -25,6 +26,7 @@ Settings come from .env at the repository root.
   --corpus  public (default) reads tasks/ and libraries/. private reads private/agent-ab/assets/, made by
             ./generate-assets. all runs both and prints the two results side by side.
   --limit   run N tasks, once per arm, spread over the task families. Without it every task runs ${ATTEMPTS} times per arm.
+  --model   the model as opencode names it, such as openai/gpt-6-luna. Default: MODEL_NAME in .env.
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
 Needs Docker, uv and bun. MODEL_NAME is the model as opencode names it, such as openai/gpt-6-luna. A name without a
@@ -129,9 +131,9 @@ export async function runCorpus(corpus: Corpus, ctx: { model: string; label: str
 }
 
 async function main(): Promise<void> {
-  let values: { corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { model?: string; corpus?: string; limit?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...MODEL_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`agent-ab: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -148,6 +150,7 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "tasks"))) fail(`the private assets are missing (private/${NAME}/assets/tasks). Make them with: ./generate-assets --only ${NAME}`);
   }
+  if (values.model !== undefined) process.env.MODEL_NAME = values.model.trim() || fail("--model needs a model name");
   const { model, env } = preflight();
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");

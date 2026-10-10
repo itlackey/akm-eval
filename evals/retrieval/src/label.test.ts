@@ -483,7 +483,7 @@ describe("the command", () => {
     expect(run(["--corpus", "private"], judge)).toMatchObject({ code: 2 });
     expect(run(["--corpus", "private"], judge).err).toContain('--corpus must be public or own, not "private"');
     expect(run(["--limit", "0"], judge).err).toContain("--limit must be a positive integer");
-    expect(run(["--corpus", "own"]).err).toContain("set JUDGE_BASE_URL and JUDGE_MODEL in .env");
+    expect(run(["--corpus", "own"]).err).toContain("name the judge: pass --judge-model ID, or set JUDGE_MODEL in .env");
     expect(run(["--nope"]).err).toContain("Usage: evals/retrieval/label [--corpus public|own] [--limit N]");
     expect(run(["--help"]).out).toContain("--corpus  public (default)");
   });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { isLocalJudge, localModelError } from "./local-model.ts";
+import { isLocalJudge, isLocalModelId, localModelError } from "./local-model.ts";
 
 describe("isLocalJudge", () => {
   const dns = (table: Record<string, string[]>) => async (host: string) => {
@@ -46,6 +46,40 @@ describe("localModelError", () => {
   });
 });
 
+describe("isLocalModelId", () => {
+  test("takes the gateway's local backends and an id with no backend", () => {
+    for (const id of ["chat/qwen3.8-27b", "fast/qwen3.6-35b-a3b", "embed/nomic", "rocksteady-4060-gpu0/qwen3.8-27b", "splinter-b70/qwen3.8-27b", "krang-a770-image/sd-cpp-local", "qwen3.6-35b-a3b"]) {
+      expect([id, isLocalModelId(id)]).toEqual([id, true]);
+    }
+  });
+
+  test("refuses every other backend, the cloud ones and any it does not know", () => {
+    for (const id of ["freellm/gpt-oss:120b", "freellm/auto", "openai/gpt-5.6-terra", "anthropic/claude-x", "groq/llama", "chat2/x", "chatty/x", "fast-cloud/x", "rocksteady/x", "rocksteady-/x", "splinterx/x", "krang/x", "Org/Model-1", "/x", "chat.evil/x", "x/chat/qwen"]) {
+      expect([id, isLocalModelId(id)]).toEqual([id, false]);
+    }
+  });
+});
+
+describe("localModelError for a gateway model", () => {
+  const url = "http://127.0.0.1:8080/v1"; // the gateway is on the local network, so its URL passes whichever backend an id names
+  const ask = (gatewayId?: string) => localModelError(url, "MODEL_BASE_URL", "--corpus own", "notes", "model", gatewayId);
+
+  test("lets a local backend through, and a model with no gateway id (a line of models.json) is judged by its URL alone", async () => {
+    expect(await ask("chat/qwen3.8-27b")).toBeUndefined();
+    expect(await ask("rocksteady-4060-gpu0/qwen3.8-27b")).toBeUndefined();
+    expect(await ask(undefined)).toBeUndefined();
+  });
+
+  test("refuses a cloud backend behind the local gateway, naming the backend and the flag", async () => {
+    const refusal = await ask("freellm/gpt-oss:120b");
+    expect(refusal).toStartWith('--corpus own sends your notes to the model, but the gateway sends "freellm/gpt-oss:120b" to freellm');
+  });
+
+  test("a local backend does not make a public URL local", async () => {
+    expect(await localModelError("http://8.8.8.8/v1", "MODEL_BASE_URL", "--corpus own", "notes", "model", "chat/x")).toContain("must be localhost");
+  });
+});
+
 describe("every eval that reads your own notes", () => {
   const EVALS = join(import.meta.dir, "..", "evals");
   const runFiles = readdirSync(EVALS).map((name) => ({ name, file: join(EVALS, name, "src", "run.ts") })).filter((r) => existsSync(r.file));
@@ -65,6 +99,14 @@ describe("every eval that reads your own notes", () => {
       return readsOwn(source) && !(r.name in NOTHING_SENT) && !source.includes("localModelError(");
     });
     expect(unguarded.map((r) => `${r.name}: reads an own corpus but never calls localModelError (lib/local-model.ts)`)).toEqual([]);
+  });
+
+  test("each passes the gateway id of its model to the guard, so a cloud model behind the gateway is refused", () => {
+    const blind = runFiles.filter((r) => {
+      const source = readFileSync(r.file, "utf8");
+      return readsOwn(source) && !(r.name in NOTHING_SENT) && !/localModelError\([^\n]*gatewayId\)/.test(source);
+    });
+    expect(blind.map((r) => `${r.name}: calls localModelError without the model's gatewayId (lib/models.ts)`)).toEqual([]);
   });
 
   test("an exemption is kept only while its eval still reads an own corpus and still calls no guard", () => {
