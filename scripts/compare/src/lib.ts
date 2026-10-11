@@ -339,8 +339,7 @@ const byDir = (x: Run, y: Run): number => (x.dir < y.dir ? -1 : x.dir > y.dir ? 
  */
 export function policyOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREATMENT): PolicyResult {
   const members = (side: string, runs: Run[]) => [...runs].sort(byDir).map((r) => ({ side, name: nameOf(r), identity: identityOf(r.summary) }));
-  const unrecorded = EVALS[String(a[0]?.summary.eval)]?.unrecorded ?? [];
-  return checkMembers([...members("A", a), ...members("B", b)], treatment, unrecorded);
+  return checkMembers([...members("A", a), ...members("B", b)], treatment);
 }
 
 /**
@@ -895,7 +894,7 @@ export function compareRepeats(runs: Run[], options: Partial<Options> = {}): Rep
   const opts = { ...DEFAULTS, ...options };
   if (runs.length < 2) fail("repeats need at least two runs");
   const first = runs[0];
-  const policy = checkMembers([...runs].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), [], EVALS[String(first.summary.eval)]?.unrecorded ?? []);
+  const policy = checkMembers([...runs].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), []);
   if (policy.mismatches.length > 0) fail(`these runs are not repeats of one configuration: ${messages(policy.mismatches).join("; ")}.`);
   const infos = runs.map(infoOf);
   const evalName = String(first.summary.eval);

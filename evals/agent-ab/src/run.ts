@@ -109,7 +109,7 @@ interface Summary {
   tasks_sha256: Record<string, string>;
   /** One digest over the libraries digest, the digest of each selected task and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the host of the endpoint it was sent to (null for the provider's own). Never a key. */
+  /** The model and the identity of the endpoint it was sent to: scheme, host, port and path (null for the provider's own). Never a key. */
   engine: { model: string; endpoint: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;

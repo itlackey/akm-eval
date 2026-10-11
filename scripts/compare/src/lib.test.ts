@@ -13,7 +13,8 @@ import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/l
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
 import { EVAL_METRICS } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
-import { engineSettings } from "../../../lib/provenance.ts";
+import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
+import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -831,8 +832,6 @@ describe("the comparison policy", () => {
     expect(gaps({ corpus: "private" }, { corpus: "private", seed: 3 })).toEqual(["the seed of the private assets is not recorded in A"]);
     // a declared axis is not checked for evidence
     expect(checkMembers([member("A", "a", { assets_sha256: null }), member("B", "b")], ["inputs"]).gaps).toEqual([]);
-    // an eval that has no such thing says so
-    expect(checkMembers([member("A", "a", { config: undefined, engine: undefined }), member("B", "b", { config: undefined, engine: undefined })], [], ["config", "engine"]).gaps).toEqual([]);
   });
 
   test("the eval's code is identified by a digest when both have one, else by a clean commit; a dirty or missing commit is a gap", () => {
@@ -859,6 +858,83 @@ describe("the comparison policy", () => {
     expect(incompleteOf({ status: "complete", completion: { expected: 9, completed: 7, failed: 0, missing: 2 } })?.detail).toBe("2 of 9 expected results are missing");
     expect(incompleteOf({ status: "complete", n_run: 3, n_cases: 9 })?.detail).toBe("it ran 3 of 9 cases");
     expect(incompleteOf({ status: "complete", n_run: 3, n_cases: 9, limit: 3 })).toBeNull();
+  });
+});
+
+// ---- the Harbor evals' identity (R01) ------------------------------------------------------------------------------------------
+
+/** A summary of a Harbor eval as the runners write it: the job, the akm arm and its AKM_* settings, the engine and the digest of the cases. */
+function harborSummary(over: { arm?: AkmArm; akmEnv?: Record<string, string>; baseUrl?: string; model?: string; attempts?: number; tasks?: string[] } = {}): Record<string, any> {
+  const { arm = releaseArm(), akmEnv = {}, baseUrl = "https://gateway.example/deployment-A/v1", model = "openai/m1", attempts = 3, tasks = ["a", "b"] } = over;
+  const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: tasks }], arm, packagesDir: arm.packages ?? undefined, akmEnv });
+  const job = jobRecord(cfg, "/run", "/repo");
+  const observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
+  return { eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", model, ...akmSummary(arm, akmEnv, [], observed), assets_sha256: "a".repeat(64), engine: { model, endpoint: endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job };
+}
+const checkoutArm = (over: Partial<AkmArm> = {}): AkmArm => ({ bin: "~/akm", build: "v0.9.27-3-gabc1234", build_fingerprint: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/run/akm-packages", ...over });
+
+describe("the identity of a Harbor summary (R01)", () => {
+  const run = (summary: Record<string, any>, name: string) => ({ dir: name, summary, rows: [] });
+  const policy = (a: Record<string, any>[], b: Record<string, any>[], treatment: Axis[]) => policyOf(a.map((s, i) => run(s, `a${i}`)), b.map((s, i) => run(s, `b${i}`)), treatment);
+
+  test("another endpoint, another deployment path or another AKM_* setting is refused unless it is the treatment", () => {
+    const base = harborSummary();
+    expect(policy([base], [harborSummary()], ["build"])).toMatchObject({ mismatches: [], gaps: [], treated: [] });
+    for (const [change, axis] of [
+      [{ baseUrl: "https://other.example/deployment-A/v1" }, "model"],
+      [{ baseUrl: "https://gateway.example/deployment-B/v1" }, "model"],
+      [{ akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, "config"],
+    ] as const) {
+      const other = harborSummary(change);
+      const refused = policy([base], [other], ["build"]);
+      expect(refused.mismatches.map((f) => f.axis), JSON.stringify(change)).toEqual([axis]);
+      expect(policy([base], [other], ["build", axis as Axis]).mismatches).toEqual([]); // declared, the difference is the treatment
+      expect(policy([base], [other], ["build", axis as Axis]).treated).toHaveLength(1);
+    }
+  });
+
+  test("a build treatment is not refused for what the build changes: the akm and plugin versions, the tarballs, the folders", () => {
+    const [release, checkout] = [harborSummary(), harborSummary({ arm: checkoutArm() })];
+    const r = policy([release], [checkout], ["build"]);
+    expect(r.mismatches).toEqual([]);
+    expect(r.gaps).toEqual([]);
+    expect(r.treated.map((f) => f.axis)).toEqual(["build", "build", "build"]); // version (with the plugin's), build, command
+    // without the treatment the same pair is refused on the build axis alone
+    expect(new Set(policy([release], [checkout], []).mismatches.map((f) => f.axis))).toEqual(new Set(["build"]));
+    // another plugin with the same akm is another build
+    const plugin = harborSummary({ arm: { ...releaseArm(), plugin: { version: "0.9.99", tarball: null } } });
+    expect(policy([release], [plugin], []).mismatches.map((f) => f.axis)).toEqual(["build"]);
+  });
+
+  test("the model and the cases are other axes: another model is refused as the model, and the task list is the cases' digest, not the config", () => {
+    const base = harborSummary();
+    expect(policy([base], [harborSummary({ model: "openai/m2" })], ["build"]).mismatches.map((f) => f.axis).sort()).toEqual(["model", "model"]);
+    expect(policy([base], [harborSummary({ tasks: ["a"] })], ["build"]).mismatches).toEqual([]); // the tasks are the cases (assets_sha256), which the summary digests
+  });
+
+  test("a summary that records no config, no AKM_* settings or no engine is a gap, so the result is exploratory", () => {
+    const base = harborSummary();
+    const legacy = { ...base, config: undefined, engine: undefined };
+    expect(policy([base], [legacy], ["build"]).gaps.map((f) => f.field).sort()).toEqual(["config", "engine"]);
+    expect(policy([legacy], [legacy], ["build"]).gaps).toHaveLength(2);
+    expect(policy([base], [{ ...base, akm_env: undefined }], ["build"]).gaps.map((f) => f.field)).toEqual(["config"]);
+    // an endpoint recorded as a host only (before the path was kept) does not say which deployment it was
+    expect(policy([base], [{ ...base, engine: { model: "openai/m1", endpoint: "gateway.example" } }], ["build"]).gaps.map((f) => f.field)).toEqual(["engine"]);
+    // a declared axis is not asked for evidence
+    expect(policy([base], [legacy], ["build", "config", "model"]).gaps).toEqual([]);
+  });
+
+  test("the repeats of one side must agree too", () => {
+    const [a, b, c] = [harborSummary(), harborSummary(), harborSummary({ akmEnv: { AKM_X: "1" } })];
+    const r = policy([a, b, c], [harborSummary()], ["build"]);
+    expect(found(r)).toHaveLength(1);
+    expect(found(r)[0]).toMatch(/^the akm config differs: .* in A a2, .* in A a0 and a1 and B$/);
+    expect(found(policy([a, b, c], [harborSummary()], ["build", "config"]))[0]).toContain("among the repeats of A");
+  });
+
+  test("no credential reaches the identity", () => {
+    const s = harborSummary({ baseUrl: "https://user:DUMMY_PASS@gateway.example/v1?api_key=DUMMY_QUERY" });
+    expect(JSON.stringify(identityOf(s))).not.toMatch(/DUMMY/);
   });
 });
 

@@ -194,7 +194,7 @@ describe("runCorpus", () => {
     const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toEqual({ ...cells(6), control: cells(3), akm: cells(3) });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "192.0.2.5:8080" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080/v1" });
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
     const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
