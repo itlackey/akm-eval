@@ -76,7 +76,8 @@ interface DateForm {
   write: (m: RegExpExecArray, year: number, day: number) => string;
 }
 
-// The four ways lib/rewrite finds a date in a text, with the same patterns, so that the two agree on what a date is.
+// The four ways lib/rewrite finds a date in a text, with the same patterns, so that the two agree on what a date is. A test runs
+// lib/rewrite and shiftTextDates on the same texts and fails when they disagree about one.
 const DATE_FORMS: DateForm[] = [
   { re: /(?<![\d-])(\d{4})-(\d{2})-(\d{2})(?!\d)/g, read: (m) => [Number(m[1]), Number(m[2]), Number(m[3])], write: (m, y, d) => `${y}-${m[2]}-${p2(d)}` },
   { re: /(?<![\d/])(\d{4})\/(\d{2})\/(\d{2})(?![\d/])/g, read: (m) => [Number(m[1]), Number(m[2]), Number(m[3])], write: (m, y, d) => `${y}/${m[2]}/${p2(d)}` },

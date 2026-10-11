@@ -12,8 +12,8 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
-import { sha256Files } from "../../../lib/provenance.ts";
-import { makeResultsDir, markRunning } from "../../../lib/results.ts";
+import { sha256File, sha256Text } from "../../../lib/provenance.ts";
+import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
 import { type ChatResult, type Endpoint, TEMPERATURE, chat, endpointHost } from "./llm.ts";
@@ -52,8 +52,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
   --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge, endpoints,
-                    akm (version, command and build), search mode and sample settings, it asks only the questions
-                    that are not done
+                    akm (version, command, build and config), search mode, dataset files and sample settings, it asks
+                    only the questions that are not done
 ${modelUsage}
 ${judgeUsage}
 ${akmUsage}
@@ -133,6 +133,8 @@ interface Summary {
   top_k: number;
   /** How akm searched: keyword, or semantic (--semantic), in which every search was checked to have come back semantic. */
   search_mode: SearchMode;
+  /** The akm config the eval wrote for the sandbox, as the file has it, with any secret redacted. For --semantic it holds the embedder's model and query timeout. */
+  config: unknown;
   /** The order the sessions akm returns go to the reader in: the haystack's, which is the order the baseline reads. */
   reader_order: string;
   retrieval_only: boolean;
@@ -247,7 +249,7 @@ function armStats(rows: Row[], arm: "without_akm" | "with_akm") {
 
 type Build = ReturnType<typeof akmBuild>;
 
-export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; model: Endpoint | null; judge: Endpoint | null; version: string; build: Build; searchMode: SearchMode; dataset: Record<string, unknown>; assets_sha256: string; seed: string | null; sample: Sample; dir: string; complete: boolean }): Summary {
+export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; model: Endpoint | null; judge: Endpoint | null; version: string; build: Build; searchMode: SearchMode; config: unknown; dataset: Record<string, unknown>; assets_sha256: string; seed: string | null; sample: Sample; dir: string; complete: boolean }): Summary {
   const retrievalOnly = ctx.model === null;
   const both = rows.filter((r) => r.without_akm?.ok && r.with_akm?.ok);
   const scoredQuestions = retrievalOnly ? rows.filter((r) => r.retrieval).length : both.length;
@@ -288,6 +290,7 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     ...ctx.build,
     top_k: TOP_K,
     search_mode: ctx.searchMode,
+    config: ctx.config,
     reader_order: READER_ORDER,
     retrieval_only: retrievalOnly,
     dataset: ctx.dataset,
@@ -359,15 +362,15 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one: the same corpus,
- * model, judge and the hosts they are called at, akm (version, command and build), search mode, dataset and sample. A
- * question with an arm that errored is asked again.
+ * model, judge and the hosts they are called at, akm (version, command, build and config), search mode, dataset, the digest of
+ * its files and sample. A question with an arm that errored is asked again.
  */
-export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; sample: Sample; version: string; build: Build; searchMode: SearchMode }): Row[] {
+export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; assets_sha256: string; sample: Sample; version: string; build: Build; searchMode: SearchMode; config: unknown }): Row[] {
   const summaryPath = join(dir, "summary.json");
   if (!existsSync(summaryPath)) fail(`${dir} has no summary.json, so it is not a run to resume`);
   const prior = JSON.parse(readFileSync(summaryPath, "utf8")) as Summary;
-  // A summary without a search mode is from before the summary held the endpoints and the sampling settings, and before the reader got the sessions in the haystack's order.
-  if (prior.search_mode === undefined) fail(`${dir} was run by an older version of this eval, whose rows are not comparable to the ones it would add. Run again without --resume.`);
+  // A summary without a search mode, a config or a digest is from before the summary held the endpoints, the sampling settings and the inputs, and before the reader got the sessions in the haystack's order.
+  if (prior.search_mode === undefined || prior.config === undefined || prior.assets_sha256 === undefined) fail(`${dir} was run by an older version of this eval, whose rows are not comparable to the ones it would add. Run again without --resume.`);
   const host = (e: Endpoint | null) => (e ? endpointHost(e.baseUrl) : null);
   const settings = (retrievalOnly: boolean) => JSON.stringify(sampling(retrievalOnly));
   const same: [string, unknown, unknown][] = [
@@ -380,9 +383,11 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
     ["akm command", prior.akm_bin, now.build.akm_bin],
     ["akm build", prior.akm_build, now.build.akm_build],
     ["search mode", prior.search_mode, now.searchMode],
+    ["akm config", JSON.stringify(prior.config), JSON.stringify(now.config)],
     ["reader order", prior.reader_order, READER_ORDER],
     ["sampling settings", JSON.stringify({ temperature: prior.temperature, max_tokens: prior.max_tokens }), settings(now.model === null)],
     ["dataset", JSON.stringify(prior.dataset), JSON.stringify(now.dataset)],
+    ["assets sha256", prior.assets_sha256, now.assets_sha256],
     ["sample seed", prior.sample.seed, now.sample.seed],
     ["sample size", prior.sample.n, now.sample.n],
   ];
@@ -407,15 +412,14 @@ export function readSeed(file: string | undefined): string | null {
   return /^\d{1,20}$/.test(seed) ? seed : null;
 }
 
-/** One digest over files in `folder`, by their names there, so the same files in another checkout give the same digest. */
+/**
+ * One digest over files in `folder`, by their names there, so the same files in another checkout give the same digest. It is
+ * the digest sha256Files makes of the names as paths, written out here so that the working folder need not change to get it:
+ * a test holds the two together.
+ */
 function digestFiles(folder: string, names: string[]): string {
-  const cwd = process.cwd();
-  process.chdir(folder); // sha256Files reads the paths as given and names each by its path
-  try {
-    return sha256Files(names);
-  } finally {
-    process.chdir(cwd);
-  }
+  const sorted = [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return sha256Text(sorted.map((name) => `${name}\0${sha256File(join(folder, name))}\n`).join(""));
 }
 
 export async function runCorpus(
@@ -430,6 +434,7 @@ export async function runCorpus(
 ): Promise<Summary> {
   const { assets, results: parent } = folders;
   const searchMode = ctx.akm.mode;
+  const config = ctx.akm.config();
   const build = ctx.build ?? akmBuild();
   let dataset: Record<string, unknown>;
   if (corpus === "public") {
@@ -450,7 +455,7 @@ export async function runCorpus(
     writeFileSync(join(dir, "samples.jsonl"), "");
   } else {
     dir = resolve(args.resume);
-    rows.push(...resumableRows(dir, { corpus, model: ctx.model, judge: ctx.judge, dataset, sample, version: ctx.version, build, searchMode }));
+    rows.push(...resumableRows(dir, { corpus, model: ctx.model, judge: ctx.judge, dataset, assets_sha256, sample, version: ctx.version, build, searchMode, config }));
     writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
     markRunning(dir); // makeResultsDir marks a new folder, so a resumed one is marked here, once it is known to be this run's
   }
@@ -458,7 +463,7 @@ export async function runCorpus(
   console.log(`${NAME} (${corpus}): ${sample.n} of ${sample.total} questions${sample.seed === null ? "" : `, drawn with sample seed ${sample.seed}`}${rows.length > 0 ? `, ${rows.length} already done` : ""}`);
   if (ctx.model && sample.n > 50) console.log("  Each question sends the whole history, about 115k tokens, in the without-akm arm. Use --limit for a shorter run.");
 
-  const base = { corpus, label: args.label, model: ctx.model, judge: ctx.judge, version: ctx.version, build, searchMode, dataset, assets_sha256, seed, sample, dir: relative(ROOT, dir) };
+  const base = { corpus, label: args.label, model: ctx.model, judge: ctx.judge, version: ctx.version, build, searchMode, config, dataset, assets_sha256, seed, sample, dir: relative(ROOT, dir) };
   const save = (complete: boolean) => {
     const summary = buildSummary(rows, { ...base, complete });
     const { results_dir: _dir, ...stored } = summary;
@@ -503,6 +508,7 @@ export async function runCorpus(
     }
   }
   const summary = save(gaveUp === undefined && rows.length === sample.n);
+  clearRunning(dir); // this folder is done: under --corpus all the next corpus runs in this process, which is alive
   printSummary(summary);
   if (gaveUp !== undefined) {
     if (gaveUpOn === "akm") fail(`akm could not search the first ${GIVE_UP_AFTER} questions, so the run stopped. Last error: ${gaveUp}\nCheck that \`${process.env.AKM_BIN?.trim() || "akm"} index\` and \`search\` work.`, 1);

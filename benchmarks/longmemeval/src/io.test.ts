@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { akmVersion } from "../../../lib/akm/akm.ts";
+import { akmVersion, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { Akm, PROJECTION_LIMIT, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
 import { TEMPERATURE, chat, chatUrl, endpointHost } from "./llm.ts";
@@ -155,6 +155,15 @@ describe("Akm", () => {
     await expect(partial.load([{ date: "d", turns: [] }, { date: "d", turns: [] }], "q")).rejects.toThrow("akm embedded 1 of 2 sessions");
     const plain = new Akm(sandboxRunning(script, dirs, { env: { FAKE_AKM_EMBEDDED: "1" } }));
     expect((await plain.load([{ date: "d", turns: [] }, { date: "d", turns: [] }], "q")).size).toBe(2); // keyword indexing has no embeddings to count
+  });
+
+  test("config is the file the sandbox runs with, keyword or semantic, with any secret redacted", () => {
+    const script = fakeAkmScript(tmp());
+    expect(new Akm(sandboxRunning(script, dirs)).config()).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
+    expect(new Akm(sandboxRunning(script, dirs, { semantic: true }), "semantic").config()).toEqual(semanticConfig());
+    const sandbox = sandboxRunning(script, dirs);
+    writeConfig(sandbox, { semanticSearchMode: "off", engines: { model: { endpoint: "http://h/v1", apiKey: "sk-live", model: "m" }, other: { apiKey: "$MODEL_API_KEY" } } });
+    expect(new Akm(sandbox).config()).toEqual({ semanticSearchMode: "off", engines: { model: { endpoint: "http://h/v1", apiKey: "<redacted>", model: "m" }, other: { apiKey: "$MODEL_API_KEY" } } });
   });
 
   test("a command that outlives its limit is a timeout, with the message the run counts", async () => {

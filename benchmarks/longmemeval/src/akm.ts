@@ -3,9 +3,10 @@
 // caller's akm is never read or written.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Sandbox, agentDetailArgs, runAkmJson } from "../../../lib/akm/akm.ts";
+import { redactConfig } from "../../../lib/provenance.ts";
 import type { SessionView } from "./prompts.ts";
 
 const AKM_TIMEOUT_MS = 120_000; // for the index and for each search. A command that takes longer is killed, and its question counts as a timeout.
@@ -39,6 +40,11 @@ export class Akm {
     readonly mode: SearchMode = "keyword",
     private readonly timeoutMs = AKM_TIMEOUT_MS,
   ) {}
+
+  /** The akm config the sandbox runs with, as the file in its config folder has it, with any secret redacted. For --semantic it holds the embedder's model and its query timeout. */
+  config(): unknown {
+    return redactConfig(JSON.parse(readFileSync(join(this.sandbox.dir, "config", "config.json"), "utf8")));
+  }
 
   /**
    * Replaces the bundle with these sessions, one memory each, and indexes it. A memory is named by a hash of the salt and its

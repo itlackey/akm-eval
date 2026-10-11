@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
@@ -96,6 +97,30 @@ describe("generate", () => {
     expect(shiftTextDates(kept, 1)).toBe(kept);
   });
 
+  test("finds the same dates as lib/rewrite, whose patterns generate.ts copies", () => {
+    // lib/rewrite moves by a count of days, and shiftTextDates by calendar years. Where only one of them sees a date, the other
+    // leaves it in its old year. So each text goes to both, and both have to change it or both have to leave it. lib/rewrite runs
+    // as generate runs it, a process on a folder of files, with a map that moves dates by one day.
+    const dates = [
+      "2024-03-05", "2024/03/05", "March 5th, 2024", "5 Mar 2024", "Sept. 09 2024", "29 February 2024", "Dec 31 2199", "1st of May, 2024 and 1 May 2024",
+      "2024-02-30", "Feb 30, 2024", "2024-13-01", "1850-01-01", "2200-01-01", "March 2024", "in 2024", "May 5", "march 5, 2024", "5 mar 2024",
+      "12024-03-05", "2024-03-051", "2024-03-05-07", "x2024-03-05", "2024/03/05/", "/2024/03/05", "2024-3-5", "5 Mar 2024s", "Mar 5 20245", "version 2024.03.05", "May5, 2024",
+    ];
+    const texts = [...dates.map((date) => `on ${date} and`), dates.join(" | ")];
+    const dir = tmp();
+    mkdirSync(join(dir, "in"));
+    const file = (i: number) => `t${String(i).padStart(3, "0")}.txt`;
+    texts.forEach((text, i) => writeFileSync(join(dir, "in", file(i)), text));
+    writeFileSync(join(dir, "map.json"), JSON.stringify({ version: 1, seed: "1", dateShiftDays: 1, words: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} }));
+    const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "..", "..", "lib", "rewrite", "rewrite.ts"), "--seed", "1", "--map", join(dir, "map.json"), "--keep-values", join(dir, "in"), join(dir, "out")], { stdout: "pipe", stderr: "pipe" });
+    expect(run.stderr.toString()).toBe("");
+    expect(run.exitCode).toBe(0);
+    const moved = texts.map((text, i) => readFileSync(join(dir, "out", file(i)), "utf8") !== text);
+    expect(texts.map((text, i) => [text, shiftTextDates(text, 1) !== text])).toEqual(texts.map((text, i) => [text, moved[i]]));
+    expect(moved.filter(Boolean).length).toBeGreaterThanOrEqual(8); // the check is not vacuous
+    expect(moved.filter((m) => !m).length).toBeGreaterThanOrEqual(8); // and the near misses are there
+  });
+
   test("says which questions the evidence check covers: the ones whose answer is in the evidence word for word", () => {
     const q = (answer: string, text: string): Question => ({ ...original, answer, answer_session_ids: ["answer_1"], haystack_sessions: [[{ role: "user", content: text }], []] });
     const verbatim = q("Lisbon", "Priya flew to Lisbon");
@@ -145,12 +170,13 @@ function tinyDataset(): Question[] {
   ];
 }
 
-/** A model that reads the history it is given and a judge that compares the answer to the key. `bodies` keeps every request. */
-function fakeEndpoint(counter = { requests: 0 }, reportedModel = "fake-model", bodies: { max_tokens?: number; temperature?: number; messages: { content: string }[] }[] = []) {
+/** A model that reads the history it is given and a judge that compares the answer to the key. `bodies` keeps every request, and `onRequest` is called with each. */
+function fakeEndpoint(counter = { requests: 0 }, reportedModel = "fake-model", bodies: { max_tokens?: number; temperature?: number; messages: { content: string }[] }[] = [], onRequest: () => void = () => {}) {
   return Bun.serve({
     port: 0,
     async fetch(req) {
       counter.requests++;
+      onRequest();
       const body = (await req.json()) as (typeof bodies)[number];
       bodies.push(body);
       const prompt = body.messages[0].content;
@@ -239,6 +265,9 @@ describe("runCorpus", () => {
     // the files it read: the lock and the questions, by name, so the same files elsewhere give the same digest
     expect(summary.assets_sha256).toBe(digestIn(folders.assets, ["ASSETS.lock", DATA_FILE]));
     expect(stored.assets_sha256).toBe(summary.assets_sha256);
+    // the akm config the eval wrote for the sandbox: keyword search, no registries
+    expect(summary.config).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
+    expect(stored.config).toEqual(summary.config);
   });
 
   test("the summary names the files it read and, for a private run, the seed in private/seed", async () => {
@@ -386,6 +415,7 @@ describe("runCorpus", () => {
     expect(stored).toMatchObject({ complete: false, n_run: 3, n_scored: 0, n_errored: 3 });
     expect(stored.metrics.retrieval).toMatchObject({ n: 2, hit_rate: 0.5 });
     expect(stored.metrics.accuracy.without_akm).toMatchObject({ n: 0, n_errored: 3 });
+    expect(existsSync(join(folders.results, readdirSync(folders.results)[0], ".running"))).toBe(false); // a run that stopped is not running
   });
 
   test("a broken akm stops the run too, with or without a model", async () => {
@@ -418,6 +448,9 @@ describe("runCorpus", () => {
     const semantic = new Akm(sandboxRunning(script, dirs, { semantic: true }), "semantic");
     const summary = await quiet(() => runCorpus("public", { label: "s", sampleSeed: 1 }, { akm: semantic, model: null, judge: null, version: "v" }, folders));
     expect(summary).toMatchObject({ search_mode: "semantic", n_run: 3, n_errored: 0 });
+    // the embedder and the query timeout the run used are in the summary, as the config file has them
+    expect(summary.config).toEqual(semanticConfig());
+    expect(summary.config).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 } });
     expect(summary.metrics.retrieval).toMatchObject({ n: 2, hit_rate: 0.5 });
     // an answer that fell back to keywords is an errored call, and the run stops when akm cannot search at all
     const fallback = new Akm(sandboxRunning(script, dirs, { semantic: true, env: { FAKE_AKM_SEARCH_MODE: "fts-fallback" } }), "semantic");
@@ -429,9 +462,24 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ search_mode: "semantic", complete: false, timeouts: 0 });
   });
 
-  test("resume checks the akm command and build, the search mode and the hosts, and marks the folder as running", async () => {
+  test("a run marks its folder while it runs and clears the marker when it ends", async () => {
     const { akm, folders } = setup();
-    server = fakeEndpoint();
+    const marker = () => join(folders.results, readdirSync(folders.results)[0], ".running");
+    const seen: boolean[] = [];
+    server = fakeEndpoint({ requests: 0 }, "fake-model", [], () => seen.push(existsSync(marker())));
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
+    await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, { akm, model: endpoint, judge: endpoint, version: "v" }, folders));
+    expect(seen).toHaveLength(12);
+    expect(seen.every(Boolean)).toBe(true);
+    // this process is still alive, as it is under --corpus all when the next corpus starts, and the marker of the finished folder is gone
+    expect(existsSync(marker())).toBe(false);
+  });
+
+  test("resume checks the akm command, build and config, the search mode, the hosts and the files, and marks the folder as running", async () => {
+    const { akm, folders } = setup();
+    const markerOf = () => join(folders.results, readdirSync(folders.results)[0], ".running");
+    const markers: (string | null)[] = [];
+    server = fakeEndpoint({ requests: 0 }, "fake-model", [], () => markers.push(existsSync(markerOf()) ? readFileSync(markerOf(), "utf8").trim() : null));
     const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
     const build = { akm_bin: "bun ~/code/akm/src/cli.ts", akm_build: "v0.9.26-1-gabc123" as string | null };
     const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v", build };
@@ -440,7 +488,9 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject(build);
     const resume = (c: typeof context) => quiet(() => runCorpus("public", { label: "t", sampleSeed: 1, resume: dir }, c, folders));
     const marker = join(dir, ".running");
-    rmSync(marker, { force: true }); // the first run marked the folder, and its process is this one
+    expect(markers).toHaveLength(12);
+    expect(markers.every((m) => m === String(process.pid))).toBe(true); // the first run marked the folder while it ran, and its process is this one
+    expect(existsSync(marker)).toBe(false); // and cleared the marker when it ended
 
     // two builds of one version are two runs, and so are two commands, and a git build against an installed release
     await expect(resume({ ...context, build: { ...build, akm_build: "v0.9.26-2-gdef456" } })).rejects.toThrow("different akm build (v0.9.26-1-gabc123, now v0.9.26-2-gdef456)");
@@ -449,6 +499,10 @@ describe("runCorpus", () => {
     // keyword and semantic search are two runs
     const semantic = new Akm(sandboxRunning(fakeAkmScript(tmp()), dirs, { semantic: true }), "semantic");
     await expect(resume({ ...context, akm: semantic })).rejects.toThrow("different search mode (keyword, now semantic)");
+    // and so is a config that changed with the mode kept, such as another embedder or a registry
+    const edited = sandboxRunning(fakeAkmScript(tmp()), dirs);
+    writeConfig(edited, { configVersion: "0.9.0", semanticSearchMode: "off", registries: ["https://registry.example"] });
+    await expect(resume({ ...context, akm: new Akm(edited) })).rejects.toThrow("different akm config");
     // the same model name at another host is another model, and so is the judge
     const other = fakeEndpoint();
     try {
@@ -460,14 +514,47 @@ describe("runCorpus", () => {
     }
     expect(existsSync(marker)).toBe(false); // a resume that was refused marks nothing
 
-    // the same settings carry on, and the folder is marked as running again, by this process, until it ends
+    // the same settings carry on, and the folder is marked as running again, by this process, until the run ends
+    const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n");
+    writeFileSync(join(dir, "samples.jsonl"), `${rows[0]}\n`);
+    markers.length = 0;
     await resume(context);
-    expect(readFileSync(marker, "utf8").trim()).toBe(String(process.pid));
+    expect(markers).toHaveLength(8); // the two questions that were left, two answers and two verdicts each
+    expect(markers.every((m) => m === String(process.pid))).toBe(true);
+    expect(existsSync(marker)).toBe(false);
 
     // a summary from before the summary held these settings is not resumed
-    const { search_mode: _mode, ...older } = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(older));
-    await expect(resume(context)).rejects.toThrow("older version of this eval");
+    const stored = readFileSync(join(dir, "summary.json"), "utf8");
+    for (const key of ["search_mode", "config", "assets_sha256"]) {
+      const { [key]: _gone, ...older } = JSON.parse(stored);
+      writeFileSync(join(dir, "summary.json"), JSON.stringify(older));
+      await expect(resume(context)).rejects.toThrow("older version of this eval");
+    }
+    writeFileSync(join(dir, "summary.json"), stored);
+  });
+
+  test("resume refuses files that changed since the run: the lock, or the questions of a private run, edited by hand", async () => {
+    const { root, akm, folders } = setup();
+    const retrieval = { akm, model: null, judge: null, version: "v" };
+    // public: the questions are checked against the lock's sha256, so a lock that differs in anything else is what a resume can see
+    await quiet(() => runCorpus("public", { label: "a", sampleSeed: 1 }, retrieval, folders));
+    const lock = JSON.parse(readFileSync(join(folders.assets, "ASSETS.lock"), "utf8"));
+    const publicDir = join(folders.results, readdirSync(folders.results)[0]);
+    writeFileSync(join(folders.assets, "ASSETS.lock"), JSON.stringify({ ...lock, files: { [DATA_FILE]: { ...lock.files[DATA_FILE], url: "http://elsewhere" } } }));
+    await expect(quiet(() => runCorpus("public", { label: "a", sampleSeed: 1, resume: publicDir }, retrieval, folders))).rejects.toThrow("different assets sha256");
+
+    // private: nothing checks the questions file against rewrite.json, so the digest is what notices an edit
+    const assets = join(root, "private-assets");
+    mkdirSync(assets);
+    writeFileSync(join(assets, DATA_FILE), readFileSync(join(folders.assets, DATA_FILE)));
+    writeFileSync(join(assets, "rewrite.json"), JSON.stringify({ derived_from: { revision: "r" }, tool: "lib/rewrite", years_back: 1, sha256: "declared" }));
+    const mine = { assets, results: join(root, "private-results") };
+    await quiet(() => runCorpus("private", { label: "p", sampleSeed: 1 }, retrieval, mine));
+    const privateDir = join(mine.results, readdirSync(mine.results)[0]);
+    const resume = () => quiet(() => runCorpus("private", { label: "p", sampleSeed: 1, resume: privateDir }, retrieval, mine));
+    expect((await resume()).n_run).toBe(3); // the same files carry on
+    writeFileSync(join(assets, DATA_FILE), JSON.stringify(tinyDataset().map((q, i) => (i === 0 ? { ...q, answer: "RED" } : q))));
+    await expect(resume()).rejects.toThrow("different assets sha256");
   });
 });
 
