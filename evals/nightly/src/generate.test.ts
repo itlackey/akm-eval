@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assetsDigest, readGenerated } from "../../consolidate/src/inputs.ts";
 import { checkRewrite } from "./generate.ts";
-import { type DistillItem, type Night, loadNight, nightProblems } from "./lib.ts";
+import { type DistillItem, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
 
 const publicNight = loadNight(join(import.meta.dir, "..", "assets"));
 
@@ -72,6 +73,41 @@ describe("generate", () => {
     const same = [...night.files.entries()].filter(([path, text]) => publicNight.files.get(path) === text).length;
     expect(same).toBeLessThan(night.files.size / 2);
     expect(readFileSync(join(out, "assets", "items.jsonl"), "utf8")).not.toBe(readFileSync(join(import.meta.dir, "..", "assets", "items.jsonl"), "utf8"));
+    // it says which seed and which public night the set was made from, and leaves no temporary folder behind
+    const publicAssets = join(import.meta.dir, "..", "assets");
+    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: assetsDigest(publicAssets, nightFiles(publicAssets)) });
+    expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
+  });
+
+  test("a new run replaces the old night, map and marker together", () => {
+    const out = temp();
+    expect(generate("1", out).exitCode).toBe(0);
+    writeFileSync(join(out, "assets", "left-over.txt"), "from the first run");
+    const first = readFileSync(join(out, "assets", "items.jsonl"), "utf8");
+    expect(generate("2", out).exitCode).toBe(0);
+    expect(readFileSync(join(out, "assets", "items.jsonl"), "utf8")).not.toBe(first);
+    expect(readdirSync(join(out, "assets")).sort()).toEqual(["items.jsonl", "library"]);
+    expect(readGenerated(out)?.seed).toBe("2");
+    expect(JSON.parse(readFileSync(join(out, "map.json"), "utf8")).seed).toBe("2"); // the map is the second run's too
+  });
+
+  test("a run that fails leaves the previous night, map and marker as they were, and no temporary folder", () => {
+    const out = temp();
+    expect(generate("1", out).exitCode).toBe(0);
+    const files = ["assets/items.jsonl", "map.json", "generated.json"];
+    const before = Object.fromEntries(files.map((f) => [f, readFileSync(join(out, f), "utf8")]));
+    const failed = generate("not-a-seed", out); // lib/rewrite refuses it after the temporary folder is made
+    expect(failed.exitCode).not.toBe(0);
+    expect(failed.stderr.toString()).toContain("--seed must be a non-negative integer");
+    expect(Object.fromEntries(files.map((f) => [f, readFileSync(join(out, f), "utf8")]))).toEqual(before);
+    expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
+    expect(loadNight(join(out, "assets")).items).toHaveLength(publicNight.items.length);
+  });
+
+  test("a first run that fails leaves nothing that a private run would take for a night", () => {
+    const out = temp();
+    expect(generate("not-a-seed", out).exitCode).not.toBe(0);
+    expect(readdirSync(out)).toEqual([]);
   });
 
   test("the same seed gives the same night, and another seed another", () => {

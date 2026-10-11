@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { type Item, applyFix, loadNight, nightlyConfig, refOf } from "./lib.ts";
+import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
+import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
+import { type Item, applyFix, loadNight, nightFiles, nightlyConfig, refOf } from "./lib.ts";
 import { feedbackArgs, hideEndpoint, plant, runCorpus } from "./run.ts";
 
 const night = loadNight(join(import.meta.dir, "..", "assets"));
@@ -41,7 +43,11 @@ const apply = (effects) => {
 };
 if (cmd === "index") {
   if (scenario.indexFails) { console.error(JSON.stringify({ ok: false, error: scenario.indexFails })); process.exit(70); }
-  if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.semanticSearchMode !== "auto") { console.error("no deterministic embedder or semantic search is off"); process.exit(3); }
+  if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
+  if (process.env.FAKE_EMBEDDER === "real") {
+    // the real embedder: no switch for the hash one, akm's model in the config, and the model's folder in the environment
+    if (process.env.AKM_EMBED_DETERMINISTIC || config.embedding?.localModel !== "Xenova/bge-small-en-v1.5" || !process.env.HF_HOME) { console.error("the real embedder is not set up"); process.exit(3); }
+  } else if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
   json({ ok: true });
 } else if (cmd === "feedback") {
   json({ ok: true });
@@ -49,6 +55,7 @@ if (cmd === "index") {
   const strategy = args[args.indexOf("--strategy") + 1];
   writeFileSync(process.env.FAKE_LOG + ".config", JSON.stringify(config));
   if (strategy !== (scenario.strategy ?? "default") || !has("--require-engines") || !has("--no-sync") || !has("--json-to-stdout") || !has("--timeout-ms")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (scenario.improveSleeps) await Bun.sleep(30000);
   if (scenario.improveFails) { console.error(JSON.stringify({ ok: false, error: scenario.improveFails })); process.exit(78); }
   apply(scenario.improveWrites);
   writeFileSync(state, JSON.stringify((scenario.proposals ?? []).map((p) => ({ ...p, status: "pending" }))));
@@ -70,7 +77,7 @@ if (cmd === "index") {
 type Scenario = Record<string, unknown>;
 
 /** A temp folder holding a small night of the public night's items, a scenario, and a context that runs the fake akm. */
-function setup(ids: string[], scenario: Scenario) {
+function setup(ids: string[], scenario: Scenario, embedder: Embedder = "deterministic") {
   const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
   dirs.push(root);
   const items = ids.map((id) => night.items.find((i) => i.id === id) as Item);
@@ -85,8 +92,8 @@ function setup(ids: string[], scenario: Scenario) {
   process.env.FAKE_SCENARIO = join(root, "scenario.json");
   process.env.FAKE_LOG = join(root, "commands.log");
   writeFileSync(process.env.FAKE_LOG, "");
-  const newSandbox = () => ({ ...createSandbox("nightly-test", { keepModelKey: true }), cmd: ["bun", join(root, "fake-akm.ts")] });
-  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
+  const newSandbox = () => ({ ...createSandbox("nightly-test", sandboxOptions(embedder)), cmd: ["bun", join(root, "fake-akm.ts")] });
+  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", embedder };
   return { ctx, folders: { assets, results: join(root, "results") }, root, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
 }
 
@@ -350,6 +357,89 @@ describe("runCorpus", () => {
     const { ctx, folders } = setup(IDS, good());
     await expect(quiet(() => runCorpus("public", ctx, folders))).resolves.toBeDefined();
   });
+
+  test("with the real embedder it sets akm's model in the config and no switch for the hash one, in a semantic sandbox, and records it", async () => {
+    process.env.FAKE_EMBEDDER = "real"; // the fake refuses to index without the model's folder, the model in the config, and with the switch on
+    try {
+      const { ctx, folders, root } = setup(IDS, good(), "real");
+      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
+      expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
+      expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("the real embedder's config is refused by an akm run with the hash embedder's sandbox, so the two cannot be mixed up", async () => {
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const { ctx, folders } = setup(IDS, good(), "deterministic"); // a plain sandbox: no model folder
+      await expect(quiet(() => runCorpus("public", { ...ctx, embedder: "real" }, folders))).rejects.toThrow("the real embedder is not set up");
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("the default is the deterministic embedder: the summary says so and the config has no embedding model", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(summary).toMatchObject({ embedder: "deterministic" });
+    expect(summary.config.embedding).toBeUndefined();
+    expect(resultsOf(folders).summary.embedder).toBe("deterministic");
+  });
+
+  test("records the config it wrote with the secrets and the endpoint left out, the engine's settings, the digest of the night, no seed for the public night, and a complete run", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    await quiet(() => runCorpus("public", { ...ctx, hasKey: true }, folders));
+    const { summary } = resultsOf(folders);
+    expect(summary).toMatchObject({ status: "complete", aborted_reason: null, seed: null });
+    expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
+    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", endpoint: "localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
+    expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
+    expect(JSON.stringify(summary)).not.toContain("localhost:1/v1");
+    // every key it wrote before is still there
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics"]) expect(summary).toHaveProperty(key);
+  });
+
+  test("the digest of the night follows the library and the items, and the config follows the config patch", async () => {
+    const [x, y] = [setup(IDS, good()), setup(IDS, good())];
+    writeFileSync(join(y.folders.assets, "library", dup.a), `${textOf(dup.a)}\nAn added line.\n`);
+    const overrides = { strategy: "default", configPatch: { path: "p.json", sha256: "abc", patch: { engines: { nightly: { temperature: 0.3 } } } } };
+    await quiet(() => runCorpus("public", { ...x.ctx, overrides }, x.folders));
+    await quiet(() => runCorpus("public", y.ctx, y.folders));
+    const [a, b] = [resultsOf(x.folders).summary, resultsOf(y.folders).summary];
+    expect(a.assets_sha256).not.toBe(b.assets_sha256);
+    expect(a.engine.temperature).toBe(0.3);
+    expect(a.config.engines.nightly.temperature).toBe(0.3);
+    expect(b.engine.temperature).toBe(0);
+  });
+
+  test("a private run records the seed its assets were made from: generated.json beside them, else private/seed", async () => {
+    const { ctx, folders, root } = setup(IDS, good());
+    const priv = join(root, "private");
+    const assets = join(priv, "nightly", "assets");
+    mkdirSync(dirname(assets), { recursive: true });
+    cpSync(folders.assets, assets, { recursive: true });
+    const private_ = { assets, results: join(priv, "nightly", "results") };
+    expect(await quiet(() => runCorpus("private", ctx, private_))).toMatchObject({ corpus: "private", seed: null });
+    writeFileSync(join(priv, "seed"), "12345\n");
+    expect(await quiet(() => runCorpus("private", { ...ctx, label: "t2" }, private_))).toMatchObject({ seed: "12345" });
+    writeFileSync(join(priv, "nightly", GENERATED), JSON.stringify({ seed: "777", inputs_sha256: "x" }));
+    const last = await quiet(() => runCorpus("private", { ...ctx, label: "t3" }, private_));
+    expect(last.seed).toBe("777");
+    expect(JSON.parse(readFileSync(join(last.results_dir, "summary.json"), "utf8")).seed).toBe("777");
+    expect(last.assets_sha256).toBe(assetsDigest(assets, nightFiles(assets)));
+  });
+
+  test("an improve run the eval kills for running too long ends the night with a message that says so, and leaves nothing behind", async () => {
+    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
+    const { ctx, folders } = setup(IDS, { ...good(), improveSleeps: true });
+    await expect(quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders))).rejects.toThrow("akm improve timed out after 1.5s");
+    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+  });
 });
 
 describe("the command", () => {
@@ -372,6 +462,9 @@ describe("the command", () => {
     expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
     expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
     expect(run(["--repeat", "0"], model).err).toContain("--repeat must be a positive integer");
+    expect(run(["--embedder", "fake"], model)).toMatchObject({ code: 2 });
+    expect(run(["--embedder", "fake"], model).err).toContain('--embedder must be deterministic or real, not "fake"');
+    expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
     expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
@@ -396,6 +489,11 @@ describe("the command", () => {
     writeFileSync(join(root, "patch.json"), "{}");
     const done = run(["--strategy", "thorough", "--config-patch", join(root, "patch.json"), "--repeat", "2"], model);
     expect(done.err).toContain("could not run `no-such-akm-in-this-test --version`");
+  });
+
+  test("takes --embedder real or deterministic, and goes on to the akm check", () => {
+    expect(run(["--embedder", "real"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--embedder", "deterministic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
   test("refuses an akm older than the one it is written for", () => {

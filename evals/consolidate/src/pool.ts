@@ -47,6 +47,11 @@ export function loadPool(dir: string): Pool {
   return pool;
 }
 
+/** The files loadPool reads from the pool folder, relative to it: labels.json and every note, for the digest of summary.json's assets_sha256. */
+export function poolFiles(dir: string): string[] {
+  return ["labels.json", ...readdirSync(join(dir, "memories")).filter((f) => f.endsWith(".md")).sort().map((f) => `memories/${f}`)];
+}
+
 /** What is wrong with a pool: a note without a label or a file, in no cluster or two, a retire entry outside its cluster, a claim that is not where it says. */
 export function poolProblems(pool: Pool): string[] {
   const problems: string[] = [];
