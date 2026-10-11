@@ -18,7 +18,10 @@ budget_tokens = 25000
 budget_wall_ms = 90000
 gold_ref = "skills/az-cli"
 gold_ref_legacy = "skill:az-cli"
+library_tokens = ["az resource list", "--query", "-o tsv", "&&", "[?tags."]
 memory_ability = "procedural_lookup"
+# The next three keys describe the first design of this task, a memory whose lesson the verifier rejected. The library now
+# teaches the form the verifier accepts. Nothing reads them.
 task_family = "workflow-compliance/feedback-polarity"
 workflow_failure_category = "feedback-polarity-trap"
 expected_workflows = ["akm-lookup-before-edit", "akm-negative-feedback-on-failure"]

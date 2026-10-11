@@ -79,6 +79,13 @@ az resource list --tag <key>=<value>
 # example: az resource list --tag env=prod
 ```
 
+`--tag` selects on one tag. To select on several tags at once, filter on `tags` inside the JMESPath `--query`, joining the conditions with `&&`. Put the columns you want after the filter, and add `-o tsv` for tab-separated output:
+
+```sh
+az resource list --query "[?tags.<key>=='<value>' && tags.<key>=='<value>'].[name,resourceGroup]" -o tsv
+# example: az resource list --query "[?tags.env=='stage' && tags.team=='ops'].[name,resourceGroup]" -o tsv
+```
+
 ## Output
 
 `-o table` for humans, `-o json` for scripts, `--query "..."` to project fields with JMESPath. `-o tsv` is the right choice when piping a single value into another command.

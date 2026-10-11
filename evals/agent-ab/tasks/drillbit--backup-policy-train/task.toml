@@ -19,6 +19,7 @@ budget_tokens = 25000
 budget_wall_ms = 360000
 gold_ref = "skills/drillbit"
 gold_ref_legacy = "skill:drillbit"
+library_tokens = ["backup", "--cluster", "--retention", "--snapshots", "30d"]
 memory_ability = "procedural_lookup"
 task_family = "drillbit/backup"
 akm_keywords = "drillbit backup retention snapshots cluster"

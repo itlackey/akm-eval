@@ -12,13 +12,15 @@
 // Only tasks whose tools are made up are rewritten (`tools = "fictional"` in their task.toml). Renaming a tool the
 // model already knows changes how hard the task is, not only what it says, so those tasks are left out.
 //
-// A private task is kept when its solution passes its verifier, the starting workspace does not, and the public
-// task's answer does not. A task that fails any of these is left out too, and the reason is printed.
+// A private task is kept when its solution passes its verifier, the starting workspace does not, the public
+// task's answer does not, and its library holds what the verifier looks for. A task that fails any of these is left
+// out too, and the reason is printed.
 
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { libraryProblems } from "./lib.ts";
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -113,9 +115,10 @@ function solve(task: string, work: string): void {
 /**
  * What is wrong with a private task. Its solution must pass its verifier, the workspace it starts with must not, and
  * what the public solution leaves must not either: otherwise nothing in the answer changed, and a model that
- * remembers the public task would pass.
+ * remembers the public task would pass. Without a public task, as for the public tasks themselves, only the first two
+ * are checked.
  */
-export function prove(name: string, privateTask: string, publicTask: string): Proof {
+export function prove(name: string, privateTask: string, publicTask?: string): Proof {
   const problems: string[] = [];
   const dirs: string[] = [];
   const fresh = (task: string) => {
@@ -132,11 +135,13 @@ export function prove(name: string, privateTask: string, publicTask: string): Pr
     const solved = verify(privateTask, own);
     if (!solved.pass) problems.push(`the solution does not pass the verifier: ${solved.output.split("\n").slice(-3).join(" / ").slice(0, 300)}`);
 
-    const old = fresh(publicTask);
-    solve(publicTask, old);
-    const carried = fresh(privateTask);
-    cpSync(old, carried, { recursive: true });
-    if (verify(privateTask, carried).pass) problems.push("the public solution's answer passes the private verifier, so the answer did not change");
+    if (publicTask !== undefined) {
+      const old = fresh(publicTask);
+      solve(publicTask, old);
+      const carried = fresh(privateTask);
+      cpSync(old, carried, { recursive: true });
+      if (verify(privateTask, carried).pass) problems.push("the public solution's answer passes the private verifier, so the answer did not change");
+    }
   } finally {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });
   }
@@ -243,6 +248,7 @@ export function generate(opts: Options): Result {
     const stash = libraryOf(dir);
     if (!stash || !libraries.has(stash)) why.push(`its library ${stash ?? "(none named)"} is not among the private libraries`);
     why.push(...prove(newNames[i], dir, join(from, "tasks", publicName)).problems);
+    why.push(...libraryProblems(dir, join(assets, "libraries")));
     if (why.length) {
       leftOut.push({ task: newNames[i], why });
       rmSync(dir, { recursive: true, force: true });

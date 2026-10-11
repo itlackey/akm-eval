@@ -19,6 +19,7 @@ budget_tokens = 25000
 budget_wall_ms = 360000
 gold_ref = "skills/inkwell"
 gold_ref_legacy = "skill:inkwell"
+library_tokens = ["healthcheck", "path", "interval", "threshold"]
 memory_ability = "procedural_lookup"
 task_family = "inkwell/healthcheck"
 akm_keywords = "inkwell service healthcheck path interval threshold"
