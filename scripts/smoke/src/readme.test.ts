@@ -1,5 +1,6 @@
 // The root README says, eval by eval, which corpora, flags and akm it has and what its summary.json records. These tests check that
-// table against the code, so it cannot drift without a test failing: every run script's --help is run and compared with it.
+// table against the code, so it cannot drift without a test failing: every run script's --help is run and compared with it. Nothing here
+// needs akm or Docker. bakeoff's help is Python, which only uv runs, so its three help tests are skipped on a machine without uv.
 
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -13,8 +14,14 @@ const README = read("README.md");
 const COMMON = ["--corpus", "--limit", "--label"];
 const LEFT_OUT = [...COMMON, "--help"];
 
-/** bakeoff's help is Python run by uv, which on a cold machine installs PyYAML first. */
+/** bakeoff's help is Python run by uv, which on a cold machine installs PyYAML first, from the network. */
 const HELP_TIMEOUT_MS = 120_000;
+
+/** Does the run script start uv? Only bakeoff's does. */
+const needsUv = (folder: string): boolean => /\buv run\b/.test(read(`${folder}/run`));
+const HAS_UV = Bun.which("uv") !== null;
+/** The test function for a check of --help: skipped for a script that needs uv on a machine that has none. The rest of the table is still checked. */
+const helpTest = (folder: string) => (needsUv(folder) && !HAS_UV ? test.skip : test);
 
 /**
  * What the seven evals that run a model through akm all record in summary.json, as the README says under its table. Each is found in
@@ -67,12 +74,20 @@ export function helpCorpora(help: string): string[] {
 
 const rows = tableRows(README);
 
-/** Each run script's --help, started together. bakeoff's is Python, run by uv. */
+/** Each run script's --help, started together, except one that needs uv when there is none. A script that prints no help is an error that says why: a uv that cannot fetch PyYAML, for one. */
 const helps = new Map(
-  rows.map((r) => {
-    const proc = Bun.spawn(["bash", join(ROOT, r.folder, "run"), "--help"], { cwd: ROOT, stdin: "ignore", stdout: "pipe", stderr: "ignore", env: process.env });
-    return [r.folder, new Response(proc.stdout).text().then(async (text) => (await proc.exited, text))] as const;
-  }),
+  rows
+    .filter((r) => HAS_UV || !needsUv(r.folder))
+    .map((r) => {
+      const proc = Bun.spawn(["bash", join(ROOT, r.folder, "run"), "--help"], { cwd: ROOT, stdin: "ignore", stdout: "pipe", stderr: "pipe", env: process.env });
+      const help = (async () => {
+        const [text, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+        if (!text.trim()) throw new Error(`${r.folder}/run --help printed no help (exit ${code}): ${err.trim().slice(-300)}`);
+        return text;
+      })();
+      help.catch(() => {}); // the test that awaits it reports the error
+      return [r.folder, help] as const;
+    }),
 );
 
 /** Where else the summary of an eval is written from: the Harbor evals' report is in lib/harbor, and nightly takes the fields about its inputs from consolidate. */
@@ -95,7 +110,7 @@ function sourceOf(folder: string): string {
 }
 
 /** Does the source write `key` into an object, as a property or a shorthand? akm_bin, akm_build, strategy and config_patch come in a spread. */
-function writes(src: string, key: string): boolean {
+export function writes(src: string, key: string): boolean {
   if ((key === "akm_bin" || key === "akm_build") && src.includes("akmBuild(")) return true;
   if ((key === "strategy" || key === "config_patch") && src.includes("overrideSummary(")) return true;
   return new RegExp(`(?:^|[\\s{,"'])${key}["']?\\s*[:,}]`, "m").test(src);
@@ -109,17 +124,17 @@ describe("the table in the root README", () => {
 
   for (const row of rows) {
     describe(row.folder, () => {
-      test("lists the flags that its run --help lists, besides the common ones, and no other", async () => {
+      helpTest(row.folder)("lists the flags that its run --help lists, besides the common ones, and no other", async () => {
         const flags = helpFlags(await helps.get(row.folder)!);
         for (const c of COMMON) expect(flags).toContain(c);
         expect(flags.filter((f) => !LEFT_OUT.includes(f))).toEqual([...row.flags].sort());
       }, HELP_TIMEOUT_MS);
 
-      test("lists the corpora that --corpus takes", async () => {
+      helpTest(row.folder)("lists the corpora that --corpus takes", async () => {
         expect(helpCorpora(await helps.get(row.folder)!)).toEqual([...row.corpora].sort());
       }, HELP_TIMEOUT_MS);
 
-      test("says 'or later' when the run stops on an older akm, with the version the help names", async () => {
+      helpTest(row.folder)("says 'or later' when the run stops on an older akm, with the version the help names", async () => {
         const said = /Needs akm (\S+) or later/.exec(await helps.get(row.folder)!);
         if (said) {
           expect(row.akm).toContain(said[1]);
@@ -130,10 +145,11 @@ describe("the table in the root README", () => {
         expect(row.akm.length).toBeGreaterThan(0);
       }, HELP_TIMEOUT_MS);
 
-      test("names only summary keys that the source of the eval has", () => {
+      test("names only summary keys that the source of the eval writes", () => {
         const src = sourceOf(row.folder);
         expect(src.length).toBeGreaterThan(0);
-        const missing = row.records.filter((k) => !src.includes(k));
+        // A name with a slash is another eval ("as `evals/agent-ab`"), not a key.
+        const missing = row.records.filter((k) => !k.includes("/") && !writes(src, k));
         expect(missing).toEqual([]);
       });
     });
@@ -155,6 +171,25 @@ describe("the table in the root README", () => {
     expect(harbor).toHaveLength(2);
     for (const r of harbor) expect(r.flags).toContain("--akm-env");
     expect(rows.filter((r) => r.flags.includes("--akm-env")).map((r) => r.folder).sort()).toEqual(harbor.map((r) => r.folder).sort());
+  });
+});
+
+describe("the checks of the table", () => {
+  test("writes() wants a key as a property or a shorthand, not as any word of the source", () => {
+    expect(writes('const s = { metrics: columns(), status: "complete" };', "metrics")).toBe(true);
+    expect(writes("return { model, limit };", "limit")).toBe(true);
+    expect(writes('{ "seed": 1 }', "seed")).toBe(true);
+    expect(writes("// metrics are scored per case\nconst status = 1;", "metrics")).toBe(false);
+    expect(writes('const msg = "the model said no";', "model")).toBe(false);
+    expect(writes("const outcome = status;", "status")).toBe(false);
+  });
+
+  test("a flag that the help gained, lost or renamed, or a corpus it dropped, is not what the table has", () => {
+    const help = "Usage: x/run [--corpus public|private] [--limit N] [--label NAME] [--model ID]\n\n  --model  the model\n  --akm  the akm";
+    expect(helpFlags(help)).toEqual(["--akm", "--corpus", "--label", "--limit", "--model"]);
+    expect(helpFlags(help.replace("--model ID", "--models FILE"))).not.toEqual(helpFlags(help));
+    expect(helpCorpora(help)).toEqual(["private", "public"]);
+    expect(helpCorpora(help.replace("public|private", "public"))).toEqual(["public"]);
   });
 });
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ENTRIES, LABEL, type Stub, completion, describeRow, readSamples, runEntry, smokeFolders, startStub, stubEnv } from "./lib.ts";
+import { ENTRIES, LABEL, type Stub, columnsWithRefs, completion, describeRow, readSamples, runEntry, smokeFolders, startStub, stubEnv } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -101,6 +101,14 @@ describe("what the rows say", () => {
     expect(readSamples(file)).toEqual({ errored: 1, first: "outcome: ok" });
     expect(readSamples(join(tmp(), "none.jsonl"))).toEqual({ errored: 0, first: "" });
   });
+
+  test("columnsWithRefs names the columns that hold a ref in some row, and none for a missing file or a column of another shape", () => {
+    const file = join(tmp(), "samples.jsonl");
+    writeFileSync(file, [JSON.stringify({ id: "a", search: { refs: [] }, curate: { refs: [] } }), "not json", JSON.stringify({ id: "b", search: { refs: ["skills/x"] }, curate: { refs: [] }, other: { refs: "skills/x" }, flat: ["skills/x"] })].join("\n"));
+    expect(columnsWithRefs(file, ["search", "curate", "other", "flat", "gone"])).toEqual(["search"]);
+    expect(columnsWithRefs(file, [])).toEqual([]);
+    expect(columnsWithRefs(join(tmp(), "none.jsonl"), ["search"])).toEqual([]);
+  });
 });
 
 /** A repository with one eval whose run script is `body`, and the environment to run it in. */
@@ -152,6 +160,55 @@ describe("runEntry", () => {
     const out = await runEntry({ dir }, { root, env: stubEnv(process.env, s.url), timeoutMs: 20_000, stub: s });
     expect(out.status).toBe("WARN");
     expect(out.note).toContain("POST /v1/responses");
+  });
+
+  describe("an eval with no model, which has to show a ref", () => {
+    /** A run script that writes a summary.json and a samples.jsonl of one row, whose search and curate answered with these refs. */
+    const answering = (search: string[], curate: string[]) => {
+      const row = JSON.stringify({ id: "q1", search: { refs: search }, curate: { refs: curate } });
+      return fakeRepo(`${makeFolder()}\nf=evals/fake/results/$(date -u +%F)-smoke\necho '{}' > $f/summary.json\necho '${row}' > $f/samples.jsonl`);
+    };
+    const entry = (dir: string) => ({ dir, model: false as const, answers: ["search", "curate"] });
+
+    test("is ok when search and curate each returned a ref", async () => {
+      const { root, dir } = answering(["skills/a"], ["skills/a"]);
+      expect(await runEntry(entry(dir), { root, env, timeoutMs: 20_000, stub: stub() })).toMatchObject({ status: "ok", note: "" });
+    });
+
+    test("warns when akm answered with no ref, which is what a JSON the eval cannot read looks like, and names the commands", async () => {
+      const none = answering([], []);
+      const out = await runEntry(entry(none.dir), { root: none.root, env, timeoutMs: 20_000, stub: stub() });
+      expect(out).toMatchObject({ status: "WARN", errored: 0 });
+      expect(out.note).toContain("search and curate returned no ref");
+      const half = answering(["skills/a"], []);
+      const one = await runEntry(entry(half.dir), { root: half.root, env, timeoutMs: 20_000 });
+      expect(one.status).toBe("WARN");
+      expect(one.note).toStartWith("curate returned no ref");
+    });
+
+    test("counts a ref from any results folder of the run, such as the library and the books", async () => {
+      const library = JSON.stringify({ id: "a", search: { refs: ["x"] }, curate: { refs: [] } });
+      const books = JSON.stringify({ id: "b", search: { refs: [] }, curate: { refs: ["y"] } });
+      const { root, dir } = fakeRepo(
+        [
+          "d=evals/fake/results/$(date -u +%F)-smoke",
+          'mkdir -p "$d-library" "$d-books"',
+          'echo "{}" > "$d-library/summary.json"',
+          'echo "{}" > "$d-books/summary.json"',
+          `echo '${library}' > "$d-library/samples.jsonl"`,
+          `echo '${books}' > "$d-books/samples.jsonl"`,
+        ].join("\n"),
+      );
+      const out = await runEntry(entry(dir), { root, env, timeoutMs: 20_000 });
+      expect(out.folders).toHaveLength(2);
+      expect(out.status).toBe("ok");
+    });
+
+    test("is not asked of an eval that calls a model, whose rows have other keys", async () => {
+      const { root, dir } = fakeRepo(`${makeFolder()}\necho '{}' > evals/fake/results/$(date -u +%F)-smoke/summary.json\n${post("chat/completions")}`);
+      const s = stub();
+      expect(await runEntry({ dir }, { root, env: stubEnv(process.env, s.url), timeoutMs: 20_000, stub: s })).toMatchObject({ status: "ok" });
+    });
   });
 
   test("fails a run that made no results folder, and shows what it printed", async () => {
@@ -207,6 +264,14 @@ describe("ENTRIES", () => {
   test("gives a reason for every one it skips", () => {
     for (const e of ENTRIES) if (e.skip !== undefined) expect(e.skip.trim().length).toBeGreaterThan(5);
     expect(ENTRIES.filter((e) => e.skip).map((e) => e.dir).sort()).toEqual(["benchmarks/longmemeval", "benchmarks/skillret", "benchmarks/terminal-bench", "evals/agent-ab", "evals/bakeoff"]);
+  });
+
+  test("says what an eval that calls no model must show, since no model call counts for it", () => {
+    for (const e of ENTRIES.filter((e) => !e.skip)) {
+      if (e.model === false) expect({ dir: e.dir, answers: e.answers }).toEqual({ dir: e.dir, answers: ["search", "curate"] });
+      else expect(e.answers).toBeUndefined();
+    }
+    expect(ENTRIES.filter((e) => e.model === false).map((e) => e.dir)).toEqual(["evals/retrieval"]);
   });
 
   test("runs every eval that drives akm and uses no Docker and no dataset", () => {

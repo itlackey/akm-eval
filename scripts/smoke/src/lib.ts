@@ -73,6 +73,11 @@ export interface Entry {
   needs?: string;
   /** False for an eval that calls no model, such as retrieval. Left out for one that does. */
   model?: false;
+  /**
+   * For an eval that calls no model, so that nothing else shows akm answered: the columns of its samples.jsonl rows (each an object with
+   * the `refs` akm returned) that must hold a ref in at least one row. Left out for an eval that calls a model.
+   */
+  answers?: string[];
 }
 
 /**
@@ -80,7 +85,7 @@ export interface Entry {
  * the reason is printed. A test checks that no folder with a run script is missing here.
  */
 export const ENTRIES: Entry[] = [
-  { dir: "evals/retrieval", model: false },
+  { dir: "evals/retrieval", model: false, answers: ["search", "curate"] },
   { dir: "evals/judge-gate" },
   { dir: "evals/reflect" },
   { dir: "evals/distill" },
@@ -140,24 +145,37 @@ export function describeRow(row: Record<string, unknown>): string {
   return parts.join("; ").slice(0, 400);
 }
 
-/** What the rows of a samples.jsonl say: how many carry an error, and what the first row says. A line that is not JSON is not counted. */
-export function readSamples(file: string): { errored: number; first: string } {
-  if (!existsSync(file)) return { errored: 0, first: "" };
-  let errored = 0;
-  let first = "";
+/** The rows of a samples.jsonl that are JSON objects. A line that is not JSON is skipped. */
+function readRows(file: string): Record<string, unknown>[] {
+  if (!existsSync(file)) return [];
+  const rows: Record<string, unknown>[] = [];
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    let row: unknown;
     try {
-      row = JSON.parse(line);
+      const row: unknown = JSON.parse(line);
+      if (isObject(row)) rows.push(row);
     } catch {
-      continue;
+      // not a row
     }
-    if (!isObject(row)) continue;
+  }
+  return rows;
+}
+
+/** What the rows of a samples.jsonl say: how many carry an error, and what the first row says. A line that is not JSON is not counted. */
+export function readSamples(file: string): { errored: number; first: string } {
+  let errored = 0;
+  let first = "";
+  for (const row of readRows(file)) {
     if (typeof row.error === "string" && row.error.trim()) errored++;
     first ||= describeRow(row);
   }
   return { errored, first };
+}
+
+/** Which of `columns` hold at least one ref in at least one row of a samples.jsonl: a retrieval row has a `search` and a `curate` object, each with the refs akm returned. */
+export function columnsWithRefs(file: string, columns: readonly string[]): string[] {
+  const rows = readRows(file);
+  return columns.filter((name) => rows.some((row) => isObject(row[name]) && Array.isArray(row[name].refs) && row[name].refs.length > 0));
 }
 
 const lastLines = (text: string, n: number): string => text.trimEnd().split("\n").slice(-n).join("\n");
@@ -176,7 +194,7 @@ export interface RunOptions {
 /**
  * Runs one entry's run script once, on one case of the public corpus, and checks what the smoke asserts: the run ended and wrote
  * a summary.json. A model that answers `{}` makes the cases error, so a run that errored on every case passes. What the cases said goes
- * in the outcome, to read, and two things that look wrong, without failing the run, are a WARN.
+ * in the outcome, to read, and three things that look wrong, without failing the run, are a WARN.
  */
 export async function runEntry(entry: Entry, opts: RunOptions): Promise<Outcome> {
   const base: Outcome = { dir: entry.dir, status: "ok", note: "", seconds: 0, exit: 0, folders: [], calls: 0, errored: 0, firstRow: "", tail: "" };
@@ -192,10 +210,13 @@ export async function runEntry(entry: Entry, opts: RunOptions): Promise<Outcome>
   const timedOut = proc.signalCode === "SIGKILL";
   const folders = smokeFolders(before, listDirs(results)).map((name) => join(entry.dir, "results", name));
   const out: Outcome = { ...base, seconds, exit: timedOut ? null : code, folders, calls: opts.stub?.calls() ?? 0, tail: lastLines(`${stdout}\n${stderr}`, 12) };
+  const answered = new Set<string>();
   for (const f of folders) {
-    const { errored, first } = readSamples(join(opts.root, f, "samples.jsonl"));
+    const samples = join(opts.root, f, "samples.jsonl");
+    const { errored, first } = readSamples(samples);
     out.errored += errored;
     out.firstRow ||= first;
+    for (const name of columnsWithRefs(samples, entry.answers ?? [])) answered.add(name);
   }
   if (timedOut) return { ...out, status: "FAIL", note: `did not end within ${Math.round(opts.timeoutMs / 1000)}s and was killed` };
   if (folders.length === 0) return { ...out, status: "FAIL", note: `exit ${code}, and it made no results folder` };
@@ -203,9 +224,12 @@ export async function runEntry(entry: Entry, opts: RunOptions): Promise<Outcome>
   if (missing.length > 0) return { ...out, status: "FAIL", note: `exit ${code}, and no summary.json in ${missing.join(", ")}` };
   // What the smoke does not assert but a reader should see. A request the stub does not serve: the eval or akm went to another endpoint.
   // An eval that uses a model and never reached it, on the one case it was given: what akm refusing a command, or printing JSON the
-  // eval cannot read, looks like.
+  // eval cannot read, looks like. An eval with no model has no call to count, so it has to show a ref instead: an akm that prints other
+  // keys than the eval reads is an empty answer to it, with no error.
   const odd = opts.stub?.unexpected() ?? [];
   if (odd.length > 0) return { ...out, status: "WARN", note: `the stub was asked for ${[...new Set(odd)].join(", ")}, which it does not serve` };
+  const empty = (entry.answers ?? []).filter((name) => !answered.has(name));
+  if (empty.length > 0) return { ...out, status: "WARN", note: `${empty.join(" and ")} returned no ref on the one query: akm may print other JSON than the eval reads` };
   if (opts.stub && entry.model !== false && out.calls === 0) return { ...out, status: "WARN", note: "the eval never reached the model" };
   return out;
 }

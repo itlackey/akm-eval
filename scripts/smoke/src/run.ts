@@ -16,14 +16,16 @@ const USAGE = `Usage: scripts/smoke/run [--only A,B] [--skip A,B] [--akm COMMAND
 Starts a stub model, a local server whose one endpoint, POST /v1/chat/completions, answers every call with the message {}, and runs each
 eval that drives akm once, on one case of the public corpus: <eval>/run --corpus public --limit 1 --label ${LABEL}. The model and the
 judge of every run are the stub, whatever .env says. A run passes when it ends and writes a summary.json. A model that answers {}
-makes every case error, so the point is not the scores: it is that the commands the evals give akm are still accepted and the JSON
-akm prints is still readable. Read what the first row of each run says, and the output of a run that failed.
+makes every case error, so the point is not the scores: it is that the commands the evals give akm are still accepted. Read what the
+first row of each run says, and the output of a run that failed. It cannot see the JSON akm prints after the model has answered, since
+the {} makes the cases error anyway. retrieval, which calls no model, is checked on its answers: search and curate must return a ref.
 
   --only A,B     run these only, by folder name (reflect, retrieval, ...)
   --skip A,B     run all but these
   --akm          the command that runs akm, such as "bun ~/code/akm/src/cli.ts". Default: AKM_BIN in .env, else akm on PATH.
   --timeout SEC  stop an eval that is still running after SEC seconds (default ${DEFAULT_TIMEOUT_SEC})
-  --strict       fail on a WARN too: an eval that uses a model and never reached it, or a request the stub does not serve
+  --strict       fail on a WARN too: an eval that uses a model and never reached it, retrieval with no ref from search or curate,
+                 or a request the stub does not serve
   --keep         keep the results folders the runs made (they are removed otherwise)
   --list         print what the smoke runs and what it skips, and why
 

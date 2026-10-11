@@ -30,7 +30,7 @@ The akm range of a row is what the eval is written for and what its README says.
 
 ## What has been run against a real akm
 
-`scripts/smoke` starts a stub model that answers `{}` to every call and runs each eval that drives akm once, on one case, with `--limit 1 --label smoke`. It asserts only that the run ends and writes a `summary.json`, and prints what the first row says. A model that answers `{}` makes the cases error or come out empty, so it says nothing of the scores. It does show that akm still takes the commands and prints JSON the eval can read, because an eval that cannot get as far as the model prints a WARN and `--strict` fails on it.
+`scripts/smoke` starts a stub model that answers `{}` to every call and runs each eval that drives akm once, on one case, with `--limit 1 --label smoke`. It asserts only that the run ends and writes a `summary.json`, and prints what the first row says. A model that answers `{}` makes the cases error or come out empty, so it says nothing of the scores. It does show that akm still takes the commands, and prints the JSON the eval reads before it calls the model, because an eval that cannot get as far as the model prints a WARN and `--strict` fails on it. It does not see the JSON akm prints after the model has answered: the `{}` makes those cases error anyway. `retrieval` calls no model, so it is checked on its answers, and `--strict` fails when `search` or `curate` returns no ref for its one query.
 
 | Run | akm | Result |
 |---|---|---|
