@@ -26,6 +26,8 @@ const REWRITE = join(ROOT, "lib", "rewrite", "rewrite.ts");
 
 const nameOf = (memory: string): string => memory.replace(/^memories\//, "").replace(/\.md$/, "");
 
+const KEY_NAMES = { required: "required fact", forbidden: "forbidden claim", contradicts: "contradiction" } as const;
+
 /** What the rewrite must keep, item by item. Returns what changed. A rewrite that changes none of these keeps every item as hard as it was. */
 export function checkRewrite(before: Night, after: Night): string[] {
   const problems: string[] = [];
@@ -37,13 +39,14 @@ export function checkRewrite(before: Night, after: Night): string[] {
     if (a.files.length !== b.files.length) note(`it has ${a.files.length} files, and the public item has ${b.files.length}`);
     if (b.kind !== "distill" || a.kind !== "distill") return;
     const [was, now] = [memoryBody(before.files.get(b.memory) as string), memoryBody(after.files.get(a.memory) as string)];
-    const groups = (key: "required" | "forbidden") =>
+    const groups = (key: "required" | "forbidden" | "contradicts") =>
       b[key].forEach((group, k) => {
-        const [x, y] = [group.some((p) => mentions(was, p)), (a[key][k] as string[]).some((p) => mentions(now, p))];
-        if (x !== y) note(`the ${key === "required" ? "required fact" : "forbidden claim"} "${(a[key][k] as string[])[0]}" ${y ? "is now" : "is no longer"} in its memory`);
+        const [x, y] = [group.some((p) => mentions(was, p)), (a[key][k] ?? []).some((p) => mentions(now, p))];
+        if (x !== y) note(`the ${KEY_NAMES[key]} "${a[key][k]?.[0]}" ${y ? "is now" : "is no longer"} in its memory`);
       });
     groups("required");
     groups("forbidden");
+    groups("contradicts");
     const holds = (item: DistillItem) => item.files.includes(lessonFile({ name: nameOf(item.memory) }));
     if (holds(b) !== holds(a)) note("the lesson at the ref distill writes to was lost or added");
   });

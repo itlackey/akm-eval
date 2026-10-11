@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
@@ -89,10 +89,17 @@ function setup(cases: Case[], embedder: Embedder = "deterministic") {
   writeFileSync(join(assets, "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  const newSandbox = () => ({ ...createSandbox("consolidate-test", sandboxOptions(embedder)), cmd: ["bun", script] });
+  // The folders of the sandboxes this context makes, so a test can ask whether its own are gone, whatever else sits in the shared temp folder.
+  const made: string[] = [];
+  const newSandbox = () => {
+    const sandbox = { ...createSandbox("consolidate-test", sandboxOptions(embedder)), cmd: ["bun", script] };
+    made.push(sandbox.dir);
+    dirs.push(sandbox.dir); // one that a failing test leaves behind is removed with the rest
+    return sandbox;
+  };
   process.env.FAKE_COUNTER_DIR = root;
   const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", rateLimitWaitMs: 1, embedder };
-  return { ctx, folders: { assets, results: join(root, "results") }, root };
+  return { ctx, folders: { assets, results: join(root, "results") }, root, made };
 }
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -207,10 +214,10 @@ describe("runCorpus", () => {
   });
 
   test("removes every sandbox it makes", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-consolidate-test-")).length;
-    const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older"), mk("e", "overlap", "crash")]);
+    const { ctx, folders, made } = setup([mk("d1", "duplicate", "retire-older"), mk("e", "overlap", "crash")]);
     await quiet(() => runCorpus("public", ctx, folders));
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-consolidate-test-")).length).toBe(before);
+    expect(made.length).toBeGreaterThan(0);
+    expect(made.filter((dir) => existsSync(dir))).toEqual([]);
   });
 
   test("a limit takes the first case of each relation in turn", async () => {

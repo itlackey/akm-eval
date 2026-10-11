@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { semanticConfig } from "../../../lib/akm/akm.ts";
 import { buildNight, itemsText } from "./build.ts";
+import { loadCases as loadDistill } from "../../distill/src/lib.ts";
 import { splitFrontmatter } from "../../reflect/src/lib.ts";
 import {
   type DistillItem,
@@ -65,6 +66,15 @@ describe("the public night", () => {
     expect(night.items.filter((i) => i.kind === "pair" || i.kind === "untouched").every((i) => i.feedback.length === 0)).toBe(true);
   });
 
+  test("carry each distill case's contradicts, so the lesson check has the reversal check the distill eval has", () => {
+    const cases = loadDistill(join(import.meta.dir, "..", "..", "distill", "assets"));
+    const distilled = night.items.filter((i): i is DistillItem => i.kind === "distill");
+    for (const item of distilled) {
+      expect(item.contradicts).toEqual(cases.find((c) => c.id === item.id)?.contradicts as string[][]);
+      expect(item.contradicts.length > 0).toBe(item.expect === "lesson");
+    }
+  });
+
   test("hold what their items say: each deciding claim, planted defect and exact fix is where it must be", () => {
     expect(nightProblems(night)).toEqual([]);
   });
@@ -113,8 +123,21 @@ describe("parseItems", () => {
     expect(as(reflect, { class: "whatever" })).toThrow('class "whatever"');
     expect(as(reflect, { defect: "" })).toThrow('no "defect"');
     expect(as(find<FixItem>("exact-fix-01"), { feedback: [] })).toThrow("no fix in its feedback");
-    expect(as(distill, { expect: "none" })).toThrow("expects none, so its required and forbidden do not fit");
+    expect(as(distill, { expect: "none" })).toThrow("expects none, so its required, forbidden and contradicts do not fit");
     expect(as(distill, { memory: "memories/other.md" })).toThrow("its memory memories/other.md");
+  });
+
+  test("rejects a distill lesson without contradicts, or with contradicts that are not lists of phrases, as it does for forbidden", () => {
+    const distill = find<DistillItem>("lesson-01");
+    const status = find<DistillItem>("status-01");
+    const as = (item: Item, over: Record<string, unknown>) => () => parseItems(JSON.stringify({ ...item, ...over }));
+    expect(parseItems(JSON.stringify(distill))[0]).toMatchObject({ contradicts: distill.contradicts });
+    expect(as(distill, { contradicts: undefined })).toThrow("needs required, forbidden and contradicts as lists of lists of phrases");
+    expect(as(distill, { contradicts: "wait for networkidle" })).toThrow("lists of lists of phrases");
+    expect(as(distill, { contradicts: [[]] })).toThrow("lists of lists of phrases");
+    expect(as(distill, { contradicts: [["wait for networkidle", 7]] })).toThrow("lists of lists of phrases");
+    expect(as(distill, { contradicts: [] })).toThrow("expects lesson, so its required, forbidden and contradicts do not fit");
+    expect(as(status, { contradicts: [["wait for networkidle"]] })).toThrow("expects none, so its required, forbidden and contradicts do not fit");
   });
 });
 
@@ -405,6 +428,26 @@ describe("scoring a distill memory", () => {
     expect(scoreItem(worthy, quiet()).checks).toMatchObject({ lesson_queued: false, lesson_good: false });
     const bad = lesson({ content: "---\ndescription: networkidle is broken.\nwhen_to_use: Always.\n---\nNever use waitForLoadState; disable the chat widget in tests and use waitForSelector.\n" });
     expect(scoreItem(worthy, quiet({ proposals: [bad] }))).toMatchObject({ ok: false, harm: false, checks: { lesson_queued: true, lesson_good: false } });
+  });
+
+  test("a lesson that states the reverse of the memory's fix fails lesson_good, and the row says what it asserted", () => {
+    // the owner's reversed lesson for lesson-01: it mentions the facts, makes no forbidden claim, and turns the advice round
+    const reversed = lesson({ content: "---\ndescription: A page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds. Wait for networkidle on pages with a polling widget; never wait for the visible heading.\n" });
+    const row = scoreItem(worthy, quiet({ proposals: [reversed] }));
+    expect(row).toMatchObject({ ok: false, harm: false, checks: { lesson_queued: true, lesson_good: false, lesson_not_accepted: true, memory_kept: true } });
+    expect(row.detail).toMatchObject({ forbidden: [], contradicted: ["=wait for networkidle", "never wait for * heading"] });
+  });
+
+  test("a lesson that states every required fact and still asserts a contradiction fails on the contradiction alone", () => {
+    const content = "---\ndescription: A page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds. Wait for the page heading to be visible, and wait for networkidle too.\n";
+    const row = scoreItem(worthy, quiet({ proposals: [lesson({ content })] }));
+    expect(row).toMatchObject({ ok: false, checks: { lesson_good: false }, detail: { missing: [], forbidden: [], contradicted: ["=wait for networkidle"] } });
+    // the same lesson passes an item that carries no contradicts, which is how the check ran before the field was carried
+    expect(scoreItem({ ...worthy, contradicts: [] }, quiet({ proposals: [lesson({ content })] })).checks.lesson_good).toBe(true);
+  });
+
+  test("a lesson that denies the reversal is not a contradiction, and a good row records none", () => {
+    expect(scoreItem(worthy, quiet({ proposals: [lesson()] })).detail).toMatchObject({ missing: [], forbidden: [], contradicted: [] });
   });
 
   test("a memory that deserves none is right with none, and a miss with a lesson", () => {
