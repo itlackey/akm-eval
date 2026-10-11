@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { build, firstHalf, insertAfterTitle, render } from "./build.ts";
+import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
 import { Database } from "bun:sqlite";
 import { type Case, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, metrics, parseCases, promotionConfig, proposalRow, readSeed, rowsFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
-const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library", "knowledge");
+const LIBRARY = BUNDLE_DIR; // the notes a run holds in its bundle, as build.ts makes them from corpus/library
 
 const make = (id: string, category: Case["category"], extra: Partial<Case> = {}): Case => ({ id, label: category === "good" ? "good" : "bad", category, ref: `knowledge/${id}`, content: `---\ndescription: ${id}\n---\n\nbody of ${id}\n`, ...extra });
 
@@ -149,7 +149,7 @@ describe("what a run read", () => {
   });
 
   test("the public assets have a digest", () => {
-    expect(assetsSha256(join(EVAL_DIR, "assets", "cases.jsonl"), join(EVAL_DIR, "..", "..", "corpus", "library"))).toMatch(/^[0-9a-f]{64}$/);
+    expect(assetsSha256(join(EVAL_DIR, "assets", "cases.jsonl"), join(EVAL_DIR, "assets", "library"))).toMatch(/^[0-9a-f]{64}$/);
   });
 
   test("digestOf names files by the name it is given and not by where they are", () => {
@@ -237,6 +237,14 @@ describe("the public cases", () => {
 
   test("are the ones build.ts makes", () => {
     expect(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8")).toBe(render(build()));
+  });
+
+  test("are judged against the bundle build.ts makes: the library's knowledge/ folder and the notes of its skills, each from the one file of the library", () => {
+    const made = bundle();
+    const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name).slice(dir.length + 1)).sort() : []);
+    expect(files(BUNDLE_DIR)).toEqual([...made.keys()].sort());
+    for (const [file, text] of made) expect(readFileSync(join(BUNDLE_DIR, file), "utf8")).toBe(text);
+    expect(made.size).toBe(30);
   });
 
   test("are 6 good proposals, and 6 duplicate, 4 stale and 4 ephemeral ones", () => {

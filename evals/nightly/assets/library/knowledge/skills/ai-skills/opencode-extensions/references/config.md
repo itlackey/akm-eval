@@ -8,7 +8,6 @@ when_to_use: When setting up OpenCode for the first time, customizing AI model
   project-level configs.
 updated: 2026-05-15
 ---
-
 # OpenCode Configuration Reference
 
 ## Locations
@@ -112,7 +111,6 @@ Configs merge; later overrides conflicting keys.
 | Option | Description |
 |--------|-------------|
 | `model` | Primary model (`provider/model-id`) |
-| `small_model` | Secondary model for lightweight tasks |
 | `tools` | Enable/disable tools |
 | `permission` | `allow`/`deny`/`ask` per tool |
 | `agent` | Custom agent definitions |
@@ -121,8 +119,7 @@ Configs merge; later overrides conflicting keys.
 | `instructions` | Additional rule files (globs) |
 | `plugin` | NPM plugin packages |
 | `mcp` | MCP server configs |
-| `formatter` | Code formatting settings |
-| `watcher` | File system watcher ignore patterns |
+| `autoupdate` | `true`/`false`/`"notify"` |
 
 ## Variable Substitution
 
@@ -136,11 +133,3 @@ Configs merge; later overrides conflicting keys.
   }
 }
 ```
-
-## Merge Behavior
-
-- **Global Config**: Loaded from `~/.config/opencode/opencode.json`.
-- **Project Config**: Loaded from `./opencode.json` in the current directory.
-- **Environment Variable**: Overrides config via `$OPENCODE_CONFIG` path.
-
-**Resolution Order**: Global settings are applied first. Project-level settings override global keys if present. Environment variables substitute values within strings (e.g., `{env:VAR}`) before parsing.

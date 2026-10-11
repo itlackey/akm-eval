@@ -81,6 +81,8 @@ Analyzes PDF documents for print production issues using a 6-stage workflow with
 
 ## Setup and Dependencies
 
+This library holds the skill's instructions, its `references/` and `assets/`, and its changelog. The pipeline's own scripts (`scripts/*.py`), its `config/` and its rules file are not part of it: the steps below run them from the pipeline's folder.
+
 ### First-Time Setup
 
 When this skill is invoked for the first time, perform these setup steps:
@@ -209,9 +211,11 @@ python scripts/analyze_metrics.py \
 ```bash
 python scripts/heuristic_checker.py \
   "$TEMP_DIR/metrics.json" \
-  references/heuristic-rules.json \
+  <heuristic-rules.json> \
   "$TEMP_DIR"
 ```
+
+`<heuristic-rules.json>` is the pipeline's own rules file. It is not one of this skill's references.
 
 **Output**: `$TEMP_DIR/flagged-pages.json`
 

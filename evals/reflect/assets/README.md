@@ -36,7 +36,7 @@ adds to the proposal is neither a fix nor a change.
 |---|---|
 | `id` | the class and a number |
 | `class` | one of the classes above |
-| `path` | where the note sits in the bundle, which is its path under `corpus/library`. The ref is the path without `.md`, and without `/SKILL` for a skill |
+| `path` | where the note sits in the bundle. It is the note's path under `corpus/library`, except for a note of a skill (`skills/<x>/references/a.md`): the library keeps it once, in the skill, and a run puts it where akm gives its ref, `knowledge/skills/<x>/references/a.md`. The ref is the path without `.md`, and without `/SKILL` for a skill |
 | `source` | the note, with its defect |
 | `feedback` | what the user types after `akm feedback <ref> --negative --reason` |
 | `defect` | what was injected, or what the note is when there is no defect |
@@ -49,7 +49,7 @@ adds to the proposal is neither a fix nor a change.
 
 ## How they were made
 
-`src/build.ts` reads each note from `corpus/library` and injects the defect with `src/lib.ts`: it changes only the
+`src/build.ts` reads each note from `corpus/library` (a note at `knowledge/skills/<x>/...` from `skills/<x>/...`: `libraryFileOf`) and injects the defect with `src/lib.ts`: it changes only the
 frontmatter, except for a missing title, which takes out the heading. It stops unless akm names that one defect in the
 result, with the rules of akm 0.9.26. Run it again after a change to the table in `build.ts` or to an injection. A
 test fails when `cases.jsonl` is out of date. The cases are ordered round by round, so the first ten hold each class

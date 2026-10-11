@@ -111,7 +111,7 @@ correctly. Do not use `--platform=gitlab`; there is no GitLab adapter.
 
 ## Credential Setup
 
-The tracker keeps every token and setting, for all platforms, in one env file: `env/tracker` (`tracker.env`) in your own primary akm stash. It never belongs in akm-shared or any other shared bundle.
+The tracker keeps every token and setting, for all platforms, in one env file: `env/tracker` (`tracker.env`) in your own primary akm stash. It never belongs in a shared bundle.
 
 Credentials are resolved in this order:
 

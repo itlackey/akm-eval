@@ -28,7 +28,7 @@ const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR
 Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
 
-  --corpus  public (default) reads assets/ and corpus/library. own reads private/promotion/own/, and runs only against a
+  --corpus  public (default) reads assets/ (cases.jsonl and library/). own reads private/promotion/own/, and runs only against a
             model marked "private": true in models.json. all runs both and prints the two results side by side.
   --cases   DIR: run the own corpus from DIR (cases.jsonl and library/, the format of private/promotion/own/) in place of
             private/promotion/own/. Like own, it runs only against a model marked "private": true in models.json. A relative
@@ -55,7 +55,7 @@ interface Folders {
 /** The folders of a corpus. `casesDir` is the own corpus somewhere else than private/promotion/own/. */
 export const foldersFor = (corpus: Corpus, casesDir = join(ROOT, "private", NAME, "own")): Folders =>
   corpus === "public"
-    ? { cases: join(EVAL_DIR, "assets", "cases.jsonl"), library: join(ROOT, "corpus", "library"), results: join(EVAL_DIR, "results") }
+    ? { cases: join(EVAL_DIR, "assets", "cases.jsonl"), library: join(EVAL_DIR, "assets", "library"), results: join(EVAL_DIR, "results") }
     : { cases: join(casesDir, "cases.jsonl"), library: join(casesDir, "library"), results: join(ROOT, "private", NAME, "results") };
 
 interface Summary {
