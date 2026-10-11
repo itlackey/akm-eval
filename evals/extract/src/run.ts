@@ -217,7 +217,7 @@ export async function runCorpus(
     ...akmBuild(),
     limit: ctx.limit ?? null,
     ...overrideSummary(overrides),
-    config: hideEndpoint(redactConfig(config), ctx.baseUrl),
+    config: redactConfig(hideEndpoint(config, ctx.baseUrl)),
     engine: engineSettings(config),
     assets_sha256: assetsSha256,
     seed: corpus === "private" && folders.map !== undefined && folders.seed !== undefined ? privateSeed(folders.map, folders.seed) : null,

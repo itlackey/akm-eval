@@ -507,7 +507,7 @@ describe("runCorpus", () => {
     const markers: (string | null)[] = [];
     server = fakeEndpoint({ requests: 0 }, "fake-model", [], () => markers.push(existsSync(markerOf()) ? readFileSync(markerOf(), "utf8").trim() : null));
     const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
-    const build = { akm_bin: "bun ~/code/akm/src/cli.ts", akm_build: "v0.9.26-1-gabc123" as string | null };
+    const build = { akm_bin: "bun ~/code/akm/src/cli.ts", akm_build: "v0.9.26-1-gabc123" as string | null, akm_build_fingerprint: null as string | null };
     const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v", build };
     await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, context, folders));
     const dir = join(folders.results, readdirSync(folders.results)[0]);

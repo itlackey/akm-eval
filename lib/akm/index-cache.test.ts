@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Sandbox, akmBuild } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, semanticConfig } from "./akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex, digest, digestTree } from "./index-cache.ts";
 
 const dirs: string[] = [];
@@ -28,6 +28,12 @@ const read = (name: string) => (existsSync(join(data, name)) ? readFileSync(join
 if (process.argv[2] === "info") console.log(JSON.stringify({ ok: true, indexStats: { entryCount: Number(read("entries")), lastBuiltAt: read("built-at"), hasEmbeddings: read("embeddings") !== "none" } }));
 else { console.error("unknown command"); process.exit(1); }
 `;
+
+/** What the cache records of the akm that built an index: the version, akmBuild() of this process, and the fingerprint only when there is one. */
+const builtBy = (builtAt: string) => {
+  const { akm_build_fingerprint, ...build } = akmBuild();
+  return { version: "0.9.99", ...build, ...(akm_build_fingerprint ? { akm_build_fingerprint } : {}), builtAt };
+};
 
 /** What a collection of three files looks like to the cache. */
 const files = (extra: Record<string, string> = {}): Record<string, string> => ({
@@ -225,7 +231,7 @@ describe("cachedIndex", () => {
       first.release();
       const before = akm.sha();
       expect(first.state).toBe("cold");
-      expect(first.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: "build 1" });
+      expect(first.builtBy).toEqual(builtBy("build 1"));
       expect(first.builtBy.akm_build).toBe(before);
       const again = await s.open(spec); // the same build
       again.release();
@@ -239,7 +245,7 @@ describe("cachedIndex", () => {
       other.release();
       expect(other.state).toBe("cold");
       expect(s.builds).toEqual([{ fresh: true }, { fresh: true }]); // from nothing
-      expect(other.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: "build 2" });
+      expect(other.builtBy).toEqual(builtBy("build 2"));
       expect(other.builtBy.akm_build).toBe(after);
       const bin = other.builtBy.akm_bin;
       expect(s.log[s.log.length - 1]).toBe(
@@ -250,25 +256,98 @@ describe("cachedIndex", () => {
       expect(last.state).toBe("warm");
     });
 
-    test.skipIf(!Bun.which("git"))("says on a reuse that the checkout has changes that are not committed", async () => {
+    test.skipIf(!Bun.which("git"))("tells two edits of one commit apart, uses the index again for the same edit, and builds again for another", async () => {
+      const s = setup();
+      const akm = checkout();
+      process.env.AKM_BIN = `bun ${akm.cli}`;
+      const spec = { cmd: ["bun", akm.cli] };
+      const clean = await s.open(spec);
+      clean.release();
+      expect(clean.state).toBe("cold");
+      expect(clean.builtBy.akm_build_fingerprint).toBeUndefined();
+      expect(s.log).toHaveLength(0);
+
+      writeFileSync(akm.cli, `${FAKE_AKM}// edit one\n`);
+      const one = await s.open(spec); // the build is `<sha>-dirty`, with a fingerprint, so this is not the clean build
+      one.release();
+      expect(one.state).toBe("cold");
+      expect(one.builtBy.akm_build).toBe(`${akm.sha()}-dirty`);
+      expect(one.builtBy.akm_build_fingerprint).toBe(akmBuild().akm_build_fingerprint as string);
+      expect(one.builtBy.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(s.log).toHaveLength(1); // the line that says the earlier index cannot be reused
+      expect(JSON.parse(readFileSync(join(s.folder, "state.json"), "utf8")).builtBy.akm_build_fingerprint).toBe(one.builtBy.akm_build_fingerprint);
+
+      const again = await s.open(spec); // the same edit: the same inputs
+      again.release();
+      expect(again.state).toBe("warm");
+      expect(again.builtBy).toEqual(one.builtBy);
+      expect(s.builds).toHaveLength(2);
+      expect(s.log[s.log.length - 1]).toContain(`was built by akm 0.9.99 build ${akm.sha()}-dirty changes ${one.builtBy.akm_build_fingerprint?.slice(0, 12)} (`);
+
+      writeFileSync(akm.cli, `${FAKE_AKM}// edit two\n`); // another edit at the same commit: `git describe` says the same
+      expect(akmBuild().akm_build).toBe(`${akm.sha()}-dirty`);
+      const two = await s.open(spec);
+      two.release();
+      expect(two.state).toBe("cold");
+      expect(two.builtBy.akm_build).toBe(one.builtBy.akm_build);
+      expect(two.builtBy.akm_build_fingerprint).not.toBe(one.builtBy.akm_build_fingerprint);
+      expect(s.builds).toEqual([{ fresh: true }, { fresh: true }, { fresh: true }]); // from nothing, each time
+      expect(s.log[s.log.length - 1]).toContain("akm, its build, its embedding model or the index's folder is not the same: it was built by akm 0.9.99 build");
+      expect(s.log[s.log.length - 1]).toContain(`changes ${one.builtBy.akm_build_fingerprint?.slice(0, 12)}`);
+      expect(s.log[s.log.length - 1]).toContain(`changes ${two.builtBy.akm_build_fingerprint?.slice(0, 12)}`);
+    });
+
+    test.skipIf(!Bun.which("git"))("builds again for a source file that is not tracked, which git describe does not see", async () => {
       const s = setup();
       const akm = checkout();
       process.env.AKM_BIN = `bun ${akm.cli}`;
       const spec = { cmd: ["bun", akm.cli] };
       (await s.open(spec)).release();
-      expect(s.log).toHaveLength(0);
-      writeFileSync(akm.cli, `${FAKE_AKM}// not committed\n`);
-      // the build is now `<sha>-dirty`, so this run is another build and the index is made again
-      const dirty = await s.open(spec);
-      dirty.release();
-      expect(dirty.state).toBe("cold");
-      expect(dirty.builtBy.akm_build).toBe(`${akm.sha()}-dirty`);
-      expect(s.log).toHaveLength(1); // the line that says the earlier index cannot be reused
-      const kept = await s.open(spec);
+      writeFileSync(join(akm.cli, "..", "extra.ts"), "export const x = 1;\n");
+      expect(akmBuild().akm_build).toBe(akm.sha()); // clean as far as git describe can say
+      const untracked = await s.open(spec);
+      untracked.release();
+      expect(untracked.state).toBe("cold");
+      expect(untracked.builtBy.akm_build).toBe(akm.sha());
+      expect(untracked.builtBy.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(s.builds).toHaveLength(2);
+      writeFileSync(join(akm.cli, "..", "extra.ts"), "export const x = 2;\n");
+      const edited = await s.open(spec);
+      edited.release();
+      expect(edited.state).toBe("cold");
+      expect(edited.builtBy.akm_build_fingerprint).not.toBe(untracked.builtBy.akm_build_fingerprint);
+    });
+
+    test.skipIf(!Bun.which("git"))("keeps using the index of a clean checkout, run after run", async () => {
+      const s = setup();
+      const akm = checkout();
+      process.env.AKM_BIN = `bun ${akm.cli}`;
+      const spec = { cmd: ["bun", akm.cli] };
+      (await s.open(spec)).release();
+      for (let run = 0; run < 2; run++) {
+        const warm = await s.open(spec);
+        warm.release();
+        expect(warm.state).toBe("warm");
+        expect(warm.builtBy.akm_build_fingerprint).toBeUndefined();
+      }
+      expect(s.builds).toHaveLength(1);
+      expect(s.log).toHaveLength(2);
+      for (const line of s.log) expect(line).toBe(`  the index skillret-public is kept from an earlier run: it was built by akm 0.9.99 build ${akm.sha()} (${akmBuild().akm_bin}) at build 1.`);
+    });
+
+    test("uses an index that was kept before the fingerprint was recorded: the key of a clean checkout and of a release is the one it was", async () => {
+      const s = setup();
+      (await s.open()).release();
+      const path = join(s.folder, "state.json");
+      const saved = JSON.parse(readFileSync(path, "utf8"));
+      // the key as it was computed before the fingerprint, from the same parts
+      const before = digest([saved.builtBy.version, saved.builtBy.akm_bin, saved.builtBy.akm_build ?? "", SEMANTIC_MODEL, s.folder, "", JSON.stringify(semanticConfig())].join("\0"));
+      expect(saved.key).toBe(before);
+      expect(saved.builtBy.akm_build_fingerprint).toBeUndefined();
+      const kept = await s.open();
       kept.release();
       expect(kept.state).toBe("warm");
-      expect(s.log[s.log.length - 1]).toContain(`was built by akm 0.9.99 build ${akm.sha()}-dirty (`);
-      expect(s.log[s.log.length - 1]).toContain("The checkout has changes that are not committed");
+      expect(kept.builtBy).toEqual(builtBy("build 1"));
     });
 
     test("uses the index of an akm that is not a checkout again, since its version is all that tells it apart", async () => {
@@ -305,7 +384,7 @@ describe("cachedIndex", () => {
       const saved = JSON.parse(readFileSync(join(s.folder, "state.json"), "utf8"));
       expect(saved.builtBy).toEqual(first.builtBy);
       expect(Object.keys(saved.builtBy)).toEqual(["version", "akm_bin", "akm_build", "builtAt"]);
-      expect(saved.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: saved.builtAt });
+      expect(saved.builtBy).toEqual(builtBy(saved.builtAt));
       const second = await s.open();
       second.release();
       expect(second.state).toBe("warm");

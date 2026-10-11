@@ -16,9 +16,10 @@
 // is built again from nothing when a file changed, is gone or is new, or when akm, its embedding model or the index's folder
 // is not the same. "The same akm" is the version it prints, the command that runs it, and the build of the checkout the command
 // runs from (akmBuild() of akm.ts): a pull request prints the version of the release it branched from, and its indexing,
-// chunking or embedding code can differ. A checkout with changes that are not committed has one build, whatever the changes
-// are, as in summary.json. akm is asked what the kept index holds before it is used, and it has to be the build that was made:
-// the same number of assets, the same build time, and embeddings.
+// chunking or embedding code can differ. A checkout with changes that are not committed is told apart by the fingerprint of its
+// changes (akm_build_fingerprint of summary.json), so two edits at one commit are two builds, and the same edit is one. akm is asked
+// what the kept index holds before it is used, and it has to be the build that was made: the same number of assets, the same
+// build time, and embeddings.
 //
 // The index is in the repository's .cache/, which the repository ignores, and akm walks a bundle that is inside a git repository
 // with `git ls-files`, which leaves out what the repository ignores: it would find no asset. So git is not let climb out of the
@@ -64,11 +65,16 @@ export interface IndexSpec {
   log?: (line: string) => void;
 }
 
-/** Which akm built an index, for summary.json: the version it printed, `akm_bin` and `akm_build` as akmBuild() says them, and when akm says it built the index. */
+/**
+ * Which akm built an index, for summary.json: the version it printed, `akm_bin` and `akm_build` as akmBuild() says them, `akm_build_fingerprint`
+ * when the checkout had changes that were not committed (a clean checkout and a release have none, and so does an index that was kept
+ * before the fingerprint was recorded), and when akm says it built the index.
+ */
 export interface BuiltBy {
   version: string;
   akm_bin: string;
   akm_build: string | null;
+  akm_build_fingerprint?: string | null;
   builtAt: string;
 }
 
@@ -95,7 +101,15 @@ interface State {
 
 const isBuiltBy = (b: unknown): b is BuiltBy => {
   const x = b as Partial<BuiltBy> | null;
-  return typeof x === "object" && x !== null && typeof x.version === "string" && typeof x.akm_bin === "string" && (x.akm_build === null || typeof x.akm_build === "string") && typeof x.builtAt === "string";
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    typeof x.version === "string" &&
+    typeof x.akm_bin === "string" &&
+    (x.akm_build === null || typeof x.akm_build === "string") &&
+    (x.akm_build_fingerprint === undefined || x.akm_build_fingerprint === null || typeof x.akm_build_fingerprint === "string") &&
+    typeof x.builtAt === "string"
+  );
 };
 
 const readState = (dir: string): State | undefined => {
@@ -140,8 +154,8 @@ async function stats(sandbox: Sandbox): Promise<{ entries: number; builtAt: stri
   return { entries: s.entryCount, builtAt: s.lastBuiltAt, hasEmbeddings: s.hasEmbeddings === true };
 }
 
-/** Which akm, in a few words: the version it prints, the build it runs from if it has one, and the command. */
-const who = (b: Omit<BuiltBy, "builtAt">): string => `akm ${b.version}${b.akm_build ? ` build ${b.akm_build}` : ""} (${b.akm_bin})`;
+/** Which akm, in a few words: the version it prints, the build it runs from if it has one, with the start of the fingerprint of its uncommitted changes if it has them, and the command. */
+const who = (b: Omit<BuiltBy, "builtAt">): string => `akm ${b.version}${b.akm_build ? ` build ${b.akm_build}` : ""}${b.akm_build_fingerprint ? ` changes ${b.akm_build_fingerprint.slice(0, 12)}` : ""} (${b.akm_bin})`;
 
 /** Why the state of an earlier index is not the index of this collection, in a sentence. `current` is the akm of this run. */
 function whyNot(state: State | undefined, key: string, files: Record<string, string>, current: Omit<BuiltBy, "builtAt">): string {
@@ -170,9 +184,11 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
   const dir = join(root, spec.name);
   const release = lock(join(root, `${spec.name}.lock`));
   try {
-    // An installed release has no build, and is told apart by its version. A checkout is told apart by its build.
+    // An installed release has no build, and is told apart by its version. A checkout is told apart by its build, and by the
+    // fingerprint of its uncommitted changes. The fingerprint is part of the key only when there is one, so the key of a
+    // clean checkout or a release is what it was before the fingerprint, and an index kept then is still used.
     const current = { version: spec.version, ...akmBuild() };
-    const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", JSON.stringify(semanticConfig())].join("\0"));
+    const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", JSON.stringify(semanticConfig()), ...(current.akm_build_fingerprint ? [current.akm_build_fingerprint] : [])].join("\0"));
     const previous = readState(dir);
     const sandbox = (): Sandbox => {
       const sb = sandboxIn(dir, { semantic: true });
@@ -192,8 +208,7 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
         if (now.entries !== previous.entries) throw new Error(`akm says the index holds ${now.entries} assets, and it was built with ${previous.entries}`);
         if (now.builtAt !== previous.builtAt) throw new Error(`akm says the index was built at ${now.builtAt}, and it was built at ${previous.builtAt}`);
         if (!now.hasEmbeddings) throw new Error("akm says the index holds no embeddings");
-        const uncommitted = current.akm_build?.endsWith("-dirty") ? ` The checkout has changes that are not committed, and the cache cannot tell one such change from another: remove ${dir} to build a new index.` : "";
-        log(`  the index ${spec.name} is kept from an earlier run: it was built by ${who(previous.builtBy)} at ${previous.builtBy.builtAt}.${uncommitted}`);
+        log(`  the index ${spec.name} is kept from an earlier run: it was built by ${who(previous.builtBy)} at ${previous.builtBy.builtAt}.`);
         return { sandbox: sb, state: "warm", entries: previous.entries, builtBy: previous.builtBy, release };
       } catch (e) {
         log(`  the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: ${(e as Error).message}. The earlier index was built by ${who(previous.builtBy)} at ${previous.builtBy.builtAt}.`);
@@ -216,7 +231,7 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
       throw e;
     }
     const next = join(dir, "state.json.tmp");
-    const builtBy: BuiltBy = { version: current.version, akm_bin: current.akm_bin, akm_build: current.akm_build, builtAt };
+    const builtBy: BuiltBy = { version: current.version, akm_bin: current.akm_bin, akm_build: current.akm_build, ...(current.akm_build_fingerprint ? { akm_build_fingerprint: current.akm_build_fingerprint } : {}), builtAt };
     writeFileSync(next, JSON.stringify({ key, files: spec.files, entries, builtAt, builtBy } satisfies State));
     renameSync(next, join(dir, "state.json"));
     return { sandbox: sb, state, entries, builtBy, release };

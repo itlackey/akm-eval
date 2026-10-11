@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
+import { basename, dirname, join } from "node:path";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -21,6 +21,14 @@ else if (cmd === "exit137") process.exit(137);
 else if (cmd === "selfkill") process.kill(process.pid, "SIGKILL");
 else if (cmd === "hang") { process.on("SIGTERM", () => {}); await Bun.sleep(60_000); }
 else if (cmd === "chatter") { console.error("working on it"); process.on("SIGTERM", () => {}); await Bun.sleep(60_000); }
+else { console.error("unknown command " + cmd); process.exit(1); }
+`;
+
+/** A fake akm that prints the value of each variable it is asked about, or null for one that is not set. */
+const ENV_AKM = `
+const [cmd, ...names] = process.argv.slice(2);
+if (cmd === "env") console.log(JSON.stringify(Object.fromEntries(names.map((name) => [name, process.env[name] ?? null]))));
+else if (cmd === "args") console.log(JSON.stringify(names));
 else { console.error("unknown command " + cmd); process.exit(1); }
 `;
 
@@ -131,30 +139,187 @@ describe("createSandbox", () => {
     expect(cmdFor("bun /work/~/cli.ts ~other/cli.ts ~ --root=~/x")).toEqual(["bun", "/work/~/cli.ts", "~other/cli.ts", "~", "--root=~/x"]);
   });
 
-  test("forwards no key named *_API_KEY or *_API_TOKEN, and keeps the rest, HOME and PATH included", () => {
-    const vars = {
+  test("drops every variable that looks like a credential, whatever its name ends in, and keeps the rest, HOME and PATH included", () => {
+    const credentials = {
       OPENAI_API_KEY: "openai-secret",
       ANTHROPIC_API_KEY: "anthropic-secret",
+      GROQ_KEY: "groq-secret",
       GITHUB_API_TOKEN: "github-secret",
       JUDGE_API_KEY: "judge-secret",
       MODEL_API_KEY: "model-secret",
       MODEL_API_TOKEN: "model-token",
-      MODEL_API_KEY_FILE: "/keep/this",
-      MY_API_KEYS: "keep-this",
-      API_KEY_HINT: "keep-this",
-      HF_TOKEN: "keep-this",
+      MODEL_API_KEY_FILE: "/drop/this",
+      MY_API_KEYS: "drop-this",
+      API_KEY_HINT: "drop-this",
+      HF_TOKEN: "drop-this",
+      DB_PASSWORD: "drop-this",
+      CLIENT_SECRET: "drop-this",
+      GOOGLE_CREDENTIALS: "drop-this",
+      SSH_AUTH_SOCK: "/drop/this",
+      openai_api_key: "drop-this",
+      Mistral_Token: "drop-this",
     };
-    const plain = withEnv(vars, () => createSandbox("lib-akm-test"));
-    const keyed = withEnv(vars, () => createSandbox("lib-akm-test", { keepModelKey: true }));
+    const kept = { LANG: "C.UTF-8", MY_SETTING: "keep-this", HF_HOME: "/keep/this", GIT_AUTHOR_NAME: "A Person", GIT_AUTHOR_EMAIL: "a@example.com" };
+    const plain = withEnv({ ...credentials, ...kept }, () => createSandbox("lib-akm-test"));
+    const keyed = withEnv({ ...credentials, ...kept }, () => createSandbox("lib-akm-test", { keepModelKey: true }));
     sandboxes.push(plain, keyed);
     for (const sandbox of [plain, keyed]) {
-      for (const k of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_API_TOKEN", "JUDGE_API_KEY", "MODEL_API_TOKEN"]) expect(sandbox.env[k]).toBeUndefined();
-      for (const k of ["MODEL_API_KEY_FILE", "MY_API_KEYS", "API_KEY_HINT", "HF_TOKEN"]) expect(sandbox.env[k]).toBe(vars[k as keyof typeof vars]);
+      for (const k of Object.keys(credentials)) if (k !== "MODEL_API_KEY") expect(sandbox.env[k]).toBeUndefined();
+      for (const [k, v] of Object.entries(kept)) expect(sandbox.env[k]).toBe(v);
       expect(sandbox.env.PATH).toBe(process.env.PATH as string);
       expect(sandbox.env.HOME).toBe(process.env.HOME as string);
     }
     expect(plain.env.MODEL_API_KEY).toBeUndefined();
     expect(keyed.env.MODEL_API_KEY).toBe("model-secret");
+  });
+
+  test("a key that the config does not name as $NAME never reaches akm, and one it names does, whatever its name", async () => {
+    const vars = { GROQ_KEY: "groq-secret", OPENAI_API_KEY: "openai-secret", SECOND_PROVIDER_TOKEN: "second-secret", HOME_TOKEN: "unnamed-secret" };
+    const sandbox = withEnv(vars, () => {
+      const sb = fakeSandbox({}, ENV_AKM);
+      writeConfig(sb, { engines: { a: { kind: "llm", apiKey: "$GROQ_KEY" }, b: { kind: "llm", headers: { "X-Api-Key": "${SECOND_PROVIDER_TOKEN}" } } } });
+      return sb;
+    });
+    const seen = JSON.parse((await runAkm(sandbox, ["env", ...Object.keys(vars), "HOME", "PATH"])).stdout);
+    expect(seen).toEqual({ GROQ_KEY: "groq-secret", OPENAI_API_KEY: null, SECOND_PROVIDER_TOKEN: "second-secret", HOME_TOKEN: null, HOME: process.env.HOME, PATH: process.env.PATH });
+  });
+
+  test("two engines that each name their own key both reach akm, and an unreferenced GROQ_KEY or OPENAI_API_KEY does not", async () => {
+    const vars = { GROQ_KEY: "groq-secret", OPENAI_API_KEY: "openai-secret", MODEL_API_KEY: "model-secret", ANTHROPIC_API_KEY: "anthropic-secret" };
+    const make = (config: unknown) =>
+      withEnv(vars, () => {
+        const sb = fakeSandbox({}, ENV_AKM);
+        writeConfig(sb, config);
+        return sb;
+      });
+    const both = make({ engines: { one: { apiKey: "$GROQ_KEY" }, two: { apiKey: "$OPENAI_API_KEY" } } });
+    expect(JSON.parse((await runAkm(both, ["env", "GROQ_KEY", "OPENAI_API_KEY", "MODEL_API_KEY", "ANTHROPIC_API_KEY"])).stdout)).toEqual({ GROQ_KEY: "groq-secret", OPENAI_API_KEY: "openai-secret", MODEL_API_KEY: null, ANTHROPIC_API_KEY: null });
+    const none = make(engineConfig("http://h/v1", "m", false));
+    expect(JSON.parse((await runAkm(none, ["env", "GROQ_KEY", "OPENAI_API_KEY", "MODEL_API_KEY"])).stdout)).toEqual({ GROQ_KEY: null, OPENAI_API_KEY: null, MODEL_API_KEY: null });
+    const model = make(engineConfig("http://h/v1", "m", true));
+    expect(JSON.parse((await runAkm(model, ["env", "GROQ_KEY", "MODEL_API_KEY"])).stdout)).toEqual({ GROQ_KEY: null, MODEL_API_KEY: "model-secret" });
+  });
+
+  test("a config written over another takes back the keys the new one does not name, but not the model key keepModelKey gave", () => {
+    const sandbox = withEnv({ GROQ_KEY: "groq-secret", OPENAI_API_KEY: "openai-secret", MODEL_API_KEY: "model-secret" }, () => {
+      const sb = createSandbox("lib-akm-test", { keepModelKey: true });
+      sandboxes.push(sb);
+      writeConfig(sb, { a: "$GROQ_KEY", b: "$OPENAI_API_KEY", c: "$NOT_SET_ANYWHERE_KEY" });
+      expect(sb.env.GROQ_KEY).toBe("groq-secret");
+      expect(sb.env.OPENAI_API_KEY).toBe("openai-secret");
+      expect(sb.env.NOT_SET_ANYWHERE_KEY).toBeUndefined();
+      writeConfig(sb, { a: "$GROQ_KEY" });
+      return sb;
+    });
+    expect(sandbox.env.GROQ_KEY).toBe("groq-secret");
+    expect(sandbox.env.OPENAI_API_KEY).toBeUndefined();
+    expect(sandbox.env.MODEL_API_KEY).toBe("model-secret");
+  });
+
+  test("a folder that has a config already gives akm the keys that config names", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(dir);
+    const sandbox = withEnv({ GROQ_KEY: "groq-secret", OPENAI_API_KEY: "openai-secret" }, () => {
+      writeConfig(sandboxIn(dir), { engines: { a: { apiKey: "$GROQ_KEY" } } });
+      return sandboxIn(dir);
+    });
+    expect(sandbox.env.GROQ_KEY).toBe("groq-secret");
+    expect(sandbox.env.OPENAI_API_KEY).toBeUndefined();
+  });
+});
+
+describe("parseCommand", () => {
+  const home = homedir();
+
+  test("splits on whitespace, and takes double and single quotes and backslash escapes, as a shell would for a command and nothing more", () => {
+    expect(parseCommand("bun /path/to/akm/src/cli.ts")).toEqual(["bun", "/path/to/akm/src/cli.ts"]);
+    expect(parseCommand("  bun \t  cli.ts \n")).toEqual(["bun", "cli.ts"]);
+    expect(parseCommand('bun "/tmp/checkout with spaces/cli.ts"')).toEqual(["bun", "/tmp/checkout with spaces/cli.ts"]);
+    expect(parseCommand("bun '/tmp/checkout with spaces/cli.ts'")).toEqual(["bun", "/tmp/checkout with spaces/cli.ts"]);
+    expect(parseCommand(String.raw`bun /tmp/checkout\ with\ spaces/cli.ts`)).toEqual(["bun", "/tmp/checkout with spaces/cli.ts"]);
+    expect(parseCommand(`bun /tmp/"a b"/'c d'/e`)).toEqual(["bun", "/tmp/a b/c d/e"]);
+    expect(parseCommand(String.raw`bun "say \"hi\" \\ done" 'no \ escape here'`)).toEqual(["bun", String.raw`say "hi" \ done`, String.raw`no \ escape here`]);
+    expect(parseCommand('a "" b')).toEqual(["a", "", "b"]);
+    expect(parseCommand("")).toEqual([]);
+  });
+
+  test("evaluates nothing: a $VARIABLE, a `command`, a glob and a ; are text", () => {
+    expect(parseCommand("bun $HOME/cli.ts `id` *.ts ; rm")).toEqual(["bun", "$HOME/cli.ts", "`id`", "*.ts", ";", "rm"]);
+    expect(parseCommand('bun "$HOME/cli.ts \\$HOME \\`id\\`" \'$HOME\'')).toEqual(["bun", "$HOME/cli.ts $HOME `id`", "$HOME"]);
+    expect(parseCommand(String.raw`bun "a\nb"`)).toEqual(["bun", String.raw`a\nb`]); // a backslash before any other character stays in double quotes
+  });
+
+  test("a word that starts with ~/ starts at your home folder, quoted or not, and any other ~ is a ~", () => {
+    expect(parseCommand("bun ~/code/akm/src/cli.ts")).toEqual(["bun", `${home}/code/akm/src/cli.ts`]);
+    expect(parseCommand('bun "~/my code/akm/cli.ts"')).toEqual(["bun", `${home}/my code/akm/cli.ts`]);
+    expect(parseCommand('bun ~/"my code"/cli.ts')).toEqual(["bun", `${home}/my code/cli.ts`]);
+    expect(parseCommand("~/bin/bun ~/code/cli.ts")).toEqual([`${home}/bin/bun`, `${home}/code/cli.ts`]);
+    expect(parseCommand("bun /work/~/cli.ts ~other/cli.ts ~ --root=~/x")).toEqual(["bun", "/work/~/cli.ts", "~other/cli.ts", "~", "--root=~/x"]);
+    expect(parseCommand(String.raw`bun \~/cli.ts`)).toEqual(["bun", "~/cli.ts"]);
+  });
+
+  test("throws on a quote that is not closed and on a backslash at the end, and says which", () => {
+    expect(() => parseCommand('bun "/tmp/a b/cli.ts')).toThrow('has a " that is not closed');
+    expect(() => parseCommand("bun '/tmp/a b/cli.ts")).toThrow("has a ' that is not closed");
+    expect(() => parseCommand("bun cli.ts\\")).toThrow("ends with a backslash");
+  });
+});
+
+describe("a command with spaces in it", () => {
+  /** A fake akm in a folder with a space in its name, which prints the arguments it was given. */
+  function spacedAkm(): { script: string; dir: string } {
+    const root = mkdtempSync(join(tmpdir(), "lib-akm-test-"));
+    dirs.push(root);
+    const dir = join(root, "checkout with spaces");
+    mkdirSync(dir);
+    const script = join(dir, "cli.ts");
+    writeFileSync(script, ENV_AKM);
+    return { script, dir };
+  }
+
+  test("AKM_BIN names a path with spaces in quotes, and akm runs", async () => {
+    const { script } = spacedAkm();
+    for (const bin of [`bun "${script}"`, `bun '${script}'`, `bun ${script.replaceAll(" ", "\\ ")}`]) {
+      const sandbox = withEnv({ AKM_BIN: bin }, () => createSandbox("lib-akm-test"));
+      sandboxes.push(sandbox);
+      expect(sandbox.cmd).toEqual(["bun", script]);
+      expect(JSON.parse((await runAkm(sandbox, ["args", "one", "two words"])).stdout)).toEqual(["one", "two words"]);
+    }
+  });
+
+  test("--akm does the same, and AKM_BIN is left as the command it read, quoted as needed", async () => {
+    const { script } = spacedAkm();
+    const stop = (message: string): never => {
+      throw new Error(message);
+    };
+    const env: Record<string, string | undefined> = {};
+    useAkm({ akm: `bun "${script}"` }, stop, env);
+    const sandbox = withEnv({ AKM_BIN: env.AKM_BIN }, () => createSandbox("lib-akm-test"));
+    sandboxes.push(sandbox);
+    expect(sandbox.cmd).toEqual(["bun", script]);
+    expect(JSON.parse((await runAkm(sandbox, ["args", "x"])).stdout)).toEqual(["x"]);
+    useAkm({ akm: `bun ~/"my code"/cli.ts` }, stop, env);
+    expect(env.AKM_BIN).toBe(`bun '${homedir()}/my code/cli.ts'`);
+  });
+
+  test("akm_bin in a summary is the command as a line that reads back to the same words, with the home folder as ~", () => {
+    const { script } = spacedAkm();
+    const built = withEnv({ AKM_BIN: `bun "${script}"` }, akmBuild);
+    expect(built.akm_bin).toBe(`bun '${script}'`);
+    expect(parseCommand(built.akm_bin)).toEqual(["bun", script]);
+    expect(withEnv({ AKM_BIN: `bun "${homedir()}/my code/cli.ts"` }, akmBuild).akm_bin).toBe("bun '~/my code/cli.ts'");
+    expect(withEnv({ AKM_BIN: "bun ~/code/akm/src/cli.ts" }, akmBuild).akm_bin).toBe("bun ~/code/akm/src/cli.ts");
+  });
+
+  test("a command with a quote that is not closed is refused, with the variable's name", () => {
+    expect(() => withEnv({ AKM_BIN: 'bun "/tmp/a b/cli.ts' }, () => createSandbox("lib-akm-test"))).toThrow('AKM_BIN is not a command: the command has a " that is not closed');
+    const refusals: string[] = [];
+    const fail = (message: string): never => {
+      refusals.push(message);
+      throw new Error(message);
+    };
+    expect(() => useAkm({ akm: "bun 'x y" }, fail, {})).toThrow("--akm is not a command");
+    expect(refusals).toHaveLength(1);
   });
 });
 
@@ -358,7 +523,7 @@ describe("akmBuild", () => {
     git(dir, "commit", "-q", "-m", "x");
     const sha = git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim();
     const bin = `bun ${join(dir, "src", "cli.ts")}`;
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: sha });
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: sha, akm_build_fingerprint: null });
     writeFileSync(join(dir, "src", "cli.ts"), "// changed");
     expect(withEnv({ AKM_BIN: bin }, akmBuild).akm_build).toBe(`${sha}-dirty`);
   });
@@ -377,7 +542,7 @@ describe("akmBuild", () => {
     const script = repo("script", "cli.ts");
     const bin = `${runtime.path} ${script.path}`;
     expect(runtime.sha).not.toBe(script.sha);
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: script.sha });
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: script.sha, akm_build_fingerprint: null });
   });
 
   test("has no build for a command outside a git checkout, and writes the home folder as ~", () => {
@@ -385,12 +550,109 @@ describe("akmBuild", () => {
     dirs.push(dir);
     writeFileSync(join(dir, "akm"), "");
     expect(withEnv({ AKM_BIN: join(dir, "akm") }, akmBuild).akm_build).toBeNull();
-    expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
+    expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null, akm_build_fingerprint: null });
     expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
   });
 
   test("writes a leading ~/ of AKM_BIN back as ~, the same whether or not it was expanded", () => {
-    expect(withEnv({ AKM_BIN: "bun ~/no/such/akm" }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
+    expect(withEnv({ AKM_BIN: "bun ~/no/such/akm" }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null, akm_build_fingerprint: null });
+  });
+
+  describe("the fingerprint of a checkout with changes that are not committed", () => {
+    /** A checkout of akm in a temporary repository: one commit with src/cli.ts and a .gitignore. */
+    function checkout() {
+      const dir = mkdtempSync(join(tmpdir(), "lib-akm-fingerprint-"));
+      dirs.push(dir);
+      mkdirSync(join(dir, "src"));
+      writeFileSync(join(dir, "src", "cli.ts"), "// the release\n");
+      writeFileSync(join(dir, ".gitignore"), "ignored/\n*.log\n");
+      for (const args of [["init", "-q"], ["add", "."], ["commit", "-q", "-m", "release"]]) expect(git(dir, "-c", "commit.gpgsign=false", ...args).exitCode).toBe(0);
+      const bin = `bun ${join(dir, "src", "cli.ts")}`;
+      return {
+        dir,
+        bin,
+        sha: git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim(),
+        write: (path: string, content: string | Uint8Array) => {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), content);
+        },
+        build: () => withEnv({ AKM_BIN: bin }, akmBuild),
+      };
+    }
+
+    test.skipIf(!Bun.which("git"))("a clean checkout and a command outside git have none, and the build says the commit", () => {
+      const akm = checkout();
+      expect(akm.build()).toEqual({ akm_bin: akm.bin, akm_build: akm.sha, akm_build_fingerprint: null });
+      const outside = mkdtempSync(join(tmpdir(), "lib-akm-fingerprint-"));
+      dirs.push(outside);
+      writeFileSync(join(outside, "akm"), "");
+      expect(withEnv({ AKM_BIN: join(outside, "akm") }, akmBuild).akm_build_fingerprint).toBeNull();
+    });
+
+    test.skipIf(!Bun.which("git"))("two different edits at one commit have the same build and two fingerprints, and the same edit has the same one", () => {
+      const akm = checkout();
+      akm.write("src/cli.ts", "// edit one\n");
+      const one = akm.build();
+      expect(one.akm_build).toBe(`${akm.sha}-dirty`);
+      expect(one.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(akm.build()).toEqual(one); // asked again
+
+      akm.write("src/cli.ts", "// edit two\n");
+      const two = akm.build();
+      expect(two.akm_build).toBe(one.akm_build); // `git describe` cannot tell them apart
+      expect(two.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      expect(two.akm_build_fingerprint).not.toBe(one.akm_build_fingerprint);
+
+      akm.write("src/cli.ts", "// edit one\n"); // back to the first edit
+      expect(akm.build()).toEqual(one);
+      expect(git(akm.dir, "add", "-A").exitCode).toBe(0); // staged, not only in the working tree: the same changes
+      expect(akm.build()).toEqual(one);
+
+      git(akm.dir, "checkout", "HEAD", "--", "src/cli.ts"); // reverted
+      expect(akm.build()).toEqual({ akm_bin: akm.bin, akm_build: akm.sha, akm_build_fingerprint: null });
+    });
+
+    test.skipIf(!Bun.which("git"))("a file that is not tracked counts: its presence, its path and its content, though git calls the checkout clean", () => {
+      const akm = checkout();
+      akm.write("src/new.ts", "// new source\n");
+      const added = akm.build();
+      expect(added.akm_build).toBe(akm.sha); // `git describe --dirty` does not see an untracked file
+      expect(added.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+      akm.write("src/new.ts", "// other new source\n");
+      const edited = akm.build();
+      expect(edited.akm_build_fingerprint).not.toBe(added.akm_build_fingerprint);
+      rmSync(join(akm.dir, "src", "new.ts"));
+      akm.write("src/renamed.ts", "// other new source\n");
+      expect(akm.build().akm_build_fingerprint).not.toBe(edited.akm_build_fingerprint);
+      rmSync(join(akm.dir, "src", "renamed.ts"));
+      expect(akm.build().akm_build_fingerprint).toBeNull();
+    });
+
+    test.skipIf(!Bun.which("git"))("an ignored file does not count, and an edit with an untracked file differs from the edit alone", () => {
+      const akm = checkout();
+      akm.write("ignored/cache.bin", "whatever");
+      akm.write("run.log", "lines");
+      expect(akm.build().akm_build_fingerprint).toBeNull();
+      akm.write("src/cli.ts", "// edit\n");
+      const edit = akm.build().akm_build_fingerprint;
+      akm.write("ignored/cache.bin", "something else");
+      expect(akm.build().akm_build_fingerprint).toBe(edit);
+      akm.write("extra.ts", "// beside it\n");
+      expect(akm.build().akm_build_fingerprint).not.toBe(edit);
+    });
+
+    test.skipIf(!Bun.which("git"))("a change to a binary file counts", () => {
+      const akm = checkout();
+      akm.write("model.bin", new Uint8Array([0, 1, 2, 255]));
+      expect(git(akm.dir, "add", "model.bin").exitCode).toBe(0);
+      expect(git(akm.dir, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "binary").exitCode).toBe(0);
+      expect(akm.build().akm_build_fingerprint).toBeNull();
+      akm.write("model.bin", new Uint8Array([0, 1, 2, 254]));
+      const one = akm.build().akm_build_fingerprint;
+      akm.write("model.bin", new Uint8Array([0, 1, 2, 253]));
+      expect(one).not.toBeNull();
+      expect(akm.build().akm_build_fingerprint).not.toBe(one);
+    });
   });
 });
 
