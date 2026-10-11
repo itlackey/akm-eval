@@ -49,7 +49,9 @@ A revision is good only when all of these hold:
 It is bad otherwise. That includes churn that fixes nothing, even when every fact survives. It also includes a real
 fix that comes with body churn that only restates: an added intro, headings, a table of contents or reworded prose.
 The `type:` line and the provenance stamps akm adds (`generated`, `verified`) are neither a fix nor churn. Uncertain
-cases were labelled bad.
+cases were labelled bad: that is how the reviews labelled a case they could not decide. Version 2 did not apply it again. It
+moved a good label only where the case's reason or its diff shows a change the rubric names, so seven good cases the rubric
+does not decide kept their labels (`ADJUDICATION.md`, "Borderline, left as good").
 
 The labels come from reviews against this rubric by Claude Opus, checked by the maintainer, and every label has a
 recorded reason.
@@ -99,10 +101,11 @@ diff invents a rationale or drops a fact; those are harmful. The run scores the 
 
 ## Known limits
 
-- The labels follow the rubric where it decides, and seven good cases are borderline. The rubric says uncertain cases were
-  labelled bad; these seven were left good because nothing in their reason or diff is a change the rubric names (a
-  description reworded or narrowed while the body still holds the facts, a reconstructed sentence, an `updated:` date).
-  `ADJUDICATION.md` lists each with its reason. Moving them is a decision for the maintainer.
+- The labels follow the rubric where it decides, and seven good cases are borderline. The criterion of version 2 is
+  evidence: a good label moved only where the case's reason or diff shows a change the rubric names. The rubric's sentence
+  that uncertain cases were labelled bad was not applied again; applied to these seven (a description reworded or narrowed
+  while the body still holds the facts, a reconstructed sentence, an `updated:` date), it would leave 4 good and 102 bad.
+  `ADJUDICATION.md` lists each with its reason. Which criterion holds is the maintainer's decision.
 - The good set is small and narrow. 11 cases, all from the accepted sets (3 July, 4 August, 4 September): none from
   `night-10-01`, `queue-10-01` or `orphans`. 7 repair only the description, 3 add `when_to_use` and 1 adds the title;
   no good case edits the body. So the set cannot show whether a judge passes a fix that does edit the body, such as
