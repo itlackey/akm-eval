@@ -7,17 +7,17 @@
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
-import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
 import { type ChatResult, type Endpoint, TEMPERATURE, chat, endpointHost } from "./llm.ts";
+import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
 import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
 import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from "./prompts.ts";
 
@@ -41,10 +41,12 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
 .env at the repository root.
 
   --corpus          public (default) fetches the pinned dataset into assets/ if it is not there. private
-                    reads private/longmemeval/assets/, made by ./generate-assets. all runs both and prints
-                    the two results side by side.
+                    reads private/longmemeval/assets/, made by ./generate-assets, and refuses them when
+                    private/longmemeval/generated.json is missing or does not match the files, the public
+                    lock or the generator. all runs both and prints the two results side by side.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
-  --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json.
+  --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
+                    apart from seed, the seed that made the private dataset.
   --retrieval-only  no model and no judge: ingest, search, and score what akm retrieves against the
                     sessions that hold the answer
   --semantic        search with akm's semantic search as well as its keyword index: akm embeds each question's sessions
@@ -103,7 +105,11 @@ interface Summary {
   corpus: Corpus;
   label: string;
   date: string;
+  /** True when the run asked every question it set out to. A summary written after each question says false until the last one. */
   complete: boolean;
+  /** "aborted" for a run that did not finish what it set out to do, and then aborted_reason says why. A run still going, or killed, has not finished either. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   git_commit: string;
   model: string | null;
   judge_model: string | null;
@@ -130,8 +136,10 @@ interface Summary {
   dataset: Record<string, unknown>;
   /** One digest over the dataset files the run read (the lock or rewrite.json, and the questions), by name. */
   assets_sha256: string;
-  /** The seed of the private dataset, from private/seed, as a decimal string. Null for the public corpus and when private/seed is missing. */
+  /** The seed of the rewrite that made the private dataset, as a decimal string: the one in generated.json beside the assets, which is not private/seed when generate-assets ran with --seed. Null for the public corpus. */
   seed: string | null;
+  /** The seed of the draw of the questions (--sample-seed), a different thing from `seed`. Null when no draw was made because every question was asked. The same number is in sample.seed. */
+  sample_seed: number | null;
   sample: Omit<Sample, "items">;
   /** The sessions loaded into akm (one count per question, since every question loads its own haystack), and those over akm's keyword body cut. */
   sessions_loaded: number;
@@ -158,6 +166,9 @@ const gitCommit = (): string => (commit ??= commitOf(ROOT)); // asked once: the 
 
 /** The benchmark's rule for an abstention question, from evaluate_qa.py and print_retrieval_metrics.py: "_abs" is somewhere in the question id. */
 export const isAbstention = (questionId: string): boolean => questionId.includes("_abs");
+
+/** Why a summary that is not complete says aborted when nothing gave up: the run was cut short, or is still going and writes it again after the next question. */
+const UNFINISHED = "the run had not asked every question when this summary was written";
 
 /** The sessions go to the reader in the order of the haystack, as the baseline reads them, and not in akm's rank order. */
 const READER_ORDER = "haystack";
@@ -229,7 +240,7 @@ function armStats(rows: Row[], arm: "without_akm" | "with_akm") {
 
 type Build = ReturnType<typeof akmBuild>;
 
-export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; model: Endpoint | null; judge: Endpoint | null; version: string; build: Build; searchMode: SearchMode; config: unknown; dataset: Record<string, unknown>; assets_sha256: string; seed: string | null; sample: Sample; dir: string; complete: boolean }): Summary {
+export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; model: Endpoint | null; judge: Endpoint | null; version: string; build: Build; searchMode: SearchMode; config: unknown; dataset: Record<string, unknown>; assets_sha256: string; seed: string | null; sample: Sample; dir: string; complete: boolean; abortedReason?: string }): Summary {
   const retrievalOnly = ctx.model === null;
   const both = rows.filter((r) => r.without_akm?.ok && r.with_akm?.ok);
   const scoredQuestions = retrievalOnly ? rows.filter((r) => r.retrieval).length : both.length;
@@ -258,6 +269,8 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     label: ctx.label,
     date: new Date().toISOString(),
     complete: ctx.complete,
+    status: ctx.complete ? "complete" : "aborted",
+    aborted_reason: ctx.complete ? null : (ctx.abortedReason ?? UNFINISHED),
     git_commit: gitCommit(),
     model: ctx.model?.model ?? null,
     judge_model: ctx.judge?.model ?? null,
@@ -276,6 +289,7 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     dataset: ctx.dataset,
     assets_sha256: ctx.assets_sha256,
     seed: ctx.seed,
+    sample_seed: ctx.sample.seed,
     sample: { order: ctx.sample.order, seed: ctx.sample.seed, n: ctx.sample.n, total: ctx.sample.total, per_type: ctx.sample.per_type },
     sessions_loaded: rows.reduce((n, r) => n + (r.n_sessions ?? 0), 0),
     sessions_over_projection_limit: rows.reduce((n, r) => n + (r.sessions_over_projection_limit ?? 0), 0),
@@ -385,34 +399,29 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
   return rows.filter((r) => r.retrieval !== null && (now.model === null || (r.without_akm?.ok === true && r.with_akm?.ok === true)));
 }
 
-/** The seed in a private/seed file, as the decimal string it holds, or null when there is no such file or it holds no integer. */
-export function readSeed(file: string | undefined): string | null {
-  if (file === undefined || !existsSync(file)) return null;
-  const seed = readFileSync(file, "utf8").split("\n")[0].trim();
-  return /^\d{1,20}$/.test(seed) ? seed : null;
-}
-
 /**
- * One digest over files in `folder`, by their names there, so the same files in another checkout give the same digest. It is
- * the digest sha256Files makes of the names as paths, written out here so that the working folder need not change to get it:
- * a test holds the two together.
+ * Why the private assets in `tree` (private/longmemeval) may not be used, or undefined when generated.json vouches for them. The
+ * public lock is the one in `publicAssets`.
  */
-function digestFiles(folder: string, names: string[]): string {
-  const sorted = [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  return sha256Text(sorted.map((name) => `${name}\0${sha256File(join(folder, name))}\n`).join(""));
-}
+export const privateProblem = (tree: string, publicAssets = join(EVAL_DIR, "assets"), where = relative(ROOT, tree) || tree): string | undefined => treeProblem(tree, publicAssets, where);
 
 export async function runCorpus(
   corpus: Corpus,
   args: { limit?: number; label: string; sampleSeed: number; resume?: string },
   ctx: Context & { version: string; build?: Build },
-  folders: { assets: string; results: string; seed?: string } = {
+  folders: { assets: string; results: string; publicAssets?: string } = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
-    seed: join(ROOT, "private", "seed"),
   },
 ): Promise<Summary> {
   const { assets, results: parent } = folders;
+  // The private assets are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
+  let seed: string | null = null;
+  if (corpus === "private") {
+    const problem = privateProblem(dirname(assets), folders.publicAssets);
+    if (problem !== undefined) fail(problem);
+    seed = readGenerated(dirname(assets))?.seed ?? null;
+  }
   const searchMode = ctx.akm.mode;
   const config = ctx.akm.config();
   const build = ctx.build ?? akmBuild();
@@ -426,7 +435,6 @@ export async function runCorpus(
   const path = corpus === "public" ? await ensureDataset(assets) : join(assets, DATA_FILE);
   // Before the questions are read, so the file is not held twice. The private file is hashed as it is, not as rewrite.json says.
   const assets_sha256 = digestFiles(assets, [corpus === "public" ? "ASSETS.lock" : "rewrite.json", DATA_FILE]);
-  const seed = corpus === "private" ? readSeed(folders.seed) : null;
   const sample = sampleQuestions(loadQuestions(path), args.limit, args.sampleSeed);
   const rows: Row[] = [];
   let dir: string;
@@ -444,8 +452,8 @@ export async function runCorpus(
   if (ctx.model && sample.n > 50) console.log("  Each question sends the whole history, about 115k tokens, in the without-akm arm. Use --limit for a shorter run.");
 
   const base = { corpus, label: args.label, model: ctx.model, judge: ctx.judge, version: ctx.version, build, searchMode, config, dataset, assets_sha256, seed, sample, dir: relative(ROOT, dir) };
-  const save = (complete: boolean) => {
-    const summary = buildSummary(rows, { ...base, complete });
+  const save = (complete: boolean, abortedReason?: string) => {
+    const summary = buildSummary(rows, { ...base, complete, abortedReason });
     const { results_dir: _dir, ...stored } = summary;
     writeFileSync(join(dir, "summary.json.tmp"), `${JSON.stringify(stored, null, 2)}\n`);
     renameSync(join(dir, "summary.json.tmp"), join(dir, "summary.json"));
@@ -487,12 +495,13 @@ export async function runCorpus(
       }
     }
   }
-  const summary = save(gaveUp === undefined && rows.length === sample.n);
+  const stopped = gaveUp === undefined ? undefined : gaveUpOn === "akm" ? `akm could not search the first ${GIVE_UP_AFTER} questions, so the run stopped. Last error: ${gaveUp}` : `the first ${GIVE_UP_AFTER} questions could not be answered and graded, so the run stopped. Last error: ${gaveUp}`;
+  const summary = save(stopped === undefined && rows.length === sample.n, stopped);
   clearRunning(dir); // this folder is done: under --corpus all the next corpus runs in this process, which is alive
   printSummary(summary);
-  if (gaveUp !== undefined) {
-    if (gaveUpOn === "akm") fail(`akm could not search the first ${GIVE_UP_AFTER} questions, so the run stopped. Last error: ${gaveUp}\nCheck that \`${process.env.AKM_BIN?.trim() || "akm"} index\` and \`search\` work.`, 1);
-    fail(`the first ${GIVE_UP_AFTER} questions could not be answered and graded, so the run stopped. Last error: ${gaveUp}\nCheck the MODEL_ and JUDGE_ settings in .env, and the context size of the model server: the whole history is about 115k tokens.`, 1);
+  if (stopped !== undefined) {
+    if (gaveUpOn === "akm") fail(`${stopped}\nCheck that \`${process.env.AKM_BIN?.trim() || "akm"} index\` and \`search\` work.`, 1);
+    fail(`${stopped}\nCheck the MODEL_ and JUDGE_ settings in .env, and the context size of the model server: the whole history is about 115k tokens.`, 1);
   }
   return summary;
 }
@@ -534,6 +543,9 @@ async function main(): Promise<void> {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", DATA_FILE))) {
       fail(`the private assets are missing (private/${NAME}/assets/${DATA_FILE}). Make them with: ./generate-assets --only ${NAME}`);
     }
+    // Before the first corpus runs: under --corpus all the public run takes hours, and the private one would refuse after it.
+    const problem = c === "private" ? privateProblem(join(ROOT, "private", NAME)) : undefined;
+    if (problem !== undefined) fail(problem);
   }
   const retrievalOnly = values["retrieval-only"] === true;
   const searchMode: SearchMode = values.semantic === true ? "semantic" : "keyword";

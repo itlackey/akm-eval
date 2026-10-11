@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
-import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, shiftTextDates, shiftYears } from "./generate.ts";
-import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
-import { isAbstention, readSeed, resolveEndpoints, runCorpus } from "./run.ts";
+import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
+import { evidence, fakeAkmScript, sandboxRunning, tinyDataset, writePublicAssets } from "./fakes.ts";
+import { GENERATED, basisOf, manifestOf } from "./manifest.ts";
+import { isAbstention, resolveEndpoints, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -145,31 +145,6 @@ describe("generate", () => {
   });
 });
 
-const evidence = (id: string, text: string) => ({ id, date: "2023/05/20 (Sat) 02:21", turns: [{ role: "user", content: text }, { role: "assistant", content: "Noted." }] });
-
-function tinyDataset(): Question[] {
-  const fill = (n: number) => Array.from({ length: n }, (_, i) => evidence(`filler_${i}`, `Chat number ${i} about gardening and tea.`));
-  const make = (id: string, type: string, question: string, answer: string, ev: ReturnType<typeof evidence>[], evidenceIds: string[]): Question => {
-    const sessions = [...fill(2), ...ev, ...fill(1).map((s) => ({ ...s, id: `${s.id}_b` }))];
-    return {
-      question_id: id,
-      question_type: type,
-      question,
-      question_date: "2023/05/30 (Tue) 23:40",
-      answer,
-      answer_session_ids: evidenceIds,
-      haystack_dates: sessions.map((s) => s.date),
-      haystack_session_ids: sessions.map((s) => s.id),
-      haystack_sessions: sessions.map((s) => s.turns),
-    };
-  };
-  return [
-    make("q-secret", "multi-session", "What is the secret answer?", "BLUE42", [evidence("answer_1", "The secret answer is BLUE42.")], ["answer_1"]),
-    make("q-cats", "temporal-reasoning", "How many companions do I own?", "3", [evidence("answer_2", "I own 3 cats named Tom, Mia and Zed.")], ["answer_2"]),
-    make("q-passport_abs", "single-session-user", "What is my passport identifier?", "You never mentioned it.", [], []),
-  ];
-}
-
 /** A model that reads the history it is given and a judge that compares the answer to the key. `bodies` keeps every request, and `onRequest` is called with each. */
 function fakeEndpoint(counter = { requests: 0 }, reportedModel = "fake-model", bodies: { max_tokens?: number; temperature?: number; messages: { content: string }[] }[] = [], onRequest: () => void = () => {}) {
   return Bun.serve({
@@ -209,10 +184,7 @@ describe("runCorpus", () => {
   function setup(questions: Question[] = tinyDataset()) {
     const root = tmp();
     const assets = join(root, "assets");
-    mkdirSync(assets);
-    const data = JSON.stringify(questions);
-    writeFileSync(join(assets, DATA_FILE), data);
-    writeFileSync(join(assets, "ASSETS.lock"), JSON.stringify({ dataset: "tiny", source: "none", licence: "MIT", revision: "r".repeat(40), files: { [DATA_FILE]: { url: "http://unused", bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") } } }));
+    writePublicAssets(assets, questions);
     const akm = new Akm(sandboxRunning(fakeAkmScript(root), dirs));
     return { root, akm, folders: { assets, results: join(root, "results") } };
   }
@@ -237,7 +209,7 @@ describe("runCorpus", () => {
     // the abstention question has no session to find, so it is left out of the means and only counted
     expect(summary.metrics.retrieval).toMatchObject({ k: 5, n: 2, hit_rate: 0.5, zero_hit_rate: 0.5 });
     expect(summary.metrics.retrieval_abstention).toEqual({ n: 1 });
-    expect(summary).toMatchObject({ n_run: 3, n_scored: 3, n_errored: 0, complete: true, akm_version: "0.9.99-test", model: "fake-model", judge_model: "fake-judge", observed_models: ["fake-model"] });
+    expect(summary).toMatchObject({ n_run: 3, n_scored: 3, n_errored: 0, complete: true, status: "complete", aborted_reason: null, akm_version: "0.9.99-test", model: "fake-model", judge_model: "fake-judge", observed_models: ["fake-model"] });
     expect(summary.notes[0]).toContain("not gpt-4o-2024-08-06");
     expect(summary.notes[0]).toContain("it answered as fake-model");
 
@@ -256,7 +228,7 @@ describe("runCorpus", () => {
 
     // what the run sent, and where: the temperature and the token limits, as the benchmark's evaluate_qa.py has them for the judge
     const host = `127.0.0.1:${server.port}`;
-    expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
+    expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
     expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
     expect(graded).toHaveLength(6);
@@ -270,7 +242,14 @@ describe("runCorpus", () => {
     expect(stored.config).toEqual(summary.config);
   });
 
-  test("the summary names the files it read and, for a private run, the seed in private/seed", async () => {
+  /** A private tree made by generate from the public assets of the setup, as `./generate-assets --only longmemeval --seed <seed>` makes it. */
+  async function privateTree(root: string, publicAssets: string, seed: string) {
+    const tree = join(root, "private", "longmemeval");
+    await quiet(() => generate({ seed, out: tree, publicAssets }));
+    return { tree, assets: join(tree, "assets") };
+  }
+
+  test("the summary names the files it read and, for a private run, the seed in generated.json", async () => {
     const { root, akm, folders } = setup();
     const retrieval = { akm, model: null, judge: null, version: "v" };
     const same = await quiet(() => runCorpus("public", { label: "a", sampleSeed: 1 }, retrieval, folders));
@@ -282,26 +261,71 @@ describe("runCorpus", () => {
     expect(digestIn(moved, ["ASSETS.lock", DATA_FILE])).not.toBe(same.assets_sha256);
     expect(same.seed).toBeNull();
 
-    // private: rewrite.json and the questions, and the seed from private/seed, as the string it holds
-    const assets = join(root, "private-assets");
-    mkdirSync(assets);
-    writeFileSync(join(assets, DATA_FILE), readFileSync(join(folders.assets, DATA_FILE)));
-    writeFileSync(join(assets, "rewrite.json"), JSON.stringify({ derived_from: { revision: "r" }, tool: "lib/rewrite", years_back: 1, sha256: "declared" }));
-    const seed = join(root, "seed");
-    writeFileSync(seed, "18446744073709551615\n");
-    const mine = { assets, results: join(root, "private-results"), seed };
+    // private: rewrite.json and the questions, and the seed generate recorded, as the string it holds
+    const { assets } = await privateTree(root, folders.assets, "18446744073709551615");
+    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
     const priv = await quiet(() => runCorpus("private", { label: "p", sampleSeed: 1 }, retrieval, mine));
     expect(priv.seed).toBe("18446744073709551615");
     expect(priv.assets_sha256).toBe(digestIn(assets, ["rewrite.json", DATA_FILE]));
     expect(priv.assets_sha256).not.toBe(same.assets_sha256);
     expect(priv.dataset).toMatchObject({ tool: "lib/rewrite", file: DATA_FILE });
-    // no seed file, or no integer in it: no seed
-    expect((await quiet(() => runCorpus("private", { label: "q", sampleSeed: 1 }, retrieval, { ...mine, seed: join(root, "no-such-seed") }))).seed).toBeNull();
-    expect(readSeed(undefined)).toBeNull();
-    writeFileSync(seed, "not a seed\n");
-    expect(readSeed(seed)).toBeNull();
-    writeFileSync(seed, "42\nmore\n");
-    expect(readSeed(seed)).toBe("42");
+    expect(priv.dataset).not.toHaveProperty("seed"); // the seed stays out of what a summary says of the dataset
+  });
+
+  test("a private run records the seed its assets were made with, not private/seed, and the sample seed apart from it", async () => {
+    const { root, akm, folders } = setup();
+    const retrieval = { akm, model: null, judge: null, version: "v" };
+    // ./generate-assets --seed 222 leaves private/seed as it was
+    const seedFile = join(root, "private", "seed");
+    mkdirSync(dirname(seedFile), { recursive: true });
+    writeFileSync(seedFile, "111\n");
+    const { tree, assets } = await privateTree(root, folders.assets, "222");
+    expect(readFileSync(seedFile, "utf8")).toBe("111\n");
+    expect(JSON.parse(readFileSync(join(tree, "map.json"), "utf8")).seed).toBe("222");
+    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+
+    const drawn = await quiet(() => runCorpus("private", { label: "d", sampleSeed: 7, limit: 2 }, retrieval, mine));
+    expect(drawn).toMatchObject({ seed: "222", sample_seed: 7, n_run: 2 });
+    const dir = join(mine.results, readdirSync(mine.results).find((d) => d.endsWith("-d")) as string);
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ seed: "222", sample_seed: 7, sample: { order: "stratified-seeded", seed: 7 } });
+
+    // every question asked: no draw was made, so there is no sample seed, and the rewrite seed is the same
+    const full = await quiet(() => runCorpus("private", { label: "f", sampleSeed: 7 }, retrieval, mine));
+    expect(full).toMatchObject({ seed: "222", sample_seed: null, n_run: 3 });
+    // the public corpus has no rewrite seed, and its draw has a sample seed
+    const pub = await quiet(() => runCorpus("public", { label: "u", sampleSeed: 9, limit: 2 }, retrieval, folders));
+    expect(pub).toMatchObject({ seed: null, sample_seed: 9 });
+  });
+
+  test("a private run refuses a tree that generated.json does not vouch for, before it makes a results folder", async () => {
+    const { root, akm, folders } = setup();
+    const retrieval = { akm, model: null, judge: null, version: "v" };
+    const { tree, assets } = await privateTree(root, folders.assets, "222");
+    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    const refused = async (message: string) => {
+      const run = () => quiet(() => runCorpus("private", { label: "r", sampleSeed: 1 }, retrieval, mine));
+      await expect(run()).rejects.toThrow(message);
+      await expect(run()).rejects.toThrow("Make them again with: ./generate-assets --only longmemeval");
+      expect(existsSync(mine.results)).toBe(false); // nothing ran
+    };
+    const [manifest, data, lock] = [readFileSync(join(tree, GENERATED)), readFileSync(join(assets, DATA_FILE)), readFileSync(join(folders.assets, "ASSETS.lock"), "utf8")];
+
+    rmSync(join(tree, GENERATED));
+    await refused("have no generated.json");
+    writeFileSync(join(tree, GENERATED), manifest);
+
+    // the public dataset moved on since the assets were made
+    writeFileSync(join(folders.assets, "ASSETS.lock"), lock.replace("r".repeat(40), "s".repeat(40)));
+    await refused("another public dataset");
+    writeFileSync(join(folders.assets, "ASSETS.lock"), lock);
+
+    // the questions were edited by hand
+    writeFileSync(join(assets, DATA_FILE), Buffer.concat([data, Buffer.from(" ")]));
+    await refused("not the ones generate wrote");
+    writeFileSync(join(assets, DATA_FILE), data);
+
+    // everything is as generate left it: the run goes ahead
+    expect((await quiet(() => runCorpus("private", { label: "ok", sampleSeed: 1 }, retrieval, mine))).seed).toBe("222");
   });
 
   test("the reader gets the sessions akm returns in the order of the haystack, and not by rank", async () => {
@@ -412,7 +436,8 @@ describe("runCorpus", () => {
     const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
     await expect(quiet(() => runCorpus("public", { label: "e", sampleSeed: 1 }, { akm, model: endpoint, judge: endpoint, version: "v" }, folders))).rejects.toThrow("could not be answered and graded");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
-    expect(stored).toMatchObject({ complete: false, n_run: 3, n_scored: 0, n_errored: 3 });
+    expect(stored).toMatchObject({ complete: false, status: "aborted", n_run: 3, n_scored: 0, n_errored: 3 });
+    expect(stored.aborted_reason).toContain("the first 3 questions could not be answered and graded");
     expect(stored.metrics.retrieval).toMatchObject({ n: 2, hit_rate: 0.5 });
     expect(stored.metrics.accuracy.without_akm).toMatchObject({ n: 0, n_errored: 3 });
     expect(existsSync(join(folders.results, readdirSync(folders.results)[0], ".running"))).toBe(false); // a run that stopped is not running
@@ -425,7 +450,8 @@ describe("runCorpus", () => {
     const akm = new Akm(sandboxRunning(broken, dirs));
     await expect(quiet(() => runCorpus("public", { label: "b", sampleSeed: 1 }, { akm, model: null, judge: null, version: "v" }, folders))).rejects.toThrow("akm could not search the first 3 questions");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
-    expect(stored).toMatchObject({ complete: false, n_run: 3, n_scored: 0, timeouts: 0 });
+    expect(stored).toMatchObject({ complete: false, status: "aborted", n_run: 3, n_scored: 0, timeouts: 0 });
+    expect(stored.aborted_reason).toContain("akm could not search the first 3 questions");
     const rows = readFileSync(join(folders.results, readdirSync(folders.results)[0], "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.map((r) => r.timed_out)).toEqual([false, false, false]);
   });
@@ -543,17 +569,16 @@ describe("runCorpus", () => {
     writeFileSync(join(folders.assets, "ASSETS.lock"), JSON.stringify({ ...lock, files: { [DATA_FILE]: { ...lock.files[DATA_FILE], url: "http://elsewhere" } } }));
     await expect(quiet(() => runCorpus("public", { label: "a", sampleSeed: 1, resume: publicDir }, retrieval, folders))).rejects.toThrow("different assets sha256");
 
-    // private: nothing checks the questions file against rewrite.json, so the digest is what notices an edit
-    const assets = join(root, "private-assets");
-    mkdirSync(assets);
-    writeFileSync(join(assets, DATA_FILE), readFileSync(join(folders.assets, DATA_FILE)));
-    writeFileSync(join(assets, "rewrite.json"), JSON.stringify({ derived_from: { revision: "r" }, tool: "lib/rewrite", years_back: 1, sha256: "declared" }));
-    const mine = { assets, results: join(root, "private-results") };
+    // private: generated.json refuses questions that were edited, and where someone made it again to vouch for the edit, the digest in summary.json is what notices
+    const { tree, assets } = await privateTree(root, folders.assets, "5");
+    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
     await quiet(() => runCorpus("private", { label: "p", sampleSeed: 1 }, retrieval, mine));
     const privateDir = join(mine.results, readdirSync(mine.results)[0]);
     const resume = () => quiet(() => runCorpus("private", { label: "p", sampleSeed: 1, resume: privateDir }, retrieval, mine));
     expect((await resume()).n_run).toBe(3); // the same files carry on
     writeFileSync(join(assets, DATA_FILE), JSON.stringify(tinyDataset().map((q, i) => (i === 0 ? { ...q, answer: "RED" } : q))));
+    await expect(resume()).rejects.toThrow("not the ones generate wrote");
+    writeFileSync(join(tree, GENERATED), JSON.stringify(manifestOf(tree, "5", basisOf(folders.assets))));
     await expect(resume()).rejects.toThrow("different assets sha256");
   });
 });
