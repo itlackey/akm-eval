@@ -1,0 +1,134 @@
+{
+  "eval": "consolidate",
+  "corpus": "public",
+  "label": "before",
+  "date": "2026-10-11T09:00:00.000Z",
+  "git_commit": "5d1c0de",
+  "model": "test-model",
+  "akm_version": "0.9.99-test",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "limit": null,
+  "strategy": "consolidate",
+  "config_patch": null,
+  "timeout_ms": null,
+  "n_cases": 12,
+  "n_run": 12,
+  "n_scored": 11,
+  "n_errored": 1,
+  "metrics": {
+    "unsafe": {
+      "n": 2,
+      "of": 11,
+      "staged": 2
+    },
+    "precision": {
+      "value": 0.6,
+      "safe": 3,
+      "retired": 5
+    },
+    "recall": {
+      "value": 0.5,
+      "retired_safe": 3,
+      "of": 6
+    },
+    "classes": {
+      "duplicate": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 1,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 1,
+        "retired_unsafe": 0,
+        "kept": 1
+      },
+      "subsumed": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 2,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 1,
+        "retired_unsafe": 1,
+        "kept": 0
+      },
+      "supersedes": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 1,
+          "contradicts": 0,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 1,
+        "retired_unsafe": 0,
+        "kept": 1
+      },
+      "contradicts": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 1,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 1,
+        "kept": 1
+      },
+      "overlap": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 2,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 2
+      },
+      "unrelated": {
+        "n": 2,
+        "error": 1,
+        "paired": 1,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 1
+      }
+    }
+  }
+}

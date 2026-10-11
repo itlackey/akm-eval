@@ -1,0 +1,7 @@
+{"id":"p01","kind":"duplicate","notes":["dup-a","dup-b"],"may_retire":["dup-a"],"outcome":"safe","retirements":[{"retired":"dup-a","successor":"dup-b","verdict":"safe","staged":false,"judged_as":"duplicate","reason":"","only_in_retired":null,"only_in_successor":null}]}
+{"id":"p02","kind":"triple","notes":["tri-a","tri-b","tri-c"],"may_retire":["tri-b","tri-c"],"outcome":"safe","retirements":[{"retired":"tri-b","successor":"tri-a","verdict":"safe","staged":false,"judged_as":"duplicate","reason":"","only_in_retired":null,"only_in_successor":null}]}
+{"id":"p03","kind":"subsumed","notes":["sub-a","sub-b"],"may_retire":["sub-a"],"outcome":"safe","retirements":[{"retired":"sub-a","successor":"sub-b","verdict":"safe","staged":false,"judged_as":"duplicate","reason":"","only_in_retired":null,"only_in_successor":null}]}
+{"id":"p04","kind":"contradicts","notes":["con-a","con-b"],"may_retire":[],"outcome":"kept","retirements":[]}
+{"id":"p05","kind":"lookalike","notes":["look-a","look-b"],"may_retire":[],"outcome":"kept","retirements":[]}
+{"id":"p06","kind":"single","notes":["solo"],"may_retire":[],"outcome":"unsafe","retirements":[{"retired":"solo","successor":null,"verdict":"unsafe","staged":true,"judged_as":"duplicate","reason":"","only_in_retired":null,"only_in_successor":null}]}
+{"id":"p07","kind":"supersedes","notes":["old","new"],"may_retire":["old"],"outcome":"safe","retirements":[{"retired":"old","successor":"new","verdict":"safe","staged":false,"judged_as":"duplicate","reason":"","only_in_retired":null,"only_in_successor":null}]}

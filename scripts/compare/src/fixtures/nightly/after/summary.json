@@ -1,0 +1,57 @@
+{
+  "eval": "nightly",
+  "corpus": "public",
+  "label": "after",
+  "date": "2026-10-11T10:00:00.000Z",
+  "git_commit": "5d1c0de",
+  "model": "test-model",
+  "akm_version": "0.9.99-test",
+  "akm_bin": "bun /work/akm/src/index.ts",
+  "akm_build": "1a2b3c4",
+  "limit": null,
+  "strategy": "night",
+  "config_patch": null,
+  "n_errored": 0,
+  "metrics": {
+    "items": {
+      "n": 14,
+      "ok": 10,
+      "rate": 0.7143
+    },
+    "by_kind": {
+      "pair": {
+        "n": 5,
+        "ok": 4
+      },
+      "reflect": {
+        "n": 3,
+        "ok": 3
+      },
+      "distill": {
+        "n": 2,
+        "ok": 2
+      },
+      "fix": {
+        "n": 2,
+        "ok": 1
+      },
+      "untouched": {
+        "n": 2,
+        "ok": 0
+      }
+    },
+    "failed": {
+      "no_unsafe_retirement": 1,
+      "right_outcome": 3
+    },
+    "harm": {
+      "items": 1,
+      "outside_changed": 1,
+      "lessons_accepted": 0
+    },
+    "calls": {
+      "n": 44,
+      "failures": 2
+    }
+  }
+}
