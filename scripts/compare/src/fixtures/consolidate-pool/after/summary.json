@@ -36,10 +36,19 @@
   "engine": {
     "engine": "model",
     "model": "test-model",
-    "endpoint": "gateway.example.com",
+    "endpoint": "https://gateway.example.com/v1",
     "temperature": 0,
     "enableThinking": false,
-    "timeoutMs": 120000
+    "timeoutMs": 120000,
+    "engines": {
+      "model": {
+        "model": "test-model",
+        "endpoint": "https://gateway.example.com/v1",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 120000
+      }
+    }
   },
   "limit": null,
   "mode": "pool",

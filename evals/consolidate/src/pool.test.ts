@@ -416,9 +416,9 @@ describe("runPool", () => {
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
       expect(stored.assets_sha256).toBe(assetsDigest(POOL_DIR, poolFiles(POOL_DIR)));
       expect(poolFiles(POOL_DIR)).toHaveLength(81); // labels.json and the 80 notes
-      expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+      expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.config.engines.consolidate).toMatchObject({ endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0, enableThinking: false });
-      expect(JSON.stringify(stored)).not.toContain("localhost:1/v1");
+      expect(JSON.stringify(stored.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

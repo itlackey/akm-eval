@@ -192,7 +192,7 @@ describe("runCorpus", () => {
     expect(text).not.toContain("model-secret");
     const stored = JSON.parse(text);
     expect(stored.config).toEqual(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey)))); // the key is the reference "$MODEL_API_KEY", which holds no secret
-    expect(stored.engine).toEqual({ engine: "reflect", model: "the-model", endpoint: "localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(stored.engine).toEqual({ engine: "reflect", model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { reflect: { model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/

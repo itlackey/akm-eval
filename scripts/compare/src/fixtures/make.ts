@@ -21,7 +21,7 @@ function write(path: string, summary: Row, rows: Row[]): void {
 // What every summary the evals write records of how the run was made, so that two of these fixtures are fully identified: they differ in the
 // akm build (the treatment of the report tests) and in nothing the policy checks. The config and the engine are what the evals write.
 const CONFIG = { configVersion: "0.9.0", semanticSearchMode: "off", registries: [], defaults: { llmEngine: "model", improveStrategy: "night" }, engines: { model: { kind: "llm", provider: "openai", endpoint: "<MODEL_BASE_URL>", model: "test-model", apiKey: "$MODEL_API_KEY", timeoutMs: 120000, temperature: 0, enableThinking: false } } };
-const IDENTIFIED = { status: "complete", aborted_reason: null, assets_sha256: "a".repeat(64), seed: null, config: CONFIG, engine: { engine: "model", model: "test-model", endpoint: "gateway.example.com", temperature: 0, enableThinking: false, timeoutMs: 120000 } };
+const IDENTIFIED = { status: "complete", aborted_reason: null, assets_sha256: "a".repeat(64), seed: null, config: CONFIG, engine: { engine: "model", model: "test-model", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, engines: { model: { model: "test-model", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000 } } } };
 const BEFORE = { label: "before", date: "2026-10-11T09:00:00.000Z", git_commit: "5d1c0de", model: "test-model", akm_version: "0.9.99-test", akm_bin: "akm", akm_build: null, ...IDENTIFIED };
 const AFTER = { label: "after", date: "2026-10-11T10:00:00.000Z", git_commit: "5d1c0de", model: "test-model", akm_version: "0.9.99-test", akm_bin: "bun /work/akm/src/index.ts", akm_build: "1a2b3c4", ...IDENTIFIED };
 const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus, ...BEFORE, limit: null, ...extra }, { eval: e, corpus, ...AFTER, limit: null, ...extra }];
@@ -382,7 +382,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
   const [rb, ra] = [rows(beforeCols), rows(afterCols)];
   const extra = { collection: "library", search_mode: { keyword: "keyword" }, depth: 10, relevant_from_grade: 2 };
   // retrieval runs no model: its engine settings are all null, and its config holds the keyword search
-  const noModel = { model: undefined, engine: { engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null }, config: { keyword: { configVersion: "0.9.0", semanticSearchMode: "off", registries: [] } } };
+  const noModel = { model: undefined, engine: { engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} }, config: { keyword: { configVersion: "0.9.0", semanticSearchMode: "off", registries: [] } } };
   const [sb, sa] = sides("retrieval", "public", { ...extra, ...noModel });
   const drop = (s: Row) => {
     const { strategy: _s, ...rest } = s;

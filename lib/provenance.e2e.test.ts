@@ -130,7 +130,7 @@ describe("what a run writes holds no endpoint credential", () => {
     const stored = JSON.parse(written["summary.json"]);
     expect(stored.config.engines.model.endpoint).toStartWith("https://gateway.example:8443/v1?api_key=<redacted>");
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
-    expect(stored.engine.endpoint).toBe("gateway.example:8443");
+    expect(stored.engine.endpoint).toBe("https://gateway.example:8443/v1?api_key=<redacted>");
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
     expect(existsSync(join(summary.results_dir, "summary.json"))).toBe(true);
   });

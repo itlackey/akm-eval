@@ -10,6 +10,7 @@
 // shown, and it is not a conclusion.
 
 import { createHash } from "node:crypto";
+import { ENGINE_KEYS } from "../../../lib/provenance.ts";
 
 export const AXES = ["build", "config", "model", "inputs", "harness"] as const;
 export type Axis = (typeof AXES)[number];
@@ -36,15 +37,12 @@ export function canonical(x: unknown): string {
   return JSON.stringify(x) ?? "null";
 }
 
-/** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the config digest leaves them out. */
-const ENGINE_KEYS = ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"];
-
 function withoutEngineSettings(x: unknown): unknown {
   if (Array.isArray(x)) return x.map(withoutEngineSettings);
   if (!isObject(x)) return x;
   return Object.fromEntries(
     Object.entries(x).map(([key, value]) => {
-      if (key === "engines" && isObject(value)) return [key, Object.fromEntries(Object.entries(value).map(([name, e]) => [name, isObject(e) ? Object.fromEntries(Object.entries(e).filter(([k]) => !ENGINE_KEYS.includes(k))) : e]))];
+      if (key === "engines" && isObject(value)) return [key, Object.fromEntries(Object.entries(value).map(([name, e]) => [name, isObject(e) ? Object.fromEntries(Object.entries(e).filter(([k]) => !(ENGINE_KEYS as readonly string[]).includes(k))) : e]))];
       return [key, withoutEngineSettings(value)];
     }),
   );
@@ -85,7 +83,8 @@ export interface Identity {
 const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : typeof x === "number" && Number.isFinite(x) ? String(x) : null);
 
 export function identityOf(s: Row): Identity {
-  const engine = isObject(s.engine) ? canonical(Object.fromEntries(ENGINE_KEYS.map((k) => [k, s.engine[k] ?? null]))) : null;
+  // the settings of every engine the run used, by name; a summary that records only the default engine's does not say what a routed one used
+  const engine = isObject(s.engine) && isObject(s.engine.engines) ? canonical(s.engine.engines) : null;
   return {
     eval: text(s.eval),
     corpus: text(s.corpus),
@@ -166,7 +165,7 @@ const FIELDS: Field[] = [
   { name: "timeout_ms", axis: "config", label: "the time limit (timeout_ms)" },
   { name: "config", axis: "config", label: "the akm config", evidence: () => true },
   { name: "model", axis: "model", label: "the model" },
-  { name: "engine", axis: "model", label: "the engine settings (temperature, thinking, endpoint host, time limit)", evidence: () => true },
+  { name: "engine", axis: "model", label: "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used)", evidence: () => true },
   { name: "assets_sha256", axis: "inputs", label: "the cases (assets_sha256)", evidence: () => true },
   { name: "seed", axis: "inputs", label: "the seed of the private assets", evidence: (i) => i.private },
   { name: "limit", axis: "inputs", label: "the --limit", within: true },
@@ -190,8 +189,9 @@ function harnessValues(ms: Member[]): (string | null)[] {
 const short = (v: string): string => v.replace(/\b[0-9a-f]{64}\b/g, (h) => h.slice(0, 12));
 function engineText(v: string): string {
   try {
-    const e = JSON.parse(v);
-    return Object.entries(e).filter(([, x]) => x !== null).map(([k, x]) => `${k} ${x}`).join(", ") || "none";
+    const engines = Object.entries(JSON.parse(v) as Row);
+    const one = (e: Row) => Object.entries(e).filter(([, x]) => x !== null).map(([k, x]) => `${k} ${x}`).join(", ") || "none";
+    return engines.length === 0 ? "none" : engines.map(([name, e]) => `${name}: ${one(e)}`).join("; ");
   } catch {
     return v;
   }

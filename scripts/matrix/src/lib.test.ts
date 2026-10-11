@@ -130,6 +130,8 @@ describe("a model and an akm build for the whole file", () => {
 const fixture = (name: string): any => JSON.parse(readFileSync(join(import.meta.dir, "fixtures", `${name}.json`), "utf8"));
 
 /** What a summary records of how its run was made and that it finished, so that two runs of a sweep are fully identified and complete. */
+/** The engine of IDENTIFIED with the settings of its one engine changed. */
+const engineWith = (over: Record<string, unknown>) => ({ ...IDENTIFIED.engine, ...over, engines: { model: { ...IDENTIFIED.engine.engines.model, ...over } } });
 const IDENTIFIED = {
   status: "complete",
   aborted_reason: null,
@@ -139,7 +141,7 @@ const IDENTIFIED = {
   strategy: "reflect-only",
   config_patch: null,
   config: { defaults: { llmEngine: "model" }, engines: { model: { kind: "llm", model: "m1", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 120000 } }, improve: { strategies: { "reflect-only": { processes: { reflect: {} } } } } },
-  engine: { engine: "model", model: "m1", endpoint: "gateway.example.com", temperature: 0, enableThinking: false, timeoutMs: 120000 },
+  engine: { engine: "model", model: "m1", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, engines: { model: { model: "m1", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000 } } },
 };
 
 /** A reflect summary with the given rates. */
@@ -816,7 +818,7 @@ describe("the Harbor evals", () => {
     const [base, better] = [measured([0, 0, 0]), measured([1, 1, 1])];
     expect(judge("agent-ab", compareAll("agent-ab", base, better), base, better).exploratory).toEqual([]);
     // an eval that does record a config is exploratory without one
-    expect(judge("reflect", compareAll("agent-ab", base, better), base, better, ["build"]).exploratory).toEqual(["the akm config is not recorded in the baseline and the config", "the engine settings (temperature, thinking, endpoint host, time limit) is not recorded in the baseline and the config"]);
+    expect(judge("reflect", compareAll("agent-ab", base, better), base, better, ["build"]).exploratory).toEqual(["the akm config is not recorded in the baseline and the config", "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the baseline and the config"]);
   });
 
   test("a config with more failed tasks than its baseline can never be better, however much its pass rate gained", () => {
@@ -1193,20 +1195,20 @@ describe("the identity of every run behind a result", () => {
   });
 
   test("two repeats with another engine and another commit are not repeats of one configuration", () => {
-    const { verdict, note } = verdictAndNote(quick(), cfg2({ engine: { ...IDENTIFIED.engine, temperature: 0.7 }, git_commit: "9999999" }));
+    const { verdict, note } = verdictAndNote(quick(), cfg2({ engine: engineWith({ temperature: 0.7 }), git_commit: "9999999" }));
     expect(verdict).toBe("not comparable");
-    expect(note).toContain("the engine settings (temperature, thinking, endpoint host, time limit) differs");
+    expect(note).toContain("the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) differs");
     expect(note).toContain("temperature 0.7");
     expect(note).toContain("the eval's code differs: commit 5d1c0de in");
   });
 
   test("a config row cannot hide a change of the engine, the akm config or the model behind its treatment", () => {
     const build = oneConfig(["--akm", "bun ~/akm-pr/src/cli.ts"]);
-    expect(verdictAndNote(build, { akm_build: "b2", engine: { ...IDENTIFIED.engine, timeoutMs: 1 } }).verdict).toBe("not comparable");
+    expect(verdictAndNote(build, { akm_build: "b2", engine: engineWith({ timeoutMs: 1 }) }).verdict).toBe("not comparable");
     expect(verdictAndNote(build, { akm_build: "b2", config: { ...IDENTIFIED.config, improve: { strategies: {} } } }).note).toContain("the akm config differs");
     expect(verdictAndNote(build, { akm_build: "b2", akm_version: "0.10.0" }).verdict).toBe("better");
     // the same change is the treatment when the row says so
-    expect(verdictAndNote(oneConfig(["--akm", "x"], { treatment: ["model"] }), { akm_build: "b2", model: "m2", engine: { ...IDENTIFIED.engine, model: "m2" } }).verdict).toBe("better");
+    expect(verdictAndNote(oneConfig(["--akm", "x"], { treatment: ["model"] }), { akm_build: "b2", model: "m2", engine: engineWith({ model: "m2" }) }).verdict).toBe("better");
     expect(verdictAndNote(oneConfig([], { treatment: "model" }), { model: "m2" }).verdict).toBe("better");
   });
 
@@ -1242,7 +1244,7 @@ describe("the identity of every run behind a result", () => {
     expect(verdictAndNote(quick(), { assets_sha256: undefined }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in the config"]);
     expect(verdictAndNote(quick(), {}, { assets_sha256: undefined }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in the baseline"]);
     // one run of three that lacks it is enough
-    expect(verdictAndNote(quick(), cfg2({ engine: undefined })).exploratory).toEqual(["the engine settings (temperature, thinking, endpoint host, time limit) is not recorded in the config 2026-10-09-sw-pr-c-r2"]);
+    expect(verdictAndNote(quick(), cfg2({ engine: undefined })).exploratory).toEqual(["the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the config 2026-10-09-sw-pr-c-r2"]);
     expect(verdictAndNote(quick(), {}).verdict).toBe("better");
   });
 

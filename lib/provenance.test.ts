@@ -159,24 +159,51 @@ describe("redactConfig and the credentials of an export", () => {
 });
 
 describe("engineSettings", () => {
-  test("reads the engine that defaults.llmEngine names, with the host of its endpoint alone", () => {
+  const nulls = { model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null };
+
+  test("reads the engine that defaults.llmEngine names, with its endpoint's identity: the path stays, the credentials go", () => {
     const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: "https://user:pw@gateway.example:8443/v1/chat/completions?key=abc", temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };
-    expect(engineSettings(config)).toEqual({ engine: "m", model: "the-model", endpoint: "gateway.example:8443", temperature: 0, enableThinking: false, timeoutMs: 600000 });
-    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc|chat/);
+    const settings = { model: "the-model", endpoint: "https://gateway.example:8443/v1/chat/completions?key=<redacted>", temperature: 0, enableThinking: false, timeoutMs: 600000 };
+    expect(engineSettings(config)).toEqual({ engine: "m", ...settings, engines: { m: settings } });
+    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc/);
   });
 
   test("reads what engineConfig writes", () => {
-    expect(engineSettings(engineConfig("http://localhost:8080/v1", "the-model", true))).toEqual({ engine: "model", model: "the-model", endpoint: "localhost:8080", temperature: null, enableThinking: null, timeoutMs: 600000 });
+    const settings = { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: null, enableThinking: null, timeoutMs: 600000 };
+    expect(engineSettings(engineConfig("http://localhost:8080/v1", "the-model", true))).toEqual({ engine: "model", ...settings, engines: { model: settings } });
+  });
+
+  test("records every engine the config uses, those a strategy, a process or a gate is routed to, and not one nothing names (R02)", () => {
+    const config = {
+      defaults: { llmEngine: "m", engine: "agent" },
+      engines: {
+        m: { model: "a", endpoint: "https://a.example/v1" },
+        worker: { model: "w", endpoint: "https://worker.example/deployment-A/v1", temperature: 0.2 },
+        judge: { model: "j", endpoint: "https://judge.example/v1", timeoutMs: 5 },
+        agent: { model: "ag" },
+        unused: { model: "u" },
+      },
+      improve: { strategies: { night: { engine: "judge", processes: { distill: { engine: "worker" }, reflect: { qualityGate: { engine: "judge" } } } } } },
+    };
+    const s = engineSettings(config);
+    expect(s.engine).toBe("m");
+    expect(Object.keys(s.engines)).toEqual(["agent", "judge", "m", "worker"]);
+    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example/deployment-A/v1", temperature: 0.2, enableThinking: null, timeoutMs: null });
+    // another deployment path of the routed engine is another identity
+    const moved = engineSettings({ ...config, engines: { ...config.engines, worker: { ...config.engines.worker, endpoint: "https://worker.example/deployment-B/v1" } } });
+    expect(moved.engines.worker).not.toEqual(s.engines.worker);
+    // the same engines in another order of keys are the same settings
+    expect(JSON.stringify(engineSettings({ engines: Object.fromEntries(Object.entries(config.engines).reverse()), improve: config.improve, defaults: config.defaults }))).toBe(JSON.stringify(s));
   });
 
   test("is null for what the config does not set, or that is not a URL", () => {
-    const nulls = { engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null };
-    expect(engineSettings({})).toEqual(nulls);
-    expect(engineSettings(null)).toEqual(nulls);
-    expect(engineSettings({ defaults: {}, engines: { m: { model: "x" } } })).toEqual(nulls);
-    expect(engineSettings({ defaults: { llmEngine: "gone" }, engines: {} })).toEqual({ ...nulls, engine: "gone" });
+    const none = { engine: null, ...nulls, engines: {} };
+    expect(engineSettings({})).toEqual(none);
+    expect(engineSettings(null)).toEqual(none);
+    expect(engineSettings({ defaults: {}, engines: { m: { model: "x" } } })).toEqual(none);
+    expect(engineSettings({ defaults: { llmEngine: "gone" }, engines: {} })).toEqual({ ...none, engine: "gone" });
     expect(engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { endpoint: "not a url" } } }).endpoint).toBeNull();
-    expect(engineSettings({ defaults: { llmEngine: "constructor" }, engines: {} })).toEqual({ ...nulls, engine: "constructor" });
+    expect(engineSettings({ defaults: { llmEngine: "constructor" }, engines: {} })).toEqual({ ...none, engine: "constructor" });
   });
 });
 

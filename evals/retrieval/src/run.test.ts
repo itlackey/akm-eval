@@ -338,7 +338,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection("public", "library", ctx, folders));
       expect(s.config.keyword).toEqual(plain);
       expect(s.config.semantic).toMatchObject({ configVersion: "0.9.0", semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 } });
-      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null });
+      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
       const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
       expect(stored.config).toEqual(s.config);
       const keyword = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
@@ -356,7 +356,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection("public", "library", { ...ctx, newSandbox }, folders));
       expect((s.config.keyword as typeof withKey).engines.model.apiKey).toBe("<redacted>");
       expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).not.toContain("sk-secret");
-      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "api.example.com", timeoutMs: 1000 });
+      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com/v1/chat/completions", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com/v1/chat/completions" } } });
     });
 
     test("has a digest of the queries and qrels the run read, the same on another machine and different when a grade is added", async () => {
