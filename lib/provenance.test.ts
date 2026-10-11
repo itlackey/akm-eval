@@ -76,6 +76,88 @@ describe("redactConfig", () => {
   });
 });
 
+describe("redactConfig and the credentials of an export", () => {
+  const LEAKS = ["DUMMY_QUERY_SECRET", "DUMMY_USER_PASSWORD", "DUMMY_HEADER_SECRET", "DUMMY_FRAGMENT_SECRET", "DUMMY_PAIR_SECRET", "DUMMY_NAMED_SECRET", "DUMMY_LINE_SECRET", "DUMMY_OAUTH_SECRET"];
+  const noLeaks = (value: unknown) => {
+    const text = JSON.stringify(value);
+    for (const leak of LEAKS) expect(text).not.toContain(leak);
+  };
+
+  test("an endpoint loses its user name and password, and the value of every authentication parameter of its query, and keeps scheme, host, port, path and the rest of the query", () => {
+    const endpoint = "https://user:DUMMY_USER_PASSWORD@gateway.example:8443/v1/chat/completions?api_key=DUMMY_QUERY_SECRET&model=m&ok=1#DUMMY_FRAGMENT_SECRET";
+    const redacted = redactConfig({ engines: { model: { endpoint, model: "m" } } });
+    expect(redacted.engines.model.endpoint).toBe("https://gateway.example:8443/v1/chat/completions?api_key=<redacted>&model=m&ok=1");
+    noLeaks(redacted);
+    expect(redactConfig("https://gateway.example/v1/chat/completions?api_key=DUMMY_QUERY_SECRET")).toBe("https://gateway.example/v1/chat/completions?api_key=<redacted>");
+    expect(redactConfig("https://u:DUMMY_USER_PASSWORD@host.example/")).toBe("https://host.example/");
+    expect(redactConfig("https://DUMMY_USER_PASSWORD@host.example/")).toBe("https://host.example/");
+    expect(redactConfig("http://localhost:8080/v1/chat/completions")).toBe("http://localhost:8080/v1/chat/completions");
+  });
+
+  test("masks api_key, apikey, key, token, access_token, auth, sig, signature, password and secret in a query, in any case, and nothing else", () => {
+    const names = ["api_key", "apikey", "key", "token", "access_token", "auth", "sig", "signature", "password", "secret", "API_KEY", "ApiKey", "Access_Token", "SIGNATURE", "X-Amz-Signature", "client_secret"];
+    for (const name of names) expect(redactConfig(`https://h.example/p?a=1&${name}=DUMMY_QUERY_SECRET&b=2`)).toBe(`https://h.example/p?a=1&${name}=<redacted>&b=2`);
+    expect(redactConfig("https://h.example/p?api%5Fkey=DUMMY_QUERY_SECRET")).toBe("https://h.example/p?api%5Fkey=<redacted>");
+    expect(redactConfig("https://h.example/p?model=m&maxTokens=5&tokenizer=t&author=a&design=d")).toBe("https://h.example/p?model=m&maxTokens=5&tokenizer=t&author=a&design=d");
+  });
+
+  test("a $NAME reference stays, as the value of a field and of a query parameter", () => {
+    expect(redactConfig({ endpoint: "https://h.example/v1?api_key=$MODEL_API_KEY&token=$OTHER_TOKEN", apiKey: "$MODEL_API_KEY", headers: { "X-Api-Key": "$OTHER_KEY", Authorization: "Bearer sk-1" } })).toEqual({
+      endpoint: "https://h.example/v1?api_key=$MODEL_API_KEY&token=$OTHER_TOKEN",
+      apiKey: "$MODEL_API_KEY",
+      headers: { "X-Api-Key": "$OTHER_KEY", Authorization: "<redacted>" },
+    });
+  });
+
+  test("redacts every engine, not only the default one, and a URL in an array", () => {
+    const redacted = redactConfig({
+      engines: {
+        one: { endpoint: "https://a:DUMMY_USER_PASSWORD@one.example/v1?key=DUMMY_QUERY_SECRET", apiKey: "$ONE_KEY", model: "m1" },
+        two: { endpoint: "https://two.example/v1?token=DUMMY_QUERY_SECRET", apiKey: "DUMMY_HEADER_SECRET", model: "m2" },
+        three: { nested: [{ deeper: { url: "wss://x:DUMMY_USER_PASSWORD@three.example:9/ws?sig=DUMMY_QUERY_SECRET", password: "DUMMY_HEADER_SECRET" } }] },
+      },
+      defaults: { llmEngine: "one" },
+      registries: ["https://DUMMY_USER_PASSWORD@registry.example/index.json?access_token=DUMMY_QUERY_SECRET", "https://plain.example/index.json"],
+    });
+    noLeaks(redacted);
+    expect(redacted.engines.one).toEqual({ endpoint: "https://one.example/v1?key=<redacted>", apiKey: "$ONE_KEY", model: "m1" });
+    expect(redacted.engines.two).toEqual({ endpoint: "https://two.example/v1?token=<redacted>", apiKey: "<redacted>", model: "m2" });
+    expect(redacted.engines.three.nested[0].deeper).toEqual({ url: "wss://three.example:9/ws?sig=<redacted>", password: "<redacted>" });
+    expect(redacted.registries).toEqual(["https://registry.example/index.json?access_token=<redacted>", "https://plain.example/index.json"]);
+    expect(redacted.defaults).toEqual({ llmEngine: "one" });
+  });
+
+  test("redacts a credential header however it is written: a field of an object, a line, a pair or a name and value", () => {
+    const redacted = redactConfig({
+      headers: { Authorization: "Bearer DUMMY_HEADER_SECRET", "X-Api-Key": "DUMMY_HEADER_SECRET", "api-key": "DUMMY_HEADER_SECRET", "Proxy-Authorization": "Basic DUMMY_HEADER_SECRET", Cookie: "s=DUMMY_HEADER_SECRET", "Content-Type": "application/json", Accept: "*/*" },
+      extraHeaders: ["Authorization: Bearer DUMMY_LINE_SECRET", "x-api-key=DUMMY_LINE_SECRET", "Accept: */*", ["Authorization", "Bearer DUMMY_PAIR_SECRET"], ["Accept", "text/plain"], { name: "X-Api-Key", value: "DUMMY_NAMED_SECRET" }, { name: "Accept", value: "text/plain" }],
+    });
+    noLeaks(redacted);
+    expect(redacted.headers).toEqual({ Authorization: "<redacted>", "X-Api-Key": "<redacted>", "api-key": "<redacted>", "Proxy-Authorization": "<redacted>", Cookie: "<redacted>", "Content-Type": "application/json", Accept: "*/*" });
+    expect(redacted.extraHeaders).toEqual(["Authorization: <redacted>", "x-api-key=<redacted>", "Accept: */*", ["Authorization", "<redacted>"], ["Accept", "text/plain"], { name: "X-Api-Key", value: "<redacted>" }, { name: "Accept", value: "text/plain" }]);
+  });
+
+  test("redacts a field whose name ends in key, token, secret or password, in any case, at any depth, and keeps the fields that only contain one", () => {
+    const redacted = redactConfig({
+      access_token: "DUMMY_OAUTH_SECRET",
+      oauth: { clientSecret: "DUMMY_OAUTH_SECRET", client_secret: "DUMMY_OAUTH_SECRET", refreshToken: "DUMMY_OAUTH_SECRET", dbPassword: "DUMMY_OAUTH_SECRET", "X-API-KEY": "DUMMY_OAUTH_SECRET", scope: "read", tokenizer: "t", maxTokens: 5, max_tokens: 6, keyboard: "us", password_hint: "pet" },
+      list: [{ apiKey: "DUMMY_OAUTH_SECRET" }, [{ secret: { inner: "DUMMY_OAUTH_SECRET" } }]],
+    });
+    noLeaks(redacted);
+    expect(redacted.access_token).toBe("<redacted>");
+    expect(redacted.oauth).toEqual({ clientSecret: "<redacted>", client_secret: "<redacted>", refreshToken: "<redacted>", dbPassword: "<redacted>", "X-API-KEY": "<redacted>", scope: "read", tokenizer: "t", maxTokens: 5, max_tokens: 6, keyboard: "us", password_hint: "pet" });
+    expect(redacted.list).toEqual([{ apiKey: "<redacted>" }, [{ secret: "<redacted>" }]]);
+  });
+
+  test("a config written to a file holds none of the dummy secrets after it is redacted, and the config it was given is unchanged", () => {
+    const config = { engines: { m: { endpoint: "https://u:DUMMY_USER_PASSWORD@h.example/v1?api_key=DUMMY_QUERY_SECRET", headers: { Authorization: "Bearer DUMMY_HEADER_SECRET" } } } };
+    const before = JSON.stringify(config);
+    noLeaks(redactConfig(config));
+    expect(JSON.stringify(config)).toBe(before);
+    expect(before).toContain("DUMMY_QUERY_SECRET");
+  });
+});
+
 describe("engineSettings", () => {
   test("reads the engine that defaults.llmEngine names, with the host of its endpoint alone", () => {
     const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: "https://user:pw@gateway.example:8443/v1/chat/completions?key=abc", temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };

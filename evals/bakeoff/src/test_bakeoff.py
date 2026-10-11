@@ -328,6 +328,35 @@ class ModelsTest(unittest.TestCase):
             self.assertNotIn(leak, text)
         self.assertNotIn("api_key", settings)
 
+    def test_redact_config_covers_every_credential_field_url_and_header_at_any_depth(self):
+        config = {
+            "engines": {
+                "a": {"endpoint": "https://user:pw-leak@gateway.example:8443/v1/chat/completions?api_key=q-leak&model=m&Access_Token=at-leak&ok=1#frag-leak", "apiKey": "$A_KEY", "maxTokens": 5},
+                "b": {"endpoint": "https://gateway.example/v1?token=$B_TOKEN&sig=sig-leak&Signature=sg-leak&auth=au-leak&password=ps-leak&secret=se-leak&key=k-leak", "client_secret": "cs-leak"},
+            },
+            "headers": {"Authorization": "Bearer h-leak", "X-Api-Key": "xk-leak", "api-key": "ak-leak", "Content-Type": "application/json"},
+            "list": [
+                "Authorization: Bearer line-leak",
+                "X-Api-Key: $KEPT",
+                ["Authorization", "Bearer pair-leak"],
+                {"name": "x-api-key", "value": "named-leak"},
+                [{"registry": "https://tok-leak@registry.example/index.json", "access_token": "ac-leak"}],
+            ],
+            "db": "postgres://dbuser:db-leak@db.example:5432/x",
+            "tokenizer": "t",
+        }
+        redacted = bakeoff.redact_config(config)
+        text = json.dumps(redacted)
+        for leak in ("pw-leak", "q-leak", "at-leak", "frag-leak", "sig-leak", "sg-leak", "au-leak", "ps-leak", "se-leak", "k-leak", "cs-leak", "h-leak", "xk-leak", "ak-leak", "line-leak", "pair-leak", "named-leak", "tok-leak", "ac-leak", "db-leak"):
+            self.assertNotIn(leak, text)
+        self.assertEqual(redacted["engines"]["a"], {"endpoint": "https://gateway.example:8443/v1/chat/completions?api_key=<redacted>&model=m&Access_Token=<redacted>&ok=1", "apiKey": "$A_KEY", "maxTokens": 5})
+        self.assertEqual(redacted["engines"]["b"]["endpoint"], "https://gateway.example/v1?token=$B_TOKEN&sig=<redacted>&Signature=<redacted>&auth=<redacted>&password=<redacted>&secret=<redacted>&key=<redacted>")
+        self.assertEqual(redacted["headers"], {"Authorization": "<redacted>", "X-Api-Key": "<redacted>", "api-key": "<redacted>", "Content-Type": "application/json"})
+        self.assertEqual(redacted["list"][:4], ["Authorization: <redacted>", "X-Api-Key: $KEPT", ["Authorization", "<redacted>"], {"name": "x-api-key", "value": "<redacted>"}])
+        self.assertEqual(redacted["list"][4], [{"registry": "https://registry.example/index.json", "access_token": "<redacted>"}])
+        self.assertEqual((redacted["db"], redacted["tokenizer"]), ("postgres://db.example:5432/x", "t"))
+        self.assertIn("pw-leak", json.dumps(config))  # the config it was given is not changed
+
 
 class ChatTest(unittest.TestCase):
     def model(self, endpoint, **options):

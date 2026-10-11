@@ -2616,19 +2616,70 @@ def model_entry(label, model, base_url, api_key, options=None, api_key_env=None,
     }
 
 
-SECRET_KEYS = {"apikey", "api_key", "token", "secret"}
-VARIABLE = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
+VARIABLE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\Z")
+REDACTED = "<redacted>"
+CREDENTIAL_FIELD = re.compile(r"(?:key|secret|password|passwd|credential)s?$|(?:token|authorization)$|^(?:set-)?cookie$", re.IGNORECASE)
+CREDENTIAL_PARAMETER = re.compile(r"(?:auth|sig|signature)$", re.IGNORECASE)
+URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>`]+")
+URI_PARTS = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*://)([^/?#]*)([^?#]*)(?:\?([^#]*))?")
+HEADER_LINE = re.compile(r"^(\s*([A-Za-z0-9_.-]+)\s*[:=]\s*)(\S[\s\S]*)$")
+
+
+def credential_field(name):
+    """Does a field of a config, or a header, hold a credential, going by its name: authorization, x-api-key, api-key, access_token, client_secret, password, apiKey, or any other name ending in key, token, secret or password, in any case. max_tokens does not."""
+    return CREDENTIAL_FIELD.search(name) is not None
+
+
+CREDENTIAL_NAME = re.compile(r"[A-Za-z0-9_.-]+\Z")
+
+
+def credential_name(value):
+    """Is this value the name of a credential header or field: a single word that credential_field says holds a credential."""
+    return isinstance(value, str) and CREDENTIAL_NAME.match(value) is not None and credential_field(value)
+
+
+def clean_query(query):
+    pairs = []
+    for pair in query.split("&"):
+        name, equals, value = pair.partition("=")
+        credential = credential_field(urllib.parse.unquote(name)) or CREDENTIAL_PARAMETER.search(urllib.parse.unquote(name))
+        pairs.append(pair if not equals or not credential or VARIABLE.match(value) else f"{name}={REDACTED}")
+    return "&".join(pairs)
+
+
+def clean_uri(match):
+    """A URI with no user name or password before the host, no fragment, and the value of each credential parameter of its query redacted. Its scheme, host, port and path stay."""
+    parts = URI_PARTS.match(match.group(0))
+    scheme, authority, path, query = parts.groups()
+    return f"{scheme}{authority.rpartition('@')[2]}{path}" + ("" if query is None else f"?{clean_query(query)}")
+
+
+def clean_text(text):
+    """A string of a config with every URI in it cleaned, and, when the whole string is a header line or an assignment of a credential, such as "Authorization: Bearer abc" or "api_key=abc", its value redacted."""
+    with_uris = URI.sub(clean_uri, text)
+    line = HEADER_LINE.match(with_uris)
+    if line and credential_field(line.group(2)) and not VARIABLE.match(line.group(3).strip()):
+        return f"{line.group(1)}{REDACTED}"
+    return with_uris
 
 
 def redact_config(config):
-    """A copy of a config with every value under apiKey, api_key, token or secret (in any case) replaced by "<redacted>", except a $NAME reference. The same rule as lib/provenance.ts."""
+    """A deep copy of a config that is safe to write to a summary, the same rules as redactConfig in lib/provenance.ts: the value under a
+    credential field (apiKey, api_key, token, secret, password, authorization, x-api-key, client_secret, and any name ending in key, token,
+    secret or password, in any case) is replaced by "<redacted>" at any depth, in objects and in arrays, headers in a list included; in every
+    string that holds a URI the user name and password, the fragment and the value of each credential parameter of the query are removed, and
+    the scheme, host, port and path stay. A $NAME reference to an environment variable holds no secret, and stays."""
+    if isinstance(config, str):
+        return clean_text(config)
     if isinstance(config, list):
-        return [redact_config(item) for item in config]
+        pair = len(config) == 2 and credential_name(config[0]) and isinstance(config[1], str) and not VARIABLE.match(config[1])
+        return [clean_text(config[0]), REDACTED] if pair else [redact_config(item) for item in config]
     if not isinstance(config, dict):
         return config
+    named = any(credential_name(config.get(field)) for field in ("name", "key", "header"))
     return {
-        key: "<redacted>"
-        if str(key).lower() in SECRET_KEYS and not (isinstance(value, str) and VARIABLE.match(value))
+        key: REDACTED
+        if (credential_field(str(key)) or (named and key == "value")) and not (isinstance(value, str) and VARIABLE.match(value))
         else redact_config(value)
         for key, value in config.items()
     }
