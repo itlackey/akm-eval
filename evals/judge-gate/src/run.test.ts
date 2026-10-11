@@ -236,7 +236,9 @@ describe("runCorpus", () => {
       writeConfig(ctx.sandbox, cfg);
       const summary = await quiet(() => runCorpus("public", ctx, folders));
       const { summary: stored } = resultsOf(folders);
-      expect(stored.config).toEqual(JSON.parse(JSON.stringify(cfg)));
+      const hidden = JSON.parse(JSON.stringify(cfg));
+      hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
+      expect(stored.config).toEqual(hidden);
       expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false, apiKey: "$MODEL_API_KEY" });
       expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: "localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
       expect(stored.assets_sha256).toBe(casesSha256(folders.assets));
@@ -252,6 +254,17 @@ describe("runCorpus", () => {
       const text = readFileSync(join(resultsOf(folders).dir, "summary.json"), "utf8");
       expect(text).not.toContain("sk-real-secret");
       expect(JSON.parse(text).config.engines.judge.apiKey).toBe("<redacted>");
+    });
+
+    test("never the model endpoint, which can hold a key in its query or credentials, but its host in engine", async () => {
+      const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
+      writeConfig(ctx.sandbox, judgeConfig("https://user:hunter2@secret-host.example:8443/v1?key=SECRET-KEY", "the-model", true));
+      await quiet(() => runCorpus("public", ctx, folders));
+      const text = readFileSync(join(resultsOf(folders).dir, "summary.json"), "utf8");
+      for (const leak of ["SECRET-KEY", "hunter2", "user:", "/v1"]) expect(text).not.toContain(leak);
+      const stored = JSON.parse(text);
+      expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>");
+      expect(stored.engine.endpoint).toBe("secret-host.example:8443");
     });
 
     test("the digest changes with the cases, and the seed is the one the run was given", async () => {

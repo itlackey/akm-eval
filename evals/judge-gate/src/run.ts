@@ -4,7 +4,7 @@
 //
 //   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
@@ -13,8 +13,8 @@ import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { CASES, casesSha256, privateSeed, staleAssets } from "./inputs.ts";
-import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
+import { CASES, casesSha256, privateAssetsProblem, privateSeed } from "./inputs.ts";
+import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideEndpoints, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -69,7 +69,7 @@ interface Summary {
   n_errored: number;
   /** The cases where akm ran into its time limit and was killed. They are errored too: a slower akm shows here, not as unexplained errors. */
   timeouts: number;
-  /** The akm config the eval wrote, with any secret redacted, and the settings of its LLM engine: the model, the endpoint's host, temperature, thinking and the time limit. */
+  /** The akm config the eval wrote, with any secret redacted and the endpoint written as <MODEL_BASE_URL>, and the settings of its LLM engine: the model, the endpoint's host, temperature, thinking and the time limit. */
   config: unknown;
   engine: EngineSettings;
   /** The digest of the cases file the run read. It changes when a case or a label does. */
@@ -208,7 +208,8 @@ export async function runCorpus(
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, cases.length) }, worker));
 
   const errored = rows.filter((r) => r.outcome === "error").length;
-  const config = redactConfig(JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8")));
+  const written = redactConfig(JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8"))); // the endpoint is whole here, for the engine's host
+  const config = hideEndpoints(written);
   const abortedReason = aborted === undefined ? null : `${GIVE_UP_AFTER} cases in a row got no verdict, so the run stopped after ${rows.length} of ${cases.length}. Last: ${aborted}`;
   const summary: Summary = {
     eval: NAME,
@@ -229,7 +230,7 @@ export async function runCorpus(
     n_errored: errored,
     timeouts: rows.filter((r) => r.timed_out).length,
     config,
-    engine: engineSettings(config),
+    engine: engineSettings(written),
     assets_sha256: casesSha256(assets),
     seed: ctx.seed ?? null,
     metrics: metrics(rows),
@@ -264,11 +265,9 @@ async function main(): Promise<void> {
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   const privateAssets = join(ROOT, "private", NAME, "assets");
-  for (const c of corpora) {
-    if (c !== "private") continue;
-    if (!existsSync(join(privateAssets, CASES))) fail(`the private assets are missing (private/${NAME}/assets/${CASES}). Make them with: ./generate-assets --only ${NAME}`);
-    const stale = staleAssets(privateAssets, join(EVAL_DIR, "assets"), `private/${NAME}/assets`);
-    if (stale) fail(stale);
+  if (corpora.includes("private")) {
+    const problem = privateAssetsProblem(privateAssets, join(EVAL_DIR, "assets"), `private/${NAME}/assets`);
+    if (problem) fail(problem);
   }
   useAkm(values, fail);
   const { baseUrl, name: model, hasKey } = useModel(values, fail);

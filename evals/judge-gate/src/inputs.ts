@@ -2,7 +2,7 @@
 // of the cases file, the seed, and the generated.json that generate writes beside the private cases. run.ts, generate.ts and the
 // tests use them.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256Files } from "../../../lib/provenance.ts";
 
@@ -70,4 +70,10 @@ export function staleAssets(assets: string, publicAssets: string, where = assets
   if (!made) return `the private cases in ${where}/ have no ${GENERATED}, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
   if (made.inputs_sha256 !== casesSha256(publicAssets)) return `the private cases in ${where}/ were made from public cases that have changed since. ${again}`;
   return undefined;
+}
+
+/** Why run --corpus private cannot start from `assets`: the cases are missing, or staleAssets says so. Undefined when it can. */
+export function privateAssetsProblem(assets: string, publicAssets: string, where = assets): string | undefined {
+  if (!existsSync(join(assets, CASES))) return `the private assets are missing (${where}/${CASES}). Make them with: ./generate-assets --only judge-gate`;
+  return staleAssets(assets, publicAssets, where);
 }

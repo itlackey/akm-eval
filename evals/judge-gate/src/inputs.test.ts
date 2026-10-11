@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CASES, GENERATED, casesSha256, privateSeed, readGenerated, readSeed, staleAssets } from "./inputs.ts";
+import { CASES, GENERATED, casesSha256, privateAssetsProblem, privateSeed, readGenerated, readSeed, staleAssets } from "./inputs.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -104,5 +104,32 @@ describe("staleAssets", () => {
     const message = staleAssets(priv, pub, "private/judge-gate/assets");
     expect(message).toContain("were made from public cases that have changed since");
     expect(message).toContain("./generate-assets --only judge-gate");
+  });
+});
+
+describe("privateAssetsProblem", () => {
+  const publicCases = "public one\npublic two\n";
+  const where = "private/judge-gate/assets";
+
+  test("is undefined for private cases made from the public cases as they are", () => {
+    const pub = assetsWith(publicCases);
+    const priv = assetsWith("private\n", { seed: "7", inputs_sha256: casesSha256(pub), rewrite: "lib/rewrite" });
+    expect(privateAssetsProblem(priv, pub, where)).toBeUndefined();
+  });
+
+  test("says the assets are missing when the folder has no cases, even with a generated.json", () => {
+    const pub = assetsWith(publicCases);
+    const none = join(tmp(), "assets");
+    mkdirSync(none);
+    expect(privateAssetsProblem(none, pub, where)).toBe(`the private assets are missing (${where}/cases.jsonl). Make them with: ./generate-assets --only judge-gate`);
+    expect(privateAssetsProblem(join(tmp(), "no-such-folder"), pub, where)).toContain("the private assets are missing");
+  });
+
+  test("refuses cases with no generated.json, and cases made from public cases that have changed since", () => {
+    const pub = assetsWith(publicCases);
+    expect(privateAssetsProblem(assetsWith("private\n"), pub, where)).toContain(`${where}/ have no generated.json`);
+    const priv = assetsWith("private\n", { seed: "7", inputs_sha256: casesSha256(pub), rewrite: "lib/rewrite" });
+    writeFileSync(join(pub, CASES), "public one\npublic changed\n");
+    expect(privateAssetsProblem(priv, pub, where)).toContain("were made from public cases that have changed since");
   });
 });

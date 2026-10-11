@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideEndpoint, hideInRow, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideEndpoint, hideEndpoints, hideInRow, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -213,6 +213,30 @@ describe("hideEndpoint", () => {
   test("leaves the text alone when there is no endpoint", () => {
     expect(hideEndpoint("abc", "")).toBe("abc");
     expect(hideEndpoint("abc", "///")).toBe("abc");
+  });
+
+  test("hideEndpoints writes every endpoint of a config as <MODEL_BASE_URL>, and changes nothing else or the config it was given", () => {
+    const config = {
+      defaults: { llmEngine: "judge" },
+      engines: { judge: { kind: "llm", model: "m", endpoint: "https://user:pass@host.example/v1?key=SECRET/chat/completions", temperature: 0 }, other: { endpoint: "http://other:1/v1/chat/completions" } },
+      embedding: { endpoint: "http://embed:2/v1" },
+      list: [{ endpoint: "http://in-a-list/v1" }],
+    };
+    const before = JSON.stringify(config);
+    const hidden = hideEndpoints(config);
+    expect(hidden).toEqual({
+      defaults: { llmEngine: "judge" },
+      engines: { judge: { kind: "llm", model: "m", endpoint: "<MODEL_BASE_URL>", temperature: 0 }, other: { endpoint: "<MODEL_BASE_URL>" } },
+      embedding: { endpoint: "<MODEL_BASE_URL>" },
+      list: [{ endpoint: "<MODEL_BASE_URL>" }],
+    });
+    expect(JSON.stringify(hidden)).not.toContain("SECRET");
+    expect(JSON.stringify(config)).toBe(before);
+  });
+
+  test("hideEndpoints leaves a config with no endpoint, and a value that is not a string, as it is", () => {
+    expect(hideEndpoints({ engines: { a: { model: "m" } }, n: null, endpoint: 3 })).toEqual({ engines: { a: { model: "m" } }, n: null, endpoint: 3 });
+    expect(hideEndpoints(null)).toBeNull();
   });
 
   test("hideInRow masks akm's reason and the error, and nothing else", () => {

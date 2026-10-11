@@ -150,6 +150,16 @@ export function hideEndpoint(text: string, baseUrl: string): string {
   return base === "" ? text : text.split(base).join("<MODEL_BASE_URL>");
 }
 
+/**
+ * A deep copy of the akm config with every `endpoint` written as <MODEL_BASE_URL>. The URL can carry a key in its query or credentials before
+ * the host, which redactConfig, going by key name, does not see, and results get shared. The host is in the summary's `engine.endpoint`.
+ */
+export function hideEndpoints(config: any): any {
+  if (Array.isArray(config)) return config.map(hideEndpoints);
+  if (typeof config !== "object" || config === null) return config;
+  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, key === "endpoint" && typeof value === "string" ? "<MODEL_BASE_URL>" : hideEndpoints(value)]));
+}
+
 /** The row with the endpoint masked in the two texts that can name it, akm's reason and the error. */
 export function hideInRow(row: Row, baseUrl: string): Row {
   return { ...row, reason: hideEndpoint(row.reason, baseUrl), ...(row.error === undefined ? {} : { error: hideEndpoint(row.error, baseUrl) }) };
