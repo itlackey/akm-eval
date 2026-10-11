@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
+import { negations, reaches } from "../../../lib/negation.ts";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 // The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
@@ -150,11 +151,12 @@ const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 /**
  * The code that decides what generate makes of the public assets and whether it accepts the result, by its path from `root`: generate.ts,
- * this file (the checks generate runs on what the rewrite made) and the code of lib/rewrite, without its tests.
+ * this file (the checks generate runs on what the rewrite made), lib/negation.ts (the rule of negation those checks share with extract) and
+ * the code of lib/rewrite, without its tests.
  */
 export function generatorFiles(root = ROOT): string[] {
   const inRewrite = readdirSync(join(root, "lib", "rewrite"), { recursive: true }).map(String).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();
-  return ["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", ...inRewrite.map((f) => `lib/rewrite/${f}`)];
+  return ["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "lib/negation.ts", ...inRewrite.map((f) => `lib/rewrite/${f}`)];
 }
 
 /** One digest over generatorFiles. A change to the generator, to its checks or to the rewrite changes it. */
@@ -189,7 +191,7 @@ export function generatedProblem(dir: string, publicAssets: string, root = ROOT)
   const generated = readGenerated(dir);
   if (!generated) return `${GENERATED} is missing or holds no seed, inputs_sha256 and rewrite, so nothing shows what they were made from`;
   if (generated.inputs_sha256 !== assetsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
-  if (generated.rewrite !== generatorSha256(root)) return `they were made by a generator that has changed since: evals/distill/src/generate.ts, lib.ts or lib/rewrite (rewrite in ${GENERATED} differs)`;
+  if (generated.rewrite !== generatorSha256(root)) return `they were made by a generator that has changed since: evals/distill/src/generate.ts, lib.ts, lib/negation.ts or lib/rewrite (rewrite in ${GENERATED} differs)`;
   return undefined;
 }
 
@@ -258,14 +260,28 @@ function pattern(phrase: string): RegExp {
 /** Does `text` hold the phrase? */
 export const mentions = (text: string, phrase: string): boolean => pattern(phrase).test(normalize(text));
 
-/** Words that say a sentence does not assert what it holds: it denies it, doubts it or asks about it. */
-const NOT_ASSERTED = /(?<![a-z0-9])(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent|unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
+/** Words that deny what they govern: "not", "no", "doesn't". */
+const DENIES = /^(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent)$/;
 
-/** Words that turn the action after them round, in the clause they stand in: "never wait for", "avoid waiting for", "instead of waiting for". They are read for a contradiction, which is an action. */
-const PROHIBITS = /(?<![a-z0-9])(?:never|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping|instead of|rather than)(?![a-z0-9])/;
+/** Words that doubt what they hold, or ask about it, and leave it unasserted too: "unconfirmed whether", "if", "might". */
+const DOUBTS = /(?<![a-z0-9])(?:unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
 
-/** A negation or a prohibition right before a phrase, with only a word such as "ever" or "try to" between: "do not wait for", "never again wait for", "no need to wait for", "instead of waiting for". */
-const NEGATES = /(?<![a-z0-9])(?:not|no|nor|never|cannot|cant|wont|dont|doesnt|didnt|isnt|arent|wasnt|werent|shouldnt|wouldnt|couldnt|hasnt|havent|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping|instead of|rather than)(?: (?:ever|again|simply|just|really|also|even|always|try|trying|to|bother|need|needs|rely|relying|on))* $/;
+/** Words that turn the action they govern round, in the clause they stand in: "never wait for", "avoid waiting for", "instead of waiting for". They are read for a contradiction, which is an action. */
+const PROHIBITS = /^(?:never|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping)$/;
+
+/** Is the word at `at` a prohibition? "Instead of" and "rather than" are two words, so the next one is read too. */
+const prohibits = (words: string[], at: number): boolean =>
+  PROHIBITS.test(words[at]) || (words[at] === "instead" && words[at + 1] === "of") || (words[at] === "rather" && words[at + 1] === "than");
+
+/**
+ * The words that deny, for a fact and for an action. A fact (a claim) is denied by a negation: "never" and "avoid" do not deny a fact, as
+ * "never wait for networkidle and use waitForSelector" still claims waitForSelector. An action, which is what a contradiction and a required
+ * action `+` are, is denied by a negation or a prohibition. In both, a negation that governs a verb that denies in turn is cancelled out
+ * (see lib/negation.ts): "do not hesitate to wait for networkidle" tells the reader to wait for it, and "do not avoid waiting for the
+ * heading" tells the reader to wait for the heading.
+ */
+const negatesClaim = (words: string[], at: number): boolean => DENIES.test(words[at]);
+const negatesAction = (words: string[], at: number): boolean => DENIES.test(words[at]) || prohibits(words, at);
 
 /** How many words around a phrase are read for a denial or a doubt: before it, and after it. */
 const WORDS_BEFORE = 6;
@@ -309,25 +325,40 @@ function* occurrences(re: RegExp, s: string): Generator<RegExpExecArray> {
   }
 }
 
+const wordsOf = (s: string): string[] => s.split(" ").filter(Boolean);
+
 /**
  * The phrases of `groups` that `text` asserts: one that a sentence holds, with no denial or doubt just before or after
  * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is asserted.
- * With `actions`, the phrases are actions, as in a case's `contradicts`, and a prohibition before one in its clause (never, avoid,
- * without, stop, skip, instead of, rather than) denies it too: "wait for networkidle" is not asserted by "never wait for networkidle".
+ * A denial is a negation within six words before the phrase or three after, or a doubt; a negation that governs a verb that denies
+ * in turn is cancelled out (see `negatesClaim`), so "we do not hesitate to say it works on all layouts" still asserts it.
+ * With `actions`, the phrases are actions, as in a case's `contradicts`, and the denial is bound to the action: a negation or a prohibition
+ * (never, avoid, without, stop, skip, instead of, rather than) before the phrase in its own clause, with the same cancelling out.
+ * "Wait for networkidle" is not asserted by "never wait for networkidle", and is asserted by "do not hesitate to wait for networkidle"
+ * and by "do not worry, wait for networkidle".
  */
 export function claims(text: string, groups: string[][], actions = false): string[] {
   const sentences = sentencesOf(text);
   const around = (s: string, from: number, to: number): string => {
-    const before = s.slice(0, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE);
-    const after = s.slice(to).split(" ").filter(Boolean).slice(0, WORDS_AFTER);
+    const before = wordsOf(s.slice(0, from)).slice(-WORDS_BEFORE);
+    const after = wordsOf(s.slice(to)).slice(0, WORDS_AFTER);
     return [...before, ...after].join(" ");
   };
-  const prohibited = (sentence: Sentence, from: number): boolean => actions && PROHIBITS.test(clauseBefore(sentence, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE).join(" "));
+  const denied = (sentence: Sentence, from: number, to: number): boolean => {
+    const before = wordsOf(actions ? clauseBefore(sentence, from) : sentence.s.slice(0, from));
+    const after = wordsOf(sentence.s.slice(to));
+    return negations(before, actions ? negatesAction : negatesClaim).some((n) => n.at >= before.length - WORDS_BEFORE) || negations(after, negatesClaim).some((n) => n.at < WORDS_AFTER);
+  };
   const found: string[] = [];
   for (const group of groups) {
     const hit = group.find((phrase) => {
       const re = pattern(phrase);
-      return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !NOT_ASSERTED.test(around(sentence.s, m.index, m.index + m[0].length)) && !prohibited(sentence, m.index)));
+      return sentences.some((sentence) =>
+        [...occurrences(re, sentence.s)].some((m) => {
+          const to = m.index + m[0].length;
+          return !DOUBTS.test(around(sentence.s, m.index, to)) && !denied(sentence, m.index, to);
+        }),
+      );
     });
     if (hit !== undefined) found.push(hit);
   }
@@ -338,15 +369,20 @@ export function claims(text: string, groups: string[][], actions = false): strin
  * Does `text` state the fact: does a sentence hold one of its phrases? A phrase that starts with `+` is an action the lesson must
  * assert, and it is not held by a sentence that negates or prohibits it right before it: "never wait for the visible heading" does not
  * state "+wait * heading". Only the words right before the phrase are read, in its clause, so a negation farther away does not matter
- * ("do not wait for networkidle, wait for the heading"). Any other phrase is a thing the lesson must mention, and a negation does not
+ * ("do not wait for networkidle, wait for the heading"). A negation that governs a verb that denies in turn is cancelled out, so
+ * "do not hesitate to wait for the heading" states it. Any other phrase is a thing the lesson must mention, and a negation does not
  * unstate it: "annotated, not lightweight tags" mentions lightweight tags, and "the invoice-service was not checked" mentions the invoice-service.
  */
 export function stated(text: string, fact: string[]): boolean {
   const sentences = sentencesOf(text);
+  const denied = (sentence: Sentence, from: number): boolean => {
+    const before = wordsOf(clauseBefore(sentence, from));
+    return negations(before, negatesAction).some((n) => reaches(before, n));
+  };
   return fact.some((phrase) => {
     const re = pattern(phrase);
     const action = phrase.startsWith("+");
-    return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !action || !NEGATES.test(clauseBefore(sentence, m.index))));
+    return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !action || !denied(sentence, m.index)));
   });
 }
 

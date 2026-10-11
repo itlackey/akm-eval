@@ -271,6 +271,75 @@ describe("claims", () => {
       expect(claims("The test timed out waiting for networkidle.", wait, true)).toEqual([]);
     });
   });
+
+  describe("a negation that governs a verb that denies is cancelled out, and the action is asserted", () => {
+    const wait = [["=wait for networkidle"]];
+    const gerund = [["wait for networkidle"]];
+
+    test("a contradiction recommended in words that look like a denial is asserted: hesitate, forget, fail, neglect, omit, refuse, decline", () => {
+      for (const text of [
+        "Do not hesitate to wait for networkidle.",
+        "Don't hesitate to wait for networkidle.",
+        "Do not forget to wait for networkidle.",
+        "Never fail to wait for networkidle.",
+        "You must never neglect to wait for networkidle.",
+        "Do not omit to wait for networkidle.",
+        "Do not refuse to wait for networkidle.",
+        "Do not decline to wait for networkidle.",
+        "Do not ever forget to wait for networkidle.",
+        "Do not be afraid to wait for networkidle.",
+        "It is not wrong to wait for networkidle.",
+        "There is no reason not to wait for networkidle.",
+        "Why not wait for networkidle?",
+      ]) expect(claims(text, wait, true), text).toEqual(["=wait for networkidle"]);
+    });
+
+    test("so is one that a prohibition of the caller's cancels: do not avoid, stop or skip waiting", () => {
+      for (const text of ["Do not avoid waiting for networkidle.", "Never stop waiting for networkidle.", "Do not skip waiting for networkidle.", "No need to avoid waiting for networkidle.", "Do not hesitate to wait for networkidle."]) {
+        expect(claims(text, gerund, true), text).toEqual(["wait for networkidle"]);
+      }
+    });
+
+    test("a direct denial, an indirect one, and a denial of a denial that is itself denied stay denied", () => {
+      for (const text of [
+        "Do not wait for networkidle.",
+        "Never wait for networkidle.",
+        "Don't wait for networkidle.",
+        "There is no need to wait for networkidle.",
+        "Try not to wait for networkidle.",
+        "Avoid having to wait for networkidle.",
+        "Rather than wait for networkidle, wait for the heading.",
+        "Do not forget to avoid waiting for networkidle.",
+        "Never fail to avoid waiting for networkidle.",
+        "Do not hesitate to avoid waiting for networkidle.",
+        "Do not hesitate to skip waiting for networkidle.",
+        "Do not hesitate to not wait for networkidle.",
+        "Do not hesitate to never wait for networkidle.",
+      ]) expect(claims(text, [...wait, ...gerund], true), text).toEqual([]);
+    });
+
+    test("the negation is bound to the action it governs: a negation in another clause does not deny it", () => {
+      expect(claims("Do not worry, wait for networkidle.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("Do not trust the timeout, wait for networkidle on this page.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("Do not use waitForSelector but wait for networkidle.", wait, true)).toEqual(["=wait for networkidle"]);
+      // the same clause still denies it, whatever the words between: the six before the phrase are read
+      expect(claims("Do not rely on the timeout to wait for networkidle.", wait, true)).toEqual([]);
+      // and a negation that governs a verb the rule does not list stands, which is the approximation the README names
+      expect(claims("Do not think it is wise to wait for networkidle.", wait, true)).toEqual([]);
+    });
+
+    test("a fact is asserted by 'we do not hesitate to say it', and still denied by 'we do not say it' and by a doubt", () => {
+      const fact = [["works on all layouts"]];
+      expect(claims("We do not hesitate to say it works on all layouts.", fact)).toEqual(["works on all layouts"]);
+      expect(claims("We never fail to confirm that it works on all layouts.", fact)).toEqual(["works on all layouts"]);
+      expect(claims("We do not say it works on all layouts.", fact)).toEqual([]);
+      expect(claims("We do not hesitate to say it might work on all layouts.", [["work on all layouts"]])).toEqual([]);
+    });
+
+    test("a doubt still leaves the action unasserted, as it did", () => {
+      expect(claims("It is unconfirmed whether you should not hesitate to wait for networkidle.", wait, true)).toEqual([]);
+    });
+  });
 });
 
 describe("stated", () => {
@@ -290,6 +359,17 @@ describe("stated", () => {
     }
     expect(stated("Avoid waiting for the heading.", heading)).toBe(false);
     expect(stated("Never wait for the visible heading", heading)).toBe(false);
+  });
+
+  test("an action is stated when the negation before it is cancelled out, and not when a denial of a denial is denied again", () => {
+    for (const before of ["Do not hesitate to", "Don't forget to", "Never fail to", "Do not neglect to", "Do not refuse to", "Do not ever forget to", "Do not be afraid to", "Do not avoid", "Do not stop", "Do not skip", "No need to avoid", "There is no reason not to", "Why not", "It is not wrong to"]) {
+      const text = `${before} wait for the visible heading.`;
+      expect(stated(text, heading), text).toBe(true);
+    }
+    for (const before of ["Do not hesitate to not", "Never fail to avoid", "Do not forget to never", "Do not hesitate to skip"]) {
+      const text = `${before} wait for the visible heading.`;
+      expect(stated(text, heading), text).toBe(false);
+    }
   });
 
   test("a negation that is farther away, or in another clause, does not stop an action being stated", () => {
@@ -523,6 +603,44 @@ describe("the public cases check themselves", () => {
     expect(check.contradicted).toEqual(["=wait for networkidle", "never wait for * heading"]);
     expect(check.forbidden).toEqual([]);
   });
+
+  describe("a lesson that recommends the contradicted action in words that look like a denial", () => {
+    const c = loadCases(PUBLIC).find((x) => x.id === "lesson-01") as LoadedCase;
+    const right = "The polling widget prevents networkidle. Wait for the visible heading.";
+
+    test("'Wait for the visible heading. Do not hesitate to wait for networkidle' is bad", () => {
+      for (const last of ["Do not hesitate to wait for networkidle.", "Do not forget to wait for networkidle.", "Never fail to wait for networkidle.", "Don't be afraid to wait for networkidle.", "There is no reason not to wait for networkidle."]) {
+        const text = `${right}\n${last}`;
+        expect({ last, check: checkLesson(c, text, c.memory) }).toMatchObject({ last, check: { good: false, missing: [], forbidden: [], contradicted: ["=wait for networkidle"] } });
+      }
+    });
+
+    test("one that says not to wait for networkidle and to wait for the heading stays good, whether it denies directly or indirectly", () => {
+      for (const last of [
+        "Do not wait for networkidle.",
+        "Never wait for networkidle.",
+        "Don't wait for networkidle.",
+        "There is no need to wait for networkidle.",
+        "Try not to wait for networkidle.",
+        "Avoid having to wait for networkidle.",
+        "Rather than wait for networkidle, wait for the heading.",
+        "Do not forget to avoid having to wait for networkidle.",
+        "Never fail to avoid having to wait for networkidle.",
+        "Do not hesitate to not wait for networkidle.",
+        "Do not hesitate to wait for the heading, and do not wait for networkidle.",
+        "Do not worry about the timeout: never wait for networkidle.",
+      ]) {
+        const text = `${right}\n${last}`;
+        expect({ last, check: checkLesson(c, text, c.memory) }).toMatchObject({ last, check: { good: true, missing: [], forbidden: [], contradicted: [] } });
+      }
+    });
+
+    test("right and wrong advice together: the wrong advice is still found, however much right advice comes with it", () => {
+      const text = "The polling widget prevents networkidle. Do not wait for networkidle; wait for the visible heading. Do not hesitate to wait for networkidle on the other pages.";
+      expect(checkLesson(c, text, c.memory)).toMatchObject({ good: false, missing: [], contradicted: ["=wait for networkidle"] });
+      expect(checkLesson(c, "The polling widget prevents networkidle. Do not hesitate to wait for the visible heading. Never wait for networkidle.", c.memory).good).toBe(true);
+    });
+  });
 });
 
 describe("the public update cases check themselves", () => {
@@ -717,9 +835,9 @@ describe("generated.json", () => {
       return root;
     };
 
-    test("covers generate.ts, lib.ts and the code of lib/rewrite, and not their tests", () => {
+    test("covers generate.ts, lib.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
       const files = generatorFiles(REPO);
-      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
+      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
       expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
       expect(files.every((f) => existsSync(join(REPO, f)))).toBe(true);
       expect(generatorSha256(REPO)).toMatch(/^[0-9a-f]{64}$/);
@@ -743,7 +861,7 @@ describe("generated.json", () => {
       const root = copyOfGenerator();
       const dir = privateDir(marker({ rewrite: generatorSha256(root) }));
       expect(generatedProblem(dir, PUBLIC, root)).toBeUndefined();
-      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "evals/distill/src/generate.ts"]) {
+      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts"]) {
         const file = join(root, name);
         const text = readFileSync(file, "utf8");
         writeFileSync(file, `${text}\n// changed\n`);
@@ -890,6 +1008,18 @@ describe("what akm did", () => {
     const text = "Wait for networkidle on pages with a polling widget; never wait for the visible heading.";
     const row = scoreCase(lesson01, run([queued(`---\ndescription: ${JSON.stringify(text)}\nwhen_to_use: When a test waits.\n---\n`)]));
     expect(row).toMatchObject({ verdict: "bad", outcome: "lesson", forbidden: [], contradicted: ["=wait for networkidle", "never wait for * heading"], missing: ["+wait * heading"] });
+  });
+
+  test("scoreCase: a lesson that recommends the contradicted action in words that look like a denial is bad, and one that denies it is good", () => {
+    const lesson01 = loadCases(PUBLIC).find((x) => x.id === "lesson-01") as LoadedCase;
+    const score = (text: string) => scoreCase(lesson01, run([queued(`---\ndescription: ${JSON.stringify(text)}\nwhen_to_use: When a test waits.\n---\n`)]));
+    const right = "The polling widget prevents networkidle. Wait for the visible heading.";
+    for (const last of ["Do not hesitate to wait for networkidle.", "Do not forget to wait for networkidle.", "Never fail to wait for networkidle."]) {
+      expect({ last, ...score(`${right}\n${last}`) }).toMatchObject({ last, verdict: "bad", outcome: "lesson", missing: [], forbidden: [], contradicted: ["=wait for networkidle"] });
+    }
+    for (const last of ["Do not wait for networkidle.", "Never wait for networkidle.", "Do not hesitate to avoid having to wait for networkidle."]) {
+      expect({ last, ...score(`${right}\n${last}`) }).toMatchObject({ last, verdict: "good", missing: [], forbidden: [], contradicted: [] });
+    }
   });
 
   test("scoreCase: a case that expects none is right unless a lesson was proposed", () => {
