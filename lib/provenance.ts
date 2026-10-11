@@ -136,6 +136,26 @@ export function redactConfig(config: any): any {
   return Object.fromEntries(entries);
 }
 
+/**
+ * What identifies an endpoint, safe to record and compare: the scheme, host, port and path of the URL, in lower case for the scheme and host,
+ * without a trailing slash, with no user name, password or fragment, and with the query's parameters in order and the value of each
+ * credential parameter replaced by "<redacted>" (see cleanUri). Two deployments on one host, such as /deployment-A/v1 and /deployment-B/v1,
+ * are two identities; a change of key alone is not. Null for a value that is missing or is not a URL.
+ */
+export function endpointIdentity(url: unknown): string | null {
+  if (typeof url !== "string" || url.trim() === "") return null;
+  let u: URL;
+  try {
+    u = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (!u.host) return null;
+  const path = u.pathname.replace(/\/+$/, "");
+  const query = u.search.length > 1 ? `?${cleanQuery(u.search.slice(1).split("&").sort().join("&"))}` : "";
+  return `${u.protocol}//${u.host}${path}${query}`;
+}
+
 export interface EngineSettings {
   engine: string | null;
   model: string | null;

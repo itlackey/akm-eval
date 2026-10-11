@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Text } from "./provenance.ts";
+import { endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Text } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -303,5 +303,26 @@ describe("harnessSha256", () => {
     writeFileSync(join(src, "bakeoff.py"), "print('a')\n");
     writeFileSync(join(src, "test_bakeoff.py"), "ignored\n");
     expect(harnessSha256(src, { root })).toBe("aa0d380a5736fa683bc2cb7aa9dec98f860df640d388f41e0a0eeed36a5a5129");
+  });
+});
+
+describe("endpointIdentity", () => {
+  test("keeps the scheme, host, port and path, so two deployments on one host differ", () => {
+    expect(endpointIdentity("https://gateway.example/deployment-A/v1")).toBe("https://gateway.example/deployment-A/v1");
+    expect(endpointIdentity("https://gateway.example/deployment-A/v1")).not.toBe(endpointIdentity("https://gateway.example/deployment-B/v1"));
+    expect(endpointIdentity("http://localhost:8080/v1/")).toBe("http://localhost:8080/v1");
+    expect(endpointIdentity("HTTPS://Gateway.Example/v1")).toBe("https://gateway.example/v1");
+  });
+
+  test("drops credentials and the fragment, redacts credential parameters, and orders the query", () => {
+    const id = endpointIdentity("https://user:DUMMY_PASS@gateway.example/v1?api_key=DUMMY_QUERY_SECRET&api-version=2024-10#frag");
+    expect(id).toBe("https://gateway.example/v1?api-version=2024-10&api_key=<redacted>");
+    expect(id).not.toContain("DUMMY");
+    expect(endpointIdentity("https://gateway.example/v1?api_key=OTHER&api-version=2024-10")).toBe(id); // a key change alone is the same endpoint
+    expect(endpointIdentity("https://gateway.example/v1?api-version=2025-01&api_key=x")).not.toBe(id);
+  });
+
+  test("is null for a value that is not a URL", () => {
+    for (const v of [undefined, null, "", "  ", "not a url", 42]) expect(endpointIdentity(v)).toBeNull();
   });
 });
