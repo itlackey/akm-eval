@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build, firstHalf, insertAfterTitle, render } from "./build.ts";
 import { Database } from "bun:sqlite";
-import { type Case, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, hideEndpoint, metrics, parseCases, promotionConfig, proposalRow, readSeed, rowsFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
+import { type Case, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, metrics, parseCases, promotionConfig, proposalRow, readSeed, rowsFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library", "knowledge");
@@ -229,13 +229,6 @@ describe("metrics", () => {
 
   test("has no precision when nothing was accepted, and no recall when nothing was good", () => {
     expect(metrics([row("bad", "stale", "reject")])).toMatchObject({ precision: { value: null, of: 0 }, recall: { value: null, of: 0 }, bad_accepted: { value: 0 } });
-  });
-});
-
-describe("hideEndpoint", () => {
-  test("writes the endpoint as <MODEL_BASE_URL>", () => {
-    expect(hideEndpoint("failed: http://host:1/v1/chat/completions", "http://host:1/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
-    expect(hideEndpoint("x", "")).toBe("x");
   });
 });
 

@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } f
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
@@ -61,18 +62,6 @@ ${akmUsage}
 Needs akm on PATH, or in AKM_BIN.`;
 
 type Corpus = "public" | "private";
-
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
 
 interface Arm {
   ok: boolean;
@@ -165,16 +154,7 @@ interface Summary {
 }
 
 let commit: string | undefined;
-function gitCommit(): string {
-  if (commit !== undefined) return commit;
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return (commit = "unknown");
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return (commit = head.stdout.toString().trim() + (dirty ? "-dirty" : ""));
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const gitCommit = (): string => (commit ??= commitOf(ROOT)); // asked once: the summary is written after every question
 
 /** The benchmark's rule for an abstention question, from evaluate_qa.py and print_retrieval_metrics.py: "_abs" is somewhere in the question id. */
 export const isAbstention = (questionId: string): boolean => questionId.includes("_abs");

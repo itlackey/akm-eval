@@ -260,9 +260,3 @@ export function metrics(rows: Row[]): Metrics {
 }
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
-
-/** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
-export function hideEndpoint(text: string, baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return base ? text.split(base).join("<MODEL_BASE_URL>") : text;
-}

@@ -9,6 +9,7 @@ import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -92,48 +93,6 @@ interface Summary extends RunInputs {
   calls_by: CallRow[];
   metrics: Metrics;
   results_dir: string;
-}
-
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-/** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
-export function hideEndpoint(text: string, baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return base ? text.split(base).join("<MODEL_BASE_URL>") : text;
-}
-
-/** What akm said when a command failed. It prints its error as a JSON object on stderr. */
-function failureMessage(args: string[], code: number, stderr: string): string {
-  const text = stderr.trim();
-  try {
-    const e = JSON.parse(text) as { error?: unknown };
-    if (typeof e.error === "string") return `akm ${args[0]} failed (exit ${code}): ${e.error}`.slice(0, 400);
-  } catch {
-    // not JSON: the last lines
-  }
-  return `akm ${args[0]} failed (exit ${code}): ${text.split("\n").slice(-3).join(" | ")}`.slice(0, 400);
 }
 
 /** Puts the items' files in the sandbox's bundle. The notes of a pair carry the file times akm reads as their dates. */
@@ -220,7 +179,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
   const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
   const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
   if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // it was killed in the middle of the night: there is no result to score
-  if (improved.code !== 0) fail(hideEndpoint(failureMessage(improveArgs, improved.code, improved.stderr), ctx.baseUrl), 1);
+  if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);
   let improve: unknown;
   try {
     improve = JSON.parse(improved.stdout);
@@ -323,7 +282,7 @@ export async function runCorpus(
     date: new Date().toISOString(),
     status: "complete",
     aborted_reason: null,
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

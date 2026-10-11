@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type Class, type LoadedCase, type Row, assetsDigest, checkSaved, claims, errorRow, extractConfig, extractOutcome, failureMessage, hideEndpoint, loadCases, mentions, metrics, normalize, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, sessionText, similarity, timedOutIn } from "./lib.ts";
+import { CLASSES, type Class, type LoadedCase, type Row, assetsDigest, checkSaved, claims, errorRow, extractConfig, extractOutcome, loadCases, mentions, metrics, normalize, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, sessionText, similarity, timedOutIn } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -520,17 +520,6 @@ describe("what the run read", () => {
   });
 });
 
-describe("hideEndpoint", () => {
-  test("writes the base URL as <MODEL_BASE_URL> in every string, with or without a closing slash, and leaves the rest alone", () => {
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions refused", "http://localhost:8080/v1")).toBe("failed: <MODEL_BASE_URL>/chat/completions refused");
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions", "http://localhost:8080/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
-    const config = { engines: { model: { endpoint: "https://u:p@host.example/v1?k=1/chat/completions", model: "m", timeoutMs: 600000, think: false, tags: ["https://u:p@host.example/v1?k=1", "x"], none: null } } };
-    expect(hideEndpoint(config, "https://u:p@host.example/v1?k=1")).toEqual({ engines: { model: { endpoint: "<MODEL_BASE_URL>/chat/completions", model: "m", timeoutMs: 600000, think: false, tags: ["<MODEL_BASE_URL>", "x"], none: null } } });
-    expect(config.engines.model.endpoint).toContain("u:p@"); // a copy
-    expect(hideEndpoint("anything", "")).toBe("anything");
-  });
-});
-
 describe("queuedAny and timedOutIn", () => {
   test("the queue is read when akm lists proposals or the session lists proposal ids, and not otherwise", () => {
     expect(queuedAny("s", { ok: true, proposals: ["a"], sessions: [] })).toBe(true);
@@ -729,10 +718,3 @@ describe("metrics", () => {
   });
 });
 
-describe("failureMessage", () => {
-  test("uses the error akm printed on stderr, or the last lines of its output", () => {
-    expect(failureMessage(78, JSON.stringify({ ok: false, error: "No engine configured", code: "LLM_NOT_CONFIGURED" }), "")).toBe("akm exited 78: No engine configured (LLM_NOT_CONFIGURED)");
-    expect(failureMessage(1, "", "a\nb\nc\nd")).toBe("akm exited 1: b | c | d");
-    expect(failureMessage(1, "plain text error\n", "")).toBe("akm exited 1: plain text error");
-  });
-});

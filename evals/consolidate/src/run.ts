@@ -9,6 +9,7 @@ import { appendFileSync, mkdirSync, readFileSync, utimesSync, writeFileSync } fr
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -93,30 +94,6 @@ interface Summary extends RunInputs {
   results_dir: string;
 }
 
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 const cell = (n: number, of: number, x: number | null) => `${n}/${of}  ${pct(x)}`;
 
 function printSummary(s: Summary): void {
@@ -199,12 +176,6 @@ type Context = {
   indexTimeoutMs?: number;
   improveTimeoutMs?: number;
 };
-
-/** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
-export function hideEndpoint(text: string, baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return base ? text.split(base).join("<MODEL_BASE_URL>") : text;
-}
 
 const embedderOf = (ctx: { embedder?: Embedder }): Embedder => ctx.embedder ?? "deterministic";
 /** The real embedder loads its model to index, and the first run downloads it, so it gets longer than the hash one. */
@@ -323,7 +294,7 @@ export async function runCorpus(
     date: new Date().toISOString(),
     status: stop ? "aborted" : "complete",
     aborted_reason: stop?.reason ?? null,
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
@@ -452,7 +423,7 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
     date: new Date().toISOString(),
     status: result.error ? "aborted" : "complete",
     aborted_reason: result.error ?? null,
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

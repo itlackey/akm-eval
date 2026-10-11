@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { GENERATED, assetsDigest } from "./inputs.ts";
 import { type Case, type Embedder, INPUT_FILES, type Relation, sandboxOptions } from "./lib.ts";
-import { failureHint, hideEndpoint, runCorpus, writeNotes } from "./run.ts";
+import { failureHint, runCorpus, writeNotes } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -128,15 +128,6 @@ describe("writeNotes", () => {
         removeSandbox(sandbox);
       }
     }
-  });
-});
-
-describe("hideEndpoint", () => {
-  test("writes the endpoint as <MODEL_BASE_URL>, with or without a closing slash, and leaves text without it alone", () => {
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions refused", "http://localhost:8080/v1")).toBe("failed: <MODEL_BASE_URL>/chat/completions refused");
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions", "http://localhost:8080/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
-    expect(hideEndpoint("nothing to hide", "http://localhost:8080/v1")).toBe("nothing to hide");
-    expect(hideEndpoint("anything", "")).toBe("anything");
   });
 });
 

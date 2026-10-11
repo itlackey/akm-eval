@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusSeed, diffBody, digestOf, distillConfig, distillOutcome, errorRow, failureMessage, generatedProblem, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, readSeed, scoreCase, selectCases, servedModels, timedOutMessage } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusSeed, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, readSeed, scoreCase, selectCases, servedModels, timedOutMessage } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -715,13 +715,3 @@ describe("metrics", () => {
   });
 });
 
-describe("failureMessage", () => {
-  test("reads the JSON error akm prints on stderr", () => {
-    expect(failureMessage(78, JSON.stringify({ ok: false, error: "engine unreachable", code: "LLM_NOT_CONFIGURED" }), "")).toBe("akm exited 78: engine unreachable (LLM_NOT_CONFIGURED)");
-  });
-
-  test("falls back to the last lines of what it printed", () => {
-    expect(failureMessage(70, "line 1\nline 2\nline 3\nline 4", "")).toBe("akm exited 70: line 2 | line 3 | line 4");
-    expect(failureMessage(70, "", "only stdout")).toBe("akm exited 70: only stdout");
-  });
-});

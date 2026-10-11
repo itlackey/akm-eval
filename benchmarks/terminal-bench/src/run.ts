@@ -9,18 +9,16 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
-  Fatal,
   type AkmArm,
   type Pins,
   akmArm,
   akmArmUsage,
   akmSummary,
   erroredOf,
-  fail,
-  gitCommit,
   jobConfig as harborJob,
   jobRecord,
   loadRunTrials,
@@ -33,7 +31,6 @@ import {
   releaseArm,
   runHarbor,
   sha256Dir,
-  slug,
   stagePackages,
   timeoutsOf,
 } from "../../../lib/harbor/harbor.ts";

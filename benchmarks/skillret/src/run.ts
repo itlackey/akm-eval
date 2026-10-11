@@ -12,6 +12,7 @@ import { availableParallelism } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { redactConfig, sha256Files } from "../../../lib/provenance.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -134,27 +135,6 @@ interface Summary {
   /** The mean time of one search, in seconds, with `workers` calls in flight. */
   call_seconds: Lines<number>;
   results_dir: string;
-}
-
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
 }
 
 /** Runs `work` for every item, `workers` at a time. */
@@ -388,7 +368,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
       corpus: corpus.corpus,
       label,
       date: new Date().toISOString(),
-      git_commit: gitCommit(),
+      git_commit: gitCommit(ROOT),
       akm_version: version,
       ...akmBuild(),
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },

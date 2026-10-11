@@ -9,12 +9,13 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
-import { BAD, type Case, type Drained, EVENT_COLUMNS, type Metrics, PROPOSAL_COLUMNS, type Row, STRATEGY, assetsSha256, corpusSeed, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, schemaProblem, selectCases } from "./lib.ts";
+import { BAD, type Case, type Drained, EVENT_COLUMNS, type Metrics, PROPOSAL_COLUMNS, type Row, STRATEGY, assetsSha256, corpusSeed, dispatchFailures, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, schemaProblem, selectCases } from "./lib.ts";
 
 const NAME = "promotion";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -91,41 +92,6 @@ interface Summary {
   calls: { n: number; failures: number; served: Record<string, number> } | null;
   metrics: Metrics;
   results_dir: string;
-}
-
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-/** What akm said when a command failed: the last lines of stderr, which is a JSON error object for most failures. */
-function failureMessage(what: string, code: number, stderr: string): string {
-  try {
-    const e = JSON.parse(stderr.trim()) as { error?: unknown };
-    if (typeof e.error === "string") return `${what} failed (exit ${code}): ${e.error}`.slice(0, 400);
-  } catch {
-    // not JSON: fall through to the last lines
-  }
-  return `${what} failed (exit ${code}): ${stderr.trim().split("\n").slice(-3).join(" | ")}`.slice(0, 400);
 }
 
 /**
@@ -266,7 +232,7 @@ export async function runCorpus(
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

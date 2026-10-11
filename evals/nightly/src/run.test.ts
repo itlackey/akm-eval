@@ -8,7 +8,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
 import { type Item, applyFix, loadNight, nightFiles, nightlyConfig, refOf } from "./lib.ts";
-import { feedbackArgs, hideEndpoint, plant, runCorpus } from "./run.ts";
+import { feedbackArgs, plant, runCorpus } from "./run.ts";
 
 const night = loadNight(join(import.meta.dir, "..", "assets"));
 const dirs: string[] = [];
@@ -201,15 +201,6 @@ describe("feedbackArgs", () => {
       "--with=d",
       "--source=npm help version",
     ]);
-  });
-});
-
-describe("hideEndpoint", () => {
-  test("writes the endpoint as <MODEL_BASE_URL>, with or without a closing slash, and leaves other text alone", () => {
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions refused", "http://localhost:8080/v1")).toBe("failed: <MODEL_BASE_URL>/chat/completions refused");
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions", "http://localhost:8080/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
-    expect(hideEndpoint("nothing to hide", "http://localhost:8080/v1")).toBe("nothing to hide");
-    expect(hideEndpoint("anything", "")).toBe("anything");
   });
 });
 
