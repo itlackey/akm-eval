@@ -330,8 +330,13 @@ describe("run --corpus private", () => {
   }, 60_000);
 });
 
-/** The akm on this machine, if it is new enough to run this eval. */
+/**
+ * The real akm these tests run against, only when AKM_EVAL_REAL_AKM=1 asks for it: an akm that happens to be on PATH, or an
+ * AKM_BIN the caller exported, is never picked up by itself, so the default suite stays fake-only whatever is installed.
+ * It must be new enough to run this eval.
+ */
 function realAkm(): string | undefined {
+  if (process.env.AKM_EVAL_REAL_AKM !== "1") return undefined;
   const cmd = (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
   try {
     const out = Bun.spawnSync([...cmd, "--version"], { stdout: "pipe", stderr: "ignore" });
