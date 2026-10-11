@@ -14,7 +14,7 @@ import { engineSettings, redactConfig, type EngineSettings } from "../../../lib/
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, failureMessage, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
+import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, failureMessage, hideEndpoint, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
 
 const NAME = "extract";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -57,7 +57,7 @@ interface Summary {
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
   config_patch: { path: string; sha256: string } | null;
-  /** The akm config the eval wrote for every session, as the sandbox's config file has it and with any secret redacted. It names the engine's endpoint. */
+  /** The akm config the eval wrote for every session, as the sandbox's config file has it, with any secret redacted and the model's endpoint written as <MODEL_BASE_URL> (its host is in `engine`). */
   config: unknown;
   /** The settings of the model under test in that config: temperature, thinking switch, time limit, and the host of its endpoint. */
   engine: EngineSettings;
@@ -151,7 +151,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; strategy?: string; timeoutMs?: number }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
+  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
   const timeoutMs = ctx.timeoutMs ?? EXTRACT_TIMEOUT_MS;
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
@@ -240,7 +240,7 @@ export async function runCorpus(
     ...akmBuild(),
     limit: ctx.limit ?? null,
     ...overrideSummary(overrides),
-    config: redactConfig(config),
+    config: hideEndpoint(redactConfig(config), ctx.baseUrl),
     engine: engineSettings(config),
     assets_sha256: assetsSha256,
     seed: corpus === "private" && folders.map !== undefined && folders.seed !== undefined ? privateSeed(folders.map, folders.seed) : null,

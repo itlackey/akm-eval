@@ -268,7 +268,7 @@ describe("what summary.json says about the run", () => {
     const stored = storedIn(summary.results_dir);
     expect(stored).toMatchObject({ strategy: "extract-only", config_patch: null, seed: null, timeouts: 0, n_errored: 0 });
     expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "localhost:8080", temperature: 0, enableThinking: false, timeoutMs: 600000 });
-    expect(stored.config).toEqual(ctx.config);
+    expect(stored.config).toEqual({ ...ctx.config, engines: { model: { ...ctx.config.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
     expect(stored.config.engines.model).toMatchObject({ temperature: 0, enableThinking: false });
     expect(stored.assets_sha256).toBe(assetsDigest(folders.assets, loadCases(folders.assets)));
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -293,6 +293,17 @@ describe("what summary.json says about the run", () => {
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
     expect(stored.config.engines.other.apiKey).toBe("<redacted>");
     expect(JSON.stringify(stored)).not.toContain("sk-secret-value");
+  });
+
+  test("the endpoint is written as <MODEL_BASE_URL> in the config, with the user name, key and query it carried, and its host is in engine", async () => {
+    const baseUrl = "https://alice:hunter2@gateway.example.com:8443/v1?api_key=abc123";
+    const hidden = { ...ctx, baseUrl, config: extractConfig(baseUrl, "the-model", true) };
+    const summary = await quiet(() => runCorpus("public", hidden, assetsFor(scenarios.slice(0, 1))));
+    const stored = storedIn(summary.results_dir);
+    expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
+    expect(stored.engine.endpoint).toBe("gateway.example.com:8443");
+    for (const secret of ["alice", "hunter2", "abc123", "https://"]) expect(JSON.stringify(stored)).not.toContain(secret);
+    expect(JSON.stringify(samplesIn(summary.results_dir))).not.toContain("hunter2");
   });
 
   test("the seed of a private corpus is the one in its map, else private/seed, and the public corpus has none", async () => {
@@ -351,9 +362,9 @@ describe("the queue and timeouts", () => {
       { id: "b-fine", class: "routine", fake: empty() },
       { id: "c-down", class: "routine", fake: { exit: 78, error: "engine unreachable" } },
     ]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 1500 }, folders));
+    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 3000 }, folders));
     const rows = samplesIn(summary.results_dir);
-    expect(rows[0]).toMatchObject({ id: "a-slow", outcome: "error", correct: null, timed_out: true, error: "akm proposal extract timed out after 1.5s" });
+    expect(rows[0]).toMatchObject({ id: "a-slow", outcome: "error", correct: null, timed_out: true, error: "akm proposal extract timed out after 3s" });
     expect("timed_out" in rows[1]).toBe(false);
     expect("timed_out" in rows[2]).toBe(false);
     expect(rows[2].error).toBe("akm exited 78: engine unreachable (FAKE)");
@@ -363,8 +374,8 @@ describe("the queue and timeouts", () => {
 
   test("a queue that akm does not list in time is a timeout too", async () => {
     const folders = assetsFor([{ id: "a-slow-list", class: "insight", fake: { ...saves(proposal("p1", "Exit 75: a stale pid file.")), listSleepMs: 20_000 } }]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 1500 }, folders));
-    expect(samplesIn(summary.results_dir)[0]).toMatchObject({ outcome: "error", timed_out: true, error: "akm proposal timed out after 1.5s" });
+    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 3000 }, folders));
+    expect(samplesIn(summary.results_dir)[0]).toMatchObject({ outcome: "error", timed_out: true, error: "akm proposal timed out after 3s" });
     expect(summary.timeouts).toBe(1);
   });
 });

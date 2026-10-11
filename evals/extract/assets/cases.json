@@ -62,7 +62,7 @@
       ["rowpack"],
       ["aarch64", "arm64"],
       ["wheel"],
-      ["1.5.0", "1.5"],
+      ["1.5.0", "rowpack 1.5", "rowpack v1.5", "rowpack at least 1.5", "rowpack version 1.5", "wheel from 1.5", "wheel since 1.5"],
       ["compil", "from source", "cargo", "rust"]
     ],
     "forbidden": [],
@@ -89,7 +89,7 @@
     "expect": "memory",
     "required": [
       ["conventional"],
-      ["60", "sixty"],
+      ["60", "sixty char"],
       ["refs", "footer"]
     ],
     "forbidden": [],
@@ -143,7 +143,7 @@
     "required": [
       ["cents"],
       ["dollars"],
-      ["2025-03-01", "1 March 2025", "March 1, 2025", "March 1st, 2025", "1st March 2025", "Mar 1, 2025", "march * 2025"],
+      ["2025-03-01", "1 March 2025", "March 1, 2025", "March 1st, 2025", "1st March 2025", "1 Mar 2025", "1st Mar 2025", "Mar 1, 2025", "Mar 1st, 2025", "in Mar 2025", "since Mar 2025", "from Mar 2025", "before Mar 2025", "until Mar 2025", "by Mar 2025", "as of Mar 2025"],
       ["by 100", "divide", "divided", "convert", "normali"]
     ],
     "forbidden": [],
