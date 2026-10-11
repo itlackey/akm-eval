@@ -136,6 +136,12 @@ works worktree wrap wrapper wrappers wraps writable writer writes writing writte
 yourself zero
 `)) COMMON.add(w);
 
+// Ordinary words that headings and titles capitalise, and that the text then repeats, so they look like names
+// ("### Trapped White Space", "Key Takeaways", "the East region").
+for (const w of words(`
+anti archive areas awards east executive factory fall faulty forget linguistic play privilege recycle regular takeaway takeaways tip united warehouse west
+`)) COMMON.add(w);
+
 export const MONTHS_DAYS = words(`
 january february march april may june july august september october november december
 jan feb mar apr jun jul aug sep sept oct nov dec
@@ -150,6 +156,13 @@ linux ubuntu debian fedora centos rhel arch alpine nixos macos windows android i
 git grep sed awk curl wget jq yq tar gzip unzip chmod chown sudo rsync cron crontab systemd apt brew yum dnf pacman snap flatpak make cmake ninja gcc clang llvm rustc node nodejs npm npx pip cargo
 promise array map set object string number boolean null undefined
 `);
+
+// The keys of the PDF and PDF/X standards (/Trapped, /OutputIntent, /GTS_PDFXVersion) and the names of licences. A model
+// has to know them as they are written, so a rewrite that renames one changes what the text asks for.
+for (const w of words(`
+trapped docinfo outputintent outputcondition outputconditionidentifier destoutputprofile registryname pdfxversion pdfxconformance
+devicecmyk devicergb devicegray iccprofile mediabox trimbox bleedbox cropbox artbox unlicense
+`)) TECH.add(w);
 
 // Names of tools and products that are also ordinary words (next, signal, apple, notion, zoom). They are kept
 // as they are: renaming them would change the prose around them.
@@ -169,7 +182,7 @@ postgres postgresql mysql mariadb sqlite redis memcached mongodb couchdb cassand
 cuda rocm vulkan nvidia chromium chrome firefox safari
 microsoft openai anthropic claude gemini gemma mistral mixtral qwen deepseek kimi moonshot glm zhipu cohere perplexity groq cerebras fireworks openrouter litellm ollama lmstudio llamacpp vllm sglang gpt chatgpt copilot codex windsurf cline aider opencode
 vscode vim neovim emacs jetbrains intellij pycharm webstorm xcode obsidian figma telegram whatsapp jira confluence asana trello stripe paypal twilio sendgrid mailgun apprise ntfy pushover powerpoint onedrive sharepoint
-ripgrep fzf tmux swagger ghostscript pantone adobe wayland
+ripgrep fzf tmux swagger ghostscript pantone adobe wayland palatino linotype gmail alibaba
 akm gutterpress pagedjs openpalm openviking skillhone longmemeval locomo skillret skillsbench appworld agentskills
 ledgerline harborlight quillmark rowpack
 drillbit inkwell
@@ -221,10 +234,69 @@ github.io gitlab.io netlify.app vercel.app pages.dev herokuapp.com azurewebsites
 export const KEEP_PORTS = new Set([1234, 1433, 1521, 2181, 2375, 2376, 3306, 5432, 5672, 6379, 9092, 9200, 11211, 11434, 27017]);
 export const KEEP_IPS = new Set(["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "172.17.0.1"]);
 
-// Numbers that mean something on their own, so they are never changed: HTTP status codes, process exit codes, round
-// bounds and sizes (powers of two). Years and single digits are kept by a rule in rewrite.ts.
+// Numbers that mean something on their own, so they are never changed: HTTP status codes, process exit codes (the shell's
+// and the sysexits 64 to 78), round bounds and sizes (powers of two), and the units of time (7 days, 12 months, 24 hours,
+// 60 minutes, 365 days). Years, single digits and the ports in KEEP_PORTS are kept by a rule in rewrite.ts.
 export const KEEP_NUMBERS = new Set([
   100, 1000, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
   200, 201, 202, 204, 206, 301, 302, 304, 307, 308, 400, 401, 403, 404, 405, 406, 408, 409, 410, 413, 415, 418, 422, 423, 429, 451, 500, 501, 502, 503, 504,
   124, 126, 127, 130, 137, 139, 143,
+  64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+  7, 12, 24, 60, 365,
 ]);
+
+// The made-up tools and projects of this repository's own evals. `--tools keep` keeps the real tools in TOOLS and
+// still renames these, because there is no real tool for a model to recognise.
+export const INVENTED_TOOLS = words(`
+ledgerline harborlight quillmark rowpack drillbit inkwell
+`);
+
+// Ordinary English words that the pseudo-word generator in rewrite.ts can spell (it alternates the consonants
+// b d f g k l m n p r s t v z with the vowels a e i o u). A replacement name is never one of these, so a tool does
+// not turn into "demise" or "semi". It is a list of words written out by hand, not a dictionary.
+export const PLAIN = words(`
+abed aged agog ago akin alas ale alit amen amid ape are ate avid ado
+bad bag ban bar bat bed beg bet bib bid big bin bit bob bog bud bug bum bus but
+babe bake bale bane bare base bite bide bike bile bone bore baba basin baton bison bogus bonus boson
+dab dad dam den did dig dim din dip dog don dot dub dud dug dale dame dare date daze dime dine dire dive dole dome done dope dose dote dove doze duke dune dupe dodo dado
+debug demon depot deter devil diner diver dozen duvet demise denote devote domino
+edit ego eke emit emu eve even ever evil
+fad fan far fat fed fig fin fir fit fob fog fun fur
+fade fake fame fare fate fine fire five fuse fatal favor fever final finer forum futon
+gab gag gap gas gel gem get gig gin god got gum gun gut
+gale game gate gave gaze gene give gone gore guru gala gamer genus given
+idol iron item
+keg ken kid kin kit kite kebab kilo
+lad lag lap led leg let lid lip lit lob log lot lug
+lake lame lane late lave live lobe lode lone lore lose love lure lute lava lido limo
+lager lemon level lever limit liter lotus lover lunar
+mad man map mat men met mob mod mom mop mud mug mum
+made make male mane mare mate maze mere mile mime mine mire mite mode mole mope more mote move mule muse mute
+mama mega memo menu mini mono madam maker manor medal melon merit meter minor minus model modem moral motor motif mover mural motive mature minute
+nab nag nap net nib nil nip nit nod nor not nub nun nut
+name nape nine none nose note nude nana nano nova nadir naked never nodal novel
+ode ole omen omit one onus open opus oral ore oven over
+pad pal pan par pat peg pen pep per pet pig pin pip pit pod pot pub pug pun pup put
+pale pane pare pate pave pike pile pine pipe poke pole pone pope pore pose pure papa puma pupa
+panel paper pilot pivot polar polite popular
+rag ram ran rap rat red rep rib rid rig rim rip rob rod rot rub rug rum run rut
+rake rate rave raze rife rile rime rite robe rode role rope rose rote rude rule rune rota
+radar rebel regal remit renal repel resin revel rider rigid river robot rotor ruler
+relate remote remove retire revise
+sad sag sap sat set sin sip sir sit sob sod son sub sum sun sup semi
+safe sage sake sale same sane sate save sere sire size sole some sore sure soda sofa saga sari solo sumo
+salad salon sedan senate sever sigil silo siren sober solid sonar super
+salami
+tab tad tag tan tap tar ten tin tip tit tog ton top tot tub tug
+tale tame tape tare tide tile time tine tire tome tone tore tube tune tuba tuna toga
+tiger timer tonal topaz total tumor tuner
+tomato
+van vat vet vale vane vase vile vine vole vote veto visa
+vital venom virus vigor
+zap zig zip zit zeta zero zone
+zebu zonal
+above abuse alike alive alone amuse arise aside atone erase evade evoke irate
+adore agate anode
+unit upon
+banana potato native
+`);
