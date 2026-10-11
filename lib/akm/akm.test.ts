@@ -42,6 +42,15 @@ function fakeSandbox(opts?: { keepModelKey?: boolean }, script = FAKE_AKM): Sand
   return sandbox;
 }
 
+/**
+ * A path as a summary writes it: ~ for your home folder. A temporary folder is under the home folder only when TMPDIR is, so a test
+ * that expects a fixture's path in akm_bin computes the form from where the fixture is.
+ */
+function written(path: string): string {
+  const home = homedir();
+  return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+}
+
 /** Runs f with these variables set in process.env (undefined removes one), then puts them back. */
 function withEnv<T>(vars: Record<string, string | undefined>, f: () => T): T {
   const apply = (v: Record<string, string | undefined>) => {
@@ -305,7 +314,7 @@ describe("a command with spaces in it", () => {
   test("akm_bin in a summary is the command as a line that reads back to the same words, with the home folder as ~", () => {
     const { script } = spacedAkm();
     const built = withEnv({ AKM_BIN: `bun "${script}"` }, akmBuild);
-    expect(built.akm_bin).toBe(`bun '${script}'`);
+    expect(built.akm_bin).toBe(`bun '${written(script)}'`);
     expect(parseCommand(built.akm_bin)).toEqual(["bun", script]);
     expect(withEnv({ AKM_BIN: `bun "${homedir()}/my code/cli.ts"` }, akmBuild).akm_bin).toBe("bun '~/my code/cli.ts'");
     expect(withEnv({ AKM_BIN: "bun ~/code/akm/src/cli.ts" }, akmBuild).akm_bin).toBe("bun ~/code/akm/src/cli.ts");
@@ -522,8 +531,9 @@ describe("akmBuild", () => {
     git(dir, "add", ".");
     git(dir, "commit", "-q", "-m", "x");
     const sha = git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim();
-    const bin = `bun ${join(dir, "src", "cli.ts")}`;
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: sha, akm_build_fingerprint: null });
+    const script = join(dir, "src", "cli.ts");
+    const bin = `bun ${script}`;
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: `bun ${written(script)}`, akm_build: sha, akm_build_fingerprint: null });
     writeFileSync(join(dir, "src", "cli.ts"), "// changed");
     expect(withEnv({ AKM_BIN: bin }, akmBuild).akm_build).toBe(`${sha}-dirty`);
   });
@@ -542,7 +552,7 @@ describe("akmBuild", () => {
     const script = repo("script", "cli.ts");
     const bin = `${runtime.path} ${script.path}`;
     expect(runtime.sha).not.toBe(script.sha);
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: bin, akm_build: script.sha, akm_build_fingerprint: null });
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: `${written(runtime.path)} ${written(script.path)}`, akm_build: script.sha, akm_build_fingerprint: null });
   });
 
   test("has no build for a command outside a git checkout, and writes the home folder as ~", () => {
@@ -567,10 +577,13 @@ describe("akmBuild", () => {
       writeFileSync(join(dir, "src", "cli.ts"), "// the release\n");
       writeFileSync(join(dir, ".gitignore"), "ignored/\n*.log\n");
       for (const args of [["init", "-q"], ["add", "."], ["commit", "-q", "-m", "release"]]) expect(git(dir, "-c", "commit.gpgsign=false", ...args).exitCode).toBe(0);
-      const bin = `bun ${join(dir, "src", "cli.ts")}`;
+      const script = join(dir, "src", "cli.ts");
+      const bin = `bun ${script}`;
       return {
         dir,
         bin,
+        /** akm_bin as a summary writes it. */
+        shown: `bun ${written(script)}`,
         sha: git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim(),
         write: (path: string, content: string | Uint8Array) => {
           mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -582,7 +595,7 @@ describe("akmBuild", () => {
 
     test.skipIf(!Bun.which("git"))("a clean checkout and a command outside git have none, and the build says the commit", () => {
       const akm = checkout();
-      expect(akm.build()).toEqual({ akm_bin: akm.bin, akm_build: akm.sha, akm_build_fingerprint: null });
+      expect(akm.build()).toEqual({ akm_bin: akm.shown, akm_build: akm.sha, akm_build_fingerprint: null });
       const outside = mkdtempSync(join(tmpdir(), "lib-akm-fingerprint-"));
       dirs.push(outside);
       writeFileSync(join(outside, "akm"), "");
@@ -609,7 +622,7 @@ describe("akmBuild", () => {
       expect(akm.build()).toEqual(one);
 
       git(akm.dir, "checkout", "HEAD", "--", "src/cli.ts"); // reverted
-      expect(akm.build()).toEqual({ akm_bin: akm.bin, akm_build: akm.sha, akm_build_fingerprint: null });
+      expect(akm.build()).toEqual({ akm_bin: akm.shown, akm_build: akm.sha, akm_build_fingerprint: null });
     });
 
     test.skipIf(!Bun.which("git"))("a file that is not tracked counts: its presence, its path and its content, though git calls the checkout clean", () => {

@@ -276,7 +276,7 @@ describe("packAkm", () => {
     writeFileSync(join(dir, "src", "cli.ts"), "export const changed = 1;\n");
     expect(checkoutBuild(dir)).toBe(`${sha}-dirty`);
     const edited = packAkm(dir, join(tmp(), "pack"), fakePack).arm;
-    expect(edited.bin).toBe(dir);
+    expect(edited.bin).toBe(withHome(dir)); // ~ when the temporary folder is under your home folder, and the path as it is when not
     expect(edited.build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
     // The same commit with another edit has the same build and another fingerprint.
     writeFileSync(join(dir, "src", "cli.ts"), "export const changed = 2;\n");
