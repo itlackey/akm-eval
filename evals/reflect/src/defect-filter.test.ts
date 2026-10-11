@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assetsSha256 } from "./lib.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
 
 const dirs: string[] = [];
@@ -37,25 +38,55 @@ describe("replay", () => {
 });
 
 describe("reflectEdits", () => {
-  test("takes the proposals of a run, good when the case was correct, with the note the case holds", () => {
+  const note = (d: string) => `---\ndescription: ${d}\n---\n`;
+  const c = (id: string, source = note(id)) => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source, feedback: "f", defect: "d", correct: "c", allow: ["when_to_use"] });
+  const rows = [
+    { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
+    { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
+    { id: "c", outcome: "none", correct: false },
+  ];
+  /** A repository root with a public corpus of these cases, and a run of it whose summary names the digest of the cases, or none. */
+  function fixture(cases = ["a", "b", "c"].map((id) => c(id)), summary: (digest: string) => Record<string, unknown> = (d) => ({ corpus: "public", assets_sha256: d }), samples: unknown[] = rows): { root: string; run: string; assets: string } {
     const root = temp();
-    mkdirSync(join(root, "evals", "reflect", "assets"), { recursive: true });
-    const note = (d: string) => `---\ndescription: ${d}\n---\n`;
-    const c = (id: string) => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source: note(id), feedback: "f", defect: "d", correct: "c", allow: ["when_to_use"] });
-    writeFileSync(join(root, "evals", "reflect", "assets", "cases.jsonl"), `${["a", "b", "c"].map((id) => JSON.stringify(c(id))).join("\n")}\n`);
+    const assets = join(root, "evals", "reflect", "assets");
+    mkdirSync(assets, { recursive: true });
+    writeFileSync(join(assets, "cases.jsonl"), `${cases.map((x) => JSON.stringify(x)).join("\n")}\n`);
     const run = join(root, "run");
     mkdirSync(run);
-    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public" }));
-    const rows = [
-      { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
-      { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
-      { id: "c", outcome: "none", correct: false },
-    ];
-    writeFileSync(join(run, "samples.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    writeFileSync(join(run, "summary.json"), JSON.stringify(summary(assetsSha256(assets))));
+    writeFileSync(join(run, "samples.jsonl"), `${samples.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    return { root, run, assets };
+  }
+
+  test("takes the proposals of a run, good when the case was correct, with the note the case holds", () => {
+    const { root, run } = fixture();
     expect(reflectEdits(run, root)).toEqual([
       { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
       { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
     ]);
+  });
+
+  test("refuses to replay when the cases were changed since the run: the source it would judge against is not the one the run saw (R08)", () => {
+    const { root, run, assets } = fixture();
+    writeFileSync(join(assets, "cases.jsonl"), `${["a", "b", "c"].map((id) => JSON.stringify(c(id, note(`${id} revised`)))).join("\n")}\n`);
+    expect(() => reflectEdits(run, root)).toThrow("other public cases");
+  });
+
+  test("refuses a summary that does not name the cases it read", () => {
+    const { root, run } = fixture(undefined, () => ({ corpus: "public" }));
+    expect(() => reflectEdits(run, root)).toThrow("no assets_sha256");
+  });
+
+  test("names a proposal whose case is not in the corpus instead of passing it an undefined source", () => {
+    const { root, run } = fixture(undefined, undefined, [...rows, { id: "gone", outcome: "proposal", correct: false, proposal: note("x") }]);
+    expect(() => reflectEdits(run, root)).toThrow('case "gone" is not in');
+  });
+
+  test("replays the same after a regeneration that leaves these cases as they were", () => {
+    const { root, run, assets } = fixture();
+    const before = reflectEdits(run, root);
+    writeFileSync(join(assets, "other.txt"), "an unrelated file of the corpus folder\n");
+    expect(reflectEdits(run, root)).toEqual(before);
   });
 });
 

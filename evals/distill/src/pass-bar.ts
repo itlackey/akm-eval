@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { checkLesson, lessonText, loadCases } from "./lib.ts";
+import { assetsSha256, checkLesson, lessonText, loadCases } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -82,24 +82,32 @@ export function report(judged: Judged[]): Report {
   return out;
 }
 
-const assetsOf = (corpus: string): string =>
-  corpus === "public" ? join(ROOT, "evals", "distill", "assets") : corpus === "private" ? join(ROOT, "private", "distill", "assets") : join(ROOT, "private", "distill", "own", corpus === "own" ? "assets" : "assets-feedback");
+const assetsOf = (corpus: string, root: string): string =>
+  corpus === "public" ? join(root, "evals", "distill", "assets") : corpus === "private" ? join(root, "private", "distill", "assets") : join(root, "private", "distill", "own", corpus === "own" ? "assets" : "assets-feedback");
 
 type SampleRow = { id: string; class: string; outcome: string; gate: string | null; scores: Record<string, number> | null; lesson: string | null; rejected_lesson: string | null };
 
-/** The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. */
-export function judgedLessons(resultsDir: string): { judged: Judged[]; skipped: number } {
-  const { corpus } = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus: string };
-  const cases = new Map(loadCases(assetsOf(corpus)).map((c) => [c.id, c]));
+/**
+ * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. The run's
+ * corpus must be the one in the assets folder now (the summary's assets_sha256) and each row's case must be in it: the lessons are
+ * checked against the cases, so other cases would give other verdicts.
+ */
+export function judgedLessons(resultsDir: string, root = ROOT): { judged: Judged[]; skipped: number } {
+  const { corpus, assets_sha256 } = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus: string; assets_sha256?: string };
+  const assets = assetsOf(corpus, root);
+  if (typeof assets_sha256 !== "string") throw new Error(`${resultsDir}/summary.json has no assets_sha256, so nothing shows which ${corpus} cases the run read: it cannot be replayed against ${assets}`);
+  if (assetsSha256(assets) !== assets_sha256) throw new Error(`${resultsDir} was run on other ${corpus} cases than the ones in ${assets} now (assets_sha256 differs): replaying it would check the lessons against other cases`);
+  const cases = new Map(loadCases(assets).map((c) => [c.id, c]));
   const judged: Judged[] = [];
   let skipped = 0;
   for (const line of readFileSync(join(resultsDir, "samples.jsonl"), "utf8").split("\n")) {
     if (!line.trim()) continue;
     const row = JSON.parse(line) as SampleRow;
     const c = cases.get(row.id);
+    if (!c) throw new Error(`${resultsDir}/samples.jsonl: case "${row.id}" is not in ${assets}`);
     const s = row.scores;
     const text = row.lesson ?? (row.rejected_lesson === null ? null : lessonText(row.rejected_lesson));
-    if (!c || !s || text === null || c.class === "lesson-update" || typeof s.reusable !== "number" || typeof s.nonRedundancy !== "number" || typeof s.grounding !== "number") {
+    if (!s || text === null || c.class === "lesson-update" || typeof s.reusable !== "number" || typeof s.nonRedundancy !== "number" || typeof s.grounding !== "number") {
       if (s) skipped++;
       continue;
     }
@@ -117,7 +125,13 @@ function main(): void {
   const all: Judged[] = [];
   let skipped = 0;
   for (const dir of args) {
-    const r = judgedLessons(resolve(dir));
+    let r: ReturnType<typeof judgedLessons>;
+    try {
+      r = judgedLessons(resolve(dir));
+    } catch (e) {
+      console.error(`pass-bar: ${(e as Error).message}`);
+      process.exit(2);
+    }
     all.push(...r.judged.map((j) => ({ ...j, id: `${dir.split("/").pop()}/${j.id}` })));
     skipped += r.skipped;
   }

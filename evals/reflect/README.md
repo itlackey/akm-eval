@@ -94,7 +94,7 @@ evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json 
 
 `evals/reflect/defect-filter --akm-src DIR` runs the filter of the akm checkout DIR on edits whose quality is known and counts what it refuses, by label. akm cannot be asked to run only its filter, so the tool loads `findReflectDefect` from `src/commands/improve/reflect-noise.ts` of the checkout and calls it as akm does. It takes two kinds of edit:
 
-- `--reflect RESULTS_DIR`: the proposals of a reflect run, good when the case was correct. Run it with `patches/defect-filter-off.json`, or the filter refuses the edits before they are proposals.
+- `--reflect RESULTS_DIR`: the proposals of a reflect run, good when the case was correct. Run it with `patches/defect-filter-off.json`, or the filter refuses the edits before they are proposals. The tool reads the sources from the corpus folder, so it refuses a run whose `assets_sha256` is not that of the folder's `cases.jsonl` now, and a proposal whose case is not in it.
 - `--judge-gate public` or `private`: the 106 labelled reflect proposals of the judge-gate eval, 11 good and 95 bad under its rubric version 2, real edits of akm's earlier reflect, which also rewrote bodies.
 
 It prints JSON: for each set, `good` and `bad` with `n`, how many the filter `refused` and by which rule, and the refused edits. A good edit refused is a fix lost for 14 days. Both kinds are small, so read a single hit as a case to look at, not a rate.

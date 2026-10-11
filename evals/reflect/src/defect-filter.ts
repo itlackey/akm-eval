@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { parseCases } from "./lib.ts";
+import { assetsSha256, parseCases } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -63,15 +63,24 @@ export function replay(edits: Edit[], find: Find): Replay {
 
 const jsonl = <T>(file: string): T[] => readFileSync(file, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as T);
 
-/** The proposals of a reflect run as edits: good when the case was correct. The note is the case's, by id. */
+/**
+ * The proposals of a reflect run as edits: good when the case was correct. The note is the case's, by id. The run's cases.jsonl
+ * must be the one in the corpus folder now (the summary's assets_sha256), and each proposal's case must be in it: otherwise the
+ * source the edit is judged against is not the one the run saw, and the replay says so instead.
+ */
 export function reflectEdits(resultsDir: string, root = ROOT): Edit[] {
-  const { corpus } = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus: "public" | "private" };
+  const { corpus, assets_sha256 } = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus: "public" | "private"; assets_sha256?: string };
   const assets = corpus === "public" ? join(root, "evals", "reflect", "assets") : join(root, "private", "reflect", "assets");
-  const sources = new Map(parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8")).map((c) => [c.id, c.source]));
+  const file = join(assets, "cases.jsonl");
+  if (typeof assets_sha256 !== "string") throw new Error(`${resultsDir}/summary.json has no assets_sha256, so nothing shows which ${corpus} cases the run read: it cannot be replayed against ${file}`);
+  if (assetsSha256(assets) !== assets_sha256) throw new Error(`${resultsDir} was run on other ${corpus} cases than the ones in ${file} now (assets_sha256 differs): replaying it would judge the edits against other sources`);
+  const sources = new Map(parseCases(readFileSync(file, "utf8")).map((c) => [c.id, c.source]));
   const edits: Edit[] = [];
   for (const row of jsonl<{ id: string; outcome: string; correct: boolean | null; proposal?: string }>(join(resultsDir, "samples.jsonl"))) {
     if (row.outcome !== "proposal" || row.proposal === undefined) continue;
-    edits.push({ id: row.id, label: row.correct ? "good" : "bad", source: sources.get(row.id) as string, candidate: row.proposal });
+    const source = sources.get(row.id);
+    if (source === undefined) throw new Error(`${resultsDir}/samples.jsonl: case "${row.id}" is not in ${file}`);
+    edits.push({ id: row.id, label: row.correct ? "good" : "bad", source, candidate: row.proposal });
   }
   return edits;
 }
@@ -104,7 +113,13 @@ async function main(): Promise<void> {
   if (!values.reflect?.length && !values["judge-gate"]?.length) fail("name something to replay: --reflect or --judge-gate");
   const find = await loadFilter(values["akm-src"] as string).catch((e: Error) => fail(e.message));
   const sets: Record<string, Replay> = {};
-  for (const dir of values.reflect ?? []) sets[`reflect ${dir}`] = replay(reflectEdits(resolve(dir)), find as Find);
+  for (const dir of values.reflect ?? []) {
+    try {
+      sets[`reflect ${dir}`] = replay(reflectEdits(resolve(dir)), find as Find);
+    } catch (e) {
+      fail((e as Error).message);
+    }
+  }
   for (const corpus of values["judge-gate"] ?? []) {
     if (corpus !== "public" && corpus !== "private") fail(`--judge-gate must be public or private, not "${corpus}"`);
     sets[`judge-gate ${corpus}`] = replay(judgeGateEdits(corpus as "public" | "private"), find as Find);
