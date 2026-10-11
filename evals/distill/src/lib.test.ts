@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, checkLesson, checkUpdate, claims, diffBody, distillConfig, distillOutcome, errorRow, failureMessage, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, scoreCase, selectCases, servedModels } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusSeed, diffBody, digestOf, distillConfig, distillOutcome, errorRow, failureMessage, generatedProblem, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, readSeed, scoreCase, selectCases, servedModels, timedOutMessage } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -346,6 +346,126 @@ describe("distillConfig", () => {
 
   test("names the key by variable and never holds it", () => {
     expect(distillConfig("https://api.example.com/v1", "m", true).engines.model.apiKey).toBe("$MODEL_API_KEY");
+  });
+});
+
+describe("assetsSha256", () => {
+  const copy = (): string => {
+    const root = mkdtempSync(join(tmpdir(), "distill-digest-"));
+    dirs.push(root);
+    cpSync(PUBLIC, join(root, "assets"), { recursive: true });
+    return join(root, "assets");
+  };
+
+  test("is the same for the same files in another folder, and does not read the README", () => {
+    const other = copy();
+    expect(assetsSha256(other)).toBe(assetsSha256(PUBLIC));
+    expect(assetsSha256(PUBLIC)).toMatch(/^[0-9a-f]{64}$/);
+    writeFileSync(join(other, "README.md"), "changed\n");
+    expect(assetsSha256(other)).toBe(assetsSha256(PUBLIC));
+  });
+
+  test("changes with a case, a memory, a file added to a bundle and a file renamed", () => {
+    const base = assetsSha256(PUBLIC);
+    const edited = copy();
+    writeFileSync(join(edited, "cases.json"), `${readFileSync(join(edited, "cases.json"), "utf8")} `);
+    expect(assetsSha256(edited)).not.toBe(base);
+    const memory = copy();
+    writeFileSync(join(memory, "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "changed\n");
+    expect(assetsSha256(memory)).not.toBe(base);
+    const added = copy();
+    writeFileSync(join(added, "bundles", "dup-01", "memories", "extra.md"), "x\n");
+    expect(assetsSha256(added)).not.toBe(base);
+    const renamed = copy();
+    renameSync(join(renamed, "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), join(renamed, "bundles", "dup-01", "memories", "renamed.md"));
+    expect(assetsSha256(renamed)).not.toBe(base);
+  });
+
+  test("digestOf names files by the name it is given and not by where they are", () => {
+    const root = mkdtempSync(join(tmpdir(), "distill-digest-"));
+    dirs.push(root);
+    writeFileSync(join(root, "a"), "one");
+    writeFileSync(join(root, "b"), "two");
+    expect(digestOf([["a", join(root, "a")], ["b", join(root, "b")]])).toBe(digestOf([["b", join(root, "b")], ["a", join(root, "a")]]));
+    expect(digestOf([["a", join(root, "a")]])).not.toBe(digestOf([["c", join(root, "a")]]));
+  });
+});
+
+describe("generated.json", () => {
+  const privateDir = (generated?: unknown): string => {
+    const dir = mkdtempSync(join(tmpdir(), "distill-generated-"));
+    dirs.push(dir);
+    if (generated !== undefined) writeFileSync(join(dir, "generated.json"), typeof generated === "string" ? generated : JSON.stringify(generated));
+    return dir;
+  };
+
+  test("vouches for assets made from the public assets as they are", () => {
+    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+    expect(generatedProblem(dir, PUBLIC)).toBeUndefined();
+    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+  });
+
+  test("refuses assets without it, with one that is not readable, and with a digest that is not the public one", () => {
+    expect(generatedProblem(privateDir(), PUBLIC)).toContain("generated.json is missing");
+    expect(generatedProblem(privateDir("not json"), PUBLIC)).toContain("generated.json is missing or holds no seed");
+    expect(generatedProblem(privateDir({ seed: 42, inputs_sha256: assetsSha256(PUBLIC) }), PUBLIC)).toContain("holds no seed");
+    expect(generatedProblem(privateDir({ seed: "42" }), PUBLIC)).toContain("holds no seed");
+    expect(generatedProblem(privateDir({ seed: "42", inputs_sha256: "0".repeat(64) }), PUBLIC)).toContain("other public assets");
+  });
+
+  test("a public case that changed makes the assets made from it stale", () => {
+    const changed = mkdtempSync(join(tmpdir(), "distill-generated-"));
+    dirs.push(changed);
+    cpSync(PUBLIC, join(changed, "assets"), { recursive: true });
+    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(join(changed, "assets")) });
+    expect(generatedProblem(dir, join(changed, "assets"))).toBeUndefined();
+    writeFileSync(join(changed, "assets", "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "changed\n");
+    expect(generatedProblem(dir, join(changed, "assets"))).toContain("other public assets");
+  });
+});
+
+describe("corpusSeed", () => {
+  const files = () => {
+    const dir = mkdtempSync(join(tmpdir(), "distill-seed-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "generated.json"), JSON.stringify({ seed: "7", inputs_sha256: "x" }));
+    writeFileSync(join(dir, "seed"), "123456789012345678\n");
+    return { dir, seed: join(dir, "seed"), none: join(dir, "no-seed") };
+  };
+
+  test("the public corpus has no seed", () => {
+    const f = files();
+    expect(corpusSeed("public", f.dir, f.seed)).toBeNull();
+  });
+
+  test("the private corpus has the seed its assets were made with, which may not be private/seed", () => {
+    const f = files();
+    expect(corpusSeed("private", f.dir, f.seed)).toBe("7");
+    expect(readSeed(f.seed)).toBe("123456789012345678");
+  });
+
+  test("an own corpus, or a private one with no generated.json, has private/seed when there is one, else null", () => {
+    const f = files();
+    expect(corpusSeed("own", f.dir, f.seed)).toBe("123456789012345678");
+    expect(corpusSeed("own-feedback", f.dir, f.seed)).toBe("123456789012345678");
+    expect(corpusSeed("own", f.dir, f.none)).toBeNull();
+    rmSync(join(f.dir, "generated.json"));
+    expect(corpusSeed("private", f.dir, f.seed)).toBe("123456789012345678");
+  });
+});
+
+describe("timeouts", () => {
+  test("a message that says akm timed out is told from other failures", () => {
+    expect(timedOutMessage("akm proposal timed out after 900s")).toBe(true);
+    expect(timedOutMessage("akm exited 137: akm timed out after 0.3s")).toBe(true);
+    expect(timedOutMessage("akm exited 137: ")).toBe(false);
+    expect(timedOutMessage("akm exited 78: engine unreachable")).toBe(false);
+  });
+
+  test("an error row carries timed_out only when it was a timeout", () => {
+    const c = { id: "x", class: "dated-status", expect: "none" } as LoadedCase;
+    expect(errorRow(c, "akm exited 137: akm timed out after 900s", 900, true)).toMatchObject({ verdict: "error", timed_out: true });
+    expect("timed_out" in errorRow(c, "akm exited 78", 1)).toBe(false);
   });
 });
 

@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build, firstHalf, insertAfterTitle, render } from "./build.ts";
-import { type Case, type Row, dispatchFailures, hideEndpoint, metrics, parseCases, promotionConfig, proposalRow, rowsFromDrain, selectCases, uuidOf } from "./lib.ts";
+import { Database } from "bun:sqlite";
+import { type Case, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, hideEndpoint, metrics, parseCases, promotionConfig, proposalRow, readSeed, rowsFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library", "knowledge");
@@ -51,12 +53,118 @@ describe("the planted proposal", () => {
   });
 });
 
+const temps: string[] = [];
+afterEach(() => {
+  for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
 describe("promotionConfig", () => {
   test("names the model as the one engine and turns triage's judgment on, in queue mode", () => {
     const config = promotionConfig("http://localhost:8080/v1/", "m", true);
     expect(config.engines.judge).toMatchObject({ kind: "llm", model: "m", endpoint: "http://localhost:8080/v1/chat/completions", apiKey: "$MODEL_API_KEY" });
     expect(config).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
     expect(config.improve.strategies.promotion).toEqual({ engine: "judge", processes: { triage: { enabled: true, applyMode: "queue", judgment: { enabled: true } } } });
+  });
+
+  test("sets the engine to temperature 0 with thinking off, as distill does", () => {
+    const engine = promotionConfig("http://localhost:8080/v1", "m", false).engines.judge;
+    expect(engine.temperature).toBe(0);
+    expect(engine.enableThinking).toBe(false);
+  });
+});
+
+describe("akm's tables", () => {
+  const proposals = "CREATE TABLE proposals (id TEXT PRIMARY KEY, stash_dir TEXT NOT NULL, ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', frontmatter_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}')";
+  const events = "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, ts TEXT NOT NULL, ref TEXT, metadata_json TEXT NOT NULL DEFAULT '{}')";
+  const memory = (...ddl: string[]) => {
+    const db = new Database(":memory:");
+    for (const d of ddl) db.run(d);
+    return db;
+  };
+
+  test("the columns the eval writes are the ten that a planted proposal has values for, and akm's table takes them", () => {
+    const row = proposalRow(make("a", "good"), "/tmp/x/bundle", "2026-10-07T00:00:00Z");
+    expect(PROPOSAL_COLUMNS).toHaveLength(10);
+    expect(row).toHaveLength(PROPOSAL_COLUMNS.length);
+    const db = memory(proposals);
+    db.prepare(`INSERT INTO proposals (${PROPOSAL_COLUMNS.join(", ")}) VALUES (${PROPOSAL_COLUMNS.map(() => "?").join(", ")})`).run(...row);
+    expect(db.query("SELECT id, ref, source FROM proposals").get()).toEqual({ id: uuidOf("a"), ref: "bundle//knowledge/a", source: "consolidate" });
+  });
+
+  test("a table that has every column it needs is fine, whatever else it has", () => {
+    expect(schemaProblem(memory(proposals), "proposals", PROPOSAL_COLUMNS)).toBeUndefined();
+    expect(schemaProblem(memory(proposals.replace("frontmatter_json TEXT,", "frontmatter_json TEXT, extra TEXT,")), "proposals", PROPOSAL_COLUMNS)).toBeUndefined();
+    expect(schemaProblem(memory(events), "events", EVENT_COLUMNS)).toBeUndefined();
+  });
+
+  test("names the columns that a table has lost or renamed", () => {
+    expect(schemaProblem(memory(proposals.replace("stash_dir", "stash")), "proposals", PROPOSAL_COLUMNS)).toBe("akm's proposals table has no column stash_dir (it has id, stash, ref, status, source, created_at, updated_at, content, frontmatter_json, metadata_json)");
+    const two = memory(proposals.replace(" frontmatter_json TEXT,", "").replace("content TEXT NOT NULL DEFAULT '', ", ""));
+    expect(schemaProblem(two, "proposals", PROPOSAL_COLUMNS)).toContain("has no column content, frontmatter_json (");
+    expect(schemaProblem(memory(events.replace("event_type", "kind")), "events", EVENT_COLUMNS)).toContain("has no column event_type (");
+  });
+
+  test("names a table that is not there", () => {
+    expect(schemaProblem(memory(), "proposals", PROPOSAL_COLUMNS)).toBe("akm's state.db has no proposals table");
+    expect(schemaProblem(memory(events), "proposals", PROPOSAL_COLUMNS)).toBe("akm's state.db has no proposals table");
+  });
+});
+
+describe("timeouts", () => {
+  test("a failure that says the call timed out is told from one that does not", () => {
+    for (const text of ["timed out", "LLM request timed out after 600000ms", "The operation timed out.", "request timeout", "Timeout of 60000ms exceeded", "time-out"]) expect(timedOutText(text)).toBe(true);
+    for (const text of ["LLM request failed: refused", "HTTP 500", "boom", "timeouts are fine"]) expect(timedOutText(text)).toBe(text === "timeouts are fine");
+  });
+
+  test("a row for a call that timed out says so, and no other row does", () => {
+    const cases = [make("slow", "duplicate"), make("down", "duplicate")];
+    const rows = rowsFromDrain(cases, {}, new Map(), new Map([[uuidOf("slow"), "LLM request timed out after 600000ms"], [uuidOf("down"), "LLM request failed: refused"]]));
+    expect(rows[0]).toMatchObject({ outcome: "error", timed_out: true });
+    expect(rows[1].outcome).toBe("error");
+    expect("timed_out" in rows[1]).toBe(false);
+  });
+});
+
+describe("what a run read", () => {
+  const folder = (notes: Record<string, string>, cases = "{}\n") => {
+    const dir = mkdtempSync(join(tmpdir(), "promotion-digest-"));
+    temps.push(dir);
+    writeFileSync(join(dir, "cases.jsonl"), cases);
+    for (const [name, text] of Object.entries(notes)) {
+      mkdirSync(join(dir, "library", "knowledge", name, ".."), { recursive: true });
+      writeFileSync(join(dir, "library", "knowledge", name), text);
+    }
+    return { cases: join(dir, "cases.jsonl"), library: join(dir, "library"), dir };
+  };
+  const digest = (f: { cases: string; library: string }) => assetsSha256(f.cases, f.library);
+
+  test("the digest is the same for the same files in another folder, and changes with a case, a note, a new note and a renamed note", () => {
+    const base = digest(folder({ "a.md": "one", "sub/b.md": "two" }));
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    expect(digest(folder({ "a.md": "one", "sub/b.md": "two" }))).toBe(base);
+    expect(digest(folder({ "a.md": "one", "sub/b.md": "changed" }))).not.toBe(base);
+    expect(digest(folder({ "a.md": "one", "sub/b.md": "two", "c.md": "three" }))).not.toBe(base);
+    expect(digest(folder({ "a.md": "one", "sub/renamed.md": "two" }))).not.toBe(base);
+    expect(digest(folder({ "a.md": "one", "sub/b.md": "two" }, "{\"id\":\"x\"}\n"))).not.toBe(base);
+  });
+
+  test("the public assets have a digest", () => {
+    expect(assetsSha256(join(EVAL_DIR, "assets", "cases.jsonl"), join(EVAL_DIR, "..", "..", "corpus", "library"))).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("digestOf names files by the name it is given and not by where they are", () => {
+    const f = folder({ "a.md": "one" });
+    expect(digestOf([["a", f.cases]])).not.toBe(digestOf([["b", f.cases]]));
+    expect(digestOf([["a", f.cases], ["b", join(f.library, "knowledge", "a.md")]])).toBe(digestOf([["b", join(f.library, "knowledge", "a.md")], ["a", f.cases]]));
+  });
+
+  test("the seed to record: none for the public corpus, private/seed for an own one when there is a file", () => {
+    const f = folder({});
+    writeFileSync(join(f.dir, "seed"), "123456789012345678\n");
+    expect(corpusSeed("public", join(f.dir, "seed"))).toBeNull();
+    expect(corpusSeed("own", join(f.dir, "seed"))).toBe("123456789012345678");
+    expect(corpusSeed("own", join(f.dir, "no-seed"))).toBeNull();
+    expect(readSeed(join(f.dir, "seed"))).toBe("123456789012345678");
   });
 });
 
