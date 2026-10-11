@@ -731,9 +731,10 @@ describe("completionOf and statusOf", () => {
 });
 
 describe("endpointOf", () => {
-  test("is the host of the base URL opencode is given, and never a key, a user or a path", () => {
-    expect(endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" })).toBe("192.0.2.5:8080");
-    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toBe("gateway.example.com");
+  test("is the identity of the base URL opencode is given: scheme, host, port and path, and never a key or a user", () => {
+    expect(endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" })).toBe("http://192.0.2.5:8080/v1?key=<redacted>");
+    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toBe("https://gateway.example.com/v1");
+    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/deployment-B/v1" })).not.toBe(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/deployment-A/v1" }));
   });
 
   test("is null for the provider's own endpoint, and for text that is not a URL", () => {

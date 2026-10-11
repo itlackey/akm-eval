@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
-import { AXES, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
+import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
 
 export type Dir = "up" | "down";
 export interface MetricSpec {
@@ -29,17 +29,16 @@ export interface EvalSpec {
   harm: MetricSpec[];
   /** The completeness policy: the error counts that must not rise against the baseline. */
   completeness: { errors: ErrorCount[] };
-  /** Identity fields (see ../../compare/src/policy.ts) the eval does not record because it has no such thing. */
-  unrecorded: string[];
 }
 
 /**
  * The Harbor evals (agent-ab, terminal-bench) write the same metrics, from lib/harbor/harbor.ts `metricsOf`: the difference in pass rate between
  * the akm arm and the control arm, paired by task. Harm is akm trials that errored and control trials that called akm (the control has no plugin).
- * They run in a container, so a summary holds no akm config or engine; it holds `completion`, which counts the tasks that failed or are missing.
+ * They run in a container, so a summary holds the Harbor job as `config`, with `akm_env` and the model and endpoint as `engine`, which the policy reads
+ * as their config and engine (see ../../compare/src/policy.ts); and `completion`, which counts the tasks that failed or are missing.
  */
-const harbor = (): EvalSpec => ({ main: [main("delta.value")], harm: [harm("akm.errored"), harm("engagement.control_calls")], completeness: { errors: ["n_errored", "completion.failed"] }, unrecorded: ["config", "engine"] });
-const spec = (m: MetricSpec[], h: MetricSpec[]): EvalSpec => ({ main: m, harm: h, completeness: { errors: ["n_errored"] }, unrecorded: [] });
+const harbor = (): EvalSpec => ({ main: [main("delta.value")], harm: [harm("akm.errored"), harm("engagement.control_calls")], completeness: { errors: ["n_errored", "completion.failed"] } });
+const spec = (m: MetricSpec[], h: MetricSpec[]): EvalSpec => ({ main: m, harm: h, completeness: { errors: ["n_errored"] } });
 
 /**
  * The metrics each eval is judged on, with its completeness policy. Every path was read from a real summary.json (and repeat-summary.json,
@@ -65,7 +64,7 @@ export const EVAL_METRICS: Record<string, MetricSpec[]> = Object.fromEntries(Obj
 /** What a row's `eval` names that lives in benchmarks/<name>/run and not in evals/<name>/run. */
 const BENCHMARKS = ["terminal-bench"];
 /** The evals that run in Harbor. Their --akm is an npm release or a checkout's folder, not a command (see lib/harbor/harbor.ts). */
-export const HARBOR = ["agent-ab", "terminal-bench"];
+export { HARBOR };
 
 /** The folder a row's eval or benchmark is in, under the repository root: evals or benchmarks. */
 export const runnerFolder = (name: string): "evals" | "benchmarks" => (BENCHMARKS.includes(name) ? "benchmarks" : "evals");
@@ -508,7 +507,7 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
     ...base.runs.map((r) => ({ side: "the baseline", name: r.name, identity: r.identity })),
     ...cfg.runs.map((r) => ({ side: "the config", name: r.name, identity: r.identity })),
   ];
-  return checkMembers(members, axes, EVALS[evalName]?.unrecorded ?? []);
+  return checkMembers(members, axes);
 }
 
 /**

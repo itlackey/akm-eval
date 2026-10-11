@@ -8,7 +8,7 @@ import { join, relative, resolve } from "node:path";
 import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
-import { sha256File, sha256Text } from "../provenance.ts";
+import { endpointIdentity, sha256File, sha256Text } from "../provenance.ts";
 import { type ArmSummary, type Arm, type Report, type Trial, loadTrials } from "./report.ts";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
@@ -571,15 +571,9 @@ export function statusOf(exit: number, completion: Completion, jobWritten = true
   return reasons.length === 0 ? { status: "complete", aborted_reason: null } : { status: "aborted", aborted_reason: reasons.join("; ") };
 }
 
-/** The host of the endpoint opencode is given (OPENAI_BASE_URL in `env`), with no scheme, path or credentials. Null for the provider's own endpoint. */
+/** The identity of the endpoint opencode is given (OPENAI_BASE_URL in `env`): scheme, host, port and path, with no credentials (see endpointIdentity). Null for the provider's own endpoint, and for a value that is not a URL: nothing that could carry a key is written down. */
 export function endpointOf(env: Record<string, string>): string | null {
-  const url = env.OPENAI_BASE_URL?.trim();
-  if (!url) return null;
-  try {
-    return new URL(url).host || null;
-  } catch {
-    return null; // not a URL: nothing that could carry a key is written down
-  }
+  return endpointIdentity(env.OPENAI_BASE_URL);
 }
 
 /**

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { metricsOf } from "../../../lib/harbor/harbor.ts";
+import { endpointOf, jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
+import { redactConfig } from "../../../lib/provenance.ts";
 import { buildReport } from "../../../lib/harbor/report.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
@@ -779,12 +780,18 @@ describe("a run that was cut short", () => {
 
 // ---- the Harbor evals and benchmarks (B2) ---------------------------------------------------------------------------------------
 
+/** What a Harbor eval records of its job, the AKM_* settings of its akm arm and the endpoint of its model (see lib/harbor/harbor.ts), for the policy to read. */
+const harborIdentity = (akmEnv: Record<string, string> = {}, baseUrl = "https://gateway.example/deployment-A/v1", model = "m1") => {
+  const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts: 3, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: ["a", "b"] }], arm: releaseArm(), akmEnv });
+  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, endpoint: endpointOf({ OPENAI_BASE_URL: baseUrl }) } };
+};
+
 describe("the Harbor evals", () => {
   const trial = (task: string, arm: "control" | "akm", reward: number | null, extra: Record<string, unknown> = {}) => ({ task, arm, trial: `${task}-${arm}`, reward, error: null, akm: arm === "akm" ? { akm_show: 1 } : null, tools: 2, tokens: null, costUsd: null, seconds: 60, timed_out: false, ...extra });
   /** What a Harbor eval writes: the metrics of lib/harbor/harbor.ts for the akm arm's rewards on three tasks against a control that passes the first. */
   const summaryOf = (akmRewards: number[], name = "agent-ab", controlCalls = false) => {
     const trials = [...akmRewards.map((r, i) => trial(`t${i}`, "akm", r)), ...akmRewards.map((_, i) => trial(`t${i}`, "control", i === 0 ? 1 : 0, controlCalls ? { akm: { akm_show: 1 } } : {}))];
-    return { eval: name, corpus: "public", status: "complete", aborted_reason: null, git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_bin: "akm-cli@0.9.26", akm_build: null, n_errored: 0, completion: { expected: 6, completed: 6, failed: 0, missing: 0 }, metrics: metricsOf(buildReport(trials), trials) };
+    return { eval: name, corpus: "public", status: "complete", aborted_reason: null, git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_bin: "akm-cli@0.9.26", akm_build: null, n_errored: 0, completion: { expected: 6, completed: 6, failed: 0, missing: 0 }, ...harborIdentity(), metrics: metricsOf(buildReport(trials), trials) };
   };
 
   test("are registered with the difference of the arms as the main metric and the akm arm's errors and the control's calls as harm", () => {
@@ -814,11 +821,27 @@ describe("the Harbor evals", () => {
     expect(verdictHarbor(base, called)).toBe("mixed");
   });
 
-  test("a Harbor summary has no akm config or engine to record, and is not exploratory for it", () => {
+  test("a Harbor summary records its job and engine, and an eval that records neither is exploratory (R01)", () => {
     const [base, better] = [measured([0, 0, 0]), measured([1, 1, 1])];
     expect(judge("agent-ab", compareAll("agent-ab", base, better), base, better).exploratory).toEqual([]);
-    // an eval that does record a config is exploratory without one
-    expect(judge("reflect", compareAll("agent-ab", base, better), base, better, ["build"]).exploratory).toEqual(["the akm config is not recorded in the baseline and the config", "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the baseline and the config"]);
+    // runs from before the job and the engine were recorded leave those axes unchecked
+    const legacy = (m: Measured): Measured => ({ ...m, runs: m.runs.map((r) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), config: undefined, engine: undefined }) })) });
+    expect(judge("agent-ab", compareAll("agent-ab", base, better), base, legacy(better), ["build"]).exploratory).toEqual(["the akm config is not recorded in the config", "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the config"]);
+    expect(verdictOf(compareAll("agent-ab", base, better), base, legacy(better), ["build"], "agent-ab")).toBe("exploratory");
+  });
+
+  test("an undeclared change of the AKM_* settings or of the model's endpoint makes two Harbor results not comparable, declared it is the treatment (R01)", () => {
+    const withIdentity = (m: Measured, id: ReturnType<typeof harborIdentity>): Measured => ({ ...m, runs: m.runs.map((r, i) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), ...id }) })) });
+    const base = measured([0, 0, 0]);
+    const [env, path] = [withIdentity(measured([1, 1, 1]), harborIdentity({ AKM_CURATE_TIMEOUT: "30" })), withIdentity(measured([1, 1, 1]), harborIdentity({}, "https://gateway.example/deployment-B/v1"))];
+    expect(verdictOf(compareAll("agent-ab", base, env), base, env, ["build"], "agent-ab")).toBe("not comparable");
+    expect(incomparable(base, env, ["build"], "agent-ab")).toContain("the akm config differs");
+    expect(incomparable(base, path, ["config"], "agent-ab")).toContain("the engine settings");
+    expect(verdictOf(compareAll("agent-ab", base, env), base, env, ["config"], "agent-ab")).toBe("better");
+    expect(verdictOf(compareAll("agent-ab", base, path), base, path, ["model"], "agent-ab")).toBe("better");
+    // the repeats of one side are one configuration
+    const mixed: Measured = { ...base, runs: [base.runs[0], base.runs[1], { ...base.runs[2], identity: identityOf({ ...summaryOf([0, 0, 0]), ...harborIdentity({ AKM_X: "1" }) }) }] };
+    expect(incomparable(mixed, base, ["config"], "agent-ab")).toContain("among the repeats of the baseline");
   });
 
   test("a config with more failed tasks than its baseline can never be better, however much its pass rate gained", () => {
@@ -1017,7 +1040,7 @@ describe("the paired comparison in the confirm stage", () => {
     const metrics = (v: number) => ({ delta: { value: v }, akm: { errored: 0 }, engagement: { control_calls: 0 } });
     for (const [n, v] of [["base", [0.1, 0.12, 0.14]], ["cfg", [0.5, 0.52, 0.54]]] as const) {
       const label = labelOf("sw", n, "confirm");
-      writeRepeat(root, "agent-ab", label, v.map((x) => ({ eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_build: null, n_errored: 0, completion: { expected: 9, completed: 9, failed: 0, missing: 0 }, metrics: metrics(x) })));
+      writeRepeat(root, "agent-ab", label, v.map((x) => ({ eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_build: null, n_errored: 0, completion: { expected: 9, completed: 9, failed: 0, missing: 0 }, ...harborIdentity(n === "cfg" ? { AKM_X: "1" } : {}), metrics: metrics(x) })));
       state.confirm[n] = record("confirm", n, "agent-ab", label, root, "repeat", 3);
     }
     expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "better", paired: null, note: "" });

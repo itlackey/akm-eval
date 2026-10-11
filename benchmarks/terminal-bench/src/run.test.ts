@@ -281,9 +281,9 @@ describe("summarize", () => {
   test("writes the model with the host of its endpoint and no key, and the job config with its secrets redacted", () => {
     const dir = runDir({ [`${one}__a`]: result(one, "opencode") });
     const job = { n_attempts: 1, agents: [{ name: "opencode", kwargs: { version: "1", api_key: "sk-job-key", opencode_config: { provider: { openai: { options: { apiKey: "sk-nested", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" } } } } } }] };
-    summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, endpoint: "gateway.example.com:8080", job });
+    summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, endpoint: "http://gateway.example.com:8080/v1", job });
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "gateway.example.com:8080" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://gateway.example.com:8080/v1" });
     expect(stored.config.agents[0].kwargs.api_key).toBe("<redacted>");
     expect(stored.config.agents[0].kwargs.opencode_config.provider.openai.options).toEqual({ apiKey: "<redacted>", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" }); // a $NAME reference holds no secret
     expect(JSON.stringify(stored.config)).not.toMatch(/sk-job-key|sk-nested/);
@@ -453,7 +453,7 @@ describe("runCorpus", () => {
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toMatchObject({ expected: 4, completed: 4, failed: 0, missing: 0, control: { expected: 2 }, akm: { expected: 2 } });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "192.0.2.5:8080" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080/v1" });
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -593,7 +593,7 @@ describe("runCorpus", () => {
     for (const leaked of ["JUDGE_API_KEY", "MODEL_API_KEY", "AKM_BIN", "ANTHROPIC_API_KEY"]) expect(seen[leaked]).toBeUndefined();
     expect(JSON.stringify(seen)).not.toContain("judge-secret");
     const stored = readFileSync(join(s.results_dir, "summary.json"), "utf8");
-    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "192.0.2.5" });
+    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5/v1" });
     expect(stored).not.toMatch(/model-key|judge-secret/);
   });
 

@@ -48,6 +48,51 @@ function withoutEngineSettings(x: unknown): unknown {
   );
 }
 
+/** The evals that run in a container with Harbor. Their summaries hold the job as `config`, not an akm config, and no engine table. */
+export const HARBOR = ["agent-ab", "terminal-bench"];
+
+/**
+ * The keys of an agent of the Harbor job that another axis owns: the model (the model axis), the akm and plugin under test and where their
+ * tarballs and the library are (the build, and the cases through assets_sha256). The rest of the job is the config: the settings of both arms.
+ */
+const AGENT_KWARGS_OWNED = ["akm_cli_version", "akm_plugin_version", "packages_dir", "akm_package", "plugin_package", "libraries_dir"];
+
+function harborAgent(agent: unknown): unknown {
+  if (!isObject(agent)) return agent;
+  const { model_name: _model, kwargs, ...rest } = agent;
+  if (!isObject(kwargs)) return rest;
+  const own = Object.fromEntries(Object.entries(kwargs).filter(([k]) => !AGENT_KWARGS_OWNED.includes(k)));
+  const { opencode_config, ...others } = own;
+  const { small_model: _small, ...opencode } = isObject(opencode_config) ? opencode_config : ({} as Row);
+  return { ...rest, kwargs: { ...others, ...(opencode_config === undefined ? {} : { opencode_config: opencode }) } };
+}
+
+/**
+ * A digest of what a Harbor summary records of how its job was set up: the job (`config`, secrets redacted) without the datasets and the
+ * attempts (the cases: assets_sha256), the model of each agent (the model axis) and the akm under test (the build axis), and with the
+ * AKM_* settings of the akm arm (`akm_env`), which is how a config is swept. Null when the summary has no config or no akm_env.
+ */
+function harborConfigDigest(s: Row): string | null {
+  if (!isObject(s.config) || !isObject(s.akm_env)) return null;
+  const { datasets: _datasets, n_attempts: _attempts, agents, ...job } = s.config;
+  return sha256(canonical({ ...job, agents: Array.isArray(agents) ? agents.map(harborAgent) : agents ?? null, akm_env: s.akm_env }));
+}
+
+/** The model and endpoint of a Harbor run, as the table of engines the other evals record: opencode is the one engine. A host with no scheme is a legacy summary, which does not say which deployment. */
+function harborEngine(s: Row): string | null {
+  if (!isObject(s.engine) || typeof s.engine.model !== "string") return null;
+  const endpoint = s.engine.endpoint ?? null;
+  if (endpoint !== null && !(typeof endpoint === "string" && endpoint.includes("://"))) return null;
+  return canonical({ opencode: { model: s.engine.model, endpoint } });
+}
+
+/** The akm version of a run; for a Harbor run with the plugin's, which it installs beside akm and which the build includes. */
+function akmVersionOf(s: Row): string | null {
+  const version = text(s.akm_version);
+  const plugin = HARBOR.includes(s.eval) && isObject(s.akm_install) ? text(s.akm_install.plugin_version) : null;
+  return version !== null && plugin !== null ? `${version} (plugin ${plugin})` : version;
+}
+
 /**
  * A digest of the akm config a summary records, without the model's settings (those are the model axis). Null when the summary has no
  * config. The configs have secrets redacted, so the digest holds none.
@@ -84,21 +129,22 @@ const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ?
 
 export function identityOf(s: Row): Identity {
   // the settings of every engine the run used, by name; a summary that records only the default engine's does not say what a routed one used
-  const engine = isObject(s.engine) && isObject(s.engine.engines) ? canonical(s.engine.engines) : null;
+  const harbor = HARBOR.includes(s.eval);
+  const engine = harbor ? harborEngine(s) : isObject(s.engine) && isObject(s.engine.engines) ? canonical(s.engine.engines) : null;
   return {
     eval: text(s.eval),
     corpus: text(s.corpus),
     collection: text(s.collection),
     mode: text(s.mode),
     private: s.corpus === "private",
-    akm_version: text(s.akm_version),
+    akm_version: akmVersionOf(s),
     akm_build: text(s.akm_build),
     akm_build_fingerprint: text(s.akm_build_fingerprint),
     akm_bin: text(s.akm_bin),
     strategy: text(s.strategy),
     config_patch: isObject(s.config_patch) ? text(s.config_patch.sha256) : null,
     timeout_ms: text(s.timeout_ms),
-    config: configDigest(s.config),
+    config: harbor ? harborConfigDigest(s) : configDigest(s.config),
     model: text(s.model),
     engine,
     assets_sha256: text(s.assets_sha256),
@@ -174,9 +220,6 @@ const FIELDS: Field[] = [
 /** The harness axis is not one field: the digest of the eval's code, else the commit it ran from, which must be clean to identify it. */
 const HARNESS: Field = { name: "harness", axis: "harness", label: "the eval's code", evidence: () => true, values: harnessValues, gap: "is not identified" };
 
-/** The fields a summary of an eval may leave out because the eval has no such thing (the Harbor evals write no akm config and no engine). */
-export type Skip = readonly string[];
-
 /** A commit that identifies the eval's code: not missing, not "unknown", and not a tree with changes that are not committed. */
 const cleanCommit = (c: string | null): c is string => c !== null && c !== "unknown" && !c.endsWith("-dirty");
 
@@ -203,7 +246,7 @@ function engineText(v: string): string {
  * runs of each side, since the sides are meant to differ there. A run that lacks evidence for an undeclared axis is a gap.
  * The messages do not depend on the order of the runs within a side.
  */
-export function checkMembers(members: Member[], treatment: Axis[], skip: Skip = []): PolicyResult {
+export function checkMembers(members: Member[], treatment: Axis[]): PolicyResult {
   const out: PolicyResult = { treatment, mismatches: [], gaps: [], treated: [] };
   const sides = [...new Set(members.map((m) => m.side))];
   /** "A", or "the baseline and the config", or "the baseline r2 and r3" when only some of the runs of a side are meant. */
@@ -233,7 +276,7 @@ export function checkMembers(members: Member[], treatment: Axis[], skip: Skip = 
     return { missing, groups: ordered };
   };
 
-  const fields: Field[] = [...FIELDS.filter((f) => !skip.includes(f.name)), HARNESS];
+  const fields: Field[] = [...FIELDS, HARNESS];
   for (const f of fields) {
     const display = (v: string | null): string => (v === null ? (f.none ?? "none") : f.name === "engine" ? engineText(v) : short(v));
     const describe = (groups: [string | null, Member[]][]) => groups.map(([v, ms]) => `${display(v)} in ${who(ms)}`).join(", ");
