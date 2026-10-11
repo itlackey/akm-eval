@@ -46,11 +46,11 @@ Read a `summary.json` before you commit it:
 `scripts/compare/run` takes such a folder as a baseline, as it takes any results folder: it reads `summary.json` and `samples.jsonl`.
 
 ```
-scripts/compare/run reports/0.9.26/nightly/base evals/nightly/results/2026-10-12-pr1071-1
+scripts/compare/run --treatment build reports/0.9.26/nightly/base evals/nightly/results/2026-10-12-pr1071-1
 scripts/compare/run --repeats reports/0.9.26/nightly/base
 ```
 
-So only a public-corpus folder, which has both files, can be compared case by case. A private or own folder has a summary only: `compare` refuses it, and the metrics can be read side by side by hand. `compare` also refuses a different eval, corpus or akm version, and a different `assets_sha256` when both summaries record one, so a baseline is good for the akm version in its path and for the assets it ran on. The model, the build, the strategy and the config patch may differ: that difference is what is compared.
+So only a public-corpus folder, which has both files, can be compared case by case. A private or own folder has a summary only: `compare` refuses it, and the metrics can be read side by side by hand. `compare` refuses a different eval, corpus or collection. The model, the strategy and the config patch may differ: that difference is what is compared. A new run of another akm than the baseline's needs `--treatment build`, as in the first command above, and then the akm config, the model, the cases and the eval's code must still be the same. Both summaries must carry full identity: `assets_sha256`, `config`, `engine`, `harness_sha256` (a summary from before it needs a `git_commit` that is clean) and `status: complete`. When one of them does not, the comparison is exploratory: `compare` computes it and says what is missing, and it is a lead, not a conclusion.
 
 ## Index
 

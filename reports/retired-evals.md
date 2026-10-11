@@ -96,7 +96,7 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 - **Ran.** 2026-09-22: localjev, a third-party library that turns rubric questions into scores, against the generative judge on the same local models. 24 planted lessons, 12 copies of their source and 12 that extend it, on a 35B and a 4B model. 2026-10-01: Intern-Decision-2B, a 2B text-only decision model, asked three questions (is the edit needed, does it keep the facts, is it supported) of 88 reflect proposals from the judge-gate set (16 good, 72 bad) and 2 distill lessons.
 - **Found.** Intern-Decision-2B: AUC 0.59 on its combined accept score, near chance. The three questions alone gave 0.41, 0.47 and 0.53. localjev: on the 35B both methods refused all 12 copies, and typed decisions passed 7 of the 12 extensions against 4 for the generative judge. On the 4B the generative judge passed all 24 lessons, and typed decisions passed 6 and sent 16 to review. On the 88 reflect cases no panel of the generative judges tried beat a local 27B model alone.
 - **Retired because.** A negative result. The localjev scripts were never committed, and the decision service is not wired into anything.
-- **Now.** `evals/judge-gate` measures any chat model as the judge, on 106 cases (28 good). It cannot test a model that is not a chat endpoint. Reopen if akm adds a non-generative decision engine; a feature request for one is open.
+- **Now.** `evals/judge-gate` measures any chat model as the judge, on 106 cases (11 good under rubric version 2; 28 before it). It cannot test a model that is not a chat endpoint. Reopen if akm adds a non-generative decision engine; a feature request for one is open.
 
 ## Skill-pack evals
 
