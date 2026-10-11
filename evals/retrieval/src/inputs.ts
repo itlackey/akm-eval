@@ -1,10 +1,12 @@
 // What a retrieval run records of its inputs, and what ties the private assets to the public ones they were made from:
-// the digest of the files a run read, the digest of the public inputs that generate rewrote, and the seed.
+// the digest of the files a run read, the digest of the public inputs that generate rewrote, the digest of the code that rewrote them, and the seed.
 // run.ts, generate.ts and the tests use them.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { sha256Files } from "../../../lib/provenance.ts";
+
+const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 /** Runs `f` with `dir` as the working folder, and then puts the old one back. sha256Files reads the paths it is given, so a digest that holds on another machine needs paths relative to a fixed folder. */
 export function inFolder<T>(dir: string, f: () => T): T {
@@ -46,9 +48,15 @@ export interface Generated {
   seed: string;
   /** publicInputsSha256 when the assets were made. */
   inputs_sha256: string;
-  /** What rewrote them. */
+  /** rewriteSha256 when the assets were made: a digest of the code that rewrote them. */
   rewrite: string;
 }
+
+/** The code that decides what generate makes of the public inputs, by its path from the repository root: the rewrite, its lexicon of tool names, and generate itself, which says which tools keep their names. */
+export const REWRITE_CODE = [join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts")];
+
+/** One digest over REWRITE_CODE in this repository. It is the rewrite that runs, so it never depends on the root of the inputs. A change to the rewrite, the lexicon or the pins changes it. */
+export const rewriteSha256 = (): string => inFolder(ROOT, () => sha256Files(REWRITE_CODE));
 
 /** The public files the private assets are made from, by their path from the repository root: the library and the books' library, and each collection's queries and qrels. */
 export function publicInputs(root: string): string[] {
@@ -80,5 +88,6 @@ export function staleAssets(assets: string, root: string, where = assets): strin
   const made = readGenerated(assets);
   if (!made) return `the private assets in ${where}/ have no ${GENERATED}, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
   if (made.inputs_sha256 !== publicInputsSha256(root)) return `the private assets in ${where}/ were made from public inputs that have changed since: the library, the queries or the qrels. ${again}`;
+  if (made.rewrite !== rewriteSha256()) return `the private assets in ${where}/ were made by a rewrite that has changed since: lib/rewrite, its lexicon or the tools that generate pins. ${again}`;
   return undefined;
 }

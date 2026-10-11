@@ -32,7 +32,7 @@ skipped, so run it again to resume, unless the asset changed since it was graded
 new grade replaces the old. Each grade is written with the judge, a digest of the prompt, the date and a digest of
 the asset as the judge read it. A pair graded before label wrote them has none, and is never graded again.
 The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root), or the one --judge-model names.
-Use one judge for a set: label warns when the qrels were graded by another.
+Use one judge for a set: label warns when the qrels were graded by another, or have grades that record no judge.
 
   --corpus  public (default) grades the public library. own grades your own set in private/retrieval/own/, from what
             akm search and akm curate return for it (no BM25: the library is too big to list), and appends to its
@@ -327,8 +327,11 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
       }
     }
     console.log(`retrieval label${own ? " (own)" : ""}: akm ${version}, ${nAssets} assets, ${queries.length} task queries, judge ${ctx.model}, prompt ${PROMPT_VERSION}, first ${MAX_DOC_CHARS} characters of each asset`);
-    const others = qrelProvenance(existing).judges.filter((j) => j !== ctx.model);
-    if (others.length > 0) console.error(`retrieval label: warning: ${name("qrels.jsonl")} has grades by ${others.join(", ")}, and this run grades with ${ctx.model}. Grades of different judges do not mix cleanly: use one judge for a set.`);
+    // The last row of each pair is the grade in force. A row that records no judge is of one who is not known, and this run's grades sit beside it.
+    const { judges, unrecorded } = qrelProvenance(existing);
+    const others = judges.filter((j) => j !== ctx.model);
+    const mixed = [...(others.length > 0 ? [`grades by ${others.join(", ")}`] : []), ...(unrecorded > 0 ? [`${unrecorded} grades that record no judge`] : [])];
+    if (mixed.length > 0) console.error(`retrieval label: warning: ${name("qrels.jsonl")} has ${mixed.join(" and ")}, and this run grades with ${ctx.model}. Grades of different judges do not mix cleanly: use one judge for a set.`);
 
     // The own library has no listing: an asset is known by the first hit akm returned for it.
     const ask = async (system: "search" | "curate", q: string) => {

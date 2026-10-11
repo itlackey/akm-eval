@@ -88,20 +88,34 @@ export function bannedByQuery(qrels: Qrel[]): Map<string, string[]> {
   return by;
 }
 
-/**
- * What the qrels say of who graded them: the distinct judges and prompts the rows record, and how many rows record no judge (rows made
- * before label wrote one). One judge is the aim: grades of two judges, or of two prompts, do not mix cleanly.
- */
-export function qrelProvenance(qrels: Qrel[]): { judges: string[]; prompts: string[]; unrecorded: number } {
-  const distinct = (values: (string | undefined)[]): string[] => [...new Set(values.filter((v): v is string => v !== undefined))].sort();
-  return { judges: distinct(qrels.map((r) => r.judge)), prompts: distinct(qrels.map((r) => r.prompt_sha256)), unrecorded: qrels.filter((r) => r.judge === undefined).length };
+/** The last row of each pair of a query and an asset: a pair graded again has two rows, and the later one replaces the earlier. */
+function lastRows(qrels: Qrel[]): Qrel[] {
+  const last = new Map<string, Qrel>();
+  for (const r of qrels) last.set(`${r.id}\t${r.ref}`, r);
+  return [...last.values()];
 }
 
-/** A sentence for run to warn with when the qrels hold the grades of more than one judge (or prompt), or null when they do not. */
+/**
+ * What the qrels say of who graded them: the distinct judges and prompts that the last row of each pair records, and how many of those rows
+ * record no judge (rows made before label wrote one). A row that a later row of its pair has replaced no longer counts: grading a pair again
+ * clears it. One judge is the aim: grades of two judges, or of two prompts, do not mix cleanly.
+ */
+export function qrelProvenance(qrels: Qrel[]): { judges: string[]; prompts: string[]; unrecorded: number } {
+  const rows = lastRows(qrels);
+  const distinct = (values: (string | undefined)[]): string[] => [...new Set(values.filter((v): v is string => v !== undefined))].sort();
+  return { judges: distinct(rows.map((r) => r.judge)), prompts: distinct(rows.map((r) => r.prompt_sha256)), unrecorded: rows.filter((r) => r.judge === undefined).length };
+}
+
+/**
+ * A sentence for run to warn with when the qrels hold the grades of more than one judge (or prompt), or null when they do not. Rows that record
+ * no judge count as one more judge once any row records one: they were graded by someone, and their grades sit beside the new ones.
+ * A set where no row records a judge, as the library's was before label wrote them, is not a mix.
+ */
 export function mixedJudgesWarning(qrels: Qrel[], where = "qrels.jsonl"): string | null {
   const { judges, prompts, unrecorded } = qrelProvenance(qrels);
-  if (judges.length < 2 && prompts.length < 2) return null;
-  const what = [judges.length > 1 ? `${judges.length} judges (${judges.join(", ")})` : "", prompts.length > 1 ? `${prompts.length} prompts` : ""].filter(Boolean).join(" and ");
+  const mixedJudges = judges.length > 1 || (judges.length === 1 && unrecorded > 0);
+  if (!mixedJudges && prompts.length < 2) return null;
+  const what = [mixedJudges ? `${judges.length} ${judges.length === 1 ? "judge" : "judges"} (${judges.join(", ")})` : "", prompts.length > 1 ? `${prompts.length} prompts` : ""].filter(Boolean).join(" and ");
   return `${where} holds grades from ${what}${unrecorded > 0 ? `, and ${unrecorded} rows that record no judge` : ""}. Grades of different judges or prompts do not mix cleanly: compare only runs on the same qrels, and grade the set again with one judge before you trust a difference.`;
 }
 

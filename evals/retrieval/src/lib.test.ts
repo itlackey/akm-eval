@@ -162,20 +162,47 @@ describe("the judge's input", () => {
 });
 
 describe("who graded the qrels", () => {
-  const row = (judge?: string, prompt?: string) => ({ id: "q1", ref: "a/x", grade: 1, reason: "r", ...(judge ? { judge } : {}), ...(prompt ? { prompt_sha256: prompt } : {}) });
+  let n = 0;
+  /** A row of a pair of its own, so that rows of one judge do not replace each other. */
+  const row = (judge?: string, prompt?: string, ref = `a/x${n++}`) => ({ id: "q1", ref, grade: 1, reason: "r", ...(judge ? { judge } : {}), ...(prompt ? { prompt_sha256: prompt } : {}) });
 
   test("lists the judges and prompts the rows record, and counts the rows that record no judge", () => {
     expect(qrelProvenance([row(), row("b"), row("a", "p1"), row("a", "p1")])).toEqual({ judges: ["a", "b"], prompts: ["p1"], unrecorded: 1 });
     expect(qrelProvenance([])).toEqual({ judges: [], prompts: [], unrecorded: 0 });
   });
 
+  test("counts the last row of each pair, so a row that a later one replaced does not count", () => {
+    const old = [row(undefined, undefined, "a/y"), row("a", "p1", "a/z")];
+    expect(qrelProvenance(old)).toEqual({ judges: ["a"], prompts: ["p1"], unrecorded: 1 });
+    // the pair a/y is graded again by b, and a/z by b with another prompt
+    const again = [...old, row("b", "p1", "a/y"), row("b", "p2", "a/z")];
+    expect(qrelProvenance(again)).toEqual({ judges: ["b"], prompts: ["p1", "p2"], unrecorded: 0 });
+    expect(qrelProvenance([row("a", "p1", "a/y"), row(undefined, undefined, "a/y")])).toEqual({ judges: [], prompts: [], unrecorded: 1 }); // the later row is the one in force
+  });
+
   test("warns when the rows hold more than one judge, or more than one prompt, and says nothing for one judge", () => {
-    expect(mixedJudgesWarning([row(), row("a"), row("a")])).toBeNull(); // rows from before label wrote a judge are not a second judge
+    expect(mixedJudgesWarning([row(), row()])).toBeNull(); // a set graded before label wrote a judge is not a mix
+    expect(mixedJudgesWarning([row("a"), row("a")])).toBeNull();
     expect(mixedJudgesWarning([row("a", "p1"), row("a", "p1")])).toBeNull();
     const two = mixedJudgesWarning([row("a"), row("b"), row()], "assets/qrels.jsonl") as string;
     expect(two).toStartWith("assets/qrels.jsonl holds grades from 2 judges (a, b), and 1 rows that record no judge.");
     expect(two).toContain("do not mix cleanly");
     expect(mixedJudgesWarning([row("a", "p1"), row("a", "p2")])).toStartWith("qrels.jsonl holds grades from 2 prompts.");
+  });
+
+  test("warns when one judge's grades sit beside rows that record no judge, which is what the library's grades are once label adds one", () => {
+    const legacy = Array.from({ length: 3 }, () => row());
+    const warning = mixedJudgesWarning([...legacy, row("new-judge", "p1")], "assets/qrels.jsonl") as string;
+    expect(warning).toStartWith("assets/qrels.jsonl holds grades from 1 judge (new-judge), and 3 rows that record no judge.");
+    expect(warning).toContain("do not mix cleanly");
+  });
+
+  test("does not warn once the pairs of the rows that record no judge are graded again by the one judge", () => {
+    const legacy = [row(undefined, undefined, "a/y"), row(undefined, undefined, "a/z")];
+    expect(mixedJudgesWarning([...legacy, row("j", "p1", "a/y")])).not.toBeNull();
+    expect(mixedJudgesWarning([...legacy, row("j", "p1", "a/y"), row("j", "p1", "a/z")])).toBeNull();
+    // and a grade of another judge that was graded again by this one does not count either
+    expect(mixedJudgesWarning([row("old", "p1", "a/y"), row("j", "p1", "a/y")])).toBeNull();
   });
 });
 

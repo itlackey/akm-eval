@@ -142,7 +142,7 @@ interface Summary {
   engine: EngineSettings;
   /** One digest over the files the run read: queries.jsonl and qrels.jsonl of the set, and bundles.json when it has one. It changes when a grade is added. */
   assets_sha256: string;
-  /** The seed of the rewrite, for a private or own corpus: the seed generate used for the private assets, else the one in private/seed, else null. Absent for the public corpus. */
+  /** The seed of the rewrite, for the private corpus only: the seed generate used for the private assets, else the one in private/seed, else null. Absent for the public and own corpora, which are not made from a seed. */
   seed?: string | null;
   metrics: Columns<SystemMetrics>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
@@ -409,7 +409,7 @@ export async function runCollection(
       config,
       engine: engineSettings(config.keyword),
       assets_sha256: assetsSha256,
-      ...(corpus === "public" ? {} : { seed: ctx.seed ?? null }),
+      ...(corpus === "private" ? { seed: ctx.seed ?? null } : {}),
       metrics: columns((s) => summarize(ok(scored, s).map((r) => at(r, s).scores as Scored))),
       abstention: {
         non_task: columns((s) => abstention(ok(nonTask, s).map((r) => at(r, s).refs.length))),
@@ -472,7 +472,7 @@ async function main(): Promise<void> {
     }
   }
   for (const s of sets) {
-    const seed = s.corpus === "private" ? (readGenerated(PRIVATE_ASSETS)?.seed ?? readSeed(ROOT)) : readSeed(ROOT);
+    const seed = s.corpus === "private" ? (readGenerated(PRIVATE_ASSETS)?.seed ?? readSeed(ROOT)) : null;
     const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(s.corpus, limit, flag as SemanticFlag), semanticFlag: flag as SemanticFlag, seed }, s.folders);
     // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
     if (repeat === undefined) summaries.push(await run(label));

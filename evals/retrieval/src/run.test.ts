@@ -347,16 +347,17 @@ describe("runCollection", () => {
       expect((await quiet(() => runCollection("own", "own", ctx, own))).assets_sha256).not.toBe(first.assets_sha256);
     });
 
-    test("has the seed for a private or own corpus, null when there is none, and none for the public corpus", async () => {
+    test("has the seed for the private corpus, null when there is none, and none for the public and own corpora", async () => {
       const { ctx, folders } = setup();
       const pub = await quiet(() => runCollection("public", "library", { ...ctx, seed: "123" }, folders));
       expect(Object.hasOwn(pub, "seed")).toBe(false);
       expect(Object.hasOwn(JSON.parse(readFileSync(join(pub.results_dir, "summary.json"), "utf8")), "seed")).toBe(false);
       expect((await quiet(() => runCollection("private", "library", { ...ctx, seed: "123" }, folders))).seed).toBe("123");
       expect((await quiet(() => runCollection("private", "library", ctx, folders))).seed).toBeNull();
-      const own = await quiet(() => runCollection("own", "own", { ...ctx, seed: null }, folders));
-      expect(own.seed).toBeNull();
-      expect(JSON.parse(readFileSync(join(own.results_dir, "summary.json"), "utf8")).seed).toBeNull();
+      // The own set is not made from a seed: private/seed is not a property of it, so it is not recorded, even when it is passed.
+      const own = await quiet(() => runCollection("own", "own", { ...ctx, seed: "123" }, folders));
+      expect(Object.hasOwn(own, "seed")).toBe(false);
+      expect(Object.hasOwn(JSON.parse(readFileSync(join(own.results_dir, "summary.json"), "utf8")), "seed")).toBe(false);
     });
 
     test("says which akm built the semantic index, for a new index and for a kept one", async () => {
@@ -410,12 +411,28 @@ describe("runCollection", () => {
       try {
         const none = setup();
         await quiet(() => runCollection("public", "library", none.ctx, none.folders));
-        const one = setup(QUERIES, [judged("judge-a", QRELS[0]), judged("judge-a", QRELS[1]), ...QRELS.slice(2)]);
+        const one = setup(QUERIES, QRELS.map((g) => judged("judge-a", g)));
         await quiet(() => runCollection("public", "library", one.ctx, one.folders));
       } finally {
         console.error = error;
       }
       expect(warnings).toEqual([]);
+    });
+
+    test("warns when one judge's grades sit beside rows that record none, and not once those pairs are graded again", async () => {
+      const { error } = console;
+      const warnings: string[] = [];
+      console.error = (...a: unknown[]) => void warnings.push(a.join(" "));
+      try {
+        const beside = setup(QUERIES, [judged("judge-a", QRELS[0]), judged("judge-a", QRELS[1]), ...QRELS.slice(2)]);
+        await quiet(() => runCollection("public", "library", beside.ctx, beside.folders));
+        const again = setup(QUERIES, [...QRELS, ...QRELS.map((g) => judged("judge-a", g))]); // every pair graded again by one judge: the rows before it are history
+        await quiet(() => runCollection("public", "library", again.ctx, again.folders));
+      } finally {
+        console.error = error;
+      }
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(`holds grades from 1 judge (judge-a), and ${QRELS.length - 2} rows that record no judge`);
     });
   });
 

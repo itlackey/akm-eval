@@ -60,7 +60,7 @@ One JSON object per line, one per pair of a task query and an asset.
 
 An asset is relevant from grade 2.
 
-The last four fields are the provenance of a grade. `label` writes them on every row it appends, and a row without them is read as before. The 1,521 rows made on 2026-10-05, below, have none: they were all graded by one judge, `chat/qwen3.8-27b`, with `umbrela-akm-v1`, and nothing in the rows says so. A pair whose asset has another `asset_sha256` today is graded again, and its new row follows the old one (a pair that appears twice keeps its last grade). A pair without a digest is never graded again. `run` warns once when the rows name more than one judge or prompt: a second judge's grades do not mix cleanly with the first's.
+The last four fields are the provenance of a grade. `label` writes them on every row it appends, and a row without them is read as before. The 1,521 rows made on 2026-10-05, below, have none: they were all graded by one judge, `chat/qwen3.8-27b`, with `umbrela-akm-v1`, and nothing in the rows says so. A pair whose asset has another `asset_sha256` today is graded again, and its new row follows the old one (a pair that appears twice keeps its last grade). A pair without a digest is never graded again. `run` warns once when the rows name more than one judge or prompt, or one judge beside rows that name none: the first grade that `label` appends to this file is a second judge's beside these 1,521, and a second judge's grades do not mix cleanly with the first's. The rows count by the last row of each pair, so grading a pair again clears its old row from the warning.
 
 ### How they were made
 

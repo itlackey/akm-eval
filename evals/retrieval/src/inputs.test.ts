@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { filesSha256, filesUnder, inFolder, publicInputs, publicInputsSha256, readGenerated, readSeed, staleAssets } from "./inputs.ts";
+import { dirname, join, resolve } from "node:path";
+import { sha256Files } from "../../../lib/provenance.ts";
+import { REWRITE_CODE, filesSha256, filesUnder, inFolder, publicInputs, publicInputsSha256, readGenerated, readSeed, rewriteSha256, staleAssets } from "./inputs.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -101,14 +102,24 @@ describe("readSeed", () => {
   });
 });
 
+describe("rewriteSha256", () => {
+  test("is one digest over the rewrite, its lexicon and generate, read from this repository", () => {
+    const root = resolve(import.meta.dir, "..", "..", "..");
+    expect(REWRITE_CODE).toEqual([join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts")]);
+    expect(rewriteSha256()).toMatch(/^[0-9a-f]{64}$/);
+    expect(rewriteSha256()).toBe(inFolder(root, () => sha256Files(REWRITE_CODE)));
+    expect(rewriteSha256()).toBe(rewriteSha256()); // the working folder is put back
+  });
+});
+
 describe("readGenerated and staleAssets", () => {
-  const made = (inputs: string) => JSON.stringify({ seed: "7", inputs_sha256: inputs, rewrite: "lib/rewrite" });
+  const made = (inputs: string, rewrite = rewriteSha256()) => JSON.stringify({ seed: "7", inputs_sha256: inputs, rewrite });
 
   test("read generated.json when it is in the format, and nothing when it is not", () => {
     const assets = tmp();
     expect(readGenerated(assets)).toBeUndefined();
-    put(assets, { "generated.json": made("abc") });
-    expect(readGenerated(assets)).toEqual({ seed: "7", inputs_sha256: "abc", rewrite: "lib/rewrite" });
+    put(assets, { "generated.json": made("abc", "def") });
+    expect(readGenerated(assets)).toEqual({ seed: "7", inputs_sha256: "abc", rewrite: "def" });
     for (const bad of ["{oops", "[]", JSON.stringify({ seed: 7, inputs_sha256: "abc", rewrite: "x" }), JSON.stringify({ seed: "7" })]) {
       put(assets, { "generated.json": bad });
       expect(readGenerated(assets)).toBeUndefined();
@@ -127,5 +138,22 @@ describe("readGenerated and staleAssets", () => {
     put(root, { "evals/retrieval/assets/qrels.jsonl": "r\nmore\n" });
     expect(staleAssets(assets, root, "private/retrieval/assets")).toContain("were made from public inputs that have changed since");
     expect(staleAssets(assets, root, "private/retrieval/assets")).toEndWith("./generate-assets --only retrieval");
+  });
+
+  test("refuse assets made by another rewrite, such as a changed lib/rewrite, lexicon or pin logic, or by a generate that wrote its name", () => {
+    const root = tmp();
+    put(root, REPO);
+    const assets = join(root, "private", "retrieval", "assets");
+    put(assets, { "generated.json": made(publicInputsSha256(root)) });
+    expect(staleAssets(assets, root)).toBeUndefined();
+    for (const other of ["0".repeat(64), "lib/rewrite"]) {
+      put(assets, { "generated.json": made(publicInputsSha256(root), other) });
+      expect(staleAssets(assets, root, "private/retrieval/assets")).toBe(
+        "the private assets in private/retrieval/assets/ were made by a rewrite that has changed since: lib/rewrite, its lexicon or the tools that generate pins. Make them again with: ./generate-assets --only retrieval",
+      );
+    }
+    // the inputs are checked first: assets made from other inputs by another rewrite say so about the inputs
+    put(assets, { "generated.json": made("not-the-digest", "0".repeat(64)) });
+    expect(staleAssets(assets, root)).toContain("were made from public inputs that have changed since");
   });
 });

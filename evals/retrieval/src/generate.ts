@@ -22,7 +22,7 @@ import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { TOOLS } from "../../../lib/rewrite/lexicon.ts";
 import * as akm from "./akm.ts";
-import { GENERATED, type Generated, filesUnder, publicInputsSha256 } from "./inputs.ts";
+import { GENERATED, type Generated, filesUnder, publicInputsSha256, rewriteSha256 } from "./inputs.ts";
 import { type Qrel, type Query, RELEVANT, parseQrels, parseQueries } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -282,7 +282,9 @@ export async function generate(opts: Options): Promise<Result> {
   const root = opts.root ?? ROOT;
   const out = resolve(opts.out);
   const staging = join(out, ".staging");
-  const inputs = publicInputsSha256(root); // before anything is read: an input that changes during the run makes the assets stale, not fresh
+  // Before anything is read or run: an input or a rewrite that changes during the run makes the assets stale, not fresh.
+  const inputs = publicInputsSha256(root);
+  const code = rewriteSha256();
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
   try {
@@ -290,7 +292,7 @@ export async function generate(opts: Options): Promise<Result> {
     for (const c of collectionsOf(root)) collections.push({ name: c.name, target: c.target, ...(await makeCollection(c, staging, opts.seed)) });
     const installed = collections.every((c) => c.found.length === 0);
     if (installed) {
-      const made: Generated = { seed: opts.seed, inputs_sha256: inputs, rewrite: "lib/rewrite" };
+      const made: Generated = { seed: opts.seed, inputs_sha256: inputs, rewrite: code };
       writeFileSync(join(staging, "assets", GENERATED), `${JSON.stringify(made, null, 2)}\n`);
       install(staging, out);
     }

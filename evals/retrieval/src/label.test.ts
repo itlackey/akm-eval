@@ -686,6 +686,23 @@ describe("grading a pair again, and the judges of a set", () => {
     const same = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r", judge: "the-model" }], ANSWERS);
     expect((await printed(() => labelCollection("public", same.ctx(judge), same.folders))).err).toEqual([]);
   });
+
+  test("warns when the qrels have grades that record no judge, as the library's from before label wrote one do", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r" }], ANSWERS);
+    const { err } = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(err.join("\n")).toContain("assets/qrels.jsonl has 1 grades that record no judge, and this run grades with the-model. Grades of different judges do not mix cleanly");
+    const both = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r" }, { id: "q1", ref: "knowledge/c", grade: 0, reason: "r", judge: "the-old-judge" }], ANSWERS);
+    expect((await printed(() => labelCollection("public", both.ctx(stubJudge({}).judge), both.folders))).err.join("\n")).toContain("has grades by the-old-judge and 1 grades that record no judge, and this run grades with the-model");
+  });
+
+  test("does not warn of a judge whose grade this run has replaced by grading the pair again", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/a", grade: 2, reason: "r", judge: "the-old-judge", asset_sha256: "not-the-digest" }], ANSWERS);
+    const first = await printed(() => labelCollection("public", set.ctx(stubJudge({ "knowledge/a": 3 }).judge), set.folders));
+    expect(first.err.join("\n")).toContain("has grades by the-old-judge");
+    expect(lastGrade(set)).toEqual({ "knowledge/a": 3 });
+    const second = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(second.err).toEqual([]);
+  });
 });
 
 describe("the command", () => {
