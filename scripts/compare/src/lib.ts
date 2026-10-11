@@ -1,10 +1,11 @@
 // The compare tool's logic, without the command line: reading results folders, the per-case verdict of each eval, the paired comparison of
-// two runs (flips, a sign test, a paired bootstrap on each eval's metrics), the flip rate of the repeats of one run, and the reports.
-// See ../README.md.
+// two runs, or of two sets of repeats pooled by case (flips, a sign test, a paired bootstrap on each eval's metrics), the flip rate of the
+// repeats of one run, and the reports. What two runs may differ in is the policy of policy.ts. See ../README.md.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
+import { EVALS, EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
+import { AXES, type Axis, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "./policy.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 const EPS = 1e-9;
@@ -124,6 +125,7 @@ const distill: Adapter = (rows) =>
     rows.map((r) => (r.verdict === "error" ? unit(r, null, "error", r.class) : unit(r, verdict(r.verdict === "good" || r.verdict === "right"), `${r.verdict} (${r.outcome})`, r.class, r.verdict === "wrong"))),
     [
       { path: "good_lessons.rate", of: share((r) => r.verdict === "good", (r) => r.expect === "lesson") },
+      { path: "lesson_updates.rate", of: share((r) => r.verdict === "right", (r) => r.expect === "update") },
       { path: "wrong_lessons.rate", of: share((r) => r.verdict === "wrong", (r) => r.expect === "none") },
     ],
   );
@@ -157,12 +159,14 @@ const promotion: Adapter = (rows) => {
 const judgeGate: Adapter = (rows) => {
   const passed = (r: Row) => r.outcome === "pass";
   const good = (r: Row) => r.label === "good";
+  const bad = (severity: string) => (r: Row) => !good(r) && r.severity === severity;
   return oneView(
     rows.map((r) => (r.outcome === "error" ? unit(r, null, "error", r.set) : unit(r, verdict(good(r) ? passed(r) : !passed(r)), String(r.outcome), r.set, !good(r) && passed(r)))),
     [
       { path: "precision.value", of: share(good, passed) },
       { path: "good.rate", of: share(passed, good) },
-      { path: "bad.rate", of: share(passed, (r) => !good(r)) },
+      { path: "bad_harmful.rate", of: share(passed, bad("harmful")) },
+      { path: "bad_churn.rate", of: share(passed, bad("churn")) },
     ],
   );
 };
@@ -280,6 +284,10 @@ export interface RunInfo {
   timeout_ms: number | null;
   limit: number | null;
   git_commit: string | null;
+  /** The digest of the eval's code and of the cases, for the summaries that record them. */
+  harness_sha256: string | null;
+  assets_sha256: string | null;
+  status: string | null;
   n_cases: number;
   n_errored: number | null;
 }
@@ -301,45 +309,73 @@ export function infoOf(run: Run): RunInfo {
     timeout_ms: num(s.timeout_ms),
     limit: num(s.limit),
     git_commit: str(s.git_commit),
+    harness_sha256: str(s.harness_sha256),
+    assets_sha256: str(s.assets_sha256),
+    status: str(s.status),
     n_cases: run.rows.length,
     n_errored: num(s.n_errored),
   };
 }
 
-/** What the two runs' summaries say about their cases and how they were made. A different akm build is the treatment, so it is not a reason to refuse. */
-export function refusals(a: Run, b: Run): string[] {
-  const out: string[] = [];
-  const [x, y] = [a.summary, b.summary];
-  const same = (what: string, p: unknown, q: unknown) => {
-    if ((p ?? null) !== (q ?? null)) out.push(`${what} differs: ${p ?? "none"} in A, ${q ?? "none"} in B`);
-  };
-  same("the eval", x.eval, y.eval);
-  if (x.eval === y.eval) {
-    same("the corpus", x.corpus, y.corpus);
-    same("the collection", x.collection, y.collection);
-    same("the mode (consolidate --pool is another set of cases)", x.mode, y.mode);
-    same("the akm version", x.akm_version, y.akm_version);
-    // Summaries that record what the cases were made from (the hash of the assets, the private seed) say when two runs had other cases.
-    if (typeof x.assets_sha256 === "string" && typeof y.assets_sha256 === "string") same("the hash of the assets", x.assets_sha256, y.assets_sha256);
-    if (x.seed != null && y.seed != null) same("the seed of the private assets", x.seed, y.seed);
-  }
-  return out;
+// ---- the policy ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The axes B may differ from A on when none is declared: the config and the model, the settings of one build. It is what compare did before
+ * it had a --treatment: a different strategy, config patch or model is what is being compared, and a different akm build is not, so it
+ * needs `--treatment build`.
+ */
+export const DEFAULT_TREATMENT: Axis[] = ["config", "model"];
+
+/** A folder's name, which tells the runs of a side apart. */
+const nameOf = (run: Run): string => basename(run.dir);
+const byDir = (x: Run, y: Run): number => (x.dir < y.dir ? -1 : x.dir > y.dir ? 1 : 0);
+
+/**
+ * The policy over the runs of both sides (see policy.ts): each axis that is not the treatment must be the same in every run of both, and
+ * an axis whose evidence a run lacks is a gap. `a` and `b` are the runs of each side; a single run is a side of one.
+ */
+export function policyOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREATMENT): PolicyResult {
+  const members = (side: string, runs: Run[]) => [...runs].sort(byDir).map((r) => ({ side, name: nameOf(r), identity: identityOf(r.summary) }));
+  const unrecorded = EVALS[String(a[0]?.summary.eval)]?.unrecorded ?? [];
+  return checkMembers([...members("A", a), ...members("B", b)], treatment, unrecorded);
 }
 
-/** Everything that differs between two runs' settings, which is the treatment being compared. */
+/**
+ * What stands in the way of comparing the runs of A with those of B, case by case: the eval, corpus, collection and mode must be the same,
+ * and so must every axis the treatment does not name (the akm, the config, the model, the cases, the eval's code), among the repeats of
+ * a side as well as between the sides. A summary that does not record the evidence for an axis is not refused: see `exploratoryOf`.
+ */
+export function refusals(a: Run, b: Run, treatment: Axis[] = DEFAULT_TREATMENT): string[] {
+  return refusalsOf([a], [b], treatment);
+}
+
+export function refusalsOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREATMENT): string[] {
+  const found = policyOf(a, b, treatment).mismatches;
+  // Runs of two evals differ in a great deal else, which says nothing more.
+  const kind = found.filter((f) => f.field === "eval");
+  return messages(kind.length > 0 ? kind : found);
+}
+
+/** Everything that differs between two runs' settings. Which of these may is the treatment's: see `policyOf`. */
 export function differences(a: RunInfo, b: RunInfo): { field: string; a: unknown; b: unknown }[] {
   return (["model", "akm_build", "akm_bin", "strategy", "config_patch", "timeout_ms", "limit", "git_commit"] as const)
     .filter((f) => a[f] !== b[f])
     .map((f) => ({ field: f, a: a[f], b: b[f] }));
 }
 
-/** Notes on a run that may make its numbers mean less than they look. */
-function runWarnings(run: Run, who: string): string[] {
-  const s = run.summary;
+/**
+ * Why a comparison is exploratory, and so no conclusion: a run did not complete (it was cut short, its summary does not say it finished, it ran
+ * fewer cases than the eval has, results are missing from it), or the policy lacks the evidence that the runs differ only in the treatment.
+ */
+export function exploratoryOf(sides: ReadonlyArray<readonly [string, Run[]]>, policy: PolicyResult): string[] {
   const out: string[] = [];
-  if (s.status === "aborted") out.push(`${who} was cut short${typeof s.aborted_reason === "string" ? `: ${s.aborted_reason}` : ""}`);
-  else if (num(s.n_run) !== null && num(s.n_cases) !== null && (s.n_run as number) < (s.n_cases as number) && s.limit == null) out.push(`${who} ran ${s.n_run} of ${s.n_cases} cases`);
-  return out;
+  for (const [side, runs] of sides) {
+    for (const run of [...runs].sort(byDir)) {
+      const inc = incompleteOf(run.summary);
+      if (inc) out.push(`${runs.length === 1 && side.length === 1 ? side : `${side}'s run ${nameOf(run)}`} ${incompleteClause(inc)}`);
+    }
+  }
+  return [...out, ...messages(policy.gaps)];
 }
 
 // ---- statistics -----------------------------------------------------------------------------------------------------------
@@ -399,21 +435,36 @@ export interface Estimate {
   used: number;
 }
 
-/** B minus A on the paired cases, and its percentile interval over resamples of the cases, the same case drawn for both runs. */
-export function pairedBootstrap(a: Unit[], b: Unit[], of: Metric["of"], indexes: Uint32Array, resamples: number): Estimate {
-  const n = a.length;
-  const [a0, b0] = [of(a), of(b)];
+/**
+ * B minus A on the paired cases, and its percentile interval over resamples of the cases, the same case drawn for both sides. Each side is
+ * the runs of one configuration, `side[run][case]` (undefined where a run has no verdict for the case). The metric of a side is the mean,
+ * over its runs, of the eval's metric on the runs' units of the drawn cases, so the case is the resampling unit and the order of the runs
+ * changes nothing. A single run a side is the plain paired bootstrap.
+ */
+export function setBootstrap(a: (Unit | undefined)[][], b: (Unit | undefined)[][], of: Metric["of"], indexes: Uint32Array, resamples: number): Estimate {
+  const n = a[0]?.length ?? 0;
+  /** The mean over the runs of the metric on the cases `pick` draws; the values are added in order of size, so the sum does not depend on the order of the runs. */
+  const pooled = (side: (Unit | undefined)[][], pick: (i: number) => number): number | null => {
+    const values: number[] = [];
+    for (const run of side) {
+      const xs: Unit[] = [];
+      for (let i = 0; i < n; i++) {
+        const u = run[pick(i)];
+        if (u !== undefined) xs.push(u);
+      }
+      const v = of(xs);
+      if (v !== null) values.push(v);
+    }
+    values.sort((p, q) => p - q);
+    return values.length === 0 ? null : values.reduce((s, x) => s + x, 0) / values.length;
+  };
+  const [a0, b0] = [pooled(a, (i) => i), pooled(b, (i) => i)];
   const out: Estimate = { a: a0, b: b0, delta: a0 === null || b0 === null ? null : b0 - a0, lo: null, hi: null, used: 0 };
   if (out.delta === null || n === 0) return out;
-  const [xa, xb] = [new Array<Unit>(n), new Array<Unit>(n)];
   const deltas: number[] = [];
   for (let r = 0; r < resamples; r++) {
-    for (let i = 0; i < n; i++) {
-      const k = indexes[r * n + i];
-      xa[i] = a[k];
-      xb[i] = b[k];
-    }
-    const [sa, sb] = [of(xa), of(xb)];
+    const pick = (i: number) => indexes[r * n + i];
+    const [sa, sb] = [pooled(a, pick), pooled(b, pick)];
     if (sa !== null && sb !== null) deltas.push(sb - sa);
   }
   out.used = deltas.length;
@@ -424,6 +475,9 @@ export function pairedBootstrap(a: Unit[], b: Unit[], of: Metric["of"], indexes:
   }
   return out;
 }
+
+/** B minus A on the paired cases of two runs: `setBootstrap` of a run a side. */
+export const pairedBootstrap = (a: Unit[], b: Unit[], of: Metric["of"], indexes: Uint32Array, resamples: number): Estimate => setBootstrap([a], [b], of, indexes, resamples);
 
 /** Better when the interval lies wholly on the better side of zero, worse when wholly on the other, else the same. */
 export function signalOf(dir: Dir, e: Pick<Estimate, "delta" | "lo" | "hi">): Signal {
@@ -478,7 +532,7 @@ export interface ViewReport {
   binary: boolean;
   n_a: number;
   n_b: number;
-  /** Cases both runs gave a verdict. Everything below is over these. */
+  /** Cases both sides gave a verdict, in at least one run each. Everything below is over these. */
   n_paired: number;
   only_a: string[];
   only_b: string[];
@@ -498,14 +552,23 @@ export interface PairReport {
   corpus: string | null;
   collection: string | null;
   pool: boolean;
+  /** The first run of each side, by folder name. With one run a side, the runs. */
   a: RunInfo;
   b: RunInfo;
+  /** Every run of each side: one for a plain comparison, the repeats of a configuration for a comparison of two sets. */
+  a_runs: RunInfo[];
+  b_runs: RunInfo[];
+  /** The axes B may differ from A on (see policy.ts), and what differs on them. Every other axis was checked to be the same. */
+  treatment: Axis[];
+  treated: string[];
   /** The settings that differ: what B changed. */
   differences: { field: string; a: unknown; b: unknown }[];
+  /** Why this comparison is no conclusion: a run did not complete, or the summaries lack the evidence that the axes outside the treatment match. Empty when it may be used for one. */
+  exploratory: string[];
   options: Options;
   warnings: string[];
   views: ViewReport[];
-  /** Metrics of EVAL_METRICS that are not a per-case quantity: from the two summaries, with no interval. */
+  /** Metrics of EVAL_METRICS that are not a per-case quantity: from the summaries (the mean of the runs of a side), with no interval. */
   summary_only: { path: string; role: MetricSpec["role"]; dir: Dir; a: number | null; b: number | null }[];
 }
 
@@ -520,63 +583,93 @@ function mapOf(view: View, who: string): Map<string, Unit> {
   return m;
 }
 
-function compareView(evalName: string, va: View, vb: View, opts: Options, names: [string, string]): ViewReport {
-  const [ma, mb] = [mapOf(va, names[0]), mapOf(vb, names[1])];
-  const onlyA = [...ma.keys()].filter((id) => !mb.has(id));
-  const onlyB = [...mb.keys()].filter((id) => !ma.has(id));
-  const both = [...ma.keys()].filter((id) => mb.has(id));
-  const noVerdict = { a: both.filter((id) => ma.get(id)!.score === null), b: both.filter((id) => mb.get(id)!.score === null) };
-  const paired = both.filter((id) => ma.get(id)!.score !== null && mb.get(id)!.score !== null);
-  if (paired.length === 0) fail(`the two runs have no case in common that both gave a verdict${va.name ? ` (${va.name})` : ""}: A has ${ma.size} cases, B has ${mb.size}, ${both.length} are in both`);
+const meanOf = (xs: number[]): number => [...xs].sort((p, q) => p - q).reduce((s, x) => s + x, 0) / xs.length;
 
-  const ua = paired.map((id) => ma.get(id)!);
-  const ub = paired.map((id) => mb.get(id)!);
-  const flip = (p: Unit, q: Unit): Flip => ({ id: p.id, group: p.group, a: p.state, b: q.state, delta: round((q.score as number) - (p.score as number), 4) as number });
-  const agree: ViewReport["agree"] = { n: 0, sets: va.binary ? { "right in both": [], "wrong in both": [] } : { unchanged: [] } };
+/**
+ * One table of A's runs against B's. A case's outcome on a side is its mean over the side's runs (those that gave it a verdict), so a case
+ * that is right in two of three repeats scores 2/3, and the order of the runs changes nothing. With one run a side that is the run's verdict.
+ */
+function compareView(evalName: string, va: View[], vb: View[], opts: Options, namesA: string[], namesB: string[]): ViewReport {
+  const [mapsA, mapsB] = [va.map((v, i) => mapOf(v, namesA[i])), vb.map((v, i) => mapOf(v, namesB[i]))];
+  const [idsA, idsB] = [new Set(mapsA.flatMap((m) => [...m.keys()])), new Set(mapsB.flatMap((m) => [...m.keys()]))];
+  // A case's place is its earliest row in any run of its side, so the lists read in the eval's order whatever order the runs are in.
+  const placeIn = (views: View[]) => {
+    const place = new Map<string, number>();
+    for (const v of views) v.units.forEach((u, i) => place.set(u.id, Math.min(place.get(u.id) ?? Infinity, i)));
+    return (x: string, y: string) => (place.get(x) as number) - (place.get(y) as number) || (x < y ? -1 : 1);
+  };
+  const [byA, byB] = [placeIn(va), placeIn(vb)];
+  const onlyA = [...idsA].filter((id) => !idsB.has(id)).sort(byA);
+  const onlyB = [...idsB].filter((id) => !idsA.has(id)).sort(byB);
+  const both = [...idsA].filter((id) => idsB.has(id)).sort(byA);
+  const scores = (maps: Map<string, Unit>[], id: string): number[] => maps.flatMap((m) => (m.get(id)?.score != null ? [m.get(id)!.score as number] : []));
+  const noVerdict = { a: both.filter((id) => scores(mapsA, id).length === 0), b: both.filter((id) => scores(mapsB, id).length === 0) };
+  const paired = both.filter((id) => scores(mapsA, id).length > 0 && scores(mapsB, id).length > 0);
+  if (paired.length === 0) fail(`the two runs have no case in common that both gave a verdict${va[0].name ? ` (${va[0].name})` : ""}: A has ${idsA.size} cases, B has ${idsB.size}, ${both.length} are in both`);
+
+  const binary = va[0].binary;
+  const unitOf = (maps: Map<string, Unit>[], id: string): Unit => maps.find((m) => m.has(id))!.get(id)!;
+  /** What a side did with a case: the run's own words, or for several runs how often it was right. */
+  const stateOf = (maps: Map<string, Unit>[], id: string): string => {
+    const xs = scores(maps, id);
+    if (maps.length === 1) return unitOf(maps, id).state;
+    return binary ? `${xs.filter((x) => x === 1).length}/${xs.length} right` : `ndcg ${meanOf(xs).toFixed(3)} (mean of ${xs.length})`;
+  };
+  const harmOf = (maps: Map<string, Unit>[], id: string): number => {
+    const us = maps.flatMap((m) => (m.get(id)?.score != null ? [m.get(id)!] : []));
+    return us.filter((u) => u.harm).length / us.length;
+  };
+  const flip = (id: string, d: number): Flip => ({ id, group: unitOf(mapsA, id).group, a: stateOf(mapsA, id), b: stateOf(mapsB, id), delta: round(d, 4) as number });
+  const agree: ViewReport["agree"] = { n: 0, sets: binary ? { "right in both": [], "wrong in both": [] } : { unchanged: [] } };
   const better: Flip[] = [];
   const worse: Flip[] = [];
   const appeared: Flip[] = [];
   const cleared: Flip[] = [];
   const groups = new Map<string, GroupReport>();
-  paired.forEach((id, i) => {
-    const [p, q] = [ua[i], ub[i]];
-    const d = (q.score as number) - (p.score as number);
-    const g = groups.get(p.group) ?? { group: p.group, n: 0, agree: 0, better: 0, worse: 0 };
-    groups.set(p.group, g);
+  for (const id of paired) {
+    const [x, y] = [meanOf(scores(mapsA, id)), meanOf(scores(mapsB, id))];
+    const d = y - x;
+    const group = unitOf(mapsA, id).group;
+    const g = groups.get(group) ?? { group, n: 0, agree: 0, better: 0, worse: 0 };
+    groups.set(group, g);
     g.n++;
-    if (Math.abs(d) <= (va.binary ? EPS : opts.tie)) {
+    if (Math.abs(d) <= (binary ? EPS : opts.tie)) {
       agree.n++;
       g.agree++;
-      agree.sets[va.binary ? ((p.score as number) === 1 ? "right in both" : "wrong in both") : "unchanged"].push(id);
+      const set = !binary ? "unchanged" : x > 1 - EPS ? "right in both" : x < EPS ? "wrong in both" : "same rate in both";
+      (agree.sets[set] ??= []).push(id);
     } else if (d > 0) {
-      better.push(flip(p, q));
+      better.push(flip(id, d));
       g.better++;
     } else {
-      worse.push(flip(p, q));
+      worse.push(flip(id, d));
       g.worse++;
     }
-    if (!p.harm && q.harm) appeared.push(flip(p, q));
-    if (p.harm && !q.harm) cleared.push(flip(p, q));
-  });
+    const [ha, hb] = [harmOf(mapsA, id), harmOf(mapsB, id)];
+    if (hb > ha + EPS) appeared.push(flip(id, d));
+    if (ha > hb + EPS) cleared.push(flip(id, d));
+  }
   const bySize = (x: Flip, y: Flip) => Math.abs(y.delta) - Math.abs(x.delta) || (x.id < y.id ? -1 : 1);
-  if (!va.binary) {
+  if (!binary) {
     better.sort(bySize);
     worse.sort(bySize);
   }
 
   const indexes = resampleIndexes(paired.length, opts.resamples, opts.seed);
+  const side = (maps: Map<string, Unit>[]) => maps.map((m) => paired.map((id) => (m.get(id)?.score != null ? m.get(id) : undefined)));
+  const [ua, ub] = [side(mapsA), side(mapsB)];
   const metrics: MetricReport[] = [];
   for (const spec of EVAL_METRICS[evalName]) {
-    const [metricA, metricB] = [va.metrics.find((m) => m.path === spec.path), vb.metrics.find((m) => m.path === spec.path)];
+    const [metricA, metricB] = [va[0].metrics.find((m) => m.path === spec.path), vb[0].metrics.find((m) => m.path === spec.path)];
     if (!metricA || !metricB) continue;
-    const e = pairedBootstrap(ua, ub, metricA.of, indexes, opts.resamples);
+    const e = setBootstrap(ua, ub, metricA.of, indexes, opts.resamples);
     metrics.push({ path: spec.path, role: spec.role, dir: spec.dir, a: round(e.a), b: round(e.b), delta: round(e.delta), ci: e.lo === null || e.hi === null ? null : [round(e.lo) as number, round(e.hi) as number], resamples_used: e.used, signal: signalOf(spec.dir, e) });
   }
   return {
-    view: va.name,
-    binary: va.binary,
-    n_a: ma.size,
-    n_b: mb.size,
+    view: va[0].name,
+    binary,
+    n_a: idsA.size,
+    n_b: idsB.size,
     n_paired: paired.length,
     only_a: onlyA,
     only_b: onlyB,
@@ -585,31 +678,61 @@ function compareView(evalName: string, va: View, vb: View, opts: Options, names:
     better,
     worse,
     sign_test: { better: better.length, worse: worse.length, p: round(signTest(better.length, worse.length), 6) },
-    harm: va.hasHarm ? { appeared, cleared } : null,
+    harm: va[0].hasHarm ? { appeared, cleared } : null,
     by_group: [...groups.values()].sort((x, y) => (x.group < y.group ? -1 : 1)),
     metrics,
   };
 }
 
-/** Refuses two runs that are not of the same eval, corpus and akm version. Compares the cases both ran, one table at a time. */
-export function comparePair(a: Run, b: Run, options: Partial<Options> = {}): PairReport {
-  const opts = { ...DEFAULTS, ...options };
-  if (a.dir === b.dir) fail("A and B are the same folder");
-  const problems = refusals(a, b);
-  if (problems.length > 0) fail(`these two runs cannot be compared case by case: ${problems.join("; ")}.`);
-  const evalName = String(a.summary.eval);
-  const [va, vb] = [viewsOf(a), viewsOf(b)];
-  const warnings = [...runWarnings(a, "A"), ...runWarnings(b, "B")];
+export interface CompareOptions extends Partial<Options> {
+  /** The axes B may differ from A on. Default: the config and the model (see DEFAULT_TREATMENT). */
+  treatment?: Axis[];
+}
+
+/**
+ * Compares two runs of an eval case by case. Refuses runs that are not of the same eval, corpus and collection, or that differ on an axis the
+ * treatment does not name (policy.ts); a run that did not complete, or that lacks evidence for an axis, makes the report exploratory.
+ * Compares the cases both ran, one table at a time.
+ */
+export function comparePair(a: Run, b: Run, options: CompareOptions = {}): PairReport {
+  return compareSets([a], [b], options);
+}
+
+/**
+ * Compares the repeats of one configuration with those of another, case by case. Each case's outcome on a side is its mean over the side's
+ * runs, a metric is the mean of the eval's metric over the runs, and the bootstrap draws cases: so the report is the same whatever order
+ * the runs are given in. Every run of both sides is checked against the policy, not the first of each: the runs of a side must be
+ * repeats of one configuration, and the sides differ only on the treatment.
+ */
+export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions = {}): PairReport {
+  const { treatment = DEFAULT_TREATMENT, ...rest } = options;
+  const opts = { ...DEFAULTS, ...rest };
+  if (runsA.length === 0 || runsB.length === 0) fail("each side needs a run");
+  const [a, b] = [[...runsA].sort(byDir), [...runsB].sort(byDir)];
+  const shared = a.find((x) => b.some((y) => x.dir === y.dir));
+  if (shared) fail(a.length === 1 && b.length === 1 ? "A and B are the same folder" : `A and B share the folder ${shared.dir}`);
+  const policy = policyOf(a, b, treatment);
+  const problems = refusalsOf(a, b, treatment);
+  // A difference in an axis can be the treatment; one in the eval, the corpus or the collection is another set of cases and cannot.
+  const hint = policy.mismatches.every((f) => f.axis !== "scope") ? ` If a difference is what you are measuring, name its axis with --treatment (${AXES.join(", ")}).` : "";
+  if (problems.length > 0) fail(`${a.length === 1 && b.length === 1 ? "these two runs cannot" : "these runs cannot"} be compared case by case: ${problems.join("; ")}.${hint}`);
+  const evalName = String(a[0].summary.eval);
+  const [allA, allB] = [a.map(viewsOf), b.map(viewsOf)];
+  const warnings: string[] = [];
   const views: ViewReport[] = [];
-  for (const x of va) {
-    const y = vb.find((v) => v.name === x.name);
-    if (!y) {
-      warnings.push(`${x.name} is in A and not in B, so it is not compared`);
+  const present = (all: View[][], name: string): View[] | null => {
+    const found = all.map((vs) => vs.find((v) => v.name === name));
+    return found.every((v) => v !== undefined) ? (found as View[]) : null;
+  };
+  for (const x of allA[0]) {
+    const [sa, sb] = [present(allA, x.name), present(allB, x.name)];
+    if (!sa || !sb) {
+      warnings.push(`${x.name} is not in every run of ${sa ? "B" : "A"}, so it is not compared`);
       continue;
     }
-    views.push(compareView(evalName, x, y, opts, [a.dir, b.dir]));
+    views.push(compareView(evalName, sa, sb, opts, a.map((r) => r.dir), b.map((r) => r.dir)));
   }
-  for (const y of vb) if (!va.some((x) => x.name === y.name)) warnings.push(`${y.name} is in B and not in A, so it is not compared`);
+  for (const y of allB[0]) if (!allA[0].some((x) => x.name === y.name)) warnings.push(`${y.name} is in B and not in A, so it is not compared`);
   if (views.length === 0) fail("the two runs have no table of cases in common");
   for (const v of views) {
     const name = v.view ? ` (${v.view})` : "";
@@ -617,17 +740,40 @@ export function comparePair(a: Run, b: Run, options: Partial<Options> = {}): Pai
     if (v.only_a.length > 0 || v.only_b.length > 0) warnings.push(`${plural(v.only_a.length, "case")}${name} ${v.only_a.length === 1 ? "is" : "are"} only in A and ${v.only_b.length} only in B (a different --limit?): they are left out`);
     if (v.no_verdict.a.length > 0 || v.no_verdict.b.length > 0) warnings.push(`${plural(v.no_verdict.a.length, "case")}${name} ${v.no_verdict.a.length === 1 ? "has" : "have"} no verdict in A and ${v.no_verdict.b.length} in B (errors): they are left out`);
   }
-  const [ia, ib] = [infoOf(a), infoOf(b)];
+  const [infosA, infosB] = [a.map(infoOf), b.map(infoOf)];
+  const [ia, ib] = [infosA[0], infosB[0]];
   const diff = differences(ia, ib);
-  if (!diff.some((d) => ["model", "akm_build", "akm_bin", "strategy", "config_patch", "timeout_ms"].includes(d.field))) warnings.push("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs, not a change");
+  if (policy.treated.length === 0 && !diff.some((d) => ["model", "akm_build", "akm_bin", "strategy", "config_patch", "timeout_ms"].includes(d.field))) warnings.push("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs, not a change");
 
   const computed = new Set(views.flatMap((v) => v.metrics.map((m) => m.path)));
-  const known = new Set([...va, ...vb].flatMap((v) => v.metrics.map((m) => m.path)));
+  const known = new Set([...allA.flat(), ...allB.flat()].flatMap((v) => v.metrics.map((m) => m.path)));
+  const pooled = (runs: Run[], path: string): number | null => {
+    const xs = runs.map((r) => num(at(r.summary.metrics, path))).filter((x): x is number => x !== null);
+    return xs.length === 0 ? null : meanOf(xs);
+  };
   const summaryOnly = EVAL_METRICS[evalName]
     .filter((spec) => !computed.has(spec.path) && !known.has(spec.path))
-    .map((spec) => ({ path: spec.path, role: spec.role, dir: spec.dir, a: num(at(a.summary.metrics, spec.path)), b: num(at(b.summary.metrics, spec.path)) }))
+    .map((spec) => ({ path: spec.path, role: spec.role, dir: spec.dir, a: pooled(a, spec.path), b: pooled(b, spec.path) }))
     .filter((m) => m.a !== null || m.b !== null);
-  return { mode: "pair", eval: evalName, corpus: str(a.summary.corpus), collection: str(a.summary.collection), pool: a.summary.mode === "pool", a: ia, b: ib, differences: diff, options: opts, warnings, views, summary_only: summaryOnly };
+  return {
+    mode: "pair",
+    eval: evalName,
+    corpus: str(a[0].summary.corpus),
+    collection: str(a[0].summary.collection),
+    pool: a[0].summary.mode === "pool",
+    a: ia,
+    b: ib,
+    a_runs: infosA,
+    b_runs: infosB,
+    treatment,
+    treated: messages(policy.treated),
+    differences: diff,
+    exploratory: exploratoryOf([["A", a], ["B", b]], policy),
+    options: opts,
+    warnings,
+    views,
+    summary_only: summaryOnly,
+  };
 }
 
 // ---- the repeats of one run ------------------------------------------------------------------------------------------------
@@ -719,6 +865,8 @@ export interface RepeatsReport {
   pool: boolean;
   runs: RunInfo[];
   options: { tie: number };
+  /** Why the runs are no conclusion: one did not complete, or the summaries lack the evidence that every axis is the same in all of them. Empty when they may be used for one. */
+  exploratory: string[];
   warnings: string[];
   views: RepeatsViewReport[];
 }
@@ -735,26 +883,21 @@ function spreadOf(values: (number | null)[]): Omit<SpreadReport, "path" | "role"
   return { values: values.map((v) => round(v)), mean: round(mean), sd: round(sd), min: round(Math.min(...xs)), max: round(Math.max(...xs)), pairwise_spread: pairs === 0 ? null : round(total / pairs) };
 }
 
-/** The settings runs must share to be repeats of one configuration. */
-const SAME_FOR_REPEATS = ["model", "akm_build", "strategy", "config_patch", "limit", "timeout_ms"] as const;
-
-/** Per-case flip rate across runs of one configuration, and with it the noise floor of the eval on this corpus. */
+/**
+ * Per-case flip rate across runs of one configuration, and with it the noise floor of the eval on this corpus. Repeats have no treatment:
+ * every axis of policy.ts (the akm, the config, the model, the cases, the eval's code) must be the same in every run, and a run is refused
+ * that differs from the others in any of them, whichever order they come in.
+ */
 export function compareRepeats(runs: Run[], options: Partial<Options> = {}): RepeatsReport {
   const opts = { ...DEFAULTS, ...options };
   if (runs.length < 2) fail("repeats need at least two runs");
   const first = runs[0];
-  for (const run of runs.slice(1)) {
-    const problems = refusals(first, run);
-    if (problems.length > 0) fail(`${first.dir} and ${run.dir} are not repeats of one run: ${problems.join("; ")}.`);
-  }
+  const policy = checkMembers([...runs].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), [], EVALS[String(first.summary.eval)]?.unrecorded ?? []);
+  if (policy.mismatches.length > 0) fail(`these runs are not repeats of one configuration: ${messages(policy.mismatches).join("; ")}.`);
   const infos = runs.map(infoOf);
-  for (const f of SAME_FOR_REPEATS) {
-    const bad = infos.findIndex((i) => i[f] !== infos[0][f]);
-    if (bad > 0) fail(`${infos[0].dir} and ${infos[bad].dir} are not repeats of one configuration: ${f} is ${infos[0][f] ?? "none"} in one and ${infos[bad][f] ?? "none"} in the other.`);
-  }
   const evalName = String(first.summary.eval);
   const allViews = runs.map(viewsOf);
-  const warnings = runs.flatMap((r, i) => runWarnings(r, `run ${i + 1} (${r.dir})`));
+  const warnings: string[] = [];
   const views: RepeatsViewReport[] = [];
   for (const base of allViews[0]) {
     const perRun = allViews.map((vs) => vs.find((v) => v.name === base.name));
@@ -811,7 +954,7 @@ export function compareRepeats(runs: Run[], options: Partial<Options> = {}): Rep
   }
   if (views.length === 0) fail("the runs have no table of cases in common");
   for (const v of views) if (v.n_compared === 0) fail(`no case has a verdict in two of the runs${v.view ? ` (${v.view})` : ""}`);
-  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, warnings, views };
+  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, exploratory: exploratoryOf([["the runs", runs]], policy), warnings, views };
 }
 
 // ---- the reports -------------------------------------------------------------------------------------------------------------
@@ -855,12 +998,21 @@ const runTable = (infos: RunInfo[], heads: string[]): string[] => {
 
 const where = (r: { eval: string; corpus: string | null; collection: string | null; pool: boolean }): string => `${r.eval}${r.pool ? " --pool" : ""} (${[r.corpus, r.collection && r.collection !== r.corpus ? r.collection : null].filter(Boolean).join(" ")})`;
 
+/** The banner of a report that is no conclusion. */
+function exploratoryBanner(reasons: string[]): string[] {
+  if (reasons.length === 0) return [];
+  return [`> **Exploratory.** This is not a conclusion, and an automated decision must not use it: ${reasons.join("; ")}.`, ""];
+}
+
 export function renderPair(r: PairReport): string {
-  const out = [`# Compare ${where(r)}: A and B`, "", ...runTable([r.a, r.b], ["A", "B"]), ""];
+  const sets = r.a_runs.length > 1 || r.b_runs.length > 1;
+  const heads = sets ? [...r.a_runs.map((_, i) => `A r${i + 1}`), ...r.b_runs.map((_, i) => `B r${i + 1}`)] : ["A", "B"];
+  const out = [`# Compare ${where(r)}: A and B`, "", ...exploratoryBanner(r.exploratory), ...runTable(sets ? [...r.a_runs, ...r.b_runs] : [r.a, r.b], heads), ""];
   out.push(r.differences.length === 0 ? "A and B have the same settings." : `B differs from A in ${r.differences.map((d) => `${d.field} (${d.a ?? "none"} → ${d.b ?? "none"})`).join(", ")}.`, "");
+  out.push(`Treatment: ${r.treatment.join(", ")}. Nothing else may differ between A and B${sets ? ", or among the repeats of one side" : ""}.${r.treated.length > 0 ? ` They differ in: ${r.treated.join("; ")}.` : ""}`, "");
   for (const w of r.warnings) out.push(`> ${w}`);
   if (r.warnings.length > 0) out.push("");
-  out.push(`Everything is B against A, over the cases both runs gave a verdict. The interval is a paired bootstrap over those cases (${r.options.resamples} resamples, seed ${r.options.seed}, 95%): the same cases are drawn for A and B. ↑ higher is better, ↓ lower is better. A harm metric is one that must not rise; the Harm section lists the cases where it did.${r.views.some((v) => !v.binary) ? ` A score counts as changed when it moves by more than ${r.options.tie}.` : ""}`, "");
+  out.push(`Everything is B against A, over the cases both sides gave a verdict. The interval is a paired bootstrap over those cases (${r.options.resamples} resamples, seed ${r.options.seed}, 95%): the same cases are drawn for A and B.${sets ? " A case is scored by its mean over the repeats of a side, and a metric is the mean of the eval's metric over them, so the order of the repeats does not matter." : ""} ↑ higher is better, ↓ lower is better. A harm metric is one that must not rise; the Harm section lists the cases where it did.${r.views.some((v) => !v.binary) ? ` A score counts as changed when it moves by more than ${r.options.tie}.` : ""}`, "");
   for (const v of r.views) {
     const name = v.view ? v.view : "cases";
     out.push(`## ${name}`, "");
@@ -896,7 +1048,7 @@ export function renderPair(r: PairReport): string {
 }
 
 export function renderRepeats(r: RepeatsReport): string {
-  const out = [`# Repeats of ${where(r)}: ${r.runs.length} runs`, "", ...runTable(r.runs, r.runs.map((_, i) => `r${i + 1}`)), ""];
+  const out = [`# Repeats of ${where(r)}: ${r.runs.length} runs`, "", ...exploratoryBanner(r.exploratory), ...runTable(r.runs, r.runs.map((_, i) => `r${i + 1}`)), ""];
   for (const w of r.warnings) out.push(`> ${w}`);
   if (r.warnings.length > 0) out.push("");
   out.push(`A case flips between two runs when its verdict differs${r.views.some((v) => !v.binary) ? ` (a score moving by more than ${r.options.tie}, for ndcg)` : ""}. A case's flip rate is the share of the pairs of runs in which it does. The noise floor is the mean flip rate over the cases: with it, about that share of the cases changes verdict between two runs of the same configuration with nothing changed.`, "");

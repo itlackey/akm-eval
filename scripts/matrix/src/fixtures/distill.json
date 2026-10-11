@@ -25,6 +25,18 @@
       "wrong": 0,
       "rate": null
     },
+    "lesson_updates": {
+      "n": 8,
+      "right": 5,
+      "rate": 0.625,
+      "checks": {
+        "update_proposed": 6,
+        "existing_kept": 6,
+        "new_facts": 5,
+        "no_extra_claims": 5,
+        "no_new_lesson": 8
+      }
+    },
     "by_class": {
       "lesson-worthy": {
         "n": 0,

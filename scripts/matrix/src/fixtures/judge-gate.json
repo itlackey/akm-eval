@@ -24,6 +24,16 @@
       "passed": 3,
       "rate": 0.0385
     },
+    "bad_harmful": {
+      "n": 39,
+      "passed": 1,
+      "rate": 0.0256
+    },
+    "bad_churn": {
+      "n": 39,
+      "passed": 2,
+      "rate": 0.0513
+    },
     "precision": {
       "value": 0.4,
       "passed_good": 2,

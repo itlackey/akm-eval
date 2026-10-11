@@ -12,11 +12,14 @@ import { metrics as promotionMetrics } from "../../../evals/promotion/src/lib.ts
 import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/lib.ts";
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
 import { EVAL_METRICS } from "../../matrix/src/lib.ts";
-import { CompareError, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, differences, findRepeats, infoOf, loadRun, pairedBootstrap, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, signTest, signalOf, viewsOf, type PairReport, type Unit } from "./lib.ts";
+import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
+import { type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 const fx = (...parts: string[]): string => join(FIXTURES, ...parts);
-const pair = (name: string, options = {}): PairReport => comparePair(loadRun(fx(name, "before")), loadRun(fx(name, "after")), options);
+/** The fixtures are a run before and a run after a change to the akm build, so their treatment is the build. */
+const BUILD: Axis[] = ["build"];
+const pair = (name: string, options: CompareOptions = {}): PairReport => comparePair(loadRun(fx(name, "before")), loadRun(fx(name, "after")), { treatment: BUILD, ...options });
 const view = (r: PairReport, name = "") => r.views.find((v) => v.view === name)!;
 const ids = (flips: { id: string }[]): string[] => flips.map((f) => f.id);
 const metric = (r: PairReport, path: string, name = "") => view(r, name).metrics.find((m) => m.path === path)!;
@@ -163,10 +166,10 @@ describe("the per-case reading of each eval agrees with the eval's own metrics",
   for (const side of ["before", "after"]) {
     test(`nightly ${side}`, () => expect(compare("nightly", side, nightlyMetrics(rows("nightly", side) as never, [], [], { calls: 0, failures: 0 }))).toBe(2));
     test(`consolidate ${side}`, () => expect(compare("consolidate", side, consolidateMetrics(rows("consolidate", side) as never))).toBe(3));
-    test(`distill ${side}`, () => expect(compare("distill", side, distillMetrics(rows("distill", side) as never))).toBe(2));
+    test(`distill ${side}`, () => expect(compare("distill", side, distillMetrics(rows("distill", side) as never))).toBe(3));
     test(`reflect ${side}`, () => expect(compare("reflect", side, reflectMetrics(rows("reflect", side) as never))).toBe(3));
     test(`promotion ${side}`, () => expect(compare("promotion", side, promotionMetrics(rows("promotion", side) as never))).toBe(3));
-    test(`judge-gate ${side}`, () => expect(compare("judge-gate", side, judgeGateMetrics(rows("judge-gate", side) as never))).toBe(3));
+    test(`judge-gate ${side}`, () => expect(compare("judge-gate", side, judgeGateMetrics(rows("judge-gate", side) as never))).toBe(4));
     test(`extract ${side}`, () => expect(compare("extract", side, extractMetrics(rows("extract", side) as never))).toBe(3));
     test(`consolidate --pool ${side}`, () => {
       const rs = rows("consolidate-pool", side);
@@ -220,10 +223,11 @@ describe("comparePair", () => {
     expect(r.warnings).toEqual([]);
   });
 
-  test("a different akm build is the treatment, not a reason to refuse", () => {
+  test("a different akm build is the treatment when it is declared, and a refusal when it is not", () => {
     const [a, b] = [loadRun(fx("nightly", "before")), loadRun(fx("nightly", "after"))];
     expect(a.summary.akm_build).not.toBe(b.summary.akm_build);
-    expect(refusals(a, b)).toEqual([]);
+    expect(refusals(a, b, BUILD)).toEqual([]);
+    expect(refusals(a, b)).toEqual(["the akm build differs: release in A, 1a2b3c4 in B", "the akm command (akm_bin) differs: akm in A, bun /work/akm/src/index.ts in B"]); // undeclared, it is a refusal
   });
 
   test("consolidate: a case an error left without a verdict is left out", () => {
@@ -339,7 +343,7 @@ describe("comparePair", () => {
   test("retrieval: a column only one run has is not compared", () => {
     const withSemantic = variant(fx("retrieval", "after"), {});
     writeFileSync(join(withSemantic, "samples.jsonl"), rows("retrieval", "after").map((r) => `${JSON.stringify({ ...r, semantic_search: r.search })}\n`).join(""));
-    const r = comparePair(loadRun(fx("retrieval", "before")), loadRun(withSemantic));
+    const r = comparePair(loadRun(fx("retrieval", "before")), loadRun(withSemantic), { treatment: BUILD });
     expect(r.views.map((v) => v.view)).toEqual(["search", "curate"]);
     expect(r.warnings).toContain("semantic_search is in B and not in A, so it is not compared");
     expect(r.summary_only).toEqual([]);
@@ -369,15 +373,15 @@ describe("comparePair", () => {
   });
 
   test("the folders can be given as the summary.json in them", () => {
-    const r = comparePair(loadRun(fx("judge-gate", "before", "summary.json")), loadRun(fx("judge-gate", "after", "summary.json")));
+    const r = comparePair(loadRun(fx("judge-gate", "before", "summary.json")), loadRun(fx("judge-gate", "after", "summary.json")), { treatment: BUILD });
     expect(r.a.label).toBe("before");
   });
 });
 
 describe("refusals", () => {
-  const message = (a: string, b: string): string => {
+  const message = (a: string, b: string, treatment: Axis[] = DEFAULT_TREATMENT): string => {
     try {
-      comparePair(loadRun(a), loadRun(b));
+      comparePair(loadRun(a), loadRun(b), { treatment });
     } catch (e) {
       expect(e).toBeInstanceOf(CompareError);
       return (e as Error).message;
@@ -406,17 +410,26 @@ describe("refusals", () => {
     expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases) differs: none in A, pool in B");
   });
 
-  test("a different hash of the assets, when both summaries have one", () => {
+  test("a different hash of the cases is a refusal unless the inputs are the treatment, and a missing one makes the report exploratory", () => {
     const x = variant(fx("nightly", "before"), { assets_sha256: "aaa" });
-    expect(message(x, variant(fx("nightly", "after"), { assets_sha256: "bbb" }))).toContain("the hash of the assets differs: aaa in A, bbb in B");
-    expect(message(x, fx("nightly", "after"))).toBe(""); // one without the hash is no reason
+    const y = variant(fx("nightly", "after"), { assets_sha256: "bbb" });
+    expect(message(x, y, BUILD)).toContain("the cases (assets_sha256) differs: aaa in A, bbb in B");
+    expect(message(x, y, ["build", "inputs"])).toBe("");
+    const bare = variant(fx("nightly", "after"), { assets_sha256: null });
+    expect(message(x, bare, BUILD)).toBe(""); // no refusal, but nothing says the cases are the same
+    expect(comparePair(loadRun(x), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in B"]);
+    expect(comparePair(loadRun(variant(fx("nightly", "before"), { assets_sha256: null })), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
   });
 
-  test("a different seed of the private assets, when both summaries have one", () => {
+  test("a different seed of the private assets is a refusal; a private run that records no seed makes the report exploratory", () => {
     const x = variant(fx("nightly", "before"), { corpus: "private", seed: 7 });
-    expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 8 }))).toContain("the seed of the private assets differs: 7 in A, 8 in B");
-    expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }))).toBe("");
-    expect(message(x, variant(fx("nightly", "after"), { corpus: "private" }))).toBe("");
+    expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 8 }), BUILD)).toContain("the seed of the private assets differs: 7 in A, 8 in B");
+    expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }), BUILD)).toBe("");
+    const bare = variant(fx("nightly", "after"), { corpus: "private" });
+    expect(message(x, bare, BUILD)).toBe("");
+    expect(comparePair(loadRun(x), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the seed of the private assets is not recorded in B"]);
+    // a public run has no seed to record
+    expect(comparePair(loadRun(fx("nightly", "before")), loadRun(fx("nightly", "after")), { treatment: BUILD }).exploratory).toEqual([]);
   });
 
   test("every reason is named at once", () => {
@@ -457,21 +470,30 @@ describe("refusals", () => {
 
   test("a pool run that errored has no result", () => {
     const bad = variant(fx("consolidate-pool", "after"), { metrics: null, n_errored: 1, error: "akm improve failed" });
-    expect(() => comparePair(loadRun(fx("consolidate-pool", "before")), loadRun(bad))).toThrow(/the pool run errored: akm improve failed, so it has no result to compare/);
+    expect(() => comparePair(loadRun(fx("consolidate-pool", "before")), loadRun(bad), { treatment: BUILD })).toThrow(/the pool run errored: akm improve failed, so it has no result to compare/);
   });
 
-  test("a run that was cut short is a warning", () => {
+  test("a run that was cut short, or that does not say it finished, makes the report exploratory", () => {
     const cut = variant(fx("consolidate", "after"), { status: "aborted", aborted_reason: "rate limited" });
-    const r = comparePair(loadRun(fx("consolidate", "before")), loadRun(cut));
-    expect(r.warnings).toContain("B was cut short: rate limited");
+    const r = comparePair(loadRun(fx("consolidate", "before")), loadRun(cut), { treatment: BUILD });
+    expect(r.exploratory).toEqual(["B was cut short: rate limited"]);
+    expect(renderPair(r)).toContain("> **Exploratory.** This is not a conclusion, and an automated decision must not use it: B was cut short: rate limited.");
+    expect(r.views[0].metrics.length).toBeGreaterThan(0); // the numbers are still there to read
+    const noStatus = variant(fx("consolidate", "after"), { status: undefined });
+    expect(comparePair(loadRun(fx("consolidate", "before")), loadRun(noStatus), { treatment: BUILD }).exploratory).toEqual(["B is not complete: the summary records no status, so the run is not known to have finished"]);
+    const partial = variant(fx("consolidate", "after"), { n_run: 4 });
+    expect(comparePair(loadRun(fx("consolidate", "before")), loadRun(partial), { treatment: BUILD }).exploratory).toEqual(["B is not complete: it ran 4 of 12 cases"]);
+    const missing = variant(fx("consolidate", "after"), { completion: { expected: 12, completed: 10, failed: 0, missing: 2 } });
+    expect(comparePair(loadRun(fx("consolidate", "before")), loadRun(missing), { treatment: BUILD }).exploratory).toEqual(["B is not complete: 2 of 12 expected results are missing"]);
+    expect(pair("consolidate").exploratory).toEqual([]);
   });
 
   test("runs with the same settings are said to show noise, and few cases are said to be crude", () => {
     const r = comparePair(loadRun(fx("nightly", "noise-r1")), loadRun(fx("nightly", "noise-r2")));
     expect(r.warnings.join("\n")).toContain("shows the noise between two runs");
-    const small = comparePair(loadRun(fx("promotion", "before")), loadRun(fx("promotion", "after")));
+    const small = pair("promotion");
     expect(small.warnings).toContain("only 9 cases were scored in both runs: an interval over so few is crude");
-    expect(comparePair(loadRun(fx("nightly", "before")), loadRun(fx("nightly", "after"))).warnings).toEqual([]);
+    expect(pair("nightly").warnings).toEqual([]);
     const few = [writeRun(join(tmp(), "f1"), { eval: "nightly", corpus: "public", akm_version: "1" }, [{ id: "a", ok: true }, { id: "b", ok: false }]), writeRun(join(tmp(), "f2"), { eval: "nightly", corpus: "public", akm_version: "1", model: "m" }, [{ id: "a", ok: false }, { id: "b", ok: false }, { id: "c", ok: true }])];
     const f = comparePair(loadRun(few[0]), loadRun(few[1]));
     expect(f.warnings.join("\n")).toContain("only 2 cases were scored in both runs");
@@ -543,13 +565,25 @@ describe("repeats", () => {
     expect(strict.views.find((v) => v.view === "search")!.n_unstable).toBe(3);
   });
 
-  test("runs that are not repeats of one configuration are refused", () => {
+  test("runs that are not repeats of one configuration are refused, whichever run differs", () => {
     const a = fx("nightly", "noise-r1");
-    expect(() => compareRepeats([loadRun(a), loadRun(variant(fx("nightly", "noise-r2"), { model: "other" }))])).toThrow(/not repeats of one configuration: model is test-model in one and other in the other/);
-    expect(() => compareRepeats([loadRun(a), loadRun(variant(fx("nightly", "noise-r2"), { akm_build: "abc" }))])).toThrow(/akm_build is none in one and abc in the other/);
-    expect(() => compareRepeats([loadRun(a), loadRun(variant(fx("nightly", "noise-r2"), { akm_version: "0.9.30" }))])).toThrow(/are not repeats of one run: the akm version differs/);
-    expect(() => compareRepeats([loadRun(a), loadRun(fx("reflect", "before"))])).toThrow(/the eval differs/);
+    const refused = (...others: string[]) => {
+      try {
+        compareRepeats([a, ...others].map(loadRun));
+      } catch (e) {
+        expect(e).toBeInstanceOf(CompareError);
+        return (e as Error).message;
+      }
+      return "";
+    };
+    const r2 = fx("nightly", "noise-r2");
+    expect(refused(variant(r2, { model: "other" }))).toContain("the model differs: other in the runs run, test-model in the runs noise-r1");
+    expect(refused(variant(r2, { akm_build: "abc" }))).toContain("the akm build differs: abc in the runs run, release in the runs noise-r1");
+    expect(refused(variant(r2, { akm_version: "0.9.30" }))).toContain("the akm version differs");
+    expect(refused(fx("reflect", "before"))).toContain("the eval differs");
     expect(() => compareRepeats([loadRun(a)])).toThrow("at least two runs");
+    // the differing run is the last of three: every run is checked, not the first against one other
+    expect(refused(r2, variant(fx("nightly", "noise-r3"), { git_commit: "9999999" }))).toContain("the eval's code differs: commit 5d1c0de in the runs noise-r1 and noise-r2, commit 9999999 in the runs run");
   });
 
   test("a case that has a verdict in only one run has no flip rate", () => {
@@ -613,7 +647,7 @@ describe("the command", () => {
 
   test("compares two folders, prints markdown and writes the JSON and markdown files", () => {
     const dir = tmp();
-    const res = run(fx("reflect", "before"), fx("reflect", "after"), "--json", join(dir, "out", "r.json"), "--md", join(dir, "r.md"));
+    const res = run(fx("reflect", "before"), fx("reflect", "after"), "--treatment", "build", "--json", join(dir, "out", "r.json"), "--md", join(dir, "r.md"));
     expect(res.exitCode).toBe(0);
     expect(text(res.stdout)).toContain("# Compare reflect (public): A and B");
     const json = JSON.parse(readFileSync(join(dir, "out", "r.json"), "utf8"));
@@ -623,7 +657,7 @@ describe("the command", () => {
   });
 
   test("--seed and --resamples reach the bootstrap", () => {
-    const res = run(fx("reflect", "before"), fx("reflect", "after"), "--seed", "9", "--resamples", "300", "--json", join(tmp(), "j.json"));
+    const res = run(fx("reflect", "before"), fx("reflect", "after"), "--treatment", "build", "--seed", "9", "--resamples", "300", "--json", join(tmp(), "j.json"));
     expect(res.exitCode).toBe(0);
     expect(text(res.stdout)).toContain("300 resamples, seed 9");
   });
@@ -648,5 +682,315 @@ describe("the command", () => {
       expect(text(res.stderr)).toContain("compare:");
     }
     expect(text(run("--help").stdout)).toContain("Usage: scripts/compare/run A B");
+  });
+});
+
+// ---- the comparison policy (F02, F14, F15) -------------------------------------------------------------------------------------
+
+/** What a summary records of how its run was made, complete, so that two of them are fully identified. */
+const IDENTITY = {
+  eval: "nightly",
+  corpus: "public",
+  status: "complete",
+  aborted_reason: null,
+  akm_version: "0.9.26",
+  akm_bin: "akm",
+  akm_build: null,
+  strategy: "night",
+  config_patch: null,
+  model: "m1",
+  limit: null,
+  seed: null,
+  assets_sha256: "a".repeat(64),
+  git_commit: "5d1c0de",
+  config: { defaults: { llmEngine: "model" }, engines: { model: { kind: "llm", model: "m1", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 120000 } }, improve: { strategies: { night: { processes: { reflect: {} } } } } },
+  engine: { engine: "model", model: "m1", endpoint: "gateway.example.com", temperature: 0, enableThinking: false, timeoutMs: 120000 },
+};
+const member = (side: string, name: string, over: Record<string, unknown> = {}): Member => ({ side, name, identity: identityOf({ ...IDENTITY, ...over }) });
+const found = (r: { mismatches: { message: string }[] }): string[] => r.mismatches.map((f) => f.message);
+
+/** A nightly run of 20 cases of which the first `right` are right, with the identity above and the changes `over`. */
+function nightlyRun(dir: string, right: number, over: Record<string, unknown> = {}, ok?: boolean[]): string {
+  const oks = ok ?? Array.from({ length: 20 }, (_, i) => i < right);
+  const rows = oks.map((o, i) => ({ id: `c${String(i + 1).padStart(2, "0")}`, kind: "pair", ok: o, harm: false, state: o ? "fixed" : "left alone" }));
+  const n = oks.filter(Boolean).length;
+  return writeRun(dir, { ...IDENTITY, n_errored: 0, metrics: { items: { n: 20, ok: n, rate: n / 20 }, harm: { items: 0, outside_changed: 0, lessons_accepted: 0 }, calls: { failures: 0 } }, ...over }, rows);
+}
+
+describe("the comparison policy", () => {
+  test("a treatment is axes separated by commas, and anything else is refused", () => {
+    expect(parseAxes("build")).toEqual(["build"]);
+    expect(parseAxes("model, build")).toEqual(["build", "model"]);
+    expect(() => parseAxes("builds")).toThrow(/one or more of build, config, model, inputs, harness.*; not builds/);
+    expect(() => parseAxes("")).toThrow(/one or more of/);
+  });
+
+  test("the config digest leaves out the model's settings, which are the model axis, and the order of the keys", () => {
+    const base = identityOf(IDENTITY);
+    expect(base.config).toMatch(/^[0-9a-f]{64}$/);
+    const otherModel = { ...IDENTITY.config, engines: { model: { ...IDENTITY.config.engines.model, model: "m2", temperature: 0.7, timeoutMs: 1 } } };
+    expect(configDigest(otherModel)).toBe(base.config);
+    expect(configDigest({ improve: IDENTITY.config.improve, engines: IDENTITY.config.engines, defaults: IDENTITY.config.defaults })).toBe(base.config);
+    expect(configDigest({ ...IDENTITY.config, improve: { strategies: { night: { processes: { reflect: { qualityGate: true } } } } } })).not.toBe(base.config);
+    expect(configDigest(undefined)).toBeNull();
+  });
+
+  test("an axis outside the treatment must be the same: the build, config, model, cases and code each refuse", () => {
+    const refused = (over: Record<string, unknown>, treatment: Axis[] = []) => found(checkMembers([member("A", "a"), member("B", "b", over)], treatment));
+    expect(refused({})).toEqual([]);
+    expect(refused({ akm_version: "0.10.0" })).toEqual(["the akm version differs: 0.9.26 in A, 0.10.0 in B"]);
+    expect(refused({ akm_build: "v0.9.0-beta.60-2648-g9f6ad3461" })).toEqual(["the akm build differs: release in A, v0.9.0-beta.60-2648-g9f6ad3461 in B"]);
+    expect(refused({ strategy: "quick" })).toEqual(["the strategy differs: night in A, quick in B"]);
+    expect(refused({ config_patch: { sha256: "b".repeat(64) } })).toEqual([`the config patch differs: none in A, ${"b".repeat(12)} in B`]);
+    expect(refused({ config: { ...IDENTITY.config, improve: { strategies: {} } } })).toHaveLength(1);
+    expect(refused({ model: "m2" })).toEqual(["the model differs: m1 in A, m2 in B"]);
+    expect(refused({ engine: { ...IDENTITY.engine, temperature: 0.7 } })[0]).toMatch(/^the engine settings .* differs: .*temperature 0.* in A, .*temperature 0.7.* in B$/);
+    expect(refused({ engine: { ...IDENTITY.engine, endpoint: "other.example.com" } })).toHaveLength(1);
+    expect(refused({ engine: { ...IDENTITY.engine, enableThinking: true } })).toHaveLength(1);
+    expect(refused({ engine: { ...IDENTITY.engine, timeoutMs: 60000 } })).toHaveLength(1);
+    expect(refused({ assets_sha256: "c".repeat(64) })).toEqual([`the cases (assets_sha256) differs: ${"a".repeat(12)} in A, ${"c".repeat(12)} in B`]);
+    expect(refused({ git_commit: "9999999" })).toEqual(["the eval's code differs: commit 5d1c0de in A, commit 9999999 in B"]);
+    expect(refused({ harness_sha256: "d".repeat(64) })).toEqual([]); // one side has a digest and the other does not: they fall back to the commit
+  });
+
+  test("a declared axis may differ between the sides, and is listed as the treatment; every other still may not", () => {
+    const r = checkMembers([member("A", "a"), member("B", "b", { akm_version: "0.10.0", akm_build: "b2", model: "m2" })], ["build"]);
+    expect(found(r)).toEqual(["the model differs: m1 in A, m2 in B"]);
+    expect(r.treated.map((f) => f.message)).toEqual(["the akm version differs: 0.9.26 in A, 0.10.0 in B", "the akm build differs: release in A, b2 in B"]);
+    expect(found(checkMembers([member("A", "a"), member("B", "b", { akm_version: "0.10.0", model: "m2" })], ["build", "model"]))).toEqual([]);
+  });
+
+  test("the repeats of one side must agree on every axis, the declared ones too", () => {
+    const members = [member("A", "r1"), member("A", "r2"), member("A", "r3", { akm_build: "other" }), member("B", "r1", { akm_build: "b2" })];
+    const r = checkMembers(members, ["build"]);
+    expect(found(r)).toEqual(["the akm build differs among the repeats of A: release in A r1 and r2, other in A r3"]);
+    // permuting the repeats of a side changes no message
+    const permuted = checkMembers([members[2], members[0], members[1], members[3]], ["build"]);
+    expect(found(permuted)).toEqual(found(r));
+  });
+
+  test("evidence that is missing is a gap, on one side or on neither, never a pass", () => {
+    const gaps = (a: Record<string, unknown>, b: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", b)], []).gaps.map((f) => f.message);
+    expect(gaps({}, {})).toEqual([]);
+    expect(gaps({ assets_sha256: null }, {})).toEqual(["the cases (assets_sha256) is not recorded in A"]);
+    expect(gaps({ assets_sha256: null }, { assets_sha256: null })).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
+    expect(gaps({}, { config: undefined })).toEqual(["the akm config is not recorded in B"]);
+    expect(gaps({ engine: undefined }, {})).toEqual(["the engine settings (temperature, thinking, endpoint host, time limit) is not recorded in A"]);
+    expect(gaps({ corpus: "private" }, { corpus: "private", seed: 3 })).toEqual(["the seed of the private assets is not recorded in A"]);
+    // a declared axis is not checked for evidence
+    expect(checkMembers([member("A", "a", { assets_sha256: null }), member("B", "b")], ["inputs"]).gaps).toEqual([]);
+    // an eval that has no such thing says so
+    expect(checkMembers([member("A", "a", { config: undefined, engine: undefined }), member("B", "b", { config: undefined, engine: undefined })], [], ["config", "engine"]).gaps).toEqual([]);
+  });
+
+  test("the eval's code is identified by a digest when both have one, else by a clean commit; a dirty or missing commit is a gap", () => {
+    const run = (a: Record<string, unknown>, b: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", b)], []);
+    expect(run({ git_commit: "5d1c0de-dirty" }, { git_commit: "5d1c0de-dirty" }).gaps.map((f) => f.message)).toEqual(["the eval's code is not identified in A and B (no harness_sha256, and git_commit is missing or has changes that are not committed)"]);
+    expect(run({ git_commit: undefined }, {}).gaps.map((f) => f.message)).toEqual(["the eval's code is not identified in A (no harness_sha256, and git_commit is missing or has changes that are not committed)"]);
+    expect(run({ git_commit: "unknown" }, {}).gaps).toHaveLength(1);
+    // dirty trees with the same digest of the code are the same code
+    const digest = { harness_sha256: "d".repeat(64), git_commit: "5d1c0de-dirty" };
+    expect(run(digest, digest)).toMatchObject({ gaps: [], mismatches: [] });
+    expect(found(run(digest, { ...digest, harness_sha256: "e".repeat(64) }))).toEqual([`the eval's code differs: digest ${"d".repeat(12)} in A, digest ${"e".repeat(12)} in B`]);
+    // a digest on one side only falls back to the commits
+    expect(run(digest, { git_commit: "5d1c0de" }).gaps).toHaveLength(1);
+    expect(run({ ...digest, git_commit: "5d1c0de" }, { git_commit: "5d1c0de" })).toMatchObject({ gaps: [], mismatches: [] });
+  });
+
+  test("a summary is complete only when it says status complete and nothing is missing from it", () => {
+    expect(incompleteOf({ status: "complete" })).toBeNull();
+    expect(incompleteOf({ status: "complete", completion: { expected: 9, completed: 9, failed: 0, missing: 0 } })).toBeNull();
+    expect(incompleteOf({ status: "aborted", aborted_reason: "rate limited" })).toEqual({ aborted: true, detail: "rate limited" });
+    expect(incompleteOf({ status: "aborted" })).toEqual({ aborted: true, detail: "no reason recorded" });
+    expect(incompleteOf({})?.detail).toContain("records no status");
+    expect(incompleteOf({ status: "running" })?.detail).toBe('the summary\'s status is "running", not "complete"');
+    expect(incompleteOf({ status: "complete", completion: { expected: 9, completed: 7, failed: 0, missing: 2 } })?.detail).toBe("2 of 9 expected results are missing");
+    expect(incompleteOf({ status: "complete", n_run: 3, n_cases: 9 })?.detail).toBe("it ran 3 of 9 cases");
+    expect(incompleteOf({ status: "complete", n_run: 3, n_cases: 9, limit: 3 })).toBeNull();
+  });
+});
+
+describe("a release against a release", () => {
+  const release = (dir: string, right: number, over: Record<string, unknown> = {}) => nightlyRun(join(tmp(), dir), right, { akm_version: "0.9.26", ...over });
+
+  test("with the build declared, two releases with common cases and code compare, and the report says what the treatment was", () => {
+    const [a, b] = [release("a", 8), release("b", 13, { akm_version: "0.10.0", akm_bin: "akm-0.10", akm_build: null })];
+    const r = comparePair(loadRun(a), loadRun(b), { treatment: ["build"] });
+    expect(r.exploratory).toEqual([]);
+    expect(r.treatment).toEqual(["build"]);
+    expect(r.treated).toEqual(["the akm version differs: 0.9.26 in A, 0.10.0 in B", "the akm command (akm_bin) differs: akm in A, akm-0.10 in B"]);
+    expect(r.views[0].better).toHaveLength(5);
+    expect(renderPair(r)).toContain("Treatment: build. Nothing else may differ between A and B. They differ in: the akm version differs");
+  });
+
+  test("without it the comparison is refused, and says which axis to declare", () => {
+    const [a, b] = [release("a", 8), release("b", 13, { akm_version: "0.10.0" })];
+    expect(() => comparePair(loadRun(a), loadRun(b))).toThrow(/the akm version differs: 0.9.26 in A, 0.10.0 in B\. If a difference is what you are measuring, name its axis with --treatment/);
+  });
+
+  test("the model, the cases and the eval's code must still be the same", () => {
+    const base = release("a", 8);
+    const refuse = (over: Record<string, unknown>) => () => comparePair(loadRun(base), loadRun(release("b", 13, { akm_version: "0.10.0", ...over })), { treatment: ["build"] });
+    expect(refuse({ model: "m2" })).toThrow(/the model differs: m1 in A, m2 in B/);
+    expect(refuse({ engine: { ...IDENTITY.engine, temperature: 0.7 } })).toThrow(/the engine settings .* differs/);
+    expect(refuse({ assets_sha256: "c".repeat(64) })).toThrow(/the cases \(assets_sha256\) differs/);
+    expect(refuse({ git_commit: "9999999" })).toThrow(/the eval's code differs: commit 5d1c0de in A, commit 9999999 in B/);
+    expect(refuse({ strategy: "quick" })).toThrow(/the strategy differs/);
+  });
+
+  test("the model and the config may differ when they are the treatment, as they did before there was a flag", () => {
+    const base = release("a", 8);
+    const plain = comparePair(loadRun(base), loadRun(release("b", 13, { model: "m2", strategy: "quick", config_patch: { sha256: "b".repeat(64) } })));
+    expect(plain.treatment).toEqual(["config", "model"]);
+    expect(plain.exploratory).toEqual([]);
+    expect(plain.differences.map((d) => d.field)).toEqual(["model", "strategy", "config_patch"]);
+  });
+
+  test("a partial or aborted comparison, and one that lacks evidence, is exploratory; the numbers are kept", () => {
+    const base = release("a", 8);
+    const partial = comparePair(loadRun(base), loadRun(release("b", 13, { status: "aborted", aborted_reason: "the endpoint went down" })));
+    expect(partial.exploratory).toEqual(["B was cut short: the endpoint went down"]);
+    expect(partial.views[0].metrics.length).toBeGreaterThan(0);
+    const dirty = comparePair(loadRun(release("c", 8, { git_commit: "5d1c0de-dirty" })), loadRun(release("d", 13, { git_commit: "5d1c0de-dirty" })));
+    expect(dirty.exploratory).toEqual(["the eval's code is not identified in A and B (no harness_sha256, and git_commit is missing or has changes that are not committed)"]);
+    expect(renderPair(dirty)).toContain("> **Exploratory.**");
+    const bare = comparePair(loadRun(release("e", 8, { assets_sha256: null })), loadRun(release("f", 13, { assets_sha256: null })));
+    expect(bare.exploratory).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
+  });
+
+  test("a plain two-folder comparison of one build is as it was: no flag, no banner, and the same numbers", () => {
+    const res = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), fx("reflect", "before"), variant(fx("reflect", "before"), { label: "again" })], { stdout: "pipe", stderr: "pipe" });
+    expect(res.exitCode).toBe(0);
+    const out = new TextDecoder().decode(res.stdout);
+    expect(out).toContain("# Compare reflect (public): A and B");
+    expect(out).not.toContain("Exploratory");
+    expect(out).toContain("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs");
+  });
+});
+
+describe("two sets of repeats", () => {
+  // the baseline's three repeats get 8, 12 and 16 of 20 cases right, the config's 13, 17 and 20
+  const A = [8, 12, 16];
+  const B = [13, 17, 20];
+  const runs = (right: number[], prefix: string, over: Record<string, unknown> = {}): string[] => {
+    const parent = tmp();
+    return right.map((n, i) => nightlyRun(join(parent, `${prefix}-r${i + 1}`), n, { label: `${prefix}-r${i + 1}`, ...over }));
+  };
+  const permutations = <T,>(xs: T[]): T[][] => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p])));
+
+  test("a case scores by its mean over the repeats, a metric by the mean of the metric, and the interval is over the cases", () => {
+    const r = compareSets(runs(A, "a").map(loadRun), runs(B, "b").map(loadRun), { treatment: ["config"] });
+    const v = r.views[0];
+    expect(r.a_runs).toHaveLength(3);
+    expect(r.b_runs).toHaveLength(3);
+    expect(v.n_paired).toBe(20);
+    // c01-c08 are right in all three repeats on both sides; c09-c12 in two of three of A's; c13 in one of three of A's and in all of B's; and so on
+    expect(v.better.map((f) => f.id)).toEqual(Array.from({ length: 12 }, (_, i) => `c${String(i + 9).padStart(2, "0")}`));
+    expect(v.worse).toEqual([]);
+    const rate = v.metrics.find((m) => m.path === "items.rate")!;
+    expect([rate.a, rate.b, rate.delta]).toEqual([0.6, 0.8333, 0.2333]);
+    expect(rate.ci![0]).toBeGreaterThan(0);
+    expect(rate.signal).toBe("better");
+    expect(v.better.find((f) => f.id === "c09")).toMatchObject({ a: "2/3 right", b: "3/3 right" });
+  });
+
+  test("permuting the repeats of either side, in the list or in the folders, gives the same report", () => {
+    const aDirs = runs(A, "a");
+    const bDirs = runs(B, "b");
+    const report = (as: string[], bs: string[]) => compareSets(as.map(loadRun), bs.map(loadRun), { treatment: ["config"] });
+    const first = JSON.stringify(report(aDirs, bDirs));
+    for (const pa of permutations(aDirs)) for (const pb of permutations(bDirs)) expect(JSON.stringify(report(pa, pb))).toBe(first);
+    // the same repeats written in another order into the folders: the views do not change
+    const swapped = runs([16, 8, 12], "s");
+    expect(JSON.stringify(report(swapped, bDirs).views)).toBe(JSON.stringify(report(aDirs, bDirs).views));
+  });
+
+  test("a plain pair is a set of one on each side", () => {
+    const [a, b] = [loadRun(runs([8], "x")[0]), loadRun(runs([13], "y")[0])];
+    const one = comparePair(a, b, { treatment: ["config"] });
+    expect(one.a_runs).toHaveLength(1);
+    expect(one.views[0].better.map((f) => f.id)).toEqual(["c09", "c10", "c11", "c12", "c13"]);
+    expect(JSON.stringify(compareSets([a], [b], { treatment: ["config"] }))).toBe(JSON.stringify(one));
+  });
+
+  test("every run of both sets is checked against the policy, not the first of each", () => {
+    const refuse = (a: string[], b: string[], treatment: Axis[]) => () => compareSets(a.map(loadRun), b.map(loadRun), { treatment });
+    const bad = (dirs: string[], over: Record<string, unknown>): string[] => dirs.map((d, i) => (i === 2 ? nightlyRun(join(tmp(), `odd-r${i + 1}`), A[i], over) : d));
+    const [aDirs, bDirs] = [runs(A, "a"), runs(B, "b")];
+    // the third repeat of A differs in its engine and its commit: the first two agree with each other
+    expect(refuse(bad(aDirs, { engine: { ...IDENTITY.engine, temperature: 0.7 } }), bDirs, ["config"])).toThrow(/the engine settings .* differs.*A /);
+    expect(refuse(bad(aDirs, { git_commit: "9999999" }), bDirs, ["config"])).toThrow(/the eval's code differs/);
+    // under a build treatment too: the repeats of a side are one configuration whatever is being compared
+    const releases = runs(B, "r", { akm_version: "0.10.0" });
+    expect(refuse(bad(aDirs, { akm_build: "other" }), releases, ["build"])).toThrow(/the akm build differs among the repeats of A/);
+    expect(refuse(aDirs, bad(releases, { assets_sha256: "c".repeat(64) }), ["build"])).toThrow(/the cases \(assets_sha256\) differs/);
+    // and a release against a release works when all of them agree
+    const r = compareSets(aDirs.map(loadRun), releases.map(loadRun), { treatment: ["build"] });
+    expect(r.exploratory).toEqual([]);
+    expect(r.treated[0]).toBe("the akm version differs: 0.9.26 in A, 0.10.0 in B");
+  });
+
+  test("a repeat of one side that did not complete makes the comparison exploratory and names the run", () => {
+    const aDirs = runs(A, "a");
+    const bDirs = runs(B, "b");
+    bDirs[1] = nightlyRun(join(tmp(), "b-r2"), B[1], { status: "aborted", aborted_reason: "rate limited" });
+    const r = compareSets(aDirs.map(loadRun), bDirs.map(loadRun), { treatment: ["config"] });
+    expect(r.exploratory).toEqual(["B's run b-r2 was cut short: rate limited"]);
+  });
+
+  test("setBootstrap with a run a side is the paired bootstrap", () => {
+    const unit = (id: string, score: number): Unit => ({ id, score, state: "", group: "", harm: false, row: { id, ok: score === 1 } });
+    const rate = (us: Unit[]): number | null => (us.length === 0 ? null : us.filter((u) => u.score === 1).length / us.length);
+    const a = [0, 0, 1, 1, 0, 1].map((s, i) => unit(`c${i}`, s));
+    const b = [1, 0, 1, 1, 1, 1].map((s, i) => unit(`c${i}`, s));
+    const idx = resampleIndexes(6, 400, 3);
+    expect(setBootstrap([a], [b], rate, idx, 400)).toEqual(pairedBootstrap(a, b, rate, idx, 400));
+    // a case a run has no verdict for is left out of that run's metric
+    const e = setBootstrap([a, a.map((u, i) => (i === 0 ? undefined : u))], [b, b], rate, idx, 400);
+    expect(e.delta).not.toBeNull();
+  });
+});
+
+describe("the command with a treatment", () => {
+  const run = (...args: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { stdout: "pipe", stderr: "pipe" });
+  const text = (b: Uint8Array | undefined) => new TextDecoder().decode(b);
+
+  test("a release against a release needs --treatment build, and works with it", () => {
+    const parent = tmp();
+    const a = nightlyRun(join(parent, "a"), 8);
+    const b = nightlyRun(join(parent, "b"), 13, { akm_version: "0.10.0" });
+    const refused = run(a, b);
+    expect(refused.exitCode).toBe(2);
+    expect(text(refused.stderr)).toContain("compare: these two runs cannot be compared case by case: the akm version differs: 0.9.26 in A, 0.10.0 in B.");
+    expect(text(refused.stderr)).toContain("--treatment");
+    const ok = run(a, b, "--treatment", "build");
+    expect(ok.exitCode).toBe(0);
+    expect(text(ok.stdout)).toContain("Treatment: build.");
+    expect(run(a, b, "--treatment", "config,model").exitCode).toBe(2);
+  });
+
+  test("--repeats with --against compares two sets of repeats", () => {
+    const parent = tmp();
+    [8, 12, 16].forEach((n, i) => nightlyRun(join(parent, `2026-10-11-base-r${i + 1}`), n));
+    [13, 17, 20].forEach((n, i) => nightlyRun(join(parent, `2026-10-11-new-r${i + 1}`), n, { akm_version: "0.10.0" }));
+    const out = join(tmp(), "pair.json");
+    const res = run("--repeats", join(parent, "2026-10-11-base"), "--against", join(parent, "2026-10-11-new"), "--treatment", "build", "--json", out);
+    expect(res.exitCode).toBe(0);
+    const json = JSON.parse(readFileSync(out, "utf8"));
+    expect(json.a_runs).toHaveLength(3);
+    expect(json.b_runs).toHaveLength(3);
+    expect(json.treatment).toEqual(["build"]);
+    expect(run("--repeats", join(parent, "2026-10-11-base"), "--against", join(parent, "2026-10-11-new")).exitCode).toBe(2);
+  });
+
+  test("bad uses of the new flags exit 2", () => {
+    const parent = tmp();
+    const a = nightlyRun(join(parent, "a"), 8);
+    const b = nightlyRun(join(parent, "b"), 13);
+    for (const args of [[a, b, "--treatment", "builds"], [a, b, "--against", a], ["--repeats", fx("nightly", "noise"), "--treatment", "build"]]) {
+      const res = run(...args);
+      expect(res.exitCode).toBe(2);
+      expect(text(res.stderr)).toContain("compare:");
+    }
   });
 });

@@ -1,13 +1,15 @@
 #!/usr/bin/env bun
 // matrix: runs a matrix file (a baseline and configurations of the evals under evals/) in two stages: every row once (screen), then
-// the rows that differ from their baseline, several times (confirm). Each stage writes decision.md and decision.json. See ../../../README.md.
+// the rows that differ from their baseline, several times (confirm). Each stage writes decision.md and decision.json, and exits non-zero
+// when a job exited non-zero, wrote no summary or did not complete. See ../../../README.md.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail } from "../../../lib/cli.ts";
 import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
-import { type Job, type Matrix, type RunRecord, type Stage, type State, confirmJobs, cutShort, emptyState, findResults, parseMatrix, runnerFolder, runnerPath, schedule, screenJobs, selectForConfirm } from "./lib.ts";
+import { fingerprintOf, resumable } from "./fingerprint.ts";
+import { type Job, type Matrix, type RunRecord, type Stage, type State, confirmJobs, emptyState, findResults, parseMatrix, runnerFolder, runnerPath, schedule, screenJobs, selectForConfirm, unusableReason } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -16,15 +18,19 @@ const USAGE = `Usage: scripts/matrix/run MATRIX.json --stage screen|confirm|repo
 Runs the evals and benchmarks of a matrix file (a row's "eval" is an eval of evals/ or terminal-bench of benchmarks/) with the model in
 .env (or the environment), or the file's "model" and "akm". The Harbor evals (agent-ab, terminal-bench) are not given the file's "akm":
 their --akm is a release or a checkout's folder, so a row names its own. A config row whose --akm differs from its baseline's, or with
-"treatment": "build", compares two akm builds. Stages:
+"treatment": "build", compares two akm builds; "treatment" may name any of build, config, model, inputs and harness (or a list), and
+every axis it does not name must be the same in the baseline and the config. Stages:
 
   --stage screen   runs the baseline and every config once, with the label <prefix>-<name>-s, and the --limit of the file's
                    "screen.limit" for its eval
   --stage confirm  runs --repeat N (the file's "repeats", default 3) for the baseline and for every config whose screen result differs from
                    its baseline's, with the label <prefix>-<name>-c. First it prints, for each baseline already confirmed, the per-case
                    noise floor of its repeats (scripts/compare), which is where to start --min-delta. The decision then has a paired
-                   column: scripts/compare on the first repeat of each side
+                   column: scripts/compare on all the repeats of each side, pooled by case
   --stage report   writes decision.md and decision.json from the results so far (every stage also writes them)
+
+A job whose process exits non-zero is a failure: its artifacts and log are kept, the stage exits 1, and its result is not used to select
+a config or to reach a verdict. A summary is a result only when it says status "complete" (and no result is missing from its completion).
 
   --parallel N     runs of different evals at the same time (default 1); two runs of one eval never overlap
   --out DIR        the results folder: state.json, logs/, decision.md and decision.json (default: <MATRIX>-results next to the file)
@@ -32,7 +38,10 @@ their --akm is a release or a checkout's folder, so a row names its own. A confi
   --only A,B       confirm: these configs, whatever their screen result
   --min-delta X    confirm: a config differs when a main or harm metric of the screen moved by more than X (default 0: any change, which
                    filters almost nothing. Read X from the noise floor that confirm prints)
-  --force          run rows again that a stage already ran with the same arguments
+  --force          run rows again that a stage already ran, though nothing they were made from has changed. A stage skips a row only when it
+                   exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the model
+                   settings (MODEL_NAME, the host of MODEL_BASE_URL and JUDGE_BASE_URL, models.json), its akm and this repository's code
+                   (git HEAD and the diff of tracked changes) are the same as when it ran
   --dry-run        print what a stage would run`;
 
 function loadState(file: string, m: Matrix): State {
@@ -113,11 +122,15 @@ async function main(): Promise<number> {
   }
   let failed = 0;
   const runJob = async (job: Job): Promise<void> => {
+    // What the job is made from, taken now: the files its arguments name, the model settings, the akm and this repository's code.
+    const fingerprint = fingerprintOf(ROOT, job);
     const prior = slot[job.row.name];
-    if (!values.force && prior && prior.exit_code === 0 && prior.results.length > 0 && prior.label === job.label && JSON.stringify(prior.args) === JSON.stringify(job.args)) {
-      console.log(`${stage}  ${job.row.name}: already ran, skipped (--force runs it again)`);
+    const resume = resumable(ROOT, prior, job, fingerprint);
+    if (!values.force && resume.skip) {
+      console.log(`${stage}  ${job.row.name}: already ran with the same inputs, skipped (--force runs it again)`);
       return;
     }
+    if (!values.force && resume.why) console.log(`${stage}  ${job.row.name}: running again, ${resume.why}`);
     const log = join(out, "logs", `${job.label}.log`);
     const started = Date.now();
     console.log(`${stage}  ${job.row.name}: ${runnerFolder(job.row.eval)}/${job.row.eval}/run ${job.args.join(" ")}`);
@@ -137,13 +150,16 @@ async function main(): Promise<number> {
       exit_code: code,
       log: log.startsWith(`${ROOT}/`) ? log.slice(ROOT.length + 1) : log,
       results: findResults(ROOT, job, started - 1000),
+      fingerprint: fingerprint.sha256,
+      fingerprint_parts: fingerprint.parts,
     };
     slot[job.row.name] = record;
     save();
-    // A run that gave up wrote its summary first. It is found, and it is no result.
-    const cut = cutShort(ROOT, record);
-    if (record.results.length === 0 || cut) failed++;
-    console.log(`${stage}  ${job.row.name}: exit ${code} after ${record.wall_seconds}s, ${record.results.length} result${record.results.length === 1 ? "" : "s"}${cut ? `, cut short: ${cut}` : ""}${record.results.length === 0 || cut ? `, see ${record.log}` : ""}`);
+    // A run that exited non-zero, or gave up, or did not say it finished, wrote its summary and its artifacts first. They are found and kept,
+    // and they are no result: the stage fails and the decision does not use them.
+    const unusable = unusableReason(ROOT, record);
+    if (unusable) failed++;
+    console.log(`${stage}  ${job.row.name}: exit ${code} after ${record.wall_seconds}s, ${record.results.length} result${record.results.length === 1 ? "" : "s"}${unusable ? `, the run ${unusable}, see ${record.log}` : ""}`);
   };
   await schedule(jobs, parallel, (j) => j.row.eval, runJob);
   report();

@@ -4,10 +4,28 @@
   "label": "noise-r2",
   "date": "2026-10-11T09:00:00.000Z",
   "git_commit": "5d1c0de",
-  "model": "test-model",
   "akm_version": "0.9.99-test",
   "akm_bin": "akm",
   "akm_build": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "assets_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seed": null,
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null
+  },
   "limit": null,
   "collection": "library",
   "search_mode": {
@@ -20,22 +38,26 @@
     "search": {
       "n": 10,
       "ndcg_10": 0.6505,
+      "ndcg_10_condensed": null,
       "p_5": 0.3253,
       "success_5": 0.7,
       "mrr": 0.6505,
       "recall_10": 0.6505,
       "judged_10": 0.9,
-      "banned_above": null
+      "banned_above": null,
+      "banned_above_first": 0
     },
     "curate": {
       "n": 9,
       "ndcg_10": 0.6556,
+      "ndcg_10_condensed": null,
       "p_5": 0.3278,
       "success_5": 0.6667,
       "mrr": 0.6556,
       "recall_10": 0.6556,
       "judged_10": 0.9,
-      "banned_above": null
+      "banned_above": null,
+      "banned_above_first": 0
     }
   }
 }
