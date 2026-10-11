@@ -10,8 +10,12 @@ import {
   type Pack,
   PLUGIN_ERROR,
   akmArm,
+  type RunTrial,
   akmSummary,
+  assetsSha256,
   checkoutBuild,
+  completionOf,
+  endpointOf,
   erroredOf,
   findPlugin,
   hostEnv,
@@ -32,6 +36,7 @@ import {
   sha256Dir,
   slug,
   stagePackages,
+  statusOf,
   timeoutsOf,
   withHome,
 } from "./harbor.ts";
@@ -160,6 +165,14 @@ describe("modelSettings", () => {
     expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_BASE_URL: "http://192.0.2.5/v1" }, none)).toThrow("no model key");
     expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("container");
     expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://127.0.0.1:1/v1" }, none)).toThrow("container");
+  });
+
+  test("a keyless local server is run as the READMEs say: any non-empty MODEL_API_KEY, and an address a container can reach", () => {
+    const server = { MODEL_NAME: "my-local-model", MODEL_BASE_URL: "http://192.168.1.20:8080/v1" };
+    expect(modelSettings(undefined, { ...server, MODEL_API_KEY: "unused" }, none)).toEqual({ model: "openai/my-local-model", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" } });
+    expect(() => modelSettings(undefined, server, none)).toThrow("no model key"); // the rule is not relaxed for a server that wants none
+    expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "" }, none)).toThrow("no model key");
+    expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "unused", MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("the container itself");
   });
 });
 
@@ -436,6 +449,17 @@ describe("relativePaths and jobRecord", () => {
 });
 
 describe("sha256Dir", () => {
+  test("leaves out the files it is told to, wherever the rest is the same", () => {
+    const a = tmp();
+    const b = tmp();
+    for (const d of [a, b]) put(join(d, "tasks", "t.md"), "task");
+    put(join(b, "generated.json"), "{}");
+    expect(sha256Dir(b)).not.toBe(sha256Dir(a));
+    expect(sha256Dir(b, ["generated.json"])).toBe(sha256Dir(a));
+    put(join(b, "tasks", "generated.json"), "{}"); // only the path it names: a file of that name deeper down counts
+    expect(sha256Dir(b, ["generated.json"])).not.toBe(sha256Dir(a));
+  });
+
   test("is the same for the same files wherever they are, and changes with a name or a content", () => {
     const a = tmp();
     const b = tmp();
@@ -624,5 +648,102 @@ describe("akmSummary", () => {
       akm_env: { AKM_X: "1" },
       akm_install: { from: "checkout", plugin_from: "release", packages: [{ file: "a.tgz" }] },
     });
+  });
+});
+
+// ---- whether the run did what it set out to do -------------------------------------------------------------------------------
+describe("completionOf and statusOf", () => {
+  const trial = (task: string, arm: "control" | "akm", over: Partial<RunTrial> = {}): RunTrial => ({ task, arm, trial: `${task}__${arm}${Math.random()}`, reward: 1, error: null, akm: null, tools: 1, tokens: null, costUsd: null, seconds: 1, timed_out: false, ...over });
+  const grid = (tasks: string[], attempts: number): RunTrial[] => tasks.flatMap((t) => (["control", "akm"] as const).flatMap((arm) => Array.from({ length: attempts }, () => trial(t, arm))));
+
+  test("expects every task in both arms once per attempt, and counts a full grid as completed", () => {
+    const c = completionOf(grid(["a", "b", "c"], 2), ["a", "b", "c"], 2);
+    expect(c).toEqual({
+      expected: 12,
+      completed: 12,
+      failed: 0,
+      missing: 0,
+      unexpected: 0,
+      control: { expected: 6, completed: 6, failed: 0, missing: 0, unexpected: 0 },
+      akm: { expected: 6, completed: 6, failed: 0, missing: 0, unexpected: 0 },
+    });
+    expect(statusOf(0, c)).toEqual({ status: "complete", aborted_reason: null });
+  });
+
+  test("a cell with no trial is missing, per arm and in all, and the run is aborted for it even when Harbor exited 0", () => {
+    const trials = grid(["a", "b"], 2).filter((t) => !(t.task === "b" && t.arm === "akm"));
+    trials.pop(); // and one control attempt of b
+    const c = completionOf(trials, ["a", "b"], 2);
+    expect(c).toMatchObject({ expected: 8, completed: 5, failed: 0, missing: 3, unexpected: 0 });
+    expect(c.control).toMatchObject({ expected: 4, completed: 3, missing: 1 });
+    expect(c.akm).toMatchObject({ expected: 4, completed: 2, missing: 2 });
+    expect(c.completed + c.failed + c.missing).toBe(c.expected);
+    expect(statusOf(0, c)).toEqual({ status: "aborted", aborted_reason: "3 of 8 expected trials have no result (control 1, akm 2)" });
+  });
+
+  test("a trial with an exception or no reward is failed, not missing: the run is still complete when Harbor exited 0", () => {
+    const trials = grid(["a", "b"], 1);
+    trials[0] = trial("a", "control", { error: "AgentTimeoutError", timed_out: true }); // verified all the same, but it raised
+    trials[3] = trial("b", "akm", { reward: null, error: "RuntimeError" });
+    trials[2] = trial("b", "control", { reward: null }); // no exception recorded, and no reward
+    const c = completionOf(trials, ["a", "b"], 1);
+    expect(c).toMatchObject({ expected: 4, completed: 1, failed: 3, missing: 0 });
+    expect(c.control).toMatchObject({ completed: 0, failed: 2 });
+    expect(c.akm).toMatchObject({ completed: 1, failed: 1 });
+    expect(statusOf(0, c)).toEqual({ status: "complete", aborted_reason: null });
+  });
+
+  test("a nonzero exit aborts the run even when every cell has a trial, and the reason says both when both hold", () => {
+    const full = completionOf(grid(["a"], 1), ["a"], 1);
+    expect(statusOf(3, full)).toEqual({ status: "aborted", aborted_reason: "Harbor exited 3" });
+    const part = completionOf(grid(["a"], 1).slice(0, 1), ["a"], 1);
+    expect(statusOf(1, part)).toEqual({ status: "aborted", aborted_reason: "Harbor exited 1; 1 of 2 expected trials have no result (control 0, akm 1)" });
+  });
+
+  test("a job folder Harbor never made is every cell missing, and says so", () => {
+    const c = completionOf([], ["a", "b"], 3);
+    expect(c).toMatchObject({ expected: 12, completed: 0, failed: 0, missing: 12 });
+    expect(statusOf(0, c, false).aborted_reason).toBe("Harbor wrote no job; 12 of 12 expected trials have no result (control 6, akm 6)");
+  });
+
+  test("trials outside the grid fill no cell: one of a task not asked for, and one beyond the attempts, and either aborts the run", () => {
+    const trials = [...grid(["a"], 1), trial("stray", "control"), trial("a", "akm")]; // a second attempt of a in the akm arm that the job did not ask for
+    const c = completionOf(trials, ["a"], 1);
+    expect(c).toMatchObject({ expected: 2, completed: 2, failed: 0, missing: 0, unexpected: 2 });
+    expect(c.control.unexpected).toBe(1);
+    expect(c.akm.unexpected).toBe(1);
+    expect(statusOf(0, c)).toEqual({ status: "aborted", aborted_reason: "2 trials fall outside the grid of tasks, arms and attempts the job asked for" });
+  });
+
+  test("a missing job folder gives no trials rather than an error", () => {
+    expect(loadRunTrials(join(tmp(), "no-such-job")).trials).toEqual([]);
+  });
+});
+
+describe("endpointOf", () => {
+  test("is the host of the base URL opencode is given, and never a key, a user or a path", () => {
+    expect(endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" })).toBe("192.0.2.5:8080");
+    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toBe("gateway.example.com");
+  });
+
+  test("is null for the provider's own endpoint, and for text that is not a URL", () => {
+    expect(endpointOf({ OPENAI_API_KEY: "sk-secret" })).toBeNull();
+    expect(endpointOf({ OPENAI_BASE_URL: "  " })).toBeNull();
+    expect(endpointOf({ OPENAI_BASE_URL: "sk-secret-not-a-url" })).toBeNull();
+  });
+});
+
+describe("assetsSha256", () => {
+  const base = { library: "a".repeat(64), dataset: { tasks: { x: "1", y: "2" } }, attempts: 3 };
+
+  test("is one digest that moves with the library, the dataset or the attempts, and with nothing else", () => {
+    const same = assetsSha256(base);
+    expect(same).toMatch(/^[0-9a-f]{64}$/);
+    expect(assetsSha256({ ...base, dataset: { tasks: { y: "2", x: "1" } } })).toBe(same); // the order of the keys is not content
+    expect(assetsSha256({ ...base, library: "b".repeat(64) })).not.toBe(same);
+    expect(assetsSha256({ ...base, library: null })).not.toBe(same);
+    expect(assetsSha256({ ...base, dataset: { tasks: { x: "1", y: "3" } } })).not.toBe(same);
+    expect(assetsSha256({ ...base, dataset: { tasks: { x: "1" } } })).not.toBe(same);
+    expect(assetsSha256({ ...base, attempts: 4 })).not.toBe(same);
   });
 });

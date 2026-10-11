@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { generate, harmonize, isFictional, leftovers, libraryOf, prove, restoreNumbers } from "./generate.ts";
+import { join } from "node:path";
+import { publicFixture } from "./fakes.ts";
+import { generate, harmonize, install, isFictional, leftovers, libraryOf, prove, restoreNumbers } from "./generate.ts";
+import { GENERATED, generatorSha256, outputsSha256, privateAssetsProblem, publicInputsSha256, readGenerated } from "./inputs.ts";
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -76,30 +78,7 @@ describe("the public tasks", () => {
 });
 
 describe("generate", () => {
-  /** A public folder of four fictional tasks and the library they seed: one sound, one whose answer holds no name or number to rewrite, one whose solution is wrong, one whose verifier wants a flag the library does not document. */
-  function fixture(): string {
-    const root = mkdtempSync(join(tmpdir(), "agent-ab-gen-"));
-    const put = (rel: string, text: string, mode = 0o644) => {
-      mkdirSync(dirname(join(root, rel)), { recursive: true });
-      writeFileSync(join(root, rel), text);
-      chmodSync(join(root, rel), mode);
-    };
-    const task = (name: string, instruction: string, solve: string, verify: string, tokens = ["scale", "--replicas"]) => {
-      const declared = `gold_ref = "skills/drillbit"\nlibrary_tokens = [${tokens.map((k) => JSON.stringify(k)).join(", ")}]`;
-      put(`tasks/${name}/task.toml`, `[task]\nname = "akm-eval/${name}"\n\n[metadata]\ntools = "fictional"\n${declared}\n\n[agent]\ntimeout_sec = 600.0\n\n[environment.env]\nAKM_TASK_STASH = "drillbit"\n`);
-      put(`tasks/${name}/instruction.md`, instruction);
-      put(`tasks/${name}/solution/solve.sh`, `#!/bin/bash\n${solve}\n`, 0o755);
-      put(`tasks/${name}/tests/verify.sh`, `#!/usr/bin/env bash\n${verify}\n`, 0o755);
-      put(`tasks/${name}/tests/test.sh`, "#!/bin/bash\n# pytest runs here, and the rewrite must not touch this\n", 0o755);
-      put(`tasks/${name}/environment/Dockerfile`, "FROM ubuntu:24.04\nRUN pip install pytest==8.4.1\n");
-    };
-    task("drillbit--scale", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 40 replicas.", 'echo "drillbit scale dev-edge --replicas 40" >> commands.txt', '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 40" ]');
-    task("drillbit--plain", "Write `hello` to `out.txt`.", "echo hello > out.txt", '[ "$(cat out.txt)" = "hello" ]');
-    task("drillbit--wrong", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 40 replicas.", "echo nothing", '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 40" ]');
-    task("drillbit--lacks", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 55 replicas.", 'echo "drillbit scale dev-edge --replicas 55" >> commands.txt', '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 55" ]', ["scale", "--tier"]);
-    put("libraries/drillbit/skills/drillbit/SKILL.md", "---\ndescription: Operate drillbit\n---\n# drillbit\n\nScale with `drillbit scale <cluster> --replicas <n>`, for example `drillbit scale x --replicas 40`.\n");
-    return root;
-  }
+  const fixture = publicFixture;
 
   test("keeps the sound task, leaves out the three that fail the proof, and keeps the plumbing as it was", () => {
     const from = fixture();
@@ -148,4 +127,190 @@ describe("generate", () => {
       for (const d of [from, a, b]) rmSync(d, { recursive: true, force: true });
     }
   });
+});
+
+/** Every file under `dir` by relative path, with its bytes, so two trees can be compared exactly. */
+function tree(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name));
+      else out[join(d, e.name).slice(dir.length + 1)] = readFileSync(join(d, e.name)).toString("base64");
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+describe("generate puts the private tasks in place only when they are sound", () => {
+  const made: string[] = [];
+  afterEach(() => {
+    for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const tmp = (): string => {
+    const d = mkdtempSync(join(tmpdir(), "agent-ab-swap-"));
+    made.push(d);
+    return d;
+  };
+  /** A public folder, and an output folder that already holds a corpus generated from it with seed 7. */
+  function withPrevious(): { from: string; out: string; before: Record<string, string> } {
+    const from = publicFixture();
+    made.push(from);
+    const out = tmp();
+    expect(generate({ seed: "7", out, from }).installed).toBe(true);
+    return { from, out, before: tree(out) };
+  }
+  const brokenVerifier = "#!/usr/bin/env bash\nexit 1\n";
+
+  test("writes generated.json: the version, the seed and the digests of the inputs, the generator and the outputs, which match the tree", () => {
+    const from = publicFixture();
+    made.push(from);
+    const out = tmp();
+    const r = generate({ seed: "7", out, from });
+    expect(r.installed).toBe(true);
+    const assets = join(out, "assets");
+    expect(JSON.parse(readFileSync(join(assets, GENERATED), "utf8"))).toEqual({
+      version: 1,
+      seed: "7",
+      inputs_sha256: publicInputsSha256(from),
+      generator_sha256: generatorSha256(),
+      outputs_sha256: outputsSha256(assets),
+    });
+    expect(readGenerated(assets)).toBeDefined();
+    expect(privateAssetsProblem(assets, from)).toBeUndefined();
+    expect(readdirSync(out).sort()).toEqual(["assets", "map.json"]); // no staging, work or old folder left behind
+  }, 60_000);
+
+  test("a verifier that always fails keeps no task, writes nothing, and leaves the assets and the map of the run before byte for byte as they were", () => {
+    const { from, out, before } = withPrevious();
+    for (const t of taskNames(join(from, "tasks"))) writeFileSync(join(from, "tasks", t, "tests", "verify.sh"), brokenVerifier);
+    const r = generate({ seed: "9", out, from }); // another seed: a map that was written would differ
+    expect(r.kept).toEqual([]);
+    expect(r.installed).toBe(false);
+    expect(tree(out)).toEqual(before);
+    expect(readdirSync(out).sort()).toEqual(["assets", "map.json"]);
+  }, 60_000);
+
+  test("with nothing before it, a run that keeps no task leaves no assets, no tasks folder and no map", () => {
+    const from = publicFixture();
+    made.push(from);
+    for (const t of taskNames(join(from, "tasks"))) writeFileSync(join(from, "tasks", t, "tests", "verify.sh"), brokenVerifier);
+    const out = tmp();
+    const r = generate({ seed: "7", out, from });
+    expect(r.installed).toBe(false);
+    expect(readdirSync(out)).toEqual([]);
+  }, 60_000);
+
+  test("a verification that fails late, on the last task, after the others were made, leaves the run before as it was", () => {
+    const { from, out, before } = withPrevious();
+    // The tasks are made in name order and drillbit--wrong is the last: its solution no longer even runs.
+    writeFileSync(join(from, "tasks", "drillbit--wrong", "solution", "solve.sh"), "#!/bin/bash\nexit 1\n");
+    expect(() => generate({ seed: "9", out, from })).toThrow("solve.sh failed");
+    expect(tree(out)).toEqual(before);
+    expect(readdirSync(out).sort()).toEqual(["assets", "map.json"]);
+  }, 60_000);
+
+  test("a renamed word left in a kept task is a problem, nothing is put in place, and the run before stays", () => {
+    const { from, out, before } = withPrevious();
+    mkdirSync(join(from, "tasks", "drillbit--scale", "environment", "workspace"), { recursive: true });
+    writeFileSync(join(from, "tasks", "drillbit--scale", "environment", "workspace", "blob.bin"), Buffer.from("drillbit\0binary, which the rewrite does not read"));
+    const r = generate({ seed: "9", out, from });
+    expect(r.kept).toHaveLength(1);
+    expect(r.problems).toEqual([expect.stringMatching(/^drillbit in assets\/tasks\/[a-z]+--scale\/environment\/workspace\/blob\.bin$/)]);
+    expect(r.installed).toBe(false);
+    expect(tree(out)).toEqual(before);
+  }, 60_000);
+
+  test("a good run after a bad one replaces the assets and the map together", () => {
+    const { from, out, before } = withPrevious();
+    const r = generate({ seed: "9", out, from });
+    expect(r.installed).toBe(true);
+    const now = tree(out);
+    expect(now["map.json"]).not.toBe(before["map.json"]);
+    expect(JSON.parse(readFileSync(join(out, "assets", GENERATED), "utf8")).seed).toBe("9");
+    expect(privateAssetsProblem(join(out, "assets"), from)).toBeUndefined();
+  }, 60_000);
+
+  test("install puts back what it moved when a later move fails", () => {
+    const out = tmp();
+    mkdirSync(join(out, "assets"));
+    writeFileSync(join(out, "assets", "x"), "old");
+    writeFileSync(join(out, "map.json"), "old map");
+    const staging = tmp();
+    mkdirSync(join(staging, "assets"));
+    writeFileSync(join(staging, "assets", "x"), "new"); // and no map.json to move after the assets
+    const before = tree(out);
+    expect(() => install(staging, out)).toThrow();
+    expect(tree(out)).toEqual(before);
+    expect(existsSync(join(out, ".old"))).toBe(false);
+  }, 60_000);
+});
+
+describe("privateAssetsProblem", () => {
+  const made: string[] = [];
+  afterEach(() => {
+    for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  function generated(): { from: string; assets: string } {
+    const from = publicFixture();
+    const out = mkdtempSync(join(tmpdir(), "agent-ab-stale-"));
+    made.push(from, out);
+    expect(generate({ seed: "7", out, from }).installed).toBe(true);
+    return { from, assets: join(out, "assets") };
+  }
+
+  test("is nothing for assets as generate wrote them", () => {
+    const { from, assets } = generated();
+    expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toBeUndefined();
+  }, 60_000);
+
+  test("refuses assets with no manifest, or one in another format", () => {
+    const { from, assets } = generated();
+    const manifest = JSON.parse(readFileSync(join(assets, GENERATED), "utf8"));
+    rmSync(join(assets, GENERATED));
+    expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toBe(
+      "the private assets in private/agent-ab/assets/ have no generated.json in its current format, so nothing says what they were made from (an older generate, or a generate that stopped). Make them again with: ./generate-assets --only agent-ab",
+    );
+    writeFileSync(join(assets, GENERATED), JSON.stringify({ ...manifest, version: 2 }));
+    expect(privateAssetsProblem(assets, from)).toContain("current format");
+    writeFileSync(join(assets, GENERATED), JSON.stringify({ seed: manifest.seed, inputs_sha256: manifest.inputs_sha256 })); // an older generate's
+    expect(privateAssetsProblem(assets, from)).toContain("current format");
+    writeFileSync(join(assets, GENERATED), "{not json");
+    expect(privateAssetsProblem(assets, from)).toContain("current format");
+  }, 60_000);
+
+  test("refuses assets made from public tasks or libraries that have changed since", () => {
+    const { from, assets } = generated();
+    writeFileSync(join(from, "libraries", "drillbit", "skills", "drillbit", "SKILL.md"), "---\ndescription: another\n---\n# drillbit\n");
+    expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toContain("were made from public tasks or libraries that have changed since");
+  }, 60_000);
+
+  test("a public task with real tools is not an input: adding one does not make the assets stale", () => {
+    const { from, assets } = generated();
+    mkdirSync(join(from, "tasks", "real--task"), { recursive: true });
+    writeFileSync(join(from, "tasks", "real--task", "task.toml"), '[metadata]\ntools = "real"\n');
+    expect(privateAssetsProblem(assets, from)).toBeUndefined();
+  }, 60_000);
+
+  test("refuses assets that are not what generate wrote: a task changed, a file added, one removed", () => {
+    const { from, assets } = generated();
+    const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0]);
+    const instruction = join(task, "instruction.md");
+    const text = readFileSync(instruction, "utf8");
+    writeFileSync(instruction, `${text}\nan edit`);
+    expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toContain("are not what generate wrote");
+    writeFileSync(instruction, text);
+    expect(privateAssetsProblem(assets, from)).toBeUndefined();
+    writeFileSync(join(assets, "libraries", "stray.md"), "added");
+    expect(privateAssetsProblem(assets, from)).toContain("are not what generate wrote");
+    rmSync(join(assets, "libraries", "stray.md"));
+    rmSync(instruction);
+    expect(privateAssetsProblem(assets, from)).toContain("are not what generate wrote");
+  }, 60_000);
+
+  test("refuses assets with no tasks folder, as the run did before", () => {
+    const { from, assets } = generated();
+    rmSync(join(assets, "tasks"), { recursive: true });
+    expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toBe("the private assets are missing (private/agent-ab/assets/tasks). Make them with: ./generate-assets --only agent-ab");
+  }, 60_000);
 });

@@ -4,7 +4,7 @@
 //
 //   evals/agent-ab/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -13,10 +13,14 @@ import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
   type AkmArm,
+  type Completion,
   type Pins,
   akmArm,
   akmArmUsage,
   akmSummary,
+  assetsSha256,
+  completionOf,
+  endpointOf,
   erroredOf,
   jobConfig as harborJob,
   jobRecord,
@@ -31,12 +35,17 @@ import {
   runHarbor,
   sha256Dir,
   stagePackages,
+  statusOf,
   timeoutsOf,
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, buildReport, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
+import { redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
+import { privateAssetsProblem, taskNames } from "./inputs.ts";
+
+export { taskNames };
 
 const NAME = "agent-ab";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -83,8 +92,21 @@ interface Summary {
   n_tasks: number;
   attempts: number;
   harbor_exit: number;
+  /** `complete` when Harbor exited 0 and every cell of the grid has a trial, `aborted` otherwise (see aborted_reason). An aborted run keeps all its artifacts, and its numbers cover the trials that finished. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
+  /** The grid the job asked for, tasks x arms x attempts, and what became of each cell: overall and per arm. */
+  completion: Completion;
   /** A digest of every file of the libraries folder the akm arm seeds from. */
   libraries_sha256: string;
+  /** A digest of the folder of each task the run used. */
+  tasks_sha256: Record<string, string>;
+  /** One digest over the libraries digest, the digest of each selected task and the attempts: the cases the run scored. */
+  assets_sha256: string;
+  /** The model and the host of the endpoint it was sent to (null for the provider's own). Never a key. */
+  engine: { model: string; endpoint: string | null };
+  /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
+  config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
   timeouts: { control: number; akm: number };
   n_errored: number;
@@ -94,14 +116,6 @@ interface Summary {
   job: Record<string, unknown>;
   report: Report;
   results_dir: string;
-}
-
-/** The task folders under `dir`: the ones with a task.toml, by name. */
-export function taskNames(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "task.toml")))
-    .map((e) => e.name)
-    .sort();
 }
 
 /**
@@ -128,6 +142,9 @@ function printSummary(s: Summary): void {
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm-cli ${s.pins.akm_cli}, plugin ${s.pins.akm_plugin}, opencode ${s.pins.opencode}, harbor ${s.pins.harbor}`);
   console.log(`  akm          ${s.akm_bin}${s.akm_build ? ` at ${s.akm_build}` : ""}${Object.keys(s.akm_env).length ? `, ${Object.entries(s.akm_env).map(([k, v]) => `${k}=${v}`).join(" ")}` : ""}`);
   console.log(`  ${s.n_tasks} tasks, ${s.attempts} ${s.attempts === 1 ? "attempt" : "attempts"} per arm`);
+  const c = s.completion;
+  console.log(`  trials       ${c.expected} expected: ${c.completed} completed, ${c.failed} failed, ${c.missing} missing${c.unexpected ? `, ${c.unexpected} outside the grid` : ""}`);
+  if (s.status === "aborted") console.log(`  ABORTED      ${s.aborted_reason}`);
   for (const line of formatReport(s.report)) console.log(line);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
 }
@@ -162,9 +179,13 @@ export async function runCorpus(
 
   const exit = await runHarbor(configFile, join(dir, "harbor.log"), ctx.env);
   const jobDir = join(jobsDir, jobName);
-  if (!existsSync(jobDir)) fail(`Harbor wrote no job (exit ${exit}). See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
-  const { trials, observed } = loadRunTrials(jobDir);
+  const { trials, observed } = loadRunTrials(jobDir); // none when Harbor made no job: every cell is then missing, and the run is aborted
   const report = buildReport(trials);
+  const completion = completionOf(trials, tasks, attempts);
+  const { status, aborted_reason } = statusOf(exit, completion, existsSync(jobDir));
+  const job = jobRecord(cfg, dir, ROOT);
+  const taskDigests = Object.fromEntries(tasks.map((t) => [t, sha256Dir(join(tasksDir, t))]));
+  const librariesSha = sha256Dir(librariesDir);
   const summary: Summary = {
     eval: NAME,
     corpus,
@@ -178,11 +199,18 @@ export async function runCorpus(
     n_tasks: tasks.length,
     attempts,
     harbor_exit: exit,
-    libraries_sha256: sha256Dir(librariesDir),
+    status,
+    aborted_reason,
+    completion,
+    libraries_sha256: librariesSha,
+    tasks_sha256: taskDigests,
+    assets_sha256: assetsSha256({ library: librariesSha, dataset: { tasks: taskDigests }, attempts }),
+    engine: { model: ctx.model, endpoint: endpointOf(ctx.env) },
+    config: redactConfig(job),
     timeouts: timeoutsOf(trials),
     n_errored: erroredOf(report),
     metrics: metricsOf(report, trials),
-    job: jobRecord(cfg, dir, ROOT),
+    job,
     report,
     results_dir: dir,
   };
@@ -190,7 +218,7 @@ export async function runCorpus(
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   writeFileSync(join(dir, "samples.jsonl"), trials.map((t) => `${JSON.stringify(t)}\n`).join(""));
   printSummary(summary);
-  if (exit !== 0) fail(`Harbor exited ${exit}. The results above cover the trials that finished.`, 1);
+  if (status === "aborted") fail(`${aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;
 }
 
@@ -214,7 +242,9 @@ async function main(): Promise<void> {
   parseAkm(values.akm); // a bad --akm stops the run now, before Docker is asked about and a checkout is packed
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
   for (const c of corpora) {
-    if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "tasks"))) fail(`the private assets are missing (private/${NAME}/assets/tasks). Make them with: ./generate-assets --only ${NAME}`);
+    // The private tasks are used only when their generated.json says they are the rewrite of the public ones as they are now, unchanged since.
+    const problem = c === "private" ? privateAssetsProblem(join(ROOT, "private", NAME, "assets"), EVAL_DIR, `private/${NAME}/assets`) : undefined;
+    if (problem) fail(problem);
   }
   const { model, env } = preflight(values);
   const label = values.label ?? slug(model);
