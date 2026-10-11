@@ -55,6 +55,7 @@ benchmarks/          published benchmarks
 lib/akm/             the akm sandbox the evals that use akm share
 lib/env.sh           the .env loader that every run, generate and label script and generate-assets source
 lib/models.ts        --model, --judge-model and models.json: which model a run uses, and whether it may see your private notes
+lib/negation.ts      the rule of negation that the checks of extract and distill share
 lib/provenance.ts    the digests, the redacted akm config and the engine settings that go into summary.json
 lib/results.ts       the results folder of a run and its .running marker
 lib/repeat.ts        --repeat
@@ -134,7 +135,7 @@ Read those to tell two builds apart. `scripts/compare` and `scripts/matrix` refu
 
 The semantic index that `evals/retrieval` and `benchmarks/skillret` keep between runs is keyed on the same version, command, build and fingerprint of uncommitted changes. Its `state.json` in `.cache/akm-index/<name>/` records which akm built it (`version`, `akm_bin`, `akm_build`, `akm_build_fingerprint` when the checkout had uncommitted changes, `builtAt`), and the `summary.json` of a run that used a kept index has the same as `semantic_index_built_by`, beside `semantic_index`: `cold`, `warm` or `rebuilt`. When a kept index cannot be used, the run says why, such as `cannot be reused: ... it was built by akm X build A (...), and this run is akm X build B (...)`, and builds a new one.
 
-A summary also records what the run was made of, so that two runs can be told apart: the effective akm `config` the eval wrote, with secrets redacted, `assets_sha256`, the private `seed` (null for the public assets), `harness_sha256` (the digest of the eval's code and of `lib/`), and for the evals that run a model, `engine`. `lib/provenance.ts` holds the helpers (`sha256Text`, `sha256File`, `sha256Files`, `redactConfig` and `engineSettings`). A private summary holds the seed, which makes the private set again, so it stays in `private/` and does not go into `reports/` with the seed in it.
+A summary also records what the run was made of, so that two runs can be told apart: the effective akm `config` the eval wrote, with secrets redacted, `assets_sha256`, the private `seed` (null for the public assets), `harness_sha256` (the digest of the eval's code and of `lib/`), and for the evals that run a model, `engine`. `lib/provenance.ts` holds the helpers (`sha256Text`, `sha256File`, `sha256Files`, `harnessSha256`, `redactConfig`, `endpointIdentity` and `engineSettings`). A private summary holds the seed, which makes the private set again, so it stays in `private/` and does not go into `reports/` with the seed in it.
 
 A command that akm does not finish in its time limit is killed, and the row says `akm <command> timed out after <N>s` and not an empty exit code. Most summaries count those apart as `timeouts`.
 
