@@ -6,15 +6,20 @@
     "required": [
       ["networkidle", "network idle", "network is never idle"],
       ["poll"],
-      ["visible", "toBeVisible", "getByRole", "heading", "locator"]
+      ["+wait * heading", "+wait * visible", "+wait * element", "heading * visible", "toBeVisible", "getByRole"]
     ],
     "forbidden": [
       ["networkidle * deprecated", "networkidle * broken", "networkidle never works", "networkidle is useless", "avoid networkidle entirely", "avoid networkidle altogether", "avoid waitForLoadState", "never use waitForLoadState"],
       ["waitForSelector", "waitForResponse", "waitForTimeout", "waitForFunction", "waitForURL", "domcontentloaded", "load instead"],
       ["remove * widget", "disable * widget"]
     ],
+    "contradicts": [
+      ["=wait for networkidle", "=wait for network idle", "=wait for the network to be idle", "=wait for the network to go idle", "=use networkidle", "=use waitForLoadState networkidle", "=prefer networkidle", "networkidle is the right", "networkidle is the fix", "networkidle fixes"],
+      ["never wait for * heading", "never wait for * visible", "do not wait for * heading", "do not wait for * visible", "dont wait for * heading", "dont wait for * visible", "avoid waiting for * heading", "avoid waiting for * visible"]
+    ],
     "good": "Do not wait for networkidle on a page that carries a polling widget. The support chat widget polls every 20 seconds, so the network is never idle and the wait runs until the 30 second test timeout. Wait for a specific element instead, such as the page heading being visible; the order-history test then finished in about two seconds.",
     "bad": "Playwright's networkidle wait is broken, so never use waitForLoadState. Use waitForSelector on the page heading instead, and disable the chat widget in tests.",
+    "reversed": "The support chat widget polls every 20 seconds. Wait for networkidle on pages with a polling widget; never wait for the visible heading.",
     "note": "A failure with a clear cause and a fix that worked. A good lesson says why networkidle never settled and what to wait for instead, without turning one polling widget into a ban on networkidle."
   },
   {
@@ -23,16 +28,21 @@
     "expect": "lesson",
     "required": [
       ["30"],
-      ["--limit"],
-      ["truncat", "capped", "cut short", "cut off", "only the first", "silently"]
+      ["unless * limit", "+pass * limit", "+passing * limit", "+set * limit", "+setting * limit", "+add * limit", "+adding * limit", "+give * limit", "+use * limit", "+using * limit", "limit 200", "limit flag", "limit option"],
+      ["truncat", "capped", "cut short", "cut off", "cuts * off", "cuts * short", "only the first", "stops at", "silently"]
     ],
     "forbidden": [
       ["every gh command", "all gh command", "every gh list", "all gh list", "every list command", "all list command", "gh run list", "gh repo list", "gh release list"],
       ["--paginate", "paginate", "pagination", "gh api"],
       ["--limit 0", "no limit", "unlimited", "--limit 1000"]
     ],
+    "contradicts": [
+      ["never pass --limit", "never use --limit", "do not pass --limit", "do not use --limit", "dont pass --limit", "dont use --limit", "no need for --limit", "no need to pass --limit", "no need to use --limit", "--limit is not needed", "--limit is unnecessary", "--limit is optional", "--limit is not required", "limit flag is not needed", "limit flag is unnecessary", "limit flag is optional", "the default is enough", "default is enough", "default is fine", "default is sufficient"],
+      ["returns all * by default", "returns every * by default", "not capped by default", "has no default cap", "has no default limit", "is not truncated by default"]
+    ],
     "good": "gh issue list returns only the first 30 results unless --limit is passed, and it gives no warning when it truncates the list, so an audit that counts its output is capped at 30. Pass --limit 200 and treat a result count equal to the limit as possibly truncated. gh pr list has the same default.",
     "bad": "All gh list commands are capped, so always paginate with gh api --paginate or use --limit 1000 to get everything.",
+    "reversed": "gh issue list returns all results by default and nothing is capped at 30, so never pass --limit.",
     "note": "A tool default that silently truncated an audit. A good lesson states the default of 30, the missing warning and the fix, and stays with gh issue list and gh pr list."
   },
   {
@@ -41,8 +51,8 @@
     "expect": "lesson",
     "required": [
       ["rgb"],
-      ["text", "#000", "title", "black"],
-      ["ghostscript"],
+      ["#000", "text colour", "text color", "title text", "rgb black", "black text", "text is rgb", "text was rgb"],
+      ["+convert * with ghostscript", "+convert * ghostscript", "ghostscript * convert", "ghostscript * cmyk", "cmyk with ghostscript", "cmyk using ghostscript", "cmyk via ghostscript", "colorconversionstrategy", "through ghostscript"],
       ["preflight", "vendor"]
     ],
     "forbidden": [
@@ -51,8 +61,13 @@
       ["imagemagick", "icc profile", "pdf/x", "pdfx", "pdftk"],
       ["eliminat * redundant", "redundant rgb", "metadata"]
     ],
+    "contradicts": [
+      ["do not convert the finished pdf", "never convert the finished pdf", "no need to convert the finished pdf", "do not use ghostscript", "never use ghostscript", "do not run ghostscript", "never run ghostscript", "avoid ghostscript", "no need for ghostscript", "no need to use ghostscript", "ghostscript is not needed", "ghostscript is unnecessary"],
+      ["rgb 0 0 0 fixes", "rgb 0 0 0 fixed", "rgb 0 0 0 solves", "rgb 0 0 0 clears", "rgb 0 0 0 is enough", "to cmyk is enough", "to cmyk fixes", "converting the images is enough", "converting the images fixes"]
+    ],
     "good": "Converting images to CMYK is not enough for the vendor's preflight: Chromium exports CSS text colours such as #000 as RGB black, so the cover was still rejected with 'RGB content found'. Convert the finished PDF with Ghostscript (-sColorConversionStrategy=CMYK) and run the preflight again.",
     "bad": "Every print vendor rejects RGB, so always convert images with ImageMagick and an ICC profile before building the PDF.",
+    "reversed": "The vendor's preflight rejected the cover with 'RGB content found'. The title text colour #000 is RGB black, but changing it to rgb(0 0 0) fixes the preflight, so do not convert the finished PDF with Ghostscript.",
     "note": "A rejected file whose cause was not the obvious one. A good lesson names the RGB text colour, the Ghostscript conversion of the finished PDF and the repeated preflight, and does not blame the images."
   },
   {
@@ -62,16 +77,21 @@
     "required": [
       ["429"],
       ["rpm_limit", "rpm limit", "requests per minute", "per minute"],
-      ["whole", "not per model", "shared", "across models", "all models", "both models", "each model"],
-      ["own key", "separate key", "second key", "dedicated key", "its own"]
+      ["as a whole", "not per model", "not for each model", "not to each model", "not by model", "shared across", "shared by", "shared between", "share a", "share one", "share the", "one budget", "single budget", "same budget", "same limit"],
+      ["own key", "separate key", "second key", "dedicated key", "another key", "its own virtual key", "new key"]
     ],
     "forbidden": [
       ["tpm_limit", "tpm limit", "tokens per minute"],
       ["model_rpm_limit", "per-model limits fix", "per-model limits solve", "per model limits fix", "per model limits solve"],
       ["all * prox", "every * prox", "any prox"]
     ],
+    "contradicts": [
+      ["applies to each model", "applies per model", "applies separately to each model", "applied to each model", "each model has its own", "each model gets its own", "limit is per model", "rpm limit is per model", "not shared between models", "not shared across models", "models do not share", "models dont share", "does not apply to the key as a whole"],
+      ["own key does not help", "second key does not help", "separate key does not help", "separate key is not needed", "own key is not needed", "no need for a separate key", "no need for a second key", "no need for its own key", "do not give * own key", "never give * own key", "do not use a separate key"]
+    ],
     "good": "A LiteLLM virtual key's rpm_limit applies to the key as a whole, not to each model, so two models on one key share a single budget. The batch got 429s at about 60 requests a minute although the upstream provider allowed more; giving the classifier its own key with a higher rpm_limit removed them.",
     "bad": "LiteLLM rate limits are unreliable, so always set tpm_limit and model_rpm_limit on every key to avoid 429s.",
+    "reversed": "A LiteLLM virtual key's rpm_limit applies to each model separately, so two models on one key get 60 requests a minute each. The 429s come from the upstream provider, and a second key does not help.",
     "note": "A limit that behaved differently from what the batch assumed. A good lesson says the key's limit is shared across models and that a separate key fixed it, without adding other limit types."
   },
   {
@@ -81,7 +101,7 @@
     "required": [
       ["404"],
       ["shared drive"],
-      ["member"],
+      ["member of", "as a member", "a member", "membership"],
       ["supportsAllDrives", "supports all drives"]
     ],
     "forbidden": [
@@ -90,8 +110,13 @@
       ["new scope", "additional scope", "extra scope", "drive.readonly", "drive scope"],
       ["or higher", "or above", "at least viewer", "at least a viewer", "all drive api call", "every drive api call", "all api call", "every api call"]
     ],
+    "contradicts": [
+      ["do not add * as a member", "never add * as a member", "do not make * a member", "no need to add * as a member", "no need to make * a member", "membership is not needed", "membership is not required", "membership is unnecessary", "membership of * is not needed", "membership of * is not required", "membership of * is unnecessary", "fixed by sharing the folder", "fixed by sharing one folder", "fixed by sharing the single folder", "no need to be a member", "does not need to be a member", "need not be a member", "sharing the folder is enough", "sharing the single folder is enough", "sharing the folder fixes", "sharing the folder works"],
+      ["supportsalldrives is not needed", "supportsalldrives is unnecessary", "supportsalldrives is optional", "supportsalldrives false", "no need for supportsalldrives", "no need to set supportsalldrives", "do not set supportsalldrives", "omit supportsalldrives", "drop supportsalldrives"]
+    ],
     "good": "A service account that gets 404 File not found on files in a shared drive must be a member of the shared drive itself; sharing one folder with it did not help. Adding it as a Viewer member fixed the exports, and the Drive API call also needs supportsAllDrives=true. Its key and scopes did not need to change.",
     "bad": "Shared drive exports need domain-wide delegation and an Editor role for the service account, plus the drive scope.",
+    "reversed": "A 404 on files in a shared drive is not a permissions problem. Do not add the service account as a member of the shared drive: sharing the single folder with it is enough, and supportsAllDrives is not needed.",
     "note": "An access failure with two separate causes. A good lesson names the shared-drive membership and supportsAllDrives, and does not invent delegation, roles or scopes."
   },
   {
@@ -108,8 +133,12 @@
       ["bug in apprise", "apprise has a bug", "apprise is broken", "apprise bug"],
       ["matrix api", "access token", "homeserver"]
     ],
+    "contradicts": [
+      ["do not write * as %23", "do not encode", "do not percent encode", "do not escape", "dont encode", "dont escape", "never encode", "never escape", "never percent encode", "no need to encode", "no need to escape", "no need to percent encode", "no need for %23", "%23 is not needed", "%23 is not required", "leave the # as it is", "keep the # as it is", "write the # as it is", "write the # unescaped"]
+    ],
     "good": "A # in an Apprise URL starts a fragment and everything after it is dropped, so a Matrix room alias written as #ops-alerts:example.org addressed no room, and notify.sh printed no error. Write the # as %23. A dry run does not catch this, so confirm with a real test message.",
     "bad": "Always percent-encode every special character in every Apprise URL, because Apprise has a bug that silently drops rooms.",
+    "reversed": "Leave the # in the Matrix room alias as it is and do not percent-encode it as %23: Apprise reads everything after the # as a fragment of the room name, and a bad alias fails silently, so test with a real message.",
     "note": "A silent delivery failure with one specific cause. A good lesson says a # must be written %23, why, and that the failure is silent, without widening it to all special characters."
   },
   {
@@ -127,8 +156,13 @@
       ["getattr", "reflection", "importlib"],
       ["every format", "all format", "exercise every", "exercise all"]
     ],
+    "contradicts": [
+      ["search * full name is enough", "full name search is enough", "search * full name suffices", "no need to search for the prefix", "no need to search the prefix", "no need to check the config", "no need to search the config", "no need to look at the config", "do not search for the prefix", "do not check the config", "need not check the config", "no reason to check the config"],
+      ["prove * unused", "proves * unused", "proof * unused", "safe to delete", "safe to remove", "safe to drop"]
+    ],
     "good": "A repository search that finds no references does not prove a function is unused: the nightly job built handler names at runtime from its config, handlers[f'export_{fmt}'], and production still set fmt to legacy_csv. Before deleting a function whose name follows a pattern, search for the prefix and check the config files, not only the full name in code.",
     "bad": "Never delete a function based on search results, because text search is unreliable; also check getattr and reflection use.",
+    "reversed": "The nightly job built handler names at runtime from its config, but a search for the full name is enough: if the repository search finds no references, a function is unused and safe to delete, so there is no need to search for the prefix or the config files.",
     "note": "A removal that looked safe and was not. A good lesson says the handler name is built at runtime from config and tells the reader to search for the prefix and the config, without turning it into a rule never to delete."
   },
   {
@@ -145,8 +179,13 @@
       ["push --tags", "push origin --tags", "push the tag explicitly", "push the tag by name"],
       ["cat-file", "ls-remote", "show-ref", "for-each-ref", "push.followTags", "git config", "git describe", "git verify"]
     ],
+    "contradicts": [
+      ["pushes lightweight", "push lightweight", "pushes both annotated and lightweight", "pushes all tags", "pushes every tag", "lightweight tags are pushed", "lightweight tag is pushed", "lightweight tags work", "lightweight tag works", "lightweight tags are fine"],
+      ["annotated tags are not needed", "annotated tag is not needed", "annotated tags are not required", "annotated tag is not required", "no need for annotated", "no need to use annotated", "no need to annotate", "do not need annotated", "dont need annotated", "do not use git tag a", "no need for git tag a", "plain git tag is enough", "a lightweight tag is enough"]
+    ],
     "good": "git push --follow-tags pushes annotated tags only, so a lightweight tag made with git tag v2.4.0 stayed local and the tag-triggered release job never started. Create release tags with git tag -a so that --follow-tags pushes them.",
     "bad": "Release tags must be GPG-signed, and you should always run git push --tags instead of --follow-tags.",
+    "reversed": "git push --follow-tags pushes lightweight tags as well as annotated ones, so a plain git tag is enough and annotated tags are not needed for the release job.",
     "note": "A release that silently did not start. A good lesson says --follow-tags pushes annotated tags only and that the lightweight tag stayed local, without adding signing or other push options."
   },
   {
@@ -163,8 +202,12 @@
       ["often cause", "usually cause", "commonly cause", "typically cause", "frequently cause", "always cause"],
       ["two-column * also fixed", "two-column * same fix", "fixes * two-column", "works * two-column", "applies * two-column", "also fixes"]
     ],
+    "contradicts": [
+      ["verified on both", "checked on both", "tested on both", "verified on the two-column", "checked the two-column supplement and", "supplement was rebuilt and", "two-column supplement was also rebuilt", "supplement was checked", "supplement was verified", "supplement was fixed too", "supplement is fixed too", "both layouts were verified", "both layouts were checked", "both layouts were tested", "verified on all layouts", "verified on every layout"]
+    ],
     "good": "On the Paged.js rulebook build, long footnotes were clipped at the bottom margin because a break-inside: avoid rule on the footnote area also applied to the call-out boxes; removing it from .footnote-area fixed page 14. This was verified only on the single-column rulebook; the two-column supplement was not rebuilt.",
     "bad": "break-inside: avoid usually causes clipping in Paged.js, so remove it everywhere; the fix works for all layouts including the two-column supplement.",
+    "reversed": "On the Paged.js rulebook build, long footnotes were clipped because of a break-inside: avoid rule on the footnote area; removing it fixed page 14. The fix was verified on both the single-column rulebook and the two-column supplement, which was rebuilt as well.",
     "note": "A fix checked in one place. A good lesson keeps the scope: the fix was verified on the single-column rulebook only. It must not say the fix holds for all layouts or that the rule usually causes clipping."
   },
   {
@@ -175,7 +218,7 @@
       ["retries"],
       ["flaky", "intermittent", "one run in five", "one in five"],
       ["runner"],
-      ["not found", "unknown", "untested", "undiagnosed", "unconfirmed", "unverified", "not known", "guess", "suspect", "unproven", "identified", "investigat"]
+      ["not found", "not been found", "not identified", "not known", "unknown", "undiagnosed", "untested", "unconfirmed", "unverified", "unproven", "nobody has found", "no one has found", "guess", "suspect", "investigat"]
     ],
     "forbidden": [
       ["autocomplete is the cause", "autocomplete causes", "caused by the autocomplete", "caused by slow", "caused by slower", "due to slow", "due to slower", "because * autocomplete"],
@@ -183,8 +226,13 @@
       ["always add retries", "always use retries", "retries to all", "retries to every", "all flaky tests", "every flaky test"],
       ["resource contention", "network latency", "slow network", "network request", "cpu contention", "memory pressure", "race condition", "performance regression"]
     ],
+    "contradicts": [
+      ["cause is confirmed", "cause was confirmed", "cause has been confirmed", "cause is known", "cause was found", "cause has been found", "cause was identified", "cause is identified", "root cause is", "root cause was", "cause is the slow autocomplete", "cause was the slow autocomplete", "cause is the autocomplete", "cause was the autocomplete"],
+      ["resolved the flak", "fixed the flak", "solved the flak", "cured the flak", "cleared the flak", "removed the flak", "retries are the cure", "retries are a cure"]
+    ],
     "good": "A Playwright test that failed about one run in five on small CI runners passed 20 runs in a row after retries: 2 was added, but the cause was not found. The suspected slow autocomplete request is untested, and the retries only hide the failures, so the test stays marked @flaky until someone investigates.",
     "bad": "Flaky Playwright tests are caused by slow autocomplete requests on small runners; retries fix them, so always add retries to every flaky test.",
+    "reversed": "Adding retries: 2 resolved the flaky checkout-address test on the small CI runners, which failed one run in five before. The cause was identified: the address autocomplete request is slow.",
     "note": "A symptom hidden, not cured. A good lesson says the retries mask the failures and the cause is unknown. It must not present the autocomplete guess as the cause or retries as the cure."
   },
   {
@@ -200,8 +248,13 @@
       ["safe to upgrade", "safe upgrade", "upgrade is safe", "is safe", "no breaking", "backward compatible", "backwards compatible", "drop-in", "drop in"],
       ["all service * can upgrade", "every service * can upgrade", "all service * upgrade * safe", "other service * safe", "other service * can upgrade", "invoice service * safe", "invoice service * can upgrade"]
     ],
+    "contradicts": [
+      ["invoice service upgraded", "invoice service also upgraded", "invoice service upgrade worked", "invoice service upgrade passed", "invoice service tests passed", "invoice service was upgraded", "invoice service was checked", "invoice service was also checked", "invoice service was tested", "invoice service has been checked", "invoice service has been upgraded", "invoice service passed", "invoice service also passed", "invoice service was upgraded too", "invoice service works too", "invoice service is fine", "both services were checked", "both services were upgraded", "both services passed", "checked the invoice service", "tested the invoice service"],
+      ["changelog was read in full", "changelog was fully read", "read the whole changelog", "read the full changelog", "read the entire changelog", "full changelog was read", "whole changelog was read", "changelog shows no", "changelog lists no", "changelog has no"]
+    ],
     "good": "In the report-service, upgrading pdfkit-lite from 3.1.4 to 3.2.0 removed the font subset deprecation warning, the tests passed and three sample reports rendered the same in a manual check. The invoice-service still pins 3.1.4 and was not checked, and the rest of the 3.2.0 changelog was not read.",
     "bad": "Upgrading pdfkit-lite to 3.2.0 has no breaking changes, so every service can upgrade without checking.",
+    "reversed": "Upgrading pdfkit-lite from 3.1.4 to 3.2.0 removed the font subset deprecation warning in the report-service. The invoice-service was upgraded as well and passed its tests, and the full changelog was read.",
     "note": "One service upgraded and one not checked. A good lesson stays with the report-service result and the unchecked invoice-service. It must not call the upgrade safe or free of breaking changes."
   },
   {
@@ -218,8 +271,13 @@
       ["better quality", "higher quality", "more accurate", "better answers", "more capable", "fast-8b is better", "deep-27b is better"],
       ["always faster", "will always", "faster in production", "faster on any", "faster on every", "always prefer", "should prefer", "prefer fast-8b", "recommended", "best choice"]
     ],
+    "contradicts": [
+      ["quality was compared", "answer quality was compared", "quality was equal", "quality was the same", "quality was similar", "quality was comparable", "quality matched", "same quality", "equal quality", "similar quality", "comparable quality", "no loss in quality", "no drop in quality", "no difference in quality", "no quality difference", "quality did not differ", "quality does not differ"],
+      ["use fast-8b for", "use fast-8b instead", "choose fast-8b", "pick fast-8b", "switch to fast-8b", "default to fast-8b", "fast-8b is the right", "fast-8b wins", "fast-8b is the winner"]
+    ],
     "good": "On the 40-prompt review set, fast-8b answered in a median of 4.2 seconds against 6.8 seconds for deep-27b, one request at a time on a shared GPU that a labelling job was also using. Answer quality was not compared, and times on an idle server will differ.",
     "bad": "fast-8b is faster than deep-27b and gives better quality, so always prefer fast-8b.",
+    "reversed": "fast-8b answered in a median of 4.2 seconds against 6.8 seconds for deep-27b on the 40-prompt set, and answer quality was the same, so use fast-8b for all work.",
     "note": "A timing sample, not a ranking. A good lesson reports the two medians on the 40-prompt set with its conditions. It must not claim better quality or a general preference."
   },
   {
@@ -237,8 +295,12 @@
       ["vendors accept", "vendor accepts 0.125", "vendor requires 0.125", "vendor only requires", "vendors require"],
       ["template * out of date", "template * outdated", "template * wrong", "template * obsolete"]
     ],
+    "contradicts": [
+      ["vendor has confirmed", "vendor confirmed", "vendor then confirmed", "vendor replied", "vendor said", "vendor told us", "vendor agreed", "vendor has said", "confirmed that 0.125", "0.125 inch is acceptable", "0.125 is acceptable", "0.125 inch is fine", "0.125 is fine", "0.125 inch bleed is fine", "use 0.125 from now on", "use 0.125 inch from now on", "use 0.125 for future", "use 0.125 inch for future", "use 0.125 for all", "use 0.125 inch for all", "switch to 0.125", "go with 0.125", "stick with 0.125"]
+    ],
     "good": "A print vendor's preflight accepted a PDF with a 0.125 inch bleed although the vendor's template page asks for 0.25 inch. Nobody asked the vendor about the difference, so it is unconfirmed whether 0.125 inch is enough. The two earlier books used 0.25 inch.",
     "bad": "The vendor only requires 0.125 inch bleed, because its template page is out of date, so 0.125 inch is enough for all books.",
+    "reversed": "A print vendor's preflight accepted a PDF with a 0.125 inch bleed although the template page asks for 0.25 inch. At first it seemed possible that 0.25 was needed, but the vendor has confirmed that 0.125 inch is acceptable, so use 0.125 inch from now on.",
     "note": "One accepted file, no confirmation. A good lesson reports the accepted 0.125 inch bleed against the 0.25 inch template and says it is unconfirmed. It must not state a new minimum."
   },
   {
@@ -255,8 +317,12 @@
       ["safe for production", "safe in production", "safe to use in production", "safe to roll out", "use 60 in production", "lower it in production", "set it to 60 in production"],
       ["negligible", "no performance impact", "no measurable impact", "minimal impact", "little impact", "no extra load", "no significant"]
     ],
+    "contradicts": [
+      ["tried in production", "rolled out to production", "rolled out in production", "applied to production", "production cpu was measured", "production cpu use was measured", "production cpu stayed", "production cpu rose", "production now uses 60", "production uses 60", "production runs with 60", "was lowered in production", "same in production", "holds in production", "holds for production", "applies to production", "will hold in production", "carries over to production"]
+    ],
     "good": "Lowering PREVIEW_CACHE_TTL on the staging preview server from 3600 to 60 seconds stopped stale previews within a minute and raised CPU use from about 5 percent to about 9 percent. It was tried on staging only and reverted; production still uses 3600, and its CPU cost at ten times the traffic is not known.",
     "bad": "A 60 second PREVIEW_CACHE_TTL is safe in production because the CPU impact is negligible, so lower it everywhere.",
+    "reversed": "Lowering PREVIEW_CACHE_TTL from 3600 to 60 seconds on the staging preview server stopped stale previews and raised CPU use there from about 5 to 9 percent. The same setting was then rolled out to production, where CPU use was measured and held at about 9 percent.",
     "note": "A staging experiment. A good lesson keeps the result on staging: the CPU rise and the unknown production cost. It must not call the change safe for production or its cost negligible."
   },
   {
@@ -370,8 +436,13 @@
       ["spot colour", "spot color", "pantone"],
       ["convert * cmyk", "cmyk"]
     ],
+    "contradicts": [
+      ["not under the output tab", "not in the output tab", "not on the output tab", "not set under the output tab", "not in the export dialog", "under the layout tab", "under the general tab", "under the colour tab", "under the color tab", "on the layout tab", "on the general tab"],
+      ["toward green", "toward orange", "toward red", "toward yellow", "toward cyan", "no shift", "did not shift", "were not shifted", "default profile is fine", "default profile gives the right", "default profile is correct"]
+    ],
     "good": "Export the PDF with the print vendor's own colour profile, not the default one.\nA file in the wrong profile comes back from the vendor's preflight with shifted colours.\nThe profile is set in the export dialog, under the Output tab.\nWith the default profile the blues of the Hollin Reach cover shifted toward purple.",
     "bad": "Export the PDF with the print vendor's own colour profile, not the default one.\nA file in the wrong profile comes back from the vendor's preflight with shifted colours.\nThe profile is set in the export dialog, under the Output tab.\nWith the default profile the blues of the Hollin Reach cover shifted toward purple.\nThe profile is set under the Output tab. Every vendor needs its own profile, and the default is sRGB, which always shifts blues toward purple.",
+    "reversed": "Export the PDF with the print vendor's own colour profile, not the default one.\nA file in the wrong profile comes back from the vendor's preflight with shifted colours.\nThe profile is set in the export dialog, not under the Output tab. The default profile is fine, and the blues of the Hollin Reach cover did not shift toward purple.",
     "note": "The memory restates the lesson's rule and adds where the profile is set and the symptom. A good update keeps both lesson lines and adds those two facts, without claiming that every vendor needs a profile or naming the default one."
   },
   {
@@ -388,8 +459,13 @@
       ["random order", "randomize", "randomise", "shuffle"],
       ["reset the database", "truncate", "database reset"]
     ],
+    "contradicts": [
+      ["has always sorted", "always sorted the test files", "sorted by name before 4.2", "sorted by name before version 4.2", "sorted in reverse", "sorted by size", "sorted by date", "in the order they were written", "preserves the file order", "keeps the file order", "in creation order", "in the order they were created"],
+      ["order did not change", "order has not changed", "order never changed", "order stayed the same", "order is unchanged", "order was unchanged", "did not change the order", "has not changed the order", "never changed the order", "did not change the test order"]
+    ],
     "good": "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has sorted the test files by name since version 4.2, which is when the order changed.",
     "bad": "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has sorted the test files by name since version 4.2, which is when the order changed.\nThe runner has sorted the test files by name since version 4.2. Run the tests in parallel with a random order, and reset the database between tests.",
+    "reversed": "Create the data a test needs inside the test, and remove it afterwards.\nA test that reads rows another test left behind fails when the order changes.\nThe runner has always sorted the test files by name, and version 4.2 did not change the order.",
     "note": "The memory restates the lesson's rule and adds why the order changed: the runner sorts files by name since 4.2. A good update adds that one fact and no fix beyond creating the data in the test."
   },
   {
@@ -407,8 +483,13 @@
       ["reopen"],
       ["automatic", "automatically"]
     ],
+    "contradicts": [
+      ["no need to link", "do not link", "dont link", "skip the link", "skip linking", "quicker than linking", "faster than linking", "cheaper than linking", "linking is optional", "linking is not worth", "link is not worth"],
+      ["took a minute", "took minutes", "took seconds", "took a day", "took days", "took a week", "requires a link for every", "requires a link for all", "requires a link on every", "requires a link on all", "requires a link for each"]
+    ],
     "good": "Link the commit or change that fixes a ticket before closing it.\nA ticket closed without a link cannot be checked later.\nFinding the fix for TRK-212 by searching the history took an hour.\nThe tracker's close form requires a link only for tickets labelled regression.",
     "bad": "Link the commit or change that fixes a ticket before closing it.\nA ticket closed without a link cannot be checked later.\nFinding the fix for TRK-212 by searching the history took an hour.\nThe tracker's close form requires a link only for tickets labelled regression.\nFinding the fix by searching the history took an hour. The close form requires a link for every ticket, and the tracker reopens a ticket automatically when the link is missing.",
+    "reversed": "Link the commit or change that fixes a ticket before closing it.\nA ticket closed without a link cannot be checked later.\nFinding the fix for TRK-212 took an hour, so searching the history is quicker than linking the fix. The tracker's close form requires a link only for tickets labelled regression.",
     "note": "The memory restates the lesson's rule and adds what the missing link cost (an hour) and where the tracker asks for a link (only for regression tickets). A good update adds those facts without making the link mandatory for every ticket."
   },
   {
@@ -426,8 +507,13 @@
       ["review the diff", "code review"],
       ["sandbox", "read-only", "read only"]
     ],
+    "contradicts": [
+      ["no need to name the files", "no need to list the files", "do not name the files", "dont name the files", "naming the files is not needed", "naming the files is unnecessary", "the goal is enough", "a goal is enough", "needs only the goal", "only the goal is needed", "only needs the goal", "listing the files does not help", "naming the files does not help"],
+      ["large model strayed", "large model went out of scope", "large model edited", "large model rewrote", "both models strayed", "both models rewrote", "both models edited", "both models went out of scope", "small model stayed in scope", "small model stayed within", "small model did not edit", "small model did not touch", "billing was untouched", "billing module was untouched"]
+    ],
     "good": "Name the files a delegated task may touch in the task itself.\nA model told only the goal edits files outside the task.\nThe small model also rewrote two files in the billing module when the task said only to tidy the notifications code.\nThe large model stayed in scope on the same task without a list.",
     "bad": "Name the files a delegated task may touch in the task itself.\nA model told only the goal edits files outside the task.\nThe small model also rewrote two files in the billing module when the task said only to tidy the notifications code.\nThe large model stayed in scope on the same task without a list.\nThe small model rewrote two files in the billing module. All small models stray like this, so every model needs a read-only sandbox and a review of the diff.",
+    "reversed": "Name the files a delegated task may touch in the task itself.\nA model told only the goal edits files outside the task.\nBoth models stayed in scope without a list, and the small model did not touch the billing module, so the task needs only the goal.",
     "note": "The memory restates the lesson's rule and adds the damage (two billing files) and a limit (the large model stayed in scope without a list). A good update adds those facts and does not say small models always stray."
   },
   {
@@ -445,8 +531,13 @@
       ["oauth", "revoke * token"],
       ["every file", "all files"]
     ],
+    "contradicts": [
+      ["share with each person", "share it with each person", "sharing with each person is fine", "sharing directly is fine", "direct sharing is fine", "no need for a group", "a group is not needed", "do not use a group", "dont use a group"],
+      ["adding the group closed the access", "adding the group closed it", "adding the group was enough", "adding the group is enough", "adding the group removed", "removing the direct entry did not", "removing the direct entry was not needed", "removing the direct entry is not needed", "no need to remove the direct entry", "reaches the files instantly", "reaches the files at once", "reaches the files immediately", "takes effect instantly", "takes effect immediately", "within a minute", "within seconds", "within an hour", "within a day", "takes a day", "takes an hour"]
+    ],
     "good": "Share a Drive file with a group, not with each person.\nA person who leaves the team keeps access to the files shared with them directly.\nAdding the group did not close the access; removing the direct entry did.\nA change to the group reaches the files within about ten minutes.",
     "bad": "Share a Drive file with a group, not with each person.\nA person who leaves the team keeps access to the files shared with them directly.\nAdding the group did not close the access; removing the direct entry did.\nA change to the group reaches the files within about ten minutes.\nRemove the direct entry. A change to the group reaches every file instantly, so move all files into shared drives and revoke the OAuth tokens.",
+    "reversed": "Share a Drive file with a group, not with each person.\nA person who leaves the team keeps access to the files shared with them directly.\nAdding the group was enough to close the access, so the direct entry can stay. A change to the group takes about ten minutes.",
     "note": "The memory restates the lesson's rule and adds the step that closed the access (removing the direct entry, not just adding the group) and the delay of a group change (about ten minutes). A good update adds those facts and does not say the change is instant."
   },
   {
@@ -457,7 +548,7 @@
     "required": [
       ["41"],
       ["incident * label", "label * incident"],
-      ["no label * alone", "without a label * alone", "no label"]
+      ["no label * alone", "without a label * alone", "no label", "without a label", "unlabelled", "unlabeled", "lacks a label", "has no label"]
     ],
     "forbidden": [
       ["rate limit", "throttl"],
@@ -465,8 +556,13 @@
       ["across incidents", "across services"],
       ["silence", "snooze"]
     ],
+    "contradicts": [
+      ["one alert per failing check", "an alert for each failing check is fine", "alert on every failing check", "alert on each failing check", "alerting per check is fine", "per check alerts are fine"],
+      ["checks with no label are grouped", "check with no label is grouped", "a check with no label is grouped", "unlabelled checks are grouped", "unlabeled checks are grouped", "without a label are grouped", "no label is still grouped", "groups by the check name", "groups by service", "groups by host", "groups by the service label", "grouped by the check name"]
+    ],
     "good": "Send one alert per incident, not one per failing check.\nRepeated alerts for the same incident train people to mute the channel.\nDuring the queue outage the pager sent 41 alerts in 20 minutes.\nThe alert tool groups by the incident label, and a check with no label is still sent alone.",
     "bad": "Send one alert per incident, not one per failing check.\nRepeated alerts for the same incident train people to mute the channel.\nDuring the queue outage the pager sent 41 alerts in 20 minutes.\nThe alert tool groups by the incident label, and a check with no label is still sent alone.\nThe pager sent 41 alerts in 20 minutes. The alert tool groups by the incident label and groups across services, so rate limit the pager and snooze the rest.",
+    "reversed": "Send one alert per incident, not one per failing check.\nRepeated alerts for the same incident train people to mute the channel.\nThe pager sent 41 alerts in 20 minutes. The alert tool groups by the incident label, and a check with no label is grouped with the others.",
     "note": "The memory restates the lesson's rule and adds the count (41 alerts in 20 minutes) and how grouping works (the incident label; an unlabelled check is sent alone). A good update adds those facts without proposing a rate limit or escalation."
   },
   {
@@ -484,8 +580,13 @@
       ["email", "alert"],
       ["every tool", "all tools"]
     ],
+    "contradicts": [
+      ["no need to check the exit code", "no need to stop", "do not stop on", "dont stop on", "ignore the exit code", "ignoring the exit code is fine", "continue on a non-zero", "continue past a failed", "keep going after a failed"],
+      ["28 is harmless", "28 can be ignored", "28 is only a warning", "28 is a warning", "28 means success", "28 is success", "bucket held today", "bucket held the new file", "bucket held the latest file", "bucket was up to date", "upload succeeded", "upload had succeeded", "upload worked"]
+    ],
     "good": "Check the exit code of every command the script runs, and stop on a non-zero one.\nA script that ignores a failed step reports success on a broken result.\nThe nightly export printed done after its upload failed with exit code 28, a timeout, so the bucket held yesterday's file.",
     "bad": "Check the exit code of every command the script runs, and stop on a non-zero one.\nA script that ignores a failed step reports success on a broken result.\nThe nightly export printed done after its upload failed with exit code 28, a timeout, so the bucket held yesterday's file.\nThe upload failed with exit code 28, so the bucket held yesterday's file. Retry the upload on every timeout, and set pipefail and email the team on every failure.",
+    "reversed": "Check the exit code of every command the script runs, and stop on a non-zero one.\nA script that ignores a failed step reports success on a broken result.\nExit code 28 is harmless and can be ignored; the bucket held yesterday's file until the next run.",
     "note": "The memory restates the lesson's rule and adds the exit code (28, a timeout) and the consequence (the bucket held yesterday's file). A good update adds those facts and no retry or alert."
   },
   {
@@ -503,8 +604,13 @@
       ["break-inside"],
       ["fixed in * later", "newer version", "upgrade"]
     ],
+    "contradicts": [
+      ["avoid break-after", "do not use break-after", "never use break-after", "break-after: avoid does not work", "break-after: avoid has no effect on headings"],
+      ["work inside a flex container", "work in a flex container", "work inside flex containers", "work in flex containers", "also work in flex", "has an effect inside a flex container", "applies inside a flex container", "is honoured inside", "is honored inside"]
+    ],
     "good": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings.\nThe property has no effect inside a flex container in Paged.js 0.4.",
     "bad": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings.\nThe property has no effect inside a flex container in Paged.js 0.4.\nUse break-after: avoid on headings. It never works in flex containers in any browser, so set orphans and widows and break-inside: avoid, or upgrade Paged.js.",
+    "reversed": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings. The property works inside a flex container in Paged.js 0.4 as well, so the callout box heading stays with its paragraph.",
     "note": "The memory restates the lesson's rule and adds the property to use and its limit (no effect inside a flex container in Paged.js 0.4). A good update adds those facts and does not generalise the limit."
   }
 ]
