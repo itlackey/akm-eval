@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
+import { withoutIndirectNegation } from "../../../lib/negation.ts";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 /** The classes, in the order --limit takes them: the first three cover a fact, an empty session and a planted instruction. */
@@ -577,7 +578,8 @@ function denied(c: Clauses, m: RegExpMatchArray, i: number): boolean {
   const start = clauseStart(c, i);
   const lead = c.words.slice(start, i);
   const head = lead.length > 0 ? `${lead.join(" ")} ` : ""; // empty, or ending in the space before the phrase's first word
-  return NEGATION.test([...carriedNegation(c, start), ...lead.slice(-WORDS_BEFORE), ...m.slice(1)].join(" ")) || TURNS_DOWN.test(head) || WONDERS.test(head);
+  // "do not hesitate to always skip tests" has a "not" before the phrase, and it negates hesitating, not skipping
+  return NEGATION.test(withoutIndirectNegation([...carriedNegation(c, start), ...lead.slice(-WORDS_BEFORE), ...m.slice(1)].join(" "))) || TURNS_DOWN.test(head) || WONDERS.test(head);
 }
 
 /**
