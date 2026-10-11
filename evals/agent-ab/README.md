@@ -31,6 +31,7 @@ Each run writes to `evals/agent-ab/results/<UTC date>-<label>/`, or to `private/
   - `akm_version`, `akm_bin`, `akm_build`, `akm_env` and `akm_install`: which akm the akm arm ran, and what was installed. See "Which akm".
   - `job`: the Harbor job that ran, from `job.json`: the tasks (`datasets`), the attempts, the concurrency (4), the setup time (2,700 seconds) and the options of both agents, opencode's config among them. Paths are relative to the run's folder or the repository. `libraries_sha256` is a digest of the libraries folder.
   - `timeouts` (`control` and `akm`), `n_errored` (the errored trials of both arms) and `metrics`: the report's main numbers as plain numbers, per arm (`pass_rate`, `passed`, `scored`, `errored`, `timeouts`, minutes and dollars per scored trial), the `delta` (akm minus control, with its interval and the number of tasks), `better` and `engagement` (`rate`, `called`, `curated_read`, `control_calls`). `--repeat` takes the spread of `metrics`.
+  - `report`: the whole report, with the figures of the table below. Its `delta` also has `ci` and `resampled` (`tasks`, or `tasks and attempts`: what the bootstrap drew). `report.sign_test` is the sign test, `report.flips` the attempts that disagreed, and each task of `report.tasks` has `disagree` and `flips`.
 - `samples.jsonl`: one line per trial, with its task, arm, reward, exception if any, whether it ran out of time (`timed_out`), the akm tools it called, its tokens and its time. A trial whose plugin was not live has `plugin_problem`, saying why.
 - `akm-packages/`: the tarballs of a checkout of akm, when `--akm` names one.
 - `jobs/`: Harbor's folders, one per trial, with the agent's output, opencode's log and the verifier's output. `job.json` is the Harbor job that ran and `harbor.log` is what Harbor printed.
@@ -88,8 +89,10 @@ A trial is scored when the verifier gave it a reward, 1 or 0. A trial without on
 | Figure | Meaning |
 |---|---|
 | pass rate | The mean over tasks of each task's share of passed attempts, with a 95% interval: the 2.5th and 97.5th percentile of the mean over 10,000 resamples of the tasks (seed 1337). Every task weighs the same. The interval is over tasks: it says how far the rate would move with other tasks like these, not with a rerun of the same ones. |
-| difference | akm minus control, task by task, averaged, with its interval from the same resampling. Only tasks that both arms have a scored trial for count, and their number is printed. |
-| akm called | The share of akm trials in which the agent called at least one of the plugin's tools (`akm_search`, `akm_show`, `akm_curate`, `akm_feedback`, `akm_remember`) or ran the `akm` command in its shell, counted from opencode's own output, and how often each. |
+| difference | akm minus control, task by task, averaged. Its interval is a paired bootstrap, 10,000 resamples (seed 1337), that draw tasks with replacement and, when a task has more than one scored attempt in an arm, also draw that arm's attempts inside each drawn task. So it includes the variance of a rerun of the same tasks. It counts the attempts' noise twice, so it errs wide. With one attempt per arm it is the bootstrap over tasks alone. Only tasks that both arms have a scored trial for count, and their number is printed. |
+| sign test | An exact two-sided sign test on the tasks where the two arms' pass rates differ, printed with how many went each way. Tasks they did the same on are left out; p = 1 means no evidence either way. In `summary.json`: `report.sign_test` (`akm`, `control`, `n`, `p`). |
+| attempts that disagreed | Per arm, the tasks whose scored attempts did not all agree, out of the tasks with more than one. This is the eval's own noise floor. The table's `flips c/a` column is, per task, the attempts that went against the majority outcome, in the control and in the akm arm. In `summary.json`: `report.flips`, and `report.tasks[].flips` and `.disagree`. |
+| akm called | The share of akm trials in which the agent called at least one of the plugin's tools (`akm_search`, `akm_show`, `akm_curate`, `akm_feedback`, `akm_remember`) or ran the `akm` command in its shell, counted from opencode's own output, and how often each. The command is matched where a command starts (also behind sudo, xargs and env, by its path, inside `$(...)` or backticks, and in `bash -c`), each tool call is counted once by its `callID`, and `which akm` or `akm` as an argument does not count. |
 | called, not called | The akm trials split by that, each split compared with the control on the same tasks. This describes what the model chose. It is not a randomised comparison: whatever made it call akm also made the task what it is. Read the number of tasks before the size of a difference. |
 | did better | The tasks both arms scored, by which arm passed more of its attempts: the akm arm, the control, or neither. |
 | read the curated results | The share of akm trials in which the agent read the file the plugin writes at the start of a session, which is akm reaching it without a tool call. |
@@ -103,11 +106,12 @@ Read the engagement before the difference. Where the agent never called akm, the
 
 - `tasks/`: 9 tasks in Harbor's task format: an `instruction.md`, an `environment/` with a Dockerfile and the starting workspace, a `solution/solve.sh`, and the `tests/` that grade it. The `task.toml` names the library to seed.
   - `drillbit--*` (3) and `inkwell--*` (3) use made-up tools. The command forms, flags and YAML fields exist only in the library, and the verifiers accept only the documented form, so a model that has not read the library cannot pass. These are marked `tools = "fictional"`.
-  - `workflow-compliance--*` (3) use real tools (az, docker compose, opencode config). The verifier wants an exact command or file that the model did not give unaided in the earlier run.
+  - `workflow-compliance--*` (3) use real tools (az, docker compose, opencode config). The verifier wants an exact command or file, and the task's library holds it: `src/lib.test.ts` checks that each gold ref holds every literal the verifier looks for (`library_tokens` in `task.toml`). The az tag-list verifier accepts a JMESPath `&&` filter, or `--tag` for each tag, with a `--query` projection and `-o tsv`. The library documents that exact form, and the opencode task no longer asks for akm provenance lines.
+  - Each `task.toml` lists `library_tokens`: the literals its verifier looks for, such as a subcommand, a flag, a field name or a value. `src/lib.test.ts` checks that the task's gold ref holds each of them, and that no instruction or starting file mentions akm, a skill, the library or the stash, tells the agent to consult one, or names the gold ref. So the akm arm is not told to call akm, and the library holds what the verifier asks for.
 - `libraries/`: the four akm libraries the tasks seed, one folder each, laid out as an akm bundle. When the agent runs, only the library of its task is in its container.
 - `private/agent-ab/assets/`: the six fictional tasks and their two libraries, with tool names and numbers rewritten from a seed by `lib/rewrite`. They are made by `generate` and never published.
 
-The nine tasks are those of the earlier 28-task slice whose control failed every attempt. A task the control already passes cannot measure akm, and the other 19 are tasks it passes in every attempt or in all but one. Nine tasks make a wide interval, and the three attempts of one task are not independent samples, which is why the interval is over tasks.
+The nine tasks are those of the earlier 28-task slice whose control failed every attempt. A task the control already passes cannot measure akm, and the other 19 are tasks it passes in every attempt or in all but one. That selection predates the edits that removed the akm and skill nudges and the leaked ref from the instructions and the workspace READMEs, and that made the libraries hold what the verifiers look for. The instruction, verifier or library of four tasks changed (opencode provider-token, az tag-list, docker compose render, inkwell add-healthcheck), and the workspace READMEs of several lost the lines that pointed at akm or a skill. Whether the control still fails them is not known until a run, so the next run is a new baseline and is not comparable with earlier results. Nine tasks make a wide interval, and the three attempts of one task are not independent samples, which is why the pass-rate intervals are over tasks. The interval of the difference also resamples the attempts of a task.
 
 ## The private tasks
 
@@ -121,7 +125,8 @@ Like the other evals, the private tasks exist so a model can be tested on tasks 
 
 1. its solution passes the verifier;
 2. the workspace it starts with does not;
-3. what the public solution leaves behind does not either. Otherwise nothing in the answer changed.
+3. what the public solution leaves behind does not either. Otherwise nothing in the answer changed;
+4. its library holds every literal its `task.toml` lists under `library_tokens`, the flags, subcommands, field names and values the verifier looks for.
 
 A task that fails a check is left out and the reason is printed. The three `workflow-compliance` tasks are left out without trying, because their tools are real. Renaming a tool the model knows changes how hard the task is, not only what it says, and the rewrite leaves `az` as it is. Private versions of them would need new made-up tools, written by hand. So the private run covers six tasks and the public run nine: compare them on the same tasks, from the per-task table, and not on the totals.
 
@@ -132,7 +137,7 @@ uv run --no-project --python 3.12 --with harbor==0.24.0 harbor run -p evals/agen
 uv run --no-project --python 3.12 --with harbor==0.24.0 harbor run -p evals/agent-ab/tasks -a nop -o evals/agent-ab/results/check -y
 ```
 
-`oracle` runs each task's solution: every task should score 1. `nop` does nothing: every task should score 0. For the private tasks use `-p private/agent-ab/assets/tasks -o private/agent-ab/results/check`.
+`oracle` runs each task's solution: every task should score 1. `nop` does nothing: every task should score 0. For the private tasks use `-p private/agent-ab/assets/tasks -o private/agent-ab/results/check`. `bun test evals/agent-ab/src` also proves the six public tasks with a shell verifier (the solution passes, the empty workspace fails). The three inkwell tasks run pytest through uv, which needs the network, so they are proven by `generate` and by the Harbor runs above.
 
 ## Pins
 
@@ -144,7 +149,7 @@ A run is made of akm-cli 0.9.26, the akm-opencode plugin 0.9.26202610051302 (whi
 - Say what a figure is every time it appears: "first-party agent A/B, 9 tasks, 3 attempts, opencode 1.18.34 and this model", not "akm improves agent performance".
 - Compare runs only with the same task set, model and pins, and move one of them at a time. When akm-cli, the plugin, opencode and the model all move together, no difference belongs to any one of them. To compare two builds of akm, run each with `--akm` and read `akm_build` in the two summaries.
 - Nine tasks and three attempts move by a task or two from one run to the next. Run `--repeat 3` and compare the spread of `metrics.delta.value` before calling a change one.
-- A task measures akm only when the control fails it. These were chosen for that on one model. With a stronger model the control may pass some of them, and those then add noise around zero. Look at the per-task table: a task the control passes in every attempt is not measuring akm.
+- A task measures akm only when the control fails it. These were chosen for that on one model. A task stays in the set only when its control arm fails it on two or more models: check this whenever a task is added or changed. It has not been checked since the task edits (see "Assets"), so the az tag-list and docker compose render tasks may fall out of the set. With a stronger model the control may pass some of them, and those then add noise around zero. Look at the per-task table: a task the control passes in every attempt is not measuring akm.
 - Report what looks bad as plainly as what looks good, errored trials included.
 
 ## Notes

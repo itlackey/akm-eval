@@ -1,0 +1,35 @@
+# Runs scripts/check on every push and pull request: the typecheck of every src folder, the Python suites and bun test.
+# Every test uses a fake akm, so the job needs no akm, no Docker, no model and no secret. The job that runs the evals against a
+# real akm is akm-smoke.yml.
+name: check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # bun 1.4.2 is the release the folders' @types/bun is pinned to.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # uv runs the bakeoff suite and the tests of the akm arm in lib/harbor. Nothing is cached.
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+
+      - name: scripts/check
+        run: scripts/check

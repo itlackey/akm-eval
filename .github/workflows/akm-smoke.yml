@@ -1,0 +1,55 @@
+# Runs each eval that drives akm once, on one case, against a stub model and a real akm (scripts/smoke), to see that akm's flags and
+# the JSON it prints still fit the evals. Every night, and on demand. Two legs: the akm release this repository pins, and the latest
+# release, which is where a change to akm that the evals cannot read shows up the day it ships.
+#
+# The stub model is a local server that answers {} to every call, so the job needs no model and no secret.
+name: akm-smoke
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        akm: [pinned, latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # akm runs on Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # promotion indexes with akm's embedding model, 133 MB from huggingface.co. It is public, and nothing else goes in this cache.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/models
+          key: akm-embedding-model-bge-small-en-v1.5
+
+      - name: Install akm
+        run: |
+          if [ "${{ matrix.akm }}" = latest ]; then
+            version=latest
+          else
+            # The release the Harbor evals install, pinned in lib/harbor/harbor.ts.
+            version="$(sed -n 's/^export const PINS = .*akm_cli: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)"
+            [ -n "$version" ] || { echo "could not read the akm pin from lib/harbor/harbor.ts" >&2; exit 1; }
+          fi
+          npm i -g "akm-cli@$version"
+          akm --version
+
+      - name: scripts/smoke
+        run: scripts/smoke/run --strict
