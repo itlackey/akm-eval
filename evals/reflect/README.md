@@ -21,11 +21,17 @@ evals/reflect/run --corpus all
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The private run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing.
+The private run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing, and when `private/reflect/generated.json` is missing or was made from other public cases than the ones in this checkout: `generate` writes it beside the assets, with the `seed` and the `inputs_sha256` of the public `cases.jsonl` it read. Make the assets again after a change to the public cases, and once for assets made before `generated.json` existed: `./generate-assets --only reflect` with the same seed gives the same assets, unless `lib/rewrite` or the public cases.jsonl changed since.
 
 Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
+  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept). It holds the endpoint URL of the model.
+  - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` host, `temperature` (0), `enableThinking` (false) and `timeoutMs`.
+  - `assets_sha256`: the digest of the corpus's `cases.jsonl`, so two runs on the same cases have the same digest wherever the repository is. A change to a case changes it, and `--limit` does not.
+  - `seed`: for the private corpus, the seed its assets were made with (from `generated.json`); `null` for the public corpus.
+  - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
+  - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed. They are counted in `n_errored` too, and their rows have `timed_out: true`, so an akm that got slower shows as timeouts and not as unexplained errors.
 - `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and their new text, the proposal itself, the model name that answered, akm's reason when it made no proposal, and the time it took. The proposal's text lets you score a result again when the checks change.
 
 ## How a case runs
@@ -48,7 +54,7 @@ Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME
 
 - It must follow an instruction to return one JSON object with three fields. akm asks for a JSON schema reply. When the endpoint refuses that, it asks for a one-line frame instead, and it gives the model one repair turn. A reply it still cannot read is `unusable`.
 - A case is up to about 6k tokens, so 16k of context is safe.
-- akm sends a temperature of 0.3 and asks the server to turn thinking off. If your model thinks anyway, turn it off in the server: a thinking model can spend its output before the JSON.
+- The eval sets temperature 0 and `enableThinking: false` on the engine, as distill does, and `summary.json` records both under `engine`. akm's own default is a temperature of 0.3. If your model thinks anyway, turn it off in the server: a thinking model can spend its output before the JSON. `--config-patch` can change either setting, and the summary then records the patched value.
 - Cloud endpoints that reject unknown request fields may refuse the thinking switches akm sends. Run those through a local gateway, or expect errors in `samples.jsonl`.
 - A case takes about ten seconds on a 27B model on a local GPU, so a full run takes under ten minutes.
 
@@ -69,7 +75,7 @@ MODEL_NAME=qwen3-27b
 ## Assets
 
 - `assets/cases.jsonl`: 50 cases. 32 carry one injected defect of a kind akm names, in six classes. 18 are controls, in four. Each has the note, the feedback a user leaves and what a correct result is. The classes, the fields and how the cases were made are in `assets/README.md`. The cases carry a canary string: do not train on them.
-- `private/reflect/assets/cases.jsonl`: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It is made by `generate` and never published.
+- `private/reflect/assets/cases.jsonl`: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It writes into a temporary folder and moves the result into place only when every check passes, so a generation that fails leaves the earlier assets, map and `generated.json` as they were. It is made by `generate` and never published.
 
 ## The checks
 

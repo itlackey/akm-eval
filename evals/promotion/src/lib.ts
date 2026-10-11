@@ -2,7 +2,10 @@
 // did with each one, and the metrics. run.ts uses them to run the eval and build.ts to make the public cases.
 
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { engineConfig, semanticConfig } from "../../../lib/akm/akm.ts";
+import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 export const BAD = ["duplicate", "stale", "ephemeral"] as const;
 export type Bad = (typeof BAD)[number];
@@ -31,6 +34,8 @@ export interface Row {
   /** The judge's reason. akm keeps it only for a rejection. */
   reason: string;
   error?: string;
+  /** The error says the model call timed out. Absent on every other row. */
+  timed_out?: true;
 }
 
 export function parseCases(text: string, where = "cases"): Case[] {
@@ -89,10 +94,12 @@ export const STRATEGY = "promotion";
  * judgment on, except that it stages what the judge accepts and does not write it. The drain decides the same either way: the
  * judgment tier only judges, and promotion lint does not block (akm 0.9.26 prints its findings as non-blocking).
  * The bundle is indexed with akm's built-in embedder, as retrieval and skillret do, because a judge that is shown the nearest
- * notes of a promotion's source memory finds them by their stored vectors.
+ * notes of a promotion's source memory finds them by their stored vectors. The engine runs at temperature 0 with thinking off, as distill's does.
  */
 export function promotionConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, "judge");
+  config.engines.judge.temperature = 0;
+  config.engines.judge.enableThinking = false;
   const { semanticSearchMode, embedding } = semanticConfig();
   config.semanticSearchMode = semanticSearchMode;
   config.embedding = embedding;
@@ -103,7 +110,30 @@ export function promotionConfig(baseUrl: string, model: string, hasKey: boolean)
 /** The memory a case's promotion names as its source, `memories/<name>.md` in the bundle. */
 export const memoryOf = (c: Case): string => `memories/${c.ref.split("/").pop()}.md`;
 
-/** The values of one row of akm's `proposals` table, for a pending promotion of consolidate, as akm itself writes it. */
+/** The columns of akm's `proposals` table that the eval writes, in the order `proposalRow` gives their values. akm's schema is private: see "Depends on akm's private schema" in the README. */
+export const PROPOSAL_COLUMNS = ["id", "stash_dir", "ref", "status", "source", "created_at", "updated_at", "content", "frontmatter_json", "metadata_json"] as const;
+
+/** The columns of akm's `events` table that the eval reads, to count the model calls of a drain. */
+export const EVENT_COLUMNS = ["event_type", "metadata_json"] as const;
+
+/** The minimum of a SQLite handle that `schemaProblem` needs, which bun:sqlite's Database has. */
+export interface SchemaDb {
+  query(sql: string): { all(): unknown[] };
+}
+
+/**
+ * Why a table of akm's state.db cannot be used the way the eval uses it, or undefined when it has every column in `needed`.
+ * The tables are akm's own and its schema is not a contract, so a build that renames a column or moves a table is found here
+ * and not by a SQL error, or by a count that is quietly zero.
+ */
+export function schemaProblem(db: SchemaDb, table: string, needed: readonly string[]): string | undefined {
+  const have = (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  if (have.length === 0) return `akm's state.db has no ${table} table`;
+  const missing = needed.filter((c) => !have.includes(c));
+  return missing.length > 0 ? `akm's ${table} table has no column ${missing.join(", ")} (it has ${have.join(", ")})` : undefined;
+}
+
+/** The values of one row of akm's `proposals` table, for a pending promotion of consolidate, as akm itself writes it. The order is PROPOSAL_COLUMNS. */
 export function proposalRow(c: Case, bundleDir: string, now: string): (string | null)[] {
   const meta = {
     changes: [{ path: `${c.ref}.md`, op: "create" }],
@@ -131,6 +161,13 @@ export function dispatchFailures(stderr: string): Map<string, string> {
   return new Map([...stderr.matchAll(DISPATCH_FAILED)].map((m) => [m[1], m[2].trim()]));
 }
 
+/**
+ * Does the text of a failed model call say it timed out? The failures here come from akm's drain, which words them as it likes, so
+ * this reads "timed out", "timeout" and the like in any case. An akm command that the eval itself kills for running too long ends the
+ * run with a message that says so, and is not a row.
+ */
+export const timedOutText = (text: string): boolean => /\btime(?:d)?[ -]?outs?\b/i.test(text);
+
 /** One row per case: what the drain did with its proposal. `reasons` holds the judge's reason for each rejection, accept and defer, by proposal id. */
 export function rowsFromDrain(cases: Case[], drained: Drained, reasons: Map<string, string>, failures: Map<string, string>): Row[] {
   const accepted = new Set([...(drained.staged ?? []), ...(drained.promoted ?? [])]);
@@ -141,13 +178,41 @@ export function rowsFromDrain(cases: Case[], drained: Drained, reasons: Map<stri
     const id = uuidOf(c.id);
     const base = { id: c.id, label: c.label, category: c.category, ref: c.ref, reason: "" };
     const failure = failures.get(id) ?? failed.get(id);
-    if (failure !== undefined) return { ...base, outcome: "error", error: failure };
+    if (failure !== undefined) return { ...base, outcome: "error", error: failure, ...(timedOutText(failure) ? { timed_out: true as const } : {}) };
     if (accepted.has(id)) return { ...base, outcome: "accept", reason: reasons.get(id) ?? "" };
     if (rejected.has(id)) return { ...base, outcome: "reject", reason: reasons.get(id) ?? "" };
     if (deferred.has(id)) return { ...base, outcome: "defer", reason: reasons.get(id) ?? "" };
     return { ...base, outcome: "error", error: "the drain did not list the proposal" };
   });
 }
+
+/**
+ * One digest over files, each named by a name of its own: the digest of sha256Files, except that the name is not the path
+ * the file is read from. A name relative to the corpus folder gives a digest that holds in another checkout.
+ */
+export function digestOf(files: [name: string, path: string][]): string {
+  const sorted = [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return sha256Text(sorted.map(([name, path]) => `${name}\0${sha256File(path)}\n`).join(""));
+}
+
+/** The digest of what a run reads: the cases file, and every file of the library's knowledge/ folder, which is copied into the bundle. Named `cases.jsonl` and `library/knowledge/...`. */
+export function assetsSha256(casesFile: string, libraryDir: string): string {
+  const knowledge = join(libraryDir, "knowledge");
+  const notes = existsSync(knowledge) ? readdirSync(knowledge, { recursive: true }).map(String).filter((f) => statSync(join(knowledge, f)).isFile()) : [];
+  return digestOf([["cases.jsonl", casesFile], ...notes.map((f): [string, string] => [`library/knowledge/${f}`, join(knowledge, f)])]);
+}
+
+/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
+export function readSeed(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The seed to record for a corpus: none for the public one, private/seed for an own one. promotion has no generated assets, so no run has a seed of its own. */
+export const corpusSeed = (corpus: string, seedFile: string): string | null => (corpus === "public" ? null : readSeed(seedFile));
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
 

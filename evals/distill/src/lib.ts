@@ -1,9 +1,10 @@
 // Pure helpers for the distill eval: the cases, the checks that score a lesson, the akm config, the rows and the
 // metrics. run.ts uses them to run the eval and generate.ts to make the private cases.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
+import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 // The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
 if (typeof Bun.YAML?.parse !== "function") throw new Error("distill: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
@@ -110,6 +111,75 @@ export function selectCases(cases: LoadedCase[], limit?: number): LoadedCase[] {
   }
   return cases.filter((c) => picked.has(c));
 }
+
+// ---- What a run read -------------------------------------------------------------------------------------------
+
+/**
+ * One digest over files, each named by a name of its own: the digest of sha256Files, except that the name is not the path
+ * the file is read from. A name relative to the corpus folder gives a digest that holds in another checkout.
+ */
+export function digestOf(files: [name: string, path: string][]): string {
+  const sorted = [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return sha256Text(sorted.map(([name, path]) => `${name}\0${sha256File(path)}\n`).join(""));
+}
+
+/** The digest of what a run reads from a corpus folder: its cases.json and every file of its bundles. */
+export function assetsSha256(assets: string): string {
+  const bundles = join(assets, "bundles");
+  const inBundles = existsSync(bundles) ? readdirSync(bundles, { recursive: true }).map(String).filter((f) => statSync(join(bundles, f)).isFile()).map((f) => `bundles/${f}`) : [];
+  return digestOf(["cases.json", ...inBundles].map((name) => [name, join(assets, name)]));
+}
+
+/** What generate writes beside the private assets: the seed they were made with, and the digest of the public assets they were made from. */
+export interface Generated {
+  seed: string;
+  inputs_sha256: string;
+}
+
+export const GENERATED = "generated.json";
+
+/** generated.json in `dir` (private/distill), or undefined when it is missing or does not hold a seed and a digest. */
+export function readGenerated(dir: string): Generated | undefined {
+  try {
+    const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
+    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256 } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, and
+ * the public assets it names the digest of are the ones in `publicAssets` now. Assets made before the public ones changed, or by
+ * an older generate, would score a different set than the public run does.
+ */
+export function generatedProblem(dir: string, publicAssets: string): string | undefined {
+  const generated = readGenerated(dir);
+  if (!generated) return `${GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from`;
+  if (generated.inputs_sha256 !== assetsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
+  return undefined;
+}
+
+/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
+export function readSeed(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The seed to record for a corpus: none for the public one. The private corpus records the seed its assets were made with
+ * (generated.json beside them), which is not private/seed when generate-assets ran with --seed. Any other corpus that is not public records private/seed.
+ */
+export function corpusSeed(corpus: string, privateDir: string, seedFile: string): string | null {
+  if (corpus === "public") return null;
+  return (corpus === "private" ? readGenerated(privateDir)?.seed : undefined) ?? readSeed(seedFile);
+}
+
+/** Did the command run past its timeout? runAkm ends the stderr of a command it killed with "akm timed out after <N>s", and runAkmJson throws a message that says so. */
+export const timedOutMessage = (message: string): boolean => /\btimed out after [\d.]+s\b/.test(message);
 
 // ---- Matching phrases ------------------------------------------------------------------------------------------
 
@@ -391,6 +461,8 @@ export interface Row {
   calls: number | null;
   seconds: number;
   error?: string;
+  /** The error was a timeout: akm ran past its timeout and was killed. Absent on every other row. */
+  timed_out?: true;
 }
 
 /** What one case's akm run left behind. */
@@ -400,8 +472,8 @@ export interface CaseRun {
   seconds: number;
 }
 
-export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null, served: [], calls: null, seconds, error: message };
+export function errorRow(c: Case, message: string, seconds: number, timedOut = false): Row {
+  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null, served: [], calls: null, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
 }
 
 /** The model names the endpoint reported for the calls in `akm improve`'s result. */

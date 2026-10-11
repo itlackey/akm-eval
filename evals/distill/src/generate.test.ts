@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRewrite } from "./generate.ts";
-import { type LoadedCase, loadCases } from "./lib.ts";
+import { type LoadedCase, assetsSha256, generatedProblem, loadCases } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -47,6 +47,38 @@ describe("generate", () => {
     const { out } = generate("42");
     const list = (dir: string) => readdirSync(dir, { recursive: true }).map((f) => String(f).replace(/[^/]+$/, "").replace(/[a-z0-9-]+\//g, "x/"));
     expect(list(join(out, "assets", "bundles")).sort()).toEqual(list(join(PUBLIC, "bundles")).sort());
+  });
+
+  test("writes generated.json beside the assets with the seed and the digest of the public assets, and leaves no work folder", () => {
+    const { out, code } = generate("42");
+    expect(code).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+    expect(generatedProblem(out, PUBLIC)).toBeUndefined();
+    expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
+  });
+
+  test("a second generation replaces the first whole: no file of the old assets stays, and the marker is the new seed's", () => {
+    const out = mkdtempSync(join(tmpdir(), "distill-generate-"));
+    dirs.push(out);
+    mkdirSync(join(out, "assets", "bundles", "old-case"), { recursive: true });
+    writeFileSync(join(out, "assets", "bundles", "old-case", "left-over.md"), "from an earlier generation\n");
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old" }));
+    expect(generate("43", out).code).toBe(0);
+    expect(existsSync(join(out, "assets", "bundles", "old-case"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("43");
+    expect(JSON.parse(readFileSync(join(out, "map.json"), "utf8")).seed).toBe("43");
+  });
+
+  test("a generation that fails leaves the earlier assets, map and generated.json as they were, and no work folder", () => {
+    const first = generate("7");
+    const before = (f: string) => readFileSync(join(first.out, f), "utf8");
+    const was = { cases: before("assets/cases.json"), map: before("map.json"), generated: before("generated.json") };
+    const failed = generate("not-a-seed", first.out); // the rewrite refuses it
+    expect(failed.code).not.toBe(0);
+    expect(failed.stderr).toContain("--seed must be a non-negative integer");
+    expect({ cases: before("assets/cases.json"), map: before("map.json"), generated: before("generated.json") }).toEqual(was);
+    expect(readdirSync(first.out).sort()).toEqual(["assets", "generated.json", "map.json"]);
+    expect(generatedProblem(first.out, PUBLIC)).toBeUndefined();
   });
 
   test("needs a seed and a folder", () => {

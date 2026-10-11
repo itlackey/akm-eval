@@ -5,14 +5,15 @@
 //   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, distillConfig, errorRow, failureMessage, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases } from "./lib.ts";
+import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsSha256, corpusSeed, distillConfig, errorRow, failureMessage, generatedProblem, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases, timedOutMessage } from "./lib.ts";
 
 const NAME = "distill";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -59,10 +60,22 @@ interface Summary {
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
   config_patch: { path: string; sha256: string } | null;
+  /** The akm config the eval wrote, with secrets redacted, and the settings of its engine: temperature, thinking, endpoint host. */
+  config: Record<string, unknown>;
+  engine: EngineSettings;
+  /** One digest over the corpus's cases.json and bundle files, named relative to the corpus folder. */
+  assets_sha256: string;
+  /** The seed of the private corpus's assets (generated.json), or private/seed for an own corpus. Null for the public corpus and when there is none. */
+  seed: string | null;
+  /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
   n_errored: number;
+  /** Of the errored cases, how many ended because akm ran past its timeout. */
+  timeouts: number;
   metrics: Metrics;
   results_dir: string;
 }
@@ -99,7 +112,7 @@ function printSummary(s: Summary): void {
   console.log(`  wrong lessons  ${m.wrong_lessons.wrong}/${m.wrong_lessons.n}  ${pct(m.wrong_lessons.rate)}   of the cases that expect none`);
   if (m.lesson_updates.n > 0) console.log(`  lesson updates ${m.lesson_updates.right}/${m.lesson_updates.n}  ${pct(m.lesson_updates.rate)}   of the cases that expect an update to a lesson the library holds`);
   for (const [klass, c] of Object.entries(m.by_class)) console.log(`    ${klass.padEnd(16)} ${c.good !== undefined ? `${c.good}/${c.n} good` : c.right !== undefined ? `${c.right}/${c.n} right` : `${c.wrong}/${c.n} wrong`}`);
-  console.log(`  errored        ${s.n_errored}`);
+  console.log(`  errored        ${s.n_errored}${s.timeouts > 0 ? ` (${s.timeouts} timed out)` : ""}`);
   console.log(`  results        ${relative(ROOT, s.results_dir)}/`);
 }
 
@@ -119,7 +132,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 }
 
 /** One case: a new sandbox with the case's bundle, distill run on its memory alone, and the queue read back. */
-export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; overrides?: Overrides }): Promise<Row> {
+export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; overrides?: Overrides; improveTimeoutMs?: number }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
@@ -130,10 +143,11 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
     if (c.feedback?.length) await runAkm(sandbox, ["index"]); // akm records feedback only against an indexed asset
     for (const f of c.feedback ?? []) {
       const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
-      if (fb.code !== 0) return errorRow(c, hide(failureMessage(fb.code, fb.stderr, fb.stdout)), seconds());
+      if (fb.code !== 0) return errorRow(c, hide(failureMessage(fb.code, fb.stderr, fb.stdout)), seconds(), fb.timedOut);
     }
     const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
-    const { stdout, stderr, code } = await runAkm(sandbox, args, { timeoutMs: IMPROVE_TIMEOUT_MS });
+    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs: ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS });
+    if (timedOut) return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds(), true);
     let improve: unknown;
     try {
       improve = JSON.parse(stdout);
@@ -145,7 +159,8 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
     for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"])) });
     return scoreCase(c, { improve, proposals: lessonProposals(listed), seconds: seconds() });
   } catch (e) {
-    return errorRow(c, hide((e as Error).message), seconds());
+    const message = hide((e as Error).message);
+    return errorRow(c, message, seconds(), timedOutMessage(message));
   } finally {
     removeSandbox(sandbox);
   }
@@ -153,14 +168,15 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
 
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number; overrides?: Overrides },
-  folders = {
+  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number; overrides?: Overrides; improveTimeoutMs?: number },
+  folders: { assets: string; results: string; seed?: string } = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "assets" : "assets-feedback") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "results" : "results-feedback") : join(ROOT, "private", NAME, "results"),
   },
 ): Promise<Summary> {
   const all = loadCases(folders.assets);
   const cases = selectCases(all, ctx.limit);
+  const assetsDigest = assetsSha256(folders.assets);
   const dir = makeResultsDir(folders.results, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
@@ -178,12 +194,13 @@ export async function runCorpus(
     console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.id.padEnd(10)} ${row.seconds}s  ${shown}`);
     consecutiveErrors = row.verdict === "error" ? consecutiveErrors + 1 : 0;
     if (consecutiveErrors >= GIVE_UP_AFTER) {
-      aborted = row.error;
+      aborted = row.error || "no message";
       break;
     }
   }
 
   const errored = rows.filter((r) => r.verdict === "error").length;
+  const abortedReason = `${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
   const summary: Summary = {
     eval: NAME,
     corpus,
@@ -196,17 +213,25 @@ export async function runCorpus(
     served_models: [...new Set(rows.flatMap((r) => r.served))].sort(),
     limit: ctx.limit ?? null,
     ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
+    config: redactConfig(ctx.config),
+    engine: engineSettings(ctx.config),
+    assets_sha256: assetsDigest,
+    seed: corpusSeed(corpus, dirname(folders.assets), folders.seed ?? join(ROOT, "private", "seed")),
+    status: aborted ? "aborted" : "complete",
+    aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
     n_errored: errored,
+    timeouts: rows.filter((r) => r.timed_out).length,
     metrics: metrics(rows),
     results_dir: dir,
   };
+  // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (aborted) fail(`${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
+  if (aborted) fail(`${abortedReason}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
   return summary;
 }
 
@@ -238,6 +263,8 @@ async function main(): Promise<void> {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
       fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
     }
+    const stale = c === "private" ? generatedProblem(join(ROOT, "private", NAME), join(EVAL_DIR, "assets")) : undefined;
+    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const settings = useModel(values, fail);
