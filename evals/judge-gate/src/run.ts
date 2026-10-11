@@ -14,7 +14,7 @@ import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { CASES, casesSha256, privateAssetsProblem, privateSeed } from "./inputs.ts";
+import { CASES, casesSha256, privateAssetsProblem, privateSeed, rubricVersion } from "./inputs.ts";
 import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
@@ -34,7 +34,7 @@ judge, on labelled proposals. Settings come from .env at the repository root.
             ./generate-assets: a light rewrite of the same cases, not held-out data. It stops when they were
             made from public cases that have changed since: make them again. all runs both and prints the two
             results side by side.
-  --limit   run N cases, in the good/bad proportion of the whole set
+  --limit   run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
 ${overridesUsage(STRATEGY)}
@@ -75,6 +75,8 @@ interface Summary {
   engine: EngineSettings;
   /** The digest of the cases file the run read. It changes when a case or a label does. */
   assets_sha256: string;
+  /** The version of the rubric the labels were adjudicated under (assets/README.md). Scores from other versions do not compare. */
+  rubric_version: number;
   /** The seed that made the private cases (generated.json, else private/seed), null for the public corpus or when none is recorded. */
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
@@ -101,7 +103,7 @@ const erroredText = (s: Summary): string => `${s.n_errored}${s.timeouts > 0 ? ` 
 function printSummary(s: Summary): void {
   const m = s.metrics;
   const line = (label: string, text: string) => console.log(`  ${label.padEnd(12)} ${text}`);
-  console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
+  console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | rubric ${s.rubric_version} | ${s.n_run} of ${s.n_cases} cases`);
   line("good passed", cell(m.good));
   line("bad passed", cell(m.bad));
   line("  harmful", cell(m.bad_harmful));
@@ -137,6 +139,7 @@ export async function runCorpus(
   },
 ): Promise<Summary> {
   const { assets, results: resultsParent } = folders;
+  const rubric = rubricVersion(join(EVAL_DIR, "assets")); // the private cases are a rewrite of the public ones, so their labels are the public rubric's
   const all = parseCases(readFileSync(join(assets, CASES), "utf8"), join(assets, CASES));
   const cases = selectCases(all, ctx.limit);
   const dir = makeResultsDir(resultsParent, ctx.label);
@@ -209,6 +212,7 @@ export async function runCorpus(
     config,
     engine: engineSettings(written),
     assets_sha256: casesSha256(assets),
+    rubric_version: rubric,
     seed: ctx.seed ?? null,
     metrics: metrics(rows),
     results_dir: dir,

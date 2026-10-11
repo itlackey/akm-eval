@@ -279,6 +279,20 @@ describe("runCorpus", () => {
       expect(two.seed).toBeNull();
     });
 
+    test("the version of the rubric the labels follow, from the public assets README, for either corpus and for a run that gave up", async () => {
+      const readme = readFileSync(join(import.meta.dir, "..", "assets", "README.md"), "utf8");
+      const version = Number(/^rubric_version: (\d+)$/m.exec(readme)?.[1]);
+      expect(version).toBe(2);
+      const pub = setup([{ word: "PASS", label: "good" }]);
+      expect((await quiet(() => runCorpus("public", pub.ctx, pub.folders))).rubric_version).toBe(version);
+      expect(resultsOf(pub.folders).summary.rubric_version).toBe(version);
+      const priv = setup([{ word: "PASS", label: "good" }]);
+      expect((await quiet(() => runCorpus("private", priv.ctx, priv.folders))).rubric_version).toBe(version);
+      const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
+      await expect(quiet(() => runCorpus("public", dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row got no verdict");
+      expect(resultsOf(dead.folders).summary).toMatchObject({ status: "aborted", rubric_version: version });
+    });
+
     test("the strategy and the config patch of the overrides", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
       const configPatch = { path: "patches/tight.json", sha256: "ab".repeat(32), patch: { defaults: { improveStrategy: "tight" } } };

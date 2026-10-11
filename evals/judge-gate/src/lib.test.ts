@@ -38,50 +38,93 @@ describe("parseCases", () => {
   test("reads the public cases", () => {
     const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
     expect(cases).toHaveLength(106);
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(28);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(11);
   });
 });
 
-/** The words of a text without the provenance stamps akm adds (type, generated, verified), which are neither a fix nor churn. */
-const wordsOf = (text: string): Set<string> => {
-  const body = text.replace(/^generated:\n(  .*\n)+/m, "").replace(/^verified:\n(  .*\n?)+/m, "").replace(/^type: .*\n/m, "");
-  return new Set(body.toLowerCase().match(/[a-z0-9][a-z0-9_.:/@~#<>=+-]*[a-z0-9]|[a-z0-9]/g) ?? []);
+/** A text without the provenance stamps akm adds (type, generated, verified), which are neither a fix nor churn, and without the when_to_use key that a fix may add. */
+const withoutStamps = (text: string): string => text.replace(/^generated:\n(  .*\n)+/m, "").replace(/^verified:\n(  .*\n?)+/m, "").replace(/^type: .*\n/m, "").replace(/^when_to_use:/m, "");
+
+const wordsOf = (text: string): Set<string> => new Set(withoutStamps(text).toLowerCase().match(/[a-z0-9][a-z0-9_.:/@~#<>=+-]*[a-z0-9]|[a-z0-9]/g) ?? []);
+
+/** The facts of a text that are easy to check: its words with a digit, an underscore, an @, a ~ or a # in them, a leading --, camelCase, or a path (a slash with a dot or a leading ~ . /), trimmed of the markup around them. */
+const factsOf = (text: string): Set<string> => {
+  const found = new Set<string>();
+  for (const word of withoutStamps(text).split(/\s+/)) {
+    const fact = word.replace(/^[`*"'.,;:()[\]{}<>|\\]+|[`*"'.,;:()[\]{}<>|\\]+$/g, "");
+    if (fact.length >= 3 && /[a-z0-9]/i.test(fact) && (/[0-9_@~#]/.test(fact) || fact.startsWith("--") || /[a-z][A-Z]/.test(fact) || (fact.includes("/") && (fact.includes(".") || /^[~./]/.test(fact))))) found.add(fact);
+  }
+  return found;
 };
+
+/** What a churn revision breaks: the facts of its source that its candidate lacks, and the numbers its candidate has that its source lacks. */
+const churnProblems = (c: { source: string; candidate: string }): { lost: string[]; added: string[] } => {
+  const [source, candidate] = [withoutStamps(c.source), withoutStamps(c.candidate)];
+  return {
+    lost: [...factsOf(source)].filter((fact) => !candidate.includes(fact)),
+    added: [...factsOf(candidate)].filter((fact) => /[0-9]/.test(fact) && !source.includes(fact)),
+  };
+};
+
+describe("the churn tripwire", () => {
+  test("lets an intro and headings pass, and sees a dropped path or version and an added number", () => {
+    const source = "---\ndescription: d\n---\nRun `scripts/run.sh --root` on v1.2.3 with maxRetries 5.\n";
+    const intro = "---\ntype: knowledge\ndescription: d\nwhen_to_use: now\n---\n\n# Title\n\nThis restates the page.\n\n## Steps\n\nRun `scripts/run.sh --root` on v1.2.3 with maxRetries 5.\n";
+    expect(churnProblems({ source, candidate: intro })).toEqual({ lost: [], added: [] });
+    expect(churnProblems({ source, candidate: intro.replace("scripts/run.sh", "run.sh") }).lost).toEqual(["scripts/run.sh"]);
+    expect(churnProblems({ source, candidate: intro.replace("v1.2.3", "v1.2") }).lost).toEqual(["v1.2.3"]);
+    expect(churnProblems({ source, candidate: `${intro}Needs v2.0.0.\n` }).added).toEqual(["v2.0.0"]);
+  });
+});
 
 describe("the severity of the public bad cases", () => {
   const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
   const bad = cases.filter((c) => c.label === "bad");
 
   test("every bad case has one, and no good case does", () => {
-    expect(bad).toHaveLength(78);
+    expect(bad).toHaveLength(95);
     for (const c of bad) expect(c.severity === "churn" || c.severity === "harmful").toBe(true);
     for (const c of cases.filter((x) => x.label === "good")) expect(c.severity).toBeUndefined();
   });
 
-  test("11 are churn and 67 are harmful. Relabel a case and change these", () => {
-    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(11);
+  test("28 are churn and 67 are harmful. Relabel a case and change these", () => {
+    expect(bad.filter((c) => c.severity === "churn")).toHaveLength(28);
     expect(bad.filter((c) => c.severity === "harmful")).toHaveLength(67);
   });
 
-  // A tripwire and no proof: a case moved to churn that adds a paragraph, or one moved to harmful that changes nothing, fails here.
-  test("a churn case adds at most ten words the source lacks, and a harmful case changes at least one word", () => {
-    for (const c of bad) {
+  // A tripwire and no proof. Churn is the form changing with every fact kept, and an intro or a heading may repeat a fact but not make one: a case
+  // moved to churn that drops a path, a version or an identifier of its source, or brings a number it lacks, fails here.
+  test("a churn case keeps every checkable fact of its source and adds no number to it", () => {
+    for (const c of bad.filter((x) => x.severity === "churn")) expect({ id: c.id, ...churnProblems(c) }).toEqual({ id: c.id, lost: [], added: [] });
+  });
+
+  test("a harmful case changes at least one word", () => {
+    for (const c of bad.filter((x) => x.severity === "harmful")) {
       const [source, candidate] = [wordsOf(c.source), wordsOf(c.candidate)];
-      const added = [...candidate].filter((w) => !source.has(w));
-      const dropped = [...source].filter((w) => !candidate.has(w));
-      if (c.severity === "churn") expect({ id: c.id, added: added.length <= 10 }).toEqual({ id: c.id, added: true });
-      else expect({ id: c.id, changed: added.length + dropped.length > 0 }).toEqual({ id: c.id, changed: true });
+      const changed = [...candidate].filter((w) => !source.has(w)).length + [...source].filter((w) => !candidate.has(w)).length;
+      expect({ id: c.id, changed: changed > 0 }).toEqual({ id: c.id, changed: true });
     }
   });
 });
 
 describe("selectCases", () => {
-  const cases = [...Array.from({ length: 28 }, (_, i) => make(i, "good")), ...Array.from({ length: 78 }, (_, i) => make(i, "bad"))];
+  const cases = [...Array.from({ length: 11 }, (_, i) => make(i, "good")), ...Array.from({ length: 95 }, (_, i) => make(i, "bad"))];
 
   test("keeps the good/bad proportion and takes each kind in file order", () => {
     const picked = selectCases(cases, 3);
     expect(picked.map((c) => c.id)).toEqual(["id-good-0", "id-bad-0", "id-bad-1"]);
-    expect(selectCases(cases, 10).filter((c) => c.label === "good")).toHaveLength(3);
+    expect(selectCases(cases, 10).filter((c) => c.label === "good")).toHaveLength(1);
+    expect(selectCases(cases, 20).filter((c) => c.label === "good")).toHaveLength(2);
+  });
+
+  test("a small limit still holds a good case and a bad one, though good cases are a tenth of the set", () => {
+    for (const limit of [2, 3, 4, 5]) {
+      const picked = selectCases(cases, limit);
+      expect(picked).toHaveLength(limit);
+      expect(picked.some((c) => c.label === "good")).toBe(true);
+      expect(picked.some((c) => c.label === "bad")).toBe(true);
+    }
+    expect(selectCases(cases, 1)).toHaveLength(1);
   });
 
   test("a limit at or above the size runs everything", () => {
