@@ -1,15 +1,28 @@
-import { describe, expect, test } from "bun:test";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
-import { PINS } from "../../../lib/harbor/harbor.ts";
+import { type AkmArm, PINS, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
-import { LIBRARY_ASSETS, jobConfig, libraryOf, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
+import { enforcedAssets, jobConfig, libraryOf, measureLibrary, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
 
 const BENCH_DIR = join(import.meta.dir, "..");
 const lock = readLock();
 const CANARY = ["terminal-bench", "canary"].join("-"); // written so this file does not hold it
+
+const dirs: string[] = [];
+const akmBin = process.env.AKM_BIN;
+afterEach(() => {
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  if (akmBin === undefined) delete process.env.AKM_BIN;
+  else process.env.AKM_BIN = akmBin;
+});
+const tmp = (): string => {
+  const d = mkdtempSync(join(tmpdir(), "terminal-bench-test-"));
+  dirs.push(d);
+  return d;
+};
 
 describe("the lock", () => {
   test("pins the dataset by digest, and names its 89 tasks and the ten of Harbor's sample", () => {
@@ -65,7 +78,8 @@ describe("selectTasks", () => {
 
 describe("jobConfig", () => {
   const tasks = selectTasks(lock, 10);
-  const cfg = jobConfig({ name: "terminal-bench-public", model: "openai/gpt-6-luna", lock, tasks, librariesDir: "/l", jobsDir: "/j" }) as any;
+  const base = { name: "terminal-bench-public", model: "openai/gpt-6-luna", lock, tasks, librariesDir: "/l", jobsDir: "/j" };
+  const cfg = jobConfig({ ...base, libraryAssets: 259 }) as any;
   const [control, akm] = cfg.agents;
 
   test("fetches the pinned dataset by its digest, and only the tasks asked for, under their registry names", () => {
@@ -73,18 +87,34 @@ describe("jobConfig", () => {
     expect(cfg.datasets[0].version).toBeUndefined();
   });
 
-  test("runs each task once per arm, four trials at a time, on the pins", () => {
+  test("runs each task once per arm by default, four trials at a time, on the pins", () => {
     expect(cfg.n_attempts).toBe(1);
     expect(cfg.n_concurrent_trials).toBe(4);
     expect(control.kwargs.version).toBe(PINS.opencode);
     expect(akm.kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, akm_plugin_version: PINS.akm_plugin });
   });
 
+  test("runs each task as many times per arm as --attempts says", () => {
+    expect((jobConfig({ ...base, attempts: 5 }) as any).n_attempts).toBe(5);
+  });
+
   test("tells the akm arm which library to seed, for every task, and how many assets akm should index in it", () => {
     expect(akm.env).toEqual({ AKM_TASK_STASH: "library" });
-    expect(akm.kwargs).toMatchObject({ libraries_dir: "/l", library_assets: LIBRARY_ASSETS });
+    expect(akm.kwargs).toMatchObject({ libraries_dir: "/l", library_assets: 259 });
     expect(JSON.stringify(control)).not.toContain("akm");
     expect(control.env).toBeUndefined();
+  });
+
+  test("asks for at least one asset when the library's were not counted", () => {
+    expect((jobConfig(base) as any).agents[1].kwargs.library_assets).toBe(1);
+    expect((jobConfig({ ...base, libraryAssets: null }) as any).agents[1].kwargs.library_assets).toBe(1);
+  });
+
+  test("gives the akm arm the akm under test and the extra settings, and the control arm none of it", () => {
+    const arm: AkmArm = { bin: "~/akm", build: "abc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: "/pack" };
+    const swept = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
+    expect(swept.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(swept.agents[0]).toEqual(control);
   });
 
   test("keeps the task's own time limits, and holds no credential", () => {
@@ -110,7 +140,7 @@ describe("summarize", () => {
 
   /** A results folder as a run leaves it: one Harbor job with these trials in it. */
   function runDir(trials: Record<string, unknown>): string {
-    const dir = mkdtempSync(join(tmpdir(), "terminal-bench-test-"));
+    const dir = tmp();
     for (const [name, r] of Object.entries(trials)) {
       mkdirSync(join(dir, "jobs", "terminal-bench-public", name, "agent"), { recursive: true });
       writeFileSync(join(dir, "jobs", "terminal-bench-public", name, "result.json"), JSON.stringify(r));
@@ -125,35 +155,176 @@ describe("summarize", () => {
       [`${two}__a`]: result(two, "opencode"),
       [`${two}__b`]: result(two, "akm-opencode", { verifier_result: null, exception_info: { exception_type: "RuntimeError" } }),
     });
-    try {
-      const s = summarize({ corpus: "public", label: "t", model: "openai/x", limit: 10, lock, tasks: lock.sample, dir, exit: 0 });
-      const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-      expect(stored).toMatchObject({ eval: "terminal-bench", corpus: "public", model: "openai/x", limit: 10, n_tasks: 10, attempts: 1, harbor_exit: 0 });
-      expect(stored.dataset).toEqual({ name: lock.registry, ref: lock.ref, source: lock.source, licence: lock.licence, tasks_in_dataset: 89, tasks_run_with_another_digest: [] });
-      expect(stored.library).toEqual({ path: "corpus/library", assets: LIBRARY_ASSETS });
-      expect(stored.results_dir).toBeUndefined();
-      expect(s.report.control).toMatchObject({ trials: 2, scored: 2, timeouts: 1, passed: 1 });
-      expect(s.report.akm).toMatchObject({ trials: 2, scored: 1, errored: 1 });
-      expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(4);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const s = summarize({ corpus: "public", label: "t", model: "openai/x", limit: 10, lock, tasks: lock.sample, dir, exit: 0 });
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ eval: "terminal-bench", corpus: "public", model: "openai/x", limit: 10, n_tasks: 10, attempts: 1, harbor_exit: 0 });
+    expect(stored.dataset).toEqual({ name: lock.registry, ref: lock.ref, source: lock.source, licence: lock.licence, tasks_in_dataset: 89, tasks_run_with_another_digest: [] });
+    expect(stored.library).toEqual({ path: "corpus/library", assets: null, measured_with: null, sha256: null });
+    expect(stored.results_dir).toBeUndefined();
+    expect(s.report.control).toMatchObject({ trials: 2, scored: 2, timeouts: 1, passed: 1 });
+    expect(s.report.akm).toMatchObject({ trials: 2, scored: 1, errored: 1 });
+    expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(4);
+  });
+
+  test("names the akm as the other evals do, the settings it ran with, and what the run was made of", () => {
+    const dir = runDir({ [`${one}__a`]: result(one, "opencode"), [`${one}__b`]: result(one, "akm-opencode") });
+    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: "/p" };
+    writeFileSync(join(dir, "jobs", "terminal-bench-public", `${one}__b`, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.27", plugin_akm_cli: "0.9.26", assets_indexed: 259, env: { AKM_CURATE_TIMEOUT: "30" } }));
+    const library = { assets: 259, measured_with: { akm_version: "0.9.26", akm_bin: "akm", akm_build: null }, sha256: "ab".repeat(32) };
+    const s = summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, attempts: 3, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" }, packages: [{ file: "akm-cli-0.9.27.tgz", sha256: "0".repeat(64) }], library, job: { n_attempts: 3 } });
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ attempts: 3, akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc", akm_env: { AKM_CURATE_TIMEOUT: "30" }, job: { n_attempts: 3 } });
+    expect(stored.pins).toEqual(pinsOf(arm));
+    expect(stored.pins.akm_cli).toBe("0.9.27");
+    expect(stored.akm_install).toMatchObject({ from: "checkout", plugin_from: "release", packages: [{ file: "akm-cli-0.9.27.tgz" }], observed: { akm_version: ["0.9.27"], plugin_akm_cli: ["0.9.26"], assets_indexed: [259], env: { AKM_CURATE_TIMEOUT: "30" } } });
+    expect(stored.library).toEqual({ path: "corpus/library", ...library });
+    expect(s.results_dir).toBe(dir);
+  });
+
+  test("carries the keys --repeat needs, with the numbers of the report in metrics", () => {
+    const dir = runDir({ [`${one}__a`]: result(one, "opencode", { verifier_result: { rewards: { reward: 0 } } }), [`${one}__b`]: result(one, "akm-opencode") });
+    summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0 });
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    for (const key of ["eval", "corpus", "model", "akm_version", "akm_bin", "akm_build", "n_errored", "metrics"]) expect(Object.hasOwn(stored, key)).toBe(true);
+    expect(stored.akm_version).toBe(PINS.akm_cli);
+    expect(stored.akm_bin).toBe(`akm-cli@${PINS.akm_cli}`);
+    expect(stored.akm_build).toBeNull();
+    expect(stored.n_errored).toBe(0);
+    expect(stored.metrics).toMatchObject({ control: { pass_rate: 0 }, akm: { pass_rate: 1 }, delta: { value: 1, n: 1 }, engagement: { control_calls: 0 } });
+    expect(stored.report.delta.value).toBe(stored.metrics.delta.value);
+  });
+
+  test("counts the trials that ran out of time apart from the errors, and marks their rows", () => {
+    const dir = runDir({
+      [`${one}__a`]: result(one, "opencode", { exception_info: { exception_type: "AgentTimeoutError" } }), // verified all the same
+      [`${one}__b`]: result(one, "akm-opencode", { verifier_result: null, exception_info: { exception_type: "AgentSetupTimeoutError" } }), // a slow akm install
+      [`${two}__a`]: result(two, "opencode"),
+      [`${two}__b`]: result(two, "akm-opencode", { verifier_result: null, exception_info: { exception_type: "RuntimeError" } }),
+    });
+    const s = summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one, two], dir, exit: 0 });
+    expect(s.timeouts).toEqual({ control: 1, akm: 1 });
+    expect(s.metrics.control.timeouts).toBe(1);
+    expect(s.metrics.akm.timeouts).toBe(1);
+    expect(s.n_errored).toBe(2); // the two akm trials that got no reward, the slow install among them
+    const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.map((r) => [r.arm, r.task === one, r.timed_out])).toEqual([
+      ["control", true, true],
+      ["akm", true, true],
+      ["control", false, false],
+      ["akm", false, false],
+    ]);
+  });
+
+  test("shows a plugin failure that a time-out hid: its exception, no reward, and a count of it", () => {
+    const dir = runDir({
+      [`${one}__a`]: result(one, "opencode"),
+      [`${one}__b`]: result(one, "akm-opencode", { verifier_result: null, exception_info: { exception_type: "AgentTimeoutError" } }),
+    });
+    writeFileSync(join(dir, "jobs", "terminal-bench-public", `${one}__b`, "agent", "akm_plugin_status.json"), JSON.stringify({ live: false, problem: "the plugin never logged 'AKM user feedback recorded'" }));
+    const s = summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0 });
+    expect(s.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
+    expect(s.report.akm).toMatchObject({ errored: 1, scored: 0 });
+    expect(s.timeouts.akm).toBe(1);
+    const row = JSON.parse(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")[1]);
+    expect(row).toMatchObject({ arm: "akm", error: "AkmPluginNotLoadedError", reward: null, timed_out: true, plugin_problem: "the plugin never logged 'AKM user feedback recorded'" });
   });
 
   test("names a task that ran with a digest other than the lock's", () => {
     const dir = runDir({ [`${one}__a`]: result(one, "opencode", { task_id: { org: "terminal-bench", name: one, ref: `sha256:${"0".repeat(64)}` } }), [`${two}__a`]: result(two, "opencode") });
+    expect(summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: lock.sample, dir, exit: 0 }).dataset.tasks_run_with_another_digest).toEqual([one]);
+  });
+});
+
+/** An akm that counts as a fake does: every .md file in the bundle is a skill, and there are five facts, which are the scaffold's. */
+const FAKE_AKM = `
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2);
+const walk = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".md") ? 1 : 0), 0);
+if (process.env.FAKE_AKM_FAIL === args[0]) { console.error("akm cannot " + args[0]); process.exit(3); }
+if (args[0] === "--version") console.log("akm " + (process.env.FAKE_AKM_VERSION ?? "0.9.99-test"));
+else if (args[0] === "bundle") mkdirSync(args[args.indexOf("--dir") + 1], { recursive: true });
+else if (args[0] === "index") {}
+else if (args[0] === "info") console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
+else { console.error("unknown command " + args[0]); process.exit(1); }
+`;
+
+/** Points AKM_BIN at the fake akm, or at no akm at all. */
+function fakeAkm(fake: boolean): void {
+  if (!fake) {
+    process.env.AKM_BIN = "no-such-akm-in-this-test";
+    return;
+  }
+  const script = join(tmp(), "fake-akm.ts");
+  writeFileSync(script, FAKE_AKM);
+  process.env.AKM_BIN = `bun ${script}`;
+}
+
+const mdFilesIn = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? mdFilesIn(join(dir, e.name)) : e.name.endsWith(".md") ? 1 : 0), 0);
+/** The .md files in the type folders of a library, as the fake akm counts them. Loose files are not copied into a bundle. */
+const fakeCount = (library: string): number => readdirSync(library, { withFileTypes: true }).filter((e) => e.isDirectory()).reduce((n, e) => n + mdFilesIn(join(library, e.name)), 0);
+
+describe("measureLibrary", () => {
+  function library(): string {
+    const dir = tmp();
+    for (const [file, text] of Object.entries({ "skills/a/SKILL.md": "a", "skills/a/ref.md": "r", "agents/x.md": "x", "scripts/s.sh": "echo", "README.md": "loose" })) {
+      mkdirSync(join(dir, file, ".."), { recursive: true });
+      writeFileSync(join(dir, file), text);
+    }
+    return dir;
+  }
+
+  test("counts the assets akm indexes in the type folders of the library, and leaves the scaffold's facts out", async () => {
+    fakeAkm(true);
+    const lib = library();
+    const m = await measureLibrary(lib);
+    expect(m.assets).toBe(3); // three .md files in type folders. The README is loose, the script is no .md, the five facts are the scaffold's
+    expect(m.reason).toBeUndefined();
+    expect(m.measured_with).toMatchObject({ akm_version: "0.9.99-test", akm_build: null });
+    expect(m.measured_with?.akm_bin).toContain("fake-akm.ts");
+    writeFileSync(join(lib, "agents", "y.md"), "y"); // a library edit changes the count, with no constant to keep in step
+    expect((await measureLibrary(lib)).assets).toBe(4);
+    rmSync(join(lib, "skills"), { recursive: true });
+    expect((await measureLibrary(lib)).assets).toBe(2);
+  });
+
+  test("is null, with the reason, when there is no akm to count with or it cannot index", async () => {
+    fakeAkm(false);
+    const none = await measureLibrary(library());
+    expect(none).toMatchObject({ assets: null, measured_with: null });
+    expect(none.reason).toContain("could not run");
+    fakeAkm(true);
+    process.env.FAKE_AKM_FAIL = "index";
     try {
-      expect(summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: lock.sample, dir, exit: 0 }).dataset.tasks_run_with_another_digest).toEqual([one]);
+      const broken = await measureLibrary(library());
+      expect(broken).toMatchObject({ assets: null, measured_with: null });
+      expect(broken.reason).toContain("akm index failed (exit 3): akm cannot index");
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      delete process.env.FAKE_AKM_FAIL;
     }
   });
 });
 
+describe("enforcedAssets", () => {
+  const counted = (version: string) => ({ assets: 259, measured_with: { akm_version: version, akm_bin: "akm", akm_build: null } });
+  const arm = (version: string) => ({ cli: { version, tarball: null } });
+
+  test("is the count when the akm arm installs the version that counted it, and nothing to enforce when it installs another", () => {
+    expect(enforcedAssets(counted("0.9.26"), arm("0.9.26"))).toBe(259);
+    expect(enforcedAssets(counted("0.9.30"), arm("0.9.26"))).toBeNull();
+    expect(enforcedAssets(counted("0.10.0"), arm("0.9.26"))).toBeNull();
+    expect(enforcedAssets(counted("0.9.26"), arm("0.9.26-rc.1"))).toBeNull(); // a pre-release is not the release
+  });
+
+  test("is nothing to enforce when no akm counted", () => {
+    expect(enforcedAssets({ assets: null, measured_with: null }, arm("0.9.26"))).toBeNull();
+  });
+});
+
 describe("runCorpus", () => {
-  /** A `uv` that is not Harbor. Given the job, it leaves the trial folders Harbor would leave and exits as FAKE_UV_EXIT says. FAKE_UV_NOTHING makes it leave none. */
+  /** A `uv` that is not Harbor. Given the job, it leaves the trial folders Harbor would leave and exits as FAKE_UV_EXIT says. FAKE_UV_NOTHING makes it leave none. It also records the environment it was started in and the job it was given. */
   function fakeUv(): { root: string; env: Record<string, string> } {
-    const root = mkdtempSync(join(tmpdir(), "terminal-bench-run-"));
+    const root = tmp();
     mkdirSync(join(root, "bin"));
     writeFileSync(
       join(root, "bin", "uv"),
@@ -162,15 +333,25 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = Bun.argv.slice(2);
 const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
+writeFileSync(join(job.jobs_dir, "..", "uv-env.json"), JSON.stringify(process.env));
 if (!process.env.FAKE_UV_NOTHING) {
-  for (const task of job.datasets[0].task_names) {
+  job.datasets[0].task_names.forEach((task, i) => {
     for (const agent of job.agents) {
       const name = agent.name ?? "akm-opencode";
       const dir = join(job.jobs_dir, job.job_name, task.split("/")[1] + "__" + name);
       mkdirSync(join(dir, "agent"), { recursive: true });
-      writeFileSync(join(dir, "result.json"), JSON.stringify({ task_name: task, agent_info: { name }, verifier_result: { rewards: { reward: name === "opencode" ? 0 : 1 } }, started_at: "2026-10-06T04:00:00Z", finished_at: "2026-10-06T04:05:00Z" }));
+      const trial = { task_name: task, agent_info: { name }, verifier_result: { rewards: { reward: name === "opencode" ? 0 : 1 } }, started_at: "2026-10-06T04:00:00Z", finished_at: "2026-10-06T04:05:00Z" };
+      if (process.env.FAKE_UV_TIMEOUTS && i === 0 && name === "opencode") trial.exception_info = { exception_type: "AgentTimeoutError" };
+      if (process.env.FAKE_UV_TIMEOUTS && i === 1 && name === "akm-opencode") { trial.exception_info = { exception_type: "AgentSetupTimeoutError" }; trial.verifier_result = null; }
+      if (process.env.FAKE_UV_PLUGIN_DEAD && i === 0 && name === "akm-opencode") {
+        trial.exception_info = { exception_type: "AgentTimeoutError" };
+        trial.verifier_result = null;
+        writeFileSync(join(dir, "agent", "akm_plugin_status.json"), JSON.stringify({ live: false, problem: "there is no opencode log" }));
+      }
+      if (name === "akm-opencode") writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" } }));
+      writeFileSync(join(dir, "result.json"), JSON.stringify(trial));
     }
-  }
+  });
 }
 process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
 `,
@@ -179,53 +360,177 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
     return { root, env: { PATH: `${join(root, "bin")}:${process.env.PATH}` } };
   }
 
-  async function quiet<T>(f: () => Promise<T>): Promise<T> {
+  /** Runs `f` with the console quiet. Pass `warnings` to get what it warned. */
+  async function quiet<T>(f: () => Promise<T>, warnings: string[] = []): Promise<T> {
     const log = console.log;
+    const warn = console.warn;
     console.log = () => {};
+    console.warn = (...a: unknown[]) => void warnings.push(a.join(" "));
     try {
       return await f();
     } finally {
       console.log = log;
+      console.warn = warn;
     }
   }
 
+  const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8"));
+
   test("writes the job, stages the library, runs Harbor and leaves the summary", async () => {
+    fakeAkm(true);
     const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+    const dir = s.results_dir;
+    expect(dir).toMatch(/results\/\d{4}-\d{2}-\d{2}-t$/);
+    const job = readJson(join(dir, "job.json"));
+    expect(job.datasets[0].task_names).toEqual(lock.sample.slice(0, 2).map((t) => `terminal-bench/${t}`));
+    expect(job.agents[1].kwargs.libraries_dir).toBe(join(dir, "libraries"));
+    expect(readdirSync(join(dir, "libraries"))).toEqual(["library"]);
+    expect(existsSync(join(dir, "libraries", "library", "skills"))).toBe(true);
+    expect(s.report.control).toMatchObject({ trials: 2, passed: 0 });
+    expect(s.report.akm).toMatchObject({ trials: 2, passed: 2 });
+    expect(readJson(join(dir, "summary.json"))).toMatchObject({ eval: "terminal-bench", corpus: "public", limit: 2, n_tasks: 2, attempts: 1, harbor_exit: 0 });
+  });
+
+  test("counts the library's assets on the host, tells the akm arm the number when it installs the same akm, and records it with the akm that counted and a digest of the library", async () => {
+    fakeAkm(true);
+    const { root, env } = fakeUv();
+    const arm = releaseArm("0.9.99-test"); // the version the fake akm prints
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm }, join(root, "results")));
+    const want = fakeCount(libraryOf("public"));
+    expect(want).toBeGreaterThan(0);
+    expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(want);
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(stored.library).toMatchObject({ path: "corpus/library", assets: want, measured_with: { akm_version: "0.9.99-test" } });
+    expect(stored.library.sha256).toBe(sha256Dir(libraryOf("public")));
+    expect(stored.library.sha256).toBe(sha256Dir(join(s.results_dir, "libraries", "library")));
+  });
+
+  test("asks only for a non-empty index when the akm arm installs another version than the one that counted, keeps the count, and warns", async () => {
+    fakeAkm(true); // the fake akm prints 0.9.99-test, and the default arm installs the pinned akm-cli
+    const { root, env } = fakeUv();
+    const said: string[] = [];
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env }, join(root, "results")), said);
+    const want = fakeCount(libraryOf("public"));
+    expect(want).toBeGreaterThan(1);
+    expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, library_assets: 1 });
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(stored.library).toMatchObject({ assets: want, measured_with: { akm_version: "0.9.99-test" } }); // the count is still recorded
+    expect(stored.job.agents[1].kwargs.library_assets).toBe(1);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain(`the ${want} assets of the library were counted with akm 0.9.99-test, and the akm arm installs akm ${PINS.akm_cli}`);
+    expect(said[0]).toContain("akm_install.observed.assets_indexed");
+  });
+
+  test("holds a checkout's akm to the count when it is the version that counted, and says nothing", async () => {
+    fakeAkm(true);
+    process.env.FAKE_AKM_VERSION = "0.9.27";
+    const { root, env } = fakeUv();
+    const packs = tmp();
+    writeFileSync(join(packs, "akm-cli-0.9.27.tgz"), "an akm");
+    const arm: AkmArm = { bin: "~/code/akm", build: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: packs };
+    const said: string[] = [];
     try {
-      const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
-      const dir = s.results_dir;
-      expect(dir).toMatch(/results\/\d{4}-\d{2}-\d{2}-t$/);
-      const job = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
-      expect(job.datasets[0].task_names).toEqual(lock.sample.slice(0, 2).map((t) => `terminal-bench/${t}`));
-      expect(job.agents[1].kwargs.libraries_dir).toBe(join(dir, "libraries"));
-      expect(readdirSync(join(dir, "libraries"))).toEqual(["library"]);
-      expect(existsSync(join(dir, "libraries", "library", "skills"))).toBe(true);
-      expect(s.report.control).toMatchObject({ trials: 2, passed: 0 });
-      expect(s.report.akm).toMatchObject({ trials: 2, passed: 2 });
-      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ eval: "terminal-bench", corpus: "public", limit: 2, n_tasks: 2, harbor_exit: 0 });
+      const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm }, join(root, "results")), said);
+      expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(fakeCount(libraryOf("public")));
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      delete process.env.FAKE_AKM_VERSION;
     }
+    expect(said).toEqual([]);
+  });
+
+  test("asks only for a non-empty index, and says it did not count, when no akm can count", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env }, join(root, "results")));
+    expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(1);
+    expect(readJson(join(s.results_dir, "summary.json")).library).toMatchObject({ assets: null, measured_with: null });
+  });
+
+  test("runs each task as many times as --attempts says, and records it", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, attempts: 4 }, join(root, "results")));
+    expect(readJson(join(s.results_dir, "job.json")).n_attempts).toBe(4);
+    expect(s.attempts).toBe(4);
+    expect(readJson(join(s.results_dir, "summary.json")).attempts).toBe(4);
+    expect(readJson(join(s.results_dir, "summary.json")).job).toMatchObject({ n_attempts: 4, n_concurrent_trials: 4 });
+  });
+
+  test("installs the akm --akm names, keeps a copy of its tarballs with the run, and records the settings it ran with", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const packs = tmp();
+    writeFileSync(join(packs, "akm-cli-0.9.27.tgz"), "an akm");
+    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: packs };
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, join(root, "results")));
+    const kwargs = readJson(join(s.results_dir, "job.json")).agents[1].kwargs;
+    expect(kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_package: "akm-cli-0.9.27.tgz", packages_dir: join(s.results_dir, "akm-packages"), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(readFileSync(join(s.results_dir, "akm-packages", "akm-cli-0.9.27.tgz"), "utf8")).toBe("an akm");
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(stored).toMatchObject({ akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(stored.akm_install.packages).toEqual([{ file: "akm-cli-0.9.27.tgz", sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }]);
+    expect(stored.akm_install.observed).toMatchObject({ akm_version: ["0.9.99-test"], assets_indexed: [7] });
+    expect(stored.job.agents[1].kwargs).toMatchObject({ packages_dir: "akm-packages", libraries_dir: "libraries", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(JSON.stringify(stored.job)).not.toContain(root); // no folder of this machine
+  });
+
+  test("starts Harbor with the model's variables and what Harbor needs, and not the judge's key or the rest of the host's", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const host = { MODEL_NAME: "openai/x", MODEL_API_KEY: "model-key", MODEL_BASE_URL: "http://192.0.2.5/v1", JUDGE_API_KEY: "judge-secret", AKM_BIN: "akm", ANTHROPIC_API_KEY: "other", HOME: process.env.HOME as string, PATH: env.PATH };
+    const run = modelSettings(undefined, host, {});
+    const s = await quiet(() => runCorpus("public", { model: run.model, label: "t", limit: 1, env: run.env }, join(root, "results")));
+    const seen = readJson(join(s.results_dir, "uv-env.json"));
+    expect(seen).toMatchObject({ OPENAI_API_KEY: "model-key", OPENAI_BASE_URL: "http://192.0.2.5/v1", HOME: process.env.HOME });
+    for (const leaked of ["JUDGE_API_KEY", "MODEL_API_KEY", "AKM_BIN", "ANTHROPIC_API_KEY"]) expect(seen[leaked]).toBeUndefined();
+    expect(JSON.stringify(seen)).not.toContain("judge-secret");
+  });
+
+  test("counts the time-outs apart and shows the plugin failure that one of them hid", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, FAKE_UV_TIMEOUTS: "1" } }, join(root, "results")));
+    expect(timeouts.timeouts).toEqual({ control: 1, akm: 1 });
+    expect(timeouts.n_errored).toBe(1); // the slow install got no reward. The control's time-out was still verified
+    const rows = readFileSync(join(timeouts.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.filter((r) => r.timed_out)).toHaveLength(2);
+    const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 1, env: { ...env, FAKE_UV_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
+    expect(dead.timeouts.akm).toBe(1);
+  });
+
+  test("with --repeat, runs the benchmark into <label>-r1 to -rN and writes the spread of its metrics beside them", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const results = join(root, "results");
+    const runs = await quiet(() => repeatRuns(2, "t", (label) => runCorpus("public", { model: "openai/x", label, limit: 2, env }, results)));
+    expect(runs).toHaveLength(2);
+    const names = readdirSync(results).sort();
+    expect(names.filter((n) => /-t-r[12]$/.test(n))).toHaveLength(2);
+    const file = names.find((n) => n.endsWith("-t-repeat-summary.json")) as string;
+    const spread = readJson(join(results, file));
+    expect(spread).toMatchObject({ eval: "terminal-bench", corpus: "public", repeat: 2, model: "openai/x", akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null });
+    expect(spread.runs).toHaveLength(2);
+    expect(spread.n_errored).toEqual({ min: 0, max: 0, mean: 0 });
+    expect(spread.metrics.delta.value).toEqual({ min: 1, max: 1, mean: 1 });
+    expect(spread.metrics.akm.pass_rate).toEqual({ min: 1, max: 1, mean: 1 });
+    expect(spread.metrics.engagement.control_calls).toEqual({ min: 0, max: 0, mean: 0 });
+    for (const run of runs) expect(existsSync(join(run.results_dir, ".running"))).toBe(false);
   });
 
   test("still leaves the summary when Harbor exits with an error, and says so", async () => {
+    fakeAkm(false);
     const { root, env } = fakeUv();
-    try {
-      await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
-      const [run] = readdirSync(join(root, "results"));
-      expect(JSON.parse(readFileSync(join(root, "results", run, "summary.json"), "utf8")).harbor_exit).toBe(3);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
+    const [run] = readdirSync(join(root, "results"));
+    expect(readJson(join(root, "results", run, "summary.json")).harbor_exit).toBe(3);
   });
 
   test("stops when Harbor left no job at all", async () => {
+    fakeAkm(false);
     const { root, env } = fakeUv();
-    try {
-      await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_NOTHING: "1" } }, join(root, "results")))).rejects.toThrow("Harbor wrote no job");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_NOTHING: "1" } }, join(root, "results")))).rejects.toThrow("Harbor wrote no job");
   });
 });
 
@@ -263,7 +568,7 @@ describe("sideBySide", () => {
 
 /** The akm on this machine, when there is one. */
 function realAkm(): boolean {
-  const cmd = (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
+  const cmd = (akmBin?.trim() || "akm").split(/\s+/);
   try {
     return Bun.spawnSync([...cmd, "--version"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
   } catch {
@@ -272,26 +577,61 @@ function realAkm(): boolean {
 }
 
 describe.skipIf(!realAkm())("with the akm on this machine", () => {
-  /** The assets akm indexes in a library, seeded as the akm arm does it: the type folders copied into a new bundle. Facts are the scaffold's. */
-  async function indexed(library: string): Promise<number> {
-    const sandbox = createSandbox("terminal-bench-test");
-    try {
-      const bundle = join(sandbox.dir, "bundle");
-      await runAkm(sandbox, ["bundle", "create", "--dir", bundle, "--set-default"]);
-      for (const e of readdirSync(library, { withFileTypes: true })) if (e.isDirectory()) cpSync(join(library, e.name), join(bundle, e.name), { recursive: true });
-      await runAkm(sandbox, ["index", "--full"]);
-      const info = await runAkmJson<{ indexStats: { byType: Record<string, number> } }>(sandbox, ["info", "-q"]);
-      return Object.entries(info.indexStats.byType).reduce((n, [type, count]) => n + (type === "fact" ? 0 : count), 0);
-    } finally {
-      removeSandbox(sandbox);
+  test("counts the public library's assets, which are fewer than its files", async () => {
+    const m = await measureLibrary(libraryOf("public"));
+    expect(m.reason).toBeUndefined();
+    expect(m.assets).toBeGreaterThan(0);
+    expect(m.assets).toBeLessThan(readdirSync(libraryOf("public"), { recursive: true }).length);
+  }, 120_000);
+
+  test.skipIf(!existsSync(libraryOf("private")))("and the private copy's", async () => {
+    expect((await measureLibrary(libraryOf("private"))).assets).toBeGreaterThan(0);
+  }, 120_000);
+});
+
+describe("the command line", () => {
+  /** Runs the runner as a person would, with only the environment given. These all stop before Docker is asked about. */
+  const run = (args: string[], env: Record<string, string> = {}) => {
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { env: { PATH: process.env.PATH as string, HOME: process.env.HOME as string, ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+
+  test("--help describes the flags of the akm under test, and the model, and says AKM_BIN is not read", () => {
+    const { code, out } = run(["--help"]);
+    expect(code).toBe(0);
+    for (const flag of ["--repeat", "--akm ", "--akm-env", "--model", "--attempts"]) expect(out).toContain(flag);
+    expect(out).toMatch(/models\.json/);
+    expect(out).toContain("AKM_BIN is not read");
+    expect(out).toContain("akm-cli@x.y.z");
+  });
+
+  test("refuses a bad count, a bad --akm and a bad --akm-env with a message and exit 2, before it asks about Docker", () => {
+    for (const [args, said] of [
+      [["--repeat", "0"], "--repeat must be a positive integer"],
+      [["--limit", "x"], "--limit must be a positive integer"],
+      [["--attempts", "0"], "--attempts must be a positive integer"],
+      [["--akm", "bun ~/code/akm/src/cli.ts"], "is a command"],
+      [["--akm", "akm-cli@latest"], "exact release"],
+      [["--akm", "/no/such/akm/checkout"], "neither akm-cli@x.y.z nor a folder"],
+      [["--akm-env", "OPENAI_API_KEY=x"], "only AKM_* settings"],
+      [["--akm-env", "AKM_BUNDLE_DIR=/x"], "the arm fixes it"],
+      [["--akm-env", "AKM_LLM_API_KEY=secret"], "looks like a credential"],
+      [["--akm-env", "AKM_X"], "takes KEY=VALUE"],
+    ] as [string[], string][]) {
+      const done = run(args);
+      expect(done.code, args.join(" ")).toBe(2);
+      expect(done.err, args.join(" ")).toContain(said);
     }
-  }
+  });
 
-  test("the public library holds the number of assets the akm arm's setup checks for, though it has more files", async () => {
-    expect(await indexed(libraryOf("public"))).toBe(LIBRARY_ASSETS);
-  }, 120_000);
-
-  test.skipIf(!existsSync(libraryOf("private")))("and so does the private copy", async () => {
-    expect(await indexed(libraryOf("private"))).toBe(LIBRARY_ASSETS);
-  }, 120_000);
+  test("sends --model through models.json and the gateway as every eval does, and refuses a base URL for a model of another provider", () => {
+    const gateway = { MODEL_BASE_URL: "https://gateway.example.com/v1", MODEL_API_KEY: "k" };
+    const done = run(["--model", "anthropic/claude-sonnet-4-5"], gateway);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("anthropic/claude-sonnet-4-5 is sent to gateway.example.com, but Harbor passes a base URL on only to an openai model");
+    const none = run([], {});
+    expect(none.code).toBe(2);
+    expect(none.err).toContain("name the model");
+    expect(run(["--model", "my-model"], { MODEL_API_KEY: "k", MODEL_BASE_URL: "http://localhost:8080/v1" }).err).toContain("would be the container itself");
+  });
 });
