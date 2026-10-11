@@ -17,7 +17,10 @@ const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "--version") console.log("akm 0.9.99-test");
 else if (cmd === "echo") console.log(JSON.stringify({ args: rest, stdin: await Bun.stdin.text(), cwd: process.cwd(), config: process.env.AKM_CONFIG_DIR, modelKey: process.env.MODEL_API_KEY ?? null }));
 else if (cmd === "fail") { console.error("it broke"); process.exit(3); }
+else if (cmd === "exit137") process.exit(137);
+else if (cmd === "selfkill") process.kill(process.pid, "SIGKILL");
 else if (cmd === "hang") { process.on("SIGTERM", () => {}); await Bun.sleep(60_000); }
+else if (cmd === "chatter") { console.error("working on it"); process.on("SIGTERM", () => {}); await Bun.sleep(60_000); }
 else { console.error("unknown command " + cmd); process.exit(1); }
 `;
 
@@ -114,6 +117,45 @@ describe("createSandbox", () => {
     expect(cmdFor("bun /path/to/akm/src/cli.ts")).toEqual(["bun", "/path/to/akm/src/cli.ts"]);
     expect(cmdFor(" bun   cli.ts ")).toEqual(["bun", "cli.ts"]);
   });
+
+  test("writes your home folder for a leading ~/ in a word of AKM_BIN, as --akm does, and leaves any other ~ alone", () => {
+    const cmdFor = (bin: string) => {
+      const sandbox = withEnv({ AKM_BIN: bin }, () => createSandbox("lib-akm-test"));
+      sandboxes.push(sandbox);
+      return sandbox.cmd;
+    };
+    const home = homedir();
+    expect(cmdFor("bun ~/code/akm/src/cli.ts")).toEqual(["bun", `${home}/code/akm/src/cli.ts`]);
+    expect(cmdFor("~/bin/akm")).toEqual([`${home}/bin/akm`]);
+    expect(cmdFor("~/bin/bun ~/code/akm/src/cli.ts")).toEqual([`${home}/bin/bun`, `${home}/code/akm/src/cli.ts`]);
+    expect(cmdFor("bun /work/~/cli.ts ~other/cli.ts ~ --root=~/x")).toEqual(["bun", "/work/~/cli.ts", "~other/cli.ts", "~", "--root=~/x"]);
+  });
+
+  test("forwards no key named *_API_KEY or *_API_TOKEN, and keeps the rest, HOME and PATH included", () => {
+    const vars = {
+      OPENAI_API_KEY: "openai-secret",
+      ANTHROPIC_API_KEY: "anthropic-secret",
+      GITHUB_API_TOKEN: "github-secret",
+      JUDGE_API_KEY: "judge-secret",
+      MODEL_API_KEY: "model-secret",
+      MODEL_API_TOKEN: "model-token",
+      MODEL_API_KEY_FILE: "/keep/this",
+      MY_API_KEYS: "keep-this",
+      API_KEY_HINT: "keep-this",
+      HF_TOKEN: "keep-this",
+    };
+    const plain = withEnv(vars, () => createSandbox("lib-akm-test"));
+    const keyed = withEnv(vars, () => createSandbox("lib-akm-test", { keepModelKey: true }));
+    sandboxes.push(plain, keyed);
+    for (const sandbox of [plain, keyed]) {
+      for (const k of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_API_TOKEN", "JUDGE_API_KEY", "MODEL_API_TOKEN"]) expect(sandbox.env[k]).toBeUndefined();
+      for (const k of ["MODEL_API_KEY_FILE", "MY_API_KEYS", "API_KEY_HINT", "HF_TOKEN"]) expect(sandbox.env[k]).toBe(vars[k as keyof typeof vars]);
+      expect(sandbox.env.PATH).toBe(process.env.PATH as string);
+      expect(sandbox.env.HOME).toBe(process.env.HOME as string);
+    }
+    expect(plain.env.MODEL_API_KEY).toBeUndefined();
+    expect(keyed.env.MODEL_API_KEY).toBe("model-secret");
+  });
 });
 
 describe("sandboxIn", () => {
@@ -203,6 +245,26 @@ describe("runAkm", () => {
     expect(r.ms).toBeGreaterThanOrEqual(250);
     expect(r.ms).toBeLessThan(4000);
   });
+
+  test("says when the timeout killed the command, and only then", async () => {
+    const sandbox = fakeSandbox();
+    expect(await runAkm(sandbox, ["hang"], { timeoutMs: 300 })).toMatchObject({ code: 137, stderr: "akm timed out after 0.3s", timedOut: true });
+    expect(await runAkm(sandbox, ["echo"])).toMatchObject({ code: 0, timedOut: false });
+    expect(await runAkm(sandbox, ["fail"])).toMatchObject({ code: 3, timedOut: false });
+  });
+
+  test("ends the stderr of a command the timeout killed with why, after what it printed, so a caller that prints stderr says it", async () => {
+    const sandbox = fakeSandbox();
+    expect((await runAkm(sandbox, ["chatter"], { timeoutMs: 800 })).stderr).toBe("working on it\nakm timed out after 0.8s");
+    const { stderr, code } = await runAkm(sandbox, ["hang"], { timeoutMs: 300 });
+    expect(`akm index failed (exit ${code}): ${stderr.trim().slice(-300)}`).toBe("akm index failed (exit 137): akm timed out after 0.3s");
+  });
+
+  test("a command that dies of SIGKILL, or exits 137, before the timeout did not time out, and its stderr is its own", async () => {
+    const sandbox = fakeSandbox();
+    expect(await runAkm(sandbox, ["selfkill"], { timeoutMs: 60_000 })).toMatchObject({ code: 137, stderr: "", timedOut: false });
+    expect(await runAkm(sandbox, ["exit137"], { timeoutMs: 60_000 })).toMatchObject({ code: 137, stderr: "", timedOut: false });
+  });
 });
 
 describe("runAkmJson", () => {
@@ -218,6 +280,18 @@ describe("runAkmJson", () => {
 
   test("throws with the command, the exit code and the end of stderr when akm fails", async () => {
     await expect(runAkmJson(fakeSandbox(), ["fail"])).rejects.toThrow("akm fail failed (exit 3): it broke");
+  });
+
+  test("throws that akm timed out, with the timeout in seconds, when the timeout killed it, not an exit code", async () => {
+    const sandbox = fakeSandbox();
+    await expect(runAkmJson(sandbox, ["hang"], { timeoutMs: 1000 })).rejects.toThrow("akm hang timed out after 1s");
+    await expect(runAkmJson(sandbox, ["hang"], { timeoutMs: 300 })).rejects.toThrow("akm hang timed out after 0.3s");
+    const e = await runAkmJson(sandbox, ["hang"], { timeoutMs: 300 }).catch((x: Error) => x);
+    expect((e as Error).message).not.toContain("exit 137");
+  });
+
+  test("still calls an exit 137 that was not the timeout a failure", async () => {
+    await expect(runAkmJson(fakeSandbox(), ["exit137"], { timeoutMs: 60_000 })).rejects.toThrow("akm exit137 failed (exit 137): ");
   });
 
   test("throws when akm prints something that is not JSON", async () => {
@@ -313,6 +387,10 @@ describe("akmBuild", () => {
     expect(withEnv({ AKM_BIN: join(dir, "akm") }, akmBuild).akm_build).toBeNull();
     expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
     expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
+  });
+
+  test("writes a leading ~/ of AKM_BIN back as ~, the same whether or not it was expanded", () => {
+    expect(withEnv({ AKM_BIN: "bun ~/no/such/akm" }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
   });
 });
 

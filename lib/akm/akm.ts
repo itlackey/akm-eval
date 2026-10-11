@@ -28,6 +28,7 @@ export interface AkmResult {
   stderr: string;
   code: number;
   ms: number; // how long the command ran
+  timedOut: boolean; // the timeout killed it. Its exit code is 137, and runAkm ends its stderr with "akm timed out after <N>s", so a caller that only prints stderr says why
 }
 
 type RunOptions = { stdin?: string; timeoutMs?: number };
@@ -59,13 +60,17 @@ export const INDEX_CACHE = join(CACHE, "akm-index");
 export const semanticConfig = () => ({ ...plainConfig(), semanticSearchMode: "auto", embedding: { localModel: SEMANTIC_MODEL, queryTimeoutMs: 10 * 60_000 } });
 
 /**
- * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no judge
- * key. The model key stays only with `keepModelKey`. A semantic sandbox keeps the embedder's model in MODEL_CACHE.
+ * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no key: not the judge's
+ * and not a provider's (OPENAI_API_KEY), which is every variable named *_API_KEY or *_API_TOKEN. A key held in a variable of
+ * another name, such as a models.json api_key_env of GROQ_KEY, is not dropped. The model key stays only with `keepModelKey`.
+ * A semantic sandbox keeps the embedder's model in MODEL_CACHE.
  */
 function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
-    if (v !== undefined && !k.startsWith("AKM_") && k !== "JUDGE_API_KEY" && (keepModelKey || k !== "MODEL_API_KEY")) env[k] = v;
+    if (v === undefined || k.startsWith("AKM_")) continue;
+    if (/_API_(KEY|TOKEN)$/.test(k) && !(keepModelKey && k === "MODEL_API_KEY")) continue;
+    env[k] = v;
   }
   return {
     ...env,
@@ -81,8 +86,11 @@ function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Reco
   };
 }
 
-/** The akm command: the words of AKM_BIN, or `akm`. */
-const akmCommand = (): string[] => (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
+/** A leading ~/ in a word is your home folder. bash leaves it alone in a quoted value and in .env, so akm's command is expanded here. */
+const expandHome = (word: string): string => (word.startsWith("~/") ? `${homedir()}/${word.slice(2)}` : word);
+
+/** The akm command: the words of AKM_BIN, with a leading ~/ in a word expanded, or `akm`. */
+const akmCommand = (): string[] => (process.env.AKM_BIN?.trim() || "akm").split(/\s+/).map(expandHome);
 
 /** `--akm`, for parseArgs, and its line of an eval's usage text. */
 export const AKM_OPTIONS = { akm: { type: "string" } } as const;
@@ -126,8 +134,16 @@ export function writeConfig(sandbox: Sandbox, config: unknown): void {
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 
-/** Runs akm with these arguments in the sandbox. A command still running after `timeoutMs` is killed with SIGKILL. */
+/** What a timeout is called in a message, such as `timed out after 900s`. */
+const timedOutAfter = (timeoutMs: number): string => `timed out after ${+(timeoutMs / 1000).toFixed(1)}s`;
+
+/**
+ * Runs akm with these arguments in the sandbox. A command still running after `timeoutMs` is killed with SIGKILL, and the result
+ * says `timedOut` and ends its stderr with "akm timed out after <N>s": a killed command prints nothing about it, so a caller that
+ * reports "akm index failed (exit 137): <stderr>" would otherwise report an empty reason.
+ */
 export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions = {}): Promise<AkmResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const t0 = performance.now();
   const proc = Bun.spawn([...sandbox.cmd, ...args], {
     env: sandbox.env,
@@ -135,18 +151,23 @@ export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions 
     stdin: opts.stdin === undefined ? "ignore" : new Blob([opts.stdin]),
     stdout: "pipe",
     stderr: "pipe",
-    timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeout: timeoutMs,
     killSignal: "SIGKILL",
   });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  return { stdout, stderr, code, ms: performance.now() - t0 };
+  const ms = performance.now() - t0;
+  // A killed process exits 137. Bun's `killed` is true for any process that has exited, so the signal decides, and the exit code when Bun gives none.
+  const killed = proc.signalCode !== null ? proc.signalCode === "SIGKILL" : code === 137;
+  const timedOut = killed && ms >= timeoutMs;
+  return { stdout, stderr: timedOut ? [stderr.trimEnd(), `akm ${timedOutAfter(timeoutMs)}`].filter(Boolean).join("\n") : stderr, code, ms, timedOut };
 }
 
 /** Runs akm with `--format json` and parses what it prints. The flag goes before any `--`, so a query after it stays a query. */
 export async function runAkmJson<T = unknown>(sandbox: Sandbox, args: string[], opts: RunOptions = {}): Promise<T> {
   const at = args.indexOf("--");
   const json = ["--format", "json"];
-  const { stdout, stderr, code } = await runAkm(sandbox, at < 0 ? [...args, ...json] : [...args.slice(0, at), ...json, ...args.slice(at)], opts);
+  const { stdout, stderr, code, timedOut } = await runAkm(sandbox, at < 0 ? [...args, ...json] : [...args.slice(0, at), ...json, ...args.slice(at)], opts);
+  if (timedOut) throw new Error(`akm ${args[0]} ${timedOutAfter(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)}`);
   if (code !== 0) throw new Error(`akm ${args[0]} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
   return JSON.parse(stdout) as T;
 }
