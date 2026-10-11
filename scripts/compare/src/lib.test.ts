@@ -190,7 +190,9 @@ describe("the per-case reading of each eval agrees with the eval's own metrics",
   });
 
   test("every eval in EVAL_METRICS is one compare reads, and every metric is per case or reported from the summaries", () => {
-    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).sort());
+    // The Harbor evals are in EVAL_METRICS for the matrix. Their rows are trials of two arms, which compare has no reading for.
+    const harbor = ["agent-ab", "terminal-bench"];
+    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).filter((name) => !harbor.includes(name)).sort());
   });
 });
 
