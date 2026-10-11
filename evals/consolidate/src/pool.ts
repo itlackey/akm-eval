@@ -158,6 +158,8 @@ export interface KindCounts {
 export interface PoolMetrics {
   /** `of` is the retirements akm proposed. `staged` is how many of the unsafe ones it staged for unattended retirement. */
   unsafe: { n: number; of: number; staged: number };
+  /** The retirements akm staged, which a triage run accepts with no one looking, and the safe ones among them. */
+  staged: { n: number; safe: number };
   precision: { value: number | null; safe: number; retired: number };
   /** Of the clusters that have a note that may be retired, the share where akm proposed a right retirement. */
   recall: { value: number | null; retired_safe: number; of: number };
@@ -230,6 +232,7 @@ export function poolMetrics(pool: Pool, retirements: Retirement[], improve: unkn
   for (const [label, n] of Object.entries(pass.labelCounts ?? {})) labels[label] = num(n);
   return {
     unsafe: { n: unsafe.length, of: retirements.length, staged: unsafe.filter((r) => r.staged).length },
+    staged: { n: retirements.filter((r) => r.staged).length, safe: retirements.filter((r) => r.staged && r.verdict === "safe").length },
     precision: { value: ratio(safe, retirements.length), safe, retired: retirements.length },
     recall: { value: ratio(hits, withSafe), retired_safe: hits, of: withSafe },
     wrong_successor: retirements.filter((r) => r.verdict === "wrong_successor").length,

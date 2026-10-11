@@ -2,8 +2,9 @@
 // reflect: runs akm's reflect on one asset at a time, with the model under test as its engine, and scores what it
 // proposes with checks that need no judge. See ../README.md.
 //
-//   evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
+import { Database } from "bun:sqlite";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -14,7 +15,7 @@ import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, ov
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
-import { type Case, type Metrics, type Row, CLASSES, STRATEGY, assetsSha256, atLeast, corpusSeed, generatedProblem, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel, timedOutMessage } from "./lib.ts";
+import { type Case, type Metrics, type Row, CLASSES, STRATEGY, assetsSha256, atLeast, corpusSeed, generatedProblem, labelledQueries, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel, timedOutMessage } from "./lib.ts";
 
 const NAME = "reflect";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -24,7 +25,7 @@ const HARNESS = harnessSha256(import.meta.dir);
 export const MIN_AKM = "0.9.25-alpha.3"; // the first release where reflect changes only the frontmatter
 const GIVE_UP_AFTER = 5; // consecutive cases that error, before any case gets an outcome
 
-const USAGE = `Usage: evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's reflect on each case's note, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 its engine, and scores the proposal. Settings come from .env at the repository root.
@@ -34,6 +35,8 @@ its engine, and scores the proposal. Settings come from .env at the repository r
   --limit   run the first N cases. The first ten hold each class once.
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+  --retrieval-queries  record the retrieval eval's labelled queries for each note as searches that found it, so the retrieval
+            check of akm's reflect (it runs after the quality judge passes an edit: see patches/judge-on.json) has queries to grade
 ${overridesUsage(STRATEGY)}
 ${modelUsage}
 ${akmUsage}
@@ -78,6 +81,8 @@ interface Summary {
   n_errored: number;
   /** Of the errored cases, how many ended because akm ran past its timeout. */
   timeouts: number;
+  /** With --retrieval-queries, how many of the cases had queries recorded. */
+  retrieval_queries: { cases: number } | null;
   /** The model names that answered, as the responses give them, with how many cases each answered. */
   served: Record<string, number>;
   metrics: Metrics;
@@ -94,6 +99,8 @@ interface Ctx {
   overrides?: Overrides;
   /** How long one akm command may run, in milliseconds. The default is runAkm's. */
   timeoutMs?: number;
+  /** Searches to record for a note, by ref (see `labelledQueries`). Without it none are recorded. */
+  queries?: Map<string, string[]>;
 }
 
 /** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
@@ -103,7 +110,7 @@ const configFor = (ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides">)
  * One case in a bundle of its own: the note, the negative feedback recorded, reflect run on that asset alone, and the
  * proposal read back from the queue. akm exits 0 whatever reflect did, so what reflect did comes from the result.
  */
-export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides" | "timeoutMs">): Promise<Row> {
+export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides" | "timeoutMs" | "queries">): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
@@ -118,6 +125,7 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
     const opts = { timeoutMs: ctx.timeoutMs };
     await runAkmJson(sandbox, ["index"], opts);
     await runAkmJson(sandbox, ["feedback", ref, "--negative", "--reason", c.feedback], opts);
+    recordSearches(sandbox.env.AKM_DATA_DIR as string, ref, ctx.queries?.get(ref) ?? []);
     const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", overrides.strategy, "--json-to-stdout"], opts);
     const { outcome, reason } = reflectOutcome(improve);
     const served = servedModel(improve);
@@ -137,6 +145,18 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
   }
 }
 
+/** The searches akm logs when a user finds a note: a usage event for the query and the note, which the retrieval check reads. */
+function recordSearches(dataDir: string, ref: string, queries: string[]): void {
+  if (queries.length === 0) return;
+  const db = new Database(join(dataDir, "state.db"));
+  try {
+    const insert = db.prepare("INSERT INTO usage_events (event_type, query, entry_ref, source) VALUES ('search', ?, ?, 'user')");
+    for (const q of queries) insert.run(q, `bundle//${ref}`);
+  } finally {
+    db.close();
+  }
+}
+
 const cell = (n: { correct: number; n: number } | undefined): string => (n ? `${n.correct}/${n.n}` : "-");
 
 function printSummary(s: Summary): void {
@@ -145,6 +165,8 @@ function printSummary(s: Summary): void {
   console.log(`  defects fixed   ${cell(m.defects)}  ${pct(m.defects.rate)}`);
   console.log(`  controls right  ${cell(m.controls)}  ${pct(m.controls.rate)}`);
   console.log(`  proposals       ${m.proposals.n}, ${m.proposals.touched_body} touched the body`);
+  const r = m.refused;
+  if (r.filter + r.judge + r.retrieval + r.other > 0) console.log(`  refused         ${r.filter} by akm's defect filter, ${r.judge} by the judge, ${r.retrieval} by the retrieval check${r.other ? `, ${r.other} other` : ""}`);
   console.log(`  errored         ${s.n_errored}${s.timeouts > 0 ? ` (${s.timeouts} timed out)` : ""}`);
   if (Object.keys(s.served).length > 0) console.log(`  served by       ${Object.entries(s.served).map(([name, n]) => `${name} ${n}`).join(", ")}`);
   for (const cls of CLASSES) {
@@ -237,6 +259,7 @@ export async function runCorpus(
     n_scored: rows.length - errored,
     n_errored: errored,
     timeouts: rows.filter((r) => r.timed_out).length,
+    retrieval_queries: ctx.queries ? { cases: cases.filter((c) => (ctx.queries?.get(refOf(c.path))?.length ?? 0) > 0).length } : null,
     served: rows.reduce<Record<string, number>>((n, r) => (r.served ? { ...n, [r.served]: (n[r.served] ?? 0) + 1 } : n), {}),
     metrics: metrics(rows),
     results_dir: dir,
@@ -250,9 +273,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; "retrieval-queries"?: boolean; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, "retrieval-queries": { type: "boolean" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`reflect: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -293,7 +316,11 @@ async function main(): Promise<void> {
 
   const ctx: Ctx = { baseUrl, model, hasKey, version, label, limit, overrides };
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
+  for (const c of corpora) {
+    const retrieval = join(c === "public" ? join(ROOT, "evals", "retrieval") : join(ROOT, "private", "retrieval"), "assets");
+    const queries = values["retrieval-queries"] ? labelledQueries(readFileSync(join(retrieval, "queries.jsonl"), "utf8"), readFileSync(join(retrieval, "qrels.jsonl"), "utf8")) : undefined;
+    summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel, queries }))));
+  }
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
 }
 

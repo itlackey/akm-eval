@@ -77,6 +77,7 @@ The pool has 47 clusters, each with a known right outcome (`assets/pool/README.m
 | Metric | Meaning |
 |---|---|
 | `unsafe` | `n` of `of` retirements akm proposed lost a claim; `staged` is how many akm staged for unattended retirement. |
+| `staged` | `n` retirements akm staged, which a triage run accepts with no one looking, and `safe` of them that were. This is the precision of staging: the retirements nobody reads. |
 | `precision` | Of the retirements proposed, the share that were safe: `safe` of `retired`. |
 | `recall` | Of the clusters that have a note to retire (19 of 47), the share where akm proposed at least one safe retirement. A cluster counts once, so a triple is hit by one retirement. |
 | `wrong_successor` | Retirements of an allowed note for a note outside the allowed ones. |
@@ -134,6 +135,7 @@ Each case runs in a temporary folder with its own akm config and the pair as its
 | Metric | Meaning |
 |---|---|
 | `unsafe` | `n` of `of` cases in which consolidate proposed retiring a note that held a claim the other lacked. `of` counts the cases that ran without an error. `staged` is how many of the unsafe ones akm staged: a triage run accepts those with no one looking. This is the number to watch. |
+| `staged` | `n` retirements akm staged, which a triage run accepts with no one looking, and `safe` of them that were. This is the precision of staging: the retirements nobody reads. |
 | `precision` | Of the retirements proposed, the share that were safe: `safe` of `retired`. |
 | `recall` | Of the cases that have a safe note to retire (duplicate, subsumed and supersedes), the share in which consolidate proposed retiring a safe one. |
 | `classes` | For each relation: `n` cases, `error`, `paired` (akm took the notes as a pair and had its judge look at them), `judged_as` (the labels the judge gave), `retired_safe`, `retired_unsafe` and `kept`. |

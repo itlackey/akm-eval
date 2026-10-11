@@ -135,7 +135,7 @@ const item = <T extends Item>(id: string) => night.items.find((i) => i.id === id
 // What a good night looks like, for the items of these tests: the first duplicate is retired, the reflect case is fixed, the control is
 // left alone, the exact fix waits, the lesson waits for review, and the note to leave alone is as it was.
 const dup = item<Extract<Item, { kind: "pair" }>>("duplicate-01");
-const period = item<Extract<Item, { kind: "reflect" }>>("description-period-01");
+const period = item<Extract<Item, { kind: "reflect" | "silent" }>>("description-period-01");
 const fix = item<Extract<Item, { kind: "fix" }>>("exact-fix-01");
 const lesson = item<Extract<Item, { kind: "distill" }>>("lesson-01");
 const GOOD_LESSON = "---\ndescription: Do not wait for networkidle on a page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds, so the network is never idle for networkidle. Wait for an element to be visible instead, such as the page heading.\n";

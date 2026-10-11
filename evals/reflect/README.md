@@ -17,6 +17,7 @@ evals/reflect/run --corpus all
 - `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
 - `--limit N` runs the first N cases. The first ten hold each class once and the first five mix defects and controls. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
+- `--retrieval-queries` records the retrieval eval's labelled queries for each note (grade 2 or 3 in `evals/retrieval/assets/qrels.jsonl`, at most 5, best first; 48 of the 50 public cases have some) as searches that found it, so the retrieval check of akm's reflect has queries to grade. See "Measure the gates of akm's reflect".
 - `--strategy NAME` runs the akm strategy NAME in place of `reflect-only`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
@@ -25,7 +26,7 @@ The private run reads `private/reflect/assets/`. Make it first with `./generate-
 
 Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
+- `summary.json`: the metrics, how many cases ran, were scored and errored, how many had retrieval queries recorded (`retrieval_queries`, null without `--retrieval-queries`), the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
   - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept). It holds the endpoint URL of the model.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` host, `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `assets_sha256`: the digest of the corpus's `cases.jsonl`, so two runs on the same cases have the same digest wherever the repository is. A change to a case changes it, and `--limit` does not.
@@ -71,6 +72,32 @@ MODEL_BASE_URL=http://localhost:8080/v1
 MODEL_API_KEY=
 MODEL_NAME=qwen3-27b
 ```
+
+## Measure the gates of akm's reflect
+
+A proposal passes three gates before it is queued, and the eval runs with the first one on and the other two off, so every proposal that passes the first reaches the checks. `patches/` holds the config patches that change that (`--config-patch`).
+
+| Gate | What it does | How to measure it |
+|---|---|---|
+| The defect filter | Refuses an edit before any judge sees it when it adds placeholder text, talk about the edit itself, or frontmatter copied into the body. On by default. | `evals/reflect/defect-filter`, below. A run with `patches/defect-filter-off.json` turns the filter off, so the edits it would refuse become proposals that the checks score. |
+| The quality judge | Refuses an edit whose score is not 4 or more on every criterion. Off in `reflect-only`. | `patches/judge-on.json` turns it on. judge-gate scores the judge on labelled edits. |
+| The retrieval check | After the judge passes an edit, grades the old and the new note on up to five of the queries that retrieved the note, and refuses the edit when the new one grades lower. It runs only when the note has queries in the usage log. | `patches/judge-on.json` with `--retrieval-queries`. Without the flag the notes have no queries, the check has nothing to grade, and the same run is the baseline. |
+
+`metrics.refused` counts the refused edits by what refused them: `filter`, `judge`, `retrieval` or `other`. A refused edit is never correct, so the gates cost `defects` and `controls` whatever they refuse, and the comparison that shows what a gate is worth is the one with it on and off, with `--repeat`, on the same model.
+
+```
+evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --label judge
+evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --retrieval-queries --label judge-queries
+```
+
+### Replay the defect filter
+
+`evals/reflect/defect-filter --akm-src DIR` runs the filter of the akm checkout DIR on edits whose quality is known and counts what it refuses, by label. akm cannot be asked to run only its filter, so the tool loads `findReflectDefect` from `src/commands/improve/reflect-noise.ts` of the checkout and calls it as akm does. It takes two kinds of edit:
+
+- `--reflect RESULTS_DIR`: the proposals of a reflect run, good when the case was correct. Run it with `patches/defect-filter-off.json`, or the filter refuses the edits before they are proposals.
+- `--judge-gate public` or `private`: the 106 labelled reflect proposals of the judge-gate eval, 11 good and 95 bad under its rubric version 2, real edits of akm's earlier reflect, which also rewrote bodies.
+
+It prints JSON: for each set, `good` and `bad` with `n`, how many the filter `refused` and by which rule, and the refused edits. A good edit refused is a fix lost for 14 days. Both kinds are small, so read a single hit as a case to look at, not a rate.
 
 ## Assets
 

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Replays distill's judge routing, with and without grounding in the pass bar, on the results of distill runs. See README.md.
+#
+#   evals/distill/pass-bar RESULTS_DIR...
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+command -v bun > /dev/null || { echo "pass-bar: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/pass-bar.ts" "$@"

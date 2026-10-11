@@ -338,6 +338,7 @@ describe("metrics", () => {
       row("unrelated", "error", null),
     ].map((r) => ({ ...r, safe_sides: r.relation === "duplicate" ? ["a", "b"] : r.relation === "subsumed" ? ["a"] : r.safe_sides })));
     expect(m.unsafe).toEqual({ n: 2, of: 7, staged: 1 });
+    expect(m.staged).toEqual({ n: 2, safe: 1 }); // the staged duplicate was safe, the staged supersedes was not
     expect(m.precision).toEqual({ value: 0.5, safe: 2, retired: 4 });
     expect(m.recall).toEqual({ value: 0.5, retired_safe: 2, of: 4 });
     expect(m.classes.supersedes).toMatchObject({ n: 2, retired_unsafe: 1, kept: 1, retired_safe: 0 });
@@ -356,6 +357,7 @@ describe("metrics", () => {
     expect(m.precision.value).toBeNull();
     expect(m.recall.value).toBeNull();
     expect(m.unsafe).toEqual({ n: 0, of: 0, staged: 0 });
+    expect(m.staged).toEqual({ n: 0, safe: 0 });
   });
 });
 

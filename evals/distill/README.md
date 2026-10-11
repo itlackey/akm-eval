@@ -159,6 +159,12 @@ The checks are a floor. A lesson can over-claim in a way no list foresees, and t
 
 A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
 
+## Replay the pass bar
+
+akm's judge scores a lesson on `reusable`, `nonRedundancy` and `grounding`, 1 to 5. A lesson passes when `reusable` and `nonRedundancy` are 4 or more: grounding is left out of the pass test and of the mean, and only a score of 2 or less on any criterion, grounding included, rejects. The reason recorded for leaving grounding out was that the judge was not shown the feedback, and it is shown it now.
+
+`evals/distill/pass-bar RESULTS_DIR...` takes the results folders of distill runs on one corpus (`--repeat` makes one per run) and routes the judge's scores of each lesson under two bars: akm's (`shipped`) and one that puts grounding into the pass test and the mean (`with-grounding`). It counts the good and the bad lessons that pass, go to review and are rejected under each bar, and lists the lessons the bars treat differently. A lesson is good when it passes the checks above; a lesson for a case that expects none is bad. A lesson that passes or goes to review is queued for a person, so what the bar decides is which lessons are dropped. `mismatch` counts the lessons whose verdict under `shipped` is not the one akm gave, and should be 0. Rows without the scores or the text of the lesson (a skipped case, a lesson-update case, an akm that does not report a rejected lesson) are left out.
+
 ## Notes
 
 - akm's error messages name the endpoint it called. The eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.

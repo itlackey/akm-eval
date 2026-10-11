@@ -14,7 +14,7 @@ export type { Claim, Relation, Side, Expect, Field };
 export type { DistillClass, CaseClass };
 
 /** The kinds of item, in the order a short run takes them: one of each kind first. */
-export const KINDS = ["pair", "reflect", "distill", "fix", "untouched"] as const;
+export const KINDS = ["pair", "reflect", "distill", "fix", "untouched", "silent"] as const;
 export type Kind = (typeof KINDS)[number];
 
 /** Negative or positive feedback on one asset, as `akm feedback` records it. A fix carries an exact edit and where the correct fact comes from. */
@@ -49,9 +49,12 @@ export interface PairItem extends Base {
   b: string;
 }
 
-/** A note with a defect akm names, or a control, and the negative feedback on it: one case of the reflect eval. */
+/**
+ * A note with a defect akm names, or a control, and the negative feedback on it: one case of the reflect eval. A `silent` item is
+ * a defect note with no feedback at all: only the proactive lane can reach it, and its proposal waits for a person.
+ */
 export interface ReflectItem extends Base {
-  kind: "reflect";
+  kind: "reflect" | "silent";
   class: CaseClass;
   path: string;
   defect: string;
@@ -132,7 +135,8 @@ export function parseItems(text: string, where = "items"): Item[] {
       inFiles(item.a, "note a");
       inFiles(item.b, "note b");
       if (item.a === item.b) throw new Error(`${at} gives both notes the path ${item.a}`);
-    } else if (item.kind === "reflect") {
+    } else if (item.kind === "reflect" || item.kind === "silent") {
+      if ((item.kind === "silent") !== (item.feedback.length === 0)) throw new Error(`${at} is ${item.kind}, so its feedback ${item.kind === "silent" ? "must be empty" : "may not be"}`);
       if (!CLASSES.includes(item.class)) throw new Error(`${at} has class "${item.class}"`);
       if (!Array.isArray(item.allow)) throw new Error(`${at} has no "allow" list`);
       for (const key of ["defect", "correct"] as const) if (typeof item[key] !== "string" || !item[key]) throw new Error(`${at} has no "${key}"`);
@@ -317,6 +321,13 @@ export function describeAction(action: Action | undefined): { state: string; err
   }
 }
 
+/** What the improve result says of the proactive lane: how many refs it picked of how many were due, and which. Null when the lane did not run (it is off, or akm does not report it). */
+export function proactiveLane(improve: unknown): { selected: number; due: number; refs: string[] } | null {
+  const lane = (improve as { proactiveMaintenance?: { selected?: unknown; dueTotal?: unknown; selectedRefs?: unknown } } | null)?.proactiveMaintenance;
+  if (!lane || !Array.isArray(lane.selectedRefs)) return null;
+  return { selected: Number(lane.selected ?? lane.selectedRefs.length), due: Number(lane.dueTotal ?? 0), refs: lane.selectedRefs.map((r) => conceptId(String(r))) };
+}
+
 export interface CallRow {
   process: string;
   /** The model name the endpoint reported. A call that got no answer is filed under the name that was asked for. */
@@ -454,6 +465,24 @@ function scoreReflectItem(item: ReflectItem, o: Outcome): Row {
   return row(item, item.class, checks, state, { changed, values, proposal: proposal?.status ?? null, gate: proposal?.gate ?? null, judge: proposal?.judgeReason ?? null, action: action.state, final: final !== source ? final : null }, action.error);
 }
 
+/**
+ * A note with a defect and no feedback, which only the proactive lane can reach. The right night leaves a pending proposal that passes
+ * the reflect eval's checks, which a person accepts, and leaves the note exactly as planted: a proposal of the lane is never accepted
+ * unattended.
+ */
+function scoreSilentItem(item: ReflectItem, o: Outcome): Row {
+  const ref = refOf(item.path);
+  const source = o.before.get(item.path) as string;
+  const proposal = o.proposals.filter((p) => p.source === "reflect" && p.ref === ref).at(-1);
+  const { checks: reflected, changed, values } = scoreReflect(reflectCase(item, source), proposal?.content ?? source);
+  const failed = Object.entries(reflected).filter(([, pass]) => !pass).map(([name]) => name);
+  const action = describeAction(actionFor(o.improve, ref, "reflect"));
+  const planned = proactiveLane(o.improve)?.refs.includes(ref) ?? false;
+  const checks = { fix_proposed: proposal !== undefined && failed.length === 0, unchanged: unchanged(o, item.path) };
+  const state = !unchanged(o, item.path) ? `edited without a person (${proposal?.status ?? "no proposal"})` : proposal ? `proposal ${proposal.status}${failed.length > 0 ? `, fails ${failed.join(", ")}` : ""}` : planned ? action.state : "not planned";
+  return row(item, item.class, checks, state, { planned, proposal: proposal?.status ?? null, gate: proposal?.gate ?? null, changed, values, failed, action: action.state }, action.error);
+}
+
 /** The exact fix: queued as a proposal that makes the note as the feedback says, and still waiting. The night changes nothing else, and nothing in the note itself. */
 function scoreFix(item: FixItem, o: Outcome): Row {
   const source = o.before.get(item.path) as string;
@@ -502,6 +531,8 @@ export function scoreItem(item: Item, o: Outcome): Row {
       return scorePair(item, o);
     case "reflect":
       return scoreReflectItem(item, o);
+    case "silent":
+      return scoreSilentItem(item, o);
     case "fix":
       return scoreFix(item, o);
     case "distill":
@@ -525,9 +556,11 @@ export interface Metrics {
   harm: { items: number; outside_changed: number; lessons_accepted: number };
   /** Model calls the improve run made and how many failed, which must be zero. */
   calls: { n: number; failures: number };
+  /** The proactive lane: refs it picked of the `due` ones, and the reflect proposals on its picks: those on silent defects, and the rest, which a reviewer reads for nothing. Null when the lane did not run. */
+  proactive: { selected: number; due: number; proposals: number; on_silent: number; on_others: number } | null;
 }
 
-export function metrics(rows: Row[], outside: string[], proposals: Proposal[], calls: { calls: number; failures: number }): Metrics {
+export function metrics(rows: Row[], outside: string[], proposals: Proposal[], calls: { calls: number; failures: number }, improve: unknown = null): Metrics {
   const by_kind: Metrics["by_kind"] = {};
   const failed: Record<string, number> = {};
   for (const r of rows) {
@@ -537,12 +570,16 @@ export function metrics(rows: Row[], outside: string[], proposals: Proposal[], c
     for (const [name, pass] of Object.entries(r.checks)) if (!pass) failed[name] = (failed[name] ?? 0) + 1;
   }
   const ok = rows.filter((r) => r.ok).length;
+  const lane = proactiveLane(improve);
+  const onPicks = lane ? proposals.filter((p) => p.source === "reflect" && lane.refs.includes(p.ref)).length : 0;
+  const onSilent = rows.filter((r) => r.kind === "silent" && r.detail.planned === true && r.detail.proposal !== null).length;
   return {
     items: { n: rows.length, ok, rate: ratio(ok, rows.length) },
     by_kind,
     failed,
     harm: { items: rows.filter((r) => r.harm).length, outside_changed: outside.length, lessons_accepted: proposals.filter((p) => p.source === "distill" && p.status === "accepted").length },
     calls: { n: calls.calls, failures: calls.failures },
+    proactive: lane ? { selected: lane.selected, due: lane.due, proposals: onPicks, on_silent: onSilent, on_others: onPicks - onSilent } : null,
   };
 }
 
@@ -559,7 +596,7 @@ export function nightProblems(night: Night): string[] {
     if (item.kind === "pair") {
       const c = { id: item.id, relation: item.relation, older: item.older, safe: item.safe, claims: item.claims, why: "", a: { name: refOf(item.a), text: text(item.a) }, b: { name: refOf(item.b), text: text(item.b) } };
       for (const p of claimProblems(c)) say(p);
-    } else if (item.kind === "reflect") {
+    } else if (item.kind === "reflect" || item.kind === "silent") {
       for (const p of caseProblems(reflectCase(item, text(item.path)))) say(p);
     } else if (item.kind === "fix") {
       const fix = item.feedback.find((f) => f.fix)?.fix as NonNullable<Feedback["fix"]>;

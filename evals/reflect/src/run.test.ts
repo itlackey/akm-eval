@@ -23,6 +23,7 @@ afterEach(() => {
  * given: what reflect did, and the proposal it made. It refuses to run reflect before feedback is recorded.
  */
 const FAKE_AKM = `
+import { Database } from "bun:sqlite";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 const [cmd, ...rest] = args;
@@ -33,10 +34,12 @@ const save = () => writeFileSync(stateFile, JSON.stringify(state));
 const out = (o) => console.log(JSON.stringify(o));
 const note = (ref) => [ref + ".md", ref + "/SKILL.md"].map((p) => process.env.AKM_BUNDLE_DIR + "/" + p).find((p) => existsSync(p));
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
-appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
+const dbFile = process.env.AKM_DATA_DIR + "/state.db";
+const searches = (ref) => { if (!ref || !existsSync(dbFile)) return []; const db = new Database(dbFile, { readonly: true }); try { return db.prepare("SELECT query FROM usage_events WHERE event_type = 'search' AND source = 'user' AND entry_ref = ?").all("bundle//" + ref).map((r) => r.query); } finally { db.close(); } };
+appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
 if (cmd === "--version") console.log("akm 0.9.99-test");
 else if (cmd === "index") out({ ok: true });
-else if (cmd === "feedback") { state.fed.push(rest[0]); save(); out({ ok: true, ref: rest[0], signal: "negative" }); }
+else if (cmd === "feedback") { const db = new Database(dbFile); db.exec("CREATE TABLE IF NOT EXISTS usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, query TEXT, entry_id INTEGER, entry_ref TEXT, signal TEXT, metadata TEXT, source TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL DEFAULT (datetime('now')))"); db.close(); state.fed.push(rest[0]); save(); out({ ok: true, ref: rest[0], signal: "negative" }); }
 else if (cmd === "improve") {
   const ref = rest[0];
   if (!state.fed.includes(ref)) { console.error("no feedback was recorded for " + ref); process.exit(2); }
@@ -240,6 +243,15 @@ describe("runCorpus", () => {
   test("without the flags it records its own strategy and no patch", async () => {
     const { ctx, folders } = setup(cases.slice(0, 1), plan);
     expect(await quiet(() => runCorpus("public", ctx, folders))).toMatchObject({ strategy: "reflect-only", config_patch: null });
+  });
+
+  test("records the queries it is given as searches that found the note, before reflect runs, and counts the cases that have some", async () => {
+    const { ctx, calls, folders } = setup(cases.slice(0, 3), plan);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, queries: new Map([["knowledge/a", ["rotate signing keys", "key expiry"]], ["skills/c", ["unrelated"]]]) }, folders));
+    const improves = calls().filter((c) => c.args[0] === "improve");
+    expect(improves.map((c) => [c.args[1], c.searches])).toEqual([["knowledge/a", ["rotate signing keys", "key expiry"]], ["knowledge/b", []], ["skills/c", ["unrelated"]]]);
+    expect(summary.retrieval_queries).toEqual({ cases: 2 });
+    expect((await quiet(() => runCorpus("public", ctx, folders))).retrieval_queries).toBeNull();
   });
 
   test("a limit runs the first cases", async () => {

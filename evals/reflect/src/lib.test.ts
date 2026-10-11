@@ -22,6 +22,7 @@ import {
   generatedProblem,
   hasCopiedFrontmatter,
   inject,
+  labelledQueries,
   makeRow,
   metrics,
   parseCases,
@@ -30,6 +31,7 @@ import {
   reflectConfig,
   reflectOutcome,
   refOf,
+  refusalOf,
   score,
   selectCases,
   servedModel,
@@ -555,6 +557,40 @@ describe("metrics", () => {
 
   test("counts the proposals that touched the body, which a title heading does not", () => {
     expect(m.proposals).toEqual({ n: 3, touched_body: 1 });
+  });
+});
+
+describe("refusalOf", () => {
+  test("tells akm's defect filter, the quality judge and the retrieval check apart, from the reason akm gives", () => {
+    expect(refusalOf("quality_rejected: Reflect proposal refused before the judge: placeholder_added")).toBe("filter");
+    expect(refusalOf('quality_rejected: Reflect proposal quality gate rejected: score=3.0, reason="adds a claim"')).toBe("judge");
+    expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval regression: grade 2.00 -> 1.40 over 5 retrieval queries")).toBe("retrieval");
+    expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval check could not grade the new content")).toBe("retrieval");
+    expect(refusalOf("content_policy_reject: x")).toBe("other");
+  });
+
+  test("metrics counts the refused edits by what refused them", () => {
+    const c = mk("retrieval-miss", NOTE);
+    const refused = (reason: string) => makeRow(c, { outcome: "refused", reason, seconds: 1 });
+    const m = metrics([refused("Reflect proposal refused before the judge: meta_commentary_added"), refused("Reflect proposal quality gate rejected: score=2"), refused("Reflect proposal refused: retrieval regression: x"), refused("Reflect proposal refused: retrieval regression: y"), makeRow(c, { outcome: "none", seconds: 1 })]);
+    expect(m.refused).toEqual({ filter: 1, judge: 1, retrieval: 2, other: 0 });
+  });
+});
+
+describe("labelledQueries", () => {
+  const queries = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map((id) => JSON.stringify({ id, query: `query ${id}`, expected: [] })).join("\n");
+  const qrel = (id: string, ref: string, grade: number) => JSON.stringify({ id, ref, grade, reason: "r" });
+
+  test("takes the queries graded 2 or 3 for a note, best grade first, and at most five", () => {
+    const qrels = [qrel("q1", "a", 2), qrel("q2", "a", 3), qrel("q3", "a", 1), qrel("q4", "a", 0), qrel("q5", "b", 3), qrel("q6", "a", 2), qrel("q7", "a", 2), qrel("q8", "a", 2), qrel("q1", "c", 2), qrel("q9", "a", 3)].join("\n");
+    const found = labelledQueries(queries, qrels);
+    expect(found.get("a")).toEqual(["query q2", "query q1", "query q6", "query q7", "query q8"]); // q9 has no query text; q3 and q4 are below 2; the sixth would be past five
+    expect(found.get("b")).toEqual(["query q5"]);
+    expect(found.has("d")).toBe(false);
+  });
+
+  test("a note whose only grades are below 2 has none", () => {
+    expect(labelledQueries(queries, qrel("q1", "a", 1)).has("a")).toBe(false);
   });
 });
 
