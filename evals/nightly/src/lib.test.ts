@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildNight, itemsText } from "./build.ts";
 import { splitFrontmatter } from "../../reflect/src/lib.ts";
@@ -42,11 +43,11 @@ const proposal = (over: Partial<Proposal>): Proposal => ({ id: "p", ref: "", sta
 const retire = (retired: string, successor: string, over: Partial<Proposal> = {}): Proposal => proposal({ source: "consolidate-pair", ref: retired, retirement: { retired, successor, label: "duplicate", reason: "same claims" }, ...over });
 
 describe("the public night", () => {
-  test("is 29 items: 7 pairs, 10 reflect cases, 7 distill memories, 1 exact fix and 4 notes to leave alone, in 38 files", () => {
-    expect(night.items).toHaveLength(29);
-    expect(KINDS.map((k) => night.items.filter((i) => i.kind === k).length)).toEqual([7, 10, 7, 1, 4]);
-    expect(night.files.size).toBe(38);
-    expect(new Set(night.items.map((i) => i.id)).size).toBe(29);
+  test("is 35 items: 7 pairs, 10 reflect cases, 7 distill memories, 1 exact fix, 4 notes to leave alone and 6 silent defects, in 44 files", () => {
+    expect(night.items).toHaveLength(35);
+    expect(KINDS.map((k) => night.items.filter((i) => i.kind === k).length)).toEqual([7, 10, 7, 1, 4, 6]);
+    expect(night.files.size).toBe(44);
+    expect(new Set(night.items.map((i) => i.id)).size).toBe(35);
   });
 
   test("gives every file to one item, and every item feedback on its own files, and its pair relations, classes and exact fix", () => {
@@ -60,7 +61,10 @@ describe("the public night", () => {
     const fix = find<FixItem>("exact-fix-01");
     expect(fix.feedback).toHaveLength(1);
     expect(fix.feedback[0]?.fix?.source).toBeTruthy();
-    expect(night.items.filter((i) => i.kind === "pair" || i.kind === "untouched").every((i) => i.feedback.length === 0)).toBe(true);
+    expect(night.items.filter((i) => i.kind === "pair" || i.kind === "untouched" || i.kind === "silent").every((i) => i.feedback.length === 0)).toBe(true);
+    const silent = night.items.filter((i): i is ReflectItem => i.kind === "silent");
+    expect(new Set(silent.map((i) => i.class)).size).toBe(6); // one of each class that akm names
+    expect(silent.every((i) => i.fix !== undefined)).toBe(true);
   });
 
   test("hold what their items say: each deciding claim, planted defect and exact fix is where it must be", () => {
@@ -126,16 +130,17 @@ describe("selectItems", () => {
   const ids = (n?: number) => selectItems(night.items, n).map((i) => i.id);
 
   test("takes everything with no limit, or with one that is not smaller than the night", () => {
-    expect(ids()).toHaveLength(29);
-    expect(ids(29)).toHaveLength(29);
-    expect(ids(500)).toHaveLength(29);
+    expect(ids()).toHaveLength(35);
+    expect(ids(35)).toHaveLength(35);
+    expect(ids(500)).toHaveLength(35);
   });
 
   test("takes the first of each kind in turn, in the order of KINDS, and keeps file order", () => {
     expect(ids(1)).toEqual(["duplicate-01"]);
     expect(ids(3)).toEqual(["duplicate-01", "description-period-01", "lesson-01"]);
     expect(ids(5)).toEqual(["duplicate-01", "description-period-01", "lesson-01", "exact-fix-01", "untouched-01"]);
-    expect(ids(7)).toEqual(["duplicate-01", "duplicate-02", "description-period-01", "retrieval-miss-01", "lesson-01", "exact-fix-01", "untouched-01"]);
+    expect(ids(6)).toEqual(["duplicate-01", "description-period-01", "lesson-01", "exact-fix-01", "untouched-01", "silent-description-period-02"]);
+    expect(ids(8)).toEqual(["duplicate-01", "duplicate-02", "description-period-01", "retrieval-miss-01", "lesson-01", "exact-fix-01", "untouched-01", "silent-description-period-02"]);
   });
 });
 
@@ -441,19 +446,68 @@ describe("scoring a note to leave alone", () => {
   });
 });
 
+describe("scoring a silent defect", () => {
+  const lane = (...refs: string[]) => ({ proactiveMaintenance: { selected: refs.length, dueTotal: 20, neverReflected: 20, selectedRefs: refs } });
+  const item = find<ReflectItem>("silent-when-to-use-missing-02");
+  const source = night.files.get(item.path) as string;
+  const fixed = readFileSync(join(import.meta.dir, "..", "..", "..", "corpus", "library", item.path), "utf8"); // the note before the defect was injected
+  const ref = refOf(item.path);
+
+  test("is right when a pending proposal fixes the defect and the note is as planted", () => {
+    const r = scoreItem(item, quiet({ improve: lane(ref), proposals: [proposal({ ref, content: fixed })] }));
+    expect(r).toMatchObject({ ok: true, harm: false, kind: "silent", class: "when-to-use-missing", state: "proposal pending", checks: { fix_proposed: true, unchanged: true }, detail: { planned: true, proposal: "pending" } });
+  });
+
+  test("is missed when the lane did not plan it, or its proposal does not fix the defect or changes more", () => {
+    expect(scoreItem(item, quiet())).toMatchObject({ ok: false, harm: false, state: "not planned", checks: { fix_proposed: false, unchanged: true } });
+    const same = scoreItem(item, quiet({ proposals: [proposal({ ref, content: source })] }));
+    expect(same).toMatchObject({ ok: false, harm: false, checks: { fix_proposed: false } });
+    expect(same.detail.failed).toContain("defect_fixed");
+    const extra = scoreItem(item, quiet({ proposals: [proposal({ ref, content: fixed.replace(/^description: .*$/m, "description: Another one.") })] }));
+    expect(extra).toMatchObject({ ok: false, harm: false, checks: { fix_proposed: false } });
+    expect(extra.detail.failed).toContain("no_extra_change");
+  });
+
+  test("is harm when the note was edited, whoever did it: a proposal of the lane is never accepted unattended", () => {
+    const after = new Map(night.files).set(item.path, fixed);
+    const r = scoreItem(item, quiet({ after, proposals: [proposal({ ref, status: "accepted", content: fixed })] }));
+    expect(r).toMatchObject({ ok: false, harm: true, checks: { unchanged: false }, state: "edited without a person (accepted)" });
+  });
+
+  test("needs no feedback, and a reflect item needs some", () => {
+    const line = (over: Record<string, unknown>) => JSON.stringify({ ...item, ...over });
+    expect(() => parseItems(line({ feedback: [{ ref, signal: "negative", reason: "r" }] }))).toThrow("must be empty");
+    expect(() => parseItems(line({ kind: "reflect" }))).toThrow("may not be");
+  });
+});
+
 describe("metrics", () => {
   const rows = night.items.map((i) => scoreItem(i, quiet()));
 
   test("counts items right, by kind and by failed check, harm, and the model calls", () => {
     const m = metrics(rows, [], [], { calls: 12, failures: 1 });
     // with nothing done: the notes to leave alone are right, the exact fix and the lessons are missed, and so on
-    expect(m.items.n).toBe(29);
+    expect(m.items.n).toBe(35);
     expect(m.by_kind.untouched).toEqual({ n: 4, ok: 4 });
+    expect(m.by_kind.silent).toEqual({ n: 6, ok: 0 }); // no proposal, so none is right, and the notes are as planted
+    expect(m.proactive).toBeNull(); // no improve result: the lane did not run
     expect(m.by_kind.pair?.n).toBe(7);
     expect(m.failed.right_outcome).toBe(4); // the two duplicates, the subset and the replaced note are not retired. The three pairs to keep are right.
     expect(m.harm).toEqual({ items: 0, outside_changed: 0, lessons_accepted: 0 });
     expect(m.calls).toEqual({ n: 12, failures: 1 });
-    expect(m.items.rate).toBe(Number((m.items.ok / 29).toFixed(4)));
+    expect(m.items.rate).toBe(Number((m.items.ok / 35).toFixed(4)));
+  });
+
+  test("counts the lane's picks and the reflect proposals on them: on silent defects, and on other notes", () => {
+    const silent = find<ReflectItem>("silent-when-to-use-missing-02");
+    const improve = { proactiveMaintenance: { selected: 3, dueTotal: 20, neverReflected: 20, selectedRefs: [refOf(silent.path), "knowledge/other", "bundle//knowledge/third"] } };
+    const hit = scoreItem(silent, quiet({ improve, proposals: [proposal({ ref: refOf(silent.path), content: "x" })] }));
+    const proposals = [proposal({ ref: refOf(silent.path) }), proposal({ ref: "knowledge/other" }), proposal({ ref: "knowledge/b" }), proposal({ source: "distill", ref: "knowledge/other" })];
+    expect(metrics([hit], [], proposals, { calls: 0, failures: 0 }, improve).proactive).toEqual({ selected: 3, due: 20, proposals: 2, on_silent: 1, on_others: 1 });
+  });
+
+  test("has no proactive numbers when the lane did not run", () => {
+    expect(metrics([], [], [proposal({ ref: "knowledge/b" })], { calls: 0, failures: 0 }, { actions: [] }).proactive).toBeNull();
   });
 
   test("adds the paths that changed outside the items and the distilled lessons accepted", () => {

@@ -2,7 +2,7 @@
 
 Does a whole nightly improve run give good results unattended, with no model-call failures?
 
-The other evals test one process of `akm improve` at a time, each on cases of its own. A real night runs them all on one library, one after another, and nobody reads the result before the morning. This eval runs one full night on a library of 29 planted items whose right outcome is known in advance, and checks every one: pairs of notes for consolidate to retire or keep, notes with a defect and notes that should stay as they are for reflect, memories for distill to turn into lessons or leave, an exact fix, and notes that nothing should touch. It then checks three things about the library as a whole: nothing outside the items changed, no distilled lesson was accepted without a person, and every model call akm made got an answer.
+The other evals test one process of `akm improve` at a time, each on cases of its own. A real night runs them all on one library, one after another, and nobody reads the result before the morning. This eval runs one full night on a library of 35 planted items whose right outcome is known in advance, and checks every one: pairs of notes for consolidate to retire or keep, notes with a defect and notes that should stay as they are for reflect, memories for distill to turn into lessons or leave, an exact fix, notes that nothing should touch, and defect notes with no feedback that only the proactive lane can reach. It then checks three things about the library as a whole: nothing outside the items changed, no distilled lesson was accepted without a person, and every model call akm made got an answer.
 
 The model under test is the engine of every process: consolidate's pair judge, reflect and its quality judge, distill and its judge. The strategy, the prompts, the gates and the drain are akm's own: the eval drives the installed akm CLI the way the lab's nightly does. It needs akm 0.9.26 or later, the first release with the pair judge's claim lists, exact fixes and lessons that wait for review, and records the akm version it used. akm is on `PATH`, or named in `AKM_BIN`.
 
@@ -23,6 +23,7 @@ akm proposal list --status <state> --detail full         # for each state
 - **consolidate** has a pair pass and a promotion pass. The pair pass finds memories, lessons and flat knowledge notes that say nearly the same thing, has a model list the claims each holds that the other lacks, and proposes retiring a note that holds none. The pair judge stages a retirement only for a duplicate that has no claim of its own on either side, after a second look. The promotion pass proposes turning memories into knowledge notes. The eval does not count them. Here they wait for a person, because triage is off (see below). Under a config with triage on, `applyMode: promote` and judgment on, as the lab runs it, the drain's judgment tier accepts them with no one looking: of the 89 promotions that reached it from 2026-09-29 to 7 October, it accepted 71, rejected 8 and left 10 for a person, while a hand review of the 54 promotions waiting on 7 October accepted 3. `../promotion/README.md` tests that tier.
 - **reflect** acts on notes that have negative feedback and edits their frontmatter only: a `description`, a `when_to_use` and a title. A quality judge reads each edit and stages the ones it passes.
 - **distill** acts on memories that have feedback, unless it is only a positive with no reason. It writes a lesson and has a judge look at it. A lesson goes to a person for review. akm never accepts one by itself.
+- **the proactive lane** (`proactiveMaintenance`, on in `default`) plans up to 15 assets a night that have no feedback and have not been reflected or distilled for 30 days, and reflect proposes a fix for them. Since akm #1147 the drain never accepts such a proposal: it waits for a person. The `silent` items are defects that only this lane can reach, so the night shows what the lane gives a reviewer. To measure it, run the night with the lane off and on: `--config-patch` with `{"improve":{"strategies":{"default":{"processes":{"proactiveMaintenance":{"enabled":false}}}}}}`, and again with `{"enabled":true,"maxPerRun":50}` to see what it finds when the 15-asset cap does not bind. `metrics.proactive` counts what the lane picked and the proposals on its picks: those on silent defects, and the rest, which are noise a reviewer reads.
 - **validation** checks that each asset has a file and each lesson a description. It calls a model only to repair a fault, and the planted notes have none.
 
 Memory inference needs an experimental switch and stays off. Triage is off in this strategy, so no judgment tier runs: the drain does its work, and the eval's drain does not pass `--judgment`. `akm proposal drain --promote` accepts what the gates allowed and leaves the rest: a retirement the pair judge staged as a duplicate, and a reflect edit that its judge passed. A proposal the drain does not accept waits for a person. The lab's nightly drains at the start of the next night. The eval drains straight after improve, to see the result of both.
@@ -79,7 +80,7 @@ MODEL_NAME=qwen3-27b
 
 ## Assets
 
-- `assets/library/` and `assets/items.jsonl`: the planted night, 29 items in 38 files, built from the cases of the consolidate, reflect and distill evals by `src/build.ts`. The items, the fields and how it was made are in `assets/README.md`. The items carry a canary string: do not train on them.
+- `assets/library/` and `assets/items.jsonl`: the planted night, 35 items in 44 files, built from the cases of the consolidate, reflect and distill evals by `src/build.ts`. The items, the fields and how it was made are in `assets/README.md`. The items carry a canary string: do not train on them.
 - `private/nightly/assets/`: the same night with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`, with one mapping for the library and `items.jsonl`, so a name or a number changes the same way in a note, in a path, in a claim, in a feedback and in what a correct result must say. `generate` then checks the night as the three evals check theirs: each file is where its item says, each deciding claim of a pair is still in the note it belongs to and in no other, each planted defect is still there and only that one, each exact fix still applies once, and each distill memory still matches the facts and claims it did. It writes nothing if one check fails, and says to try another seed. The mapping is in `private/nightly/map.json`. It is made by `generate` and never published.
 
 | Kind | Items | The item | A right night |
@@ -89,6 +90,7 @@ MODEL_NAME=qwen3-27b
 | `fix` | 1 | A note with a wrong fact planted in its body, and negative feedback with the exact fix: `--replace`, `--with` and `--source`, new in akm 0.9.26. | The fix is queued as a proposal that makes exactly that edit, and waits for a person. The night does not apply it, and does not change the note. |
 | `distill` | 7 | A memory with positive feedback and a reason. 3 deserve a lesson. 4 do not: 2 dated statuses, one that restates a skill the library holds, one whose point a lesson of the library makes. | A lesson that states the facts of its memory and claims nothing more, waiting for review. For the others, no lesson. Never a lesson accepted. |
 | `untouched` | 4 | 2 memories and 2 knowledge notes with no feedback, no pair and nothing wrong. | Exactly as they were. |
+| `silent` | 6 | A note with a defect akm names, one of each class that has a fix, and no feedback: the -02 cases of the reflect eval. Only the proactive lane can plan it. | A proposal that fixes the defect and passes the reflect eval's checks, waiting for a person, and the note exactly as planted. A night with the lane off leaves none. |
 
 ## The checks
 
@@ -109,7 +111,8 @@ No judge model scores an item. Each check looks at the library as the night left
 | `no_lesson` | distill, other cases | No lesson was queued for the memory. | miss |
 | `lesson_not_accepted` | distill | No lesson proposal was accepted, and no lesson file was written. | harm |
 | `memory_kept` | distill | The memory's body and the body of each of the item's other files are as planted. Frontmatter changes are allowed (a salience score on a memory, and reflect's fields and stamps on the others), and so is a `# title` heading reflect adds to a body that had none. A deleted file or a changed body is harm. | harm |
-| `unchanged` | untouched | The files are exactly as planted. | harm |
+| `unchanged` | untouched, silent | The files are exactly as planted. For a silent defect this means no one accepted the lane's proposal. | harm |
+| `fix_proposed` | silent | A reflect proposal for the note exists and passes the reflect eval's checks: the defect is repaired, the body kept, nothing else changed or invented. Its state (pending, accepted) is read from `unchanged`. | miss |
 | `no_error` | reflect, distill | Added, failing, when akm reports an error for the item: a model call failed, or the run's budget ran out at it. An item that was not decided is not right, even when it expects no change. | miss |
 
 ## Read the results
@@ -121,18 +124,19 @@ No judge model scores an item. Each check looks at the library as the night left
 | `failed` | For each check, how many items failed it. |
 | `harm` | `items`: items with a check that guards the library failing. `outside_changed`: paths no item owns that changed, appeared or vanished. `lessons_accepted`: distill proposals accepted. All three should be 0. |
 | `calls` | `n` model calls the improve run made and `failures`, how many failed. It should be 0. `calls_by` in `summary.json` splits them by process and by the model name the endpoint reported. |
+| `proactive` | The lane, from akm's improve result: `selected` refs of the `due` ones, and `proposals`, the reflect proposals on its picks, of which `on_silent` are on silent defects and `on_others` on other notes, which a reviewer reads for nothing. Null when the lane did not run (it is off in the config). |
 
 The calls come from akm's own usage report. A gateway may serve one model name from several providers, and each call is filed under the name that answered. A call that got no answer has none, and is filed under the name it asked for with no tokens, so the failures show under that name.
 
-For scale: a night that does nothing gets 15 of 29 items right and no harm: the 3 pairs to keep, the 4 controls, the 4 memories that deserve no lesson and the 4 notes to leave alone. A useful night gets the duplicates retired, most defects fixed, the exact fix queued, the good lessons queued, and no harm and no failed call.
+For scale: a night that does nothing gets 15 of 35 items right and no harm: the 3 pairs to keep, the 4 controls, the 4 memories that deserve no lesson and the 4 notes to leave alone. The 6 silent defects are missed. A useful night gets the duplicates retired, most defects fixed, the exact fix queued, the good lessons queued, and no harm and no failed call.
 
-The set is small. One item is 3.4 points of 29, and a kind has between 1 and 10 items. Read changes of an item or two as noise, and rerun before you trust a gap. A rerun can differ by an item or two, because the model judges and writes again.
+The set is small. One item is 2.9 points of 35, and a kind has between 1 and 10 items. Read changes of an item or two as noise, and rerun before you trust a gap. A rerun can differ by an item or two, because the model judges and writes again.
 
 A model may have seen the public night in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
 
 ## Notes
 
-- The library holds only the planted notes. It does not hold `corpus/library`. akm plans reflect and distill only for notes that have feedback, and the pair pass reads only memories, lessons and flat knowledge notes, so the 317 files of `corpus/library` would add index time and no model call. The notes that nothing should touch, and the check of every other path, cover what the background would.
+- The library holds only the planted notes. It does not hold `corpus/library`. akm plans reflect and distill for notes that have feedback and, in the proactive lane, for a few that have none, and the pair pass reads only memories, lessons and flat knowledge notes, so the 317 files of `corpus/library` would add index time and no model call. The notes that nothing should touch, and the check of every other path, cover what the background would.
 - All the items share one night, as they do in a real library. A pair judged in the same run as the others can be paired with a note of another item; the pairs are different made-up systems, so that is rare. The step 2 evals give each case a library of its own.
 - The pair judge's label of a pair is known only for a pair that was retired. `summary.json` holds the labels of the run.
 - A retirement archives the note under `.akm/` in the bundle, and nothing is deleted. The eval leaves akm's own folder out of its reading of the library.

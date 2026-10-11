@@ -221,6 +221,7 @@ function printSummary(s: Summary, rows: Row[]): void {
   console.log(`  items right        ${cell(m.items.ok, m.items.n, m.items.rate)}`);
   console.log(`  harm               ${m.harm.items} items, ${m.harm.outside_changed} paths changed outside the items, ${m.harm.lessons_accepted} lessons accepted`);
   console.log(`  model calls        ${m.calls.n}, ${m.calls.failures} failed`);
+  if (m.proactive) console.log(`  proactive lane     picked ${m.proactive.selected} of ${m.proactive.due} due, ${m.proactive.on_silent} proposals on silent defects, ${m.proactive.on_others} on other notes`);
   console.log(`  night              ${minutes(s.seconds.total)} (index ${minutes(s.seconds.index)}, feedback ${minutes(s.seconds.feedback)}, improve ${minutes(s.seconds.improve)}, drain ${minutes(s.seconds.drain)})`);
   console.log(`  drain              ${s.drain.promoted} promoted, ${s.drain.rejected} rejected, ${s.drain.deferred} left for review, ${s.drain.failed} failed`);
   if (!s.improve_ok) console.log("  akm reported the improve run as not ok");
@@ -307,7 +308,7 @@ export async function runCorpus(
     outside_changed: outside,
     pair_pass: pairPass ? { pairs_judged: Number(pairPass.pairsJudged ?? 0), failed_judgments: Number(pairPass.failedJudgments ?? 0), labels: Object.fromEntries(Object.entries(pairPass.labelCounts ?? {}).filter(([, n]) => n > 0)) } : null,
     calls_by: calls.by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
-    metrics: metrics(rows, outside, done.proposals, calls),
+    metrics: metrics(rows, outside, done.proposals, calls, done.improve),
     results_dir: dir,
   };
   const { results_dir: _dir, ...stored } = summary;

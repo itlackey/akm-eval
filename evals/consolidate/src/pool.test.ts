@@ -220,7 +220,7 @@ describe("poolMetrics", () => {
   const [t1a, t1b] = cluster("triple-01").notes;
 
   const proposals = listing(
-    retire(d1a, d1b), // safe
+    retire(d1a, d1b, { gateDecision: { outcome: "staged" } }), // safe, staged
     retire(s1b, s1a, { gateDecision: { outcome: "staged" } }), // the bigger note: unsafe, staged
     retire(o1a, "harrow-coffee-rota"), // unsafe, not staged
     retire(t1a, "harrow-coffee-rota"), // allowed note, successor outside its cluster: wrong successor
@@ -230,6 +230,7 @@ describe("poolMetrics", () => {
 
   test("counts unsafe retirements and how many akm staged, precision, wrong successors and recall over the clusters that have a note to retire", () => {
     expect(m.unsafe).toEqual({ n: 2, of: 4, staged: 1 });
+    expect(m.staged).toEqual({ n: 2, safe: 1 });
     expect(m.precision).toEqual({ value: 0.25, safe: 1, retired: 4 });
     expect(m.wrong_successor).toBe(1);
     const withSafe = pool.clusters.filter((c) => Object.keys(c.retire).length > 0).length;
@@ -259,6 +260,7 @@ describe("poolMetrics", () => {
     expect(none.precision.value).toBeNull();
     expect(none.recall.value).toBe(0);
     expect(none.unsafe).toEqual({ n: 0, of: 0, staged: 0 });
+    expect(none.staged).toEqual({ n: 0, safe: 0 });
   });
 });
 

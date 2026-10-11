@@ -29,6 +29,8 @@ const DISTILLS: Record<string, string> = {
   "dup-04": "Helped me when a test waited on a fixed sleep.",
   "status-02": "Helped me see how far the migration had got.",
 };
+// Defect notes with no feedback at all, one of each class that akm names: only the proactive lane can find them. They are the -02 cases of the reflect eval.
+const SILENT = ["description-period-02", "description-quote-02", "description-truncated-02", "description-missing-02", "when-to-use-missing-02", "title-missing-02"];
 // Memories and notes that nothing has a reason to touch: no feedback, no pair, nothing wrong.
 const UNTOUCHED_MEMORIES = ["lesson-05", "status-04"];
 const UNTOUCHED_NOTES = ["knowledge/skills/ai-skills/opencode-extensions/references/config.md", "knowledge/skills/ai-skills/opencode-extensions/references/network.md"];
@@ -107,6 +109,12 @@ export function buildNight(): Night {
     add(path, text);
     items.push({ id: `untouched-0${i + 1}`, kind: "untouched", note: "No feedback, no pair and nothing wrong: the night leaves this note exactly as it is.", files: [path], feedback: [] });
   });
+
+  const silentNote = "No feedback, so only the proactive lane can plan it. The night leaves a proposal that fixes the defect, waiting for a person, and the note exactly as planted: a proposal of the lane is never accepted unattended.";
+  for (const c of pick(parseReflect(readFileSync(join(EVALS, "reflect", "assets", "cases.jsonl"), "utf8")), SILENT, "reflect")) {
+    add(c.path, c.source);
+    items.push({ id: `silent-${c.id}`, kind: "silent", note: silentNote, files: [c.path], feedback: [], class: c.class, path: c.path, defect: c.defect, correct: c.correct, allow: c.allow, ...(c.fix ? { fix: c.fix } : {}) });
+  }
 
   const night = { items: items.map((i) => ({ ...i, canary: CANARY })), files };
   const problems = nightProblems(night);

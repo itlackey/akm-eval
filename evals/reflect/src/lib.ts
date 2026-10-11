@@ -543,6 +543,39 @@ export function reflectOutcome(improve: unknown): { outcome: Outcome; reason: st
   return { outcome: "error", reason: why };
 }
 
+/** The queries akm's retrieval check grades an edit on: at most 5, as akm takes. */
+const MAX_QUERIES = 5;
+
+/**
+ * The queries the retrieval eval labels as finding each note (grade 2 or 3), by ref, best grade first, at most five. They
+ * stand in for the searches that a real asset has in the usage log, which the retrieval check of akm's reflect grades the
+ * edit on. `queries` and `qrels` are the two jsonl files of evals/retrieval/assets.
+ */
+export function labelledQueries(queries: string, qrels: string): Map<string, string[]> {
+  const text = new Map<string, string>();
+  for (const line of queries.split("\n")) if (line.trim()) text.set(JSON.parse(line).id, JSON.parse(line).query);
+  const found = new Map<string, { query: string; grade: number; id: string }[]>();
+  for (const line of qrels.split("\n")) {
+    if (!line.trim()) continue;
+    const q = JSON.parse(line) as { id: string; ref: string; grade: number };
+    const query = text.get(q.id);
+    if (query === undefined || q.grade < 2) continue;
+    found.set(q.ref, [...(found.get(q.ref) ?? []), { query, grade: q.grade, id: q.id }]);
+  }
+  return new Map([...found].map(([ref, list]) => [ref, list.sort((a, b) => b.grade - a.grade || (a.id < b.id ? -1 : 1)).slice(0, MAX_QUERIES).map((q) => q.query)]));
+}
+
+/** What refused an edit: akm's pre-judge defect filter, the quality judge, or the retrieval check that runs after the judge passes it. */
+export type Refusal = "filter" | "judge" | "retrieval" | "other";
+
+/** Which of the three refused an edit, from the reason akm gives. */
+export function refusalOf(reason: string): Refusal {
+  if (/refused before the judge/.test(reason)) return "filter";
+  if (/quality gate rejected/.test(reason)) return "judge";
+  if (/retrieval/.test(reason)) return "retrieval";
+  return "other";
+}
+
 /**
  * The model that answered reflect, as the response names it, from the usage report in the improve result. A gateway that
  * serves one name from several providers may answer with a different name each time.
@@ -593,6 +626,8 @@ export interface Metrics {
   controls: Stats;
   classes: Partial<Record<CaseClass, ClassStats>>;
   proposals: { n: number; touched_body: number };
+  /** The refused edits, by what refused them (see `refusalOf`). */
+  refused: Record<Refusal, number>;
 }
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
@@ -617,11 +652,14 @@ export function metrics(rows: Row[]): Metrics {
     classes[cls] = { ...stats(mine), outcomes, failed };
   }
   const proposals = rows.filter((r) => r.outcome === "proposal");
+  const refused: Metrics["refused"] = { filter: 0, judge: 0, retrieval: 0, other: 0 };
+  for (const r of rows) if (r.outcome === "refused") refused[refusalOf(r.reason)]++;
   return {
     defects: stats(rows.filter((r) => isDefect(r.class))),
     controls: stats(rows.filter((r) => !isDefect(r.class))),
     classes,
     proposals: { n: proposals.length, touched_body: proposals.filter((r) => r.checks?.body_kept === false).length },
+    refused,
   };
 }
 
