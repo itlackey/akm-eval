@@ -40,14 +40,19 @@ function arm(): void {
   }
 }
 
+/** Marks an existing folder as running: writes the `.running` marker with this process's pid and removes it when the process ends, as for a new folder. For a run that picks up a folder (`--resume`). */
+export function markRunning(dir: string): void {
+  writeFileSync(join(dir, RUNNING), `${process.pid}\n`);
+  marked.add(dir);
+  arm();
+}
+
 /** A new folder `<UTC date>-<label>` under `parent`, with `-2`, `-3` and so on when the name is taken, holding the `.running` marker. */
 export function makeResultsDir(parent: string, label: string): string {
   const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
   let dir = base;
   for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, RUNNING), `${process.pid}\n`);
-  marked.add(dir);
-  arm();
+  markRunning(dir);
   return dir;
 }

@@ -16,6 +16,23 @@ describe("retrievalMetrics with a list of relevant ids", () => {
   });
 });
 
+describe("retrievalMetrics with an id that comes more than once", () => {
+  test("counts it once, at its first place: returned, precision, recall and ndcg are over distinct ids", () => {
+    expect(retrievalMetrics({ a: 3 }, ["a", "a"], 10, 2)).toEqual({ returned: 1, hit: true, recall: 1, precision: 0.1, mrr: 1, ndcg: 1 });
+    expect(retrievalMetrics(["a"], ["a", "a", "a"], 5)).toEqual({ returned: 1, hit: true, recall: 1, precision: 0.2, mrr: 1, ndcg: 1 });
+  });
+
+  test("drops the repeat before the cut at k, so it does not use up a place", () => {
+    expect(retrievalMetrics(["a", "b"], ["a", "a", "x", "b"], 3)).toMatchObject({ returned: 3, recall: 1, mrr: 1 });
+    expect(retrievalMetrics(["b"], ["a", "a", "b"], 2)).toMatchObject({ returned: 2, hit: true, mrr: 0.5 });
+  });
+
+  test("scores a list with repeats the same as the list without them", () => {
+    const grades = { a: 3, b: 2, c: 1 };
+    expect(retrievalMetrics(grades, ["c", "a", "c", "x", "a", "b"], 10, 2)).toEqual(retrievalMetrics(grades, ["c", "a", "x", "b"], 10, 2));
+  });
+});
+
 describe("retrievalMetrics with grades", () => {
   const grades = { a: 3, b: 2, c: 1, d: 0 };
 
