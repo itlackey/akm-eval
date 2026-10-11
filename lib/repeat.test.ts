@@ -37,7 +37,7 @@ describe("spreadOf", () => {
 describe("repeatRuns", () => {
   const make = (parent: string) => async (label: string) => {
     const results_dir = makeResultsDir(parent, label);
-    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, timeouts: label.endsWith("r1") ? 1 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
   };
 
   test("without --repeat runs once under the label and writes nothing else", async () => {
@@ -56,7 +56,7 @@ describe("repeatRuns", () => {
     const files = readdirSync(parent).sort();
     expect(files).toEqual([`${DAY}-base-r1`, `${DAY}-base-r2`, expect.stringMatching(/^\d{4}-\d{2}-\d{2}-base-repeat-summary\.json$/)]);
     const stored = JSON.parse(readFileSync(join(parent, files[2]), "utf8"));
-    expect(stored).toMatchObject({ eval: "t", corpus: "public", label: "base", repeat: 2, model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, runs: [`${DAY}-base-r1`, `${DAY}-base-r2`], n_errored: { min: 0, max: 2, mean: 1 }, metrics: { score: { min: 1, max: 3, mean: 2 } } });
+    expect(stored).toMatchObject({ eval: "t", corpus: "public", label: "base", repeat: 2, model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, runs: [`${DAY}-base-r1`, `${DAY}-base-r2`], n_errored: { min: 0, max: 2, mean: 1 }, timeouts: { min: 0, max: 1, mean: 0.5 }, metrics: { score: { min: 1, max: 3, mean: 2 } } });
     expect(stored.seconds.min).toBeGreaterThanOrEqual(0); // wall time of each run
     expect(stored.seconds.max).toBeGreaterThanOrEqual(stored.seconds.min);
   });

@@ -10,6 +10,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
+import { staleAssets } from "../../../evals/retrieval/src/inputs.ts";
 import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
@@ -345,6 +346,11 @@ async function main(): Promise<void> {
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
   for (const c of corpora) {
     if (!existsSync(libraryOf(c))) fail(`the ${c} library is missing (${relative(ROOT, libraryOf(c))}).${c === "private" ? " Make it with: ./generate-assets --only retrieval" : ""}`);
+    // The private library is the retrieval eval's: it is used only when its generated.json says it was made from the public inputs as they are now.
+    if (c === "private") {
+      const stale = staleAssets(join(ROOT, "private", "retrieval", "assets"), ROOT, "private/retrieval/assets");
+      if (stale) fail(stale);
+    }
   }
   const { model, env } = preflight(values);
   const label = values.label ?? slug(model);

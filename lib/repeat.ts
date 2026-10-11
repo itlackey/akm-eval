@@ -1,5 +1,5 @@
 // `--repeat N`: runs a corpus N times, each into its own results folder `<UTC date>-<label>-r1` to `-rN`, and writes the spread of
-// the metrics next to them, in `<UTC date>-<label>-repeat-summary.json`. A run of a model differs by a case or two from the next,
+// the metrics next to them, in `<UTC date>-<label>-repeat-summary.json` (and of `timeouts`, for an eval that counts them). A run of a model differs by a case or two from the next,
 // so a change smaller than that spread is not a change. Each run is a whole run of the eval, with the same summary.json as one
 // made without --repeat. A run's `.running` file is removed when that run is done, so a script that waits for r1 sees it end.
 
@@ -16,6 +16,8 @@ interface Summarized {
   akm_bin: string;
   akm_build: string | null;
   n_errored: number;
+  /** Timed-out calls, for the evals that count them apart from the other errors: a number, or an object of numbers (one per arm). */
+  timeouts?: unknown;
   metrics: unknown;
   results_dir: string;
 }
@@ -65,7 +67,7 @@ export async function repeatRuns<S extends Summarized>(times: number | undefined
   let file = `${base}.json`;
   for (let n = 2; existsSync(file); n++) file = `${base}-${n}.json`;
   const { eval: name, corpus, model, akm_version, akm_bin, akm_build } = first;
-  const summary = { eval: name, corpus, label, repeat: times, model, akm_version, akm_bin, akm_build, runs: runs.map((r) => basename(r.results_dir)), n_errored: spreadOf(runs.map((r) => r.n_errored)), seconds: spreadOf(seconds), metrics: spreadOf(runs.map((r) => r.metrics)) };
+  const summary = { eval: name, corpus, label, repeat: times, model, akm_version, akm_bin, akm_build, runs: runs.map((r) => basename(r.results_dir)), n_errored: spreadOf(runs.map((r) => r.n_errored)), ...(runs.some((r) => r.timeouts !== undefined) ? { timeouts: spreadOf(runs.map((r) => r.timeouts)) } : {}), seconds: spreadOf(seconds), metrics: spreadOf(runs.map((r) => r.metrics)) };
   writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(`\n${name} (${corpus}): ${times} runs, spread in ${basename(file)}`);
   return runs;
