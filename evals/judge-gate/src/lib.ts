@@ -69,13 +69,15 @@ export function parseCases(text: string, where = "cases"): Case[] {
 
 /**
  * The cases a run uses. Without a limit, all of them. With one, N cases in the same good/bad
- * proportion as the whole set, each kind taken in file order, so a quick run still holds both.
+ * proportion as the whole set, each kind taken in file order, so a quick run still holds both: from
+ * two cases on there is at least one good case, though good cases are a tenth of the set.
  */
 export function selectCases(cases: Case[], limit?: number): Case[] {
   if (limit === undefined || limit >= cases.length) return cases;
   const good = cases.filter((c) => c.label === "good");
   const bad = cases.filter((c) => c.label === "bad");
-  const goodQuota = Math.min(good.length, Math.round((limit * good.length) / cases.length));
+  const share = Math.round((limit * good.length) / cases.length);
+  const goodQuota = Math.min(good.length, limit >= 2 ? Math.min(limit - 1, Math.max(1, share)) : share);
   const badQuota = Math.min(bad.length, limit - goodQuota);
   const picked = new Set([...good.slice(0, goodQuota), ...bad.slice(0, badQuota)]);
   return cases.filter((c) => picked.has(c));

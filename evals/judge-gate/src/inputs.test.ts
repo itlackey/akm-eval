@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CASES, GENERATED, casesSha256, privateAssetsProblem, privateSeed, readGenerated, readSeed, staleAssets } from "./inputs.ts";
+import { CASES, GENERATED, RUBRIC, casesSha256, privateAssetsProblem, privateSeed, readGenerated, readSeed, rubricVersion, staleAssets } from "./inputs.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -42,6 +42,28 @@ describe("casesSha256", () => {
     const empty = tmp();
     expect(() => casesSha256(empty)).toThrow();
     expect(process.cwd()).toBe(before);
+  });
+});
+
+describe("rubricVersion", () => {
+  const readme = (text: string): string => {
+    const dir = assetsWith("x\n");
+    writeFileSync(join(dir, RUBRIC), text);
+    return dir;
+  };
+
+  test("is the number on the rubric_version line of the assets README", () => {
+    expect(rubricVersion(readme("# Judge gate\n\nrubric_version: 2\n\n## Severity\n"))).toBe(2);
+    expect(rubricVersion(readme("rubric_version:   13  \n"))).toBe(13);
+  });
+
+  test("is not fooled by the name in a sentence, and fails when the line or the README is missing", () => {
+    expect(() => rubricVersion(readme("`rubric_version` is the version.\nThe rubric_version: 2 is in prose.\n"))).toThrow('no "rubric_version: N" line');
+    expect(() => rubricVersion(assetsWith("x\n"))).toThrow();
+  });
+
+  test("the public assets state one", () => {
+    expect(rubricVersion(join(import.meta.dir, "..", "assets"))).toBe(2);
   });
 });
 
