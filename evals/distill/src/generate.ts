@@ -7,12 +7,13 @@
 // memory, in a file name and in what a correct lesson must state. Then each case is checked against the public one.
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
 // fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed and the digest of the
-// public assets, and `run --corpus private` refuses assets without it or with a digest that is no longer the public one.
+// public assets and the digest of the code that made them (this file, lib.ts and lib/rewrite), and `run --corpus private` refuses assets
+// without it, or with a digest that is no longer the public one or the generator's.
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { GENERATED, type Generated, type LoadedCase, assetsSha256, checkLesson, checkUpdate, lessonFile, loadCases, memoryBody, mentions } from "./lib.ts";
+import { GENERATED, type Generated, type LoadedCase, assetsSha256, checkLesson, checkUpdate, generatorSha256, lessonFile, loadCases, memoryBody, mentions, stated } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -21,8 +22,9 @@ const REWRITE = join(ROOT, "lib", "rewrite", "rewrite.ts");
 const files = (c: LoadedCase): number => readdirSync(c.dir, { recursive: true }).length;
 
 /**
- * What the rewrite must keep, case by case: which required facts and forbidden claims its memory body matches, how its
- * two example lessons score, whether the lesson distill would write already exists, and how many files it has.
+ * What the rewrite must keep, case by case: which required facts its memory body states and which forbidden claims and
+ * contradictions it matches, how its example lessons (good, bad and reversed) score, whether the lesson distill would write
+ * already exists, and how many files it has.
  * Returns what changed. A rewrite that changes none of these keeps the case as hard as it was.
  */
 export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[] {
@@ -33,8 +35,8 @@ export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[
     const note = (message: string) => problems.push(`${b.id}: ${message}`);
     if (a.id !== b.id || a.class !== b.class) return note(`came back as ${a.id}, ${a.class}`);
     b.required.forEach((fact, k) => {
-      const was = fact.some((p) => mentions(memoryBody(b.memory), p));
-      const now = a.required[k].some((p) => mentions(memoryBody(a.memory), p));
+      const was = stated(memoryBody(b.memory), fact);
+      const now = stated(memoryBody(a.memory), a.required[k]);
       if (was !== now) note(`the required fact "${a.required[k][0]}" ${now ? "is now" : "is no longer"} in its memory`);
     });
     b.forbidden.forEach((group, k) => {
@@ -42,13 +44,18 @@ export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[
       const now = a.forbidden[k].some((p) => mentions(memoryBody(a.memory), p));
       if (was !== now) note(`the forbidden claim "${a.forbidden[k][0]}" ${now ? "is now" : "is no longer"} in its memory`);
     });
-    for (const key of ["good", "bad"] as const) {
+    b.contradicts.forEach((group, k) => {
+      const was = group.some((p) => mentions(memoryBody(b.memory), p));
+      const now = (a.contradicts[k] ?? []).some((p) => mentions(memoryBody(a.memory), p));
+      if (was !== now) note(`the contradiction "${a.contradicts[k]?.[0]}" ${now ? "is now" : "is no longer"} in its memory`);
+    });
+    for (const key of ["good", "bad", "reversed"] as const) {
       if (b[key] === undefined) continue;
       // An update case's example is the whole updated body, scored against the existing lesson's body.
       const passes = (c: LoadedCase) => {
         if (c.expect !== "update") return checkLesson(c, c[key] as string, c.memory).good;
         const r = checkUpdate(c, c.existingBody ?? "", c[key] as string);
-        return r.dropped.length === 0 && r.missing.length === 0 && r.forbidden.length === 0;
+        return r.dropped.length === 0 && r.missing.length === 0 && r.forbidden.length === 0 && r.contradicted.length === 0;
       };
       const was = passes(b);
       const now = passes(a);
@@ -106,7 +113,7 @@ function main(): void {
     if (problems.length > 0) {
       refused = `distill: the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} it must keep, so nothing was written:\n  ${problems.join("\n  ")}`;
     } else {
-      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")) };
+      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")), rewrite: generatorSha256() };
       writeFileSync(join(work, GENERATED), `${JSON.stringify(generated, null, 2)}\n`);
       const written = loadCases(assets).length;
       install(work, out);

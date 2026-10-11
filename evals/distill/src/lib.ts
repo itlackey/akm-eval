@@ -2,7 +2,7 @@
 // metrics. run.ts uses them to run the eval and generate.ts to make the private cases.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
@@ -22,13 +22,25 @@ export interface Case {
   id: string;
   class: Class;
   expect: Expect;
-  /** What a lesson must state: facts, each a list of phrases, any one of which states it. For a lesson-update case, the new facts the memory adds. Lesson and update cases only. */
+  /**
+   * What a lesson must state: facts, each a list of phrases, any one of which states it. A phrase that starts with `+` is an action, and a
+   * negation right before it ("never wait for the heading") does not state it. For a lesson-update case, the new facts the memory adds.
+   * Lesson and update cases only.
+   */
   required: string[][];
   /** What a lesson must not claim: groups of phrases, any one of which makes the claim. Lesson and update cases only. */
   forbidden: string[][];
+  /**
+   * What a lesson must not assert because it turns the memory's action round: groups of phrases, any one of which fails the lesson, such as
+   * "wait for networkidle" for a memory whose fix was to stop waiting for it. Matched like `forbidden`. Optional, so a case without it is
+   * scored without it; every public lesson, over-claim and update case has it. Lesson and update cases only.
+   */
+  contradicts?: string[][];
   /** A lesson that passes, and one that over-claims. They keep the phrases honest. For a lesson-update case, the whole body of the updated lesson. Lesson and update cases only. */
   good?: string;
   bad?: string;
+  /** A lesson that mentions the facts, makes no forbidden claim and still turns the memory's action round. It must fail, on a contradiction or a required action it does not assert. For a lesson-update case, the whole body of such an update. Optional. */
+  reversed?: string;
   /** A lesson-update case only: the name of the lesson the library already holds, the file `lessons/<existing>.md` in the case's bundle. */
   existing?: string;
   /** What a correct result is, in a sentence. */
@@ -38,6 +50,7 @@ export interface Case {
 }
 
 export interface LoadedCase extends Case {
+  contradicts: string[][];
   /** The case's bundle folder: the memory and the assets that go with it. */
   dir: string;
   /** The memory's name, so its ref is memories/<name>. */
@@ -69,7 +82,7 @@ export function loadCases(assets: string): LoadedCase[] {
     if (!CLASSES.includes(row.class)) throw new Error(`${at} has class "${row.class}", expected one of ${CLASSES.join(", ")}`);
     if (row.expect !== expectOf(row.class)) throw new Error(`${at} is ${row.class}, so it expects ${expectOf(row.class)}, not "${row.expect}"`);
     if (typeof row.note !== "string" || !row.note.trim()) throw new Error(`${at} has no note`);
-    const groups = (key: "required" | "forbidden") => {
+    const groups = (key: "required" | "forbidden" | "contradicts") => {
       const value = row[key] ?? [];
       const ok = Array.isArray(value) && value.every((g) => Array.isArray(g) && g.length > 0 && g.every((p) => typeof p === "string" && /[a-z0-9]/i.test(p)));
       if (!ok) throw new Error(`${at} needs ${key} as a list of lists of phrases, each with a letter or a digit`);
@@ -77,11 +90,13 @@ export function loadCases(assets: string): LoadedCase[] {
     };
     const required = groups("required");
     const forbidden = groups("forbidden");
+    const contradicts = groups("contradicts");
+    if (row.reversed !== undefined && (typeof row.reversed !== "string" || !row.reversed.trim())) throw new Error(`${at} has a "reversed" example lesson that is not text`);
     if (row.expect === "lesson" || row.expect === "update") {
       if (required.length === 0 || forbidden.length === 0) throw new Error(`${at} expects ${row.expect === "lesson" ? "a lesson" : "an update"}, so it needs required and forbidden`);
       for (const key of ["good", "bad"] as const) if (typeof row[key] !== "string" || !row[key]?.trim()) throw new Error(`${at} needs a "${key}" example lesson`);
-    } else if (required.length > 0 || forbidden.length > 0) {
-      throw new Error(`${at} expects no lesson, so it has no required or forbidden`);
+    } else if (required.length > 0 || forbidden.length > 0 || contradicts.length > 0 || row.reversed !== undefined) {
+      throw new Error(`${at} expects no lesson, so it has no required, forbidden, contradicts or reversed`);
     }
     const dir = join(assets, "bundles", row.id);
     const memories = existsSync(join(dir, "memories")) ? readdirSync(join(dir, "memories")).filter((f) => f.endsWith(".md")) : [];
@@ -94,7 +109,7 @@ export function loadCases(assets: string): LoadedCase[] {
       if (`lessons/${row.existing}.md` === lessonFile({ name })) throw new Error(`${at} holds its existing lesson where distill would write the memory's own, so distill would skip the memory and never try an update`);
       existingBody = memoryBody(readFileSync(file, "utf8"));
     }
-    return { ...row, required, forbidden, dir, name, memory: readFileSync(join(dir, "memories", memories[0]), "utf8"), ...(existingBody === undefined ? {} : { existingBody }) };
+    return { ...row, required, forbidden, contradicts, dir, name, memory: readFileSync(join(dir, "memories", memories[0]), "utf8"), ...(existingBody === undefined ? {} : { existingBody }) };
   });
 }
 
@@ -130,33 +145,51 @@ export function assetsSha256(assets: string): string {
   return digestOf(["cases.json", ...inBundles].map((name) => [name, join(assets, name)]));
 }
 
-/** What generate writes beside the private assets: the seed they were made with, and the digest of the public assets they were made from. */
+/** The repository root. The generator's code is read from here, so a copy of the repository digests its own files. */
+const ROOT = resolve(import.meta.dir, "..", "..", "..");
+
+/**
+ * The code that decides what generate makes of the public assets and whether it accepts the result, by its path from `root`: generate.ts,
+ * this file (the checks generate runs on what the rewrite made) and the code of lib/rewrite, without its tests.
+ */
+export function generatorFiles(root = ROOT): string[] {
+  const inRewrite = readdirSync(join(root, "lib", "rewrite"), { recursive: true }).map(String).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();
+  return ["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", ...inRewrite.map((f) => `lib/rewrite/${f}`)];
+}
+
+/** One digest over generatorFiles. A change to the generator, to its checks or to the rewrite changes it. */
+export const generatorSha256 = (root = ROOT): string => digestOf(generatorFiles(root).map((name) => [name, join(root, name)]));
+
+/** What generate writes beside the private assets: the seed they were made with, the digest of the public assets they were made from, and the digest of the code that made them. */
 export interface Generated {
   seed: string;
   inputs_sha256: string;
+  /** generatorSha256 when the assets were made. */
+  rewrite: string;
 }
 
 export const GENERATED = "generated.json";
 
-/** generated.json in `dir` (private/distill), or undefined when it is missing or does not hold a seed and a digest. */
+/** generated.json in `dir` (private/distill), or undefined when it is missing or does not hold a seed and the two digests. */
 export function readGenerated(dir: string): Generated | undefined {
   try {
     const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
-    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256 } : undefined;
+    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" && typeof g.rewrite === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256, rewrite: g.rewrite } : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, and
- * the public assets it names the digest of are the ones in `publicAssets` now. Assets made before the public ones changed, or by
- * an older generate, would score a different set than the public run does.
+ * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, the public
+ * assets it names the digest of are the ones in `publicAssets` now, and the generator that made them is the one in `root` now. Assets made
+ * before the public ones changed, or by a generator or a rewrite that has changed since, would score a different set than the public run does.
  */
-export function generatedProblem(dir: string, publicAssets: string): string | undefined {
+export function generatedProblem(dir: string, publicAssets: string, root = ROOT): string | undefined {
   const generated = readGenerated(dir);
-  if (!generated) return `${GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from`;
+  if (!generated) return `${GENERATED} is missing or holds no seed, inputs_sha256 and rewrite, so nothing shows what they were made from`;
   if (generated.inputs_sha256 !== assetsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
+  if (generated.rewrite !== generatorSha256(root)) return `they were made by a generator that has changed since: evals/distill/src/generate.ts, lib.ts or lib/rewrite (rewrite in ${GENERATED} differs)`;
   return undefined;
 }
 
@@ -197,15 +230,29 @@ export function normalize(text: string): string {
     .trim();
 }
 
+/** Words after which a phrase is a thing, not an action: "the wait for networkidle" is not "wait for networkidle". */
+const DETERMINERS = "the|a|an|this|that|its|their|our|your";
+
+/** Verbs that a phrase holds whole: "was" does not match "wasnt", as "isn't" is "isnt" once the apostrophe is gone, nor "has" "hasnt". */
+const WHOLE_WORDS = new Set(["is", "was", "are", "were", "be", "been", "has", "have", "had", "do", "does", "did", "can", "could", "would", "should", "will", "may", "might", "must"]);
+
 /**
  * A phrase as a pattern over normalized text. Each word matches the start of a word ("retr" matches "retry" and
- * "retries"), each number matches that number only, and `*` stands for up to three words.
+ * "retries"), each number matches that number only, and `*` stands for up to three words. The verbs "is", "was", "has"
+ * and the like match whole, so that "is safe" does not find "isn't safe". A word written with a leading `=` matches that
+ * word only ("=wait" matches "wait" and not "waiting"), and a phrase that starts with one is not matched after "the", "a",
+ * "its" and the like, where the word is a noun: "=wait for networkidle" is an instruction to wait and not "the wait for networkidle".
+ * A `+` at the start of a phrase is not part of the pattern: see stated.
  */
 function pattern(phrase: string): RegExp {
-  const segments = phrase.split("*").map((s) => normalize(s).split(" ").filter(Boolean)).filter((s) => s.length > 0);
+  const segments = phrase
+    .split("*")
+    .map((seg) => seg.split(/\s+/).flatMap((token) => normalize(token).split(" ").filter(Boolean).map((w) => ({ w, exact: token.startsWith("=") }))))
+    .filter((s) => s.length > 0);
   if (segments.length === 0) return /(?!)/;
-  const word = (w: string) => (/^\d+$/.test(w) ? `${w}(?![a-z0-9])` : `${w}[a-z0-9]*`);
-  return new RegExp(`(?<![a-z0-9])${segments.map((s) => s.map(word).join(" ")).join(" (?:[a-z0-9]+ ){0,3}")}`);
+  const word = ({ w, exact }: { w: string; exact: boolean }) => (exact || /^\d+$/.test(w) || WHOLE_WORDS.has(w) ? `${w}(?![a-z0-9])` : `${w}[a-z0-9]*`);
+  const verb = segments[0][0].exact ? `(?<!(?:^| )(?:${DETERMINERS}) )` : "";
+  return new RegExp(`(?<![a-z0-9])${verb}${segments.map((s) => s.map(word).join(" ")).join(" (?:[a-z0-9]+ ){0,3}")}`);
 }
 
 /** Does `text` hold the phrase? */
@@ -214,34 +261,93 @@ export const mentions = (text: string, phrase: string): boolean => pattern(phras
 /** Words that say a sentence does not assert what it holds: it denies it, doubts it or asks about it. */
 const NOT_ASSERTED = /(?<![a-z0-9])(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent|unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
 
+/** Words that turn the action after them round, in the clause they stand in: "never wait for", "avoid waiting for", "instead of waiting for". They are read for a contradiction, which is an action. */
+const PROHIBITS = /(?<![a-z0-9])(?:never|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping|instead of|rather than)(?![a-z0-9])/;
+
+/** A negation or a prohibition right before a phrase, with only a word such as "ever" or "try to" between: "do not wait for", "never again wait for", "no need to wait for", "instead of waiting for". */
+const NEGATES = /(?<![a-z0-9])(?:not|no|nor|never|cannot|cant|wont|dont|doesnt|didnt|isnt|arent|wasnt|werent|shouldnt|wouldnt|couldnt|hasnt|havent|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping|instead of|rather than)(?: (?:ever|again|simply|just|really|also|even|always|try|trying|to|bother|need|needs|rely|relying|on))* $/;
+
 /** How many words around a phrase are read for a denial or a doubt: before it, and after it. */
 const WORDS_BEFORE = 6;
 const WORDS_AFTER = 3;
 
+/** Where a clause starts: after a comma, a colon, a bracket or a dash, and at "but". A prohibition ends where its clause does. */
+const CLAUSE_BREAK = /[,:()]|\s[-–—]+\s|[–—]|\b(?:but|whereas)\b/i;
+
+/** A sentence as normalized words, and the offsets in it at which a clause starts. */
+interface Sentence {
+  s: string;
+  starts: number[];
+}
+
+/** The sentences of `text`: a sentence ends at a full stop, a line break or a semicolon, and not at the dot in a number. */
+function sentencesOf(text: string): Sentence[] {
+  return text
+    .split(/[.!?;]+(?=\s|$)|\n+/)
+    .map((raw) => {
+      let s = "";
+      const starts: number[] = [];
+      for (const part of raw.split(CLAUSE_BREAK).map(normalize)) {
+        if (part === "") continue;
+        starts.push(s === "" ? 0 : s.length + 1);
+        s = s === "" ? part : `${s} ${part}`;
+      }
+      return { s, starts };
+    })
+    .filter((sentence) => sentence.s !== "");
+}
+
+/** The words of the sentence before `from`, back to the start of the clause that `from` is in. */
+const clauseBefore = (sentence: Sentence, from: number): string => sentence.s.slice(Math.max(...sentence.starts.filter((start) => start <= from)), from);
+
+/** Every place in the sentence where the phrase starts, also where it overlaps another. */
+function* occurrences(re: RegExp, s: string): Generator<RegExpExecArray> {
+  const all = new RegExp(re.source, "g");
+  for (let m = all.exec(s); m !== null; m = all.exec(s)) {
+    yield m;
+    all.lastIndex = m.index + 1;
+  }
+}
+
 /**
  * The phrases of `groups` that `text` asserts: one that a sentence holds, with no denial or doubt just before or after
- * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is
- * asserted.
+ * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is asserted.
+ * With `actions`, the phrases are actions, as in a case's `contradicts`, and a prohibition before one in its clause (never, avoid,
+ * without, stop, skip, instead of, rather than) denies it too: "wait for networkidle" is not asserted by "never wait for networkidle".
  */
-export function claims(text: string, groups: string[][]): string[] {
-  const sentences = text.split(/[.!?;]+(?=\s|$)|\n+/).map(normalize).filter(Boolean);
+export function claims(text: string, groups: string[][], actions = false): string[] {
+  const sentences = sentencesOf(text);
   const around = (s: string, from: number, to: number): string => {
     const before = s.slice(0, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE);
     const after = s.slice(to).split(" ").filter(Boolean).slice(0, WORDS_AFTER);
     return [...before, ...after].join(" ");
   };
+  const prohibited = (sentence: Sentence, from: number): boolean => actions && PROHIBITS.test(clauseBefore(sentence, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE).join(" "));
   const found: string[] = [];
   for (const group of groups) {
     const hit = group.find((phrase) => {
       const re = pattern(phrase);
-      return sentences.some((s) => {
-        const m = re.exec(s);
-        return m !== null && !NOT_ASSERTED.test(around(s, m.index, m.index + m[0].length));
-      });
+      return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !NOT_ASSERTED.test(around(sentence.s, m.index, m.index + m[0].length)) && !prohibited(sentence, m.index)));
     });
     if (hit !== undefined) found.push(hit);
   }
   return found;
+}
+
+/**
+ * Does `text` state the fact: does a sentence hold one of its phrases? A phrase that starts with `+` is an action the lesson must
+ * assert, and it is not held by a sentence that negates or prohibits it right before it: "never wait for the visible heading" does not
+ * state "+wait * heading". Only the words right before the phrase are read, in its clause, so a negation farther away does not matter
+ * ("do not wait for networkidle, wait for the heading"). Any other phrase is a thing the lesson must mention, and a negation does not
+ * unstate it: "annotated, not lightweight tags" mentions lightweight tags, and "the invoice-service was not checked" mentions the invoice-service.
+ */
+export function stated(text: string, fact: string[]): boolean {
+  const sentences = sentencesOf(text);
+  return fact.some((phrase) => {
+    const re = pattern(phrase);
+    const action = phrase.startsWith("+");
+    return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !action || !NEGATES.test(clauseBefore(sentence, m.index))));
+  });
 }
 
 // ---- Scoring a lesson ------------------------------------------------------------------------------------------
@@ -272,17 +378,23 @@ export interface Check {
   missing: string[];
   /** The forbidden phrases it asserts, one per group at most. */
   forbidden: string[];
+  /** The contradicting phrases it asserts, one per group at most: the ones that turn the memory's action round. */
+  contradicted: string[];
   /** The lesson's words over the memory's. */
   ratio: number;
   good: boolean;
 }
 
-/** Score a lesson against a case: every required fact, no forbidden claim, and not much longer than its memory. */
-export function checkLesson(c: Pick<Case, "required" | "forbidden">, lesson: string, memory: string): Check {
-  const missing = c.required.filter((fact) => !fact.some((p) => mentions(lesson, p))).map((fact) => fact[0]);
+/** What a case checks a lesson with. `contradicts` is optional, as in a case. */
+type Checked = Pick<Case, "required" | "forbidden" | "contradicts">;
+
+/** Score a lesson against a case: every required fact stated, no forbidden claim, no contradiction of the memory, and not much longer than its memory. */
+export function checkLesson(c: Checked, lesson: string, memory: string): Check {
+  const missing = c.required.filter((fact) => !stated(lesson, fact)).map((fact) => fact[0]);
   const forbidden = claims(lesson, c.forbidden);
+  const contradicted = claims(lesson, c.contradicts ?? [], true);
   const ratio = Number((words(lesson) / Math.max(1, words(memoryBody(memory)))).toFixed(2));
-  return { missing, forbidden, ratio, good: missing.length === 0 && forbidden.length === 0 && ratio <= MAX_RATIO };
+  return { missing, forbidden, contradicted, ratio, good: missing.length === 0 && forbidden.length === 0 && contradicted.length === 0 && ratio <= MAX_RATIO };
 }
 
 // ---- Scoring an update ------------------------------------------------------------------------------------------
@@ -295,7 +407,7 @@ export interface UpdateChecks {
   existing_kept: boolean | null;
   /** Each new fact the memory adds is in the lines the update added. */
   new_facts: boolean | null;
-  /** The added lines make no forbidden claim. */
+  /** The added lines make no forbidden claim and contradict nothing the memory shows. */
   no_extra_claims: boolean | null;
   /** distill proposed no lesson of its own beside the update. */
   no_new_lesson: boolean;
@@ -313,11 +425,11 @@ export function diffBody(existing: string, updated: string): { dropped: string[]
   return { dropped: bodyLines(existing).filter((l) => !kept.has(l)), added: updated.split("\n").map((l) => l.trim()).filter((l) => normalize(l) !== "" && !had.has(normalize(l))) };
 }
 
-/** Score the body of an updated lesson against a lesson-update case: the lines it kept, the facts it added, and the claims it made. */
-export function checkUpdate(c: Pick<Case, "required" | "forbidden">, existingBody: string, updatedBody: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[] } {
+/** Score the body of an updated lesson against a lesson-update case: the lines it kept, the facts it added, the claims it made, and what it contradicts. */
+export function checkUpdate(c: Checked, existingBody: string, updatedBody: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[]; contradicted: string[] } {
   const { dropped, added } = diffBody(existingBody, updatedBody);
   const text = added.join("\n");
-  return { dropped, added, missing: c.required.filter((fact) => !fact.some((p) => mentions(text, p))).map((fact) => fact[0]), forbidden: claims(text, c.forbidden) };
+  return { dropped, added, missing: c.required.filter((fact) => !stated(text, fact)).map((fact) => fact[0]), forbidden: claims(text, c.forbidden), contradicted: claims(text, c.contradicts ?? [], true) };
 }
 
 /** The lesson's body, without its frontmatter. */
@@ -454,6 +566,8 @@ export interface Row {
   rejected_lesson: string | null;
   missing: string[];
   forbidden: string[];
+  /** The contradicting phrases the lesson (or the added lines of an update) asserts: the ones that turn the memory's action round. */
+  contradicted: string[];
   ratio: number | null;
   /** The model names the endpoint reported for the case's calls, from akm's usage report. A gateway may serve one name with another model. */
   served: string[];
@@ -473,7 +587,7 @@ export interface CaseRun {
 }
 
 export function errorRow(c: Case, message: string, seconds: number, timedOut = false): Row {
-  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null, served: [], calls: null, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
+  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ratio: null, served: [], calls: null, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
 }
 
 /** The model names the endpoint reported for the calls in `akm improve`'s result. */
@@ -519,8 +633,8 @@ function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "o
     const r = checkUpdate(c, c.existingBody ?? "", bodyOf(target.content));
     checks.existing_kept = r.dropped.length === 0;
     checks.new_facts = r.missing.length === 0;
-    checks.no_extra_claims = r.forbidden.length === 0;
-    extra = { missing: r.missing, forbidden: r.forbidden, added: r.added };
+    checks.no_extra_claims = r.forbidden.length === 0 && r.contradicted.length === 0;
+    extra = { missing: r.missing, forbidden: r.forbidden, contradicted: r.contradicted, added: r.added };
   }
   const shown = target ?? updates[0] ?? run.proposals[0];
   const detail = [shown.gate ?? shown.status, shown.reason ?? ""].filter(Boolean).join(": ");
@@ -530,7 +644,7 @@ function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "o
 
 /** Score a case from what akm did. The queue decides whether a lesson, or an update to one, was proposed. */
 export function scoreCase(c: LoadedCase, run: CaseRun): Row {
-  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), calls: modelCalls(run.improve), lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], ratio: null };
+  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), calls: modelCalls(run.improve), lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ratio: null };
   const proposal = run.proposals[0];
   if (proposal && c.expect === "update") return scoreUpdate(c, run, base);
   if (proposal) {
@@ -539,7 +653,7 @@ export function scoreCase(c: LoadedCase, run: CaseRun): Row {
     const update = run.proposals.some((p) => p.update);
     const check = checkLesson(c, lesson, c.memory);
     const verdict: Verdict = c.expect === "none" ? "wrong" : update ? "missed" : check.good ? "good" : "bad";
-    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, ratio: check.ratio } : {};
+    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, contradicted: check.contradicted, ratio: check.ratio } : {};
     const action = distillAction(run.improve)?.result;
     const reason = proposal.reason ?? (action?.outcome === "review_needed" && typeof action.reason === "string" ? action.reason : "");
     const detail = [proposal.gate ?? proposal.status, reason].filter(Boolean).join(": ");
@@ -567,7 +681,7 @@ export interface Metrics {
   /** What distill did, for the cases that expect a lesson, those that expect none and those that expect an update. */
   outcomes: Record<Expect, Record<Outcome, number>>;
   /** Why the lessons that were proposed for lesson cases were not good. A lesson can fail in more than one way. */
-  bad_by: { missing_fact: number; forbidden_claim: number; too_long: number };
+  bad_by: { missing_fact: number; forbidden_claim: number; contradiction: number; too_long: number };
 }
 
 /** The numbers the eval reports, over the cases that ran without an error. */
@@ -601,6 +715,7 @@ export function metrics(rows: Row[]): Metrics {
     bad_by: {
       missing_fact: bad.filter((r) => r.missing.length > 0).length,
       forbidden_claim: bad.filter((r) => r.forbidden.length > 0).length,
+      contradiction: bad.filter((r) => (r.contradicted ?? []).length > 0).length, // rows of a run before this check have no list
       too_long: bad.filter((r) => (r.ratio ?? 0) > MAX_RATIO).length,
     },
   };

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRewrite } from "./generate.ts";
-import { type LoadedCase, assetsSha256, generatedProblem, loadCases } from "./lib.ts";
+import { type LoadedCase, assetsSha256, generatedProblem, generatorSha256, loadCases } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -49,10 +49,10 @@ describe("generate", () => {
     expect(list(join(out, "assets", "bundles")).sort()).toEqual(list(join(PUBLIC, "bundles")).sort());
   });
 
-  test("writes generated.json beside the assets with the seed and the digest of the public assets, and leaves no work folder", () => {
+  test("writes generated.json beside the assets with the seed, the digest of the public assets and the digest of the generator, and leaves no work folder", () => {
     const { out, code } = generate("42");
     expect(code).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC), rewrite: generatorSha256() });
     expect(generatedProblem(out, PUBLIC)).toBeUndefined();
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
@@ -62,7 +62,7 @@ describe("generate", () => {
     dirs.push(out);
     mkdirSync(join(out, "assets", "bundles", "old-case"), { recursive: true });
     writeFileSync(join(out, "assets", "bundles", "old-case", "left-over.md"), "from an earlier generation\n");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old" }));
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old", rewrite: "old" }));
     expect(generate("43", out).code).toBe(0);
     expect(existsSync(join(out, "assets", "bundles", "old-case"))).toBe(false);
     expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("43");
@@ -111,6 +111,15 @@ describe("checkRewrite", () => {
     expect(checkRewrite(before, after)).toEqual(["lesson-01: the good example lesson no longer passes"]);
     const worse = copy("lesson-01", () => ({ bad: "Do not wait for networkidle on a polling page; wait for the heading to be visible." }));
     expect(checkRewrite(before, worse)).toEqual(["lesson-01: the bad example lesson now passes"]);
+  });
+
+  test("a contradiction the memory now makes, and a reversed lesson that now passes", () => {
+    const after = copy("lesson-08", (c) => ({ memory: `${c.memory}The release job pushes lightweight tags too.\n` }));
+    expect(checkRewrite(before, after)).toEqual(['lesson-08: the contradiction "pushes lightweight" is now in its memory']);
+    const passes = copy("lesson-01", () => ({ reversed: "Do not wait for networkidle on a polling page; wait for the heading to be visible." }));
+    expect(checkRewrite(before, passes)).toEqual(["lesson-01: the reversed example lesson now passes"]);
+    const update = copy("upd-08", (c) => ({ reversed: (c.good as string).replace("has no effect", "is ignored") }));
+    expect(checkRewrite(before, update)).toEqual(["upd-08: the reversed example lesson now passes"]);
   });
 
   test("an update case: a new fact the memory no longer states, and an example body that scores differently", () => {

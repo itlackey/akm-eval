@@ -176,7 +176,7 @@ describe("runCorpus", () => {
     expect(summary.metrics.good_lessons).toEqual({ n: 3, good: 1, rate: 0.3333 });
     expect(summary.metrics.wrong_lessons).toEqual({ n: 4, wrong: 2, rate: 0.5 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
-    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, too_long: 0 });
+    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, contradiction: 0, too_long: 0 });
     expect(stored.results_dir).toBeUndefined();
   });
 
@@ -256,7 +256,7 @@ describe("runCorpus", () => {
   test("the seed of a private run is the one in generated.json, and of an own run the one in private/seed", async () => {
     const folders = assetsFor(scenarios.slice(0, 1));
     const root = join(folders.assets, "..");
-    writeFileSync(join(root, "generated.json"), JSON.stringify({ seed: "42", inputs_sha256: "x" }));
+    writeFileSync(join(root, "generated.json"), JSON.stringify({ seed: "42", inputs_sha256: "x", rewrite: "y" }));
     writeFileSync(join(root, "seed"), "99\n");
     const seeds = {
       public: (await quiet(() => runCorpus("public", ctx, { ...folders, seed: join(root, "seed") }))).seed,
@@ -397,4 +397,31 @@ describe("run --corpus private", () => {
     expect(stale.code).toBe(2);
     expect(stale.err).toContain("made from other public assets");
   }, 60_000);
+
+  test("refuses assets made by a generator or a rewrite that has changed since, and runs on them again when the code is as it was", () => {
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "distill");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toMatchObject({ seed: "5", rewrite: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).not.toContain("cannot be used");
+
+    // The rewrite, its lexicon, generate itself and the checks generate runs: a change to any of them marks the assets stale.
+    for (const file of [join("lib", "rewrite", "lexicon.ts"), join("lib", "rewrite", "rewrite.ts"), join("evals", "distill", "src", "generate.ts"), join("evals", "distill", "src", "lib.ts")]) {
+      const path = join(tree, file);
+      const text = readFileSync(path, "utf8");
+      writeFileSync(path, `${text}\n// changed after the private assets were made\n`);
+      const stale = bun(tree, "run.ts", ["--corpus", "private"]);
+      expect(stale.code, file).toBe(2);
+      expect(stale.err, file).toContain("the private assets cannot be used: they were made by a generator that has changed since");
+      expect(stale.err, file).toContain("./generate-assets --only distill");
+      writeFileSync(path, text);
+      expect(bun(tree, "run.ts", ["--corpus", "private"]).err, file).not.toContain("cannot be used");
+    }
+
+    // Made again by the changed generator, the assets are good for it.
+    writeFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), `${readFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), "utf8")}\n// changed\n`);
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).code).toBe(2);
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).not.toContain("cannot be used");
+  }, 120_000);
 });
