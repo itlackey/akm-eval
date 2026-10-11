@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AkmArm, PINS, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
+import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
+import { generate } from "./generate.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -144,39 +146,10 @@ describe("jobConfig with an akm under test", () => {
 });
 
 describe("runCorpus", () => {
-  /** A `uv` that is not Harbor. Given the job, it leaves the trial folders Harbor would leave, records the environment it was started in, and exits as FAKE_UV_EXIT says. */
+  /** A `uv` that is not Harbor (see fakes.ts), with the environment to start the runner in. */
   function fakeUv(): { root: string; env: Record<string, string> } {
     const root = tmp();
-    mkdirSync(join(root, "bin"));
-    writeFileSync(
-      join(root, "bin", "uv"),
-      `#!/usr/bin/env bun
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-const args = Bun.argv.slice(2);
-const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
-writeFileSync(join(job.jobs_dir, "..", "uv-env.json"), JSON.stringify(process.env));
-job.datasets[0].task_names.forEach((task, i) => {
-  for (const agent of job.agents) {
-    const name = agent.name ?? "akm-opencode";
-    const dir = join(job.jobs_dir, job.job_name, task + "__" + name);
-    mkdirSync(join(dir, "agent"), { recursive: true });
-    const trial = { task_name: task, agent_info: { name }, verifier_result: { rewards: { reward: name === "opencode" ? 0 : 1 } }, started_at: "2026-10-06T04:00:00Z", finished_at: "2026-10-06T04:05:00Z" };
-    if (process.env.FAKE_UV_TIMEOUTS && i === 0 && name === "akm-opencode") { trial.exception_info = { exception_type: "AgentTimeoutError" }; }
-    if (process.env.FAKE_UV_PLUGIN_DEAD && i === 1 && name === "akm-opencode") {
-      trial.exception_info = { exception_type: "AgentTimeoutError" };
-      trial.verifier_result = null;
-      writeFileSync(join(dir, "agent", "akm_plugin_status.json"), JSON.stringify({ live: false, problem: "there is no opencode log" }));
-    }
-    if (name === "akm-opencode") writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" } }));
-    writeFileSync(join(dir, "result.json"), JSON.stringify(trial));
-  }
-});
-process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
-`,
-    );
-    chmodSync(join(root, "bin", "uv"), 0o755);
-    return { root, env: { PATH: `${join(root, "bin")}:${process.env.PATH}` } };
+    return { root, env: { PATH: `${writeFakeHarbor(root)}:${process.env.PATH}` } };
   }
 
   async function quiet<T>(f: () => Promise<T>): Promise<T> {
@@ -210,6 +183,65 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
     expect(s.report.akm).toMatchObject({ trials: 3, passed: 3 });
   });
 
+  test("records that the run finished: its status, the grid of trials, the model's endpoint without a key, the job config and the digest of the cases", async () => {
+    const { root, env } = fakeUv();
+    const withKey = { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: "http://user:hunter2@192.0.2.5:8080/v1" };
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env: withKey }, join(root, "results")));
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
+    expect(stored.completion).toEqual({ ...cells(6), control: cells(3), akm: cells(3) });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "192.0.2.5:8080" });
+    expect(stored.config).toEqual(stored.job);
+    expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
+    const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
+    expect(Object.keys(stored.tasks_sha256).sort()).toEqual([...tasks].sort());
+    for (const t of tasks) expect(stored.tasks_sha256[t]).toBe(sha256Dir(join(EVAL_DIR, "tasks", t)));
+    expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries"))); // the component stays, to say which part moved
+  });
+
+  test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {
+    const { root, env } = fakeUv();
+    const results = join(root, "results");
+    const reason = "Harbor exited 1; 1 of 6 expected trials have no result (control 0, akm 1)";
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env: { ...env, UV_FAKE_MISSING: "1", UV_FAKE_EXIT: "1" } }, results))).rejects.toMatchObject({ code: 1, message: expect.stringContaining(reason) });
+    const [run] = readdirSync(results);
+    const dir = join(results, run);
+    const stored = readJson(join(dir, "summary.json"));
+    expect(stored).toMatchObject({ status: "aborted", aborted_reason: reason, harbor_exit: 1 });
+    expect(stored.completion).toEqual({
+      expected: 6,
+      completed: 5,
+      failed: 0,
+      missing: 1,
+      unexpected: 0,
+      control: { expected: 3, completed: 3, failed: 0, missing: 0, unexpected: 0 },
+      akm: { expected: 3, completed: 2, failed: 0, missing: 1, unexpected: 0 },
+    });
+    for (const kept of ["job.json", "harbor.log", "samples.jsonl", "jobs"]) expect(existsSync(join(dir, kept)), kept).toBe(true);
+    expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(5);
+    expect(stored.report.control.trials + stored.report.akm.trials).toBe(5);
+  });
+
+  test("a cell missing aborts the run even when Harbor exited 0, and a full grid with errored trials does not", async () => {
+    const { root, env } = fakeUv();
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "m", limit: 2, env: { ...env, UV_FAKE_MISSING: "1" } }, join(root, "results")))).rejects.toThrow("1 of 4 expected trials have no result (control 0, akm 1)");
+    const errored = await quiet(() => runCorpus("public", { model: "openai/x", label: "e", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    expect(errored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
+    expect(errored.completion).toMatchObject({ expected: 4, completed: 3, failed: 1, missing: 0 });
+  });
+
+  test("a Harbor that made no job at all is an aborted run with every cell missing, and its summary is kept", async () => {
+    const { root, env } = fakeUv();
+    const results = join(root, "results");
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_NOTHING: "1" } }, results))).rejects.toThrow("Harbor wrote no job; 2 of 2 expected trials have no result (control 1, akm 1)");
+    const [run] = readdirSync(results);
+    const stored = readJson(join(results, run, "summary.json"));
+    expect(stored).toMatchObject({ status: "aborted", harbor_exit: 0, completion: { expected: 2, completed: 0, failed: 0, missing: 2 } });
+    expect(readFileSync(join(results, run, "samples.jsonl"), "utf8")).toBe("");
+  });
+
   test("installs the akm --akm names, keeps a copy of its tarballs with the run, and records the settings it ran with", async () => {
     const { root, env } = fakeUv();
     const packs = tmp();
@@ -239,12 +271,12 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
 
   test("counts the time-outs apart and shows the plugin failure that one of them hid", async () => {
     const { root, env } = fakeUv();
-    const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, FAKE_UV_TIMEOUTS: "1" } }, join(root, "results")));
+    const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TIMEOUTS: "1" } }, join(root, "results")));
     expect(timeouts.timeouts).toEqual({ control: 0, akm: 1 });
     expect(timeouts.metrics.akm.timeouts).toBe(1);
     const rows = readFileSync(join(timeouts.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.filter((r) => r.timed_out).map((r) => r.arm)).toEqual(["akm"]);
-    const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 2, env: { ...env, FAKE_UV_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
     expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
     expect(dead.n_errored).toBe(1);
     expect(dead.timeouts.akm).toBe(1);
@@ -268,7 +300,7 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
 
   test("still leaves the summary when Harbor exits with an error, and says so", async () => {
     const { root, env } = fakeUv();
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, FAKE_UV_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
     const [run] = readdirSync(join(root, "results"));
     expect(readJson(join(root, "results", run, "summary.json")).harbor_exit).toBe(3);
   });
@@ -318,4 +350,121 @@ describe("the command line", () => {
     expect(none.err).toContain("name the model");
     expect(run(["--model", "my-model"], { MODEL_API_KEY: "k", MODEL_BASE_URL: "http://localhost:8080/v1" }).err).toContain("would be the container itself");
   });
+});
+
+describe("the command line with a fake Harbor, in a copy of the repository", () => {
+  const repos: string[] = [];
+  afterEach(() => {
+    for (const d of repos.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  /** A copy of the code laid out as the repository is, a fake uv and docker to put on PATH, and a way to run the CLI in it as a person would. */
+  function repo() {
+    const root = sandboxRepo();
+    const bin = writeFakeHarbor(root);
+    repos.push(root);
+    const run = (args: string[], env: Record<string, string> = {}) => {
+      const done = Bun.spawnSync(["bun", join(root, "evals", "agent-ab", "src", "run.ts"), ...args], {
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME as string, MODEL_NAME: "openai/x", MODEL_API_KEY: "sk-test-key", ...env },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+    };
+    const summary = (label: string, corpus: "public" | "private" = "public") => {
+      const results = corpus === "public" ? join(root, "evals", "agent-ab", "results") : join(root, "private", "agent-ab", "results");
+      return JSON.parse(readFileSync(join(results, readdirSync(results).find((d) => d.endsWith(`-${label}`)) as string, "summary.json"), "utf8"));
+    };
+    return { root, run, summary };
+  }
+
+  test("ends with exit 1 and an aborted summary when Harbor leaves a cell missing and exits 1, and with exit 0 and a complete one otherwise", () => {
+    const { run, summary } = repo();
+    const aborted = run(["--limit", "3", "--label", "cut"], { UV_FAKE_MISSING: "1", UV_FAKE_EXIT: "1" });
+    expect(aborted.code).toBe(1);
+    expect(aborted.err).toContain("agent-ab: Harbor exited 1; 1 of 6 expected trials have no result (control 0, akm 1)");
+    expect(aborted.out).toContain("ABORTED");
+    expect(summary("cut")).toMatchObject({ status: "aborted", harbor_exit: 1, completion: { expected: 6, completed: 5, failed: 0, missing: 1 } });
+    const whole = run(["--limit", "3", "--label", "whole"]);
+    expect(whole.code).toBe(0);
+    expect(summary("whole")).toMatchObject({ status: "complete", aborted_reason: null, completion: { expected: 6, completed: 6, missing: 0 } });
+  }, 60_000);
+
+  test("a change to the library, to a selected task, to the tasks selected or to the attempts changes assets_sha256, and a rerun does not", () => {
+    const { root, run, summary } = repo();
+    const library = join(root, "evals", "agent-ab", "libraries", "drillbit", "skills", "drillbit", "SKILL.md");
+    const instruction = join(root, "evals", "agent-ab", "tasks", "drillbit--scale", "instruction.md");
+    const [libraryText, instructionText] = [readFileSync(library, "utf8"), readFileSync(instruction, "utf8")];
+    let n = 0;
+    const go = (...args: string[]) => {
+      n++;
+      expect(run([...args, "--label", `r${n}`]).code).toBe(0);
+      const s = summary(`r${n}`);
+      return { assets: s.assets_sha256 as string, libraries: s.libraries_sha256 as string, tasks: s.tasks_sha256 as Record<string, string>, attempts: s.attempts as number };
+    };
+    const base = go("--limit", "4"); // all four tasks, one attempt
+    expect(base.assets).toMatch(/^[0-9a-f]{64}$/);
+    expect(go("--limit", "4").assets).toBe(base.assets);
+
+    writeFileSync(library, `${libraryText}\nAnother line of the library.\n`);
+    const otherLibrary = go("--limit", "4");
+    expect(otherLibrary.libraries).not.toBe(base.libraries);
+    expect(otherLibrary.assets).not.toBe(base.assets);
+    expect(otherLibrary.tasks).toEqual(base.tasks);
+    writeFileSync(library, libraryText);
+
+    writeFileSync(instruction, `${instructionText}\nAnd one more thing.\n`);
+    const otherTask = go("--limit", "4");
+    expect(otherTask.libraries).toBe(base.libraries);
+    expect(otherTask.assets).not.toBe(base.assets);
+    expect(otherTask.tasks["drillbit--scale"]).not.toBe(base.tasks["drillbit--scale"]);
+    expect(otherTask.tasks["drillbit--plain"]).toBe(base.tasks["drillbit--plain"]);
+    writeFileSync(instruction, instructionText);
+
+    const fewer = go("--limit", "2"); // other tasks selected, the same library and attempts
+    expect(Object.keys(fewer.tasks)).toHaveLength(2);
+    expect(fewer.libraries).toBe(base.libraries);
+    expect(fewer.assets).not.toBe(base.assets);
+
+    const more = go(); // the same four tasks and library, three attempts
+    expect(more.attempts).toBe(3);
+    expect(more.tasks).toEqual(base.tasks);
+    expect(more.libraries).toBe(base.libraries);
+    expect(more.assets).not.toBe(base.assets);
+    expect(go("--limit", "4").assets).toBe(base.assets);
+  }, 60_000);
+
+  test("run --corpus private refuses a tree with no manifest, one made from other public inputs, and one whose files are not what generate wrote, and runs one that is sound", () => {
+    const { root, run, summary } = repo();
+    const out = join(root, "private", "agent-ab");
+    const assets = join(out, "assets");
+    const refused = (said: string) => {
+      const done = run(["--corpus", "private", "--limit", "1", "--label", "p"]);
+      expect(done.code).toBe(2);
+      expect(done.err).toContain(said);
+    };
+
+    refused("the private assets are missing (private/agent-ab/assets/tasks)");
+    expect(generate({ seed: "7", out, from: join(root, "evals", "agent-ab") }).installed).toBe(true);
+
+    const manifest = readFileSync(join(assets, "generated.json"), "utf8");
+    rmSync(join(assets, "generated.json"));
+    refused("the private assets in private/agent-ab/assets/ have no generated.json in its current format");
+    writeFileSync(join(assets, "generated.json"), manifest);
+
+    const library = join(root, "evals", "agent-ab", "libraries", "drillbit", "skills", "drillbit", "SKILL.md");
+    const libraryText = readFileSync(library, "utf8");
+    writeFileSync(library, `${libraryText}\nChanged after the private tasks were made.\n`);
+    refused("were made from public tasks or libraries that have changed since");
+    writeFileSync(library, libraryText);
+
+    const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0], "instruction.md");
+    const taskText = readFileSync(task, "utf8");
+    writeFileSync(task, `${taskText}\nEdited by hand.\n`);
+    refused("are not what generate wrote");
+    writeFileSync(task, taskText);
+
+    const ran = run(["--corpus", "private", "--limit", "1", "--label", "p"]);
+    expect(ran.code).toBe(0);
+    expect(summary("p", "private")).toMatchObject({ corpus: "private", status: "complete", completion: { expected: 2, completed: 2 } });
+  }, 60_000);
 });

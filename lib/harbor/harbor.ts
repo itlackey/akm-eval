@@ -380,13 +380,13 @@ export function jobRecord(cfg: Record<string, unknown>, dir: string, root: strin
   return relativePaths(rest, [dir, root]) as Record<string, unknown>;
 }
 
-/** One digest over every file under `dir`, by relative path and content, so another machine gets the same one. */
-export function sha256Dir(dir: string): string {
+/** One digest over every file under `dir`, by relative path and content, so another machine gets the same one. `except` names files, by path from `dir`, that the digest leaves out. */
+export function sha256Dir(dir: string, except: string[] = []): string {
   const files: string[] = [];
   const walk = (d: string) => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
       if (e.isDirectory()) walk(join(d, e.name));
-      else if (e.isFile()) files.push(relative(dir, join(d, e.name)));
+      else if (e.isFile() && !except.includes(relative(dir, join(d, e.name)))) files.push(relative(dir, join(d, e.name)));
     }
   };
   walk(dir);
@@ -451,6 +451,7 @@ const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
  */
 export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: Observed } {
   const observed: Observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
+  if (!existsSync(jobDir)) return { trials: [], observed }; // Harbor never made the job: every cell of the grid is missing
   const trials = loadTrials(jobDir).map((t): RunTrial => {
     const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUTS.has(t.error) };
     if (t.arm !== "akm") return row;
@@ -505,6 +506,90 @@ export function metricsOf(report: Report, trials: RunTrial[]) {
 
 /** The errored trials of both arms, for the summary's n_errored. */
 export const erroredOf = (report: Report): number => report.control.errored + report.akm.errored;
+
+// ---- whether the run did what it set out to do ----------------------------------------------------------------------------
+
+/**
+ * The trial grid of a run: every selected task, in each arm, once per attempt. `expected` = completed + failed + missing, and it is
+ * tasks x attempts for an arm, and tasks x 2 arms x attempts for the run.
+ */
+export interface Cells {
+  expected: number;
+  /** Cells whose trial got a reward and raised no exception. */
+  completed: number;
+  /** Cells whose trial raised an exception or got no reward. A trial whose agent ran out of time and was verified anyway is one of them. */
+  failed: number;
+  /** Cells with no trial: Harbor never started them, or was stopped before they wrote a result. */
+  missing: number;
+  /** Trials outside the grid: of a task the run did not ask for, or beyond the attempts it asked for. They fill no cell. */
+  unexpected: number;
+}
+
+/** The grid of the run and of each arm. */
+export interface Completion extends Cells {
+  control: Cells;
+  akm: Cells;
+}
+
+/** Which cells of the grid have a trial, from the trials Harbor left and the tasks and attempts the job asked for. */
+export function completionOf(trials: Trial[], tasks: string[], attempts: number): Completion {
+  const cells = (arm: Arm): Cells => {
+    const mine = trials.filter((t) => t.arm === arm);
+    const cell: Cells = { expected: tasks.length * attempts, completed: 0, failed: 0, missing: 0, unexpected: 0 };
+    let used = 0;
+    for (const task of tasks) {
+      const ran = mine.filter((t) => t.task === task).slice(0, attempts);
+      used += ran.length;
+      for (const t of ran) {
+        if (t.error === null && t.reward !== null) cell.completed++;
+        else cell.failed++;
+      }
+      cell.missing += attempts - ran.length;
+    }
+    cell.unexpected = mine.length - used;
+    return cell;
+  };
+  const [control, akm] = [cells("control"), cells("akm")];
+  const total = (key: keyof Cells): number => control[key] + akm[key];
+  return { expected: total("expected"), completed: total("completed"), failed: total("failed"), missing: total("missing"), unexpected: total("unexpected"), control, akm };
+}
+
+/**
+ * Whether the run finished: `complete` only when Harbor exited 0 and every cell of the grid has a trial, a trial that errored or timed
+ * out included (those are counted, not missing). Anything else is `aborted`, and the reason says what was not done. `jobWritten` is false
+ * when Harbor left no job folder at all.
+ */
+export function statusOf(exit: number, completion: Completion, jobWritten = true): { status: "complete" | "aborted"; aborted_reason: string | null } {
+  const reasons: string[] = [];
+  if (exit !== 0) reasons.push(`Harbor exited ${exit}`);
+  if (!jobWritten) reasons.push("Harbor wrote no job");
+  if (completion.missing > 0) reasons.push(`${completion.missing} of ${completion.expected} expected trials have no result (control ${completion.control.missing}, akm ${completion.akm.missing})`);
+  if (completion.unexpected > 0) reasons.push(`${completion.unexpected} trials fall outside the grid of tasks, arms and attempts the job asked for`);
+  return reasons.length === 0 ? { status: "complete", aborted_reason: null } : { status: "aborted", aborted_reason: reasons.join("; ") };
+}
+
+/** The host of the endpoint opencode is given (OPENAI_BASE_URL in `env`), with no scheme, path or credentials. Null for the provider's own endpoint. */
+export function endpointOf(env: Record<string, string>): string | null {
+  const url = env.OPENAI_BASE_URL?.trim();
+  if (!url) return null;
+  try {
+    return new URL(url).host || null;
+  } catch {
+    return null; // not a URL: nothing that could carry a key is written down
+  }
+}
+
+/**
+ * assets_sha256 of a Harbor eval's summary: one digest over what the run was set to run on. `library` is the digest of the library the
+ * akm arm seeds from, `dataset` identifies the tasks (the digests of the selected ones), and `attempts` is how many times each ran. It
+ * moves when any of them does, so two summaries with another library, other tasks or another attempt count are other cases. The
+ * components stay in the summary as well, to say which one moved.
+ */
+export function assetsSha256(o: { library: string | null; dataset: Record<string, unknown>; attempts: number }): string {
+  const sorted = (x: unknown): unknown =>
+    Array.isArray(x) ? x.map(sorted) : typeof x === "object" && x !== null ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, sorted(v)])) : x;
+  return sha256Text(JSON.stringify(sorted({ library: o.library, dataset: o.dataset, attempts: o.attempts })));
+}
 
 /** The summary keys about the akm under test, which both evals write: akm_version, akm_bin and akm_build as in the other evals, and what was installed. */
 export function akmSummary(arm: AkmArm, akmEnv: Record<string, string>, packages: { file: string; sha256: string }[], observed: Observed) {

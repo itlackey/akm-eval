@@ -15,10 +15,14 @@ import {
   AKM_ARM_OPTIONS,
   CONCURRENT_TRIALS,
   type AkmArm,
+  type Completion,
   type Pins,
   akmArm,
   akmArmUsage,
   akmSummary,
+  assetsSha256,
+  completionOf,
+  endpointOf,
   erroredOf,
   jobConfig as harborJob,
   jobRecord,
@@ -33,10 +37,12 @@ import {
   runHarbor,
   sha256Dir,
   stagePackages,
+  statusOf,
   timeoutsOf,
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, buildReport, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
+import { redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 
@@ -112,6 +118,17 @@ interface Summary {
   n_tasks: number;
   attempts: number;
   harbor_exit: number;
+  /** `complete` when Harbor exited 0 and every cell of the grid has a trial, `aborted` otherwise (see aborted_reason). An aborted run keeps all its artifacts, and its numbers cover the trials that finished. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
+  /** The grid the job asked for, tasks x arms x attempts, and what became of each cell: overall and per arm. */
+  completion: Completion;
+  /** One digest over the library's digest, the pinned dataset (its digest and the digest of each selected task) and the attempts: the cases the run scored. */
+  assets_sha256: string;
+  /** The model and the host of the endpoint it was sent to (null for the provider's own). Never a key. */
+  engine: { model: string; endpoint: string | null };
+  /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
+  config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
   timeouts: { control: number; akm: number };
   n_errored: number;
@@ -222,6 +239,9 @@ function printSummary(s: Summary): void {
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm-cli ${s.pins.akm_cli}, plugin ${s.pins.akm_plugin}, opencode ${s.pins.opencode}, harbor ${s.pins.harbor}`);
   console.log(`  akm          ${s.akm_bin}${s.akm_build ? ` at ${s.akm_build}` : ""}${Object.keys(s.akm_env).length ? `, ${Object.entries(s.akm_env).map(([k, v]) => `${k}=${v}`).join(" ")}` : ""}`);
   console.log(`  ${s.dataset.name} ${s.dataset.ref.slice(0, 19)}, ${s.n_tasks} of ${s.dataset.tasks_in_dataset} tasks, ${s.attempts} ${s.attempts === 1 ? "attempt" : "attempts"} per arm, akm arm library: ${s.library.path} (${s.library.assets === null ? "assets not counted" : `${s.library.assets} assets`})`);
+  const c = s.completion;
+  console.log(`  trials       ${c.expected} expected: ${c.completed} completed, ${c.failed} failed, ${c.missing} missing${c.unexpected ? `, ${c.unexpected} outside the grid` : ""}`);
+  if (s.status === "aborted") console.log(`  ABORTED      ${s.aborted_reason}`);
   if (s.dataset.tasks_run_with_another_digest.length) console.log(`  WARNING: these tasks ran with a digest other than the lock's: ${s.dataset.tasks_run_with_another_digest.join(", ")}`);
   for (const line of formatReport(s.report)) console.log(line);
   console.log(`  results      ${relative(ROOT, s.results_dir)}/`);
@@ -250,12 +270,19 @@ export function summarize(o: {
   akmEnv?: Record<string, string>;
   packages?: { file: string; sha256: string }[];
   library?: LibraryCount & { sha256: string | null };
+  /** The host of the endpoint the model was sent to, null for the provider's own. */
+  endpoint?: string | null;
   job?: Record<string, unknown>;
 }): Summary {
-  const { trials, observed } = loadRunTrials(join(o.dir, "jobs", jobName(o.corpus)));
+  const jobDir = join(o.dir, "jobs", jobName(o.corpus));
+  const { trials, observed } = loadRunTrials(jobDir); // none when Harbor made no job: every cell is then missing, and the run is aborted
   const arm = o.arm ?? releaseArm();
   const akmEnv = o.akmEnv ?? {};
+  const attempts = o.attempts ?? DEFAULT_ATTEMPTS;
   const report = buildReport(trials);
+  const completion = completionOf(trials, o.tasks, attempts);
+  const { status, aborted_reason } = statusOf(o.exit, completion, existsSync(jobDir));
+  const dataset = { registry: o.lock.registry, ref: o.lock.ref, tasks: Object.fromEntries(o.tasks.map((t) => [t, o.lock.tasks[t] ?? null])) };
   const summary: Summary = {
     eval: NAME,
     corpus: o.corpus,
@@ -269,8 +296,14 @@ export function summarize(o: {
     library: { path: relative(ROOT, libraryOf(o.corpus)), assets: o.library?.assets ?? null, measured_with: o.library?.measured_with ?? null, sha256: o.library?.sha256 ?? null },
     limit: o.limit ?? null,
     n_tasks: o.tasks.length,
-    attempts: o.attempts ?? DEFAULT_ATTEMPTS,
+    attempts,
     harbor_exit: o.exit,
+    status,
+    aborted_reason,
+    completion,
+    assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
+    engine: { model: o.model, endpoint: o.endpoint ?? null },
+    config: redactConfig(o.job ?? {}),
     timeouts: timeoutsOf(trials),
     n_errored: erroredOf(report),
     metrics: metricsOf(report, trials),
@@ -313,10 +346,9 @@ export async function runCorpus(
   console.log(`${NAME} (${corpus}): ${tasks.length} of ${Object.keys(lock.tasks).length} tasks x 2 arms x ${attempts} = ${tasks.length * 2 * attempts} trials, ${CONCURRENT_TRIALS} at a time`);
 
   const exit = await runHarbor(configFile, join(dir, "harbor.log"), ctx.env);
-  if (!existsSync(join(dir, "jobs", jobName(corpus)))) fail(`Harbor wrote no job (exit ${exit}). See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
-  const summary = summarize({ corpus, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit, attempts, arm, akmEnv, packages: staged?.files, library, job: jobRecord(cfg, dir, ROOT) });
+  const summary = summarize({ corpus, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit, attempts, arm, akmEnv, packages: staged?.files, library, endpoint: endpointOf(ctx.env), job: jobRecord(cfg, dir, ROOT) });
   printSummary(summary);
-  if (exit !== 0) fail(`Harbor exited ${exit}. The results above cover the trials that finished.`, 1);
+  if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;
 }
 
