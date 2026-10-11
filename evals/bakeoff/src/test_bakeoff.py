@@ -636,6 +636,7 @@ def sandbox(private=False, seed="42"):
                 (root / "private" / "bakeoff" / "results").mkdir(parents=True)
                 (root / "private" / "bakeoff" / "assets").symlink_to(REAL_ASSETS)
                 (root / "private" / "bakeoff" / "map.json").write_text(json.dumps({"version": 1, "seed": seed}))
+                (root / "private" / "bakeoff" / "generated.json").write_text(json.dumps({"seed": seed, "inputs_sha256": bakeoff.sha256_tree(REAL_ASSETS)}))
             with mock.patch.object(bakeoff, "ROOT", root), mock.patch.object(bakeoff, "EVAL_DIR", eval_dir):
                 yield root
     finally:
@@ -977,6 +978,66 @@ class CheckAssetsTest(unittest.TestCase):
                     self.assertEqual(bakeoff.command_check_assets(type("Args", (), {"assets": str(copy)})()), 1)
                 self.assertIn(f"the {key} ref {new!r}", out.getvalue())
         bakeoff.use_assets(REAL_ASSETS)
+
+
+class GenerateTest(unittest.TestCase):
+    """evals/bakeoff/generate stages the private assets, writes generated.json, and run --corpus private refuses assets it does not vouch for."""
+
+    GENERATE = bakeoff.EVAL_DIR / "generate"
+
+    def generate(self, seed, out):
+        return subprocess.run(["bash", str(self.GENERATE), "--seed", seed, "--out", str(out)], cwd=bakeoff.ROOT, capture_output=True, text=True)
+
+    def state(self, out):
+        return {path.relative_to(out).as_posix(): path.read_bytes() for path in sorted(pathlib.Path(out).rglob("*")) if path.is_file()}
+
+    def test_writes_the_assets_the_map_and_generated_json_and_leaves_no_work_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp, "out")
+            done = self.generate("7", out)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["assets", "generated.json", "map.json"])
+            self.assertEqual(json.loads((out / "generated.json").read_text()), {"seed": "7", "inputs_sha256": bakeoff.sha256_tree(REAL_ASSETS)})
+            self.assertIsNone(bakeoff.generated_problem(out, REAL_ASSETS))
+
+    def test_a_generation_that_fails_leaves_the_earlier_one_as_it_was(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp, "out")
+            self.assertEqual(self.generate("7", out).returncode, 0)
+            was = self.state(out)
+            failed = self.generate("not-a-seed", out)  # the rewrite refuses it
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertEqual(self.state(out), was)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["assets", "generated.json", "map.json"])
+
+    def test_generated_json_must_be_there_and_name_the_public_assets_of_this_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = pathlib.Path(tmp)
+            self.assertIn("generated.json is missing", bakeoff.generated_problem(private, REAL_ASSETS))
+            (private / "generated.json").write_text("not json")
+            self.assertIn("holds no seed", bakeoff.generated_problem(private, REAL_ASSETS))
+            (private / "generated.json").write_text(json.dumps({"seed": 7, "inputs_sha256": bakeoff.sha256_tree(REAL_ASSETS)}))
+            self.assertIn("holds no seed", bakeoff.generated_problem(private, REAL_ASSETS))
+            (private / "generated.json").write_text(json.dumps({"seed": "7", "inputs_sha256": "0" * 64}))
+            self.assertIn("other public assets", bakeoff.generated_problem(private, REAL_ASSETS))
+            (private / "generated.json").write_text(json.dumps({"seed": "7", "inputs_sha256": bakeoff.sha256_tree(REAL_ASSETS)}))
+            self.assertIsNone(bakeoff.generated_problem(private, REAL_ASSETS))
+
+    def test_run_refuses_private_assets_without_a_marker_for_these_public_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            assets = root / "private" / "bakeoff" / "assets"
+            assets.mkdir(parents=True)
+            (assets / "cases.json").write_text("[]")
+            args = type("Args", (), {"corpus": "private", "limit": None, "repeat": None, "models": None, "model": None, "label": "x"})()
+            for marker in (None, {"seed": "7", "inputs_sha256": "0" * 64}):
+                if marker is not None:
+                    (assets.parent / "generated.json").write_text(json.dumps(marker))
+                err = io.StringIO()
+                with mock.patch.object(bakeoff, "ROOT", root), contextlib.redirect_stderr(err):
+                    self.assertEqual(bakeoff.command_run(args), 2)
+                self.assertIn("the private assets cannot be used", err.getvalue())
+                self.assertIn("./generate-assets --only bakeoff", err.getvalue())
 
 
 class RunningMarkerTest(unittest.TestCase):

@@ -11,7 +11,7 @@ longer asks a model for are the legacy cases, which run only with --include-lega
                            [--label NAME] [--model ID]... [--models FILE] [--repeat N]
                            [--include-legacy]
     python3 bakeoff.py verify
-    python3 bakeoff.py check-assets ASSETS_DIR [--against PUBLIC_ASSETS_DIR]
+    python3 bakeoff.py check-assets ASSETS_DIR [--against PUBLIC_ASSETS_DIR [--stamp SEED]]
 
 The cases (which files each one reads, what a correct reply holds) are in assets/cases.json. The
 prompts and the scorers are here. Python 3.10 or newer, and PyYAML.
@@ -3081,6 +3081,23 @@ def harness_sha256(src_dir=None, root=None):
 HARNESS = harness_sha256()
 
 
+GENERATED = "generated.json"
+
+
+def generated_problem(private_dir, public_assets):
+    """Why the private assets beside generated.json in private_dir may not be used, or None when it vouches for them: it is there, and the
+    public assets it names the digest of are the ones in public_assets now. Assets made from other public cases would score another set."""
+    try:
+        generated = json.loads((pathlib.Path(private_dir) / GENERATED).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        generated = None
+    if not isinstance(generated, dict) or not isinstance(generated.get("seed"), str) or not isinstance(generated.get("inputs_sha256"), str):
+        return f"{GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from"
+    if generated["inputs_sha256"] != sha256_tree(public_assets):
+        return f"they were made from other public assets than the ones in this checkout (inputs_sha256 in {GENERATED} differs)"
+    return None
+
+
 def private_seed():
     """The seed the private assets were made with: the one in the map that generate wrote beside them. None when there is no map."""
     try:
@@ -3233,6 +3250,9 @@ def command_run(args):
     for corpus in corpora:
         if corpus == "private" and not (ROOT / "private" / NAME / "assets" / "cases.json").is_file():
             return fail(f"the private assets are missing (private/{NAME}/assets/cases.json). Make them with: ./generate-assets --only {NAME}")
+        problem = generated_problem(ROOT / "private" / NAME, EVAL_DIR / "assets") if corpus == "private" else None
+        if problem:
+            return fail(f"the private assets cannot be used: {problem}. Make them again with: ./generate-assets --only {NAME}")
     if args.limit is not None and args.limit < 1:
         return fail("--limit must be a positive integer")
     if args.repeat is not None and args.repeat < 1:
@@ -3368,6 +3388,11 @@ def command_check_assets(args):
     if errors:
         return 1
     print(f"ok: {len(cases)} cases in {args.assets}")
+    stamp = getattr(args, "stamp", None)
+    if stamp is not None:
+        # generate's marker, written beside the assets only once they pass: the seed, and the digest of the public assets they were made from
+        generated = {"seed": stamp, "inputs_sha256": sha256_tree(args.against)}
+        (pathlib.Path(args.assets).parent / GENERATED).write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
@@ -3392,7 +3417,10 @@ def main(argv=None):
     check = sub.add_parser("check-assets", help="check an assets folder")
     check.add_argument("assets")
     check.add_argument("--against", help="the assets this folder was made from: the expected terms must still match the files the way they did")
+    check.add_argument("--stamp", metavar="SEED", help="when the check passes, write generated.json beside the folder, with SEED and the digest of the --against assets (generate uses it)")
     args = parser.parse_args(argv)
+    if args.command == "check-assets" and args.stamp is not None and not args.against:
+        parser.error("--stamp needs --against")
     if args.command == "run":
         return command_run(args)
     if args.command == "check-assets":
