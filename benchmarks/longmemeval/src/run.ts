@@ -58,8 +58,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
   --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge, endpoints,
-                    akm (version, command, build and config), search mode, dataset files and sample settings, it asks
-                    only the questions that are not done
+                    akm (version, command, build, its uncommitted changes and config), search mode, dataset files
+                    and sample settings, it asks only the questions that are not done
 ${modelUsage}
 ${judgeUsage}
 ${akmUsage}

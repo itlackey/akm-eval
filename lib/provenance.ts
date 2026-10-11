@@ -41,8 +41,8 @@ function codeFiles(dir: string, extensions: string[]): string[] {
 
 /**
  * The digest of the code a run was made with, for the `harness_sha256` of a summary.json: one sha256 over a manifest of the eval's own
- * source files (every `.ts` and `.py` in `evalSrcDir`, at any depth) and of the shared code it runs on (every `.ts` file under lib/, and
- * lib/env.sh). The manifest has the path of each file from the repository root, with the digest of its content, in the order of the
+ * source files (every `.ts` and `.py` in `evalSrcDir`, at any depth) and of the shared code it runs on (every `.ts` and `.py` file under
+ * lib/, such as the akm arm of the Harbor evals in lib/harbor/akm_opencode.py, and lib/env.sh). The manifest has the path of each file from the repository root, with the digest of its content, in the order of the
  * paths. It leaves out the tests (`*.test.ts`, `test_*.py`, `fakes.ts`), the fixtures, the dependencies and the READMEs, since none of
  * them changes what a run measures. The digest does not depend on where the checkout is, and it covers edits that are not committed,
  * which `git_commit` does not.
@@ -58,7 +58,7 @@ export function harnessSha256(evalSrcDir: string, options: { also?: string[]; ro
     if (inside === "" || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) throw new Error(`${dir} is not inside the repository at ${base}`);
   }
   const env = join(base, "lib", "env.sh");
-  const paths = new Set([...folders.flatMap((dir) => codeFiles(dir, [".ts", ".py"])), ...codeFiles(join(base, "lib"), [".ts"]), ...(existsSync(env) ? [env] : [])]);
+  const paths = new Set([...folders.flatMap((dir) => codeFiles(dir, [".ts", ".py"])), ...codeFiles(join(base, "lib"), [".ts", ".py"]), ...(existsSync(env) ? [env] : [])]);
   return manifestDigest([...paths].map((path) => [relative(base, path).split(sep).join("/"), sha256File(path)]));
 }
 

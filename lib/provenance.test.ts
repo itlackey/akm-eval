@@ -187,6 +187,8 @@ describe("harnessSha256", () => {
     "lib/a.ts": "export const a = 1;\n",
     "lib/sub/b.ts": "export const b = 2;\n",
     "lib/env.sh": "load_env() { :; }\n",
+    "lib/harbor/arm.py": "ARM = 1\n",
+    "lib/harbor/test_arm.py": "def test(): pass\n",
     "lib/a.test.ts": "test one\n",
     "lib/README.md": "the lib\n",
     "evals/x/src/run.ts": "export const run = 1;\n",
@@ -237,7 +239,7 @@ describe("harnessSha256", () => {
     expect(harnessSha256(join(REPO, "evals", "distill", "src"))).not.toBe(at(one)); // another eval is another digest
   });
 
-  test("changes with an edit to the eval's own code, to a file of lib/, to lib/env.sh, and with a file added, renamed or dropped", () => {
+  test("changes with an edit to the eval's own code, to a .ts or .py file of lib/, to lib/env.sh, and with a file added, renamed or dropped", () => {
     const base = digest(checkout());
     const changes: Record<string, string>[] = [
       { "evals/x/src/lib.ts": "export const score = 2;\n" },
@@ -247,6 +249,7 @@ describe("harnessSha256", () => {
       { "lib/a.ts": "export const a = 2;\n" },
       { "lib/sub/b.ts": "export const b = 3;\n" },
       { "lib/env.sh": "load_env() { return 1; }\n" },
+      { "lib/harbor/arm.py": "ARM = 2\n" },
       { "lib/added.ts": "export const added = 1;\n" },
     ];
     for (const change of changes) expect(digest(checkout(change))).not.toBe(base);
@@ -269,6 +272,7 @@ describe("harnessSha256", () => {
       { "evals/x/src/package.json": '{"edited":true}\n' },
       { "evals/x/README.md": "the eval, edited\n" },
       { "lib/a.test.ts": "test edited\n" },
+      { "lib/harbor/test_arm.py": "def test(): return 1\n" },
       { "lib/README.md": "the lib, edited\n" },
       { "evals/y/src/run.ts": "export const other = 2;\n" },
       { "evals/x/src/new.test.ts": "a test added\n", "lib/new.test.ts": "a test added\n", "evals/x/src/NOTES.md": "notes\n" },

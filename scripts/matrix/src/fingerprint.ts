@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { akmBuild } from "../../../lib/akm/akm.ts";
+import { akmBuild, dirtyFingerprint } from "../../../lib/akm/akm.ts";
 import { canonical } from "../../compare/src/policy.ts";
 import { type Job, type RunRecord, HARBOR, flagValue, readJson, runDirs, unusableReason } from "./lib.ts";
 
@@ -93,22 +93,23 @@ const expandHome = (command: string): string => command.replace(/(^|\s)~\//g, `$
 
 /**
  * The akm a job runs. For an eval that runs akm on this machine: `--akm`, else AKM_BIN of the environment or .env, else `akm`, with the build
- * that command identifies (akmBuild() of lib/akm/akm.ts, which every eval records as `akm_build`). For a Harbor eval, `--akm` is a release
- * (the string) or a checkout (its folder, with the build of that checkout).
+ * that command identifies (akmBuild() of lib/akm/akm.ts, which every eval records as `akm_build` and `akm_build_fingerprint`). For a Harbor
+ * eval, `--akm` is a release (the string) or a checkout (its folder, with the build of that checkout and its uncommitted changes).
  */
-function akmIdentity(args: string[], evalName: string, env: Env): { command: string; build: string | null } {
+function akmIdentity(args: string[], evalName: string, env: Env): { command: string; build: string | null; fingerprint: string | null } {
   const flag = flagValue(args, "--akm");
   if (HARBOR.includes(evalName)) {
     const folder = flag ? expandHome(flag) : "";
-    return { command: flag ?? "", build: folder && existsSync(folder) && statSync(folder).isDirectory() ? describe(folder) : null };
+    const checkout = folder !== "" && existsSync(folder) && statSync(folder).isDirectory();
+    return { command: flag ?? "", build: checkout ? describe(folder) : null, fingerprint: checkout ? dirtyFingerprint(folder) : null };
   }
   const command = expandHome((flag ?? env.AKM_BIN ?? "").trim());
   const saved = process.env.AKM_BIN;
   try {
     if (command) process.env.AKM_BIN = command;
     else delete process.env.AKM_BIN;
-    const { akm_bin, akm_build } = akmBuild();
-    return { command: akm_bin, build: akm_build };
+    const { akm_bin, akm_build, akm_build_fingerprint } = akmBuild();
+    return { command: akm_bin, build: akm_build, fingerprint: akm_build_fingerprint };
   } finally {
     if (saved === undefined) delete process.env.AKM_BIN;
     else process.env.AKM_BIN = saved;

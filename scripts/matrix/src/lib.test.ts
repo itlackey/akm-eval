@@ -1743,6 +1743,26 @@ describe("the fingerprint of a job", () => {
     expect(fingerprintOf(root, job(["--akm", "akm-cli@0.9.26"], "agent-ab"), { ...env, AKM_BIN: "other" }).parts.akm).toBe(release("akm-cli@0.9.26")); // AKM_BIN is not read by a Harbor eval
   });
 
+  test("the akm of a checkout includes its uncommitted changes, for an AKM_BIN and for the folder a Harbor eval names", () => {
+    const root = tmp();
+    const akm = join(root, "akm");
+    mkdirSync(akm);
+    git(akm, "init", "-q");
+    writeFileSync(join(akm, "cli.ts"), "one\n");
+    git(akm, "add", "cli.ts");
+    git(akm, "commit", "-q", "-m", "one");
+    const local = () => fingerprintOf(root, job([]), { ...env, AKM_BIN: `bun ${join(akm, "cli.ts")}` }).parts.akm;
+    const harbor = () => fingerprintOf(root, job(["--akm", akm], "agent-ab"), env).parts.akm;
+    const clean = [local(), harbor()];
+    writeFileSync(join(akm, "cli.ts"), "two\n");
+    const edited = [local(), harbor()];
+    writeFileSync(join(akm, "cli.ts"), "three\n");
+    const other = [local(), harbor()];
+    for (const i of [0, 1]) expect(new Set([clean[i], edited[i], other[i]]).size).toBe(3);
+    writeFileSync(join(akm, "cli.ts"), "one\n");
+    expect([local(), harbor()]).toEqual(clean);
+  });
+
   test("the harness is the commit and the digest of the uncommitted changes, and a folder that is no checkout has its own", () => {
     const root = tmp();
     expect(fingerprintOf(root, job([]), env).parts.harness).toBe(fingerprintOf(root, job([]), env).parts.harness);

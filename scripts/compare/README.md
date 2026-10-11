@@ -35,7 +35,7 @@ What two runs may differ in is `src/policy.ts`, which the matrix applies too. Ru
 
 | axis | what it is | recorded as |
 |---|---|---|
-| `build` | the akm | `akm_version`, `akm_build`, `akm_bin` |
+| `build` | the akm | `akm_version`, `akm_build`, `akm_build_fingerprint` (the digest of a checkout's uncommitted changes), `akm_bin` |
 | `config` | the akm config the eval wrote | `strategy`, `config_patch` (its hash), a digest of `config`, `timeout_ms` |
 | `model` | the model and its engine | `model`, and in `engine` the temperature, `enableThinking`, the endpoint's host and `timeoutMs` |
 | `inputs` | the cases | `assets_sha256`, and the private `seed` |
@@ -43,7 +43,7 @@ What two runs may differ in is `src/policy.ts`, which the matrix applies too. Ru
 
 A comparison declares its treatment, the axes it measures. **Every other axis must be the same in every run**, among the runs of a side as well as between the sides: for two sets of repeats each of the six runs is checked, not the first of each. A run that differs outside the treatment makes the comparison refused, with the axis and the runs named. Without `--treatment` the treatment is `config,model`, the settings of one build, which is what compare did before it had the flag: a different strategy, config patch or model is what is being compared, and a different akm build is not. To compare a release with the next, or a branch of akm with `main`, say `--treatment build`; the model, the akm config, the cases and the eval's code must then still be the same. Repeats of one configuration (`--repeats` alone) have no treatment: all five axes must be the same.
 
-The digest of `config` leaves out the engine settings, which belong to the model axis. `git_commit` identifies the eval's code only when it is neither missing, `unknown` nor `-dirty`; `harness_sha256`, the digest of the eval's own code, replaces it where every run records one.
+The digest of `config` leaves out the engine settings, which belong to the model axis. `git_commit` identifies the eval's code only when it is neither missing, `unknown` nor `-dirty`; `harness_sha256`, the digest of the eval's code and of `lib/`, uncommitted edits included, replaces it where every run records one.
 
 **What the summaries do not say is a gap, not a pass.** A run that does not record `assets_sha256`, the akm `config`, the `engine` settings, a clean commit (or digest) of the code, or, for a private corpus, the seed, leaves that axis unchecked. If the axis is not in the treatment, the report is **exploratory**: the numbers are computed and shown, with a banner naming what is missing, and they are not a conclusion. The same goes for a run that does not say it finished: `status` is not `complete` (or is missing), results are missing from its `completion`, or, without a `--limit`, it ran fewer cases than the eval has. An aborted or partial comparison is exploratory, never refused. The matrix applies the same policy to its own results and gives a row in that position the verdict "exploratory", so it stays out of its conclusions.
 

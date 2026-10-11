@@ -277,6 +277,8 @@ export interface RunInfo {
   model: string | null;
   akm_version: string | null;
   akm_build: string | null;
+  /** The digest of the akm checkout's uncommitted changes, null for a clean checkout or a release. */
+  akm_build_fingerprint: string | null;
   akm_bin: string | null;
   strategy: string | null;
   /** The SHA-256 of the config patch, null for none. */
@@ -303,6 +305,7 @@ export function infoOf(run: Run): RunInfo {
     model: str(s.model),
     akm_version: str(s.akm_version),
     akm_build: str(s.akm_build),
+    akm_build_fingerprint: str(s.akm_build_fingerprint),
     akm_bin: str(s.akm_bin),
     strategy: str(s.strategy),
     config_patch: str(s.config_patch?.sha256),
@@ -358,7 +361,7 @@ export function refusalsOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREAT
 
 /** Everything that differs between two runs' settings. Which of these may is the treatment's: see `policyOf`. */
 export function differences(a: RunInfo, b: RunInfo): { field: string; a: unknown; b: unknown }[] {
-  return (["model", "akm_build", "akm_bin", "strategy", "config_patch", "timeout_ms", "limit", "git_commit"] as const)
+  return (["model", "akm_build", "akm_build_fingerprint", "akm_bin", "strategy", "config_patch", "timeout_ms", "limit", "git_commit"] as const)
     .filter((f) => a[f] !== b[f])
     .map((f) => ({ field: f, a: a[f], b: b[f] }));
 }
@@ -743,7 +746,7 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
   const [infosA, infosB] = [a.map(infoOf), b.map(infoOf)];
   const [ia, ib] = [infosA[0], infosB[0]];
   const diff = differences(ia, ib);
-  if (policy.treated.length === 0 && !diff.some((d) => ["model", "akm_build", "akm_bin", "strategy", "config_patch", "timeout_ms"].includes(d.field))) warnings.push("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs, not a change");
+  if (policy.treated.length === 0 && !diff.some((d) => ["model", "akm_build", "akm_build_fingerprint", "akm_bin", "strategy", "config_patch", "timeout_ms"].includes(d.field))) warnings.push("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs, not a change");
 
   const computed = new Set(views.flatMap((v) => v.metrics.map((m) => m.path)));
   const known = new Set([...allA.flat(), ...allB.flat()].flatMap((v) => v.metrics.map((m) => m.path)));
@@ -988,7 +991,7 @@ const runTable = (infos: RunInfo[], heads: string[]): string[] => {
     ["label", (i) => i.label ?? "–"],
     ["date", (i) => i.date ?? "–"],
     ["model", (i) => i.model ?? "–"],
-    ["akm", (i) => `${i.akm_version ?? "–"}${i.akm_build ? ` build ${i.akm_build}` : ""}`],
+    ["akm", (i) => `${i.akm_version ?? "–"}${i.akm_build ? ` build ${i.akm_build}` : ""}${i.akm_build_fingerprint ? ` (changes ${i.akm_build_fingerprint.slice(0, 12)})` : ""}`],
     ["strategy", (i) => i.strategy ?? "–"],
     ["config patch", (i) => (i.config_patch ? i.config_patch.slice(0, 12) : "–")],
     ["cases", (i) => `${i.n_cases}${i.n_errored ? ` (${i.n_errored} errored)` : ""}`],

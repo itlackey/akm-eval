@@ -870,6 +870,10 @@ describe("a release against a release", () => {
     const r = comparePair(loadRun(a), loadRun(b), { treatment: ["build"] });
     expect(r.treated).toEqual([`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
     expect(r.exploratory).toEqual([]);
+    // the report shows what tells the two builds apart, and does not call them the same akm
+    expect(differences(infoOf(loadRun(a)), infoOf(loadRun(b))).map((d) => d.field)).toEqual(["akm_build_fingerprint"]);
+    expect(renderPair(r)).toContain(`build v0.9.26-1-gabc123-dirty (changes ${"b".repeat(12)})`);
+    expect(r.warnings.join("\n")).not.toContain("shows the noise between two runs");
     // the same edits are the same build
     expect(comparePair(loadRun(a), loadRun(edited("d", 13, "a".repeat(64)))).views[0].better).toHaveLength(5);
   });
