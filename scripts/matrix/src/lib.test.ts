@@ -1609,7 +1609,8 @@ describe("a stage as a process: what makes it resume or run again (F07)", () => 
     expect(t.runs()).toBe(4);
     await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1", MODEL_API_KEY: "key-two" });
     expect(t.runs()).toBe(4);
-    expect(readFileSync(join(t.out, "state.json"), "utf8")).not.toContain("key-");
+    const state = readFileSync(join(t.out, "state.json"), "utf8");
+    for (const secret of ["key-one", "key-two"]) expect(state).not.toContain(secret); // the exact values given, not any "key-" in a path of the checkout
   });
 
   test("another MODEL_NAME, JUDGE_* setting or .env runs the jobs again", async () => {
