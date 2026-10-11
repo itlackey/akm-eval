@@ -1,8 +1,10 @@
 // Test doubles shared by the tests.
 
-import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
+import { DATA_FILE, type Question } from "./dataset.ts";
 
 /**
  * An akm that is a few lines of TypeScript: it keeps what the bundle holds and answers search from it. With a semantic config it
@@ -51,3 +53,38 @@ export const sandboxRunning = (script: string, cleanup: string[], opts: { semant
   cleanup.push(sandbox.dir);
   return sandbox;
 };
+
+/** One chat session: an id, a date and a user turn with this text. */
+export const evidence = (id: string, text: string) => ({ id, date: "2023/05/20 (Sat) 02:21", turns: [{ role: "user", content: text }, { role: "assistant", content: "Noted." }] });
+
+/** Three questions with four or three sessions each, one of them an abstention question: the dataset the pipeline and generate tests run on. */
+export function tinyDataset(): Question[] {
+  const fill = (n: number) => Array.from({ length: n }, (_, i) => evidence(`filler_${i}`, `Chat number ${i} about gardening and tea.`));
+  const make = (id: string, type: string, question: string, answer: string, ev: ReturnType<typeof evidence>[], evidenceIds: string[]): Question => {
+    const sessions = [...fill(2), ...ev, ...fill(1).map((s) => ({ ...s, id: `${s.id}_b` }))];
+    return {
+      question_id: id,
+      question_type: type,
+      question,
+      question_date: "2023/05/30 (Tue) 23:40",
+      answer,
+      answer_session_ids: evidenceIds,
+      haystack_dates: sessions.map((s) => s.date),
+      haystack_session_ids: sessions.map((s) => s.id),
+      haystack_sessions: sessions.map((s) => s.turns),
+    };
+  };
+  return [
+    make("q-secret", "multi-session", "What is the secret answer?", "BLUE42", [evidence("answer_1", "The secret answer is BLUE42.")], ["answer_1"]),
+    make("q-cats", "temporal-reasoning", "How many companions do I own?", "3", [evidence("answer_2", "I own 3 cats named Tom, Mia and Zed.")], ["answer_2"]),
+    make("q-passport_abs", "single-session-user", "What is my passport identifier?", "You never mentioned it.", [], []),
+  ];
+}
+
+/** Writes a public assets folder: the questions, and an ASSETS.lock that pins them by their sha256. */
+export function writePublicAssets(dir: string, questions: Question[] = tinyDataset()): void {
+  mkdirSync(dir, { recursive: true });
+  const data = JSON.stringify(questions);
+  writeFileSync(join(dir, DATA_FILE), data);
+  writeFileSync(join(dir, "ASSETS.lock"), JSON.stringify({ dataset: "tiny", source: "none", licence: "MIT", revision: "r".repeat(40), files: { [DATA_FILE]: { url: "http://unused", bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") } } }));
+}
