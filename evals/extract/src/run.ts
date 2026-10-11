@@ -15,7 +15,7 @@ import { engineSettings, redactConfig, type EngineSettings } from "../../../lib/
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
+import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, generatedProblem, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
 
 const NAME = "extract";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -261,6 +261,8 @@ async function main(): Promise<void> {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
       fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
     }
+    const stale = c === "private" ? generatedProblem(join(ROOT, "private", NAME), join(EVAL_DIR, "assets")) : undefined;
+    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const { baseUrl, name: model, hasKey } = useModel(values, fail);

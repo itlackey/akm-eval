@@ -166,6 +166,39 @@ export function privateSeed(mapFile: string, seedFile: string): string | null {
   }
 }
 
+/** What generate writes beside the private assets: the seed they were made with, and the digest of the public assets they were made from. */
+export interface Generated {
+  seed: string;
+  inputs_sha256: string;
+}
+
+export const GENERATED = "generated.json";
+
+/** The digest of the public assets a private set is made from: cases.json and the sessions it names. */
+export const inputsSha256 = (assets: string): string => assetsDigest(assets, loadCases(assets));
+
+/** generated.json in `dir` (private/extract), or undefined when it is missing or does not hold a seed and a digest. */
+export function readGenerated(dir: string): Generated | undefined {
+  try {
+    const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
+    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256 } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, and
+ * the public assets it names the digest of are the ones in `publicAssets` now. Assets made from other public cases would score a
+ * different set than the public run does.
+ */
+export function generatedProblem(dir: string, publicAssets: string): string | undefined {
+  const generated = readGenerated(dir);
+  if (!generated) return `${GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from`;
+  if (generated.inputs_sha256 !== inputsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
+  return undefined;
+}
+
 // ---- Matching phrases ------------------------------------------------------------------------------------------
 
 /**
