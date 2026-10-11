@@ -2,18 +2,52 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import type { Schema } from "./schema.ts";
 
-/** What the stub model answers to every chat completion: the object `{}` as the message, and token counts. */
-export function completion(model: string): Record<string, unknown> {
+/** What the stub model answers to a chat completion unless it is given another answer: the object `{}` as the message, and token counts. */
+export const EMPTY_ANSWER = "{}";
+
+/** The chat completion object for a message. The token counts are fixed: nothing here is a measure of cost. */
+export function completion(model: string, content: string = EMPTY_ANSWER): Record<string, unknown> {
   return {
     id: "chatcmpl-smoke",
     object: "chat.completion",
     created: 0,
     model,
-    choices: [{ index: 0, message: { role: "assistant", content: "{}" }, finish_reason: "stop" }],
+    choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   };
 }
+
+/** The part of a chat completion request the stub reads: akm sends the schema it wants the reply to fit as response_format. */
+export interface ChatRequest {
+  model?: unknown;
+  messages?: { role?: unknown; content?: unknown }[];
+  response_format?: { type?: unknown; json_schema?: { name?: unknown; schema?: Schema; strict?: unknown } };
+}
+
+/** The schema a request asks the reply to fit, or undefined when it sends none. */
+export const schemaOf = (req: ChatRequest): Schema | undefined => {
+  const schema = req.response_format?.json_schema?.schema;
+  return typeof schema === "object" && schema !== null ? schema : undefined;
+};
+
+/** The text of the last user message of a request, for an answer to pick by what was asked. */
+export const promptOf = (req: ChatRequest): string => {
+  const users = (req.messages ?? []).filter((m) => m.role === "user");
+  const content = users[users.length - 1]?.content;
+  return typeof content === "string" ? content : "";
+};
+
+/** What a request was, for the stub to remember: the required keys of the schema it sent (null when it sent none), the start of its prompt and the reply it got. */
+export interface Seen {
+  keys: string[] | null;
+  prompt: string;
+  reply: string;
+}
+
+/** What the stub says to a request: the text of the assistant message. */
+export type Answerer = (req: ChatRequest) => string;
 
 export interface Stub {
   /** The base URL to give as MODEL_BASE_URL, with /v1 on it, as an OpenAI-compatible endpoint has. */
@@ -22,14 +56,24 @@ export interface Stub {
   calls(): number;
   /** The method and path of every request it did not answer, such as "POST /v1/responses". */
   unexpected(): string[];
+  /** Every chat completion it has answered since the start, or since `reset`, in order. */
+  seen(): Seen[];
+  /** Changes what it answers from now on, until it is changed again. `reset` does not undo it. */
+  answer(answerer: Answerer): void;
+  /** Forgets the calls, the unserved requests and the requests seen. */
   reset(): void;
   stop(): void;
 }
 
-/** A local server with one endpoint, POST /v1/chat/completions, that answers every call alike. Any other request is a 404. */
-export function startStub(): Stub {
+/**
+ * A local server with one endpoint, POST /v1/chat/completions, that answers each call with `answerer` (by default `{}` to every call).
+ * Any other request is a 404.
+ */
+export function startStub(answerer: Answerer = () => EMPTY_ANSWER): Stub {
   let calls = 0;
   let unexpected: string[] = [];
+  let seen: Seen[] = [];
+  let answerWith = answerer;
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
@@ -37,8 +81,11 @@ export function startStub(): Stub {
       const { pathname } = new URL(req.url);
       if (req.method === "POST" && pathname === "/v1/chat/completions") {
         calls++;
-        const body = (await req.json().catch(() => ({}))) as { model?: unknown };
-        return Response.json(completion(typeof body.model === "string" ? body.model : "smoke-model"));
+        const parsed: unknown = await req.json().catch(() => ({}));
+        const body = (typeof parsed === "object" && parsed !== null ? parsed : {}) as ChatRequest;
+        const reply = answerWith(body);
+        seen.push({ keys: schemaOf(body)?.required ?? (schemaOf(body) ? [] : null), prompt: promptOf(body).slice(0, 120), reply });
+        return Response.json(completion(typeof body.model === "string" ? body.model : "smoke-model", reply));
       }
       unexpected.push(`${req.method} ${pathname}`);
       return Response.json({ error: { message: `the smoke stub answers POST /v1/chat/completions only, not ${req.method} ${pathname}`, type: "not_found" } }, { status: 404 });
@@ -48,9 +95,12 @@ export function startStub(): Stub {
     url: `http://127.0.0.1:${server.port}/v1`,
     calls: () => calls,
     unexpected: () => [...unexpected],
+    seen: () => [...seen],
+    answer: (next) => void (answerWith = next),
     reset: () => {
       calls = 0;
       unexpected = [];
+      seen = [];
     },
     stop: () => void server.stop(true),
   };
@@ -146,7 +196,7 @@ export function describeRow(row: Record<string, unknown>): string {
 }
 
 /** The rows of a samples.jsonl that are JSON objects. A line that is not JSON is skipped. */
-function readRows(file: string): Record<string, unknown>[] {
+export function readRows(file: string): Record<string, unknown>[] {
   if (!existsSync(file)) return [];
   const rows: Record<string, unknown>[] = [];
   for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -159,6 +209,16 @@ function readRows(file: string): Record<string, unknown>[] {
     }
   }
   return rows;
+}
+
+/** The object a summary.json holds, or undefined when the file is missing or holds anything else. */
+export function readSummary(file: string): Record<string, unknown> | undefined {
+  try {
+    const summary: unknown = JSON.parse(readFileSync(file, "utf8"));
+    return isObject(summary) ? summary : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** What the rows of a samples.jsonl say: how many carry an error, and what the first row says. A line that is not JSON is not counted. */

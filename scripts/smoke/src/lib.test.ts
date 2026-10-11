@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ENTRIES, LABEL, type Stub, columnsWithRefs, completion, describeRow, readSamples, runEntry, smokeFolders, startStub, stubEnv } from "./lib.ts";
+import { ENTRIES, LABEL, type ChatRequest, type Stub, columnsWithRefs, completion, describeRow, promptOf, readSamples, readSummary, runEntry, schemaOf, smokeFolders, startStub, stubEnv } from "./lib.ts";
+import type { Schema } from "./schema.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -43,6 +44,10 @@ describe("the stub model", () => {
   test("answers a body that is not JSON too, and anything else is a 404 that it remembers", async () => {
     const s = stub();
     expect((await fetch(`${s.url}/chat/completions`, { method: "POST", body: "not json" })).status).toBe(200);
+    expect((await fetch(`${s.url}/chat/completions`, { method: "POST", body: "null" })).status).toBe(200); // JSON, but not a request
+    expect(s.calls()).toBe(2);
+    s.reset();
+    expect((await fetch(`${s.url}/chat/completions`, { method: "POST", body: "not json" })).status).toBe(200);
     expect(s.calls()).toBe(1);
     const other = await fetch(`${s.url}/responses`, { method: "POST", body: "{}" });
     expect(other.status).toBe(404);
@@ -56,7 +61,59 @@ describe("the stub model", () => {
   });
 
   test("completion() is a chat completion object", () => {
-    expect(completion("x")).toMatchObject({ object: "chat.completion", model: "x", choices: [{ index: 0 }] });
+    expect(completion("x")).toMatchObject({ object: "chat.completion", model: "x", choices: [{ index: 0, message: { content: "{}" } }] });
+    expect(completion("x", "ok")).toMatchObject({ choices: [{ message: { role: "assistant", content: "ok" } }] });
+  });
+
+  const ask = (s: Stub, body: unknown) => fetch(`${s.url}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json() as Promise<any>);
+  const schema = { type: "object", required: ["a", "b"], properties: { a: { type: "string" }, b: { type: "string" } } };
+  const withSchema = { model: "m", messages: [{ role: "system", content: "s" }, { role: "user", content: "first" }, { role: "assistant", content: "{}" }, { role: "user", content: "the last question" }], response_format: { type: "json_schema", json_schema: { name: "akm_response", schema } } };
+
+  test("answers with the reply of the answerer it is given, and tells it the request", async () => {
+    const asked: unknown[] = [];
+    const s = startStub((req) => {
+      asked.push(req);
+      return "from the answerer";
+    });
+    stubs.push(s);
+    const body = await ask(s, withSchema);
+    expect(body.choices[0].message.content).toBe("from the answerer");
+    expect(asked).toEqual([withSchema]);
+  });
+
+  test("answer() changes the reply from the next call on, and reset() forgets the calls and keeps the answer", async () => {
+    const s = stub();
+    expect((await ask(s, withSchema)).choices[0].message.content).toBe("{}");
+    s.answer(() => "second");
+    expect((await ask(s, withSchema)).choices[0].message.content).toBe("second");
+    s.reset();
+    expect(s.calls()).toBe(0);
+    expect(s.seen()).toEqual([]);
+    expect((await ask(s, withSchema)).choices[0].message.content).toBe("second");
+  });
+
+  test("remembers the required keys of the schema of each call (null when it sent none), the start of its last user message and the reply", async () => {
+    const s = stub();
+    await ask(s, withSchema);
+    await ask(s, { model: "m", messages: [{ role: "user", content: "Respond with just the word: ok" }] });
+    await ask(s, { model: "m", messages: [], response_format: { type: "json_object" } });
+    await ask(s, { model: "m", messages: [{ role: "user", content: "x".repeat(300) }], response_format: { type: "json_schema", json_schema: { schema: { type: "object" } } } });
+    expect(s.seen()).toEqual([
+      { keys: ["a", "b"], prompt: "the last question", reply: "{}" },
+      { keys: null, prompt: "Respond with just the word: ok", reply: "{}" },
+      { keys: null, prompt: "", reply: "{}" },
+      { keys: [], prompt: "x".repeat(120), reply: "{}" },
+    ]);
+  });
+
+  test("schemaOf and promptOf read what akm sends", () => {
+    expect(schemaOf(withSchema as ChatRequest)).toEqual(schema as Schema);
+    expect(schemaOf({ response_format: { type: "json_object" } })).toBeUndefined();
+    expect(schemaOf({})).toBeUndefined();
+    expect(promptOf(withSchema as ChatRequest)).toBe("the last question");
+    expect(promptOf({ messages: [{ role: "assistant", content: "x" }] })).toBe("");
+    expect(promptOf({ messages: [{ role: "user", content: [{ type: "text", text: "parts" }] }] })).toBe("");
+    expect(promptOf({})).toBe("");
   });
 });
 
@@ -100,6 +157,17 @@ describe("what the rows say", () => {
     writeFileSync(file, [JSON.stringify({ id: "a", outcome: "ok" }), "not json", "", JSON.stringify({ id: "b", outcome: "error", error: "boom" }), JSON.stringify([1]), JSON.stringify({ id: "c", error: "" })].join("\n"));
     expect(readSamples(file)).toEqual({ errored: 1, first: "outcome: ok" });
     expect(readSamples(join(tmp(), "none.jsonl"))).toEqual({ errored: 0, first: "" });
+  });
+
+  test("readSummary gives the object a summary.json holds, and nothing for a missing file, bad JSON or another shape", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "ok.json"), JSON.stringify({ status: "complete", n: 1 }));
+    writeFileSync(join(dir, "bad.json"), "{");
+    writeFileSync(join(dir, "list.json"), "[1]");
+    expect(readSummary(join(dir, "ok.json"))).toEqual({ status: "complete", n: 1 });
+    expect(readSummary(join(dir, "bad.json"))).toBeUndefined();
+    expect(readSummary(join(dir, "list.json"))).toBeUndefined();
+    expect(readSummary(join(dir, "none.json"))).toBeUndefined();
   });
 
   test("columnsWithRefs names the columns that hold a ref in some row, and none for a missing file or a column of another shape", () => {
@@ -292,15 +360,18 @@ describe("scripts/smoke/run", () => {
   test("--help prints the usage, and an unknown name or flag is a usage error", () => {
     const run = (...args: string[]) => Bun.spawnSync(["bash", join(ROOT, "scripts/smoke/run"), ...args], { cwd: ROOT, env: process.env });
     expect(run("--help").stdout.toString()).toContain("Usage: scripts/smoke/run");
+    expect(run("--help").stdout.toString()).toContain("--contract");
     const bad = run("--only", "nope");
     expect(bad.exitCode).toBe(2);
     expect(bad.stderr.toString()).toContain('--only names "nope"');
     expect(run("--bogus").exitCode).toBe(2);
   });
 
-  test("fails with a message when no akm can be run", () => {
-    const out = Bun.spawnSync(["bash", join(ROOT, "scripts/smoke/run"), "--akm", "/nonexistent/akm"], { cwd: ROOT, env: process.env });
-    expect(out.exitCode).toBe(2);
-    expect(out.stderr.toString()).toContain("could not run");
+  test("fails with a message when no akm can be run, in the contract mode too", () => {
+    for (const mode of [[], ["--contract"]]) {
+      const out = Bun.spawnSync(["bash", join(ROOT, "scripts/smoke/run"), ...mode, "--akm", "/nonexistent/akm"], { cwd: ROOT, env: process.env });
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr.toString()).toContain("could not run");
+    }
   });
 });

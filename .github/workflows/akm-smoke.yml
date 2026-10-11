@@ -1,8 +1,13 @@
-# Runs each eval that drives akm once, on one case, against a stub model and a real akm (scripts/smoke), to see that akm still takes the
-# commands the evals give it and, for retrieval, that the JSON of search and curate is still readable. Every night, and on demand. Two legs: the akm release this repository pins, and the latest
-# release, which is where a change to akm that the evals cannot read shows up the day it ships.
+# Runs each eval that drives akm once, on one case, against a stub model and a real akm (scripts/smoke). Every night, and on demand. Two legs:
 #
-# The stub model is a local server that answers {} to every call, so the job needs no model and no secret.
+#   pinned  the akm release this repository pins, in the contract mode: the stub answers each model call with a reply that is valid, and the
+#           leg fails unless every eval reaches the outcome it counts as its work (a proposal, a lesson, a memory, a verdict, a retirement,
+#           an accepted promotion), and the outcome it has for a reply akm cannot read. This leg is required: when it fails, the workflow fails.
+#   latest  the latest release, in the startup mode: the stub answers {}, and the leg shows that akm still takes the commands and that the
+#           JSON the evals read before the model is readable. It is advisory (continue-on-error), a warning that a change to akm that the evals
+#           cannot read shipped the day before. When it goes red, run `scripts/smoke/run --contract` by hand against that release.
+#
+# The stub model is a local server, so the job needs no model and no secret.
 name: akm-smoke
 
 on:
@@ -15,12 +20,20 @@ permissions:
 
 jobs:
   smoke:
+    name: smoke (${{ matrix.akm }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    continue-on-error: ${{ matrix.advisory }}
     strategy:
       fail-fast: false
       matrix:
-        akm: [pinned, latest]
+        include:
+          - akm: pinned
+            flags: --contract
+            advisory: false
+          - akm: latest
+            flags: --strict
+            advisory: true
     steps:
       - uses: actions/checkout@v4
 
@@ -52,4 +65,4 @@ jobs:
           akm --version
 
       - name: scripts/smoke
-        run: scripts/smoke/run --strict
+        run: scripts/smoke/run ${{ matrix.flags }}
