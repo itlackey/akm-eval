@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import type { Case, Relation } from "./lib.ts";
+import { GENERATED, assetsDigest } from "./inputs.ts";
+import { type Case, type Embedder, INPUT_FILES, type Relation, sandboxOptions } from "./lib.ts";
 import { failureHint, hideEndpoint, runCorpus, writeNotes } from "./run.ts";
 
 const dirs: string[] = [];
@@ -32,11 +33,19 @@ const proposal = (name, extra = {}) => ({ id: "p-" + name, ref: "bundle//memorie
 const pass = (over) => ({ initiators: 2, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 }, retired: [], ...over });
 
 if (cmd === "index") {
-  if (process.env.AKM_EMBED_DETERMINISTIC !== "1") { console.error("no deterministic embedder"); process.exit(3); }
+  if (what === "slow-index") await Bun.sleep(30000);
+  if (process.env.FAKE_EMBEDDER === "real") {
+    // the real embedder: no switch for the hash one, akm's model in the config, and the model's folder in the environment
+    if (process.env.AKM_EMBED_DETERMINISTIC) { console.error("the deterministic embedder is on"); process.exit(3); }
+    if (config.embedding?.localModel !== "Xenova/bge-small-en-v1.5" || !process.env.HF_HOME) { console.error("the real embedder is not set up"); process.exit(3); }
+  } else {
+    if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
+  }
   if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
   json({ ok: true, totalEntries: notes.length });
 } else if (cmd === "improve") {
   if (args[1] !== "--strategy" || args[2] !== (process.env.FAKE_STRATEGY ?? "consolidate") || !has("--no-sync") || !has("--json-to-stdout")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (what === "slow-improve") await Bun.sleep(30000);
   if (what === "crash") { console.error(JSON.stringify({ ok: false, error: "boom", code: "BOOM" })); process.exit(70); }
   let list = [];
   let result = pass({});
@@ -72,7 +81,7 @@ function mk(id: string, relation: Relation, what: string, over: Partial<Case> = 
   return { id, relation, older: "a", safe: relation === "duplicate" ? ["a", "b"] : relation === "subsumed" ? ["b"] : [], claims: [], why: "because", a: note(`${id}-one`, what), b: note(`${id}-two`, what), ...over };
 }
 
-function setup(cases: Case[]) {
+function setup(cases: Case[], embedder: Embedder = "deterministic") {
   const root = mkdtempSync(join(tmpdir(), "consolidate-run-"));
   dirs.push(root);
   const assets = join(root, "assets");
@@ -80,9 +89,9 @@ function setup(cases: Case[]) {
   writeFileSync(join(assets, "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  const newSandbox = () => ({ ...createSandbox("consolidate-test", { keepModelKey: true }), cmd: ["bun", script] });
+  const newSandbox = () => ({ ...createSandbox("consolidate-test", sandboxOptions(embedder)), cmd: ["bun", script] });
   process.env.FAKE_COUNTER_DIR = root;
-  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", rateLimitWaitMs: 1 };
+  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", rateLimitWaitMs: 1, embedder };
   return { ctx, folders: { assets, results: join(root, "results") }, root };
 }
 
@@ -153,7 +162,7 @@ describe("runCorpus", () => {
       mk("e2", "supersedes", "crash", { safe: ["a"] }),
     ]);
     const summary = await quiet(() => runCorpus("public", ctx, folders));
-    expect(summary).toMatchObject({ eval: "consolidate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 9, n_run: 9, n_scored: 7, n_errored: 2, n_paired: 6 });
+    expect(summary).toMatchObject({ eval: "consolidate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 9, n_run: 9, n_scored: 7, n_errored: 2, timeouts: 0, n_paired: 6, status: "complete", aborted_reason: null });
     // the endpoint's names add up over every case that got as far as a run result, errored ones included: 8 cases of 2 calls
     expect(summary.served_models).toEqual({ "fake-served": 16 });
     expect(summary.metrics.unsafe).toEqual({ n: 1, of: 7, staged: 1 });
@@ -237,6 +246,10 @@ describe("runCorpus", () => {
     expect(rows[1]).toMatchObject({ outcome: "error", retried: 4 });
     expect(rows[1].error).toContain("429");
     expect(summary).toMatchObject({ n_run: 2, n_scored: 1, n_errored: 1 });
+    // the summary on disk says the run was cut short, so it is not taken for a whole one
+    expect(summary).toMatchObject({ status: "aborted", n_cases: 3 });
+    expect(summary.aborted_reason).toContain("still rate limiting after 4 new tries of a case, so the run stopped after 2 of 3 cases");
+    expect(summary.aborted_reason).toContain("429");
   });
 
   test("keeps the endpoint out of an error, in the row and on the console", async () => {
@@ -265,12 +278,22 @@ describe("runCorpus", () => {
     const { summary } = resultsOf(folders);
     expect(summary.n_run).toBe(5);
     expect(summary.n_scored).toBe(0);
+    expect(summary.status).toBe("aborted");
+    expect(summary.aborted_reason).toContain("the first 5 cases got no verdict, so the run stopped. Last error: ");
+    expect(summary.aborted_reason).toContain("boom");
   });
 
-  test("says so when akm paired none of the notes", async () => {
+  test("says so when akm paired none of the notes, and marks the summary it wrote before that as aborted", async () => {
     const { ctx, folders } = setup([mk("u1", "unrelated", "unpaired"), mk("u2", "unrelated", "unpaired")]);
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("akm paired none of the notes");
-    expect(resultsOf(folders).summary.n_paired).toBe(0);
+    const { summary } = resultsOf(folders);
+    expect(summary).toMatchObject({ n_paired: 0, n_run: 2, status: "aborted", aborted_reason: "akm paired none of the notes, so its judge never ran." });
+  });
+
+  test("a run that ends without a failure is complete, even with a limit that cuts the cases short", async () => {
+    const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older"), mk("s1", "subsumed", "retire-newer")]);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 1 }, folders));
+    expect(summary).toMatchObject({ n_run: 1, n_cases: 2, status: "complete", aborted_reason: null });
   });
 
   test("an akm that retires a note outside the pair is an error, not a retirement", async () => {
@@ -278,5 +301,135 @@ describe("runCorpus", () => {
     const summary = await quiet(() => runCorpus("public", ctx, folders));
     expect(summary).toMatchObject({ n_scored: 1, n_errored: 1 });
     expect(resultsOf(folders).rows[1].error).toContain("not one of the two notes");
+  });
+
+  test("counts the cases in which it killed akm for running too long as timeouts, apart from the other errors", async () => {
+    const { ctx, folders } = setup([mk("t1", "overlap", "slow-improve"), mk("t2", "overlap", "slow-index"), mk("e1", "overlap", "crash"), mk("d1", "duplicate", "retire-older")]);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, indexTimeoutMs: 1500, improveTimeoutMs: 1500 }, folders));
+    expect(summary).toMatchObject({ n_run: 4, n_scored: 1, n_errored: 3, timeouts: 2, status: "complete" });
+    const { rows, summary: stored } = resultsOf(folders);
+    expect(stored).toMatchObject({ n_errored: 3, timeouts: 2 });
+    expect(rows[0]).toMatchObject({ id: "t1", outcome: "error", error: "akm improve timed out after 1.5s", timed_out: true });
+    expect(rows[1]).toMatchObject({ id: "t2", outcome: "error", error: "akm index timed out after 1.5s", timed_out: true });
+    expect(rows[2].error).toContain("boom");
+    expect(rows[2]).not.toHaveProperty("timed_out");
+    expect(rows[3]).toMatchObject({ outcome: "retire" });
+    expect(rows[3]).not.toHaveProperty("timed_out");
+  });
+
+  test("a timeout is not a rate limit: the case is not tried again", async () => {
+    const { ctx, folders } = setup([mk("t1", "overlap", "slow-improve"), mk("d1", "duplicate", "retire-older")]);
+    await quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders));
+    expect(resultsOf(folders).rows[0].retried).toBeUndefined();
+  });
+
+  test("records the config it wrote with the secrets and the endpoint left out, the engine's settings, the digest of the cases, and no seed for the public cases", async () => {
+    const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")]);
+    await quiet(() => runCorpus("public", { ...ctx, hasKey: true }, folders));
+    const { summary } = resultsOf(folders);
+    expect(summary).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
+    expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, INPUT_FILES));
+    expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
+    expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "consolidate" } });
+    expect(summary.config.embedding).toBeUndefined();
+    expect(JSON.stringify(summary)).not.toContain("localhost:1/v1");
+    // every key it wrote before is still there
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics"]) expect(summary).toHaveProperty(key);
+  });
+
+  test("the digest of the cases follows the cases, and the config follows the config patch", async () => {
+    const [x, y] = [setup([mk("d1", "duplicate", "retire-older")]), setup([mk("d1", "duplicate", "retire-newer")])];
+    const overrides = { strategy: "consolidate", configPatch: { path: "p.json", sha256: "abc", patch: { engines: { consolidate: { temperature: 0.3 } } } } };
+    await quiet(() => runCorpus("public", { ...x.ctx, overrides }, x.folders));
+    await quiet(() => runCorpus("public", y.ctx, y.folders));
+    const [a, b] = [resultsOf(x.folders).summary, resultsOf(y.folders).summary];
+    expect(a.assets_sha256).not.toBe(b.assets_sha256);
+    expect(a.engine.temperature).toBe(0.3);
+    expect(a.config.engines.consolidate.temperature).toBe(0.3);
+    expect(b.engine.temperature).toBe(0);
+  });
+
+  test("a private run records the seed its assets were made from: generated.json beside them, else private/seed", async () => {
+    const { ctx, folders, root } = setup([mk("d1", "duplicate", "retire-older")]);
+    const priv = join(root, "private");
+    const assets = join(priv, "consolidate", "assets");
+    mkdirSync(assets, { recursive: true });
+    writeFileSync(join(assets, "cases.jsonl"), readFileSync(join(folders.assets, "cases.jsonl")));
+    const private_ = { assets, results: join(priv, "consolidate", "results") };
+    expect(await quiet(() => runCorpus("private", ctx, private_))).toMatchObject({ corpus: "private", seed: null });
+    writeFileSync(join(priv, "seed"), "12345\n");
+    expect(await quiet(() => runCorpus("private", { ...ctx, label: "t2" }, private_))).toMatchObject({ seed: "12345" });
+    writeFileSync(join(priv, "consolidate", GENERATED), JSON.stringify({ seed: "777", inputs_sha256: "x" }));
+    const last = await quiet(() => runCorpus("private", { ...ctx, label: "t3" }, private_));
+    expect(last.seed).toBe("777");
+    expect(JSON.parse(readFileSync(join(last.results_dir, "summary.json"), "utf8")).seed).toBe("777");
+    expect(last.assets_sha256).toBe(assetsDigest(assets, INPUT_FILES));
+  });
+
+  test("with the real embedder it sets akm's model in the config and no switch for the hash one, and records it", async () => {
+    process.env.FAKE_EMBEDDER = "real"; // the fake refuses to index without the model's folder, the model in the config, and with the switch on
+    try {
+      const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")], "real");
+      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      expect(summary).toMatchObject({ embedder: "real", n_errored: 0, status: "complete" });
+      expect(summary.config.embedding.localModel).toBe("Xenova/bge-small-en-v1.5");
+      expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(resultsOf(folders).rows[0]).toMatchObject({ outcome: "retire", retired: "a" });
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("the real embedder's config is refused by an akm run with the hash embedder's sandbox, so the two cannot be mixed up", async () => {
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")], "deterministic"); // a plain sandbox: no model folder
+      const summary = await quiet(() => runCorpus("public", { ...ctx, embedder: "real" }, folders));
+      expect(summary.n_errored).toBe(1);
+      expect(resultsOf(folders).rows[0].error).toContain("the real embedder is not set up");
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("with the real embedder, a run in which akm pairs nothing points at --embedder deterministic", async () => {
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const { ctx, folders } = setup([mk("u1", "unrelated", "unpaired")], "real");
+      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("Try --embedder deterministic");
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+});
+
+describe("the command", () => {
+  // Bun loads the .env of its working folder, and the repository's holds the model settings. So the command runs in a folder of its
+  // own and with an akm that does not exist, and never reaches a model, whatever .env says.
+  const run = (args: string[], env: Record<string, string> = {}) => {
+    const { MODEL_BASE_URL: _u, MODEL_NAME: _m, AKM_BIN: _a, ...rest } = process.env;
+    const cwd = mkdtempSync(join(tmpdir(), "consolidate-run-"));
+    dirs.push(cwd);
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd, env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+  const model = { MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" };
+
+  test("says what is wrong with --embedder, and exits 2", () => {
+    expect(run(["--embedder", "fake"], model)).toMatchObject({ code: 2 });
+    expect(run(["--embedder", "fake"], model).err).toContain('--embedder must be deterministic or real, not "fake"');
+    expect(run(["--pool", "--embedder", ""], model).err).toContain("--embedder must be deterministic or real");
+  });
+
+  test("takes --embedder real or deterministic, with the cases or the pool, and goes on to the akm check", () => {
+    for (const args of [["--embedder", "real"], ["--embedder", "deterministic"], ["--pool", "--embedder", "real"]]) {
+      expect(run(args, model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    }
+  });
+
+  test("lists --embedder in its usage", () => {
+    expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
+    expect(run(["--help"]).out).toContain("made from other public cases");
   });
 });

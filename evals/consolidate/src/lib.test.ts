@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SEMANTIC_MODEL, createSandbox, removeSandbox, semanticConfig } from "../../../lib/akm/akm.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, RELATIONS, type Relation, type Row, claimProblems, consolidateConfig, errorRow, metrics, noteAges, parseCases, rowFromRun, selectCases } from "./lib.ts";
+import { assetsDigest, readGenerated } from "./inputs.ts";
+import { type Case, EMBEDDER_ENV, INPUT_FILES, RELATIONS, type Relation, type Row, claimProblems, consolidateConfig, embedderEnv, errorRow, isTimeout, metrics, noteAges, parseCases, parseEmbedder, rowFromRun, sandboxOptions, selectCases, timeoutMessage, withEmbedder } from "./lib.ts";
 
 const note = (name: string, text = `---\ndescription: ${name}\n---\n# ${name}\n\nA claim.\n`) => ({ name, text });
 
@@ -171,6 +173,75 @@ describe("consolidateConfig", () => {
   test("names the key by variable and never holds it", () => {
     expect(consolidateConfig("https://api.example.com/v1", "m", true).engines.consolidate.apiKey).toBe("$MODEL_API_KEY");
   });
+
+  test("asks for temperature 0 and no thinking, so a run does not depend on akm's default sampling", () => {
+    expect(consolidateConfig("http://localhost:8080/v1", "m", false).engines.consolidate).toMatchObject({ temperature: 0, enableThinking: false });
+  });
+
+  test("the deterministic embedder (the default) sets no embedding model, and the real one sets it as lib/akm's semanticConfig does", () => {
+    const hash = consolidateConfig("http://localhost:8080/v1", "m", false);
+    expect(hash.embedding).toBeUndefined();
+    expect(consolidateConfig("http://localhost:8080/v1", "m", false, "deterministic")).toEqual(hash);
+    const real = consolidateConfig("http://localhost:8080/v1", "m", false, "real");
+    expect(real.semanticSearchMode).toBe("auto");
+    expect(real.embedding).toEqual({ localModel: SEMANTIC_MODEL, queryTimeoutMs: semanticConfig().embedding.queryTimeoutMs });
+    expect({ ...real, embedding: undefined }).toEqual({ ...hash, embedding: undefined });
+  });
+});
+
+describe("the embedder", () => {
+  test("parseEmbedder takes deterministic (the default) and real, and ends the run with a message for anything else", () => {
+    const fail = (message: string): never => {
+      throw new Error(message);
+    };
+    expect(parseEmbedder(undefined, fail)).toBe("deterministic");
+    expect(parseEmbedder("deterministic", fail)).toBe("deterministic");
+    expect(parseEmbedder("real", fail)).toBe("real");
+    expect(() => parseEmbedder("fake", fail)).toThrow('--embedder must be deterministic or real, not "fake"');
+    expect(() => parseEmbedder("", fail)).toThrow("--embedder must be deterministic or real");
+  });
+
+  test("the deterministic embedder is akm's switch in the environment, and the real one sets nothing", () => {
+    expect(embedderEnv("deterministic")).toEqual(EMBEDDER_ENV);
+    expect(EMBEDDER_ENV).toEqual({ AKM_EMBED_DETERMINISTIC: "1" });
+    expect(embedderEnv("real")).toEqual({});
+  });
+
+  test("the real embedder opens a semantic sandbox, which points akm at the model kept in .cache/, and the deterministic one a plain sandbox", () => {
+    expect(sandboxOptions("real")).toEqual({ keepModelKey: true, semantic: true });
+    expect(sandboxOptions("deterministic")).toEqual({ keepModelKey: true, semantic: false });
+    const [real, hash] = [createSandbox("consolidate-test", sandboxOptions("real")), createSandbox("consolidate-test", sandboxOptions("deterministic"))];
+    try {
+      expect(real.env.HF_HOME).toMatch(/\.cache[\\/]models$/);
+      expect(hash.env.HF_HOME).toBeUndefined();
+      expect(real.env.AKM_EMBED_DETERMINISTIC).toBeUndefined(); // the sandbox never forwards the caller's AKM_ settings
+    } finally {
+      removeSandbox(real);
+      removeSandbox(hash);
+    }
+  });
+
+  test("withEmbedder turns semantic search on for either", () => {
+    expect(withEmbedder({}, "deterministic")).toEqual({ semanticSearchMode: "auto" });
+    expect(withEmbedder({ other: 1 }, "real")).toEqual({ other: 1, semanticSearchMode: "auto", embedding: semanticConfig().embedding });
+  });
+});
+
+describe("timeoutMessage, isTimeout, errorRow", () => {
+  test("a timeout message is the one lib/akm's runAkmJson throws, and nothing else reads as a timeout", () => {
+    expect(timeoutMessage("improve", 1_800_000)).toBe("akm improve timed out after 1800s");
+    expect(timeoutMessage("index", 700)).toBe("akm index timed out after 0.7s");
+    expect(isTimeout("akm index timed out after 120s")).toBe(true);
+    expect(isTimeout("akm proposal timed out after 0.7s")).toBe(true);
+    expect(isTimeout("akm improve failed (exit 70): the request timed out after 30s")).toBe(false);
+    expect(isTimeout("akm paired the notes but its judge gave no verdict (akm said: request timed out)")).toBe(false);
+  });
+
+  test("an error row says it timed out only when it did", () => {
+    const c = make("d1", "duplicate");
+    expect(errorRow(c, "boom", 1.5)).not.toHaveProperty("timed_out");
+    expect(errorRow(c, "akm index timed out after 120s", 120, true)).toMatchObject({ outcome: "error", error: "akm index timed out after 120s", timed_out: true });
+  });
 });
 
 describe("rowFromRun", () => {
@@ -333,6 +404,42 @@ describe("generate", () => {
       const unrelated = made.filter((c) => c.relation === "unrelated").map(cosine);
       expect(unrelated.filter((x) => x > 0.94)).toHaveLength(5);
       expect(unrelated.filter((x) => x < 0.6)).toHaveLength(5);
+      // it says which seed and which public cases the set was made from, and leaves no temporary folder behind
+      expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsDigest(join(import.meta.dir, "..", "assets"), INPUT_FILES) });
+      expect(readdirSync(dir).sort()).toEqual(["assets", "generated.json", "map.json"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  const generate = (seed: string, out: string) => Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", seed, "--out", out], { stdout: "pipe", stderr: "pipe" });
+
+  test("a new run replaces the old assets, map and marker together", () => {
+    const dir = mkdtempSync(join(tmpdir(), "consolidate-generate-"));
+    try {
+      expect(generate("1", dir).exitCode).toBe(0);
+      writeFileSync(join(dir, "assets", "left-over.txt"), "from the first run");
+      const first = readFileSync(join(dir, "assets", "cases.jsonl"), "utf8");
+      expect(generate("2", dir).exitCode).toBe(0);
+      expect(readFileSync(join(dir, "assets", "cases.jsonl"), "utf8")).not.toBe(first);
+      expect(readdirSync(join(dir, "assets"))).toEqual(["cases.jsonl"]);
+      expect(readGenerated(dir)?.seed).toBe("2");
+      expect(JSON.parse(readFileSync(join(dir, "map.json"), "utf8")).seed).toBe("2"); // the map is the second run's too
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a run that fails leaves the previous assets, map and marker as they were, and no temporary folder", () => {
+    const dir = mkdtempSync(join(tmpdir(), "consolidate-generate-"));
+    try {
+      expect(generate("1", dir).exitCode).toBe(0);
+      const before = Object.fromEntries(["assets/cases.jsonl", "map.json", "generated.json"].map((f) => [f, readFileSync(join(dir, f), "utf8")]));
+      const failed = generate("not-a-seed", dir); // lib/rewrite refuses it after the work folder is made
+      expect(failed.exitCode).not.toBe(0);
+      expect(failed.stderr.toString()).toContain("--seed must be a non-negative integer");
+      expect(Object.fromEntries(Object.keys(before).map((f) => [f, readFileSync(join(dir, f), "utf8")]))).toEqual(before);
+      expect(readdirSync(dir).sort()).toEqual(["assets", "generated.json", "map.json"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

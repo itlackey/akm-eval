@@ -2,10 +2,10 @@
 // consolidate: runs akm's consolidate on pairs of notes whose right outcome is known, with the model under test as
 // its engine, and counts the notes it proposes to retire that held a claim the other lacked. See ../README.md.
 //
-//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
-//   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
@@ -13,14 +13,16 @@ import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { clusterRows, loadPool, type Pool, type PoolMetrics, POOL_STRATEGY, poolImproveArgs, scorePool, writePoolNotes } from "./pool.ts";
-import { type Case, EMBEDDER_ENV, RELATIONS, type Row, consolidateConfig, errorRow, metrics, noteAges, parseCases, pct, rowFromRun, selectCases } from "./lib.ts";
+import { type RunInputs, assetsDigest, privateAssetsProblem, privateSeed, runInputs } from "./inputs.ts";
+import { clusterRows, loadPool, type Pool, type PoolMetrics, POOL_STRATEGY, poolImproveArgs, poolFiles, scorePool, writePoolNotes } from "./pool.ts";
+import { type Case, EMBEDDER_OPTIONS, type Embedder, INPUT_FILES, RELATIONS, type Row, consolidateConfig, embedderEnv, embedderUsage, errorRow, isTimeout, metrics, noteAges, parseCases, parseEmbedder, pct, rowFromRun, sandboxOptions, selectCases, timeoutMessage } from "./lib.ts";
 
 const NAME = "consolidate";
 const STRATEGY = "consolidate"; // the strategy akm ships for consolidate alone
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 const INDEX_TIMEOUT_MS = 2 * 60_000;
+const REAL_INDEX_TIMEOUT_MS = 30 * 60_000; // the real embedder loads its model to index, and the first run downloads it (133 MB)
 const IMPROVE_TIMEOUT_MS = 30 * 60_000; // up to three model calls on a slow local model
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
 const RATE_LIMIT_TRIES = 4; // times a case is tried again when the endpoint rate limits it
@@ -30,17 +32,19 @@ const POOL_DIR = join(EVAL_DIR, "assets", "pool");
 const POOL_DEFAULT_BUDGET_MS = 2 * 60 * 60_000; // akm improve's own wall-clock budget when --timeout-ms is not given
 const POOL_KILL_SLACK_MS = 10 * 60_000; // how long past akm's budget the eval waits before it kills akm
 
-const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
-       evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME]
+const USAGE = `Usage: evals/consolidate/run [--corpus public|private|all] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+       evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME]
 
 Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.
 
   --corpus  public (default) reads assets/. private reads private/consolidate/assets/, made by
-            ./generate-assets. all runs both and prints the two results side by side.
+            ./generate-assets; the run stops if they are missing or were made from other public cases than the ones in assets/.
+            all runs both and prints the two results side by side.
   --limit   run N cases, taking the first of each relation in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${embedderUsage}
 ${overridesUsage(STRATEGY)}
 ${modelUsage}
 ${akmUsage}
@@ -54,17 +58,25 @@ Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
 
 type Corpus = "public" | "private";
 
-interface Summary {
+interface Summary extends RunInputs {
   eval: string;
   corpus: Corpus;
   label: string;
   date: string;
+  /**
+   * "aborted" when the run ended in a failure, with the reason: the endpoint kept rate limiting, no case got a verdict, or akm paired none
+   * of the notes. The counts are then those of the cases that ran, and the summary is not a result.
+   */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   git_commit: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** How akm embedded the notes to find pairs: its deterministic word-hash embedder, or its built-in model. */
+  embedder: Embedder;
   limit: number | null;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
@@ -73,6 +85,8 @@ interface Summary {
   n_run: number;
   n_scored: number;
   n_errored: number;
+  /** Of the errored cases, the ones in which the eval killed akm for running past its time limit. */
+  timeouts: number;
   n_paired: number;
   served_models: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   metrics: ReturnType<typeof metrics>;
@@ -111,7 +125,7 @@ function printSummary(s: Summary): void {
   console.log(`  unsafe retirements  ${m.unsafe.n} of ${m.unsafe.of} cases, ${m.unsafe.staged} of them staged for unattended retirement`);
   console.log(`  retire precision    ${cell(m.precision.safe, m.precision.retired, m.precision.value)}`);
   console.log(`  retire recall       ${cell(m.recall.retired_safe, m.recall.of, m.recall.value)}  of the cases with a safe side`);
-  console.log(`  errored             ${s.n_errored}`);
+  console.log(`  errored             ${s.n_errored}${s.timeouts > 0 ? `, ${s.timeouts} of them timeouts` : ""}`);
   const served = Object.entries(s.served_models).map(([name, calls]) => `${name} (${calls} calls)`);
   if (served.length > 0) console.log(`  served as           ${served.join(", ")}`);
   const rows: string[][] = [["relation", "cases", "paired", "retired safe", "retired unsafe", "kept"]];
@@ -135,6 +149,7 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["retire precision", precision(a), precision(b)],
     ["retire recall", recall(a), recall(b)],
     ["errored", String(a.n_errored), String(b.n_errored)],
+    ["timeouts", String(a.timeouts), String(b.timeouts)],
     ...RELATIONS.map((r): [string, string, string] => {
       const per = (s: Summary) => {
         const k = s.metrics.classes[r];
@@ -168,13 +183,35 @@ export function failureHint(stderr: string): string {
   return line ? ` (akm said: ${line.trim().slice(0, 150)})` : "";
 }
 
-type Context = { newSandbox: () => Sandbox; baseUrl: string; model: string; hasKey: boolean; version: string; label: string; limit?: number; rateLimitWaitMs?: number; overrides?: Overrides };
+type Context = {
+  newSandbox: () => Sandbox;
+  baseUrl: string;
+  model: string;
+  hasKey: boolean;
+  version: string;
+  label: string;
+  limit?: number;
+  rateLimitWaitMs?: number;
+  overrides?: Overrides;
+  /** How akm embeds the notes. The sandbox newSandbox makes has to match it: see sandboxOptions. Default: deterministic. */
+  embedder?: Embedder;
+  /** The time limits of the akm commands, in milliseconds, in place of the eval's own: for tests. */
+  indexTimeoutMs?: number;
+  improveTimeoutMs?: number;
+};
 
 /** akm's errors name the URL it called, and results get shared, so the endpoint is written as <MODEL_BASE_URL>. */
 export function hideEndpoint(text: string, baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return base ? text.split(base).join("<MODEL_BASE_URL>") : text;
 }
+
+const embedderOf = (ctx: { embedder?: Embedder }): Embedder => ctx.embedder ?? "deterministic";
+/** The real embedder loads its model to index, and the first run downloads it, so it gets longer than the hash one. */
+const indexTimeout = (ctx: Context): number => ctx.indexTimeoutMs ?? (embedderOf(ctx) === "real" ? REAL_INDEX_TIMEOUT_MS : INDEX_TIMEOUT_MS);
+
+/** The akm config a run writes: the eval's own, with the config patch merged into it. summary.json records it. */
+const effectiveConfig = (ctx: Context): Record<string, any> => patchedConfig(consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey, embedderOf(ctx)), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /** akm says so when the endpoint turns a call away for sending too many. */
 const isRateLimited = (text: string): boolean => /rate.?limit|\(429\)/i.test(text);
@@ -186,18 +223,20 @@ async function tryCase(c: Case, ctx: Context): Promise<{ row: Row; rateLimited: 
   const sandbox = ctx.newSandbox();
   try {
     const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-    writeConfig(sandbox, patchedConfig(consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey), overrides));
-    Object.assign(sandbox.env, EMBEDDER_ENV);
+    const improveTimeoutMs = ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS;
+    writeConfig(sandbox, effectiveConfig(ctx));
+    Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
     writeNotes(sandbox, c);
-    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: INDEX_TIMEOUT_MS });
-    const improve = await runAkm(sandbox, ["improve", "--strategy", overrides.strategy, "--no-sync", "--json-to-stdout", "--format", "json"], { timeoutMs: IMPROVE_TIMEOUT_MS });
+    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: indexTimeout(ctx) });
+    const improve = await runAkm(sandbox, ["improve", "--strategy", overrides.strategy, "--no-sync", "--json-to-stdout", "--format", "json"], { timeoutMs: improveTimeoutMs });
+    if (improve.timedOut) throw new Error(timeoutMessage("improve", improveTimeoutMs));
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
-    const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
+    const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: ctx.indexTimeoutMs ?? INDEX_TIMEOUT_MS });
     const row = rowFromRun(c, JSON.parse(improve.stdout), proposals, seconds());
     return { row: row.error ? { ...row, error: hideEndpoint(row.error + failureHint(improve.stderr), ctx.baseUrl) } : row, rateLimited: row.outcome === "error" && isRateLimited(improve.stderr) };
   } catch (e) {
     const message = (e as Error).message.slice(0, 300);
-    return { row: errorRow(c, hideEndpoint(message, ctx.baseUrl), seconds()), rateLimited: isRateLimited(message) };
+    return { row: errorRow(c, hideEndpoint(message, ctx.baseUrl), seconds(), isTimeout(message)), rateLimited: isRateLimited(message) };
   } finally {
     removeSandbox(sandbox);
   }
@@ -232,6 +271,7 @@ export async function runCorpus(
   const { assets, results: resultsParent } = folders;
   const all = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl"));
   const cases = selectCases(all, ctx.limit);
+  const config = effectiveConfig(ctx);
   const dir = makeResultsDir(resultsParent, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
@@ -267,21 +307,35 @@ export async function runCorpus(
 
   const errored = rows.filter((r) => r.outcome === "error").length;
   const paired = rows.filter((r) => r.outcome !== "error" && r.paired).length;
+  const scored = rows.length - errored;
+  // Why the run ends in a failure, if it does. The summary says so before the run fails, so a cut-short run is not taken for a whole one.
+  const stop = limited
+    ? { reason: `the endpoint was still rate limiting after ${RATE_LIMIT_TRIES} new tries of a case, so the run stopped after ${rows.length} of ${cases.length} cases. Last error: ${aborted}`, hint: "Wait and run it again, or use an endpoint with room." }
+    : aborted
+      ? { reason: `the first ${GIVE_UP_AFTER} cases got no verdict, so the run stopped. Last error: ${aborted}`, hint: "Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm is 0.9.26." }
+      : scored > 0 && paired === 0
+        ? { reason: "akm paired none of the notes, so its judge never ran.", hint: embedderOf(ctx) === "real" ? "Consolidate pairs notes by the cosine of their embeddings, and the real embedder may put these below akm's floor, or akm could not load its model. Try --embedder deterministic." : "Consolidate needs semantic search, which this eval gets from akm's deterministic embedder (AKM_EMBED_DETERMINISTIC). Does this akm still have it?" }
+        : null;
   const summary: Summary = {
     eval: NAME,
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
+    status: stop ? "aborted" : "complete",
+    aborted_reason: stop?.reason ?? null,
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
+    embedder: embedderOf(ctx),
     limit: ctx.limit ?? null,
     ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
+    ...runInputs(config, (text) => hideEndpoint(text, ctx.baseUrl), { dir: assets, files: INPUT_FILES }, corpus === "private" ? privateSeed(assets) : null),
     n_cases: all.length,
     n_run: rows.length,
-    n_scored: rows.length - errored,
+    n_scored: scored,
     n_errored: errored,
+    timeouts: rows.filter((r) => r.timed_out).length,
     n_paired: paired,
     served_models: servedModels(rows),
     metrics: metrics(rows),
@@ -290,25 +344,27 @@ export async function runCorpus(
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (limited) fail(`the endpoint was still rate limiting after ${RATE_LIMIT_TRIES} new tries of a case, so the run stopped after ${rows.length} of ${cases.length} cases. Last error: ${aborted}\nWait and run it again, or use an endpoint with room.`, 1);
-  if (aborted) fail(`the first ${GIVE_UP_AFTER} cases got no verdict, so the run stopped. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm is 0.9.26.`, 1);
-  if (summary.n_scored > 0 && paired === 0) fail("akm paired none of the notes, so its judge never ran. Consolidate needs semantic search, which this eval gets from akm's deterministic embedder (AKM_EMBED_DETERMINISTIC). Does this akm still have it?", 1);
+  if (stop) fail(`${stop.reason}\n${stop.hint}`, 1);
   return summary;
 }
 
 type PoolContext = Context & { overrides: Overrides; timeoutMs?: number };
 
-interface PoolSummary {
+interface PoolSummary extends RunInputs {
   eval: string;
   mode: "pool";
   corpus: "public";
   label: string;
   date: string;
+  /** "aborted" when the run failed (see `error`), "complete" otherwise. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   git_commit: string;
   model: string;
   akm_version: string;
   akm_bin: string;
   akm_build: string | null;
+  embedder: Embedder;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
   config_patch: { path: string; sha256: string } | null;
@@ -320,6 +376,8 @@ interface PoolSummary {
   n_run: number;
   n_scored: number;
   n_errored: number;
+  /** 1 when the errored run is one in which the eval killed akm for running past its time limit, else 0. */
+  timeouts: number;
   n_paired: number; // pairs akm's judge looked at
   seconds: number; // wall time of the improve run
   served_models: Record<string, number>;
@@ -358,25 +416,30 @@ function printPool(s: PoolSummary): void {
  * another), the proposals read back and scored against the labels. Not tried again on a rate limit: the run is one long call
  * sequence, and the calls the endpoint turned away show in `calls.failures`.
  */
-export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR), resultsParent = join(EVAL_DIR, "results")): Promise<PoolSummary> {
+export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR), resultsParent = join(EVAL_DIR, "results"), poolDir = POOL_DIR): Promise<PoolSummary> {
+  const config = effectiveConfig(ctx);
   const dir = makeResultsDir(resultsParent, ctx.label);
   console.log(`${NAME} --pool: ${Object.keys(pool.texts).length} notes in ${pool.clusters.length} clusters, one improve run (${ctx.overrides.strategy})`);
   const sandbox = ctx.newSandbox();
   let result: ReturnType<typeof scorePool>;
   let improveJson: unknown = null;
   let seconds = 0;
+  let timedOut = false;
   try {
-    writeConfig(sandbox, patchedConfig(consolidateConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides));
-    Object.assign(sandbox.env, EMBEDDER_ENV);
+    const improveTimeoutMs = ctx.improveTimeoutMs ?? (ctx.timeoutMs ?? POOL_DEFAULT_BUDGET_MS) + POOL_KILL_SLACK_MS;
+    writeConfig(sandbox, config);
+    Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
     writePoolNotes(sandbox, pool);
-    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: INDEX_TIMEOUT_MS });
-    const improve = await runAkm(sandbox, poolImproveArgs(ctx.overrides.strategy, ctx.timeoutMs), { timeoutMs: (ctx.timeoutMs ?? POOL_DEFAULT_BUDGET_MS) + POOL_KILL_SLACK_MS });
+    await runAkmJson(sandbox, ["index", "--full"], { timeoutMs: indexTimeout(ctx) });
+    const improve = await runAkm(sandbox, poolImproveArgs(ctx.overrides.strategy, ctx.timeoutMs), { timeoutMs: improveTimeoutMs });
     seconds = Number((improve.ms / 1000).toFixed(1));
+    if (improve.timedOut) throw new Error(timeoutMessage("improve", improveTimeoutMs));
     if (improve.code !== 0) throw new Error(`akm improve failed (exit ${improve.code}): ${improve.stderr.trim().slice(-300)}`);
     improveJson = JSON.parse(improve.stdout);
-    const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: INDEX_TIMEOUT_MS });
+    const proposals = await runAkmJson(sandbox, ["proposal", "list", "--detail", "full"], { timeoutMs: ctx.indexTimeoutMs ?? INDEX_TIMEOUT_MS });
     result = scorePool(pool, improveJson, proposals);
   } catch (e) {
+    timedOut = isTimeout((e as Error).message);
     result = { error: hideEndpoint((e as Error).message.slice(0, 300), ctx.baseUrl), metrics: null, retirements: [], served_models: {} };
   } finally {
     removeSandbox(sandbox);
@@ -387,11 +450,15 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
     corpus: "public",
     label: ctx.label,
     date: new Date().toISOString(),
+    status: result.error ? "aborted" : "complete",
+    aborted_reason: result.error ?? null,
     git_commit: gitCommit(),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
+    embedder: embedderOf(ctx),
     ...overrideSummary(ctx.overrides),
+    ...runInputs(config, (text) => hideEndpoint(text, ctx.baseUrl), { dir: poolDir, files: poolFiles(poolDir) }, null),
     timeout_ms: ctx.timeoutMs ?? null,
     limit: null,
     n_notes: Object.keys(pool.texts).length,
@@ -400,6 +467,7 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
     n_run: 1,
     n_scored: result.error ? 0 : 1,
     n_errored: result.error ? 1 : 0,
+    timeouts: timedOut ? 1 : 0,
     n_paired: result.metrics?.pairs.judged ?? 0,
     seconds,
     served_models: result.served_models,
@@ -417,9 +485,9 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -434,6 +502,7 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const embedder = parseEmbedder(values.embedder, fail);
   const overrides = parseOverrides(values, values.pool ? POOL_STRATEGY : STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
   const timeoutMs = values["timeout-ms"] === undefined ? undefined : Number(values["timeout-ms"]);
@@ -442,16 +511,15 @@ async function main(): Promise<void> {
   if (values.pool && (corpus !== "public" || limit !== undefined)) fail("--pool runs the public pool: leave out --corpus private, --corpus all and --limit");
 
   for (const c of corpora) {
-    if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.jsonl"))) {
-      fail(`the private assets are missing (private/${NAME}/assets/cases.jsonl). Make them with: ./generate-assets --only ${NAME}`);
-    }
+    const problem = c === "private" ? privateAssetsProblem(NAME, join(ROOT, "private", NAME), "cases.jsonl", () => assetsDigest(join(EVAL_DIR, "assets"), INPUT_FILES)) : null;
+    if (problem) fail(problem);
   }
   useAkm(values, fail);
   const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
-  const newSandbox = () => createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
+  const newSandbox = () => createSandbox(NAME, sandboxOptions(embedder)); // the config names the model key as $MODEL_API_KEY; the real embedder's model is kept in .cache/
   const probe = newSandbox();
   let version: string;
   try {
@@ -460,7 +528,7 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
 
-  const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides };
+  const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides, embedder };
   if (values.pool) {
     await repeatRuns(repeat, label, (runLabel) => runPool({ ...ctx, label: runLabel, overrides, timeoutMs }));
     return;

@@ -9,12 +9,16 @@
 // distill evals check theirs: every file is where its item says, each deciding claim is still in its note and in no other, each
 // planted defect is still there and only that one, each exact fix still applies once, and each distill case still matches the
 // facts and claims it did.
+//
+// It works in a temporary folder, private/nightly/.new, and moves assets/ and map.json into place only when the checks have
+// passed, with generated.json (the seed and the digest of the public night) beside them. A failed run leaves the previous private
+// night, map and generated.json as they were. `run --corpus private` stops when generated.json is missing or does not match the public night.
 
-import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { assetsDigest, generateInto } from "../../consolidate/src/inputs.ts";
 import { lessonFile, memoryBody, mentions } from "../../distill/src/lib.ts";
-import { type DistillItem, type Night, loadNight, nightProblems } from "./lib.ts";
+import { type DistillItem, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -52,40 +56,36 @@ function rewrite(args: string[]): string {
   return p.stdout.toString().trim();
 }
 
-function main(): void {
+function main(): number {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
   if (values.seed === undefined || values.out === undefined) {
     console.error("Usage: evals/nightly/generate --seed N --out private/nightly");
-    process.exit(2);
+    return 2;
   }
+  const seed = values.seed;
   const out = resolve(values.out);
-  const assets = join(out, "assets");
-  const map = join(out, "map.json");
-  const clear = () => {
-    rmSync(assets, { recursive: true, force: true });
-    rmSync(map, { force: true });
-  };
 
-  clear();
   const publicAssets = join(EVAL_DIR, "assets");
   const publicNight = loadNight(publicAssets);
-  rewrite(["--seed", values.seed, "--map", map, join(publicAssets, "library"), join(assets, "library")]);
-  const summary = rewrite(["--map", map, "--min-count", "1000000", join(publicAssets, "items.jsonl"), join(assets, "items.jsonl")]);
-
-  let problems: string[];
-  try {
-    const night = loadNight(assets);
-    problems = [...nightProblems(night), ...checkRewrite(publicNight, night)];
-  } catch (e) {
-    problems = [(e as Error).message];
-  }
+  let summary = "";
+  // Everything is made in a temporary folder and moved into place when it has passed the checks, so a failure leaves the previous private night as it was.
+  const problems = generateInto(out, seed, assetsDigest(publicAssets, nightFiles(publicAssets)), (stage) => {
+    rewrite(["--seed", seed, "--map", stage.map, join(publicAssets, "library"), join(stage.assets, "library")]);
+    summary = rewrite(["--map", stage.map, "--min-count", "1000000", join(publicAssets, "items.jsonl"), join(stage.assets, "items.jsonl")]);
+    try {
+      const night = loadNight(stage.assets);
+      return [...nightProblems(night), ...checkRewrite(publicNight, night)];
+    } catch (e) {
+      return [(e as Error).message];
+    }
+  });
   if (problems.length > 0) {
-    clear();
     console.error(`nightly: the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} the night depends on, so nothing was written. Try another seed.\n  ${problems.join("\n  ")}`);
-    process.exit(1);
+    return 1;
   }
   console.log(`nightly: ${publicNight.items.length} items written to ${join(values.out, "assets")}`);
   console.log(summary.split("\n").pop());
+  return 0;
 }
 
-if (import.meta.main) main();
+if (import.meta.main) process.exit(main());

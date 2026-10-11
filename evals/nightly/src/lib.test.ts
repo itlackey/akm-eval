@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { semanticConfig } from "../../../lib/akm/akm.ts";
 import { buildNight, itemsText } from "./build.ts";
 import { splitFrontmatter } from "../../reflect/src/lib.ts";
 import {
@@ -18,6 +19,7 @@ import {
   describeAction,
   loadNight,
   metrics,
+  nightFiles,
   nightProblems,
   nightlyConfig,
   outsideChanges,
@@ -152,6 +154,30 @@ describe("noteAges, nightlyConfig", () => {
     expect(c.defaults).toEqual({ llmEngine: "nightly" });
     expect(c.semanticSearchMode).toBe("auto");
     expect(c.improve).toBeUndefined();
+  });
+
+  test("the engine asks for temperature 0 and no thinking, so a night does not depend on akm's default sampling", () => {
+    expect(nightlyConfig("http://localhost:8080/v1", "m", false).engines.nightly).toMatchObject({ temperature: 0, enableThinking: false });
+  });
+
+  test("the deterministic embedder (the default) sets no embedding model, and the real one sets it as lib/akm's semanticConfig does", () => {
+    const hash = nightlyConfig("http://localhost:8080/v1", "m", false);
+    expect(hash.embedding).toBeUndefined();
+    expect(nightlyConfig("http://localhost:8080/v1", "m", false, "deterministic")).toEqual(hash);
+    const real = nightlyConfig("http://localhost:8080/v1", "m", false, "real");
+    expect(real.semanticSearchMode).toBe("auto");
+    expect(real.embedding).toEqual(semanticConfig().embedding);
+    expect(real.embedding.localModel).toBe("Xenova/bge-small-en-v1.5");
+    expect({ ...real, embedding: undefined }).toEqual({ ...hash, embedding: undefined });
+  });
+});
+
+describe("nightFiles", () => {
+  test("is items.jsonl and every file of the library, relative to the assets, so the digest of the public night is the same in any checkout", () => {
+    const files = nightFiles(join(import.meta.dir, "..", "assets"));
+    expect(files[0]).toBe("items.jsonl");
+    expect(files).toHaveLength(1 + night.files.size);
+    expect(files.slice(1)).toEqual([...night.files.keys()].sort().map((p) => `library/${p}`));
   });
 });
 

@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
-import { type Claim, EMBEDDER_ENV, type Relation, type Side, RELATIONS, claimProblems, noteAges } from "../../consolidate/src/lib.ts";
+import { type Claim, EMBEDDER_ENV, type Embedder, type Relation, type Side, RELATIONS, claimProblems, noteAges, withEmbedder } from "../../consolidate/src/lib.ts";
 import { type Class as DistillClass, type Expect, checkLesson, lessonFile, lessonText, memoryBody } from "../../distill/src/lib.ts";
 import { type Case as ReflectCase, type CaseClass, type Field, CLASSES, addedTitle, caseProblems, refOf, score as scoreReflect, splitFrontmatter } from "../../reflect/src/lib.ts";
 
@@ -197,11 +197,21 @@ export function selectItems(items: Item[], limit?: number): Item[] {
 
 // --- What the night runs ---------------------------------------------------------------------------------------------
 
-/** The akm config of a night: one LLM engine, the model under test, for every process, and semantic search on, which the pair pass needs. The strategy is akm's own `default`. */
-export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
+/**
+ * The akm config of a night: one LLM engine, the model under test, for every process, and semantic search on, which the pair pass needs.
+ * The strategy is akm's own `default`. Requests use temperature 0 and ask for no thinking, as distill's and extract's do, so a night
+ * does not depend on akm's default sampling. The embedder is the deterministic one unless `real` says akm's built-in model.
+ */
+export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean, embedder: Embedder = "deterministic"): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, "nightly");
-  config.semanticSearchMode = "auto";
-  return config;
+  config.engines.nightly.temperature = 0;
+  config.engines.nightly.enableThinking = false;
+  return withEmbedder(config, embedder);
+}
+
+/** The files of an assets folder that a night reads, relative to it: items.jsonl and the library. assets_sha256 and generated.json digest them. */
+export function nightFiles(assets: string): string[] {
+  return ["items.jsonl", ...listFiles(join(assets, "library")).map((p) => `library/${p}`)];
 }
 
 /** The text of each file under `dir`, by path. */
