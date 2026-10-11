@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""bakeoff: how well a model does the work akm asks a model to do. See ../README.md.
+"""bakeoff: how well a model does a frozen copy of the work akm asks a model to do. See ../README.md.
 
-The suite is 120 cases across 13 of akm's model-backed processes. Each case builds a prompt the way
-akm does, sends it to an OpenAI-compatible chat endpoint, and scores the reply with deterministic
-checks. No judge model is used and akm does not need to be installed.
+The suite is 120 cases across 13 model-backed jobs. Each case builds a prompt from a snapshot of akm's
+prompts (PROMPTS_VERSION), sends it to an OpenAI-compatible chat endpoint, and scores the reply with
+deterministic checks. akm is never run, so the suite measures the model on that snapshot and cannot
+register a change to akm's own prompts, parsers or schemas. No judge model is used. The jobs akm no
+longer asks a model for are the legacy cases, which run only with --include-legacy.
 
     python3 bakeoff.py run --corpus public|private|all [--limit N] [--tier compact|deep]
-                           [--label NAME] [--models FILE]
+                           [--label NAME] [--model ID]... [--models FILE] [--repeat N]
+                           [--include-legacy]
     python3 bakeoff.py verify
     python3 bakeoff.py check-assets ASSETS_DIR [--against PUBLIC_ASSETS_DIR]
 
 The cases (which files each one reads, what a correct reply holds) are in assets/cases.json. The
-prompts and the scorers are here. Python 3.10 or newer, and PyYAML for --models.
+prompts and the scorers are here. Python 3.10 or newer, and PyYAML.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -29,6 +33,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import yaml
@@ -44,6 +49,11 @@ CORPUS = EVAL_DIR / "assets"
 
 TIERS = ("compact", "deep")
 TRACKS = ("focused", "legacy", "production")
+
+# The akm the prompts below were taken from, written to every summary.json. Nothing in this repository says
+# which release that was; the architecture pages the cases read (assets/public-akm) are nearly all 0.9.15's, so
+# the prompts are called 0.9.15-style. Change it only when the prompts are redone from another release.
+PROMPTS_VERSION = "0.9.15-style"
 
 PROCESSES = (
     "memory_consolidation",
@@ -61,7 +71,29 @@ PROCESSES = (
     "proposal_triage",
 )
 
-FENCE = re.compile(r"^\s*```(?:json|markdown|md)?\s*|\s*```\s*$", re.I | re.S)
+# The legacy cases: jobs akm no longer asks a model for, or asks for in another form. A model's score on them says
+# little about today's akm, so run skips them unless --include-legacy and verify does not require them. This is not
+# the "legacy" track, which is the original bake-off's cases and which stays in the default run. The README says why.
+LEGACY_JOBS = {
+    "graph_extraction": "akm 0.9.17 removed the entity graph, so akm no longer asks a model for one",
+    "metadata_enhance": "reports/retired-evals.md records that metadata enrichment was removed in akm 0.9.17 with the graph; not checked against akm's changelog",
+}
+# Reflect has edited only the frontmatter since akm 0.9.25-alpha.3. These cases ask for a rewritten body.
+REFLECT_BODY_VARIANTS = ("revision", "deep_reflect", "production_reflect")
+REFLECT_BODY_REASON = "reflect has changed only the frontmatter since akm 0.9.25-alpha.3, and these cases ask for a rewritten body"
+
+
+def legacy_reason(case):
+    """Why a case is a legacy case, or None for a current one."""
+    if case["process"] in LEGACY_JOBS:
+        return LEGACY_JOBS[case["process"]]
+    if case["process"] == "reflect_proposal" and case["variant"] in REFLECT_BODY_VARIANTS:
+        return REFLECT_BODY_REASON
+    return None
+
+
+FENCE_OPEN = re.compile(r"^\s*```(?:json|markdown|md)?\s*", re.I)
+FENCE_CLOSE = re.compile(r"\s*```\s*$")
 THINK = re.compile(r"<think>.*?</think>", re.I | re.S)
 SPACE = re.compile(r"\s+")
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)?$")
@@ -140,8 +172,8 @@ def memory_pool_blocks(case):
         if ref in queued:
             annotations.append("already queued")
         suffix = f" ({'; '.join(annotations)})" if annotations else ""
-        description = (frontmatter or {}).get("description") or "(none)"
-        tags = (frontmatter or {}).get("tags") or "(none)"
+        description = frontmatter_text((frontmatter or {}).get("description") or "(none)")
+        tags = frontmatter_text((frontmatter or {}).get("tags") or "(none)")
         blocks.extend(
             (
                 f"[{index}] {ref}{suffix}",
@@ -336,9 +368,9 @@ Rules:
         name = pathlib.PurePosixPath(path).parent.name if path.endswith("/SKILL.md") else pathlib.PurePosixPath(path).stem
         parts = [f"Name: {name}", f"Type: {asset_type}"]
         if frontmatter and frontmatter.get("description"):
-            parts.append(f"Current description: {frontmatter['description']}")
+            parts.append(f"Current description: {frontmatter_text(frontmatter['description'])}")
         if frontmatter and frontmatter.get("tags"):
-            parts.append(f"Current tags: {frontmatter['tags']}")
+            parts.append(f"Current tags: {frontmatter_text(frontmatter['tags'])}")
         truncated = raw[:4000] + ("\n... (truncated)" if len(raw) > 4000 else "")
         parts.append(f"File content:\n{truncated}")
         prompt = "\n".join(parts) + f"""
@@ -610,17 +642,26 @@ def build_message_sets(case):
 
 
 def strip_wrappers(text):
-    return FENCE.sub("", THINK.sub("", (text or "").strip())).strip()
+    """The reply without its <think> block and its code fence. A closing fence goes only with an opening one, so a reply that ends in a code block of its own keeps it."""
+    text = THINK.sub("", (text or "").strip())
+    opened = FENCE_OPEN.match(text)
+    if opened:
+        text = FENCE_CLOSE.sub("", text[opened.end() :])
+    return text.strip()
+
+
+# How many opening brackets of a reply are tried as the start of its JSON, so a reply full of braces stays cheap to read.
+JSON_STARTS = 24
 
 
 def parse_json_value(text):
+    """The JSON object or array in a reply: the whole reply, else the longest span from an opening bracket to the last closing one of its kind that reads as JSON.
+    Prose around the JSON is cut away, and so is a stray bracket before it ("see {below}: {...}"): each opening bracket is tried. The longest wins because the answer is the biggest value in a reply, so an array in the prose before it ("see [1]") does not take its place."""
     raw = strip_wrappers(text)
-    candidates = [raw]
-    if "{" in raw and "}" in raw:
-        candidates.append(raw[raw.find("{") : raw.rfind("}") + 1])
-    if "[" in raw and "]" in raw:
-        candidates.append(raw[raw.find("[") : raw.rfind("]") + 1])
-    for candidate in candidates:
+    closers = {"{": raw.rfind("}"), "[": raw.rfind("]")}
+    starts = [index for index, char in enumerate(raw) if char in closers and closers[char] > index][:JSON_STARTS]
+    spans = sorted((raw[index : closers[raw[index]] + 1] for index in starts), key=len, reverse=True)
+    for candidate in [raw, *spans]:
         try:
             value = json.loads(candidate, strict=False)
         except (TypeError, ValueError):
@@ -662,36 +703,50 @@ def graph_tokens(value):
 
 
 def graph_phrase_match(left, right):
+    """Two entity names are the same when their normalized words are the same, in the same order. "BundleAdapter interface" is not "BundleAdapter"."""
     left_tokens = graph_tokens(left)
-    right_tokens = graph_tokens(right)
-    if not left_tokens or not right_tokens:
-        return False
-    shorter, longer = sorted((left_tokens, right_tokens), key=len)
-    return any(tuple(longer[index : index + len(shorter)]) == shorter for index in range(len(longer) - len(shorter) + 1))
+    return bool(left_tokens) and left_tokens == graph_tokens(right)
 
 
 def graph_pair_match(left, right):
-    return bool(
-        graph_phrase_match(left[0], right[0])
-        and graph_phrase_match(left[1], right[1])
-        or graph_phrase_match(left[0], right[1])
-        and graph_phrase_match(left[1], right[0])
-    )
+    """A relation is the expected one when it runs the same way: from the same entity to the same entity."""
+    return bool(graph_phrase_match(left[0], right[0]) and graph_phrase_match(left[1], right[1]))
 
 
 def graph_path_match(relations, expected):
-    """Match a required relation directly or through one reified graph node."""
+    """Match a required relation directly, or through one reified graph node: from -> node and node -> to."""
     if any(graph_pair_match(relation, expected) for relation in relations):
         return True
-    for first_left, first_right in relations:
-        for second_left, second_right in relations:
-            for first_outer, first_middle in ((first_left, first_right), (first_right, first_left)):
-                for second_middle, second_outer in ((second_left, second_right), (second_right, second_left)):
-                    if graph_phrase_match(first_middle, second_middle) and graph_pair_match(
-                        (first_outer, second_outer), expected
-                    ):
-                        return True
-    return False
+    return any(
+        graph_phrase_match(first[1], second[0]) and graph_pair_match((first[0], second[1]), expected)
+        for first in relations
+        for second in relations
+    )
+
+
+def frontmatter_fields(block):
+    """The fields of a YAML block. Where PyYAML cannot read the block, each line with a `key: value` is taken as it stands.
+    PyYAML raises a plain ValueError, not a YAMLError, for a date that is not on the calendar (2026-09-31), so both are caught."""
+    try:
+        data = yaml.safe_load(block)
+    except (yaml.YAMLError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        return {str(key): value for key, value in data.items()}
+    fields = {}
+    for line in block.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip()
+    return fields
+
+
+def frontmatter_text(value):
+    """A frontmatter value as the prompts print it: a list reads [a, b]."""
+    if isinstance(value, list):
+        return "[" + ", ".join(str(item) for item in value) + "]"
+    return str(value)
 
 
 def parse_frontmatter(text):
@@ -701,13 +756,7 @@ def parse_frontmatter(text):
     end = raw.find("\n---\n", 4)
     if end < 0:
         return None, raw
-    data = {}
-    for line in raw[4:end].splitlines():
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip()
-    return data, raw[end + 5 :].strip()
+    return frontmatter_fields(raw[4:end]), raw[end + 5 :].strip()
 
 
 def is_number(value, low=None, high=None):
@@ -793,7 +842,16 @@ def score_grounded_document(case, text):
         )
     else:
         checks.append(("claims cite the input document", cited_refs == set(refs)))
+    # What the deliverable must keep and must not say. A case with neither is graded on format and grounding only.
+    deliverable = normalize(output)
+    checks.extend((f"retains {term}", contains_term(deliverable, term)) for term in case["expected"].get("required", ()))
+    checks.extend((f"omits {term}", normalize(term) not in deliverable) for term in case["expected"].get("forbidden", ()))
     return checked(structure, checks)
+
+
+def has_content_terms(case):
+    """True when a grounded case names terms its deliverable is checked for."""
+    return bool(case["expected"].get("required") or case["expected"].get("forbidden"))
 
 
 def valid_consolidation_op(operation):
@@ -1354,7 +1412,9 @@ def score_remember(case, text):
     if expected_date:
         checks = [("preserves explicit date", bool(obj and obj.get("observed_at") == expected_date))]
     else:
-        checks = [("does not invent an observation date", bool(obj and "observed_at" not in obj))]
+        # The prompt asks for a date only when the memory writes one, so no date is absent, null or empty.
+        given = (obj or {}).get("observed_at")
+        checks = [("does not invent an observation date", bool(obj) and (given is None or (isinstance(given, str) and not given.strip())))]
     checks.extend((f"metadata covers {term}", contains_term(output, term)) for term in case["expected"]["keywords"])
     return checked(structure, checks)
 
@@ -1623,7 +1683,7 @@ At a depth of 800, return HTTP 429 for batch jobs with a 30-second Retry-After w
                 "Operations Team",
                 "Production Release",
                 "Release Controller",
-                "Candidate Worker Service Image",
+                "Worker Service",
                 "API Gateway",
                 "Object Store",
                 "PostgreSQL",
@@ -1632,15 +1692,15 @@ At a depth of 800, return HTTP 429 for batch jobs with a 30-second Retry-After w
                 "Canary Artifact",
                 "Completion State",
                 "Previous Worker Service Image",
-                "worker-stable Alias",
+                "worker-stable",
             ],
             "relations": [
                 {"from": "Operations Team", "to": "Production Release", "type": "approves"},
-                {"from": "Release Controller", "to": "Candidate Worker Service Image", "type": "deploys"},
+                {"from": "Release Controller", "to": "Worker Service", "type": "deploys"},
                 {"from": "Canary Job", "to": "API Gateway", "type": "sent through"},
                 {"from": "Canary Artifact", "to": "Object Store", "type": "stored in"},
                 {"from": "Completion State", "to": "PostgreSQL", "type": "recorded in"},
-                {"from": "worker-stable Alias", "to": "Previous Worker Service Image", "type": "points to"},
+                {"from": "worker-stable", "to": "Previous Worker Service Image", "type": "points to"},
             ],
         }
     ),
@@ -1862,13 +1922,25 @@ def grounded_calibration(case):
         superseded = []
     combined = SPACE.sub(" ", " ".join(corpus_text(path) for path in case["files"])).strip()
     output_length = min(1200, max(300, len(combined) // 5))
+    # A good deliverable keeps what the case requires: take the source line that carries each required term. Without terms, the head of the source.
+    lines = [SPACE.sub(" ", line).strip() for path in case["files"] for line in corpus_text(path).splitlines()]
+    carriers = []
+    for term in case["expected"].get("required", ()):
+        carrier = next((line for line in lines if contains_term(normalize(line), term)), None)
+        if carrier is None:
+            raise ValueError(f"{case['id']}: the required term {term!r} is in none of its files")
+        if carrier not in carriers:
+            carriers.append(carrier)
+    output = "\n".join(carriers)
+    if len(output) < output_length:
+        output = (output + "\n" if output else "") + combined[: output_length - len(output)]
     return json.dumps(
         {
             "title": "Grounded calibration",
             "confidence": 0.95,
             "superseded_refs": superseded,
             "key_claims": claims,
-            "output": combined[:output_length],
+            "output": output,
         }
     )
 
@@ -2133,20 +2205,26 @@ def precision_failure_for(case, calibration):
 
 
 def command_verify():
-    """Check the public suite offline: its structure, every scorer against known good and bad replies, and the request retries."""
+    """Check the public suite offline: its structure, every scorer against known good and bad replies, and the request retries.
+    The legacy cases are not required: coverage is asked of the current cases only. Those present still get their prompts built and their scorers calibrated."""
     errors = []
-    compact_cases = [case for case in CASES if case["tier"] == "compact"]
+    current_cases = [case for case in CASES if legacy_reason(case) is None]
+    compact_cases = [case for case in current_cases if case["tier"] == "compact"]
     bakeoff_cases = [case for case in CASES if case["id"].startswith("deep-bakeoff-")]
-    extra_deep_cases = [case for case in CASES if case["tier"] == "deep" and case["track"] == "legacy" and case not in bakeoff_cases]
-    production_cases = [case for case in CASES if case["tier"] == "deep" and case["track"] == "production"]
+    extra_deep_cases = [case for case in current_cases if case["tier"] == "deep" and case["track"] == "legacy" and case not in bakeoff_cases]
+    production_cases = [case for case in current_cases if case["tier"] == "deep" and case["track"] == "production"]
     if len(CASE_BY_ID) != len(CASES):
         errors.append("case ids are not unique")
+    # A job that has only legacy cases may be missing altogether.
+    optional_processes = set(LEGACY_JOBS) | {"reflect_proposal"}
     covered = {case["process"] for case in CASES}
-    if covered != set(PROCESSES):
-        errors.append(f"process coverage mismatch: missing={sorted(set(PROCESSES) - covered)} extra={sorted(covered - set(PROCESSES))}")
+    missing_processes, extra_processes = set(PROCESSES) - optional_processes - covered, covered - set(PROCESSES)
+    if missing_processes or extra_processes:
+        errors.append(f"process coverage mismatch: missing={sorted(missing_processes)} extra={sorted(extra_processes)}")
     compact_counts = {
-        process: sum(case["tier"] == "compact" and case["process"] == process for case in CASES)
+        process: sum(case["tier"] == "compact" and case["process"] == process for case in current_cases)
         for process in PROCESSES
+        if process not in optional_processes
     }
     if any(count != 4 for count in compact_counts.values()):
         errors.append(f"expected four compact cases per process: {compact_counts}")
@@ -2156,25 +2234,25 @@ def command_verify():
         errors.append("case uses an unknown track")
     if len(bakeoff_cases) != 24:
         errors.append(f"expected 24 anonymized bakeoff cases, found {len(bakeoff_cases)}")
-    if len(extra_deep_cases) != 15:
-        errors.append(f"expected 15 extended deep cases, found {len(extra_deep_cases)}")
-    legacy_counts = {
+    if len(extra_deep_cases) != 7:
+        errors.append(f"expected 7 extended deep cases (synthesis and proposal judging), found {len(extra_deep_cases)}")
+    deep_split = {
         process: sum(case["process"] == process for case in bakeoff_cases + extra_deep_cases)
         for process in PROCESSES
     }
-    expected_legacy_counts = {
+    expected_deep_split = {
         "memory_consolidation": 15,
         "distill": 12,
-        "graph_extraction": 4,
         "proposal_quality_gate": 4,
-        "reflect_proposal": 4,
     }
-    if any(legacy_counts[process] != expected_legacy_counts.get(process, 0) for process in PROCESSES):
-        errors.append(f"unexpected legacy deep-case split: {legacy_counts}")
+    if any(deep_split[process] != expected_deep_split.get(process, 0) for process in PROCESSES if process not in optional_processes):
+        errors.append(f"unexpected deep-case split of the original bake-off: {deep_split}")
+    grounded_without_terms = [case["id"] for case in CASES if case["variant"] in GROUNDED_TASKS and not has_content_terms(case)]
+    if grounded_without_terms:
+        errors.append(f"grounded cases without required or forbidden terms, which would be graded on format and grounding only: {grounded_without_terms}")
     required_production_variants = {
-        "production_plan", "production_lesson", "production_knowledge", "graph_batch", "graph_chunked",
-        "production_reflect", "production_session", "production_session_empty", "session_summary",
-        "production_metadata", "production_schema",
+        "production_plan", "production_lesson", "production_knowledge",
+        "production_session", "production_session_empty", "session_summary", "production_schema",
     }
     production_variants = {case["variant"] for case in production_cases}
     if not required_production_variants.issubset(production_variants):
@@ -2202,25 +2280,6 @@ def command_verify():
     }
     if review_processes != {"lesson_quality_gate", "proposal_quality_gate"}:
         errors.append(f"review-band coverage mismatch: {sorted(review_processes)}")
-    production_graph_variants = {
-        case["variant"] for case in production_cases if case["process"] == "graph_extraction"
-    }
-    if production_graph_variants != {"graph_batch", "graph_chunked"}:
-        errors.append(f"production graph shapes mismatch: {sorted(production_graph_variants)}")
-    reflected_types = {
-        asset_type_for_path(case["files"][0])
-        for case in production_cases
-        if case["variant"] == "production_reflect"
-    }
-    if reflected_types != {"workflow", "skill", "memory", "lesson", "command"}:
-        errors.append(f"production reflection type coverage mismatch: {sorted(reflected_types)}")
-    metadata_types = {
-        case["expected"]["asset_type"]
-        for case in production_cases
-        if case["variant"] == "production_metadata"
-    }
-    if metadata_types != {"agent", "command", "skill", "script"}:
-        errors.append(f"metadata type coverage mismatch: {sorted(metadata_types)}")
     schema_types = {
         asset_type_for_path(case["files"][0])
         for case in production_cases
@@ -2241,10 +2300,11 @@ def command_verify():
     ]
     if len(long_session_cases) < 2 or not any(case["variant"] == "session_summary" for case in production_cases):
         errors.append("production session coverage requires two long extraction cases and a summary case")
-    metadata_cutoff_case = CASE_BY_ID["prod-metadata-agent-existing-and-truncated"]
-    metadata_prompt = "\n".join(content for _role, content in build_messages(metadata_cutoff_case))
-    if len(corpus_text(metadata_cutoff_case["files"][0])) <= 4000 or "copper finch" in normalize(metadata_prompt):
-        errors.append("metadata truncation fixture does not exercise the 4000-character boundary")
+    metadata_cutoff_case = CASE_BY_ID.get("prod-metadata-agent-existing-and-truncated")  # a legacy case: checked when it is there
+    if metadata_cutoff_case:
+        metadata_prompt = "\n".join(content for _role, content in build_messages(metadata_cutoff_case))
+        if len(corpus_text(metadata_cutoff_case["files"][0])) <= 4000 or "copper finch" in normalize(metadata_prompt):
+            errors.append("metadata truncation fixture does not exercise the 4000-character boundary")
     for case in CASES:
         for relative_path in case["files"]:
             path = CORPUS / relative_path
@@ -2256,7 +2316,11 @@ def command_verify():
             build_message_sets(case)
         except Exception as error:
             errors.append(f"{case['id']}: prompt construction failed: {error}")
-        calibration = calibration_for(case)
+        try:
+            calibration = calibration_for(case)
+        except ValueError as error:
+            errors.append(str(error))
+            continue
         if calibration is None:
             errors.append(f"{case['id']}: no scorer calibration output")
             continue
@@ -2270,6 +2334,12 @@ def command_verify():
             )
             if score_case(case, json.dumps(fabricated))["passed"]:
                 errors.append(f"{case['id']}: fabricated source quote incorrectly passed")
+            # Right shape, real quotes, wrong content: the deliverable says nothing the case asks for.
+            wrong = json.loads(calibration)
+            wrong["output"] = "This output is wrong in every particular. " * 30
+            wrong_result = score_case(case, json.dumps(wrong))
+            if has_content_terms(case) and (wrong_result["passed"] or not any(label.startswith("retains ") for label in wrong_result["failures"])):
+                errors.append(f"{case['id']}: a deliverable with the wrong content incorrectly passed")
         precision_failure = precision_failure_for(case, calibration)
         if precision_failure is not None and score_case(case, precision_failure)["passed"]:
             errors.append(f"{case['id']}: precision failure incorrectly passed")
@@ -2381,10 +2451,11 @@ def command_verify():
         for error in errors:
             print(f"ERROR {error}")
         return 1
+    legacy = len(CASES) - len(current_cases)
     print(
         f"verified {len(files)} corpus files, {len(CASES)} cases "
-        f"({len(compact_cases)} compact, {len(CASES) - len(compact_cases)} deep), "
-        f"{len(PROCESSES)} processes"
+        f"({sum(case['tier'] == 'compact' for case in CASES)} compact, {sum(case['tier'] == 'deep' for case in CASES)} deep; "
+        f"{legacy} of them legacy, which are not required), {len(PROCESSES)} processes"
     )
     return 0
 
@@ -2456,6 +2527,7 @@ def call_chat_messages(model, message_pairs):
     text = message.get("content") or ""
     reasoning = message.get("reasoning_content") or ""
     fallback = False
+    # An empty answer with JSON in the reasoning: that JSON is scored as the answer, and the row says so (content_fallback). The README tells why.
     if not text.strip() and "{" in reasoning:
         text = reasoning[reasoning.find("{") : reasoning.rfind("}") + 1]
         fallback = True
@@ -2496,26 +2568,47 @@ def call_chat(model, case):
 
 # --- models -------------------------------------------------------------------------------------
 
+# Fields the run sets itself. extra_body cannot carry them: a model or messages there would change what is asked.
+RESERVED_BODY_KEYS = ("model", "messages", "stream")
+OPTIONS = ("temperature", "max_tokens", "extra_body", "timeout", "retries", "seed")
+
 
 def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "model"
 
 
-def model_entry(label, model, base_url, api_key, options=None):
+def model_entry(label, model, base_url, api_key, options=None, api_key_env=None, private=False):
     options = options or {}
-    unknown = set(options) - {"temperature", "max_tokens", "extra_body", "timeout", "retries"}
+    unknown = set(options) - set(OPTIONS)
     if unknown:
         raise ValueError(f"model {label}: unknown option(s) {', '.join(sorted(unknown))}")
     extra_body = options.get("extra_body") or {}
     if not isinstance(extra_body, dict):
         raise ValueError(f"model {label}: extra_body must be a mapping")
+    reserved = sorted(set(extra_body) & set(RESERVED_BODY_KEYS))
+    if reserved:
+        raise ValueError(f"model {label}: extra_body cannot set {', '.join(reserved)}. The run sets them")
+    extra_body = dict(extra_body)
+    # A seed is an option of the model, sent as the seed field of every request. One written in extra_body counts as the option.
+    seed = options.get("seed")
+    if seed is None:
+        seed = extra_body.get("seed")
+    if seed is not None:
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError(f"model {label}: seed must be an integer")
+        if extra_body.get("seed", seed) != seed:
+            raise ValueError(f"model {label}: seed and extra_body.seed differ")
+        extra_body["seed"] = seed
     return {
         "label": label,
         "model": model,
         "base_url": base_url,
         "api_key": api_key or None,
+        "api_key_env": api_key_env,
+        "private": private,
         "temperature": options.get("temperature", 0),
         "max_tokens": options.get("max_tokens", 6000),
+        "seed": seed,
         "extra_body": extra_body,
         "timeout": options.get("timeout", 900),
         "retries": options.get("retries", 5),
@@ -2523,19 +2616,120 @@ def model_entry(label, model, base_url, api_key, options=None):
     }
 
 
-def load_models(models_file, environ):
-    """The models to compare: the entries of a models file, or the one set in MODEL_* in the environment."""
-    if models_file is None:
-        base_url = (environ.get("MODEL_BASE_URL") or "").strip()
-        name = (environ.get("MODEL_NAME") or "").strip()
-        if not base_url or not name:
-            raise ValueError("set MODEL_BASE_URL and MODEL_NAME in .env (and MODEL_API_KEY if the endpoint needs one), or pass --models FILE. See .env.example.")
-        return [model_entry(slugify(name), name, base_url, (environ.get("MODEL_API_KEY") or "").strip())]
+SECRET_KEYS = {"apikey", "api_key", "token", "secret"}
+VARIABLE = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def redact_config(config):
+    """A copy of a config with every value under apiKey, api_key, token or secret (in any case) replaced by "<redacted>", except a $NAME reference. The same rule as lib/provenance.ts."""
+    if isinstance(config, list):
+        return [redact_config(item) for item in config]
+    if not isinstance(config, dict):
+        return config
+    return {
+        key: "<redacted>"
+        if str(key).lower() in SECRET_KEYS and not (isinstance(value, str) and VARIABLE.match(value))
+        else redact_config(value)
+        for key, value in config.items()
+    }
+
+
+def model_settings(model):
+    """What shaped a model's requests, for summary.json: the resolved entry without its key. The endpoint loses any credentials, query and fragment."""
+    parts = urllib.parse.urlsplit(model["base_url"])
+    endpoint = urllib.parse.urlunsplit((parts.scheme, parts.netloc.rpartition("@")[2], parts.path, "", ""))
+    return {
+        "base_url": endpoint,
+        "api_key_env": model["api_key_env"],
+        "private": model["private"],
+        "temperature": model["temperature"],
+        "max_tokens": model["max_tokens"],
+        "seed": model["seed"],
+        "extra_body": redact_config(model["extra_body"]),
+        "timeout": model["timeout"],
+        "retries": model["retries"],
+    }
+
+
+def load_model_lines(file=None):
+    """The lines of models.json, which sits beside .env, or none when there is no file. The same rules as lib/models.ts."""
+    path = pathlib.Path(file) if file else ROOT / "models.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        raise ValueError(f"{path} is not JSON ({error})") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must hold an object of model lines")
+    for name, line in data.items():
+        if not isinstance(line, dict) or not isinstance(line.get("base_url"), str) or not line["base_url"].strip():
+            raise ValueError(f'models.json: "{name}" needs a base_url')
+        if "model" in line and not isinstance(line["model"], str):
+            raise ValueError(f'models.json: "{name}": model must be a string')
+        if "private" in line and not isinstance(line["private"], bool):
+            raise ValueError(f'models.json: "{name}": private must be true or false')
+        key_env = line.get("api_key_env")
+        if "api_key_env" in line and (not isinstance(key_env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_env)):
+            raise ValueError(f'models.json: "{name}": api_key_env must be the name of an environment variable, not a key')
+    return data
+
+
+def resolve_model(flag, environ, lines):
+    """The model for a --model id the way lib/models.ts resolves it. The id is the flag, else MODEL_NAME. An id that is a line of
+    models.json goes to that line's URL, with the key held in its api_key_env. Any other id goes to MODEL_BASE_URL with MODEL_API_KEY."""
+    ident = (flag if flag is not None else environ.get("MODEL_NAME") or "").strip()
+    if flag is not None and not ident:
+        raise ValueError("--model needs a model id")
+    if not ident:
+        raise ValueError("name the model: pass --model ID, or set MODEL_NAME in .env. See .env.example.")
+    line = lines.get(ident)
+    if line:
+        key_env = line.get("api_key_env")
+        key = (environ.get(key_env) or "").strip() if key_env else ""
+        if key_env and not key:
+            raise ValueError(f'models.json: "{ident}" takes its key from {key_env}, which is not set. Set it in .env.')
+        name = line["model"] if line.get("model") is not None else ident
+        return {"id": ident, "name": name, "base_url": line["base_url"].strip(), "api_key": key, "api_key_env": key_env, "private": line.get("private") is True}
+    base_url = (environ.get("MODEL_BASE_URL") or "").strip()
+    if not base_url:
+        raise ValueError(f"{ident} is sent to the gateway: set MODEL_BASE_URL in .env (and MODEL_API_KEY if it needs a key). See .env.example.")
+    key = (environ.get("MODEL_API_KEY") or "").strip()
+    return {"id": ident, "name": ident, "base_url": base_url, "api_key": key, "api_key_env": "MODEL_API_KEY" if key else None, "private": False}
+
+
+def find_models_file(models_file):
     path = pathlib.Path(models_file)
     if not path.is_file() and (EVAL_DIR / models_file).is_file():
         path = EVAL_DIR / models_file
     if not path.is_file():
         raise ValueError(f"models file not found: {models_file}")
+    return path
+
+
+def load_models(models_file, environ, model_ids=(), lines=None):
+    """The models to compare: the --model ids, or the entries of a models file, or the one set in MODEL_NAME.
+    `lines` are the lines of models.json (read from the repository root when None)."""
+    if models_file is not None and model_ids:
+        raise ValueError("give --model ID (once for each model) or --models FILE, not both. An entry of a models file can name a model by id and add options.")
+    loaded = [] if lines is None else [lines]
+
+    def model_lines():
+        # Read only when a model needs it, so a models file of explicit entries never depends on models.json.
+        if not loaded:
+            loaded.append(load_model_lines())
+        return loaded[0]
+
+    if models_file is None:
+        models = []
+        for ident in list(model_ids) or [None]:
+            found = resolve_model(ident, environ, model_lines())
+            models.append(model_entry(slugify(found["id"]), found["name"], found["base_url"], found["api_key"], None, found["api_key_env"], found["private"]))
+        labels = [model["label"] for model in models]
+        if len(set(labels)) != len(labels):
+            raise ValueError("--model names the same model twice")
+        return models
+    path = find_models_file(models_file)
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     entries = data.get("models") if isinstance(data, dict) else data
     if not isinstance(entries, list) or not entries:
@@ -2546,19 +2740,33 @@ def load_models(models_file, environ):
             raise ValueError(f"{path}: entry {index} is not a mapping")
         entry = dict(entry)
         label = entry.pop("label", None)
+        ident = entry.pop("id", None)
         model = entry.pop("model", None)
         base_url = entry.pop("base_url", None)
         key_env = entry.pop("api_key_env", None)
-        if not (label and model and base_url):
-            raise ValueError(f"{path}: entry {index} needs label, model and base_url")
+        private = entry.pop("private", None)
+        if not label or not ((model and base_url) or ident):
+            raise ValueError(f"{path}: entry {index} needs a label, and either an id or a model and a base_url")
         if not re.fullmatch(r"[A-Za-z0-9._-]+", str(label)):
             raise ValueError(f"{path}: label {label!r} may use letters, digits, dot, dash and underscore")
+        if private is not None and not isinstance(private, bool):
+            raise ValueError(f"{path}: model {label}: private must be true or false")
+        if ident:
+            # The model is named as --model names it, so its endpoint, key and private flag come from models.json or the gateway.
+            if model or base_url or key_env or private is not None:
+                raise ValueError(f"{path}: model {label}: an id cannot be combined with model, base_url, api_key_env or private")
+            try:
+                found = resolve_model(str(ident), environ, model_lines())
+            except ValueError as error:
+                raise ValueError(f"{path}: model {label}: {error}") from None
+            models.append(model_entry(str(label), found["name"], found["base_url"], found["api_key"], entry, found["api_key_env"], found["private"]))
+            continue
         api_key = None
         if key_env:
             api_key = (environ.get(key_env) or "").strip()
             if not api_key:
                 raise ValueError(f"{path}: model {label}: environment variable {key_env} is not set. Put it in .env.")
-        models.append(model_entry(str(label), str(model), str(base_url), api_key, entry))
+        models.append(model_entry(str(label), str(model), str(base_url), api_key, entry, key_env or None, private is True))
     labels = [model["label"] for model in models]
     if len(set(labels)) != len(labels):
         raise ValueError(f"{path}: labels must be different")
@@ -2568,9 +2776,9 @@ def load_models(models_file, environ):
 # --- a run --------------------------------------------------------------------------------------
 
 
-def select_cases(cases, tier=None, limit=None):
-    """The cases of a run. A limit takes the first case of each process in turn, so a short run covers many."""
-    chosen = [case for case in cases if tier is None or case["tier"] == tier]
+def select_cases(cases, tier=None, limit=None, include_legacy=False):
+    """The cases of a run. Legacy cases are left out unless asked for. A limit takes the first case of each process in turn, so a short run covers many."""
+    chosen = [case for case in cases if (tier is None or case["tier"] == tier) and (include_legacy or legacy_reason(case) is None)]
     if limit is None or limit >= len(chosen):
         return chosen
     by_process = {process: [case for case in chosen if case["process"] == process] for process in PROCESSES}
@@ -2615,9 +2823,12 @@ def summarize_model(model, rows):
 
     by_process = {process: group([row for row in scored if row["process"] == process]) for process in PROCESSES if any(row["process"] == process for row in scored)}
     by_track = {track: group([row for row in scored if row["track"] == track]) for track in TRACKS if any(row["track"] == track for row in scored)}
+    legacy = [row for row in scored if legacy_reason(CASE_BY_ID[row["case_id"]])]
     return {
         "label": model["label"],
         "model": model["model"],
+        # What shaped the requests, without the key.
+        "settings": model_settings(model),
         # What the endpoint says answered. A gateway may route a name to another model.
         "observed_models": sorted({row["observed_model"] for row in scored if row["observed_model"]}),
         "n_run": len(rows),
@@ -2632,6 +2843,8 @@ def summarize_model(model, rows):
         },
         "by_track": by_track,
         "by_process": by_process,
+        # The legacy cases that ran (--include-legacy), apart. They are also inside the numbers above.
+        "legacy_jobs": group(legacy) if legacy else None,
     }
 
 
@@ -2652,6 +2865,7 @@ def run_model(model, cases, samples, give_up_after=3):
             "process": case["process"],
             "tier": case["tier"],
             "track": case["track"],
+            "legacy": legacy_reason(case) is not None,
             "ok": row_error is None,
             "error": row_error,
             "structure": scored["structure"] if scored else None,
@@ -2698,12 +2912,20 @@ def git_commit():
 # The same marker as lib/results.ts: while this process runs, the results folder holds `.running` with its pid.
 RUNNING = ".running"
 _marked = []
+_armed = []
 
 
 def _clear_markers():
     for path in _marked:
         (path / RUNNING).unlink(missing_ok=True)
     _marked.clear()
+
+
+def clear_running(path):
+    """Removes the marker of a results folder whose run has ended, for a run that is one of several in a process (--corpus all, --repeat)."""
+    (path / RUNNING).unlink(missing_ok=True)
+    if path in _marked:
+        _marked.remove(path)
 
 
 def _on_sigterm(signum, frame):
@@ -2720,7 +2942,8 @@ def make_results_dir(parent, label):
         n += 1
     path.mkdir(parents=True)
     (path / RUNNING).write_text(f"{os.getpid()}\n", encoding="utf-8")
-    if not _marked:
+    if not _armed:
+        _armed.append(True)
         atexit.register(_clear_markers)
         signal.signal(signal.SIGTERM, _on_sigterm)
     _marked.append(path)
@@ -2732,7 +2955,11 @@ def percent(rate):
 
 
 def print_summary(summary):
-    print(f"\n{NAME} ({summary['corpus']}) | {summary['n_cases']} cases | results {summary['results_dir']}/")
+    print(f"\n{NAME} ({summary['corpus']}) | {summary['n_selected']} of {summary['n_cases']} cases | prompts {summary['prompts_version']} | results {summary['results_dir']}/")
+    if summary["include_legacy"]:
+        print(f"  legacy cases included ({summary['legacy_cases']}): read them apart in each model's legacy_jobs")
+    if summary["grounded"]:
+        print(f"  grounded cases are checked for: {summary['grounded']['scope']}")
     for model in summary["models"]:
         m = model["metrics"]
         answered = f", answered by {', '.join(model['observed_models'])}" if model["observed_models"] else ""
@@ -2742,6 +2969,9 @@ def print_summary(summary):
         print(f"    checks       {percent(m['checks']['rate'])}  (the average share of a case's checks that held)")
         print(f"    real quotes  {m['real_quotes']['passed']}/{m['real_quotes']['n']}  {percent(m['real_quotes']['rate'])}")
         print(f"    median time  {m['median_seconds']} s a case")
+        legacy = model["legacy_jobs"]
+        if legacy:
+            print(f"    legacy jobs  {legacy['passed']}/{legacy['n']} passed, checks {percent(legacy['checks'])}")
 
 
 def print_side_by_side(first, second):
@@ -2764,13 +2994,66 @@ def print_side_by_side(first, second):
             print(f"    {row[0]:<{width[0]}}  {row[1]:<{width[1]}}  {row[2]:<{width[2]}}")
 
 
+def sha256_file(path):
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+
+def sha256_tree(root):
+    """One digest over every file under root, made the way sha256Files of lib/provenance.ts makes it: the paths relative to root, in order,
+    each with the digest of its content. A file renamed, added, dropped or changed gives another digest."""
+    root = pathlib.Path(root)
+    paths = sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file())
+    return hashlib.sha256("".join(f"{path}\0{sha256_file(root / path)}\n" for path in paths).encode()).hexdigest()
+
+
+def private_seed():
+    """The seed the private assets were made with: the one in the map that generate wrote beside them. None when there is no map."""
+    try:
+        seed = json.loads((ROOT / "private" / NAME / "map.json").read_text(encoding="utf-8")).get("seed")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return None if seed is None else str(seed)
+
+
+def models_file_record(models_file):
+    """The path and the digest of the models file of a run, or None for a run without one."""
+    if models_file is None:
+        return None
+    path = find_models_file(models_file)
+    resolved = path.resolve()
+    try:
+        shown = resolved.relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        shown = str(resolved)
+    return {"path": shown, "sha256": sha256_file(path)}
+
+
+def grounded_scope(cases):
+    """What the grounded cases of a run are checked for, in words for summary.json. A case with no required or forbidden terms is graded on format and grounding only."""
+    grounded = [case for case in cases if case["variant"] in GROUNDED_TASKS]
+    if not grounded:
+        return None
+    with_terms = sum(has_content_terms(case) for case in grounded)
+    if with_terms == len(grounded):
+        scope = "format, grounding and content terms"
+    elif with_terms == 0:
+        scope = "format and grounding only"
+    else:
+        scope = f"content terms for {with_terms} of {len(grounded)} cases, the rest format and grounding only"
+    return {"cases": len(grounded), "with_content_terms": with_terms, "scope": scope}
+
+
 def run_corpus(corpus, args, models, label):
     assets = EVAL_DIR / "assets" if corpus == "public" else ROOT / "private" / NAME / "assets"
     parent = EVAL_DIR / "results" if corpus == "public" else ROOT / "private" / NAME / "results"
     all_cases = use_assets(assets)
-    cases = select_cases(all_cases, args.tier, args.limit)
+    include_legacy = bool(getattr(args, "include_legacy", False))
+    cases = select_cases(all_cases, args.tier, args.limit, include_legacy)
+    legacy = sum(legacy_reason(case) is not None for case in all_cases)
     results_dir = make_results_dir(parent, label)
-    print(f"{NAME} ({corpus}): {len(cases)} of {len(all_cases)} cases, {len(models)} model(s)")
+    left_out = len(select_cases(all_cases, args.tier, None, True)) - len(select_cases(all_cases, args.tier, None, False))
+    skipped = "" if include_legacy or not left_out else f", {left_out} legacy cases skipped (--include-legacy runs them)"
+    print(f"{NAME} ({corpus}): {len(cases)} of {len(all_cases)} cases, {len(models)} model(s), prompts {PROMPTS_VERSION}{skipped}")
     summaries = []
     with open(results_dir / "samples.jsonl", "w", encoding="utf-8") as samples:
         for model in models:
@@ -2781,9 +3064,19 @@ def run_corpus(corpus, args, models, label):
         "label": label,
         "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "git_commit": git_commit(),
+        # The prompts are a frozen snapshot, not akm's: see the README. The assets and the models file are identified by digest.
+        "prompts_version": PROMPTS_VERSION,
+        "include_legacy": include_legacy,
+        "legacy_cases": legacy,
+        "grounded": grounded_scope(cases),
+        "seed": private_seed() if corpus == "private" else None,
+        "cases_sha256": sha256_file(assets / "cases.json"),
+        "assets_sha256": sha256_tree(assets),
+        "models_file": models_file_record(getattr(args, "models", None)),
         "limit": args.limit,
         "tier": args.tier,
         "n_cases": len(all_cases),
+        "n_selected": len(cases),
         "n_run": sum(model["n_run"] for model in summaries),
         "n_scored": sum(model["n_scored"] for model in summaries),
         "n_errored": sum(model["n_errored"] for model in summaries),
@@ -2792,7 +3085,58 @@ def run_corpus(corpus, args, models, label):
     (results_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     summary["results_dir"] = os.path.relpath(results_dir, ROOT)
     print_summary(summary)
+    clear_running(results_dir)
     return summary
+
+
+def spread_of(runs):
+    """The shape of the runs' values with every number replaced by its minimum, maximum and mean over the runs. The same rule as spreadOf of lib/repeat.ts:
+    a number that is missing or null in some runs is taken over the runs where it is a number, and is null when it is in none."""
+    objects = [run for run in runs if isinstance(run, dict)]
+    if objects:
+        keys = list(dict.fromkeys(key for item in objects for key in item))
+        return {key: spread_of([item.get(key) for item in objects]) for key in keys}
+    numbers = [run for run in runs if isinstance(run, (int, float)) and not isinstance(run, bool)]
+    if not numbers:
+        return None
+    return {"min": min(numbers), "max": max(numbers), "mean": round(sum(numbers) / len(numbers), 4)}
+
+
+def write_repeat_summary(label, runs, seconds):
+    """<UTC date>-<label>-repeat-summary.json next to the results folders of the runs, in the shape lib/repeat.ts writes: the spread of the metrics.
+    The metrics are kept for each model, and also at the top for a run of one model, as the other evals write them."""
+    first = runs[0]
+    parent = (ROOT / first["results_dir"]).parent
+    base = parent / f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}-{label}-repeat-summary"
+    path, n = pathlib.Path(f"{base}.json"), 2
+    while path.exists():
+        path = pathlib.Path(f"{base}-{n}.json")
+        n += 1
+    by_model = [
+        {
+            "label": model["label"],
+            "model": model["model"],
+            "n_errored": spread_of([run["models"][index]["n_errored"] for run in runs]),
+            "metrics": spread_of([run["models"][index]["metrics"] for run in runs]),
+        }
+        for index, model in enumerate(first["models"])
+    ]
+    summary = {"eval": first["eval"], "corpus": first["corpus"], "label": label, "repeat": len(runs), "prompts_version": first["prompts_version"]}
+    if len(by_model) == 1:
+        summary["model"] = by_model[0]["model"]
+    summary.update(
+        {
+            "runs": [pathlib.PurePath(run["results_dir"]).name for run in runs],
+            "n_errored": spread_of([run["n_errored"] for run in runs]),
+            "seconds": spread_of(seconds),
+            "models": by_model,
+        }
+    )
+    if len(by_model) == 1:
+        summary["metrics"] = by_model[0]["metrics"]
+    path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"\n{first['eval']} ({first['corpus']}): {len(runs)} runs, spread in {path.name}")
+    return path
 
 
 def command_run(args):
@@ -2802,24 +3146,70 @@ def command_run(args):
             return fail(f"the private assets are missing (private/{NAME}/assets/cases.json). Make them with: ./generate-assets --only {NAME}")
     if args.limit is not None and args.limit < 1:
         return fail("--limit must be a positive integer")
+    if args.repeat is not None and args.repeat < 1:
+        return fail("--repeat must be a positive integer")
     try:
-        models = load_models(args.models, os.environ)
+        models = load_models(args.models, os.environ, args.model or ())
     except ValueError as error:
         return fail(str(error))
-    label = args.label or (pathlib.Path(args.models).stem if args.models else models[0]["label"])
+    if args.label:
+        label = args.label
+    elif args.models:
+        label = pathlib.Path(args.models).stem
+    else:
+        label = "-".join(model["label"] for model in models)[:60].strip("-")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", label):
         return fail("--label may use letters, digits, dot, dash and underscore")
-    summaries = [run_corpus(corpus, args, models, label) for corpus in corpora]
-    if len(summaries) == 2:
+    summaries = []
+    for corpus in corpora:
+        if args.repeat is None:
+            summaries.append(run_corpus(corpus, args, models, label))
+            continue
+        runs, seconds = [], []
+        for number in range(1, args.repeat + 1):
+            started = time.monotonic()
+            runs.append(run_corpus(corpus, args, models, f"{label}-r{number}"))
+            seconds.append(round(time.monotonic() - started, 1))
+        write_repeat_summary(label, runs, seconds)
+        summaries.extend(runs)
+    # With --repeat each corpus has its own spread, so the two are not set side by side.
+    if len(summaries) == 2 and args.repeat is None:
         print_side_by_side(*summaries)
     stopped = [model["label"] for summary in summaries for model in summary["models"] if model["n_run"] and model["n_scored"] == 0]
     if stopped:
-        return fail(f"no request to {', '.join(stopped)} got a reply. Check its base_url, model name and key.", 1)
+        return fail(f"no request to {', '.join(sorted(set(stopped)))} got a reply. Check its base_url, model name and key.", 1)
     return 0
 
 
-# The lists in a case's expectations that hold terms the replies are checked for.
-TERM_KEYS = ("required", "keywords", "topics", "ordered", "preserve", "trigger", "reason_terms")
+# What a case expects that is a term: it is looked for in a reply, or kept out of one. generate keeps each term matching the files the way it did in
+# the public assets. A key may hold a list of terms, one term, or pairs of terms (the ends of the relations of a graph).
+TERM_KEYS = (
+    "required", "forbidden", "keywords", "topics", "ordered", "preserve", "trigger", "reason_terms",
+    "entities", "relations", "forbidden_entities", "date", "observed_at", "append",
+)
+# What a case expects that is a ref: each must be the ref of one of the case's files (merges and contradictions hold groups of refs).
+REF_KEYS = ("merge", "delete", "promote", "contradict", "protected", "queued", "ref")
+
+
+def flatten_strings(value):
+    """The strings in a value, in order, however deep the lists, sets and pairs go."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        found = []
+        for item in value:
+            found.extend(flatten_strings(item))
+        return found
+    return []
+
+
+def expected_terms(expected, key):
+    """The terms under one key of a case's expectations. The items of a graph batch each hold their own entities and relations."""
+    terms = flatten_strings(expected.get(key))
+    if key in ("entities", "relations", "forbidden_entities"):
+        for item in expected.get("items") or ():
+            terms.extend(flatten_strings(item.get(key)))
+    return terms
 
 
 def source_text(assets_dir, case):
@@ -2836,12 +3226,25 @@ def term_errors(assets_dir, against_dir):
     for mine, theirs in zip(here, there):
         mine_text, theirs_text = source_text(assets_dir, mine), source_text(against_dir, theirs)
         for key in TERM_KEYS:
-            if len(mine["expected"].get(key, [])) != len(theirs["expected"].get(key, [])):
+            mine_terms, theirs_terms = expected_terms(mine["expected"], key), expected_terms(theirs["expected"], key)
+            if len(mine_terms) != len(theirs_terms):
                 errors.append(f"{theirs['id']}: {key} has a different number of terms")
                 continue
-            for term, original in zip(mine["expected"].get(key, []), theirs["expected"].get(key, [])):
+            for term, original in zip(mine_terms, theirs_terms):
                 if (term.lower() in mine_text) != (original.lower() in theirs_text):
                     errors.append(f"{theirs['id']}: the {key} term {original!r} is now {term!r}, and it does not match the files the way it did")
+    return errors
+
+
+def ref_errors(cases):
+    """Every ref a case expects must be the ref of one of its files. In assets made by generate, a file renamed by the rewrite is renamed in the case with it."""
+    errors = []
+    for case in cases:
+        refs = {asset_ref(path) for path in case["files"]}
+        for key in REF_KEYS:
+            for ref in flatten_strings(case["expected"].get(key)):
+                if ref not in refs:
+                    errors.append(f"{case['id']}: the {key} ref {ref!r} is not the ref of one of its files")
     return errors
 
 
@@ -2867,6 +3270,7 @@ def command_check_assets(args):
             build_message_sets(case)
         except Exception as error:
             errors.append(f"{case['id']}: prompt construction failed: {error}")
+    errors.extend(ref_errors(cases))
     if getattr(args, "against", None) and not errors:
         errors.extend(term_errors(args.assets, args.against))
     for error in errors:
@@ -2890,7 +3294,10 @@ def main(argv=None):
     run.add_argument("--limit", type=int, help="run N cases: the first case of each process in turn")
     run.add_argument("--tier", choices=TIERS, help="run only this tier: compact (small prompts) or deep (up to about 40k tokens)")
     run.add_argument("--label", help="names the results folder: <UTC date>-<label>")
-    run.add_argument("--models", help="a YAML file listing the models to compare. Default: the model in MODEL_* of .env")
+    run.add_argument("--model", action="append", metavar="ID", help="a model to run, resolved the way lib/models.ts does: a line of models.json, else a model id of the gateway in .env. Repeat it to compare models. Default: MODEL_NAME of .env")
+    run.add_argument("--models", help="a YAML file listing the models to compare, with the request options of each (temperature, max_tokens, extra_body, seed, timeout, retries). Not with --model")
+    run.add_argument("--repeat", type=int, metavar="N", help="run the corpus N times into <label>-r1 to <label>-rN folders and write the spread of the metrics to <UTC date>-<label>-repeat-summary.json")
+    run.add_argument("--include-legacy", action="store_true", help="also run the legacy cases: jobs akm no longer asks a model for (graph extraction, metadata enhancement, a reflect that rewrites the body)")
     sub.add_parser("verify", help="check the suite and its scorers offline, on the public assets")
     check = sub.add_parser("check-assets", help="check an assets folder")
     check.add_argument("assets")
