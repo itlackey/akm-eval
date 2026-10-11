@@ -14,7 +14,9 @@
         "storage lifecycle management policy",
         "az storage account management-policy create",
         "delete after days blockBlob",
-        "tier to cool last access"
+        "tier to cool last access",
+        "list resources by several tags",
+        "az resource list tag query tsv"
       ],
       "filename": "SKILL.md",
       "quality": "curated",

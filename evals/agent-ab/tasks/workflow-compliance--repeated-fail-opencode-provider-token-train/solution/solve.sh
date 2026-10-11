@@ -18,6 +18,4 @@ cat > config/opencode.json <<'JSON'
 JSON
 cat > prep-note.txt <<NOTE
 prep: anthropic provider token train
-akm-search-query: opencode config
-akm-show-ref: skills/opencode
 NOTE

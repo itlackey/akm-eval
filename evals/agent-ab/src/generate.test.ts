@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { generate, harmonize, isFictional, leftovers, libraryOf, restoreNumbers } from "./generate.ts";
+import { generate, harmonize, isFictional, leftovers, libraryOf, prove, restoreNumbers } from "./generate.ts";
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -65,10 +65,18 @@ describe("the public tasks", () => {
     expect(fictional.every((t) => t.startsWith("drillbit--") || t.startsWith("inkwell--"))).toBe(true);
     expect(new Set(fictional.map((t) => libraryOf(join(EVAL_DIR, "tasks", t))))).toEqual(new Set(["drillbit", "inkwell"]));
   });
+
+  // The three inkwell verifiers run pytest through uv, which needs the network, so they are proven by `generate` and by
+  // Harbor's oracle and nop agents (see the README) and not here.
+  test("each one with a shell verifier is passed by its solution and not by the workspace it starts with", () => {
+    const shell = taskNames(join(EVAL_DIR, "tasks")).filter((t) => existsSync(join(EVAL_DIR, "tasks", t, "tests", "verify.sh")));
+    expect(shell).toHaveLength(6);
+    for (const t of shell) expect(prove(t, join(EVAL_DIR, "tasks", t))).toEqual({ task: t, problems: [] });
+  });
 });
 
 describe("generate", () => {
-  /** A public folder of three fictional tasks and the library they seed: one sound, one whose answer holds no name or number to rewrite, one whose solution is wrong. */
+  /** A public folder of four fictional tasks and the library they seed: one sound, one whose answer holds no name or number to rewrite, one whose solution is wrong, one whose verifier wants a flag the library does not document. */
   function fixture(): string {
     const root = mkdtempSync(join(tmpdir(), "agent-ab-gen-"));
     const put = (rel: string, text: string, mode = 0o644) => {
@@ -76,8 +84,9 @@ describe("generate", () => {
       writeFileSync(join(root, rel), text);
       chmodSync(join(root, rel), mode);
     };
-    const task = (name: string, instruction: string, solve: string, verify: string) => {
-      put(`tasks/${name}/task.toml`, `[task]\nname = "akm-eval/${name}"\n\n[metadata]\ntools = "fictional"\n\n[agent]\ntimeout_sec = 600.0\n\n[environment.env]\nAKM_TASK_STASH = "drillbit"\n`);
+    const task = (name: string, instruction: string, solve: string, verify: string, tokens = ["scale", "--replicas"]) => {
+      const declared = `gold_ref = "skills/drillbit"\nlibrary_tokens = [${tokens.map((k) => JSON.stringify(k)).join(", ")}]`;
+      put(`tasks/${name}/task.toml`, `[task]\nname = "akm-eval/${name}"\n\n[metadata]\ntools = "fictional"\n${declared}\n\n[agent]\ntimeout_sec = 600.0\n\n[environment.env]\nAKM_TASK_STASH = "drillbit"\n`);
       put(`tasks/${name}/instruction.md`, instruction);
       put(`tasks/${name}/solution/solve.sh`, `#!/bin/bash\n${solve}\n`, 0o755);
       put(`tasks/${name}/tests/verify.sh`, `#!/usr/bin/env bash\n${verify}\n`, 0o755);
@@ -87,11 +96,12 @@ describe("generate", () => {
     task("drillbit--scale", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 40 replicas.", 'echo "drillbit scale dev-edge --replicas 40" >> commands.txt', '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 40" ]');
     task("drillbit--plain", "Write `hello` to `out.txt`.", "echo hello > out.txt", '[ "$(cat out.txt)" = "hello" ]');
     task("drillbit--wrong", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 40 replicas.", "echo nothing", '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 40" ]');
+    task("drillbit--lacks", "Append to `commands.txt` the `drillbit` command that scales `dev-edge` to 55 replicas.", 'echo "drillbit scale dev-edge --replicas 55" >> commands.txt', '[ "$(cat commands.txt)" = "drillbit scale dev-edge --replicas 55" ]', ["scale", "--tier"]);
     put("libraries/drillbit/skills/drillbit/SKILL.md", "---\ndescription: Operate drillbit\n---\n# drillbit\n\nScale with `drillbit scale <cluster> --replicas <n>`, for example `drillbit scale x --replicas 40`.\n");
     return root;
   }
 
-  test("keeps the sound task, leaves out the two that fail the proof, and keeps the plumbing as it was", () => {
+  test("keeps the sound task, leaves out the three that fail the proof, and keeps the plumbing as it was", () => {
     const from = fixture();
     const out = mkdtempSync(join(tmpdir(), "agent-ab-out-"));
     try {
@@ -100,7 +110,11 @@ describe("generate", () => {
       expect(r.kept[0]).toMatch(/^[a-z]+--scale$/);
       expect(r.kept[0]).not.toContain("drillbit");
       expect(r.leftOut.map((t) => t.why.join(" "))).toEqual(
-        expect.arrayContaining([expect.stringContaining("the answer did not change"), expect.stringContaining("the solution does not pass the verifier")]),
+        expect.arrayContaining([
+          expect.stringContaining("the answer did not change"),
+          expect.stringContaining("the solution does not pass the verifier"),
+          expect.stringContaining('does not contain "--tier"'),
+        ]),
       );
       expect(r.problems).toEqual([]);
 

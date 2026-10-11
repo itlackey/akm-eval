@@ -79,6 +79,13 @@ az resource list --tag <key>=<value>
 # example: az resource list --tag env=prod
 ```
 
+To select on several tags at once, repeat `--tag`, one `<key>=<value>` for each tag. Project the columns you want with `--query` and a JMESPath projection, and add `-o tsv` for tab-separated output:
+
+```sh
+az resource list --tag <key>=<value> --tag <key>=<value> --query "[].{name:name,group:resourceGroup}" -o tsv
+# example: az resource list --tag env=stage --tag team=ops --query "[].{name:name,group:resourceGroup}" -o tsv
+```
+
 ## Output
 
 `-o table` for humans, `-o json` for scripts, `--query "..."` to project fields with JMESPath. `-o tsv` is the right choice when piping a single value into another command.

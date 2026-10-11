@@ -18,6 +18,7 @@ budget_tokens = 25000
 budget_wall_ms = 90000
 gold_ref = "skills/az-cli"
 gold_ref_legacy = "skill:az-cli"
+library_tokens = ["az resource list", "--tag", "--query", "-o tsv"]
 memory_ability = "procedural_lookup"
 task_family = "workflow-compliance/feedback-polarity"
 workflow_failure_category = "feedback-polarity-trap"

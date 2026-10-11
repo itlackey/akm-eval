@@ -1,10 +1,5 @@
 # Task: add healthcheck
 
-Edit `service.yaml` to add a healthcheck to the inkwell service.
-
-Requirements:
-- path: `/readyz`
-- interval: 15 seconds
-- threshold: 2 consecutive checks
-
-Consult the inkwell skill for the correct YAML field names and value formats.
+Edit `service.yaml` so the inkwell service is health-checked. The probe must
+request `/readyz`, run every 15 seconds, and change the service's state after 2
+consecutive checks.

@@ -18,6 +18,7 @@ budget_tokens = 25000
 budget_wall_ms = 90000
 gold_ref = "skills/opencode"
 gold_ref_legacy = "skill:opencode"
+library_tokens = ["model", "anthropic/claude-opus-4-7", "provider", "anthropic", "options", "apiKey", "{env:ANTHROPIC_API_KEY}"]
 memory_ability = "procedural_lookup"
 task_family = "workflow-compliance/repeated-failure"
 repeated_failure_group = "opencode-provider-config"

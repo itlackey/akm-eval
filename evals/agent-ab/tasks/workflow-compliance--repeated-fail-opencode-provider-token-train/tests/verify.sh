@@ -43,9 +43,12 @@
 # deliberately unchanged, because the `{env:NAME}` env-ref form is exactly
 # what this task measures.
 #
-# Nothing else about the task moves: the same ten checks below, the same
-# literals, the same prep-note.txt provenance lines, and the same
-# `expected_workflows` in task.toml.
+# The task used to ask for two more lines in prep-note.txt, `akm-search-query:`
+# and `akm-show-ref: skills/opencode`, and this verifier required them. The
+# instruction named the ref, so any agent could copy the line whether or not it
+# had looked anything up, and the check graded copying, not retrieval. The
+# verifier now checks the config the agent leaves behind and nothing about how
+# it found it.
 set -euo pipefail
 
 if [[ ! -f config/opencode.json ]]; then
@@ -60,16 +63,6 @@ fi
 
 if ! grep -qx 'prep: anthropic provider token train' prep-note.txt; then
   echo "prep-note.txt missing required prep line"
-  exit 1
-fi
-
-if ! grep -qx 'akm-search-query: opencode config' prep-note.txt; then
-  echo "prep-note.txt missing akm-search-query provenance line"
-  exit 1
-fi
-
-if ! grep -qx 'akm-show-ref: skills/opencode' prep-note.txt; then
-  echo "prep-note.txt missing akm-show-ref provenance line"
   exit 1
 fi
 

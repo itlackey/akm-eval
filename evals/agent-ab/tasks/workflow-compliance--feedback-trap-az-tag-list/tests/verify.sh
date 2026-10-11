@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Deterministic verifier for feedback-trap-az-tag-list.
 #
-# This task is intentionally hard to satisfy from the gold ref alone
-# (`skills/az-cli` describes `--query` and `-o tsv` but not the compound
-# tag-selector pattern). The verifier checks for the structural shape of
-# the correct command; tasks that only echo the asset's hints will not
-# match all four greps.
+# The one accepted form is the one the az-cli library teaches, in its
+# `skills/az-cli` skill and its compound-tag-filter memory: a `--tag key=value`
+# for each tag, a `--query` projection of the columns, and `-o tsv`. The tags
+# and the columns come from the instruction. A JMESPath filter such as
+# `--query "[?tags.env=='prod' && tags.tier=='data']..."` is a different
+# command and is rejected here, so the library must not teach it as the way to
+# select on several tags. evals/agent-ab/src/lib.test.ts checks that the skill
+# holds every literal this file looks for.
 set -euo pipefail
 
 if [[ ! -f commands.txt ]]; then
