@@ -41,6 +41,9 @@ done
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+# Settings come from .env at the repository root: KEY=value lines. A variable that is already set wins. See lib/env.sh.
+source lib/env.sh
+
 # A seed is an unsigned 64-bit integer written in decimal.
 valid_seed() {
   [[ "$1" =~ ^[0-9]{1,20}$ ]] || return 1

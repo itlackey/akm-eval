@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, createSandbox, engineConfig, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
@@ -17,6 +17,8 @@ const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "--version") console.log("akm 0.9.99-test");
 else if (cmd === "echo") console.log(JSON.stringify({ args: rest, stdin: await Bun.stdin.text(), cwd: process.cwd(), config: process.env.AKM_CONFIG_DIR, modelKey: process.env.MODEL_API_KEY ?? null }));
 else if (cmd === "fail") { console.error("it broke"); process.exit(3); }
+else if (cmd === "exit137") process.exit(137);
+else if (cmd === "selfkill") process.kill(process.pid, "SIGKILL");
 else if (cmd === "hang") { process.on("SIGTERM", () => {}); await Bun.sleep(60_000); }
 else { console.error("unknown command " + cmd); process.exit(1); }
 `;
@@ -114,6 +116,45 @@ describe("createSandbox", () => {
     expect(cmdFor("bun /path/to/akm/src/cli.ts")).toEqual(["bun", "/path/to/akm/src/cli.ts"]);
     expect(cmdFor(" bun   cli.ts ")).toEqual(["bun", "cli.ts"]);
   });
+
+  test("writes your home folder for a leading ~/ in a word of AKM_BIN, as --akm does, and leaves any other ~ alone", () => {
+    const cmdFor = (bin: string) => {
+      const sandbox = withEnv({ AKM_BIN: bin }, () => createSandbox("lib-akm-test"));
+      sandboxes.push(sandbox);
+      return sandbox.cmd;
+    };
+    const home = homedir();
+    expect(cmdFor("bun ~/code/akm/src/cli.ts")).toEqual(["bun", `${home}/code/akm/src/cli.ts`]);
+    expect(cmdFor("~/bin/akm")).toEqual([`${home}/bin/akm`]);
+    expect(cmdFor("~/bin/bun ~/code/akm/src/cli.ts")).toEqual([`${home}/bin/bun`, `${home}/code/akm/src/cli.ts`]);
+    expect(cmdFor("bun /work/~/cli.ts ~other/cli.ts ~ --root=~/x")).toEqual(["bun", "/work/~/cli.ts", "~other/cli.ts", "~", "--root=~/x"]);
+  });
+
+  test("forwards no key named *_API_KEY or *_API_TOKEN, and keeps the rest, HOME and PATH included", () => {
+    const vars = {
+      OPENAI_API_KEY: "openai-secret",
+      ANTHROPIC_API_KEY: "anthropic-secret",
+      GITHUB_API_TOKEN: "github-secret",
+      JUDGE_API_KEY: "judge-secret",
+      MODEL_API_KEY: "model-secret",
+      MODEL_API_TOKEN: "model-token",
+      MODEL_API_KEY_FILE: "/keep/this",
+      MY_API_KEYS: "keep-this",
+      API_KEY_HINT: "keep-this",
+      HF_TOKEN: "keep-this",
+    };
+    const plain = withEnv(vars, () => createSandbox("lib-akm-test"));
+    const keyed = withEnv(vars, () => createSandbox("lib-akm-test", { keepModelKey: true }));
+    sandboxes.push(plain, keyed);
+    for (const sandbox of [plain, keyed]) {
+      for (const k of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_API_TOKEN", "JUDGE_API_KEY", "MODEL_API_TOKEN"]) expect(sandbox.env[k]).toBeUndefined();
+      for (const k of ["MODEL_API_KEY_FILE", "MY_API_KEYS", "API_KEY_HINT", "HF_TOKEN"]) expect(sandbox.env[k]).toBe(vars[k as keyof typeof vars]);
+      expect(sandbox.env.PATH).toBe(process.env.PATH as string);
+      expect(sandbox.env.HOME).toBe(process.env.HOME as string);
+    }
+    expect(plain.env.MODEL_API_KEY).toBeUndefined();
+    expect(keyed.env.MODEL_API_KEY).toBe("model-secret");
+  });
 });
 
 describe("sandboxIn", () => {
@@ -203,6 +244,19 @@ describe("runAkm", () => {
     expect(r.ms).toBeGreaterThanOrEqual(250);
     expect(r.ms).toBeLessThan(4000);
   });
+
+  test("says when the timeout killed the command, and only then", async () => {
+    const sandbox = fakeSandbox();
+    expect(await runAkm(sandbox, ["hang"], { timeoutMs: 300 })).toMatchObject({ code: 137, stderr: "", timedOut: true });
+    expect(await runAkm(sandbox, ["echo"])).toMatchObject({ code: 0, timedOut: false });
+    expect(await runAkm(sandbox, ["fail"])).toMatchObject({ code: 3, timedOut: false });
+  });
+
+  test("a command that dies of SIGKILL, or exits 137, before the timeout did not time out", async () => {
+    const sandbox = fakeSandbox();
+    expect(await runAkm(sandbox, ["selfkill"], { timeoutMs: 60_000 })).toMatchObject({ code: 137, timedOut: false });
+    expect(await runAkm(sandbox, ["exit137"], { timeoutMs: 60_000 })).toMatchObject({ code: 137, timedOut: false });
+  });
 });
 
 describe("runAkmJson", () => {
@@ -218,6 +272,18 @@ describe("runAkmJson", () => {
 
   test("throws with the command, the exit code and the end of stderr when akm fails", async () => {
     await expect(runAkmJson(fakeSandbox(), ["fail"])).rejects.toThrow("akm fail failed (exit 3): it broke");
+  });
+
+  test("throws that akm timed out, with the timeout in seconds, when the timeout killed it, not an exit code", async () => {
+    const sandbox = fakeSandbox();
+    await expect(runAkmJson(sandbox, ["hang"], { timeoutMs: 1000 })).rejects.toThrow("akm hang timed out after 1s");
+    await expect(runAkmJson(sandbox, ["hang"], { timeoutMs: 300 })).rejects.toThrow("akm hang timed out after 0.3s");
+    const e = await runAkmJson(sandbox, ["hang"], { timeoutMs: 300 }).catch((x: Error) => x);
+    expect((e as Error).message).not.toContain("exit 137");
+  });
+
+  test("still calls an exit 137 that was not the timeout a failure", async () => {
+    await expect(runAkmJson(fakeSandbox(), ["exit137"], { timeoutMs: 60_000 })).rejects.toThrow("akm exit137 failed (exit 137): ");
   });
 
   test("throws when akm prints something that is not JSON", async () => {
@@ -314,6 +380,10 @@ describe("akmBuild", () => {
     expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
     expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
   });
+
+  test("writes a leading ~/ of AKM_BIN back as ~, the same whether or not it was expanded", () => {
+    expect(withEnv({ AKM_BIN: "bun ~/no/such/akm" }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null });
+  });
 });
 
 describe("useAkm", () => {
@@ -341,5 +411,87 @@ describe("useAkm", () => {
 
   test("refuses an empty command", () => {
     expect(() => useAkm({ akm: "  " }, stop, {})).toThrow("--akm needs the command that runs akm");
+  });
+});
+
+describe("lib/env.sh, the .env loader of the bash scripts", () => {
+  const ROOT = join(import.meta.dir, "..", "..");
+
+  /** A repository root with a copy of lib/env.sh and this .env. */
+  function fakeRoot(env: string): string {
+    const root = mkdtempSync(join(tmpdir(), "lib-env-test-"));
+    dirs.push(root);
+    mkdirSync(join(root, "lib"));
+    copyFileSync(join(ROOT, "lib", "env.sh"), join(root, "lib", "env.sh"));
+    writeFileSync(join(root, ".env"), env);
+    return root;
+  }
+
+  /** Sources lib/env.sh of a root with this .env, from another folder, and returns these variables as bash then exports them. `preset` is the caller's environment. */
+  function loadEnv(env: string, names: string[], preset: Record<string, string> = {}): Record<string, string | undefined> {
+    const script = 'set -euo pipefail; cd /; source "$1/lib/env.sh"; shift; for k in "$@"; do if v=$(printenv "$k"); then printf "%s=%s\\0" "$k" "$v"; fi; done';
+    const run = Bun.spawnSync(["bash", "-c", script, "bash", fakeRoot(env), ...names], { env: { PATH: process.env.PATH as string, ...preset }, stdout: "pipe", stderr: "pipe" });
+    expect(run.stderr.toString()).toBe("");
+    expect(run.exitCode).toBe(0);
+    const out: Record<string, string | undefined> = Object.fromEntries(names.map((n) => [n, undefined]));
+    for (const pair of run.stdout.toString().split("\0").filter(Boolean)) {
+      const at = pair.indexOf("=");
+      out[pair.slice(0, at)] = pair.slice(at + 1);
+    }
+    return out;
+  }
+
+  test("exports KEY=value lines, with or without export, and strips one pair of quotes", () => {
+    const env = loadEnv(["# a comment", "", "PLAIN=plain", "export EXPORTED=yes", 'DOUBLE="two words"', "SINGLE='one word'", "EMPTY=", "URL=http://h/v1?a=b#frag", "HASH=a#b", "NOT A KEY=x", "1BAD=x", ""].join("\n"), [
+      "PLAIN", "EXPORTED", "DOUBLE", "SINGLE", "EMPTY", "URL", "HASH", "NOT", "1BAD",
+    ]);
+    expect(env).toEqual({ PLAIN: "plain", EXPORTED: "yes", DOUBLE: "two words", SINGLE: "one word", EMPTY: "", URL: "http://h/v1?a=b#frag", HASH: "a#b", NOT: undefined, "1BAD": undefined });
+  });
+
+  test("reads the last line without a newline, and lines that end in CR LF", () => {
+    expect(loadEnv('FIRST=1\r\nSECOND="2"\r\nLAST=3', ["FIRST", "SECOND", "LAST"])).toEqual({ FIRST: "1", SECOND: "2", LAST: "3" });
+  });
+
+  test("a variable that is already set wins, even an empty one", () => {
+    const env = loadEnv("SET=from-file\nEMPTY=from-file\nNEW=from-file\n", ["SET", "EMPTY", "NEW"], { SET: "from-caller", EMPTY: "" });
+    expect(env).toEqual({ SET: "from-caller", EMPTY: "", NEW: "from-file" });
+  });
+
+  test("takes a line that starts with spaces or a tab, also with export, and skips an indented comment", () => {
+    const env = loadEnv(["  SPACES=1", "\tTAB=2", "  export EXPORTED=3", "   export    SPACED=4", "  # NOT=5", "\t# ALSO_NOT=6"].join("\n"), ["SPACES", "TAB", "EXPORTED", "SPACED", "NOT", "ALSO_NOT"]);
+    expect(env).toEqual({ SPACES: "1", TAB: "2", EXPORTED: "3", SPACED: "4", NOT: undefined, ALSO_NOT: undefined });
+  });
+
+  test("an unquoted value ends at a # that has a space before it, and a quoted value keeps its # characters", () => {
+    const env = loadEnv(
+      ["PLAIN=small # the local one", "TABBED=x\t# note", "TWO=a #b #c", "ONLY= # nothing", "NOSPACE=a#b #c", 'DOUBLE="a # b"', "SINGLE='a # b'", 'QUOTED_SPACES="  kept  "'].join("\n"),
+      ["PLAIN", "TABBED", "TWO", "ONLY", "NOSPACE", "DOUBLE", "SINGLE", "QUOTED_SPACES"],
+    );
+    expect(env).toEqual({ PLAIN: "small", TABBED: "x", TWO: "a", ONLY: "", NOSPACE: "a#b", DOUBLE: "a # b", SINGLE: "a # b", QUOTED_SPACES: "  kept  " });
+  });
+
+  test("does nothing when there is no .env", () => {
+    const root = fakeRoot("");
+    rmSync(join(root, ".env"));
+    const run = Bun.spawnSync(["bash", "-c", 'set -euo pipefail; source "$1/lib/env.sh"; echo ok', "bash", root], { env: { PATH: process.env.PATH as string }, stdout: "pipe", stderr: "pipe" });
+    expect([run.exitCode, run.stdout.toString().trim(), run.stderr.toString()]).toEqual([0, "ok", ""]);
+  });
+
+  test("an AKM_BIN of .env with a quoted ~/ reaches akm's command expanded", () => {
+    const { AKM_BIN } = loadEnv('AKM_BIN="bun ~/code/akm/src/cli.ts"\n', ["AKM_BIN"]);
+    expect(AKM_BIN).toBe("bun ~/code/akm/src/cli.ts");
+    const sandbox = withEnv({ AKM_BIN }, () => createSandbox("lib-akm-test"));
+    sandboxes.push(sandbox);
+    expect(sandbox.cmd).toEqual(["bun", `${homedir()}/code/akm/src/cli.ts`]);
+  });
+
+  test("every run, generate and label script, and generate-assets, source it and carry no loader of their own", () => {
+    const scripts = [...new Bun.Glob("{evals,benchmarks}/*/{run,generate}").scanSync({ cwd: ROOT }), "evals/retrieval/label", "generate-assets"].sort();
+    expect(scripts.length).toBeGreaterThanOrEqual(25);
+    for (const script of scripts) {
+      const text = readFileSync(join(ROOT, script), "utf8");
+      expect([script, text.includes("\nsource lib/env.sh\n")]).toEqual([script, true]);
+      expect([script, text.includes("IFS= read -r line")]).toEqual([script, false]);
+    }
   });
 });
