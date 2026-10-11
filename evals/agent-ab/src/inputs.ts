@@ -88,15 +88,17 @@ export function readGenerated(assets: string): Generated | undefined {
 
 /**
  * Why run --corpus private must not use the private assets in `assets`, in a sentence that says what to do, or undefined when they are
- * the rewrite of the public tasks as they are now, still as generate wrote them. `from` is the folder of the public tasks and libraries,
- * and `where` is how the assets folder is named in the message.
+ * the rewrite of the public tasks as they are now, made by the generator as it is now, still as generate wrote them. `from` is the folder
+ * of the public tasks and libraries, `where` is how the assets folder is named in the message, and `root` is the repository whose generator
+ * code is compared (a test passes a copy).
  */
-export function privateAssetsProblem(assets: string, from: string, where = assets): string | undefined {
+export function privateAssetsProblem(assets: string, from: string, where = assets, root = ROOT): string | undefined {
   const again = "Make them again with: ./generate-assets --only agent-ab";
   if (!existsSync(join(assets, "tasks"))) return `the private assets are missing (${where}/tasks). Make them with: ./generate-assets --only agent-ab`;
   const made = readGenerated(assets);
   if (!made) return `the private assets in ${where}/ have no ${GENERATED} in its current format, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
   if (made.inputs_sha256 !== publicInputsSha256(from)) return `the private assets in ${where}/ were made from public tasks or libraries that have changed since. ${again}`;
+  if (made.generator_sha256 !== generatorSha256(root)) return `the private assets in ${where}/ were made by a generator that has changed since: generate.ts, inputs.ts or lib.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in ${GENERATED} differs). ${again}`;
   if (made.outputs_sha256 !== outputsSha256(assets)) return `the private assets in ${where}/ are not what generate wrote: a file in them was changed, added or removed since. ${again}`;
   return undefined;
 }

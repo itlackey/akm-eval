@@ -279,6 +279,21 @@ describe("treeProblem", () => {
     expect(treeProblem(out, pub, out, root)).toBeUndefined();
   });
 
+  test("refuses a manifest that names another generator, with the inputs and the files as generate wrote them", async () => {
+    const { pub, out } = await copyOfMade();
+    const manifest = JSON.parse(readFileSync(join(out, GENERATED), "utf8"));
+    expect(manifest.generator_sha256).toBe(generatorSha256());
+    for (const old of ["0".repeat(64), "f".repeat(64)]) {
+      writeFileSync(join(out, GENERATED), JSON.stringify({ ...manifest, generator_sha256: old }));
+      expect(readGenerated(out)?.generator_sha256).toBe(old); // a digest in the right format, so only the comparison can refuse it
+      expect(treeProblem(out, pub, "private/longmemeval")).toBe(
+        "the private assets in private/longmemeval/ were made by a generator that has changed since: lib/rewrite, its lexicon, or generate.ts, dataset.ts or manifest.ts of this benchmark (generator_sha256 in generated.json differs). Make them again with: ./generate-assets --only longmemeval",
+      );
+    }
+    writeFileSync(join(out, GENERATED), JSON.stringify(manifest));
+    expect(treeProblem(out, pub)).toBeUndefined();
+  });
+
   test("refuses outputs that are not the ones generate wrote: edited, replaced or missing", async () => {
     const { pub, out } = await copyOfMade();
     for (const name of OUTPUTS) {
