@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, akmBuild, semanticConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, akmBuild, commandLine, semanticConfig } from "./akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex, digest, digestTree } from "./index-cache.ts";
 
 const dirs: string[] = [];
@@ -47,7 +47,7 @@ function setup() {
   const root = tmp();
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  process.env.AKM_BIN = `bun ${script}`; // an akm that is not in a git checkout: no build
+  process.env.AKM_BIN = commandLine(["bun", script]); // an akm that is not in a git checkout: no build
   const builds: { fresh: boolean }[] = [];
   /** An index to build: it marks the data folder as akm would, with the count and the time it built. */
   const build = async (sandbox: Sandbox): Promise<number> => {
@@ -225,7 +225,7 @@ describe("cachedIndex", () => {
     test.skipIf(!Bun.which("git"))("does not let two builds of akm that print the same version share an index", async () => {
       const s = setup();
       const akm = checkout();
-      process.env.AKM_BIN = `bun ${akm.cli}`;
+      process.env.AKM_BIN = commandLine(["bun", akm.cli]);
       const spec = { cmd: ["bun", akm.cli] };
       const first = await s.open(spec);
       first.release();
@@ -259,7 +259,7 @@ describe("cachedIndex", () => {
     test.skipIf(!Bun.which("git"))("tells two edits of one commit apart, uses the index again for the same edit, and builds again for another", async () => {
       const s = setup();
       const akm = checkout();
-      process.env.AKM_BIN = `bun ${akm.cli}`;
+      process.env.AKM_BIN = commandLine(["bun", akm.cli]);
       const spec = { cmd: ["bun", akm.cli] };
       const clean = await s.open(spec);
       clean.release();
@@ -300,7 +300,7 @@ describe("cachedIndex", () => {
     test.skipIf(!Bun.which("git"))("builds again for a source file that is not tracked, which git describe does not see", async () => {
       const s = setup();
       const akm = checkout();
-      process.env.AKM_BIN = `bun ${akm.cli}`;
+      process.env.AKM_BIN = commandLine(["bun", akm.cli]);
       const spec = { cmd: ["bun", akm.cli] };
       (await s.open(spec)).release();
       writeFileSync(join(akm.cli, "..", "extra.ts"), "export const x = 1;\n");
@@ -321,7 +321,7 @@ describe("cachedIndex", () => {
     test.skipIf(!Bun.which("git"))("keeps using the index of a clean checkout, run after run", async () => {
       const s = setup();
       const akm = checkout();
-      process.env.AKM_BIN = `bun ${akm.cli}`;
+      process.env.AKM_BIN = commandLine(["bun", akm.cli]);
       const spec = { cmd: ["bun", akm.cli] };
       (await s.open(spec)).release();
       for (let run = 0; run < 2; run++) {
@@ -370,7 +370,7 @@ describe("cachedIndex", () => {
       (await s.open()).release();
       const other = join(s.root, "other-akm.ts");
       writeFileSync(other, FAKE_AKM);
-      process.env.AKM_BIN = `bun ${other}`;
+      process.env.AKM_BIN = commandLine(["bun", other]);
       const index = await s.open({ cmd: ["bun", other] });
       index.release();
       expect(index.state).toBe("cold");

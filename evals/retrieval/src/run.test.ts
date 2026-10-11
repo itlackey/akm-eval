@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { commandLine, createSandbox, parseCommand, writeConfig } from "../../../lib/akm/akm.ts";
 import { harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
@@ -111,7 +111,7 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
   /** The fake akm for the keyword sandbox, and for the semantic index in the cache, which is in the temp folder. */
   const ctx = { newSandbox, label: "t", semantic: true, cache: { root: cacheRoot, cmd: ["bun", script] } };
   // summary.json says which akm the run was started with, by AKM_BIN. It is the fake one, whatever the caller has set; the afterEach above puts the caller's back.
-  const akmBin = `bun ${script}`;
+  const akmBin = commandLine(["bun", script]);
   process.env.AKM_BIN = akmBin;
   return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot, akmBin };
 }
@@ -405,7 +405,7 @@ describe("runCollection", () => {
       expect([first.semantic_index, second.semantic_index]).toEqual(["cold", "warm"]);
       // The summary writes the home folder as ~, wherever the temp folder is.
       const home = homedir();
-      const shown = akmBin.split(" ").map((word) => (word === home || word.startsWith(`${home}/`) ? `~${word.slice(home.length)}` : word)).join(" ");
+      const shown = commandLine(parseCommand(akmBin).map((word) => (word === home || word.startsWith(`${home}/`) ? `~${word.slice(home.length)}` : word)));
       const built = { version: "0.9.99-test", akm_bin: shown, akm_build: null, builtAt: "build 1" };
       expect(first.semantic_index_built_by).toEqual(built);
       expect(second.semantic_index_built_by).toEqual(built);

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
@@ -87,7 +88,7 @@ function setup(cases: Case[], plan: Record<string, object>) {
   writeFileSync(join(assets, "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  process.env.AKM_BIN = `bun ${script}`;
+  process.env.AKM_BIN = commandLine(["bun", script]);
   process.env.FAKE_PLAN = JSON.stringify(plan);
   process.env.FAKE_LOG = join(root, "calls.jsonl");
   process.env.MODEL_API_KEY = "model-secret";
@@ -318,7 +319,7 @@ describe("run --corpus private", () => {
   }
   const bun = (tree: string, script: string, args: string[]) => {
     // akm is not there, so a run that gets past its checks stops at the version probe, before it calls a model.
-    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: join(tree, "no-akm") };
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine([join(tree, "no-akm")]) };
     const p = Bun.spawnSync(["bun", join(tree, "evals", "reflect", "src", script), ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
     return { code: p.exitCode, err: p.stderr.toString() };
   };

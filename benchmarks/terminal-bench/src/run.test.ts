@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
 import { type AkmArm, PINS, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
@@ -342,7 +343,7 @@ function fakeAkm(fake: boolean): void {
   }
   const script = join(tmp(), "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  process.env.AKM_BIN = `bun ${script}`;
+  process.env.AKM_BIN = commandLine(["bun", script]);
 }
 
 const mdFilesIn = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? mdFilesIn(join(dir, e.name)) : e.name.endsWith(".md") ? 1 : 0), 0);

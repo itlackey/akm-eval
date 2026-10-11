@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -520,7 +520,7 @@ describe("the command", () => {
     const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
     dirs.push(root);
     writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
-    const done = run([], { ...model, AKM_BIN: `bun ${join(root, "old-akm.ts")}` });
+    const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
     expect(done.code).toBe(2);
     expect(done.err).toContain("akm 0.9.25 is older than this eval is written for. It needs akm 0.9.26 or later.");
   });

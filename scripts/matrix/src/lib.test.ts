@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
 import { endpointOf, jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
 import { buildReport } from "../../../lib/harbor/report.ts";
@@ -2056,7 +2057,7 @@ describe("the fingerprint of a job", () => {
     writeFileSync(join(akm, "cli.ts"), "one\n");
     git(akm, "add", "cli.ts");
     git(akm, "commit", "-q", "-m", "one");
-    const local = () => fingerprintOf(root, job([]), { ...env, AKM_BIN: `bun ${join(akm, "cli.ts")}` }).parts.akm;
+    const local = () => fingerprintOf(root, job([]), { ...env, AKM_BIN: commandLine(["bun", join(akm, "cli.ts")]) }).parts.akm;
     const harbor = () => fingerprintOf(root, job(["--akm", akm], "agent-ab"), env).parts.akm;
     const clean = [local(), harbor()];
     writeFileSync(join(akm, "cli.ts"), "two\n");

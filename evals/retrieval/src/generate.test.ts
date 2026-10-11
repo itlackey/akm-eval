@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
 import { assemble, commandWords, explode, generate, install, pinnedTools, problems } from "./generate.ts";
 import { publicInputsSha256, readGenerated, rewriteSha256, staleAssets } from "./inputs.ts";
 import { type Qrel, type Query, parseQrels } from "./lib.ts";
@@ -296,7 +297,7 @@ function publicRepo() {
   write("evals/retrieval/assets/books/qrels.jsonl", jsonl([{ id: "b1", ref: "knowledge/bread", grade: 3, reason: "Bakes bread." }]));
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
-  process.env.AKM_BIN = `bun ${script}`;
+  process.env.AKM_BIN = commandLine(["bun", script]);
   return { root, out: join(root, "private", "retrieval"), write };
 }
 
