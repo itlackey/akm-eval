@@ -8,6 +8,39 @@
   "akm_version": "0.9.99-test",
   "akm_bin": "bun /work/akm/src/index.ts",
   "akm_build": "1a2b3c4",
+  "status": "complete",
+  "aborted_reason": null,
+  "assets_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seed": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "night"
+    },
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>",
+        "model": "test-model",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 120000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "test-model",
+    "endpoint": "gateway.example.com",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 120000
+  },
   "limit": null,
   "strategy": "promotion",
   "config_patch": null,
