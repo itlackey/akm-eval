@@ -214,6 +214,7 @@ export interface ClassCounts {
 
 export interface Metrics {
   unsafe: { n: number; of: number; staged: number }; // unsafe retirements, scored cases, and the unsafe ones akm staged
+  staged: { n: number; safe: number }; // the retirements akm staged, which a triage run accepts with no one looking, and the safe ones among them
   precision: { value: number | null; safe: number; retired: number }; // of the retirements, the share that were safe
   recall: { value: number | null; retired_safe: number; of: number }; // of the cases with a safe side, the share where akm retired a safe one
   classes: Record<Relation, ClassCounts>;
@@ -225,6 +226,8 @@ export function metrics(rows: Row[]): Metrics {
   const classes = Object.fromEntries(RELATIONS.map((r) => [r, { n: 0, error: 0, paired: 0, judged_as: labels(), retired_safe: 0, retired_unsafe: 0, kept: 0 }])) as Record<Relation, ClassCounts>;
   let unsafe = 0;
   let staged = 0;
+  let stagedAll = 0;
+  let stagedSafe = 0;
   let safe = 0;
   let scored = 0;
   let withSafeSide = 0;
@@ -239,6 +242,10 @@ export function metrics(rows: Row[]): Metrics {
     scored++;
     if (r.paired) k.paired++;
     if (r.judged_as) k.judged_as[r.judged_as]++;
+    if (r.staged) {
+      stagedAll++;
+      if (r.safe) stagedSafe++;
+    }
     if (r.outcome === "keep") k.kept++;
     else if (r.safe) {
       k.retired_safe++;
@@ -255,6 +262,7 @@ export function metrics(rows: Row[]): Metrics {
   }
   return {
     unsafe: { n: unsafe, of: scored, staged },
+    staged: { n: stagedAll, safe: stagedSafe },
     precision: { value: ratio(safe, safe + unsafe), safe, retired: safe + unsafe },
     recall: { value: ratio(hits, withSafeSide), retired_safe: hits, of: withSafeSide },
     classes,

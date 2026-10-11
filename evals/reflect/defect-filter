@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Replays akm's reflect defect filter on labelled edits. See README.md.
+#
+#   evals/reflect/defect-filter --akm-src DIR [--reflect RESULTS_DIR]... [--judge-gate public|private]...
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+command -v bun > /dev/null || { echo "defect-filter: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/defect-filter.ts" "$@"

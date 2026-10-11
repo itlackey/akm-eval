@@ -32,7 +32,7 @@ describe("checkRewrite", () => {
     const fewer = copy(publicNight);
     (fewer.items[0] as { files: string[] }).files = ["only-one.md"];
     expect(checkRewrite(publicNight, fewer)[0]).toContain("it has 1 files, and the public item has 2");
-    expect(checkRewrite(publicNight, { ...publicNight, items: publicNight.items.slice(1) })).toEqual(["28 items were written, and there are 29"]);
+    expect(checkRewrite(publicNight, { ...publicNight, items: publicNight.items.slice(1) })).toEqual(["34 items were written, and there are 35"]);
   });
 
   test("names a required fact that is no longer in the memory, and a forbidden claim that is now in it", () => {
@@ -59,7 +59,7 @@ describe("generate", () => {
     const out = temp();
     const done = generate("42", out);
     expect(done.exitCode).toBe(0);
-    expect(done.stdout.toString()).toContain("29 items written to");
+    expect(done.stdout.toString()).toContain("35 items written to");
     expect(existsSync(join(out, "map.json"))).toBe(true);
     const night = loadNight(join(out, "assets"));
     expect(nightProblems(night)).toEqual([]);

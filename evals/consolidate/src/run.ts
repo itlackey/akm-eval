@@ -109,6 +109,7 @@ function printSummary(s: Summary): void {
   const m = s.metrics;
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} cases`);
   console.log(`  unsafe retirements  ${m.unsafe.n} of ${m.unsafe.of} cases, ${m.unsafe.staged} of them staged for unattended retirement`);
+  console.log(`  staged retirements  ${m.staged.safe} of ${m.staged.n} safe`);
   console.log(`  retire precision    ${cell(m.precision.safe, m.precision.retired, m.precision.value)}`);
   console.log(`  retire recall       ${cell(m.recall.retired_safe, m.recall.of, m.recall.value)}  of the cases with a safe side`);
   console.log(`  errored             ${s.n_errored}`);
@@ -337,6 +338,7 @@ function printPool(s: PoolSummary): void {
     return;
   }
   console.log(`  unsafe retirements  ${m.unsafe.n} of ${m.unsafe.of} proposed, ${m.unsafe.staged} of them staged for unattended retirement`);
+  console.log(`  staged retirements  ${m.staged.safe} of ${m.staged.n} safe`);
   console.log(`  wrong successor     ${m.wrong_successor}`);
   console.log(`  retire precision    ${cell(m.precision.safe, m.precision.retired, m.precision.value)}`);
   console.log(`  retire recall       ${cell(m.recall.retired_safe, m.recall.of, m.recall.value)}  of the clusters with a note to retire`);
