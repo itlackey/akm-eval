@@ -6,8 +6,9 @@
 // The text of each question (the question, the answer and every turn of every session) goes through one
 // rewrite map, so a name or a place changes the same way in the sessions, the question and the answer.
 // Numbers and versions are kept (--keep-values): the answers count days, times and items in the sessions.
-// Tool and product names are renamed, and the check below shows the answers stay in their evidence.
-// Dates move back by whole years, so month and day still agree with dates written in the chats.
+// Tool and product names are renamed, and the check below shows the answers stay in their evidence, for the
+// answers that are in their evidence word for word. rewrite.json says how many questions that is.
+// Dates move back by whole calendar years, the sessions' and the ones written in the chats, so month and day agree.
 
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -62,6 +63,65 @@ export function shiftYears(date: string, years: number): string {
   return `${String(y).padStart(4, "0")}/${m[2]}/${m[3]} (${WEEKDAYS[when.getUTCDay()]}) ${m[5]}`;
 }
 
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const monthNumber = (name: string): number => MONTH_NAMES.indexOf(name.slice(0, 3).toLowerCase()) + 1;
+const p2 = (n: number): string => String(n).padStart(2, "0");
+
+interface DateForm {
+  re: RegExp;
+  /** The year, month and day of a match. */
+  read: (m: RegExpExecArray) => [number, number, number];
+  /** The match again with this year and day. The month, the spelling and the separators stay. */
+  write: (m: RegExpExecArray, year: number, day: number) => string;
+}
+
+// The four ways lib/rewrite finds a date in a text, with the same patterns, so that the two agree on what a date is.
+const DATE_FORMS: DateForm[] = [
+  { re: /(?<![\d-])(\d{4})-(\d{2})-(\d{2})(?!\d)/g, read: (m) => [Number(m[1]), Number(m[2]), Number(m[3])], write: (m, y, d) => `${y}-${m[2]}-${p2(d)}` },
+  { re: /(?<![\d/])(\d{4})\/(\d{2})\/(\d{2})(?![\d/])/g, read: (m) => [Number(m[1]), Number(m[2]), Number(m[3])], write: (m, y, d) => `${y}/${m[2]}/${p2(d)}` },
+  {
+    re: new RegExp(`\\b(${MONTH})(\\.?)(\\s+)(\\d{1,2})((?:st|nd|rd|th)?)(,?\\s+)(\\d{4})\\b`, "g"),
+    read: (m) => [Number(m[7]), monthNumber(m[1]), Number(m[4])],
+    write: (m, y, d) => `${m[1]}${m[2]}${m[3]}${m[4].length === 2 && m[4].startsWith("0") ? p2(d) : d}${m[5]}${m[6]}${y}`,
+  },
+  {
+    re: new RegExp(`\\b(\\d{1,2})((?:st|nd|rd|th)?)(\\s+)(${MONTH})(\\.?)(,?\\s+)(\\d{4})\\b`, "g"),
+    read: (m) => [Number(m[7]), monthNumber(m[4]), Number(m[1])],
+    write: (m, y, d) => `${m[1].length === 2 && m[1].startsWith("0") ? p2(d) : d}${m[2]}${m[3]}${m[4]}${m[5]}${m[6]}${y}`,
+  },
+];
+
+/** Is it a real date, in the years lib/rewrite treats as dates (1900 to 2199)? */
+function isRealDate(y: number, mo: number, d: number): boolean {
+  if (y < 1900 || y > 2199) return false;
+  const when = new Date(Date.UTC(y, mo - 1, d));
+  return when.getUTCFullYear() === y && when.getUTCMonth() === mo - 1 && when.getUTCDate() === d;
+}
+
+/**
+ * Every date written in full in the text (2023-05-20, 2023/05/20, May 20th, 2023, 20 May 2023) moved back by whole calendar years: the
+ * same month and day, as a session's date moves with shiftYears, and not by a count of days, which is a day off past a 29th of
+ * February. A 29th of February with no equivalent becomes the 28th. A bare year, or a month and a year, is not a date here and is not moved.
+ */
+export function shiftTextDates(text: string, years: number): string {
+  const claimed = new Uint8Array(text.length);
+  const edits: { start: number; end: number; text: string }[] = [];
+  for (const form of DATE_FORMS) {
+    for (const m of text.matchAll(form.re)) {
+      const [start, end] = [m.index, m.index + m[0].length];
+      const [y, mo, d] = form.read(m);
+      if (!isRealDate(y, mo, d) || claimed.subarray(start, end).some(Boolean)) continue; // not a date, which lib/rewrite leaves alone too
+      claimed.fill(1, start, end);
+      const leap = new Date(Date.UTC(y - years, 1, 29)).getUTCMonth() === 1;
+      edits.push({ start, end, text: form.write(m, y - years, mo === 2 && d === 29 && !leap ? 28 : d) });
+    }
+  }
+  let out = text;
+  for (const e of edits.sort((a, b) => b.start - a.start)) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  return out;
+}
+
 /** The question again, with the rewritten texts and the dates moved. The ids, the types and the flags are kept. */
 export function assembleQuestion(original: Question, rewritten: string, years: number): Question {
   const parts = blocks(rewritten);
@@ -92,17 +152,27 @@ export function assembleQuestion(original: Question, rewritten: string, years: n
   };
 }
 
-/** Is the answer still in the evidence sessions of the rewritten question, if it was in them in the original? */
+const evidenceText = (q: Question): string => {
+  const ids = new Set(q.answer_session_ids);
+  return q.haystack_sessions
+    .filter((_, i) => ids.has(q.haystack_session_ids[i]))
+    .flatMap((turns) => turns.map((t) => t.content))
+    .join("\n")
+    .toLowerCase();
+};
+
+/**
+ * Is the answer of the original question in its evidence sessions word for word? Only then can the evidence check below say anything.
+ * An answer that is counted from the sessions (how many days, how many times) or put in other words is not, and the check lets it pass.
+ */
+export const evidenceChecked = (original: Question): boolean => evidenceText(original).includes(String(original.answer).toLowerCase());
+
+/** How many of the questions the evidence check covers (see evidenceChecked). */
+export const evidenceCoverage = (questions: Question[]): { questions: number; checked: number } => ({ questions: questions.length, checked: questions.filter(evidenceChecked).length });
+
+/** Is the answer still in the evidence sessions of the rewritten question, if it was in them in the original? True for a question the check does not cover (see evidenceChecked). */
 export function evidenceKept(original: Question, rewritten: Question): boolean {
-  const evidence = (q: Question) => {
-    const ids = new Set(q.answer_session_ids);
-    return q.haystack_sessions
-      .filter((_, i) => ids.has(q.haystack_session_ids[i]))
-      .flatMap((turns) => turns.map((t) => t.content))
-      .join("\n")
-      .toLowerCase();
-  };
-  return !evidence(original).includes(String(original.answer).toLowerCase()) || evidence(rewritten).includes(String(rewritten.answer).toLowerCase());
+  return !evidenceChecked(original) || evidenceText(rewritten).includes(String(rewritten.answer).toLowerCase());
 }
 
 /**
@@ -142,11 +212,12 @@ async function main(): Promise<void> {
 
   rmSync(work, { recursive: true, force: true });
   mkdirSync(join(work, "in"), { recursive: true });
-  const texts = questions.map(explodeQuestion);
+  const texts = questions.map((q) => shiftTextDates(explodeQuestion(q), yearsBack));
   texts.forEach((text, i) => writeFileSync(join(work, "in", `q${String(i + 1).padStart(4, "0")}.txt`), text));
 
   const keep = commonWords(texts);
-  const initial = { version: 1, seed, dateShiftDays: -365 * yearsBack, words: Object.fromEntries(keep.map((w) => [w, w])), hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
+  // The dates are moved above, by calendar years, so the rewrite moves none by a count of days.
+  const initial = { version: 1, seed, dateShiftDays: 0, words: Object.fromEntries(keep.map((w) => [w, w])), hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {} };
   writeFileSync(map, JSON.stringify(initial));
   console.log(rewrite(["--seed", seed, "--map", map, "--keep-values", join(work, "in"), join(work, "out")]).split("\n").pop());
   const finalMap = JSON.parse(readFileSync(map, "utf8")) as { words: Record<string, string> };
@@ -155,6 +226,7 @@ async function main(): Promise<void> {
   if (names.length !== questions.length) throw new Error(`the rewrite wrote ${names.length} files for ${questions.length} questions`);
   const rewritten = questions.map((q, i) => assembleQuestion(q, readFileSync(join(work, "out", names[i]), "utf8"), yearsBack));
   const lost = questions.filter((q, i) => !evidenceKept(q, rewritten[i])).map((q) => q.question_id);
+  const coverage = evidenceCoverage(questions);
   if (lost.length > 0) throw new Error(`the rewrite took the answer out of the evidence of ${lost.length} questions (${lost.slice(0, 5).join(", ")}). Nothing was written.`);
 
   rmSync(assets, { recursive: true, force: true });
@@ -166,13 +238,15 @@ async function main(): Promise<void> {
     derived_from: { name: lock.dataset, source: lock.source, licence: lock.licence, revision: lock.revision, sha256: lock.files[DATA_FILE].sha256 },
     tool: "lib/rewrite",
     years_back: yearsBack,
+    // The check covers the questions whose answer is in the evidence word for word. The others (counted or put in other words) pass it unchecked.
+    evidence_check: coverage,
     words_kept: keep.length,
     words_renamed: Object.keys(finalMap.words).length - keep.length,
     sha256: createHash("sha256").update(data).digest("hex"),
   };
   writeFileSync(join(assets, "rewrite.json"), `${JSON.stringify(provenance, null, 2)}\n`);
   rmSync(work, { recursive: true, force: true });
-  console.log(`longmemeval: ${rewritten.length} questions written to ${join(values.out, "assets", DATA_FILE)} (${provenance.words_renamed} names and words renamed, ${keep.length} ordinary words kept)`);
+  console.log(`longmemeval: ${rewritten.length} questions written to ${join(values.out, "assets", DATA_FILE)} (${provenance.words_renamed} names and words renamed, ${keep.length} ordinary words kept; the evidence check covers ${coverage.checked} of them)`);
 }
 
 if (import.meta.main) await main();

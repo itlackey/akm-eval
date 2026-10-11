@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { akmVersion } from "../../../lib/akm/akm.ts";
-import { Akm } from "./akm.ts";
+import { Akm, PROJECTION_LIMIT, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
-import { chat, chatUrl } from "./llm.ts";
+import { TEMPERATURE, chat, chatUrl, endpointHost } from "./llm.ts";
 
 const dirs: string[] = [];
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -84,6 +84,24 @@ describe("chat", () => {
     expect(chatUrl("http://h/v1")).toBe("http://h/v1/chat/completions");
     expect(chatUrl("http://h/v1/chat/completions/")).toBe("http://h/v1/chat/completions");
   });
+
+  test("sends the temperature it records, unless asked for another", async () => {
+    const bodies: { temperature: number }[] = [];
+    server = Bun.serve({ port: 0, fetch: async (req) => (bodies.push((await req.json()) as { temperature: number }), reply("ok")) });
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "m" };
+    await chat(endpoint, "p");
+    await chat(endpoint, "p", { temperature: 0.7 });
+    expect(TEMPERATURE).toBe(0);
+    expect(bodies.map((b) => b.temperature)).toEqual([TEMPERATURE, 0.7]);
+  });
+
+  test("names an endpoint by its host, with no path, query or credentials", () => {
+    expect(endpointHost("https://api.openai.com/v1")).toBe("api.openai.com");
+    expect(endpointHost("http://localhost:8080/v1/chat/completions?key=1")).toBe("localhost:8080");
+    expect(endpointHost("https://user:secret@gateway.example:8443/v1")).toBe("gateway.example:8443");
+    expect(endpointHost("not a url")).toBeNull();
+    expect(endpointHost("")).toBeNull();
+  });
 });
 
 describe("Akm", () => {
@@ -110,6 +128,54 @@ describe("Akm", () => {
     expect(readdirSync(join(sandbox.dir, "bundle", "memories"))).toHaveLength(1);
     expect(again.size).toBe(1);
     expect(existsSync(join(sandbox.dir, "bundle"))).toBe(true);
+  });
+
+  test("a semantic sandbox embeds the sessions as it indexes them, and every search has to say it was semantic", async () => {
+    const script = fakeAkmScript(tmp());
+    const sandbox = sandboxRunning(script, dirs, { semantic: true });
+    expect(JSON.parse(readFileSync(join(sandbox.dir, "config", "config.json"), "utf8"))).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+    const akm = new Akm(sandbox, "semantic");
+    expect(akm.mode).toBe("semantic");
+    const names = await akm.load([{ date: "d", turns: [{ role: "user", content: "My dog Biscuit needs a harness" }] }, { date: "d", turns: [{ role: "user", content: "A trip to Lisbon" }] }], "q");
+    expect((await akm.search("Which harness does Biscuit need?", 5)).map((h) => names.get(h))).toEqual([0]);
+
+    // a search that fell back to keywords, or says nothing about how it searched, is an error
+    const fallback = new Akm(sandboxRunning(script, dirs, { semantic: true, env: { FAKE_AKM_SEARCH_MODE: "fts-fallback" } }), "semantic");
+    await fallback.load([{ date: "d", turns: [{ role: "user", content: "harness" }] }], "q");
+    await expect(fallback.search("harness", 5)).rejects.toThrow("akm searched with fts-fallback, not semantic");
+    const silent = join(tmp(), "silent.ts");
+    writeFileSync(silent, 'if (process.argv[2] === "search" && process.argv[3] === "--help") console.log("--detail <detail>"); else console.log(JSON.stringify({ hits: [], totalEntries: 0 }));');
+    await expect(new Akm(sandboxRunning(silent, dirs, { semantic: true }), "semantic").search("harness", 5)).rejects.toThrow("akm searched with no search mode, not semantic");
+    // keyword search takes whatever akm says, as before
+    const keyword = new Akm(sandboxRunning(silent, dirs));
+    expect(await keyword.search("harness", 5)).toEqual([]);
+
+    // an index that did not embed every session is an error too
+    const partial = new Akm(sandboxRunning(script, dirs, { semantic: true, env: { FAKE_AKM_EMBEDDED: "1" } }), "semantic");
+    await expect(partial.load([{ date: "d", turns: [] }, { date: "d", turns: [] }], "q")).rejects.toThrow("akm embedded 1 of 2 sessions");
+    const plain = new Akm(sandboxRunning(script, dirs, { env: { FAKE_AKM_EMBEDDED: "1" } }));
+    expect((await plain.load([{ date: "d", turns: [] }, { date: "d", turns: [] }], "q")).size).toBe(2); // keyword indexing has no embeddings to count
+  });
+
+  test("a command that outlives its limit is a timeout, with the message the run counts", async () => {
+    const akm = new Akm(sandboxRunning(fakeAkmScript(tmp()), dirs, { env: { FAKE_AKM_SLEEP: "5000" } }), "keyword", 300);
+    const error = await akm.load([{ date: "d", turns: [] }], "q").catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("akm index timed out after 0.3s");
+    expect(isAkmTimeout((error as Error).message)).toBe(true);
+    // the other ways akm fails are not timeouts
+    expect(isAkmTimeout("akm index failed (exit 137): ")).toBe(false);
+    expect(isAkmTimeout("akm indexed 1 entries for 2 sessions")).toBe(false);
+    expect(isAkmTimeout("the request timed out after 900 s")).toBe(false);
+  });
+
+  test("counts the sessions that are longer than akm's keyword index keeps", () => {
+    const session = (n: number) => ({ date: "2023/05/20 (Sat) 02:21", turns: [{ role: "user", content: "x".repeat(n) }] });
+    const header = "# Chat session\n\nSession date: 2023/05/20 (Sat) 02:21\n\nuser: \n".length;
+    expect(PROJECTION_LIMIT).toBe(16_384);
+    // the memory file is what counts: the heading, the date and the role go with the text
+    expect(overProjectionLimit([session(PROJECTION_LIMIT - header), session(PROJECTION_LIMIT - header + 1), session(100_000), session(0)])).toBe(2);
+    expect(overProjectionLimit([])).toBe(0);
   });
 
   test("stops when akm indexes a different number of entries than there are sessions", async () => {
