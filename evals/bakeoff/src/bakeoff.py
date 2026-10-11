@@ -76,7 +76,7 @@ PROCESSES = (
 # the "legacy" track, which is the original bake-off's cases and which stays in the default run. The README says why.
 LEGACY_JOBS = {
     "graph_extraction": "akm 0.9.17 removed the entity graph, so akm no longer asks a model for one",
-    "metadata_enhance": "the review counts it with the graph passes akm 0.9.17 removed (A4); not checked against akm's changelog",
+    "metadata_enhance": "reports/retired-evals.md records that metadata enrichment was removed in akm 0.9.17 with the graph; not checked against akm's changelog",
 }
 # Reflect has edited only the frontmatter since akm 0.9.25-alpha.3. These cases ask for a rewritten body.
 REFLECT_BODY_VARIANTS = ("revision", "deep_reflect", "production_reflect")
@@ -655,14 +655,13 @@ JSON_STARTS = 24
 
 
 def parse_json_value(text):
-    """The JSON object or array in a reply: the whole reply, else the span from an opening bracket to the last closing one of its kind.
-    Prose around the JSON is cut away, and so is a stray bracket before it ("see {below}: {...}"): each opening bracket is tried in turn."""
+    """The JSON object or array in a reply: the whole reply, else the longest span from an opening bracket to the last closing one of its kind that reads as JSON.
+    Prose around the JSON is cut away, and so is a stray bracket before it ("see {below}: {...}"): each opening bracket is tried. The longest wins because the answer is the biggest value in a reply, so an array in the prose before it ("see [1]") does not take its place."""
     raw = strip_wrappers(text)
-    candidates = [raw]
     closers = {"{": raw.rfind("}"), "[": raw.rfind("]")}
     starts = [index for index, char in enumerate(raw) if char in closers and closers[char] > index][:JSON_STARTS]
-    candidates.extend(raw[index : closers[raw[index]] + 1] for index in starts)
-    for candidate in candidates:
+    spans = sorted((raw[index : closers[raw[index]] + 1] for index in starts), key=len, reverse=True)
+    for candidate in [raw, *spans]:
         try:
             value = json.loads(candidate, strict=False)
         except (TypeError, ValueError):
@@ -726,10 +725,11 @@ def graph_path_match(relations, expected):
 
 
 def frontmatter_fields(block):
-    """The fields of a YAML block. Where PyYAML cannot read the block, each line with a `key: value` is taken as it stands."""
+    """The fields of a YAML block. Where PyYAML cannot read the block, each line with a `key: value` is taken as it stands.
+    PyYAML raises a plain ValueError, not a YAMLError, for a date that is not on the calendar (2026-09-31), so both are caught."""
     try:
         data = yaml.safe_load(block)
-    except yaml.YAMLError:
+    except (yaml.YAMLError, ValueError):
         data = None
     if isinstance(data, dict):
         return {str(key): value for key, value in data.items()}

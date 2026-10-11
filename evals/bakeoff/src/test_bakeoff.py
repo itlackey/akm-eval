@@ -468,6 +468,19 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(body, "body")
         self.assertEqual(bakeoff.parse_frontmatter("no frontmatter"), (None, "no frontmatter"))
 
+    def test_a_date_that_is_not_on_the_calendar_does_not_make_the_frontmatter_unreadable(self):
+        # PyYAML raises a plain ValueError for these, not a YAMLError: the block is then read by lines
+        for updated in ("2026-09-31", "2026-02-30", "2026-13-01", "2026-09-30T25:00:00Z"):
+            frontmatter, body = bakeoff.parse_frontmatter(f"---\ndescription: Queue recovery.\nupdated: {updated}\n---\nbody")
+            self.assertEqual(frontmatter, {"description": "Queue recovery.", "updated": updated}, updated)
+            self.assertEqual(body, "body")
+        case = bakeoff.CASE_BY_ID["distill-queue-knowledge"]
+        reply = bakeoff.GOOD_OUTPUTS[case["id"]].replace("\ntags:", "\nupdated: 2026-09-31\ntags:", 1)
+        self.assertIn("updated: 2026-09-31", reply)
+        result = bakeoff.score_distill(case, reply)
+        self.assertTrue(result["structure"])
+        self.assertTrue(result["passed"], result["failures"])
+
     def test_graph_relations_must_run_the_expected_way(self):
         case = bakeoff.CASE_BY_ID["extract-release-graph"]
         good = json.loads(bakeoff.calibration_for(case))
@@ -529,6 +542,29 @@ class ScoringTest(unittest.TestCase):
         self.assertIsNone(bakeoff.parse_json_value("no json {here"))
         self.assertIsNone(bakeoff.parse_json_value(""))
         self.assertIsNone(bakeoff.parse_json("[1, 2]"))  # parse_json wants an object
+
+    def test_an_array_in_the_prose_before_the_answer_does_not_take_its_place(self):
+        answer = '{"score": 4, "reason": "clear"}'
+        for preamble in ("Result (see [1]):", "Scores are in [0, 5]. Answer:", "I checked the [] list first."):
+            self.assertEqual(bakeoff.parse_json_value(f"{preamble}\n{answer}"), {"score": 4, "reason": "clear"}, preamble)
+            self.assertEqual(bakeoff.parse_json(f"{preamble}\n{answer}\n\nDone."), {"score": 4, "reason": "clear"}, preamble)
+        # an answer that is an array stays whole, and one case passes as it did without the preamble
+        self.assertEqual(bakeoff.parse_json_value('Scores [1]:\n[{"a": 1}, {"a": 2}]'), [{"a": 1}, {"a": 2}])
+        case = bakeoff.CASE_BY_ID["judge-strong-lesson"]
+        calibration = bakeoff.calibration_for(case)
+        self.assertTrue(bakeoff.score_reply(case, calibration)["passed"])
+        for preamble in ("Result (see [1]):", "Scores are in [0, 5]. Answer:", "I checked the [] list first."):
+            self.assertTrue(bakeoff.score_reply(case, f"{preamble}\n{calibration}")["passed"], preamble)
+
+    def test_a_reply_cut_off_inside_its_json_is_not_a_valid_output(self):
+        # an inner object or array of the cut reply may read as JSON, but the shape checks reject it
+        for case_id in ("consolidate-memory-pool", "deep-bakeoff-d01", "infer-checkpoint-memory"):
+            case = bakeoff.CASE_BY_ID[case_id]
+            calibration = bakeoff.calibration_for(case)
+            for share in (0.3, 0.5, 0.8, 0.95):
+                result = bakeoff.score_reply(case, calibration[: int(len(calibration) * share)])
+                self.assertFalse(result["structure"], (case_id, share))
+                self.assertFalse(result["passed"], (case_id, share))
 
 
 class RepeatTest(unittest.TestCase):
