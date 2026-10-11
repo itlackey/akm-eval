@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { spreadOf } from "../repeat.ts";
 import {
   FIXED_AKM_ENV,
@@ -116,6 +116,20 @@ describe("modelSettings", () => {
     expect(r.env).toMatchObject({ OPENAI_API_KEY: "a", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
     const both = modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "m", MODEL_BASE_URL: "http://m/v1", OPENAI_API_KEY: "a", OPENAI_BASE_URL: "http://o/v1" }, none);
     expect(both.env).toMatchObject({ OPENAI_API_KEY: "m", OPENAI_BASE_URL: "http://m/v1" });
+  });
+
+  test("lets each of the older names stand in for its empty MODEL_* one, whichever URL names the gateway", () => {
+    // MODEL_BASE_URL with only OPENAI_API_KEY: the key of a setup from before models.json, with the gateway under the new name.
+    const urlOnly = modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, none);
+    expect(urlOnly.env).toEqual({ OPENAI_API_KEY: "a", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
+    // OPENAI_BASE_URL with only MODEL_API_KEY, and an empty MODEL_API_KEY that does not hide OPENAI_API_KEY.
+    expect(modelSettings("gpt-6", { OPENAI_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "m" }, none).env).toEqual({ OPENAI_API_KEY: "m", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
+    expect(modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "  ", OPENAI_API_KEY: "a" }, none).env.OPENAI_API_KEY).toBe("a");
+    // A model with a line in models.json still takes the key of the line, and never the older name of the gateway's.
+    const lines = { cloud: { base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
+    expect(() => modelSettings("cloud", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, lines)).toThrow("takes its key from CLOUD_KEY");
+    // And with no key under either name the run still stops.
+    expect(() => modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_BASE_URL: "http://o/v1" }, none)).toThrow("no model key");
   });
 
   test("with no gateway and no line, an openai model goes to openai with OPENAI_API_KEY, or MODEL_API_KEY", () => {
@@ -250,6 +264,19 @@ describe("packAkm", () => {
     expect(packAkm(dir, join(tmp(), "pack"), fakePack).arm.bin).toBe(dir);
   });
 
+  test("packs into a relative folder as into the absolute one, since npm pack runs in the checkout and would read it from there", () => {
+    const seen: string[] = [];
+    const pack: Pack = (dir, into) => {
+      seen.push(into);
+      return fakePack(dir, into);
+    };
+    const into = join(tmp(), "pack");
+    const { arm } = packAkm(checkout({ plugin: true }), relative(process.cwd(), into), pack);
+    expect(seen).toEqual([into, into]);
+    expect(arm.packages).toBe(into);
+    expect(existsSync(join(into, "akm-opencode-0.9.27-plugin.tgz"))).toBe(true);
+  });
+
   test("refuses a folder that is not akm-cli's, and a checkout that has not been built", () => {
     expect(() => packAkm(checkout({ name: "something-else" }), join(tmp(), "p"), fakePack)).toThrow("is not an akm checkout");
     expect(() => packAkm(tmp(), join(tmp(), "p"), fakePack)).toThrow("is not an akm checkout");
@@ -264,6 +291,7 @@ describe("packAkm", () => {
     const listed = Bun.spawnSync(["tar", "-tzf", join(into, file)]).stdout.toString();
     expect(listed).toContain("package/dist/cli.js");
     expect(packAkm(dir, join(tmp(), "pack")).arm.cli.tarball).toBe("akm-cli-0.9.27.tgz");
+    expect(packAkm(dir, relative(process.cwd(), join(tmp(), "pack"))).arm.cli.tarball).toBe("akm-cli-0.9.27.tgz"); // a relative folder too
   });
 });
 
@@ -317,7 +345,7 @@ describe("parseAkmEnv", () => {
     expect(() => parseAkmEnv(["OPENAI_API_KEY=x"])).toThrow("only AKM_* settings");
     expect(() => parseAkmEnv(["akm_x=1"])).toThrow("only AKM_* settings");
     for (const key of FIXED_AKM_ENV) expect(() => parseAkmEnv([`${key}=/x`])).toThrow("the arm fixes it");
-    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_SECRET_X", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
+    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_SECRET_X", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY", "AKM_AUTH_BEARER", "AKM_CREDENTIALS", "AKM_KEYRING"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
     expect(() => parseAkmEnv(["AKM_X=1", "AKM_X=2"])).toThrow("given twice");
   });
 
@@ -498,6 +526,20 @@ describe("loadRunTrials", () => {
     expect(report.akm.exceptions).toEqual({ [PLUGIN_ERROR]: 2 }); // the failure shows in the report's exceptions
     expect(report.akm.errored).toBe(2);
     expect(timeoutsOf(trials).akm).toBe(1); // and the timeout is still counted
+  });
+
+  test("takes the reward away from a trial whose plugin was not live, even when the verifier scored it", () => {
+    const job = tmp();
+    // Harbor 0.24.0 skips the verifier when the agent raises after its run, so a reward and a dead plugin do not meet there.
+    // A Harbor that verified anyway would count the pass of an akm arm that had no akm.
+    trialDir(job, "t1__b", "akm-opencode", {}, { "akm_plugin_status.json": { live: false, problem: "there is no opencode log" } });
+    trialDir(job, "t2__b", "akm-opencode", timeout, { "akm_plugin_status.json": { live: false, problem: "the plugin never logged" } });
+    const { trials } = loadRunTrials(job);
+    expect(trials.map((t) => [t.trial, t.error, t.reward])).toEqual([
+      ["t1__b", PLUGIN_ERROR, null],
+      ["t2__b", PLUGIN_ERROR, null],
+    ]);
+    expect(buildReport(trials).akm).toMatchObject({ errored: 2, scored: 0, passed: 0 });
   });
 
   test("collects what the akm arm's containers reported of themselves, without repeats", () => {

@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AkmArm, PINS, modelSettings, pinsOf, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { type AkmArm, PINS, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { jobConfig, libraryOf, measureLibrary, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
+import { enforcedAssets, jobConfig, libraryOf, measureLibrary, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
 
 const BENCH_DIR = join(import.meta.dir, "..");
 const lock = readLock();
@@ -242,7 +242,7 @@ import { join } from "node:path";
 const args = process.argv.slice(2);
 const walk = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".md") ? 1 : 0), 0);
 if (process.env.FAKE_AKM_FAIL === args[0]) { console.error("akm cannot " + args[0]); process.exit(3); }
-if (args[0] === "--version") console.log("akm 0.9.99-test");
+if (args[0] === "--version") console.log("akm " + (process.env.FAKE_AKM_VERSION ?? "0.9.99-test"));
 else if (args[0] === "bundle") mkdirSync(args[args.indexOf("--dir") + 1], { recursive: true });
 else if (args[0] === "index") {}
 else if (args[0] === "info") console.log(JSON.stringify({ indexStats: { byType: { skill: walk(process.env.AKM_BUNDLE_DIR as string), fact: 5 } } }));
@@ -305,6 +305,22 @@ describe("measureLibrary", () => {
   });
 });
 
+describe("enforcedAssets", () => {
+  const counted = (version: string) => ({ assets: 259, measured_with: { akm_version: version, akm_bin: "akm", akm_build: null } });
+  const arm = (version: string) => ({ cli: { version, tarball: null } });
+
+  test("is the count when the akm arm installs the version that counted it, and nothing to enforce when it installs another", () => {
+    expect(enforcedAssets(counted("0.9.26"), arm("0.9.26"))).toBe(259);
+    expect(enforcedAssets(counted("0.9.30"), arm("0.9.26"))).toBeNull();
+    expect(enforcedAssets(counted("0.10.0"), arm("0.9.26"))).toBeNull();
+    expect(enforcedAssets(counted("0.9.26"), arm("0.9.26-rc.1"))).toBeNull(); // a pre-release is not the release
+  });
+
+  test("is nothing to enforce when no akm counted", () => {
+    expect(enforcedAssets({ assets: null, measured_with: null }, arm("0.9.26"))).toBeNull();
+  });
+});
+
 describe("runCorpus", () => {
   /** A `uv` that is not Harbor. Given the job, it leaves the trial folders Harbor would leave and exits as FAKE_UV_EXIT says. FAKE_UV_NOTHING makes it leave none. It also records the environment it was started in and the job it was given. */
   function fakeUv(): { root: string; env: Record<string, string> } {
@@ -344,11 +360,12 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
     return { root, env: { PATH: `${join(root, "bin")}:${process.env.PATH}` } };
   }
 
-  async function quiet<T>(f: () => Promise<T>): Promise<T> {
+  /** Runs `f` with the console quiet. Pass `warnings` to get what it warned. */
+  async function quiet<T>(f: () => Promise<T>, warnings: string[] = []): Promise<T> {
     const log = console.log;
     const warn = console.warn;
     console.log = () => {};
-    console.warn = () => {};
+    console.warn = (...a: unknown[]) => void warnings.push(a.join(" "));
     try {
       return await f();
     } finally {
@@ -375,10 +392,11 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
     expect(readJson(join(dir, "summary.json"))).toMatchObject({ eval: "terminal-bench", corpus: "public", limit: 2, n_tasks: 2, attempts: 1, harbor_exit: 0 });
   });
 
-  test("counts the library's assets on the host, tells the akm arm the number, and records it with the akm that counted and a digest of the library", async () => {
+  test("counts the library's assets on the host, tells the akm arm the number when it installs the same akm, and records it with the akm that counted and a digest of the library", async () => {
     fakeAkm(true);
     const { root, env } = fakeUv();
-    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env }, join(root, "results")));
+    const arm = releaseArm("0.9.99-test"); // the version the fake akm prints
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm }, join(root, "results")));
     const want = fakeCount(libraryOf("public"));
     expect(want).toBeGreaterThan(0);
     expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(want);
@@ -386,6 +404,39 @@ process.exit(Number(process.env.FAKE_UV_EXIT ?? 0));
     expect(stored.library).toMatchObject({ path: "corpus/library", assets: want, measured_with: { akm_version: "0.9.99-test" } });
     expect(stored.library.sha256).toBe(sha256Dir(libraryOf("public")));
     expect(stored.library.sha256).toBe(sha256Dir(join(s.results_dir, "libraries", "library")));
+  });
+
+  test("asks only for a non-empty index when the akm arm installs another version than the one that counted, keeps the count, and warns", async () => {
+    fakeAkm(true); // the fake akm prints 0.9.99-test, and the default arm installs the pinned akm-cli
+    const { root, env } = fakeUv();
+    const said: string[] = [];
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env }, join(root, "results")), said);
+    const want = fakeCount(libraryOf("public"));
+    expect(want).toBeGreaterThan(1);
+    expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, library_assets: 1 });
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(stored.library).toMatchObject({ assets: want, measured_with: { akm_version: "0.9.99-test" } }); // the count is still recorded
+    expect(stored.job.agents[1].kwargs.library_assets).toBe(1);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toContain(`the ${want} assets of the library were counted with akm 0.9.99-test, and the akm arm installs akm ${PINS.akm_cli}`);
+    expect(said[0]).toContain("akm_install.observed.assets_indexed");
+  });
+
+  test("holds a checkout's akm to the count when it is the version that counted, and says nothing", async () => {
+    fakeAkm(true);
+    process.env.FAKE_AKM_VERSION = "0.9.27";
+    const { root, env } = fakeUv();
+    const packs = tmp();
+    writeFileSync(join(packs, "akm-cli-0.9.27.tgz"), "an akm");
+    const arm: AkmArm = { bin: "~/code/akm", build: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: packs };
+    const said: string[] = [];
+    try {
+      const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm }, join(root, "results")), said);
+      expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(fakeCount(libraryOf("public")));
+    } finally {
+      delete process.env.FAKE_AKM_VERSION;
+    }
+    expect(said).toEqual([]);
   });
 
   test("asks only for a non-empty index, and says it did not count, when no akm can count", async () => {

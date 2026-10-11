@@ -147,8 +147,8 @@ export function libraryOf(corpus: Corpus): string {
  * The assets akm indexes in `library`, counted with the akm on this machine (AKM_BIN, else akm on PATH) as the akm arm seeds it: the
  * type folders copied into a new bundle in a sandbox, a full index, and `akm info`. Facts are the scaffold's, not the library's.
  * Count them here and not by files: a file is not an asset (317 files, 259 assets in the public library on akm 0.9.26), and the number
- * changes with every library edit and with akm's rules. The akm arm's own akm may count otherwise; its setup stops when it indexes fewer.
- * When no akm can count, the number is null and `reason` says why.
+ * changes with every library edit and with akm's rules. The akm arm's own akm may count otherwise, so runCorpus holds that akm to this
+ * number only when it is the same version (enforcedAssets). When no akm can count, the number is null and `reason` says why.
  */
 export async function measureLibrary(library: string): Promise<LibraryCount & { reason?: string }> {
   const sandbox = createSandbox(`${NAME}-count`);
@@ -173,9 +173,19 @@ export async function measureLibrary(library: string): Promise<LibraryCount & { 
 }
 
 /**
+ * The number of assets the akm arm's setup must find indexed: what the host's akm counted when the akm arm installs the same version,
+ * else null, which is one (an index that is not empty). Two versions can index a different number of assets from one library, and a
+ * floor the container's akm cannot reach stops every akm trial after its setup while the control arm runs on alone. The count stays
+ * in the summary either way, and the setup records what the container's akm indexed.
+ */
+export function enforcedAssets(count: LibraryCount, arm: Pick<AkmArm, "cli">): number | null {
+  return count.assets !== null && count.measured_with?.akm_version === arm.cli.version ? count.assets : null;
+}
+
+/**
  * The Harbor job: the two arms on these tasks of the pinned dataset, `attempts` each. The tasks are Harbor's and none
  * of them names a library, so the job names the one the akm arm seeds, for every task, and how many assets akm must index in
- * it (`libraryAssets`, as measureLibrary counted them: when it could not, at least one).
+ * it (`libraryAssets`, see enforcedAssets: when none, at least one).
  */
 export function jobConfig(o: {
   name: string;
@@ -296,8 +306,10 @@ export async function runCorpus(
   const { reason, ...count } = counted;
   if (reason !== undefined) console.warn(`${NAME}: the assets of the library were not counted (${reason}). The akm arm's setup will only check that its index is not empty.`);
   const library = { ...count, sha256: sha256Dir(join(librariesDir, LIBRARY)) };
+  const libraryAssets = enforcedAssets(library, arm);
+  if (library.assets !== null && libraryAssets === null) console.warn(`${NAME}: the ${library.assets} assets of the library were counted with akm ${library.measured_with?.akm_version}, and the akm arm installs akm ${arm.cli.version}. The setup will only check that its index is not empty. What it indexed is in akm_install.observed.assets_indexed.`);
   const staged = stagePackages(arm, dir); // the tarballs of a checkout, kept with the run
-  const cfg = jobConfig({ name: jobName(corpus), model: ctx.model, lock, tasks, librariesDir, jobsDir: join(dir, "jobs"), attempts, libraryAssets: library.assets, arm, packagesDir: staged?.dir, akmEnv });
+  const cfg = jobConfig({ name: jobName(corpus), model: ctx.model, lock, tasks, librariesDir, jobsDir: join(dir, "jobs"), attempts, libraryAssets, arm, packagesDir: staged?.dir, akmEnv });
   const configFile = join(dir, "job.json");
   writeFileSync(configFile, `${JSON.stringify(cfg, null, 2)}\n`);
   console.log(`${NAME} (${corpus}): ${tasks.length} of ${Object.keys(lock.tasks).length} tasks x 2 arms x ${attempts} = ${tasks.length * 2 * attempts} trials, ${CONCURRENT_TRIALS} at a time`);

@@ -100,8 +100,10 @@ const endpointHost = (url: string): string => {
  * with the key in its api_key_env, any other name to the gateway in MODEL_BASE_URL with MODEL_API_KEY. Here the result is mapped to
  * what opencode's openai provider reads, OPENAI_BASE_URL and OPENAI_API_KEY. So an endpoint can only serve an openai model (a name
  * without a provider is one), and a base URL given for another provider's model is refused, since it would be dropped.
+ * OPENAI_BASE_URL and OPENAI_API_KEY, which this took before models.json, still stand in for an empty MODEL_BASE_URL and an empty
+ * MODEL_API_KEY, in any combination of the two.
  *
- * With no line and no MODEL_BASE_URL (or OPENAI_BASE_URL, which this took before models.json), an openai model goes to openai with the key
+ * With no line and no MODEL_BASE_URL (or OPENAI_BASE_URL), an openai model goes to openai with the key
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
  * Only what Harbor needs goes into the environment (hostEnv), and the model's variables.
  */
@@ -115,7 +117,9 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
   } catch (e) {
     return fail((e as Error).message);
   }
-  const named = host.MODEL_BASE_URL?.trim() ? host : host.OPENAI_BASE_URL?.trim() ? { ...host, MODEL_BASE_URL: host.OPENAI_BASE_URL, MODEL_API_KEY: host.MODEL_API_KEY?.trim() ? host.MODEL_API_KEY : host.OPENAI_API_KEY } : host;
+  // The gateway, when either URL names one: the older name of each setting fills in for the MODEL_* one that is empty.
+  const gateway = host.MODEL_BASE_URL?.trim() || host.OPENAI_BASE_URL?.trim();
+  const named = gateway ? { ...host, MODEL_BASE_URL: gateway, MODEL_API_KEY: host.MODEL_API_KEY?.trim() || host.OPENAI_API_KEY } : host;
   const env = hostEnv(host);
 
   if (Object.hasOwn(lines, id) || named.MODEL_BASE_URL?.trim()) {
@@ -259,6 +263,7 @@ function tarFiles(tarball: string): string[] {
  * has to be built first is refused when the tarball lacks the file its `bin` names.
  */
 export function packAkm(checkout: string, into: string, pack: Pack = npmPack): { arm: AkmArm; note: string | null } {
+  into = resolve(into); // npm pack runs in the checkout, so a relative folder would be read against another one
   const pkg = readJson(join(checkout, "package.json"));
   if (pkg?.name !== "akm-cli" || typeof pkg.version !== "string") fail(`${checkout} is not an akm checkout: its package.json is not akm-cli's.`);
   mkdirSync(into, { recursive: true });
@@ -303,7 +308,7 @@ export function parseAkmEnv(values: string[] | undefined): Record<string, string
     const key = v.slice(0, eq);
     if (!/^AKM_[A-Z0-9_]+$/.test(key)) fail(`--akm-env ${key}: only AKM_* settings go to akm`);
     if (FIXED_AKM_ENV.includes(key)) fail(`--akm-env ${key}: the arm fixes it. The five directories move together, and the plugin must run the akm installed in the container.`);
-    if (/(API_?KEY|_KEY$|TOKEN|SECRET|PASSWORD)/.test(key)) fail(`--akm-env ${key}: it looks like a credential, and the job and the summary record every setting.`);
+    if (/(API_?KEY|_KEY$|KEYRING|TOKEN|SECRET|PASSWORD|BEARER|CREDENTIAL|AUTH)/.test(key)) fail(`--akm-env ${key}: it looks like a credential, and the job and the summary record every setting.`);
     if (Object.hasOwn(out, key)) fail(`--akm-env ${key} is given twice`);
     out[key] = v.slice(eq + 1);
   }
