@@ -1487,7 +1487,7 @@ function runnerTree() {
   git(root, "commit", "-q", "-m", "tree");
   const summary = { ...fixture("reflect"), ...IDENTIFIED, model: "m1", akm_build: "b1", akm_bin: "akm", akm_version: "0.9.30" };
   // The environment the runner gets is spelled out: nothing of the caller's, and so not its AKM_BIN.
-  const baseEnv: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? root, TMPDIR: process.env.TMPDIR ?? tmpdir(), AKM_BIN: "fake-akm", MODEL_NAME: "m1", MODEL_BASE_URL: "https://gateway-a.example.com/v1", MODEL_API_KEY: "key-one", FAKE_SUMMARY: JSON.stringify(summary) };
+  const baseEnv: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? root, TMPDIR: process.env.TMPDIR ?? tmpdir(), AKM_BIN: "fake-akm", MODEL_NAME: "m1", MODEL_BASE_URL: "https://gateway-a.example.com/v1", MODEL_API_KEY: "synthetic-matrix-secret-one", FAKE_SUMMARY: JSON.stringify(summary) };
   const out = join(root, "matrix-results");
   return {
     root,
@@ -1607,9 +1607,11 @@ describe("a stage as a process: what makes it resume or run again (F07)", () => 
     // only the host counts, so the path does not, and neither does a key
     await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v2" });
     expect(t.runs()).toBe(4);
-    await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1", MODEL_API_KEY: "key-two" });
+    await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1", MODEL_API_KEY: "synthetic-matrix-secret-two" });
     expect(t.runs()).toBe(4);
-    expect(readFileSync(join(t.out, "state.json"), "utf8")).not.toContain("key-");
+    // the state names paths, and a path may hold "key-", so what must be absent is each key the runs were given
+    const state = readFileSync(join(t.out, "state.json"), "utf8");
+    for (const key of ["synthetic-matrix-secret-one", "synthetic-matrix-secret-two"]) expect(state).not.toContain(key);
   });
 
   test("another MODEL_NAME, JUDGE_* setting or .env runs the jobs again", async () => {
