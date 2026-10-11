@@ -20,6 +20,8 @@ gold_ref = "skills/opencode"
 gold_ref_legacy = "skill:opencode"
 library_tokens = ["model", "anthropic/claude-opus-4-7", "provider", "anthropic", "options", "apiKey", "{env:ANTHROPIC_API_KEY}"]
 memory_ability = "procedural_lookup"
+# The next four keys describe the first design of this task, which graded akm provenance lines in prep-note.txt. The
+# verifier now grades only the config the agent leaves. Nothing reads them.
 task_family = "workflow-compliance/repeated-failure"
 repeated_failure_group = "opencode-provider-config"
 workflow_failure_category = "repeated-failure-reflection-trigger"

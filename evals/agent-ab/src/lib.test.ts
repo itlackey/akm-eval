@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { goldText, libraryProblems, nudges, specOf, staleTokens } from "./lib.ts";
+import { goldText, holds, libraryProblems, nudges, specOf, staleTokens } from "./lib.ts";
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -27,14 +28,63 @@ describe("the public tasks", () => {
     for (const t of tasks) expect({ task: t, nudges: nudges(join(TASKS, t)) }).toEqual({ task: t, nudges: [] });
   });
 
-  test("the az-cli skill and its memory teach one form for several tags, the one the az verifier accepts", () => {
+  test("the az-cli skill and its memory teach several tags as one filter joined with &&, and not as a repeated --tag", () => {
+    // `az resource list --tag` takes a single tag, so a second --tag does not AND.
     const skill = readFileSync(join(LIBRARIES, "az-cli", "skills", "az-cli", "SKILL.md"), "utf8");
     const memory = readFileSync(join(LIBRARIES, "az-cli", "memories", "compound-tag-filter.md"), "utf8");
-    const repeated = /az resource list [^\n`]*--tag \S+ --tag \S+/;
-    expect(skill).toMatch(repeated);
-    expect(memory).toMatch(repeated);
-    // A JMESPath filter on two tags is the form the verifier rejects.
-    for (const text of [skill, memory]) expect(text).not.toMatch(/--query "\[\?[^"]*&&/);
+    for (const text of [skill, memory]) {
+      expect(text).toMatch(/az resource list [^\n`]*--query "\[\?tags\.[^"]*&&[^"]*tags\.[^"]*\]/);
+      expect(text).not.toMatch(/--tag \S+ --tag /);
+    }
+  });
+
+  test("the az verifier takes the filter form, a repeated --tag and one of each, and not an OR, one tag or a missing projection", () => {
+    const task = join(TASKS, "workflow-compliance--feedback-trap-az-tag-list");
+    const dir = mkdtempSync(join(tmpdir(), "agent-ab-az-"));
+    try {
+      const passes = (command: string) => {
+        writeFileSync(join(dir, "commands.txt"), `${command}\n`);
+        return spawnSync("bash", [join(task, "tests", "verify.sh")], { cwd: dir }).status === 0;
+      };
+      const cols = "[name,type,location]";
+      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data'].${cols}" -o tsv`)).toBe(true);
+      expect(passes(`az resource list --query "[?tags.tier=='data' && tags.env=='prod'].{name:name,type:type,location:location}" --output tsv`)).toBe(true);
+      expect(passes(`az resource list --tag env=prod --tag tier=data --query "[].{name:name,type:type,location:location}" -o tsv`)).toBe(true);
+      expect(passes(`az resource list --tag env=prod --query "[?tags.tier=='data'].${cols}" -o tsv`)).toBe(true);
+      expect(passes(`az resource list --query "[?tags.env=='prod' || tags.tier=='data'].${cols}" -o tsv`)).toBe(false);
+      expect(passes(`az resource list --query "[?tags.env=='prod' and tags.tier=='data'].${cols}" -o tsv`)).toBe(false);
+      expect(passes(`az resource list --query "[?tags.env=='prod'].${cols}" -o tsv`)).toBe(false);
+      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data']" -o tsv`)).toBe(false);
+      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data'].${cols}" -o table`)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the opencode skill says which model is the anthropic default, because the instruction only asks for it", () => {
+    const instruction = readFileSync(join(TASKS, "workflow-compliance--repeated-fail-opencode-provider-token-train", "instruction.md"), "utf8");
+    const skill = readFileSync(join(LIBRARIES, "noisy", "skills", "opencode", "SKILL.md"), "utf8");
+    expect(instruction).not.toContain("claude-opus-4-7");
+    expect(skill).toContain("The anthropic default model is `anthropic/claude-opus-4-7`");
+  });
+});
+
+describe("holds", () => {
+  test("finds a token as a whole word, so a short flag or word does not match inside a longer one", () => {
+    expect(holds("docker compose --env-file envs/x.env", "-f")).toBe(false);
+    expect(holds("docker compose -f compose.yaml", "-f")).toBe(true);
+    expect(holds("see the configuration notes", "config")).toBe(false);
+    expect(holds("docker compose config --services", "config")).toBe(true);
+    expect(holds("--cluster=logs", "--cluster")).toBe(true);
+    expect(holds("--replicas-max", "--replicas")).toBe(false);
+  });
+
+  test("finds a token that starts or ends with a symbol as it is written", () => {
+    expect(holds('"apiKey": "{env:ANTHROPIC_API_KEY}"', "{env:ANTHROPIC_API_KEY}")).toBe(true);
+    expect(holds("--query \"[?tags.env=='a' && tags.x=='b']\"", "[?tags.")).toBe(true);
+    expect(holds("a && b", "&&")).toBe(true);
+    expect(holds("anthropic/claude-opus-4-7", "anthropic/claude-opus-4-7")).toBe(true);
+    expect(holds("anthropic/claude-opus-4-7-latest", "anthropic/claude-opus-4-7")).toBe(false);
   });
 });
 

@@ -1,15 +1,18 @@
 ---
-description: How to select az resources on several tags at once, project columns, and when a JMESPath filter is needed instead
+description: How to select az resources on several tags at once, with AND/OR JMESPath filters for az CLI --query, and how to project columns as tsv
 tags: [az-cli, jmespath, tags, query, filtering]
 observed_at: "2026-05-01"
 ---
 
-To select resources on several tags at once, repeat `--tag`, one `<key>=<value>` for each tag. Add a `--query` projection for the columns you want and `-o tsv` for tab-separated output.
+`az resource list --tag` selects on one tag. To select on several tags at once, filter in `--query`. az CLI `--query` uses JMESPath, and compound conditions use `&&` (AND) and `||` (OR) inside `[?...]`.
 
-Correct example (resources tagged env=stage and team=ops, name and group as tab-separated columns):
-`az resource list --tag env=stage --tag team=ops --query "[].{name:name,group:resourceGroup}" -o tsv`
+Correct example (resources tagged env=prod AND team=ops):
+`az resource list --query "[?tags.env=='prod' && tags.team=='ops']"`
 
-az CLI `--query` uses JMESPath. A filter inside `[?...]` is for what `--tag` cannot say, such as either of two values, written with `||`:
+Correct example (the same, with name and group as tab-separated columns):
+`az resource list --query "[?tags.env=='prod' && tags.team=='ops'].[name,resourceGroup]" -o tsv`
+
+Correct example (either tag matches):
 `az resource list --query "[?tags.env=='prod' || tags.env=='staging']"`
 
 Common trap — using Python-style `and`/`or` keywords: `[?tags.env=='prod' and tags.team=='ops']` is invalid JMESPath and returns an empty result silently. JMESPath spells them `&&` and `||`.

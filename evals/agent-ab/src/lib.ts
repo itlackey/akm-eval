@@ -14,7 +14,7 @@ export interface TaskSpec {
   library?: string;
   /** The asset of that library the answer is written in, such as `skills/drillbit`. */
   goldRef?: string;
-  /** The literals the verifier looks for that the instruction does not give, such as a flag or a field name. The gold ref must hold each. */
+  /** The literals the verifier looks for, such as a subcommand, a flag, a field name or a value. The gold ref must hold each. The instruction may give some of them too: the check is that the library has them, not that the instruction leaves them out. */
   tokens: string[];
 }
 
@@ -44,6 +44,17 @@ export function goldText(librariesDir: string, library: string, goldRef: string)
   return existsSync(`${at}.md`) ? readFileSync(`${at}.md`, "utf8") : undefined;
 }
 
+/**
+ * Whether `text` has `token` as a whole word, so `-f` is not found inside `--env-file` and `config` is not found inside
+ * `configuration`. A token that starts or ends with a symbol, such as `{env:KEY}` or `[?tags.`, is found as written there.
+ */
+export function holds(text: string, token: string): boolean {
+  const wordy = /[\w-]/;
+  const start = wordy.test(token[0]) ? "(?<![\\w-])" : "";
+  const end = wordy.test(token[token.length - 1]) ? "(?![\\w-])" : "";
+  return new RegExp(start + token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + end).test(text);
+}
+
 /** What the library lacks of what the verifier asks for, one sentence each. Empty when the gold ref holds every token the task declares. */
 export function libraryProblems(taskDir: string, librariesDir: string): string[] {
   const { library, goldRef, tokens } = specOf(taskDir);
@@ -51,7 +62,7 @@ export function libraryProblems(taskDir: string, librariesDir: string): string[]
   if (!library || !goldRef) return ["task.toml declares library_tokens but not both a gold_ref and an AKM_TASK_STASH"];
   const text = goldText(librariesDir, library, goldRef);
   if (text === undefined) return [`the gold ref ${goldRef} is not in the library ${library}`];
-  return tokens.filter((t) => !text.includes(t)).map((t) => `the gold ref ${goldRef} does not contain "${t}", which the verifier looks for`);
+  return tokens.filter((t) => !holds(text, t)).map((t) => `the gold ref ${goldRef} does not contain "${t}", which the verifier looks for`);
 }
 
 /** The verifier and the solution, which passes it: where a declared token has to turn up. */

@@ -52,3 +52,4 @@ If the task asks for `claude-opus-4-7`, use:
 - If the task says to disable `openai`, set `provider.openai` to `false` exactly.
 - If the task says to ensure a provider exists, create the `provider` object if it is missing.
 - Keep env var placeholders in the `{env:NAME}` form, not literal secrets.
+- The anthropic default model is `anthropic/claude-opus-4-7`. When a task asks for the anthropic default model, such as the one a provider-token train variant requires, and names no other model, set `model` to it. The `claude-3-5-sonnet` example above only shows the shape of the file.
