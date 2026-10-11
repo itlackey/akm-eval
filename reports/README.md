@@ -38,7 +38,7 @@ Nothing else of a results folder goes in: not `logs/`, not `improve.json`, not t
 Read a `summary.json` before you commit it:
 
 - A private run records `seed`. The seed makes the private set again from the public one, so a published seed gives the set to anyone and it can no longer be held back. Remove the `seed` key. (`assets_sha256` is a digest and stays.)
-- `config` and `engine` name the model's endpoint: the host in `engine.endpoint` and `model_endpoint`, and in `config` either `<MODEL_BASE_URL>` or the whole URL, depending on the eval. Replace what you do not want public with `<MODEL_BASE_URL>`.
+- `config` and `engine` name the model's endpoint: the host in `engine.endpoint`, the host and path in `model_endpoint`, and in `config` either `<MODEL_BASE_URL>` or the whole URL, depending on the eval. Replace what you do not want public with `<MODEL_BASE_URL>`.
 - An own run reports counts and rates of your notes. Read the `by_class` and per-case parts for a name of your own.
 
 ## Compare with a published run

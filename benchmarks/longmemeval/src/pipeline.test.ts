@@ -227,7 +227,7 @@ describe("runCorpus", () => {
     expect(rows.map((r) => [r.n_sessions, r.sessions_over_projection_limit])).toEqual([[4, 0], [4, 0], [3, 0]]);
 
     // what the run sent, and where: the temperature and the token limits, as the benchmark's evaluate_qa.py has them for the judge
-    const host = `127.0.0.1:${server.port}`;
+    const host = `http://127.0.0.1:${server.port}/v1`;
     expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
     expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
@@ -414,6 +414,65 @@ describe("runCorpus", () => {
     }
   });
 
+  test("resume does not reuse rows another harness made, and does not file them under this one", async () => {
+    const { akm, folders } = setup();
+    const counter = { requests: 0 };
+    server = fakeEndpoint(counter);
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    const current = (await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, context, folders))).harness_sha256;
+    expect(counter.requests).toBe(12);
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    const resume = () => quiet(() => runCorpus("public", { label: "t", sampleSeed: 1, resume: dir }, context, folders));
+
+    // an unchanged harness reuses every completed row
+    counter.requests = 0;
+    expect(await resume()).toMatchObject({ n_run: 3, complete: true, harness_sha256: current });
+    expect(counter.requests).toBe(0);
+
+    // an errored row is asked again under an unchanged harness
+    const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n");
+    const errored = JSON.parse(lines[0]);
+    errored.with_akm = { ...errored.with_akm, ok: false, error: "boom" };
+    writeFileSync(join(dir, "samples.jsonl"), `${JSON.stringify(errored)}\n${lines.slice(1).join("\n")}\n`);
+    counter.requests = 0;
+    await resume();
+    expect(counter.requests).toBe(4);
+
+    // another harness digest in the old summary: every row is asked again, and the summary says this harness made them
+    const other = "e".repeat(64);
+    expect(current).not.toBe(other);
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...stored, harness_sha256: other }));
+    counter.requests = 0;
+    expect(await resume()).toMatchObject({ n_run: 3, complete: true, harness_sha256: current });
+    expect(counter.requests).toBe(12);
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).harness_sha256).toBe(current);
+
+    // and so is a summary that has no harness digest at all
+    const { harness_sha256: _gone, ...without } = stored;
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(without));
+    counter.requests = 0;
+    await resume();
+    expect(counter.requests).toBe(12);
+  });
+
+  test("resume takes the same host at another path for another model, and for another judge", async () => {
+    const { akm, folders } = setup();
+    server = fakeEndpoint();
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/deployment-a/v1`, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, context, folders));
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    expect(summary.model_endpoint).toBe(`http://127.0.0.1:${server.port}/deployment-a/v1`);
+    const resume = (c: typeof context) => quiet(() => runCorpus("public", { label: "t", sampleSeed: 1, resume: dir }, c, folders));
+    const moved = (name: string) => `http://127.0.0.1:${server?.port}/${name}/v1`;
+    await expect(resume({ ...context, model: { ...endpoint, baseUrl: moved("deployment-b") } })).rejects.toThrow("different model endpoint");
+    await expect(resume({ ...context, judge: { ...context.judge, baseUrl: moved("deployment-b") } })).rejects.toThrow("different judge endpoint");
+    expect(await resume({ ...context, model: { ...endpoint, baseUrl: `${endpoint.baseUrl}/` } })).toMatchObject({ complete: true }); // a trailing slash is the same endpoint
+  });
+
   test("resume takes two edits of one akm commit for two builds, and a summary from before the fingerprint for a clean one", async () => {
     const { akm, folders } = setup();
     const dirOf = (label: string) => join(folders.results, readdirSync(folders.results).find((d) => d.endsWith(`-${label}`)) as string);
@@ -562,7 +621,7 @@ describe("runCorpus", () => {
     const other = fakeEndpoint();
     try {
       const elsewhere = `http://127.0.0.1:${other.port}/v1`;
-      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (127.0.0.1:${server.port}, now 127.0.0.1:${other.port})`);
+      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (http://127.0.0.1:${server.port}/v1, now http://127.0.0.1:${other.port}/v1)`);
       await expect(resume({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: elsewhere } })).rejects.toThrow("different judge endpoint");
     } finally {
       other.stop(true);

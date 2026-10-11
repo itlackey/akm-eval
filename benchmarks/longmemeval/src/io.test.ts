@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { akmVersion, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { Akm, PROJECTION_LIMIT, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
-import { TEMPERATURE, chat, chatUrl, endpointHost } from "./llm.ts";
+import { TEMPERATURE, chat, chatUrl } from "./llm.ts";
 
 const dirs: string[] = [];
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -93,14 +93,6 @@ describe("chat", () => {
     await chat(endpoint, "p", { temperature: 0.7 });
     expect(TEMPERATURE).toBe(0);
     expect(bodies.map((b) => b.temperature)).toEqual([TEMPERATURE, 0.7]);
-  });
-
-  test("names an endpoint by its host, with no path, query or credentials", () => {
-    expect(endpointHost("https://api.openai.com/v1")).toBe("api.openai.com");
-    expect(endpointHost("http://localhost:8080/v1/chat/completions?key=1")).toBe("localhost:8080");
-    expect(endpointHost("https://user:secret@gateway.example:8443/v1")).toBe("gateway.example:8443");
-    expect(endpointHost("not a url")).toBeNull();
-    expect(endpointHost("")).toBeNull();
   });
 });
 

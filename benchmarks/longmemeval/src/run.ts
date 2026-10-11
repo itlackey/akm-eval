@@ -13,11 +13,11 @@ import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandb
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointIdentity, harnessSha256 } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
-import { type ChatResult, type Endpoint, TEMPERATURE, chat, endpointHost } from "./llm.ts";
+import { type ChatResult, type Endpoint, TEMPERATURE, chat } from "./llm.ts";
 import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
 import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
 import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from "./prompts.ts";
@@ -284,8 +284,8 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     judge_model: ctx.judge?.model ?? null,
     observed_models: [...new Set([...seen("without_akm", "model"), ...seen("with_akm", "model")])],
     observed_judge_models: observedJudges,
-    model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,
-    judge_endpoint: ctx.judge ? endpointHost(ctx.judge.baseUrl) : null,
+    model_endpoint: ctx.model ? endpointIdentity(ctx.model.baseUrl) : null,
+    judge_endpoint: ctx.judge ? endpointIdentity(ctx.judge.baseUrl) : null,
     ...sampling(retrievalOnly),
     akm_version: ctx.version,
     ...ctx.build,
@@ -364,8 +364,9 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one: the same corpus,
- * model, judge and the hosts they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and
- * config), search mode, dataset, the digest of its files and sample. A question with an arm that errored is asked again.
+ * model, judge and the endpoints they are called at (host and path), akm (version, command, build with the fingerprint of its uncommitted changes, and
+ * config), search mode, dataset, the digest of its files and sample. A question with an arm that errored is asked again. Rows another
+ * harness made are not reused either: every question is asked again, so the summary's one harness digest is true of every row in it.
  */
 export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; assets_sha256: string; sample: Sample; version: string; build: Build; searchMode: SearchMode; config: unknown }): Row[] {
   const summaryPath = join(dir, "summary.json");
@@ -373,14 +374,14 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
   const prior = JSON.parse(readFileSync(summaryPath, "utf8")) as Summary;
   // A summary without a search mode, a config or a digest is from before the summary held the endpoints, the sampling settings and the inputs, and before the reader got the sessions in the haystack's order.
   if (prior.search_mode === undefined || prior.config === undefined || prior.assets_sha256 === undefined) fail(`${dir} was run by an older version of this eval, whose rows are not comparable to the ones it would add. Run again without --resume.`);
-  const host = (e: Endpoint | null) => (e ? endpointHost(e.baseUrl) : null);
+  const endpoint = (e: Endpoint | null) => (e ? endpointIdentity(e.baseUrl) : null);
   const settings = (retrievalOnly: boolean) => JSON.stringify(sampling(retrievalOnly));
   const same: [string, unknown, unknown][] = [
     ["corpus", prior.corpus, now.corpus],
     ["model", prior.model, now.model?.model ?? null],
-    ["model endpoint", prior.model_endpoint, host(now.model)],
+    ["model endpoint", prior.model_endpoint, endpoint(now.model)],
     ["judge", prior.judge_model, now.judge?.model ?? null],
-    ["judge endpoint", prior.judge_endpoint, host(now.judge)],
+    ["judge endpoint", prior.judge_endpoint, endpoint(now.judge)],
     ["akm version", prior.akm_version, now.version],
     ["akm command", prior.akm_bin, now.build.akm_bin],
     ["akm build", prior.akm_build, now.build.akm_build],
@@ -396,6 +397,10 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
   ];
   const show = (x: unknown) => (x === null ? "none" : String(x));
   for (const [what, was, is] of same) if (was !== is) fail(`${dir} was run with a different ${what} (${show(was)}, now ${show(is)}). Run again with the same settings, or without --resume.`);
+  if (prior.harness_sha256 !== HARNESS) {
+    console.log(`${dir} was run by other code than this harness (harness_sha256 ${show(prior.harness_sha256 ?? null)}, now ${HARNESS}), so its rows are not reused: every question is asked again.`);
+    return [];
+  }
   const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter((l) => l.trim() !== "");
   const rows: Row[] = [];
   for (const [i, line] of lines.entries()) {
