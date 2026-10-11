@@ -20,7 +20,7 @@ The tracker checks these locations in order (first match wins):
 
 ## The env/tracker File
 
-All tracker tokens and settings, for every platform, live in one env file: `env/tracker` (`tracker.env`) in your own primary akm stash. Each agent keeps its own; it never belongs in akm-shared or any other shared bundle.
+All tracker tokens and settings, for every platform, live in one env file: `env/tracker` (`tracker.env`) in your own primary akm stash. Each agent keeps its own; it never belongs in a shared bundle.
 
 - `akm env path env/tracker` prints the file's location.
 - `akm env run env/tracker -- <command>` runs a command with its variables injected. Prefer this to sourcing the raw file.
@@ -196,7 +196,7 @@ AZURE_DEVOPS_ORG=https://dev.azure.com/<org>
    chmod 600 "$(akm env path env/tracker -q)"
    ```
 
-2. **Keep `env/tracker` in your own stash** - Never put it in akm-shared or any other shared bundle
+2. **Keep `env/tracker` in your own stash** - Never put it in a shared bundle
 
 3. **Use minimal scopes** - Only grant permissions the tracker needs
 

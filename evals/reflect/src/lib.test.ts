@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCases } from "./build.ts";
+import { refOfFile } from "../../retrieval/src/library.ts";
+import { buildCases, libraryFileOf } from "./build.ts";
 import {
   CLASSES,
   type Case,
@@ -211,7 +212,7 @@ describe("the public cases", () => {
   test("each note is a library note with the defect injected, and no two cases use the same note", () => {
     expect(new Set(cases.map((c) => c.path)).size).toBe(cases.length);
     for (const c of cases) {
-      const clean = readFileSync(join(LIBRARY, c.path), "utf8");
+      const clean = readFileSync(join(LIBRARY, libraryFileOf(c.path)), "utf8");
       expect(cleanProblems(clean)).toEqual([]);
       expect(inject(c.class, clean)).toBe(c.source);
     }
@@ -636,9 +637,18 @@ describe("refOf", () => {
 
   test("every public note is where akm reads that type", () => {
     for (const c of parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"))) {
-      expect(existsSync(join(LIBRARY, c.path))).toBe(true);
+      const file = libraryFileOf(c.path);
+      expect(existsSync(join(LIBRARY, file))).toBe(true);
       expect(c.path).toMatch(/^(knowledge|agents|commands|workflows)\/.+\.md$|^skills\/.+\/SKILL\.md$/);
+      // The ref the run gives the note is the ref akm gives the file of the library it is made from.
+      expect(refOfFile(file, () => readFileSync(join(LIBRARY, file), "utf8"))).toBe(refOf(c.path));
     }
+  });
+
+  test("a note of a skill is made from the file under skills/, and a note of a type folder from itself", () => {
+    expect(libraryFileOf("knowledge/skills/ai-skills/agent-cli-tools/references/codex.md")).toBe("skills/ai-skills/agent-cli-tools/references/codex.md");
+    expect(libraryFileOf("knowledge/print/fix-team-dispatch-template.md")).toBe("knowledge/print/fix-team-dispatch-template.md");
+    expect(libraryFileOf("skills/akm-migrate/SKILL.md")).toBe("skills/akm-migrate/SKILL.md");
   });
 });
 

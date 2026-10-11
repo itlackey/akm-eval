@@ -3,17 +3,37 @@
 A public akm library: the shareable assets of the shared bundle our lab's
 agents read, kept here as a snapshot. The evals in
 [akm-eval](https://github.com/itlackey/akm-eval) use it as their public library,
-and anyone can read it as an akm bundle. Some assets still carry the bundle's
-old name, for example `author: akm-shared contributors`.
+and anyone can read it as an akm bundle.
 
 ## Where it came from
 
 A snapshot of the lab's shared bundle (the private repository
-`fwdslsh-shared-bundle`, formerly `akm-shared`) at commit
+`fwdslsh-shared-bundle`) at commit
 `d7479b0a0d2698fe238de41dfabc7613aaea7a61` (2026-09-16). The lab's bundle stays
 the live copy; a new snapshot replaces this one when the evals need newer
-assets. The git history was not copied. Apart from this README and the files
-left out (see "Not in this copy"), every file is unchanged.
+assets. The git history was not copied. Apart from this README, the files left
+out (see "Not in this copy") and the changes below, every file is unchanged.
+
+### Changes since the snapshot
+
+- **No file is here twice.** akm gives a note of a skill a ref from its whole path
+  (`skills/<x>/references/a.md` is `knowledge/skills/<x>/references/a`). The library held 24
+  copies of such notes under `agents/skills/`, `commands/skills/` and `knowledge/skills/`, 23 of
+  them with another text than the original. 17 claimed the ref of the original, and akm
+  indexes one of the two files (akm#1050). The other 7 were read as agents or commands, and
+  the same text was indexed under a second ref. The copies are removed, with a stray copy of
+  `litellm-skill`'s `yaml-manager.ts` under `scripts/skills/`. The files that remain are the
+  ones under `skills/`. `evals/retrieval/src/library.test.ts` fails when two files resolve to
+  one ref, and when a file of a type folder copies a file of `skills/`.
+- **The references are in their skills.** The eight files of `pdf-review` and
+  `pdf-layout-reviewer` that sat under `knowledge/skills/print/` are back in the folders of
+  those skills, where their `SKILL.md` names them. Their refs are the same.
+- **Dangling paths.** `pdf-layout-reviewer` no longer names a `heuristic-rules.json` that is
+  not here, `llm-delegation-tool` names `references/QUICKSTART.md` as the file is spelled,
+  and `akm-migrate` no longer points to a `references/breaking-changes.md` that is not here.
+- **The bundle's old name** is gone from five files, and two `name:` fields that held a path
+  (`print/publish-pipeline`, `print/qa-coordinator`) are now the bare name, as in every other
+  command and agent.
 
 ## Using it
 
@@ -98,21 +118,43 @@ when the project supplies a `.markdownlint.*` config (or sets
 
 ## Contents
 
-- **Development:** coding and technical-debt skills, end-to-end and Playwright
-  testing with their coverage rubric and best practices, web UX gate workflows and
-  judges with their measurable rubric, report analysis commands and agents, and
-  writing agents.
-- **Agent tooling:** agent CLI delegation, OpenCode extensions and troubleshooting,
-  LiteLLM and OpenAI-compatible delegation, OpenViking.
-- **Work tracking:** tracker for GitHub, Gitea and Azure DevOps.
-- **Print and publishing:** Paged.js, PDF layout and visual review, CMYK conversion,
-  the print commands and agents, the spread QA loop, and the fix-team dispatch
-  template and measurable design and CSS rubric.
-- **Integrations:** gws-setup for the Google Workspace CLI, and notify for Apprise.
+The tree, by folder. Each of the 35 skills is a folder with a `SKILL.md`, and it carries
+its own notes, templates and scripts in `references/`, `assets/`, `scripts/` and `examples/`.
+akm gives those files refs of their own types.
+
+- **`skills/`**
+  - Technical debt and coding, `coding/`: `technical-debt-workflow` and the steps it
+    orchestrates (`repository-assessment`, `debt-inventory`, `architecture-review`,
+    `dead-code-removal`, `dependency-simplification`, `documentation-sync`,
+    `test-gap-analysis`, `refactoring-plan`, `refactoring-executor`, `refactoring-review`,
+    `regression-verification`), and `cli-workflow-creator`, `fta-code-quality` and `git-release`.
+  - End-to-end testing, `e2e-testing`, with `app-exploration` and `test-implementation`.
+  - Agent tooling, `ai-skills/`: `agent-cli-tools`, `opencode-extensions`,
+    `opencode-troubleshoot`, `litellm-skill`, `llm-delegation-tool` and `openviking`; and
+    `akm-migrate`, for moving between akm releases.
+  - Work tracking, `administrative/tracker`: GitHub, Gitea and Azure DevOps.
+  - Print and publishing, `print/`: `pagedjs`, `pdfx-print-pipeline`, `pdf-layout-reviewer`,
+    `pdf-review`, `print-utilities` and the namespace skill `print`; and `cmyk-image-converter`.
+  - Integrations: `gws-setup` for the Google Workspace CLI, and `notify` for Apprise.
+- **`agents/`** (19): the technical-debt orchestrator, a web design expert, four Playwright
+  agents (explorer, test writer, test reviewer, coverage judge), five print agents, three
+  writing agents, and the five `report-*` agents (see "Not in this copy").
+- **`commands/`** (18): two technical-debt commands, 13 print commands, and
+  `add-package-script`, `complete-github-issue` and `implement-tasks`.
+- **`workflows/`** (6): `technical-debt-lifecycle`, `create-github-issues-from-spec`,
+  `github-issues-parallel-implementer`, `playwright-full-coverage`, `print-spread-qa-loop` and
+  `research-to-knowledge`.
+- **`knowledge/`** (5): the Playwright best practices and coverage rubric, and the print fix-team
+  dispatch template, measurable design and CSS rubric and designer-eye method. The notes that
+  belong to a skill are in that skill's folder.
+- **`scripts/skills/coding/technical-debt-workflow/`**: the Python tooling of the technical-debt
+  skills (the check runner that writes evidence artifacts, the pack validator, the skill
+  evaluation and the pilot replay), with its tests, evaluation cases and the pilot repository
+  they run on.
 
 ## Not in this copy
 
-Three skills in akm-shared are marked `license: Proprietary`. They were not
+Three skills in the lab's shared bundle are marked `license: Proprietary`. They were not
 copied, with the agents, commands and knowledge files that belong to them:
 
 - `skills/coding/application-security-review`
@@ -123,6 +165,11 @@ The assets built around them stay out as well: for `ux-dom-audit`, the web-ux
 parent skill, its three judges, the measurable UX rubric and the two
 web-ux-validation-gate workflows; for `agent-team-reporting`, the six `report-*`
 commands.
+
+The five `agents/report-*.md` (analyst, orchestrator, researcher, reviewer and writer) belong to
+`agent-team-reporting`, which is not here, and they are kept. Each reads as a role prompt that
+stands alone, but nothing in this copy says how a run hands work from one to the next or
+which commands start it: that is in the skill and its commands.
 
 ## Licence
 

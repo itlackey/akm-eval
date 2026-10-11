@@ -1,5 +1,5 @@
 ---
-name: print/publish-pipeline
+name: publish-pipeline
 type: command
 description: Run the full print publishing pipeline with explicit GO/FIX/NO-GO gates and a final release recommendation.
 when_to_use: Use this when you need one command to validate, build, preflight, and review a TTRPG PDF before proofing or marketplace upload.

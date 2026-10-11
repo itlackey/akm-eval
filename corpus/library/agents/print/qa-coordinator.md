@@ -1,5 +1,5 @@
 ---
-name: print/qa-coordinator
+name: qa-coordinator
 type: agent
 description: |
   Orchestrates TTRPG publishing QA from draft through POD submission (DriveThruRPG-first).

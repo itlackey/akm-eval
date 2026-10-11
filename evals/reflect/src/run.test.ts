@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { libraryFileOf } from "./build.ts";
 import { type Case, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -350,7 +351,7 @@ describe.skipIf(!realVersion)(`with the akm on this machine (${realVersion})`, (
   function model(mode: "oracle" | "nothing" | "churn") {
     const byRef = new Map(cases.map((c) => [refOf(c.path), c]));
     const original = (c: Case) => {
-      const clean = readFileSync(join(LIBRARY, c.path), "utf8");
+      const clean = readFileSync(join(LIBRARY, libraryFileOf(c.path)), "utf8");
       const fm = Bun.YAML.parse(clean.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "") as Record<string, string>;
       const squash = (s?: string) => (s ? s.replace(/\s+/g, " ").trim() : null);
       return { description: squash(fm.description), when_to_use: squash(fm.when_to_use), title: squash(fm.title) ?? clean.match(/^#[ \t]+(\S.*)$/m)?.[1] ?? null };

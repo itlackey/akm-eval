@@ -8,7 +8,7 @@ description: |
   Triggers: "delegate to claude", "run opencode", "use codex", "kick off agent", "agentic CLI",
   "run aider", "run copilot", "headless agent", "non-interactive agent"
 metadata:
-  author: akm-shared contributors
+  author: contributors to a shared bundle
   version: "1.1.0"
   created: 2026-05-22
 license: MPL-2.0
