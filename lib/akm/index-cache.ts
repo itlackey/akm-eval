@@ -14,20 +14,23 @@
 //    embeddings though no file had changed, and 89 of its 136 queries then ranked otherwise.
 // Only a new index is built by akm, and it is built in one go. So an index is kept for the collection it was built from, and
 // is built again from nothing when a file changed, is gone or is new, or when akm, its embedding model or the index's folder
-// is not the same. akm is asked what the kept index holds before it is used, and it has to be the build that was made:
+// is not the same. "The same akm" is the version it prints, the command that runs it, and the build of the checkout the command
+// runs from (akmBuild() of akm.ts): a pull request prints the version of the release it branched from, and its indexing,
+// chunking or embedding code can differ. A checkout with changes that are not committed has one build, whatever the changes
+// are, as in summary.json. akm is asked what the kept index holds before it is used, and it has to be the build that was made:
 // the same number of assets, the same build time, and embeddings.
 //
 // The index is in the repository's .cache/, which the repository ignores, and akm walks a bundle that is inside a git repository
 // with `git ls-files`, which leaves out what the repository ignores: it would find no asset. So git is not let climb out of the
 // index's folder, and akm walks the bundle itself.
 //
-// What the index was built from is in state.json, which is written last, after akm has indexed and the caller has checked the
-// index. A folder without one holds an index that was not finished, and is removed.
+// What the index was built from, and by which akm, is in state.json, which is written last, after akm has indexed and the
+// caller has checked the index. A folder without one holds an index that was not finished, and is removed.
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { INDEX_CACHE, SEMANTIC_MODEL, type Sandbox, runAkmJson, sandboxIn, semanticConfig } from "./akm.ts";
+import { INDEX_CACHE, SEMANTIC_MODEL, type Sandbox, akmBuild, runAkmJson, sandboxIn, semanticConfig } from "./akm.ts";
 
 export const digest = (content: string | Uint8Array): string => createHash("sha256").update(content).digest("hex");
 
@@ -49,7 +52,7 @@ export function digestTree(root: string): Record<string, string> {
 export interface IndexSpec {
   /** The folder of the collection's index in the cache, such as skillret-public. */
   name: string;
-  /** What akm says its version is. An index is never reused by another version. */
+  /** What akm says its version is. An index is never reused by another version, nor by another akm command or build: the cache asks akmBuild() for those. */
   version: string;
   /** What the collection holds: each file's path, and the sha256 of its content. */
   files: Record<string, string>;
@@ -61,12 +64,22 @@ export interface IndexSpec {
   log?: (line: string) => void;
 }
 
+/** Which akm built an index, for summary.json: the version it printed, `akm_bin` and `akm_build` as akmBuild() says them, and when akm says it built the index. */
+export interface BuiltBy {
+  version: string;
+  akm_bin: string;
+  akm_build: string | null;
+  builtAt: string;
+}
+
 export interface CachedIndex {
   sandbox: Sandbox;
   /** cold: a new index was built. warm: the index of an earlier run is used as it is. rebuilt: the earlier index was not what it was built as, and a new one was built. */
   state: "cold" | "warm" | "rebuilt";
   /** How many assets the index holds. */
   entries: number;
+  /** The akm that built the index. The cache keeps an index for one akm version, command and build, so for a kept index it is this run's akm. */
+  builtBy: BuiltBy;
   /** Lets go of the index, which stays in the cache. */
   release(): void;
 }
@@ -77,12 +90,18 @@ interface State {
   /** How many assets akm indexed, and when akm says it built the index. */
   entries: number;
   builtAt: string;
+  builtBy: BuiltBy;
 }
+
+const isBuiltBy = (b: unknown): b is BuiltBy => {
+  const x = b as Partial<BuiltBy> | null;
+  return typeof x === "object" && x !== null && typeof x.version === "string" && typeof x.akm_bin === "string" && (x.akm_build === null || typeof x.akm_build === "string") && typeof x.builtAt === "string";
+};
 
 const readState = (dir: string): State | undefined => {
   try {
     const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as State;
-    return typeof state.key === "string" && state.files && typeof state.files === "object" && Number.isInteger(state.entries) && typeof state.builtAt === "string" ? state : undefined;
+    return typeof state.key === "string" && state.files && typeof state.files === "object" && Number.isInteger(state.entries) && typeof state.builtAt === "string" && isBuiltBy(state.builtBy) ? state : undefined;
   } catch {
     return undefined;
   }
@@ -121,10 +140,16 @@ async function stats(sandbox: Sandbox): Promise<{ entries: number; builtAt: stri
   return { entries: s.entryCount, builtAt: s.lastBuiltAt, hasEmbeddings: s.hasEmbeddings === true };
 }
 
-/** Why the state of an earlier index is not the index of this collection, in a sentence. */
-function whyNot(state: State | undefined, key: string, files: Record<string, string>): string {
-  if (!state) return "it was not finished";
-  if (state.key !== key) return "akm, its embedding model or the index's folder is not the same";
+/** Which akm, in a few words: the version it prints, the build it runs from if it has one, and the command. */
+const who = (b: Omit<BuiltBy, "builtAt">): string => `akm ${b.version}${b.akm_build ? ` build ${b.akm_build}` : ""} (${b.akm_bin})`;
+
+/** Why the state of an earlier index is not the index of this collection, in a sentence. `current` is the akm of this run. */
+function whyNot(state: State | undefined, key: string, files: Record<string, string>, current: Omit<BuiltBy, "builtAt">): string {
+  if (!state) return "it was not finished, or it was kept before the build of akm was recorded";
+  if (state.key !== key) {
+    const [built, now] = [who(state.builtBy), who(current)];
+    return `akm, its build, its embedding model or the index's folder is not the same${built === now ? "" : `: it was built by ${built}, and this run is ${now}`}`;
+  }
   const changed = Object.entries(state.files).filter(([path, sum]) => files[path] !== sum).length;
   const added = Object.keys(files).filter((path) => !(path in state.files)).length;
   return `${changed} of its ${Object.keys(state.files).length} files changed or are gone, and ${added} are new`;
@@ -145,7 +170,9 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
   const dir = join(root, spec.name);
   const release = lock(join(root, `${spec.name}.lock`));
   try {
-    const key = digest([spec.version, SEMANTIC_MODEL, dir, spec.extra ?? "", JSON.stringify(semanticConfig())].join("\0"));
+    // An installed release has no build, and is told apart by its version. A checkout is told apart by its build.
+    const current = { version: spec.version, ...akmBuild() };
+    const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", JSON.stringify(semanticConfig())].join("\0"));
     const previous = readState(dir);
     const sandbox = (): Sandbox => {
       const sb = sandboxIn(dir, { semantic: true });
@@ -165,13 +192,15 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
         if (now.entries !== previous.entries) throw new Error(`akm says the index holds ${now.entries} assets, and it was built with ${previous.entries}`);
         if (now.builtAt !== previous.builtAt) throw new Error(`akm says the index was built at ${now.builtAt}, and it was built at ${previous.builtAt}`);
         if (!now.hasEmbeddings) throw new Error("akm says the index holds no embeddings");
-        return { sandbox: sb, state: "warm", entries: previous.entries, release };
+        const uncommitted = current.akm_build?.endsWith("-dirty") ? ` The checkout has changes that are not committed, and the cache cannot tell one such change from another: remove ${dir} to build a new index.` : "";
+        log(`  the index ${spec.name} is kept from an earlier run: it was built by ${who(previous.builtBy)} at ${previous.builtBy.builtAt}.${uncommitted}`);
+        return { sandbox: sb, state: "warm", entries: previous.entries, builtBy: previous.builtBy, release };
       } catch (e) {
-        log(`  the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: ${(e as Error).message}`);
+        log(`  the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: ${(e as Error).message}. The earlier index was built by ${who(previous.builtBy)} at ${previous.builtBy.builtAt}.`);
         state = "rebuilt";
       }
     } else if (existsSync(dir)) {
-      log(`  the index ${spec.name} in the cache cannot be reused: ${whyNot(previous, key, spec.files)}. Building a new one.`);
+      log(`  the index ${spec.name} in the cache cannot be reused: ${whyNot(previous, key, spec.files, current)}. Building a new one.`);
     }
     discard();
     const sb = sandbox();
@@ -187,9 +216,10 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
       throw e;
     }
     const next = join(dir, "state.json.tmp");
-    writeFileSync(next, JSON.stringify({ key, files: spec.files, entries, builtAt } satisfies State));
+    const builtBy: BuiltBy = { version: current.version, akm_bin: current.akm_bin, akm_build: current.akm_build, builtAt };
+    writeFileSync(next, JSON.stringify({ key, files: spec.files, entries, builtAt, builtBy } satisfies State));
     renameSync(next, join(dir, "state.json"));
-    return { sandbox: sb, state, entries, release };
+    return { sandbox: sb, state, entries, builtBy, release };
   } catch (e) {
     release();
     throw e;
