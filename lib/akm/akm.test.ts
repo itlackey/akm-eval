@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -532,8 +532,8 @@ describe("akmBuild", () => {
     git(dir, "commit", "-q", "-m", "x");
     const sha = git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim();
     const script = join(dir, "src", "cli.ts");
-    const bin = `bun ${script}`;
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: `bun ${written(script)}`, akm_build: sha, akm_build_fingerprint: null });
+    const bin = commandLine(["bun", script]);
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: commandLine(["bun", written(script)]), akm_build: sha, akm_build_fingerprint: null });
     writeFileSync(join(dir, "src", "cli.ts"), "// changed");
     expect(withEnv({ AKM_BIN: bin }, akmBuild).akm_build).toBe(`${sha}-dirty`);
   });
@@ -550,16 +550,16 @@ describe("akmBuild", () => {
     };
     const runtime = repo("runtime", "bun");
     const script = repo("script", "cli.ts");
-    const bin = `${runtime.path} ${script.path}`;
+    const bin = commandLine([runtime.path, script.path]);
     expect(runtime.sha).not.toBe(script.sha);
-    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: `${written(runtime.path)} ${written(script.path)}`, akm_build: script.sha, akm_build_fingerprint: null });
+    expect(withEnv({ AKM_BIN: bin }, akmBuild)).toEqual({ akm_bin: commandLine([written(runtime.path), written(script.path)]), akm_build: script.sha, akm_build_fingerprint: null });
   });
 
   test("has no build for a command outside a git checkout, and writes the home folder as ~", () => {
     const dir = mkdtempSync(join(tmpdir(), "lib-akm-build-"));
     dirs.push(dir);
     writeFileSync(join(dir, "akm"), "");
-    expect(withEnv({ AKM_BIN: join(dir, "akm") }, akmBuild).akm_build).toBeNull();
+    expect(withEnv({ AKM_BIN: commandLine([join(dir, "akm")]) }, akmBuild).akm_build).toBeNull();
     expect(withEnv({ AKM_BIN: `bun ${homedir()}/no/such/akm` }, akmBuild)).toEqual({ akm_bin: "bun ~/no/such/akm", akm_build: null, akm_build_fingerprint: null });
     expect(withEnv({ AKM_BIN: undefined }, akmBuild).akm_bin).toBe("akm");
   });
@@ -578,12 +578,12 @@ describe("akmBuild", () => {
       writeFileSync(join(dir, ".gitignore"), "ignored/\n*.log\n");
       for (const args of [["init", "-q"], ["add", "."], ["commit", "-q", "-m", "release"]]) expect(git(dir, "-c", "commit.gpgsign=false", ...args).exitCode).toBe(0);
       const script = join(dir, "src", "cli.ts");
-      const bin = `bun ${script}`;
+      const bin = commandLine(["bun", script]);
       return {
         dir,
         bin,
         /** akm_bin as a summary writes it. */
-        shown: `bun ${written(script)}`,
+        shown: commandLine(["bun", written(script)]),
         sha: git(dir, "rev-parse", "--short", "HEAD").stdout.toString().trim(),
         write: (path: string, content: string | Uint8Array) => {
           mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -599,7 +599,7 @@ describe("akmBuild", () => {
       const outside = mkdtempSync(join(tmpdir(), "lib-akm-fingerprint-"));
       dirs.push(outside);
       writeFileSync(join(outside, "akm"), "");
-      expect(withEnv({ AKM_BIN: join(outside, "akm") }, akmBuild).akm_build_fingerprint).toBeNull();
+      expect(withEnv({ AKM_BIN: commandLine([join(outside, "akm")]) }, akmBuild).akm_build_fingerprint).toBeNull();
     });
 
     test.skipIf(!Bun.which("git"))("two different edits at one commit have the same build and two fingerprints, and the same edit has the same one", () => {

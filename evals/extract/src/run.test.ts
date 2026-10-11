@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
@@ -112,7 +113,7 @@ beforeAll(() => {
   log = join(root, "calls.jsonl");
   writeFileSync(join(root, "scenarios.json"), "{}");
   saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, FAKE_SCENARIOS: process.env.FAKE_SCENARIOS, AKM_LEAK: process.env.AKM_LEAK, JUDGE_API_KEY: process.env.JUDGE_API_KEY, MODEL_API_KEY: process.env.MODEL_API_KEY };
-  process.env.AKM_BIN = `bun ${script}`;
+  process.env.AKM_BIN = commandLine(["bun", script]);
   process.env.FAKE_LOG = log;
   process.env.FAKE_SCENARIOS = join(root, "scenarios.json");
   process.env.AKM_LEAK = "the caller's bundle";
@@ -433,7 +434,7 @@ describe("the command", () => {
     const root = mkdtempSync(join(tmpdir(), "extract-cmd-"));
     dirs.push(root);
     writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
-    const done = run([], { ...model, AKM_BIN: `bun ${join(root, "old-akm.ts")}` });
+    const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
     expect(done.code).toBe(2);
     expect(done.err).toContain(`akm 0.9.25 is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
   });

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { distillConfig } from "../evals/distill/src/lib.ts";
 import { runCorpus } from "../evals/distill/src/run.ts";
+import { commandLine } from "./akm/akm.ts";
 import { useModel } from "./models.ts";
 
 const QUERY_SECRET = "DUMMY_QUERY_SECRET";
@@ -50,7 +51,7 @@ beforeAll(() => {
   writeFileSync(script, FAKE_AKM);
   log = join(root, "calls.jsonl");
   saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, MODEL_API_KEY: process.env.MODEL_API_KEY };
-  process.env.AKM_BIN = `bun ${script}`; // the fake this test wrote, whatever the caller has
+  process.env.AKM_BIN = commandLine(["bun", script]); // the fake this test wrote, whatever the caller has
   process.env.FAKE_LOG = log;
 });
 afterAll(() => {

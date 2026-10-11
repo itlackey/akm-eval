@@ -160,8 +160,8 @@ export function parseCommand(text: string): string[] {
 /** A word as parseCommand reads it back: as it is when it holds only safe characters, else in single quotes. */
 const quoteWord = (word: string): string => (/^[A-Za-z0-9_@%+=:,./~-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
 
-/** The words of a command as one line that parseCommand reads back to the same words. */
-const commandLine = (words: string[]): string => words.map(quoteWord).join(" ");
+/** The words of a command as one line that parseCommand reads back to the same words: AKM_BIN for a script at a path with a space in it. */
+export const commandLine = (words: string[]): string => words.map(quoteWord).join(" ");
 
 /** The akm command: the words of AKM_BIN (see parseCommand), or `akm`. */
 function akmCommand(): string[] {
