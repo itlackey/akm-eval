@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
@@ -76,7 +76,10 @@ if (cmd === "index") {
 
 type Scenario = Record<string, unknown>;
 
-/** A temp folder holding a small night of the public night's items, a scenario, and a context that runs the fake akm. */
+/**
+ * A temp folder holding a small night of the public night's items, a scenario, and a context that runs the fake akm. `made` lists the
+ * folders of the sandboxes that context made, so a test can ask whether its own are gone, whatever else sits in the shared temp folder.
+ */
 function setup(ids: string[], scenario: Scenario, embedder: Embedder = "deterministic") {
   const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
   dirs.push(root);
@@ -92,10 +95,22 @@ function setup(ids: string[], scenario: Scenario, embedder: Embedder = "determin
   process.env.FAKE_SCENARIO = join(root, "scenario.json");
   process.env.FAKE_LOG = join(root, "commands.log");
   writeFileSync(process.env.FAKE_LOG, "");
-  const newSandbox = () => ({ ...createSandbox("nightly-test", sandboxOptions(embedder)), cmd: ["bun", join(root, "fake-akm.ts")] });
+  const made: string[] = [];
+  const newSandbox = () => {
+    const sandbox = { ...createSandbox("nightly-test", sandboxOptions(embedder)), cmd: ["bun", join(root, "fake-akm.ts")] };
+    made.push(sandbox.dir);
+    dirs.push(sandbox.dir); // one that a failing test leaves behind is removed with the rest
+    return sandbox;
+  };
   const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", embedder };
-  return { ctx, folders: { assets, results: join(root, "results") }, root, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
+  return { ctx, folders: { assets, results: join(root, "results") }, root, made, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
 }
+
+/** The sandboxes a test's context made: there was at least one, and none is left on disk. */
+const expectAllRemoved = (made: string[]) => {
+  expect(made.length).toBeGreaterThan(0);
+  expect(made.filter((dir) => existsSync(dir))).toEqual([]);
+};
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -285,8 +300,20 @@ describe("runCorpus", () => {
     expect(Object.keys(summary.seconds)).toEqual(["index", "feedback", "improve", "drain", "total"]);
     expect(rows.map((r) => [r.id, r.ok])).toEqual(IDS.map((id) => [id, true]).sort((a, b) => IDS.indexOf(a[0] as string) - IDS.indexOf(b[0] as string)));
     expect(rows.find((r) => r.id === "duplicate-01")).toMatchObject({ kind: "pair", state: "retired a", detail: { judged_as: "duplicate" } });
-    expect(rows.find((r) => r.id === "lesson-01")).toMatchObject({ state: "lesson pending, deferred/distill-review", detail: { gate: "deferred/distill-review", missing: [], forbidden: [] } });
+    expect(rows.find((r) => r.id === "lesson-01")).toMatchObject({ state: "lesson pending, deferred/distill-review", detail: { gate: "deferred/distill-review", missing: [], forbidden: [], contradicted: [] } });
     expect(rows.find((r) => r.id === "lesson-01")?.detail.lesson).toContain("polls every 20 seconds");
+  });
+
+  test("a queued lesson that states the reverse of its memory's fix fails lesson_good, and the row says what it asserted", async () => {
+    const reversed = good();
+    const queued = (reversed.proposals as { id: string; payload: { content: string } }[]).find((p) => p.id === "p4") as { payload: { content: string } };
+    queued.payload.content = "---\ndescription: A page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds. Wait for networkidle on pages with a polling widget; never wait for the visible heading.\n";
+    const { ctx, folders } = setup(IDS, reversed);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const row = resultsOf(folders).rows.find((r) => r.id === "lesson-01");
+    expect(row).toMatchObject({ ok: false, harm: false, checks: { lesson_queued: true, lesson_good: false }, detail: { forbidden: [], contradicted: ["=wait for networkidle", "never wait for * heading"] } });
+    expect(summary.metrics.failed).toEqual({ lesson_good: 1 });
+    expect(summary.metrics.items).toMatchObject({ n: 6, ok: 5 });
   });
 
   test("counts the harm of a bad night: an unsafe retirement, a note changed outside the items, a lesson accepted, a model call failed", async () => {
@@ -322,10 +349,9 @@ describe("runCorpus", () => {
   });
 
   test("ends with akm's own message when improve fails, with the endpoint hidden, and leaves nothing behind", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
-    const { ctx, folders } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
+    const { ctx, folders, made } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused");
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+    expectAllRemoved(made);
   });
 
   test("ends with akm's message when a step before improve fails, and says when akm reports the run as not ok", async () => {
@@ -338,10 +364,9 @@ describe("runCorpus", () => {
   });
 
   test("removes every sandbox it makes", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
-    const { ctx, folders } = setup(IDS, good());
+    const { ctx, folders, made } = setup(IDS, good());
     await quiet(() => runCorpus("public", ctx, folders));
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+    expectAllRemoved(made);
   });
 
   test("gives akm what it needs: semantic search and the deterministic embedder (the fake refuses to index without them)", async () => {
@@ -426,10 +451,9 @@ describe("runCorpus", () => {
   });
 
   test("an improve run the eval kills for running too long ends the night with a message that says so, and leaves nothing behind", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
-    const { ctx, folders } = setup(IDS, { ...good(), improveSleeps: true });
+    const { ctx, folders, made } = setup(IDS, { ...good(), improveSleeps: true });
     await expect(quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders))).rejects.toThrow("akm improve timed out after 1.5s");
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+    expectAllRemoved(made);
   });
 });
 

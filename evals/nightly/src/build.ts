@@ -90,7 +90,7 @@ export function buildNight(): Night {
     for (const path of own) add(path, readFileSync(join(c.dir, path), "utf8"));
     const memory = `memories/${c.name}.md`;
     const note = c.expect === "lesson" ? `${c.note} The night queues the lesson for review and never accepts it.` : c.note;
-    items.push({ id: c.id, kind: "distill", note, files: own, feedback: [{ ref: refOf(memory), signal: "positive", reason: DISTILLS[c.id] as string }], class: c.class, expect: c.expect, memory, required: c.required, forbidden: c.forbidden });
+    items.push({ id: c.id, kind: "distill", note, files: own, feedback: [{ ref: refOf(memory), signal: "positive", reason: DISTILLS[c.id] as string }], class: c.class, expect: c.expect, memory, required: c.required, forbidden: c.forbidden, contradicts: c.contradicts });
   }
 
   const clean = readFileSync(join(LIBRARY, FIX.path), "utf8");
