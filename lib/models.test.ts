@@ -169,7 +169,9 @@ describe("every eval and benchmark takes its model and akm the same way", () => 
       const model = /useModel\(|MODEL_OPTIONS/.test(r.source);
       const runsModel = /createSandbox\(|preflight\(/.test(r.source) && !/^(evals\/retrieval|benchmarks\/skillret)$/.test(r.name);
       if (runsModel && !model) missing.push(`${r.name}: no --model`);
-      if (/createSandbox\(/.test(r.source) && !/useAkm\(/.test(r.source)) missing.push(`${r.name}: no --akm`);
+      // The Harbor evals (preflight) run their akm in a container: their --akm is an npm release or a checkout (AKM_ARM_OPTIONS in lib/harbor/harbor.ts), not a command for useAkm.
+      const harbor = /preflight\(/.test(r.source);
+      if ((harbor || /createSandbox\(/.test(r.source)) && !(harbor ? /AKM_ARM_OPTIONS/ : /useAkm\(/).test(r.source)) missing.push(`${r.name}: no --akm`);
       if (r.name === "benchmarks/longmemeval" && !/useJudge\(/.test(r.source)) missing.push(`${r.name}: no --judge-model`);
     }
     expect(missing).toEqual([]);

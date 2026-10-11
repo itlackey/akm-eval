@@ -2,7 +2,7 @@
 
 Does akm change an agent's pass rate on Terminal-Bench tasks?
 
-[Terminal-Bench 2.1](https://github.com/harbor-framework/terminal-bench-2-1) has 89 tasks that an agent does in a container with a terminal: build software, debug a program, set up a service, process data, train a small model. A task passes when its own tests accept what the agent left in the container. Each task runs twice here, once with [opencode](https://opencode.ai) alone and once with opencode plus the [akm plugin](https://github.com/itlackey/akm-plugins), on the same model and one attempt each. The report gives each arm's pass rate, the difference between them over the tasks, whether the agent used akm at all, and what the run cost.
+[Terminal-Bench 2.1](https://github.com/harbor-framework/terminal-bench-2-1) has 89 tasks that an agent does in a container with a terminal: build software, debug a program, set up a service, process data, train a small model. A task passes when its own tests accept what the agent left in the container. Each task runs twice here, once with [opencode](https://opencode.ai) alone and once with opencode plus the [akm plugin](https://github.com/itlackey/akm-plugins), on the same model and, by default, one attempt each. The report gives each arm's pass rate, the difference between them over the tasks, whether the agent used akm at all, and what the run cost.
 
 The tasks are about tools the model mostly knows, so akm has little to add and this is not expected to move much. The benchmark measures that. The library the akm arm searches is the public one the other evals use: skills, knowledge, commands, agents, scripts and workflows our lab's agents read, with nothing written for a task. This is a paired A/B on one model, not a leaderboard score. See "Comparing results".
 
@@ -13,17 +13,28 @@ benchmarks/terminal-bench/run --corpus public --limit 10
 benchmarks/terminal-bench/run --corpus public
 benchmarks/terminal-bench/run --corpus private
 benchmarks/terminal-bench/run --corpus all
+benchmarks/terminal-bench/run --limit 10 --attempts 3 --repeat 2
+benchmarks/terminal-bench/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 ```
 
 - `--corpus` picks the library the akm arm gets. The tasks are the same Terminal-Bench tasks in both. `public` is `corpus/library`. `private` is its private copy in `private/retrieval/assets/library`, made by `./generate-assets --only retrieval`, and the run stops with an error when it is missing. `all` runs both one after the other and prints the two results side by side, never as one number.
 - `--limit N` runs the first N tasks of a fixed order. Its first ten are the tasks of Harbor's `terminal-bench-sample`, so `--limit 10` runs that sample, and the rest follow by name. Use it to check a setup. Without it all 89 tasks run.
+- `--attempts N` runs each task N times per arm. The default is 1. A task's pass rate is then the share of its attempts that passed, and the difference averages over tasks, so a task the arms disagree on once counts for less than one they disagree on every time. The leaderboard asks for at least five.
+- `--repeat N` runs the whole benchmark N times, into `<label>-r1` to `<label>-rN`, and writes the min, max and mean of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. With `--corpus all` each corpus is repeated on its own and the two are not printed side by side.
+- `--model NAME` is the model, as opencode names it. It wins over `MODEL_NAME`. See "What it needs".
+- `--akm akm-cli@x.y.z|FOLDER` is the akm of the akm arm, and `--akm-env KEY=VALUE` (repeatable) adds a setting to its environment. See "Which akm".
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
 Each run writes to `benchmarks/terminal-bench/results/<UTC date>-<label>/`, or to `private/terminal-bench/results/` for the private corpus:
 
-- `summary.json`: the report described below, the model, the pins, the dataset and its digest, the library, how many tasks ran and the git commit.
-- `samples.jsonl`: one line per trial, with its task, arm, reward, exception if any, the akm tools it called, whether it read the curated results, its tokens, its cost and its time.
+- `summary.json`: the report described below, the model, the pins, the dataset and its digest, the library, how many tasks and attempts ran and the git commit. It also holds:
+  - `akm_version`, `akm_bin`, `akm_build`, `akm_env` and `akm_install`: which akm the akm arm ran, and what was installed. See "Which akm".
+  - `library`: the folder, `assets` (how many assets akm indexed in it, counted on the host at the start of the run), `measured_with` (the akm that counted) and `sha256` (a digest of the copy the akm arm was given). See "The library".
+  - `job`: the Harbor job that ran, from `job.json`: the datasets (the dataset and the tasks), the attempts, the concurrency (4), the setup time (2,700 seconds) and the options of both agents, opencode's config among them. Paths are relative to the run's folder or the repository.
+  - `timeouts` (`control` and `akm`), `n_errored` (the errored trials of both arms) and `metrics`: the report's main numbers as plain numbers, per arm (`pass_rate`, `passed`, `scored`, `errored`, `timeouts`, minutes and dollars per scored trial), the `delta` (akm minus control, with its interval and the number of tasks), `better` and `engagement` (`rate`, `called`, `curated_read`, `control_calls`). `--repeat` takes the spread of `metrics`.
+- `samples.jsonl`: one line per trial, with its task, arm, reward, exception if any, whether it ran out of time (`timed_out`), the akm tools it called, whether it read the curated results, its tokens, its cost and its time. A trial whose plugin was not live has `plugin_problem`, saying why.
 - `libraries/library/`: the copy of the library the akm arm was given.
+- `akm-packages/`: the tarballs of a checkout of akm, when `--akm` names one.
 - `jobs/`: Harbor's folders, one per trial, with the agent's output, opencode's log and the verifier's output. `job.json` is the Harbor job that ran and `harbor.log` is what Harbor printed.
 
 `jobs/` quotes the tasks: the instruction and what the verifier prints are in it. Keep it out of git and out of anything you publish. Publish scores only. See "The data".
@@ -31,9 +42,10 @@ Each run writes to `benchmarks/terminal-bench/results/<UTC date>-<label>/`, or t
 ## What it needs
 
 - [Docker](https://docs.docker.com/engine/install/), [uv](https://docs.astral.sh/uv/) and [bun](https://bun.sh). uv runs [Harbor](https://github.com/harbor-framework/harbor) at the release the benchmark pins, without installing it. opencode and akm are installed in each task's container.
-- A model with tool calling that answers quickly, set in `.env` as for `evals/agent-ab`: `MODEL_NAME` is the model as opencode names it, such as `openai/gpt-6-luna`, and the key goes in `MODEL_API_KEY` (or `OPENAI_API_KEY`). opencode's openai provider calls the Responses API. `JUDGE_*` is not used. The tasks keep their own time limits, 15 minutes for most, and a trial that runs out of time is a lost task and not a measurement: an earlier pilot on a slow free model timed out in 43 of its 60 trials.
+- A model with tool calling that answers quickly, set as for `evals/agent-ab` (see "What it needs" there): `--model NAME` or `MODEL_NAME` is the model as opencode names it, such as `openai/gpt-6-luna`. A name that is a line of `models.json` goes to that line's endpoint and key, any other to the gateway in `MODEL_BASE_URL` with `MODEL_API_KEY`, and opencode gets them as `OPENAI_BASE_URL` and `OPENAI_API_KEY`. A base URL given with a model of another provider stops the run. Harbor is started with the model's variables and what it, uv and Docker need, not with the judge's key or the rest of your environment. opencode's openai provider calls the Responses API. `JUDGE_*` is not used. The tasks keep their own time limits, 15 minutes for most, and a trial that runs out of time is a lost task and not a measurement: an earlier pilot on a slow free model timed out in 43 of its 60 trials.
 - Internet from the containers: apt, GitHub, nodejs.org, the npm registry, models.dev and the model. Harbor pulls each task's image from Docker Hub, which limits anonymous pulls per address (100 an hour when this was written). A full run pulls up to 89 images, so run `docker login` first when you run it more than once an hour or share the address with other pulls.
 - Disk for the images: the 89 task images are 74.9 GB as Docker reports them, the biggest 6 GB. Harbor leaves each in Docker when its trials end, so a full run leaves about 65 GB behind unless you remove the images as the tasks finish. After a run, `docker images --format '{{.Repository}}:{{.Tag}}' | grep '^alexgshaw/' | xargs -r docker image rm` removes them, and any you pulled before. A trial in `results/` is 28 MB on average, because opencode's own database holds the tool outputs, and a few are 300 to 650 MB: a full run is about 5 GB.
+- akm on this machine (`AKM_BIN`, else `akm` on `PATH`) to count the library's assets before the run. Without one the run goes on and the setup checks less: see "The library". npm, only to pack a checkout of akm (`--akm FOLDER`).
 - CPU and memory for four containers at a time. Most tasks ask for 1 CPU and 2 GB, and up to 4 CPUs and 8 GB.
 - Time: see "Cost and time".
 
@@ -47,7 +59,9 @@ Tasks come with their own tests, solutions and time limits for the agent: 48 of 
 
 ## The library
 
-The akm arm searches one library, `corpus/library`: 317 files, of which akm indexes 259 as assets (35 skills, 111 knowledge notes, 58 scripts, 25 commands, 24 agents and 6 workflows). The private corpus gives it `private/retrieval/assets/library` instead, the same library with names, tools, hosts, ids and numbers rewritten from a seed (see the root README). Both index to 259 assets. The setup stops, and the trial is an error, when the container's akm indexes fewer.
+The akm arm searches one library, `corpus/library`: 317 files, of which akm 0.9.26 indexed 259 as assets (35 skills, 111 knowledge notes, 58 scripts, 25 commands, 24 agents and 6 workflows) when this was written. The private corpus gives it `private/retrieval/assets/library` instead, the same library with names, tools, hosts, ids and numbers rewritten from a seed (see the root README).
+
+A file is not an asset, and the count changes with every edit of the library and with akm's rules, so the run counts the assets itself and no number is kept in the code. Before it starts Harbor, it seeds a bundle in a sandbox as the akm arm does (the library's type folders copied in), indexes it with the akm on this machine (`AKM_BIN`, else `akm` on `PATH`) and reads the count from `akm info`, facts left out. The number goes to the akm arm as `library_assets` in `job.json`, and to `summary.json` as `library.assets`, with the akm that counted it (`library.measured_with`) and a digest of the library (`library.sha256`). The setup stops, and the trial is an error, when the container's akm indexes fewer. An akm that indexes more passes, and the number it indexed is in `akm_install.observed.assets_indexed`. A build that indexes fewer assets of the same library than the akm on your machine therefore stops every akm trial, and the message says how many. When no akm on this machine can count, `library.assets` is null, the run says so, and the setup only checks that the index is not empty.
 
 The library must stay generic. The leaderboard rules treat a hint written for a task as cheating, and a library written for these tasks would measure the library and not akm. Add nothing to it for Terminal-Bench.
 
@@ -58,6 +72,7 @@ The private corpus does not change the tasks, so unlike the other evals it canno
 Measured on the run of 2026-10-06 with `openai/gpt-6-luna`, on a machine with 12 cores that was busy with other work, at a load average of 20 to 30 for much of the time. The figures are opencode's own, in dollars at the model's price.
 
 - A run of all 89 tasks is 178 trials, four at a time. It took 7 hours 6 minutes and cost $3.97: $1.68 for the control arm and $2.29 for the akm arm. The ten-task sample, 20 trials, took 28 minutes and cost $0.16.
+- `--attempts N` and `--repeat N` multiply the trials and the time by N each. The figures below are for one attempt in one run.
 - A scored trial took 8.9 minutes on average in the control arm and 10.6 in the akm arm (medians 4.8 and 6.2). The agent's own run is 6.2 and 6.8 minutes of that, from seconds to the task's limit. The rest is the container's setup, 1.6 minutes for the control and 2.8 for the akm arm, which installs akm-cli and warms the plugin up, and the verifier, 0.8 minutes on average and up to 12.
 - A scored trial cost $0.019 in the control arm and $0.026 in the akm arm: 0.85 million and 1.45 million input tokens, nearly all of them cache reads, and about 4,000 and 4,700 output tokens. The akm arm sends 70% more input: the curated results and the hints ride in every request, and its sessions make 19% more tool calls (39.4 against 33.0).
 - An agent that does not finish runs to the task's limit. 11 of the 178 trials did, 6%, and each held one of the four places for up to an hour, so a handful of tasks decide how long a run takes. Both arms ran `install-windows-3.11` to its limit of an hour.
@@ -73,11 +88,17 @@ Both arms get the same model, the same opencode (1.18.34), the same task, the sa
 
 At the start of a session the plugin runs akm's curate on the task's text against the library, writes the five best matches to a file, and tells the agent to read it, and it adds the akm tools and hints on using them to the agent's prompt. So the agent has two ways in: reading that file, and calling `akm_search`, `akm_show`, `akm_curate`, `akm_feedback` or `akm_remember`, or `akm` in its shell. The report counts both.
 
-The akm arm's setup is checked, as in `evals/agent-ab`: a warm-up session must show the plugin loaded, and after the run the measured session's log must show it too. A trial where the plugin was not shown to be live is an error with no reward, not a score. `lib/harbor/akm_opencode.py` is the arm, and `lib/harbor/harbor.ts` the job, both shared with `evals/agent-ab`.
+The akm arm's setup is checked, as in `evals/agent-ab`: a warm-up session must show the plugin loaded, and after the run the measured session's log must show it too. A trial where the plugin was not shown to be live is an error with no reward, not a score. Harbor keeps only the first exception of a trial, so when the agent ran out of time first, the arm's verdict is also written to `agent/akm_plugin_status.json` and the runner gives such a trial the exception `AkmPluginNotLoadedError`. `lib/harbor/akm_opencode.py` is the arm, and `lib/harbor/harbor.ts` the job, both shared with `evals/agent-ab`.
+
+## Which akm
+
+`--akm` and `--akm-env` work as in `evals/agent-ab` (see "Which akm" there). The akm arm runs in a container, so `--akm` is not a command: it is an exact npm release, `akm-cli@x.y.z` (the pin, `akm-cli@0.9.26`, without the flag), or the folder of an akm checkout, which is packed with `npm pack` on the host, kept in the run's folder as `akm-packages/` and installed from the tarball in each akm container. A checkout that holds the plugin has it packed too. Otherwise the pinned plugin stays and carries its own akm-cli, so only the akm it shells out to is the one under test, and the run says so. `AKM_BIN` is not read. `--akm-env AKM_CURATE_TIMEOUT=30` adds a setting to every command of the akm arm, for a sweep.
+
+The setup records what it installed instead of requiring a version: `akm --version` as printed, the akm-cli the plugin carries and the assets the index holds, in the trial's context and in `summary.json` under `akm_install.observed`. `summary.json` has `akm_version`, `akm_bin`, `akm_build` and `akm_env` as the other evals do. A checkout's `akm_build` is `git describe --always --dirty`, and null for a release.
 
 ## Read the results
 
-A trial is scored when the verifier gave it a reward, 1 or 0. A trial without one is errored: it never got far enough, or the plugin was not shown to be live. A trial whose agent ran out of the task's time is a timeout. Harbor still runs the verifier on what the agent left, so a timed-out trial is usually scored too, and it is counted as a timeout as well. Errored trials are left out of the rates and counted, with their exception types. Read the errors and the timeouts before the rates.
+A trial is scored when the verifier gave it a reward, 1 or 0. A trial without one is errored: it never got far enough, or the plugin was not shown to be live. A trial whose agent ran out of the task's time, or whose setup ran out of its own (Harbor's `AgentTimeoutError` and `AgentSetupTimeoutError`), is a timeout: `timeouts` in `summary.json` by arm, and `timed_out: true` on its row. A slower akm shows as more of them in the akm arm. Harbor still runs the verifier on what an agent left when it ran out of time, so such a trial is usually scored too, and it is counted as a timeout as well. A setup that ran out of time has no reward, and is an errored trial too. Errored trials are left out of the rates and counted, with their exception types. A trial whose plugin was not live is one of them even when the agent ran out of time first: see "The two arms". Read the errors and the timeouts before the rates.
 
 | Figure | Meaning |
 |---|---|
@@ -113,10 +134,11 @@ That is no more than the public run showed. It finds no effect of akm, and no de
 
 ## Comparing results
 
-- A pass rate here is not a Terminal-Bench score. The leaderboard takes at least five trials per task, uploaded publicly to Harbor Hub. This runs one attempt per task, with opencode and a plugin, on a library of ours, on a machine that may be busy with other work. Never put a figure from this benchmark in a table, a chart or a sentence beside a leaderboard row, with or without a footnote. It answers one question: akm against itself on the same tasks.
+- A pass rate here is not a Terminal-Bench score. The leaderboard takes at least five trials per task, uploaded publicly to Harbor Hub. This runs one attempt per task by default, with opencode and a plugin, on a library of ours, on a machine that may be busy with other work. Never put a figure from this benchmark in a table, a chart or a sentence beside a leaderboard row, with or without a footnote. It answers one question: akm against itself on the same tasks.
 - Say what a figure is every time it appears: "Terminal-Bench 2.1, 89 tasks, one attempt, opencode 1.18.34 and this model, with and without akm", not "akm improves agent performance".
 - Compare runs only with the same dataset digest, model, pins and library, and move one of them at a time. When akm-cli, the plugin, opencode and the model all move together, no difference belongs to any one of them.
-- One attempt per task is noisy. A model that passes a task one run may fail it the next, and the paired difference is the sum of a few tasks the two arms disagreed on. In the runs above the control arm alone changed its outcome on 6 of 26 tasks between two runs. Look at `did better` before the interval, and repeat a run before trusting a gap of a few tasks.
+- One attempt per task is noisy. A model that passes a task one run may fail it the next, and the paired difference is the sum of a few tasks the two arms disagreed on. In the runs above the control arm alone changed its outcome on 6 of 26 tasks between two runs. Look at `did better` before the interval, and repeat a run before trusting a gap of a few tasks: `--attempts N` for more attempts of each task in one run, `--repeat N` for the spread of whole runs (`metrics.delta.value` in the repeat summary).
+- To compare two builds of akm, run each with `--akm` on the same dataset, model, pins and library, and read `akm_build` in the two summaries.
 - A task measures akm only when the control fails it. Most of these tasks the control passes. They add nothing but noise around zero, and the pass rate of a strong model is mostly the tasks it would have passed anyway.
 - Report what looks bad as plainly as what looks good, errored trials and timeouts included.
 
