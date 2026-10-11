@@ -436,7 +436,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(go("--limit", "4").assets).toBe(base.assets);
   }, 60_000);
 
-  test("run --corpus private refuses a tree with no manifest, one made from other public inputs, and one whose files are not what generate wrote, and runs one that is sound", () => {
+  test("run --corpus private refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
     const { root, run, summary } = repo();
     const out = join(root, "private", "agent-ab");
     const assets = join(out, "assets");
@@ -459,6 +459,11 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     writeFileSync(library, `${libraryText}\nChanged after the private tasks were made.\n`);
     refused("were made from public tasks or libraries that have changed since");
     writeFileSync(library, libraryText);
+
+    // Made by another generator: the manifest of assets an older generate wrote, with the same public inputs and the same files.
+    writeFileSync(join(assets, "generated.json"), JSON.stringify({ ...JSON.parse(manifest), generator_sha256: "0".repeat(64) }));
+    refused("were made by a generator that has changed since");
+    writeFileSync(join(assets, "generated.json"), manifest);
 
     const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0], "instruction.md");
     const taskText = readFileSync(task, "utf8");

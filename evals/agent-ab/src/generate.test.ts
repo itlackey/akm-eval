@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { publicFixture } from "./fakes.ts";
 import { generate, harmonize, install, isFictional, leftovers, libraryOf, prove, restoreNumbers } from "./generate.ts";
-import { GENERATED, generatorSha256, outputsSha256, privateAssetsProblem, publicInputsSha256, readGenerated } from "./inputs.ts";
+import { GENERATED, GENERATOR_CODE, generatorSha256, outputsSha256, privateAssetsProblem, publicInputsSha256, readGenerated } from "./inputs.ts";
 import { taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
@@ -290,6 +290,55 @@ describe("privateAssetsProblem", () => {
     mkdirSync(join(from, "tasks", "real--task"), { recursive: true });
     writeFileSync(join(from, "tasks", "real--task", "task.toml"), '[metadata]\ntools = "real"\n');
     expect(privateAssetsProblem(assets, from)).toBeUndefined();
+  }, 60_000);
+
+  test("refuses assets whose manifest names another generator, and says to make them again; a corpus made again passes", () => {
+    const { from, assets } = generated();
+    const manifest = JSON.parse(readFileSync(join(assets, GENERATED), "utf8"));
+    expect(manifest.generator_sha256).toBe(generatorSha256());
+    // The inputs and the files are exactly as generate wrote them: only the recorded generator differs, as it does for assets an older generate made.
+    for (const old of ["0".repeat(64), "f".repeat(64), generatorSha256().replace(/^./, (c) => (c === "a" ? "b" : "a"))]) {
+      writeFileSync(join(assets, GENERATED), JSON.stringify({ ...manifest, generator_sha256: old }));
+      expect(privateAssetsProblem(assets, from, "private/agent-ab/assets"), old).toBe(
+        "the private assets in private/agent-ab/assets/ were made by a generator that has changed since: generate.ts, inputs.ts or lib.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in generated.json differs). Make them again with: ./generate-assets --only agent-ab",
+      );
+    }
+    expect(generate({ seed: "7", out: dirname(assets), from }).installed).toBe(true); // made again over the stale ones: the digest it records is the one it checks
+    expect(JSON.parse(readFileSync(join(assets, GENERATED), "utf8")).generator_sha256).toBe(generatorSha256());
+    expect(privateAssetsProblem(assets, from)).toBeUndefined();
+  }, 60_000);
+
+  test("refuses assets made by a generator that has changed since: any of its files, lib/rewrite included", () => {
+    const { from, assets } = generated();
+    // A copy of the generator's files is the same generator: the digest is of the files, wherever they are.
+    const root = mkdtempSync(join(tmpdir(), "agent-ab-generator-"));
+    made.push(root);
+    for (const rel of GENERATOR_CODE) {
+      mkdirSync(dirname(join(root, rel)), { recursive: true });
+      cpSync(join(EVAL_DIR, "..", "..", rel), join(root, rel));
+    }
+    expect(generatorSha256(root)).toBe(generatorSha256());
+    expect(privateAssetsProblem(assets, from, assets, root)).toBeUndefined();
+    expect(GENERATOR_CODE).toContain(join("lib", "rewrite", "rewrite.ts"));
+    expect(GENERATOR_CODE).toContain(join("lib", "rewrite", "lexicon.ts"));
+    expect(GENERATOR_CODE).toContain(join("evals", "agent-ab", "src", "generate.ts"));
+    for (const rel of GENERATOR_CODE) {
+      const file = join(root, rel);
+      const text = readFileSync(file, "utf8");
+      writeFileSync(file, `${text}\n// changed\n`);
+      expect(privateAssetsProblem(assets, from, assets, root), rel).toContain("were made by a generator that has changed since");
+      writeFileSync(file, text);
+    }
+    expect(privateAssetsProblem(assets, from, assets, root)).toBeUndefined();
+  }, 60_000);
+
+  test("the inputs are checked before the generator, and the generator before the files", () => {
+    const { from, assets } = generated();
+    const manifest = JSON.parse(readFileSync(join(assets, GENERATED), "utf8"));
+    writeFileSync(join(assets, GENERATED), JSON.stringify({ ...manifest, inputs_sha256: "0".repeat(64), generator_sha256: "0".repeat(64) }));
+    expect(privateAssetsProblem(assets, from)).toContain("were made from public tasks or libraries that have changed since");
+    writeFileSync(join(assets, GENERATED), JSON.stringify({ ...manifest, generator_sha256: "0".repeat(64), outputs_sha256: "0".repeat(64) }));
+    expect(privateAssetsProblem(assets, from)).toContain("were made by a generator that has changed since");
   }, 60_000);
 
   test("refuses assets that are not what generate wrote: a task changed, a file added, one removed", () => {
