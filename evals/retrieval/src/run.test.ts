@@ -1,15 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
+import { assetsSha256 } from "./inputs.ts";
 import { collectionsFor, runCollection, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
+/** The caller's AKM_BIN. A run records the akm it was started with, so setup() points AKM_BIN at the fake akm it makes, and every test puts the caller's back. */
+const callerAkmBin = process.env.AKM_BIN;
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  if (callerAkmBin === undefined) delete process.env.AKM_BIN;
+  else process.env.AKM_BIN = callerAkmBin;
 });
 
 /**
@@ -104,7 +110,10 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
   const cacheRoot = join(root, "index-cache");
   /** The fake akm for the keyword sandbox, and for the semantic index in the cache, which is in the temp folder. */
   const ctx = { newSandbox, label: "t", semantic: true, cache: { root: cacheRoot, cmd: ["bun", script] } };
-  return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot };
+  // summary.json says which akm the run was started with, by AKM_BIN. It is the fake one, whatever the caller has set; the afterEach above puts the caller's back.
+  const akmBin = `bun ${script}`;
+  process.env.AKM_BIN = akmBin;
+  return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot, akmBin };
 }
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -361,11 +370,14 @@ describe("runCollection", () => {
     });
 
     test("says which akm built the semantic index, for a new index and for a kept one", async () => {
-      const { ctx, folders } = setup();
+      const { ctx, folders, akmBin } = setup();
       const first = await quiet(() => runCollection("public", "library", ctx, folders));
       const second = await quiet(() => runCollection("public", "library", ctx, folders));
       expect([first.semantic_index, second.semantic_index]).toEqual(["cold", "warm"]);
-      const built = { version: "0.9.99-test", akm_bin: "akm", akm_build: null, builtAt: "build 1" };
+      // The summary writes the home folder as ~, wherever the temp folder is.
+      const home = homedir();
+      const shown = akmBin.split(" ").map((word) => (word === home || word.startsWith(`${home}/`) ? `~${word.slice(home.length)}` : word)).join(" ");
+      const built = { version: "0.9.99-test", akm_bin: shown, akm_build: null, builtAt: "build 1" };
       expect(first.semantic_index_built_by).toEqual(built);
       expect(second.semantic_index_built_by).toEqual(built);
       const stored = JSON.parse(readFileSync(join(second.results_dir, "summary.json"), "utf8"));
@@ -381,6 +393,165 @@ describe("runCollection", () => {
       const off = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false, semanticFlag: "off" }, folders));
       expect(off.semantic_flag).toBe("off");
       expect(JSON.parse(readFileSync(join(off.results_dir, "summary.json"), "utf8")).semantic_flag).toBe("off");
+    });
+  });
+
+  describe("the library in assets_sha256", () => {
+    /** A library of two notes in a folder. Neither is graded in the qrels: the digest covers what akm indexes, judged or not. */
+    const notes = (library: string) => {
+      mkdirSync(join(library, "knowledge"));
+      writeFileSync(join(library, "knowledge", "retry.md"), "Retry busy requests\n");
+      writeFileSync(join(library, "knowledge", "backoff.md"), "Wait longer after each retry\n");
+    };
+    /** Two queries are enough to tell one run from another here, and each run of the fake akm costs a process for every call. */
+    const lean = () => setup([QUERIES[0], QUERIES[4]], QRELS.filter((r) => r.id === "q1"));
+    /** What can happen to an asset of the library. */
+    const CHANGES: Record<string, (library: string) => void> = {
+      "an edited asset": (library) => writeFileSync(join(library, "knowledge", "retry.md"), "Never retry busy requests\n"),
+      "an added asset": (library) => writeFileSync(join(library, "knowledge", "timeouts.md"), "Give every call a time limit\n"),
+      "a removed asset": (library) => rmSync(join(library, "knowledge", "backoff.md")),
+      "a renamed asset": (library) => renameSync(join(library, "knowledge", "backoff.md"), join(library, "knowledge", "waiting.md")),
+    };
+
+    for (const [what, change] of Object.entries(CHANGES)) {
+      test(`${what} changes the digest of a run with a new semantic index, of a run with a kept one, and of a run with keyword search only`, async () => {
+        const { ctx, folders } = lean();
+        notes(folders.library);
+        const run = (over: { semantic?: boolean } = {}) => quiet(() => runCollection("public", "library", { ...ctx, ...over }, folders));
+        const cold = await run();
+        const warm = await run();
+        expect([cold.semantic_index, warm.semantic_index]).toEqual(["cold", "warm"]);
+        // The same library has one identity: a kept index and a run without the semantic search do not change it.
+        expect(warm.assets_sha256).toBe(cold.assets_sha256);
+        expect((await run({ semantic: false })).assets_sha256).toBe(cold.assets_sha256);
+
+        change(folders.library);
+        const keyword = await run({ semantic: false });
+        expect(keyword.assets_sha256).not.toBe(cold.assets_sha256);
+        const rebuilt = await run();
+        expect(rebuilt.semantic_index).toBe("cold"); // the kept index is not used for another library
+        expect(rebuilt.assets_sha256).not.toBe(cold.assets_sha256);
+        const kept = await run();
+        expect(kept.semantic_index).toBe("warm");
+        expect(kept.assets_sha256).not.toBe(cold.assets_sha256);
+        // and the changed library has one identity as well
+        expect([rebuilt.assets_sha256, kept.assets_sha256]).toEqual([keyword.assets_sha256, keyword.assets_sha256]);
+        // Only the library's digest moved: the queries and the qrels are the same files.
+        expect({ ...kept.assets, library_sha256: cold.assets.library_sha256 }).toEqual(cold.assets);
+        expect(kept.assets.library_sha256).not.toBe(cold.assets.library_sha256);
+        expect(JSON.parse(readFileSync(join(kept.results_dir, "summary.json"), "utf8")).assets_sha256).toBe(kept.assets_sha256);
+      });
+    }
+
+    test("is the same for the same library in another folder, whatever the dates of its files, and for a file written again with the text it had", async () => {
+      const [a, b] = [lean(), lean()];
+      for (const { folders } of [a, b]) notes(folders.library);
+      const first = await quiet(() => runCollection("public", "library", a.ctx, a.folders));
+      const other = await quiet(() => runCollection("public", "library", b.ctx, b.folders));
+      expect(other.assets).toEqual(first.assets);
+      expect(other.assets_sha256).toBe(first.assets_sha256);
+      utimesSync(join(b.folders.library, "knowledge", "retry.md"), new Date(0), new Date(0));
+      writeFileSync(join(a.folders.library, "knowledge", "retry.md"), "Retry busy requests\n");
+      expect((await quiet(() => runCollection("public", "library", a.ctx, a.folders))).assets_sha256).toBe(first.assets_sha256);
+      expect((await quiet(() => runCollection("public", "library", b.ctx, b.folders))).assets_sha256).toBe(first.assets_sha256);
+      // the same change to both gives the same digest again
+      for (const { folders } of [a, b]) CHANGES["an edited asset"](folders.library);
+      const [edited, alsoEdited] = [await quiet(() => runCollection("public", "library", a.ctx, a.folders)), await quiet(() => runCollection("public", "library", b.ctx, b.folders))];
+      expect(edited.assets_sha256).not.toBe(first.assets_sha256);
+      expect(alsoEdited.assets_sha256).toBe(edited.assets_sha256);
+    });
+
+    test("is made of digests that the summary keeps: the library, the bundle mapping, the queries and the qrels, each changing with its own file", async () => {
+      const { ctx, folders } = lean();
+      notes(folders.library);
+      const first = await quiet(() => runCollection("public", "library", ctx, folders));
+      const stored = JSON.parse(readFileSync(join(first.results_dir, "summary.json"), "utf8"));
+      expect(stored.assets).toEqual(first.assets);
+      expect(Object.keys(stored.assets)).toEqual(["library_sha256", "bundles_sha256", "queries_sha256", "qrels_sha256"]);
+      expect(stored.assets.library_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(stored.assets.bundles_sha256).toBeNull(); // this library has no bundles.json
+      expect(stored.assets.queries_sha256).toBe(sha256File(join(folders.assets, "queries.jsonl")));
+      expect(stored.assets.qrels_sha256).toBe(sha256File(join(folders.assets, "qrels.jsonl")));
+      expect(stored.assets_sha256).toBe(assetsSha256(stored.assets));
+
+      CHANGES["an edited asset"](folders.library);
+      const edited = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(edited.assets.library_sha256).not.toBe(first.assets.library_sha256);
+      expect({ ...edited.assets, library_sha256: first.assets.library_sha256 }).toEqual(first.assets);
+
+      writeFileSync(join(folders.assets, "qrels.jsonl"), `${readFileSync(join(folders.assets, "qrels.jsonl"), "utf8")}${JSON.stringify(grade("q1", "a/new", 1))}\n`);
+      const graded = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(graded.assets.qrels_sha256).not.toBe(edited.assets.qrels_sha256);
+      expect({ ...graded.assets, qrels_sha256: edited.assets.qrels_sha256 }).toEqual(edited.assets);
+      expect(graded.assets_sha256).not.toBe(edited.assets_sha256);
+
+      writeFileSync(join(folders.assets, "queries.jsonl"), `${readFileSync(join(folders.assets, "queries.jsonl"), "utf8")}${JSON.stringify({ id: "n3", query: "thanks", kind: "chitchat" })}\n`);
+      const asked = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(asked.assets.queries_sha256).not.toBe(graded.assets.queries_sha256);
+      expect({ ...asked.assets, queries_sha256: graded.assets.queries_sha256 }).toEqual(graded.assets);
+    });
+
+    describe("of a library of bundles", () => {
+      /** Bundles in `root`: `one` is in the library, `two` is a link to a folder outside it, and `three` is named by a path that leaves it. */
+      const layout = (root: string) => {
+        const library = join(root, "bundles");
+        const outside = join(root, "outside");
+        for (const dir of [join(library, "one"), join(outside, "two-notes"), join(root, "shared", "three")]) mkdirSync(dir, { recursive: true });
+        symlinkSync(join(outside, "two-notes"), join(library, "two"));
+        for (const [dir, text] of [[join(library, "one"), "one\n"], [join(outside, "two-notes"), "two\n"], [join(root, "shared", "three"), "three\n"]]) {
+          writeFileSync(join(dir, "a.md"), text);
+          writeFileSync(join(dir, "b.md"), `${text}, too\n`);
+        }
+        const bundles = join(root, "bundles.json");
+        writeFileSync(bundles, JSON.stringify({ one: "akm", two: "akm", "../shared/three": "akm" }));
+        return { library, bundles, folders: { one: join(library, "one"), two: join(outside, "two-notes"), three: join(root, "shared", "three") } };
+      };
+      const STEPS: [string, (dir: string) => void][] = [
+        ["edit", (dir) => writeFileSync(join(dir, "a.md"), "edited\n")],
+        ["add", (dir) => writeFileSync(join(dir, "c.md"), "new\n")],
+        ["remove", (dir) => rmSync(join(dir, "b.md"))],
+        ["rename", (dir) => renameSync(join(dir, "a.md"), join(dir, "z.md"))],
+      ];
+
+      for (const bundle of ["one", "two", "three"] as const) {
+        test(`${bundle === "one" ? "an asset in a bundle of the library" : bundle === "two" ? "an asset in a bundle that is a link to a folder outside the library" : "an asset in a bundle that bundles.json names by a path outside the library"} is covered, whether it is edited, added, removed or renamed`, async () => {
+          const { ctx, folders, root } = lean();
+          const { library, bundles, folders: where } = layout(root);
+          const own = { ...folders, library, bundles };
+          const seen = [(await quiet(() => runCollection("own", "own", ctx, own))).assets_sha256];
+          for (const [step, apply] of STEPS) {
+            apply(where[bundle]);
+            const cold = await quiet(() => runCollection("own", "own", ctx, own));
+            const warm = await quiet(() => runCollection("own", "own", ctx, own));
+            expect([cold.semantic_index, warm.semantic_index]).toEqual(["cold", "warm"]);
+            const keyword = await quiet(() => runCollection("own", "own", { ...ctx, semantic: false }, own));
+            expect(seen, step).not.toContain(cold.assets_sha256); // a digest that no earlier state of the bundles had
+            expect([warm.assets_sha256, keyword.assets_sha256], step).toEqual([cold.assets_sha256, cold.assets_sha256]);
+            seen.push(cold.assets_sha256);
+          }
+        });
+      }
+
+      test("is the same wherever the bundles are, and changes with the adapter and the names but not with the library's path", async () => {
+        const [a, b] = [lean(), lean()];
+        const [one, two] = [layout(a.root), layout(b.root)];
+        const first = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        const other = await quiet(() => runCollection("own", "own", b.ctx, { ...b.folders, library: two.library, bundles: two.bundles }));
+        expect(other.assets).toEqual(first.assets);
+        expect(first.assets.bundles_sha256).toMatch(/^[0-9a-f]{64}$/);
+
+        writeFileSync(one.bundles, JSON.stringify({ "../shared/three": "akm", two: "akm", one: "claude" }));
+        const adapter = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        expect(adapter.assets.bundles_sha256).not.toBe(first.assets.bundles_sha256);
+        expect(adapter.assets.library_sha256).toBe(first.assets.library_sha256); // the same files
+        expect(adapter.assets_sha256).not.toBe(first.assets_sha256);
+
+        writeFileSync(one.bundles, JSON.stringify({ one: "akm", two: "akm" })); // a bundle left out is not indexed, so its files are not part of the library
+        const fewer = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        expect(fewer.assets.library_sha256).not.toBe(first.assets.library_sha256);
+        writeFileSync(join(one.folders.three, "a.md"), "edited, but not indexed\n");
+        expect((await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }))).assets_sha256).toBe(fewer.assets_sha256);
+      });
     });
   });
 
@@ -767,5 +938,16 @@ describe("the command", () => {
     expect(help).toContain("--semantic  on scores the semantic search too, auto (default) only in a full run of the public and private corpora");
     expect(help).toContain("--akm");
     expect(help).toContain("made by ./generate-assets --only retrieval. It stops\n            when they were made from public files that have changed since: make them again.");
+  });
+});
+
+describe("AKM_BIN", () => {
+  test("is pointed at the fake akm by setup(), and is the caller's again after the test", () => {
+    expect(setup().akmBin).toBe(process.env.AKM_BIN as string);
+    process.env.AKM_BIN = "/nonexistent/other-akm";
+  });
+
+  test("is the caller's in the test after it", () => {
+    expect(process.env.AKM_BIN).toBe(callerAkmBin);
   });
 });

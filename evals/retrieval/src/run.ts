@@ -16,7 +16,7 @@ import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
-import { filesSha256, readGenerated, readSeed, staleAssets } from "./inputs.ts";
+import { type AssetsDigests, assetsDigests, assetsSha256, readGenerated, readSeed, staleAssets } from "./inputs.ts";
 import {
   type Abstention,
   DEPTH,
@@ -141,8 +141,10 @@ interface Summary {
   config: { keyword: unknown; semantic?: unknown };
   /** The LLM engine of that config. Retrieval calls no model, so every field is null. */
   engine: EngineSettings;
-  /** One digest over the files the run read: queries.jsonl and qrels.jsonl of the set, and bundles.json when it has one. It changes when a grade is added. */
+  /** One digest over what the run was made from: the files of the library akm indexed, the bundle mappings of bundles.json, and the queries and qrels. It changes when an asset is edited, added, removed or renamed, and when a grade is added. */
   assets_sha256: string;
+  /** The digests that assets_sha256 is made of, to tell which input two runs differ in. */
+  assets: AssetsDigests;
   /** The seed of the rewrite, for the private corpus only: the seed generate used for the private assets, else the one in private/seed, else null. Absent for the public and own corpora, which are not made from a seed. */
   seed?: string | null;
   metrics: Columns<SystemMetrics>;
@@ -279,8 +281,9 @@ export async function runCollection(
   } catch (e) {
     fail(`${(e as Error).message}${corpus === "own" ? `\n${OWN_HELP}` : ""}`);
   }
-  // What the run read, as it is now: label may append grades while the run is going.
-  const assetsSha256 = filesSha256(folders.assets, [queriesFile, qrelsFile, ...(folders.bundles && existsSync(folders.bundles) ? [folders.bundles] : [])]);
+  // What the run is made from, as it is now: label may append grades while the run is going. The library is read once, for the digest and for the semantic index kept between runs.
+  const library = akm.libraryFiles(folders.library, folders.bundles);
+  const assets = assetsDigests(library, queriesFile, qrelsFile);
   const mixed = mixedJudgesWarning(qrels, relative(ROOT, qrelsFile));
   if (mixed && !warnedQrels.has(qrelsFile)) {
     warnedQrels.add(qrelsFile);
@@ -314,8 +317,7 @@ export async function runCollection(
     if (ctx.semantic) {
       console.log(`${NAME} (${where(corpus, collection)}): indexing for semantic search`);
       const t1 = performance.now();
-      const { files, extra } = akm.libraryFiles(folders.library, folders.bundles);
-      const index = await cachedIndex({ name: `${NAME}-${where(corpus, collection).replace(/ /g, "-")}`, version, files, extra, ...ctx.cache }, (sb) => akm.load(sb, folders.library, folders.bundles, true));
+      const index = await cachedIndex({ name: `${NAME}-${where(corpus, collection).replace(/ /g, "-")}`, version, files: library.files, extra: library.extra, ...ctx.cache }, (sb) => akm.load(sb, folders.library, folders.bundles, true));
       release = index.release;
       boxes.semantic = index.sandbox;
       semanticIndex = index.state;
@@ -388,7 +390,8 @@ export async function runCollection(
       timeouts: rows.reduce((n, r) => n + systems.filter((s) => at(r, s).timed_out).length, 0),
       config,
       engine: engineSettings(config.keyword),
-      assets_sha256: assetsSha256,
+      assets_sha256: assetsSha256(assets),
+      assets,
       ...(corpus === "private" ? { seed: ctx.seed ?? null } : {}),
       metrics: columns((s) => summarize(ok(scored, s).map((r) => at(r, s).scores as Scored))),
       abstention: {

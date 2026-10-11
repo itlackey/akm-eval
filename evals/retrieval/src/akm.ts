@@ -11,12 +11,37 @@ const TYPES = ["skill", "command", "agent", "knowledge", "workflow", "script", "
 
 const bundleOf = (sb: Sandbox): string => join(sb.dir, "bundle");
 
+/** The folder of a bundle that bundles.json names. The name is relative to the library, and may leave it (a link, or `../shared/notes`). */
+const bundleFolder = (root: string, name: string): string => join(root, name);
+
+/** What akm is given of a library: the files it indexes, and for a library of bundles the adapters that read them. */
+export interface LibraryContents {
+  /**
+   * Each file akm is given, by its path and the sha256 of its content. A library that is copied whole has every file under it, by its
+   * path from the library. A library of bundles has the files of each bundle that bundles.json names, by the bundle's name and the path
+   * in the bundle, wherever the bundle is: one linked in from another folder is read through the link, and is part of the library.
+   */
+  files: Record<string, string>;
+  /** Folder name to adapter, as bundles.json says. Absent for a library that is copied whole. */
+  adapters?: Record<string, string>;
+  /** Whatever else makes a semantic index different, for lib/akm's index cache: where the bundles are and what adapters they have. */
+  extra?: string;
+}
+
 /**
- * What the library is to lib/akm's index cache: each of its files, by path, with the sha256 of its content. A library of
- * bundles that is indexed where it is has `extra` as well, which says where the bundles are and what adapters they have.
+ * What the library is to a run: the files akm indexes, each with the sha256 of its content, read once for the digest of the run's inputs
+ * and for lib/akm's index cache, which keeps a semantic index for exactly these files.
  */
-export function libraryFiles(library: string, bundles?: string): { files: Record<string, string>; extra?: string } {
-  if (bundles && existsSync(bundles)) return { files: digestTree(realpathSync(library)), extra: JSON.stringify({ root: realpathSync(library), adapters: JSON.parse(readFileSync(bundles, "utf8")) }) };
+export function libraryFiles(library: string, bundles?: string): LibraryContents {
+  if (bundles && existsSync(bundles)) {
+    const root = realpathSync(library);
+    const adapters = JSON.parse(readFileSync(bundles, "utf8")) as Record<string, string>;
+    const files: Record<string, string> = {};
+    for (const name of Object.keys(adapters)) {
+      for (const [path, sum] of Object.entries(digestTree(bundleFolder(root, name)))) files[`${name}/${path}`] = sum;
+    }
+    return { files, adapters, extra: JSON.stringify({ root, adapters }) };
+  }
   return { files: digestTree(library) };
 }
 
@@ -32,7 +57,7 @@ export async function load(sb: Sandbox, library: string, bundles?: string, seman
     const adapters = JSON.parse(readFileSync(bundles, "utf8")) as Record<string, string>;
     const root = realpathSync(library);
     const config = JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8"));
-    writeConfig(sb, { ...config, bundles: Object.fromEntries(Object.entries(adapters).map(([name, adapter]) => [name, { path: join(root, name), components: { main: { adapter } }, writable: false }])) });
+    writeConfig(sb, { ...config, bundles: Object.fromEntries(Object.entries(adapters).map(([name, adapter]) => [name, { path: bundleFolder(root, name), components: { main: { adapter } }, writable: false }])) });
   } else {
     cpSync(library, bundleOf(sb), { recursive: true, dereference: true });
   }
