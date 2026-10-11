@@ -130,7 +130,7 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 }
 ```
 
-`args` are the eval's own flags. A relative `--config-patch` path is from the matrix file's folder. Leave out `--label` and `--repeat`: the runner sets them. A config is compared with the baseline that runs the same cases (the same eval, `--corpus`, `--pool`, `--cases` and `--limit`), so give one baseline per eval and mode; the corpora are never pooled. `screen.limit` is a number for every eval, or one per eval, and does not apply to `--pool` runs. The model and the akm build are the run's own: `.env` and `AKM_BIN`, or the file's top-level `"model"` and `"akm"`, which become `--model` and `--akm` of every row (see "Pick the model and the akm build of a run").
+`args` are the eval's own flags. A relative `--config-patch` path is from the matrix file's folder. Leave out `--label` and `--repeat`: the runner sets them. A config is compared with the baseline that runs the same cases (the same eval, `--corpus`, `--pool`, `--cases` and `--limit`), so give one baseline per eval and mode; the corpora are never pooled. `screen.limit` is a number for every eval, or one per eval, and does not apply to `--pool` runs. The model and the akm build are the run's own: `.env` and `AKM_BIN`, or the file's top-level `"model"` and `"akm"`, which become `--model` and `--akm` of every row (see "Pick the model and the akm build of a run"). A row's `eval` is an eval of `evals/` or a benchmark of `benchmarks/`: `terminal-bench` is the one benchmark in `EVAL_METRICS`.
 
 ```
 scripts/matrix/run sweep.json --stage screen                  # every row once, label <prefix>-<name>-s
@@ -139,9 +139,9 @@ scripts/matrix/run sweep.json --stage confirm --only low-value
 scripts/matrix/run sweep.json --stage report
 ```
 
-`--parallel N` runs rows of different evals at the same time; two runs of one eval never overlap. A stage skips a row it already ran with the same arguments (`--force` runs it again), so a stopped sweep resumes. `--dry-run` prints what a stage would run. `--min-delta X` sets how much a screen result must move to count as different (default 0: any change in a main or harm metric); `--only A,B` confirms the named configs whatever the screen said.
+`--parallel N` runs rows of different evals at the same time; two runs of one eval never overlap. A stage skips a row it already ran with the same arguments (`--force` runs it again), so a stopped sweep resumes. `--dry-run` prints what a stage would run. `--only A,B` confirms the named configs whatever the screen said. `--min-delta X` sets how much a screen result must move to count as different; see "Choose `--min-delta`" below.
 
-Each stage writes `decision.md` and `decision.json`, beside `state.json` and the runs' `logs/`, in `<matrix name>-results/` next to the matrix file (or `--out`). One row per config: the main metrics and the harm metrics, baseline against config, as mean and min-max over the repeats, the model calls and seconds, the akm build and the model, and a verdict. The metrics of each eval are in `EVAL_METRICS` in `scripts/matrix/src/lib.ts`, each with its direction: nightly `items.rate`; consolidate (also `--pool`) `recall.value` and `precision.value`, harm `unsafe.n`; distill `good_lessons.rate`, harm `wrong_lessons.rate`; reflect `defects.rate`, harm `controls.rate` falling and `proposals.touched_body`; promotion `precision.value` and `recall.value`, harm `bad_accepted.value`; judge-gate `precision.value` and `good.rate`, harm `bad.rate`; extract `insights.rate`, harm `routine.rate` falling and `planted.saved_instruction`; retrieval `ndcg_10` of each column, per collection.
+Each stage writes `decision.md` and `decision.json`, beside `state.json` and the runs' `logs/`, in `<matrix name>-results/` next to the matrix file (or `--out`). One row per config: the main metrics and the harm metrics, baseline against config, as mean and min-max over the repeats, the model calls and seconds, the akm build and the model, the paired comparison (confirm stage), and a verdict. The metrics of each eval are in `EVAL_METRICS` in `scripts/matrix/src/lib.ts`, each with its direction: nightly `items.rate`; consolidate (also `--pool`) `recall.value` and `precision.value`, harm `unsafe.n`; distill `good_lessons.rate`, harm `wrong_lessons.rate`; reflect `defects.rate`, harm `controls.rate` falling and `proposals.touched_body`; promotion `precision.value` and `recall.value`, harm `bad_accepted.value`; judge-gate `precision.value` and `good.rate`, harm `bad.rate`; extract `insights.rate`, harm `routine.rate` falling and `planted.saved_instruction`; retrieval `ndcg_10` of each column, per collection (the summary also has `ndcg_10_condensed`, over the judged results only, which the matrix does not judge on); agent-ab and terminal-bench `delta.value`, harm `akm.errored` and `engagement.control_calls`.
 
 The decision rule is the plan's for akm's 0.10 defaults:
 
@@ -150,7 +150,44 @@ The decision rule is the plan's for akm's 0.10 defaults:
 - mixed: both a better and a worse metric;
 - no difference: neither;
 - screen only: a run with one repeat. A screen cannot tell a change from noise, so it only picks what to confirm;
-- no result (a run wrote no scored summary) and not comparable (the baseline and the config ran another model or akm build) are the other two.
+- no result: a run wrote no scored summary, or was cut short. An eval that gives up (the endpoint down or rate limiting, no case getting a verdict) writes its summary first, with `status: "aborted"` and an `aborted_reason`, and its numbers cover only the cases that ran; the matrix reads that as no result, and the row's note gives the reason and the log. One run of a repeat that was cut short makes the whole repeat no result;
+- not comparable: the baseline and the config ran another model, or another akm build or version (unless the config's treatment is a build, below), or two summaries that record `assets_sha256`, or the `seed` of private assets, disagree on it, which means they scored other cases. The note names which. A summary that records neither is compared as before, so rerun a baseline that is older than a change to an eval's cases or scorer.
+
+### Compare akm builds
+
+A config row whose `--akm` is not its baseline's compares two builds of akm, the way to test a branch against `main`:
+
+```json
+{
+  "prefix": "pr1071",
+  "model": "my-cloud-model",
+  "baseline": [{ "name": "main", "eval": "nightly", "args": ["--akm", "bun ~/code/akm/src/cli.ts"] }],
+  "configs": [{ "name": "pr", "eval": "nightly", "args": ["--akm", "bun ~/code/akm-pr1071/src/cli.ts"] }]
+}
+```
+
+The same goes for a row with `"treatment": "build"`, for a command that is the same in both rows but runs another build when it runs, such as a checkout you switch branches in between the stages. The `"akm"` at the top of the file is the same for both rows and is not a treatment. A build treatment is compared across builds and versions, since a checkout of a pre-release prints the version of the release it branched from, or another one: the table shows the baseline's build and the config's in its akm build column, and the row in `decision.json` has `treatment`, `baseline_akm_build`, `akm_build` and the two versions. The model must still be the same, and so must the cases (`assets_sha256`). A row that changes settings of one build (a strategy, a config patch, a timeout) must run the same build in both, as before. A note says when both rows of a build treatment ran the same build. A checkout with changes that are not committed counts as one build, whatever the changes are (its `akm_build` ends in `-dirty`), so commit before you measure.
+
+### The Harbor evals and terminal-bench
+
+`agent-ab` (of `evals/`) and `terminal-bench` (of `benchmarks/`) run opencode with and without the akm plugin in Harbor. Their rows are like the others', with their own flags: `--akm` is an npm release (`akm-cli@0.9.27`) or the folder of a checkout, `--akm-env KEY=VALUE` sets a setting or a strategy for the akm arm, `--attempts N` (terminal-bench) runs each task N times, and `--repeat` and `--limit` work as for the other evals. The file's top-level `"akm"` is a command, so it is not passed to them: name `--akm` in the row of a baseline or a config that needs a release or a checkout. `--model` is passed as for the others. The main metric is `delta.value`, the akm arm's pass rate minus the control's, paired by task; harm is `akm.errored`, akm trials that never got a verdict, and `engagement.control_calls`, control trials that called akm, which has no plugin there. `scripts/compare` has no per-case reading of their trials, so their rows have no paired comparison.
+
+### Paired comparison of the repeats
+
+Three runs of 20 to 60 cases vary too much for their min-max ranges to separate except for a large effect, and the cases are the same in every run. So in the confirm stage, when both sides are repeat runs, the decision also compares them case by case with `scripts/compare` (`scripts/compare/README.md`): the first repeat of the baseline against the first repeat of the config, and, when both have the same number of repeats, every `r<i>` against `r<i>`. The row's `paired` holds, for the first pair, the cases that flipped to better (`better`), to worse (`worse`) and that `agree`, the sign test on the flips (`p`) and `ci`: each metric as config minus baseline, with the 95% interval of a bootstrap over the cases that both runs gave a verdict. With more pairs, `paired.runs` has each of them. The table shows the same as a paired column.
+
+The verdict stays the min-max rule's. A row that is `no difference` while a main or a harm metric's paired interval excludes 0 says `paired says different` in its note, with the metric, its interval and in how many of the pairs of repeats the interval lies on the same side. Read it with the flips and the sign test: about one interval in twenty crosses 0 by chance, there are several metrics, and the interval is over the cases, not over the model's own variation. It needs each run's `samples.jsonl`, and `scripts/compare` refuses runs of another akm version, so a build sweep between versions has no paired comparison; the row's note says why, and the verdict is the min-max rule's alone.
+
+To see which cases a change moved outside a matrix, compare two results folders of the same eval, corpus and akm version: `scripts/compare/run evals/nightly/results/<baseline folder> evals/nightly/results/<change folder> [--json FILE] [--md FILE]`. It lists the cases that agree, flipped to better and flipped to worse, with their ids, and the same sign test and intervals.
+
+### Choose `--min-delta`
+
+The confirm stage runs the baseline and the configs whose screen result differs from their baseline's. `--min-delta X` is how far a main or harm metric of the screen must move to differ, in the metric's own unit (a rate, or a count for harm such as `unsafe.n`). The default is 0, which selects any change, and a model's runs differ by a case or two with nothing changed, so it selects nearly every config. To pick X from the evals' own noise:
+
+- The confirm stage prints, before it selects, the **noise floor** of each baseline it has already confirmed, measured with `scripts/compare` on that baseline's repeats. It is the mean flip rate, the share of the cases whose verdict changes between two runs of one configuration, and the same as a number of cases (`about 5.3 of 20 cases flip`); then how far a main metric moves between two runs, as the `--min-delta` to start from. A matrix has no floor until a first confirm has run its baselines; measure one earlier by running the baseline with `--repeat 3` and `scripts/compare/run --repeats evals/nightly/results/<UTC date>-<label>`, which finds `<label>-r1` to `-rN` (`--collection` names a retrieval collection).
+- Take X at that figure or above: a screen result that moves less than two runs of the same configuration do carries no signal. Three runs give three pairs, so the figure is rough; repeat more for a firmer one.
+- X applies to every metric of every eval in the file. A rate moves in fractions and a count in whole numbers, so a count of harm that moves by one is selected for any X below 1. To use another X for each eval, confirm them in turn: `--stage confirm --only A,B --min-delta X`.
+- Retrieval's repeats are close to the same run by construction (the same index and grades), so its floor is about 0 and tells you little about a change.
 
 ## Stop or wait for a run
 

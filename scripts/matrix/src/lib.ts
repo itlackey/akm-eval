@@ -1,5 +1,5 @@
 // The matrix runner's logic, without the process spawning: the matrix file, the table of each eval's metrics, which runs a stage
-// makes, how a result is found, the verdict, and the report. See ../../../README.md ("Run a matrix").
+// makes, how a result is found, and the verdict. The report is in decision.ts. See ../../../README.md ("Run a matrix").
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -18,6 +18,12 @@ const main = (path: string, dir: Dir = "up"): MetricSpec => ({ path, dir, role: 
 const harm = (path: string, dir: Dir = "down"): MetricSpec => ({ path, dir, role: "harm" });
 
 /**
+ * The Harbor evals (agent-ab, terminal-bench) write the same metrics, from lib/harbor/harbor.ts `metricsOf`: the difference in pass rate between
+ * the akm arm and the control arm, paired by task. Harm is akm trials that errored and control trials that called akm (the control has no plugin).
+ */
+const harbor = (): MetricSpec[] => [main("delta.value"), harm("akm.errored"), harm("engagement.control_calls")];
+
+/**
  * The metrics each eval is judged on. Every path was read from a real summary.json (and repeat-summary.json, which has the same keys with
  * {min, max, mean} at each number). Rates are used for the main metrics, counts for harm that should be zero.
  */
@@ -30,18 +36,36 @@ export const EVAL_METRICS: Record<string, MetricSpec[]> = {
   "judge-gate": [main("precision.value"), main("good.rate"), harm("bad.rate")],
   extract: [main("insights.rate"), harm("routine.rate", "up"), harm("planted.saved_instruction")],
   retrieval: [main("search.ndcg_10"), main("curate.ndcg_10"), main("semantic_search.ndcg_10"), main("semantic_curate.ndcg_10")],
+  "agent-ab": harbor(),
+  "terminal-bench": harbor(),
 };
+
+/** What a row's `eval` names that lives in benchmarks/<name>/run and not in evals/<name>/run. */
+const BENCHMARKS = ["terminal-bench"];
+/** The evals that run in Harbor. Their --akm is an npm release or a checkout's folder, not a command (see lib/harbor/harbor.ts). */
+const HARBOR = ["agent-ab", "terminal-bench"];
+
+/** The folder a row's eval or benchmark is in, under the repository root: evals or benchmarks. */
+export const runnerFolder = (name: string): "evals" | "benchmarks" => (BENCHMARKS.includes(name) ? "benchmarks" : "evals");
+/** The run script of an eval or a benchmark, from the repository root `root`. */
+export const runnerPath = (root: string, name: string): string => join(root, runnerFolder(name), name, "run");
 
 export const NAME_RE = /^[A-Za-z0-9._-]+$/;
 const EPS = 1e-9;
 
 // ---- the matrix file ----------------------------------------------------------------------------------------------------
 
+/** What a config changes against its baseline: the akm build, or only settings (a strategy, a config patch, a timeout, ...) of the same build. */
+export type Treatment = "build" | "config";
+
 export interface Row {
   name: string;
+  /** The eval or the benchmark to run: a name of EVAL_METRICS, which is in evals/ or in benchmarks/. */
   eval: string;
   /** The eval's own flags, with a relative --config-patch resolved from the matrix file's folder. */
   args: string[];
+  /** "build" on a config row says its treatment is another akm build, which is also so when its --akm differs from its baseline's. */
+  treatment?: "build";
 }
 
 export interface Matrix {
@@ -81,6 +105,8 @@ function resolvePatch(args: string[], dir: string): string[] {
 
 function parseRow(x: unknown, what: string, dir: string, defaultName?: string): Row {
   if (!isObject(x)) throw new Error(`${what} must be an object {name, eval, args}`);
+  if (x.treatment !== undefined && x.treatment !== "build") throw new Error(`${what}: treatment must be "build", or left out`);
+  if (x.treatment !== undefined && what === "baseline") throw new Error(`${what}: treatment is for a config row, the baseline is what it is compared with`);
   const name = x.name === undefined ? defaultName : x.name;
   if (typeof name !== "string" || !NAME_RE.test(name)) throw new Error(`${what}: name must use letters, digits, dot, dash and underscore`);
   if (typeof x.eval !== "string" || !(x.eval in EVAL_METRICS)) throw new Error(`${what} (${name}): eval must be one of ${Object.keys(EVAL_METRICS).join(", ")}`);
@@ -88,7 +114,7 @@ function parseRow(x: unknown, what: string, dir: string, defaultName?: string): 
   if (!Array.isArray(args) || args.some((a) => typeof a !== "string")) throw new Error(`${what} (${name}): args must be a list of strings`);
   for (const f of ["--label", "--repeat"]) if (hasFlag(args as string[], f)) throw new Error(`${what} (${name}): leave out ${f}, the runner sets it`);
   if (flagValue(args as string[], "--corpus") === "all") throw new Error(`${what} (${name}): --corpus all pools corpora; list one row per corpus`);
-  return { name, eval: x.eval, args: resolvePatch(args as string[], dir) };
+  return { name, eval: x.eval, args: resolvePatch(args as string[], dir), ...(x.treatment === "build" ? { treatment: "build" as const } : {}) };
 }
 
 /** Parses a matrix file's JSON. `file` only gives the folder that relative patch paths resolve from, and the default prefix. */
@@ -147,6 +173,21 @@ export function baselineFor(m: Matrix, config: Row): Row {
   return found[0];
 }
 
+/** The `--akm` a row runs with: its own, else the file's (which the Harbor evals do not get), else none and so AKM_BIN. */
+function akmOf(m: Matrix, row: Row): string | undefined {
+  return flagValue(row.args, "--akm") ?? (HARBOR.includes(row.eval) ? undefined : m.akm);
+}
+
+/**
+ * What a config changes against its baseline. A build, when the row says `"treatment": "build"` or runs another `--akm` than its baseline
+ * (a `--akm` in the file's top level is the same for both and is not a treatment). Otherwise settings of one build, which must be the
+ * same build in both.
+ */
+export function treatmentOf(m: Matrix, config: Row, base: Row = baselineFor(m, config)): Treatment {
+  if (config.treatment === "build") return "build";
+  return (akmOf(m, config)?.trim() ?? "") !== (akmOf(m, base)?.trim() ?? "") ? "build" : "config";
+}
+
 // ---- the runs of a stage -------------------------------------------------------------------------------------------------
 
 export type Stage = "screen" | "confirm";
@@ -165,7 +206,7 @@ export const labelOf = (prefix: string, name: string, stage: Stage): string => `
 function makeJob(m: Matrix, row: Row, stage: Stage): Job {
   const label = labelOf(m.prefix, row.name, stage);
   const args = [...row.args];
-  if (m.akm && !hasFlag(args, "--akm")) args.unshift("--akm", m.akm);
+  if (m.akm && !hasFlag(args, "--akm") && !HARBOR.includes(row.eval)) args.unshift("--akm", m.akm);
   if (m.model && row.eval !== "retrieval" && !hasFlag(args, "--model")) args.unshift("--model", m.model);
   let repeat: number | null = null;
   if (stage === "screen") {
@@ -214,7 +255,7 @@ export interface State {
 
 export const emptyState = (m: Matrix): State => ({ matrix: m.file, prefix: m.prefix, screen: {}, confirm: {} });
 
-const readJson = (file: string): any => {
+export const readJson = (file: string): any => {
   try {
     return JSON.parse(readFileSync(file, "utf8"));
   } catch {
@@ -222,10 +263,10 @@ const readJson = (file: string): any => {
   }
 };
 
-/** The folders an eval may write its results to for a corpus. */
+/** The folders an eval or a benchmark may write its results to for a corpus. */
 export function resultsParents(root: string, evalName: string, args: string[]): string[] {
   const corpus = flagValue(args, "--corpus") ?? "public";
-  if (corpus === "public") return [join(root, "evals", evalName, "results")];
+  if (corpus === "public") return [join(root, runnerFolder(evalName), evalName, "results")];
   const p = join(root, "private", evalName);
   return [join(p, "results"), join(p, "own", "results"), join(p, "own", "results-feedback")];
 }
@@ -294,6 +335,11 @@ export interface Measured {
   seconds: number | null;
   metrics: unknown;
   repeated: boolean;
+  /** The digest of the cases the run read, and the seed of its private assets, for the summaries that record them. */
+  assets_sha256?: string | null;
+  seed?: string | number | null;
+  /** The results folders of the runs behind the numbers (absolute): one for a run, the repeats' for a repeat. */
+  dirs?: string[];
 }
 
 const at = (x: unknown, path: string): unknown => path.split(".").reduce<unknown>((o, k) => (isObject(o) ? o[k] : undefined), x);
@@ -308,16 +354,41 @@ export function callsOf(s: any): number | null {
   return num(s?.metrics?.calls?.n) ?? num(s?.metrics?.calls?.calls) ?? num(s?.calls?.n);
 }
 
-/** `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. */
+/** The results folders of the runs a result stands for: its own, or those a repeat summary lists. */
+export function runDirs(file: string, s: any, kind: ResultRef["kind"]): string[] {
+  if (kind === "run") return [dirname(file)];
+  return (Array.isArray(s?.runs) ? s.runs : []).filter((r: unknown) => typeof r === "string").map((r: string) => join(dirname(file), r));
+}
+
+/**
+ * Why a result is no result: a run behind it was cut short (`status: "aborted"`), and so its numbers cover only the cases that ran. The
+ * evals write the summary before they fail, so a summary is there to be found. Null when no run was cut short.
+ */
+export function abortedReason(root: string, ref: ResultRef): string | null {
+  const file = join(root, ref.file);
+  for (const [i, dir] of runDirs(file, readJson(file), ref.kind).entries()) {
+    const s = ref.kind === "run" ? readJson(file) : readJson(join(dir, "summary.json"));
+    if (s?.status === "aborted") return `${ref.kind === "repeat" ? `run r${i + 1}: ` : ""}${typeof s.aborted_reason === "string" ? s.aborted_reason : "no reason recorded"}`;
+  }
+  return null;
+}
+
+/** What a summary says its cases were made from. A repeat summary has neither, so the first of its runs is read. */
+function provenanceOf(s: any): { assets_sha256: string | null; seed: string | number | null } {
+  return { assets_sha256: typeof s?.assets_sha256 === "string" ? s.assets_sha256 : null, seed: typeof s?.seed === "string" || typeof s?.seed === "number" ? s.seed : null };
+}
+
+/** `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was cut short is no result. */
 export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, repeat: number | null): Measured | null {
   const file = join(root, ref.file);
   const s = readJson(file);
-  if (!s) return null;
+  if (!s || abortedReason(root, ref) !== null) return null;
+  const dirs = runDirs(file, s, ref.kind);
   if (ref.kind === "run") {
-    return { scope: ref.scope, n: 1, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, n_errored: num(s.n_errored), calls: callsOf(s), seconds: wallSeconds, metrics: s.metrics, repeated: false };
+    return { scope: ref.scope, n: 1, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, n_errored: num(s.n_errored), calls: callsOf(s), seconds: wallSeconds, metrics: s.metrics, repeated: false, ...provenanceOf(s), dirs };
   }
-  const runs = (Array.isArray(s.runs) ? s.runs : []).map((r: string) => readJson(join(dirname(file), r, "summary.json")));
-  return { scope: ref.scope, n: repeat ?? runs.length, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, n_errored: num(at(s, "n_errored.mean")), calls: mean(runs.map(callsOf)), seconds: num(at(s, "seconds.mean")), metrics: s.metrics, repeated: true };
+  const runs = dirs.map((d) => readJson(join(d, "summary.json")));
+  return { scope: ref.scope, n: repeat ?? runs.length, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, n_errored: num(at(s, "n_errored.mean")), calls: mean(runs.map(callsOf)), seconds: num(at(s, "seconds.mean")), metrics: s.metrics, repeated: true, ...provenanceOf(runs.find(isObject)), dirs };
 }
 
 /** The spread of a metric: {min, max, mean} from a repeat summary, or a single number as a spread of one. */
@@ -364,10 +435,31 @@ export function compareAll(evalName: string, base: Measured, cfg: Measured): Met
 
 export type Verdict = "better" | "worse" | "no difference" | "mixed" | "screen only" | "no result" | "not comparable";
 
-export function verdictOf(compares: MetricCompare[], base: Measured, cfg: Measured): Verdict {
+const short = (x: string | number): string => String(x).slice(0, 12);
+
+/**
+ * Why two results cannot be set side by side, or null. The model must be the same whatever the treatment. The akm build and version must be
+ * the same for a config treatment, since the build is then not what is being compared; for a build treatment they are what differs. Two
+ * runs that record the digest of their assets, or the seed of their private assets, must agree on it: otherwise they scored other cases.
+ * A summary that does not record one is compared as before.
+ */
+export function incomparable(base: Measured, cfg: Measured, treatment: Treatment = "config"): string | null {
+  const why: string[] = [];
+  const differ = (what: string, b: unknown, c: unknown) => why.push(`${what} differs: ${b ?? "none"} in the baseline, ${c ?? "none"} in the config`);
+  if (base.model !== cfg.model) differ("the model", base.model, cfg.model);
+  if (treatment !== "build") {
+    if (base.akm_build !== cfg.akm_build) differ("the akm build", base.akm_build ?? "release", cfg.akm_build ?? "release");
+    if (base.akm_version !== cfg.akm_version) differ("the akm version", base.akm_version, cfg.akm_version);
+  }
+  if (base.assets_sha256 && cfg.assets_sha256 && base.assets_sha256 !== cfg.assets_sha256) differ("the cases (assets_sha256)", short(base.assets_sha256), short(cfg.assets_sha256));
+  if (base.seed != null && cfg.seed != null && String(base.seed) !== String(cfg.seed)) differ("the seed of the private assets", base.seed, cfg.seed);
+  return why.length > 0 ? why.join("; ") : null;
+}
+
+export function verdictOf(compares: MetricCompare[], base: Measured, cfg: Measured, treatment: Treatment = "config"): Verdict {
   const scored = (c: MetricCompare) => c.role === "main" && c.base && c.cfg;
   if (!compares.some(scored)) return "no result";
-  if (base.model !== cfg.model || base.akm_build !== cfg.akm_build || base.akm_version !== cfg.akm_version) return "not comparable";
+  if (incomparable(base, cfg, treatment) !== null) return "not comparable";
   if (base.n < 2 || cfg.n < 2) return "screen only";
   const better = compares.some((c) => c.signal === "better");
   const worse = compares.some((c) => c.signal === "worse");
@@ -394,8 +486,11 @@ export interface Selection {
   reason: string;
 }
 
-const measuredOf = (root: string, rec: RunRecord | undefined): Measured[] =>
+export const measuredOf = (root: string, rec: RunRecord | undefined): Measured[] =>
   (rec?.results ?? []).map((ref) => loadMeasured(root, ref, rec!.wall_seconds, rec!.repeat)).filter((x): x is Measured => x !== null);
+
+/** Why a run's summary is no result: the run was cut short, with its reason. Null for a run that was not, or that wrote nothing. */
+export const cutShort = (root: string, rec: RunRecord | undefined): string | null => rec?.results.map((ref) => abortedReason(root, ref)).find((x) => x != null) ?? null;
 
 /** The configs to confirm: those named in `only`, or those whose screen result differs from their baseline's. */
 export function selectForConfirm(root: string, m: Matrix, state: State, opts: { only?: string[]; minDelta: number }): { selected: Selection[]; skipped: Selection[] } {
@@ -413,7 +508,8 @@ export function selectForConfirm(root: string, m: Matrix, state: State, opts: { 
     const base = baselineFor(m, config);
     const [b, c] = [measuredOf(root, state.screen[base.name]), measuredOf(root, state.screen[config.name])];
     if (c.length === 0) {
-      skipped.push({ config, reason: "no screen result" });
+      const cut = cutShort(root, state.screen[config.name]);
+      skipped.push({ config, reason: cut ? `no screen result, the run was cut short: ${cut}` : "no screen result" });
       continue;
     }
     const moved = c.flatMap((cm) => {
@@ -463,109 +559,4 @@ export async function schedule<J>(jobs: J[], parallel: number, key: (j: J) => st
     };
     pump();
   });
-}
-
-// ---- the report ------------------------------------------------------------------------------------------------------------
-
-export interface DecisionRow {
-  eval: string;
-  scope: string;
-  config: string;
-  baseline: string;
-  /** "confirm" when both ran the repeats, else "screen". */
-  stage: Stage;
-  n: number;
-  verdict: Verdict;
-  note: string;
-  metrics: { path: string; role: "main" | "harm"; dir: Dir; signal: Signal; baseline: Spread | null; config: Spread | null }[];
-  calls: { baseline: number | null; config: number | null };
-  seconds: { baseline: number | null; config: number | null };
-  n_errored: { baseline: number | null; config: number | null };
-  akm_build: string | null;
-  model: string | null;
-}
-
-export interface Decision {
-  matrix: string;
-  prefix: string;
-  generated: string;
-  min_delta: number;
-  rows: DecisionRow[];
-}
-
-/** One row per config (and per scope, for an eval with more than one), from the confirm results where both sides have them, else the screen. */
-export function buildDecision(root: string, m: Matrix, state: State, minDelta: number, now = new Date()): Decision {
-  const rows: DecisionRow[] = [];
-  for (const config of m.configs) {
-    const base = baselineFor(m, config);
-    const pick = (stage: Stage) => [measuredOf(root, state[stage][base.name]), measuredOf(root, state[stage][config.name])] as const;
-    const [bc, cc] = pick("confirm");
-    const useConfirm = bc.length > 0 && cc.length > 0;
-    const stage: Stage = useConfirm ? "confirm" : "screen";
-    const [bs, cs] = useConfirm ? [bc, cc] : pick("screen");
-    const confirmRec = state.confirm[config.name];
-    if (cs.length === 0) {
-      const rec = state[stage][config.name] ?? state.screen[config.name];
-      rows.push({ eval: config.eval, scope: "", config: config.name, baseline: base.name, stage, n: 0, verdict: "no result", note: rec ? `the run wrote no summary (exit ${rec.exit_code}), see ${rec.log}` : "not run", metrics: [], calls: { baseline: null, config: null }, seconds: { baseline: null, config: null }, n_errored: { baseline: null, config: null }, akm_build: null, model: null });
-      continue;
-    }
-    for (const cm of cs) {
-      const bm = bs.find((x) => x.scope === cm.scope);
-      if (!bm) {
-        rows.push({ eval: config.eval, scope: cm.scope, config: config.name, baseline: base.name, stage, n: cm.n, verdict: "no result", note: "the baseline has no result for this scope", metrics: [], calls: { baseline: null, config: cm.calls }, seconds: { baseline: null, config: cm.seconds }, n_errored: { baseline: null, config: cm.n_errored }, akm_build: cm.akm_build, model: cm.model });
-        continue;
-      }
-      const compares = compareAll(config.eval, bm, cm);
-      const verdict = verdictOf(compares, bm, cm);
-      const notes: string[] = [];
-      if (verdict === "not comparable") notes.push(`baseline ran ${bm.model} on ${bm.akm_build ?? bm.akm_version}, config ${cm.model} on ${cm.akm_build ?? cm.akm_version}`);
-      if (verdict === "screen only" && !confirmRec) {
-        const moved = screenDiffers(config.eval, bm, cm, minDelta);
-        notes.push(moved.length ? `screen differs: ${moved.join(", ")}` : "screen matches the baseline");
-      }
-      if ((cm.n_errored ?? 0) > (bm.n_errored ?? 0)) notes.push(`more errored cases (${cm.n_errored} vs ${bm.n_errored ?? 0})`);
-      rows.push({
-        eval: config.eval,
-        scope: cm.scope,
-        config: config.name,
-        baseline: base.name,
-        stage,
-        n: Math.min(bm.n, cm.n),
-        verdict,
-        note: notes.join("; "),
-        metrics: compares.map((c) => ({ path: c.path, role: c.role, dir: c.dir, signal: c.signal, baseline: c.base, config: c.cfg })),
-        calls: { baseline: bm.calls, config: cm.calls },
-        seconds: { baseline: bm.seconds, config: cm.seconds },
-        n_errored: { baseline: bm.n_errored, config: cm.n_errored },
-        akm_build: cm.akm_build,
-        model: cm.model,
-      });
-    }
-  }
-  return { matrix: m.file, prefix: m.prefix, generated: now.toISOString(), min_delta: minDelta, rows };
-}
-
-const trim = (x: number): string => String(Number(x.toFixed(3)));
-const fmtSpread = (s: Spread | null): string => (s === null ? "–" : s.min === s.max ? trim(s.mean) : `${trim(s.mean)} (${trim(s.min)}–${trim(s.max)})`);
-const fmtNum = (x: number | null): string => (x === null ? "–" : trim(x));
-const ARROW: Record<Dir, string> = { up: "↑", down: "↓" };
-
-export function renderMarkdown(d: Decision): string {
-  const out = [`# Matrix decision: ${d.prefix}`, "", `Matrix \`${basename(d.matrix)}\`, generated ${d.generated}. A cell reads baseline → config, as mean (min–max over the repeats). ↑ higher is better, ↓ lower is better; harm must not rise. Verdicts apply the plan's rule: ranges that do not overlap, harm not up; n=1 is "screen only".`, ""];
-  const groups = new Map<string, DecisionRow[]>();
-  for (const r of d.rows) groups.set(`${r.eval}${r.scope ? ` (${r.scope})` : ""} vs ${r.baseline}`, [...(groups.get(`${r.eval}${r.scope ? ` (${r.scope})` : ""} vs ${r.baseline}`) ?? []), r]);
-  for (const [title, rows] of groups) {
-    out.push(`## ${title}`, "", "| config | runs | main metric | harm | calls | seconds | akm build | model | verdict |", "|---|---|---|---|---|---|---|---|---|");
-    for (const r of rows) {
-      const cell = (role: "main" | "harm") =>
-        r.metrics
-          .filter((x) => x.role === role && (x.baseline || x.config))
-          .map((x) => `${x.path} ${ARROW[x.dir]} ${fmtSpread(x.baseline)} → ${fmtSpread(x.config)}`)
-          .join("<br>") || "–";
-      const pair = (p: { baseline: number | null; config: number | null }) => `${fmtNum(p.baseline)} → ${fmtNum(p.config)}`;
-      out.push(`| ${r.config} | ${r.n} | ${cell("main")} | ${cell("harm")} | ${pair(r.calls)} | ${pair(r.seconds)} | ${r.akm_build ?? "release"} | ${r.model ?? "–"} | **${r.verdict}**${r.note ? `<br>${r.note}` : ""} |`);
-    }
-    out.push("");
-  }
-  return `${out.join("\n")}\n`;
 }

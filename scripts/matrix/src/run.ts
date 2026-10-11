@@ -6,25 +6,32 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail } from "../../../lib/cli.ts";
-import { type Job, type Matrix, type RunRecord, type Stage, type State, buildDecision, confirmJobs, emptyState, findResults, parseMatrix, renderMarkdown, schedule, screenJobs, selectForConfirm } from "./lib.ts";
+import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
+import { type Job, type Matrix, type RunRecord, type Stage, type State, confirmJobs, cutShort, emptyState, findResults, parseMatrix, runnerFolder, runnerPath, schedule, screenJobs, selectForConfirm } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 const USAGE = `Usage: scripts/matrix/run MATRIX.json --stage screen|confirm|report [--parallel N] [--out DIR] [--prefix NAME] [--only A,B] [--min-delta X] [--force] [--dry-run]
 
-Runs the evals of a matrix file with the model in .env (or the environment), or the file's "model" and "akm". Stages:
+Runs the evals and benchmarks of a matrix file (a row's "eval" is an eval of evals/ or terminal-bench of benchmarks/) with the model in
+.env (or the environment), or the file's "model" and "akm". The Harbor evals (agent-ab, terminal-bench) are not given the file's "akm":
+their --akm is a release or a checkout's folder, so a row names its own. A config row whose --akm differs from its baseline's, or with
+"treatment": "build", compares two akm builds. Stages:
 
   --stage screen   runs the baseline and every config once, with the label <prefix>-<name>-s, and the --limit of the file's
                    "screen.limit" for its eval
   --stage confirm  runs --repeat N (the file's "repeats", default 3) for the baseline and for every config whose screen result differs from
-                   its baseline's, with the label <prefix>-<name>-c
+                   its baseline's, with the label <prefix>-<name>-c. First it prints, for each baseline already confirmed, the per-case
+                   noise floor of its repeats (scripts/compare), which is where to start --min-delta. The decision then has a paired
+                   column: scripts/compare on the first repeat of each side
   --stage report   writes decision.md and decision.json from the results so far (every stage also writes them)
 
   --parallel N     runs of different evals at the same time (default 1); two runs of one eval never overlap
   --out DIR        the results folder: state.json, logs/, decision.md and decision.json (default: <MATRIX>-results next to the file)
   --prefix NAME    the label prefix (default: the file's "prefix", else the file's name)
   --only A,B       confirm: these configs, whatever their screen result
-  --min-delta X    confirm: a config differs when a main or harm metric of the screen moved by more than X (default 0: any change)
+  --min-delta X    confirm: a config differs when a main or harm metric of the screen moved by more than X (default 0: any change, which
+                   filters almost nothing. Read X from the noise floor that confirm prints)
   --force          run rows again that a stage already ran with the same arguments
   --dry-run        print what a stage would run`;
 
@@ -76,13 +83,17 @@ async function main(): Promise<number> {
   if (stage === "screen") jobs = screenJobs(matrix);
   if (stage === "confirm") {
     const only = values.only === undefined ? undefined : String(values.only).split(",").map((s) => s.trim()).filter(Boolean);
+    const { floors, notes } = noiseFloors(ROOT, matrix, state);
+    for (const f of floors) console.log(`noise    ${noiseLine(f)}`);
+    for (const n of notes) console.log(`noise    ${n}: not measured`);
+    if (floors.length === 0 && notes.length === 0) console.log("noise    none yet: no baseline has been confirmed, so there are no repeats to measure. Once one has, this stage prints its flip rate. By hand: scripts/compare/run --repeats <a results folder up to the label>");
     const { selected, skipped } = selectForConfirm(ROOT, matrix, state, { only, minDelta });
     for (const s of selected) console.log(`confirm  ${s.config.name}: ${s.reason}`);
     for (const s of skipped) console.log(`skip     ${s.config.name}: ${s.reason}`);
     jobs = confirmJobs(matrix, selected);
   }
   if (values["dry-run"]) {
-    for (const j of jobs) console.log(`evals/${j.row.eval}/run ${j.args.join(" ")}`);
+    for (const j of jobs) console.log(`${runnerFolder(j.row.eval)}/${j.row.eval}/run ${j.args.join(" ")}`);
     return 0;
   }
   mkdirSync(join(out, "logs"), { recursive: true });
@@ -109,8 +120,8 @@ async function main(): Promise<number> {
     }
     const log = join(out, "logs", `${job.label}.log`);
     const started = Date.now();
-    console.log(`${stage}  ${job.row.name}: evals/${job.row.eval}/run ${job.args.join(" ")}`);
-    const proc = Bun.spawn(["bash", "-c", 'exec "$@" >> "$0" 2>&1', log, join(ROOT, "evals", job.row.eval, "run"), ...job.args], { cwd: ROOT, env: process.env, stdin: "ignore" });
+    console.log(`${stage}  ${job.row.name}: ${runnerFolder(job.row.eval)}/${job.row.eval}/run ${job.args.join(" ")}`);
+    const proc = Bun.spawn(["bash", "-c", 'exec "$@" >> "$0" 2>&1', log, runnerPath(ROOT, job.row.eval), ...job.args], { cwd: ROOT, env: process.env, stdin: "ignore" });
     children.add(proc);
     const code = await proc.exited;
     children.delete(proc);
@@ -129,8 +140,10 @@ async function main(): Promise<number> {
     };
     slot[job.row.name] = record;
     save();
-    if (record.results.length === 0) failed++;
-    console.log(`${stage}  ${job.row.name}: exit ${code} after ${record.wall_seconds}s, ${record.results.length} result${record.results.length === 1 ? "" : "s"}${record.results.length === 0 ? `, see ${record.log}` : ""}`);
+    // A run that gave up wrote its summary first. It is found, and it is no result.
+    const cut = cutShort(ROOT, record);
+    if (record.results.length === 0 || cut) failed++;
+    console.log(`${stage}  ${job.row.name}: exit ${code} after ${record.wall_seconds}s, ${record.results.length} result${record.results.length === 1 ? "" : "s"}${cut ? `, cut short: ${cut}` : ""}${record.results.length === 0 || cut ? `, see ${record.log}` : ""}`);
   };
   await schedule(jobs, parallel, (j) => j.row.eval, runJob);
   report();
