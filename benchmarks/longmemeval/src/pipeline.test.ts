@@ -227,7 +227,7 @@ describe("runCorpus", () => {
     expect(rows.map((r) => [r.n_sessions, r.sessions_over_projection_limit])).toEqual([[4, 0], [4, 0], [3, 0]]);
 
     // what the run sent, and where: the temperature and the token limits, as the benchmark's evaluate_qa.py has them for the judge
-    const host = `127.0.0.1:${server.port}`;
+    const host = `http://127.0.0.1:${server.port}/v1`; // the endpoint's identity: scheme, host, port and path
     expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
     expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
@@ -438,6 +438,98 @@ describe("runCorpus", () => {
     expect(await resume(older, { ...context, build: clean })).toMatchObject({ complete: true, akm_build_fingerprint: null });
   });
 
+  test("resume refuses rows that another harness made, or one of unknown code, and carries on with the same code, retrying only what errored (R07)", async () => {
+    const { akm, folders } = setup();
+    const searches = { n: 0 };
+    const search = akm.search.bind(akm);
+    akm.search = async (query, k) => {
+      searches.n++;
+      return search(query, k);
+    };
+    const counter = { requests: 0 };
+    server = fakeEndpoint(counter);
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    const first = await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, context, folders));
+    expect(counter.requests).toBe(12);
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const summaryFile = join(dir, "summary.json");
+    const samplesFile = join(dir, "samples.jsonl");
+    const current = first.harness_sha256;
+    expect(current).toMatch(/^[0-9a-f]{64}$/);
+    const stored = readFileSync(summaryFile, "utf8");
+    const rows = readFileSync(samplesFile, "utf8");
+    const resume = () => quiet(() => runCorpus("public", { label: "t", sampleSeed: 1, resume: dir }, context, folders));
+    const asked = () => ({ requests: counter.requests, searches: searches.n });
+    const reset = () => {
+      counter.requests = 0;
+      searches.n = 0;
+    };
+
+    // the stored digest is another valid one, as if another version of the code had written the rows
+    const other = "f".repeat(64);
+    const changed = JSON.stringify({ ...JSON.parse(stored), harness_sha256: other });
+    writeFileSync(summaryFile, changed);
+    reset();
+    await expect(resume()).rejects.toThrow(`its harness_sha256 is ${other}, and this run's is ${current}`);
+    await expect(resume()).rejects.toThrow("Start a new run, without --resume.");
+    // it asked nothing and searched nothing, and the folder is as it was: the summary still names the code that made the rows, and nothing is marked as running
+    expect(asked()).toEqual({ requests: 0, searches: 0 });
+    expect(readFileSync(summaryFile, "utf8")).toBe(changed);
+    expect(readFileSync(samplesFile, "utf8")).toBe(rows);
+    expect(existsSync(join(dir, ".running"))).toBe(false);
+
+    // a summary from before harness_sha256 was recorded has unknown code, and is refused the same way
+    const { harness_sha256: _unknown, ...unknown } = JSON.parse(stored);
+    writeFileSync(summaryFile, JSON.stringify(unknown));
+    await expect(resume()).rejects.toThrow(`its harness_sha256 is not recorded (the summary is from before it was), and this run's is ${current}`);
+    expect(asked()).toEqual({ requests: 0, searches: 0 });
+
+    // the same code carries on: the completed rows are reused, nothing is asked or searched again, and the summary names this code
+    writeFileSync(summaryFile, stored);
+    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true, status: "complete", harness_sha256: current });
+    expect(asked()).toEqual({ requests: 0, searches: 0 });
+    expect(readFileSync(samplesFile, "utf8")).toBe(rows);
+
+    // and a question with an arm that errored is asked again, and only that one
+    const lines = rows.trim().split("\n").map((l) => JSON.parse(l));
+    lines[1] = { ...lines[1], with_akm: { ...lines[1].with_akm, ok: false, correct: null, verdict: null, error: "the endpoint went down" } };
+    writeFileSync(samplesFile, lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
+    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true, harness_sha256: current });
+    expect(asked()).toEqual({ requests: 4, searches: 1 }); // that question: two answers and two verdicts, and one search
+    const done = readFileSync(samplesFile, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(done.map((r) => r.question_id).sort()).toEqual(["q-cats", "q-passport_abs", "q-secret"]);
+    expect(done.every((r) => r.without_akm?.ok && r.with_akm?.ok)).toBe(true);
+  });
+
+  test("resume takes the same host at another path for another endpoint, and a key, a login in the URL or a trailing slash for the same one (R07)", async () => {
+    const { akm, folders } = setup();
+    const counter = { requests: 0 };
+    server = fakeEndpoint(counter);
+    const at = (path: string) => `http://127.0.0.1:${server?.port}${path}`;
+    const A = at("/deployment-A/v1");
+    const B = at("/deployment-B/v1");
+    const endpoint = { baseUrl: A, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    const first = await quiet(() => runCorpus("public", { label: "t", sampleSeed: 1 }, context, folders));
+    expect(first).toMatchObject({ model_endpoint: A, judge_endpoint: A });
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const resume = (c: typeof context) => quiet(() => runCorpus("public", { label: "t", sampleSeed: 1, resume: dir }, c, folders));
+    counter.requests = 0;
+    await expect(resume({ ...context, model: { ...endpoint, baseUrl: B } })).rejects.toThrow(`different model endpoint (${A}, now ${B})`);
+    await expect(resume({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: B } })).rejects.toThrow(`different judge endpoint (${A}, now ${B})`);
+    await expect(resume({ ...context, model: { ...endpoint, baseUrl: at("/deployment-A/v1/other") } })).rejects.toThrow("different model endpoint");
+    expect(counter.requests).toBe(0);
+    // a key, a user name and password in the URL and a trailing slash are not another endpoint, and none of them is written to the summary
+    const login = `http://user:synthetic-pass-3f9a@127.0.0.1:${server.port}/deployment-A/v1/`;
+    const same = await resume({ ...context, model: { ...endpoint, baseUrl: login, apiKey: "sk-synthetic-new" }, judge: { ...endpoint, model: "fake-judge", baseUrl: A, apiKey: "sk-synthetic-new" } });
+    expect(same).toMatchObject({ n_run: 3, complete: true, model_endpoint: A, judge_endpoint: A });
+    expect(counter.requests).toBe(0);
+    const stored = readFileSync(join(dir, "summary.json"), "utf8");
+    expect(stored).not.toContain("synthetic-pass-3f9a");
+    expect(stored).not.toContain("sk-synthetic-new");
+  });
+
   test("with no model it only measures what akm retrieves", async () => {
     const { akm, folders } = setup();
     const quiet = console.log;
@@ -562,7 +654,7 @@ describe("runCorpus", () => {
     const other = fakeEndpoint();
     try {
       const elsewhere = `http://127.0.0.1:${other.port}/v1`;
-      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (127.0.0.1:${server.port}, now 127.0.0.1:${other.port})`);
+      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (http://127.0.0.1:${server.port}/v1, now http://127.0.0.1:${other.port}/v1)`);
       await expect(resume({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: elsewhere } })).rejects.toThrow("different judge endpoint");
     } finally {
       other.stop(true);

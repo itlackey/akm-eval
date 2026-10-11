@@ -13,11 +13,11 @@ import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandb
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointIdentity, harnessSha256 } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
-import { type ChatResult, type Endpoint, TEMPERATURE, chat, endpointHost } from "./llm.ts";
+import { type ChatResult, type Endpoint, TEMPERATURE, chat } from "./llm.ts";
 import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
 import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
 import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from "./prompts.ts";
@@ -57,9 +57,10 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     indexes them, so a question takes longer. A search that does not come back as semantic is an
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
-  --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge, endpoints,
-                    akm (version, command, build, its uncommitted changes and config), search mode, dataset files
-                    and sample settings, it asks only the questions that are not done
+  --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge, endpoints (path
+                    included), akm (version, command, build, its uncommitted changes and config), search mode, dataset
+                    files, sample settings and code (harness_sha256), it asks only the questions that are not done.
+                    Rows made by other code are refused, not carried on: start a new run, without --resume
 ${modelUsage}
 ${judgeUsage}
 ${akmUsage}
@@ -120,7 +121,7 @@ interface Summary {
   judge_model: string | null;
   observed_models: string[];
   observed_judge_models: string[];
-  /** The host (and port) of the model's and the judge's endpoint, null when the run has no model. */
+  /** What identifies the model's and the judge's endpoint (endpointIdentity in lib/provenance.ts): scheme, host, port and path, with no credentials. Null when the run has no model. */
   model_endpoint: string | null;
   judge_endpoint: string | null;
   /** What every model and judge request sends: the temperature, and the most tokens each may answer with. Null when the run has no model. */
@@ -284,8 +285,8 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     judge_model: ctx.judge?.model ?? null,
     observed_models: [...new Set([...seen("without_akm", "model"), ...seen("with_akm", "model")])],
     observed_judge_models: observedJudges,
-    model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,
-    judge_endpoint: ctx.judge ? endpointHost(ctx.judge.baseUrl) : null,
+    model_endpoint: ctx.model ? endpointIdentity(ctx.model.baseUrl) : null,
+    judge_endpoint: ctx.judge ? endpointIdentity(ctx.judge.baseUrl) : null,
     ...sampling(retrievalOnly),
     akm_version: ctx.version,
     ...ctx.build,
@@ -364,8 +365,11 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one: the same corpus,
- * model, judge and the hosts they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and
- * config), search mode, dataset, the digest of its files and sample. A question with an arm that errored is asked again.
+ * model, judge and the endpoints they are called at (scheme, host, port and path), akm (version, command, build with the fingerprint of
+ * its uncommitted changes, and config), search mode, dataset, the digest of its files, sample and harness. A question with an arm that
+ * errored is asked again. A run made by other code is refused, not continued: the summary would name this run's code for rows that code
+ * did not make, and there is no mixed-version mode. A summary with no harness_sha256 is from before it was recorded, so its code is
+ * unknown, and it is refused the same way.
  */
 export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; assets_sha256: string; sample: Sample; version: string; build: Build; searchMode: SearchMode; config: unknown }): Row[] {
   const summaryPath = join(dir, "summary.json");
@@ -373,14 +377,17 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
   const prior = JSON.parse(readFileSync(summaryPath, "utf8")) as Summary;
   // A summary without a search mode, a config or a digest is from before the summary held the endpoints, the sampling settings and the inputs, and before the reader got the sessions in the haystack's order.
   if (prior.search_mode === undefined || prior.config === undefined || prior.assets_sha256 === undefined) fail(`${dir} was run by an older version of this eval, whose rows are not comparable to the ones it would add. Run again without --resume.`);
-  const host = (e: Endpoint | null) => (e ? endpointHost(e.baseUrl) : null);
+  if (prior.harness_sha256 !== HARNESS) {
+    fail(`${dir} was run by other code than this run's: its harness_sha256 is ${prior.harness_sha256 ?? "not recorded (the summary is from before it was)"}, and this run's is ${HARNESS}. Its rows are not carried into a summary that names this code. Start a new run, without --resume.`);
+  }
+  const endpoint = (e: Endpoint | null) => (e ? endpointIdentity(e.baseUrl) : null);
   const settings = (retrievalOnly: boolean) => JSON.stringify(sampling(retrievalOnly));
   const same: [string, unknown, unknown][] = [
     ["corpus", prior.corpus, now.corpus],
     ["model", prior.model, now.model?.model ?? null],
-    ["model endpoint", prior.model_endpoint, host(now.model)],
+    ["model endpoint", prior.model_endpoint, endpoint(now.model)],
     ["judge", prior.judge_model, now.judge?.model ?? null],
-    ["judge endpoint", prior.judge_endpoint, host(now.judge)],
+    ["judge endpoint", prior.judge_endpoint, endpoint(now.judge)],
     ["akm version", prior.akm_version, now.version],
     ["akm command", prior.akm_bin, now.build.akm_bin],
     ["akm build", prior.akm_build, now.build.akm_build],
