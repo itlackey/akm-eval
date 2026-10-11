@@ -19,12 +19,13 @@ export interface Retrieval {
 
 /**
  * `relevance` is either the relevant ids, or an id to grade map. An id counts as relevant at `minGrade` or more
- * (grade 1 for a list). The ids outside the map have grade 0. `retrieved` is ids in rank order. Only the first k count.
+ * (grade 1 for a list). The ids outside the map have grade 0. `retrieved` is ids in rank order. An id that comes again is dropped (the first
+ * place stands), then only the first k count, so `returned` and every metric count distinct ids.
  */
 export function retrievalMetrics(relevance: string[] | Record<string, number>, retrieved: string[], k: number, minGrade = 1): Retrieval {
   const grades = new Map<string, number>(Array.isArray(relevance) ? relevance.map((id) => [id, 1]) : Object.entries(relevance));
   const relevant = new Set([...grades].filter(([, g]) => g >= minGrade).map(([id]) => id));
-  const results = retrieved.slice(0, k);
+  const results = [...new Set(retrieved)].slice(0, k);
   const found = results.filter((id) => relevant.has(id));
   const dcg = (gs: number[]) => gs.reduce((sum, g, i) => sum + (2 ** g - 1) / Math.log2(i + 2), 0);
   const ideal = dcg([...grades.values()].sort((a, b) => b - a).slice(0, k));
@@ -32,7 +33,7 @@ export function retrievalMetrics(relevance: string[] | Record<string, number>, r
   return {
     returned: results.length,
     hit: found.length > 0,
-    recall: relevant.size === 0 ? 0 : round(new Set(found).size / relevant.size),
+    recall: relevant.size === 0 ? 0 : round(found.length / relevant.size),
     precision: round(found.length / k),
     mrr: firstRank === 0 ? 0 : round(1 / firstRank),
     ndcg: ideal === 0 ? 0 : round(dcg(results.map((id) => grades.get(id) ?? 0)) / ideal),
