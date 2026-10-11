@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
+import { withoutIndirectNegation } from "../../../lib/negation.ts";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 // The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
@@ -258,8 +259,16 @@ function pattern(phrase: string): RegExp {
 /** Does `text` hold the phrase? */
 export const mentions = (text: string, phrase: string): boolean => pattern(phrase).test(normalize(text));
 
+/** Words that deny what they stand next to. */
+const DENIALS = "not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent";
+/** Words that doubt it or ask about it. */
+const DOUBTS = "unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely";
+const words_ = (list: string): RegExp => new RegExp(`(?<![a-z0-9])(?:${list})(?![a-z0-9])`);
+
 /** Words that say a sentence does not assert what it holds: it denies it, doubts it or asks about it. */
-const NOT_ASSERTED = /(?<![a-z0-9])(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent|unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
+const NOT_ASSERTED = words_(`${DENIALS}|${DOUBTS}`);
+const DENIAL = words_(DENIALS);
+const DOUBT = words_(DOUBTS);
 
 /** Words that turn the action after them round, in the clause they stand in: "never wait for", "avoid waiting for", "instead of waiting for". They are read for a contradiction, which is an action. */
 const PROHIBITS = /(?<![a-z0-9])(?:never|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping|instead of|rather than)(?![a-z0-9])/;
@@ -300,6 +309,20 @@ function sentencesOf(text: string): Sentence[] {
 /** The words of the sentence before `from`, back to the start of the clause that `from` is in. */
 const clauseBefore = (sentence: Sentence, from: number): string => sentence.s.slice(Math.max(...sentence.starts.filter((start) => start <= from)), from);
 
+/** The words of the sentence from `to` to the end of the clause `to` is in. */
+const clauseAfter = (sentence: Sentence, to: number): string => sentence.s.slice(to, sentence.starts.find((start) => start > to));
+
+/** A denial that a comma sets off before the phrase's clause: "never, under any circumstances, wait for". Another clause's denial is that clause's: "do not poll, wait for" denies nothing after the comma. */
+function carriedBefore(sentence: Sentence, from: number): string {
+  const ends = (clause: string): boolean => new RegExp(`(?:^| )(?:${DENIALS}|never)$`).test(clause);
+  const starts = sentence.starts.filter((start) => start <= from);
+  const clauseAt = (n: number): string => sentence.s.slice(starts[n - 1], starts[n]).trim();
+  const own = starts.length - 1;
+  if (own < 1) return "";
+  if (ends(clauseAt(own))) return clauseAt(own).split(" ").slice(-1)[0];
+  return own >= 2 && clauseAt(own).split(" ").length <= 3 && ends(clauseAt(own - 1)) ? clauseAt(own - 1).split(" ").slice(-1)[0] : "";
+}
+
 /** Every place in the sentence where the phrase starts, also where it overlaps another. */
 function* occurrences(re: RegExp, s: string): Generator<RegExpExecArray> {
   const all = new RegExp(re.source, "g");
@@ -317,17 +340,25 @@ function* occurrences(re: RegExp, s: string): Generator<RegExpExecArray> {
  */
 export function claims(text: string, groups: string[][], actions = false): string[] {
   const sentences = sentencesOf(text);
-  const around = (s: string, from: number, to: number): string => {
-    const before = s.slice(0, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE);
-    const after = s.slice(to).split(" ").filter(Boolean).slice(0, WORDS_AFTER);
-    return [...before, ...after].join(" ");
+  const lastWords = (s: string, n: number): string => s.split(" ").filter(Boolean).slice(-n).join(" ");
+  const firstWords = (s: string, n: number): string => s.split(" ").filter(Boolean).slice(0, n).join(" ");
+  // "do not hesitate to wait" has a "not" before "wait", and it negates hesitating, not waiting
+  const before = (s: string, from: number): string => lastWords(withoutIndirectNegation(s.slice(0, from)), WORDS_BEFORE);
+  const around = (s: string, from: number, to: number): string => `${before(s, from)} ${firstWords(s.slice(to), WORDS_AFTER)}`;
+  const clauseBeforeNeutral = (sentence: Sentence, from: number): string => withoutIndirectNegation(`${carriedBefore(sentence, from)} ${clauseBefore(sentence, from)}`);
+  const prohibited = (sentence: Sentence, from: number): boolean => actions && PROHIBITS.test(lastWords(clauseBeforeNeutral(sentence, from), WORDS_BEFORE));
+  // An action is denied by a denial in its own clause, and a doubt anywhere around it: "do not poll, wait for networkidle" denies polling.
+  const asserted = (sentence: Sentence, m: RegExpExecArray): boolean => {
+    const to = m.index + m[0].length;
+    if (!actions) return !NOT_ASSERTED.test(around(sentence.s, m.index, to));
+    const denied = DENIAL.test(`${lastWords(clauseBeforeNeutral(sentence, m.index), WORDS_BEFORE)} ${firstWords(clauseAfter(sentence, to), WORDS_AFTER)}`);
+    return !DOUBT.test(around(sentence.s, m.index, to)) && !denied;
   };
-  const prohibited = (sentence: Sentence, from: number): boolean => actions && PROHIBITS.test(clauseBefore(sentence, from).split(" ").filter(Boolean).slice(-WORDS_BEFORE).join(" "));
   const found: string[] = [];
   for (const group of groups) {
     const hit = group.find((phrase) => {
       const re = pattern(phrase);
-      return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !NOT_ASSERTED.test(around(sentence.s, m.index, m.index + m[0].length)) && !prohibited(sentence, m.index)));
+      return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => asserted(sentence, m) && !prohibited(sentence, m.index)));
     });
     if (hit !== undefined) found.push(hit);
   }

@@ -468,6 +468,60 @@ const UNRELATED: Record<string, [text: string, missing: string]> = {
   "claim-02": ["The retries setting was added to the flaky test on the runner. The cause was identified.", "not found"],
 };
 
+describe("a negation of hesitation, forgetting or failure does not deny the action (R05)", () => {
+  const c = loadCases(PUBLIC).find((x) => x.id === "lesson-01") as LoadedCase;
+  const wait = [["=wait for networkidle"]];
+  const lead = "The polling widget prevents networkidle. Wait for the visible heading.";
+
+  test("a lesson that recommends the contradicted action through indirect negation is bad", () => {
+    for (const last of [
+      "Do not hesitate to wait for networkidle.",
+      "Don't forget to wait for networkidle.",
+      "Never fail to wait for networkidle.",
+      "Be sure not to fail to wait for networkidle.",
+      "Do not be afraid to wait for networkidle.",
+      "Never refuse to wait for networkidle.",
+      "Wait for networkidle without hesitation.",
+    ]) {
+      const k = checkLesson(c, `${lead} ${last}`, c.memory);
+      expect({ last, good: k.good, contradicted: k.contradicted }).toMatchObject({ last, good: false });
+      expect(k.contradicted.length, last).toBeGreaterThan(0);
+    }
+    expect(claims("Do not hesitate to wait for networkidle.", wait, true)).toEqual(wait[0]);
+  });
+
+  test("direct and indirect negation of the contradicted action stays good", () => {
+    const why = "The support chat widget polls every 20 seconds, so the network is never idle.";
+    for (const rule of [
+      "Do not wait for networkidle; wait for the heading to be visible.",
+      "Do not wait for networkidle, wait for the heading to be visible.",
+      "Never wait for networkidle. Wait for the heading to be visible.",
+      "Do not hesitate to avoid networkidle: wait for the heading to be visible.",
+      "Do not poll, and do not hesitate to wait for the heading to be visible instead of networkidle.",
+    ]) expect({ rule, good: checkLesson(c, `${why} ${rule}`, c.memory).good }).toEqual({ rule, good: true });
+  });
+
+  test("a negation farther back or in another clause is not the action's: contrasted clauses", () => {
+    expect(claims("Do not poll, wait for networkidle.", wait, true)).toEqual(wait[0]);
+    expect(claims("Do not rely on the heading, wait for networkidle.", wait, true)).toEqual(wait[0]);
+    expect(claims("Never, under any circumstances, wait for networkidle.", wait, true)).toEqual([]);
+    expect(claims("Never wait for the heading, wait for networkidle.", wait, true)).toEqual(wait[0]);
+  });
+
+  test("a quoted warning is a denial too", () => {
+    expect(claims('Warning: "never wait for networkidle".', wait, true)).toEqual([]);
+    expect(claims('The note says "do not hesitate to wait for networkidle".', wait, true)).toEqual(wait[0]); // a quoted recommendation is read as given
+  });
+
+  test("a required fact is read the same way", () => {
+    const heading = ["+wait * heading"];
+    expect(stated("Do not hesitate to wait for the heading.", heading)).toBe(true);
+    expect(stated("Never fail to wait for the heading.", heading)).toBe(true);
+    expect(stated("Never wait for the heading.", heading)).toBe(false);
+    expect(stated("Do not wait for the heading.", heading)).toBe(false);
+  });
+});
+
 describe("the public cases check themselves", () => {
   for (const c of loadCases(PUBLIC).filter((c) => c.expect === "lesson")) {
     describe(c.id, () => {
