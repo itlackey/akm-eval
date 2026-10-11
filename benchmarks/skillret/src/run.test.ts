@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { akmVersion } from "../../../lib/akm/akm.ts";
+import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, publicCorpus } from "./dataset.ts";
 import { type Split, fakeAkmScript, sandboxRunning, writeAssets } from "./fakes.ts";
-import { CURATE_CHECK, curateSample, runCorpus, withSemantic } from "./run.ts";
+import { CURATE_CHECK, assetsDigest, curateSample, failureOf, runCorpus, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -124,6 +125,42 @@ describe("akm", () => {
     expect((await akm.ask(semantic, "curate", "docker networking", known)).error).toContain("akm curate searched with semantic, not keyword");
   });
 
+  test("an answer with no searchMode is a failure on the semantic index, where a build that drops the field would pass keyword rankings as semantic", async () => {
+    const s = setup();
+    const semantic = s.newSandbox(true);
+    const keyword = s.newSandbox();
+    await akm.load(semantic, s.corpus.skills, true);
+    await akm.load(keyword, s.corpus.skills);
+    const known = new Set(s.corpus.skills.map((x) => x.id));
+    for (const system of ["search", "curate"] as const) {
+      const unsaid = await akm.ask(semantic, system, "NOMODE docker networking", known, "semantic");
+      expect(unsaid).toMatchObject({ ranked: [], mode: null });
+      expect(unsaid.error).toContain(`akm ${system} did not say how it searched (no searchMode), and a semantic answer has to say semantic`);
+      expect(unsaid.timedOut).toBeUndefined();
+    }
+    // the keyword index has semantic search off, so an answer that does not name its mode is still its keyword ranking
+    expect(await akm.ask(keyword, "search", "NOMODE docker networking", known)).toMatchObject({ ranked: ["t2"], mode: null });
+    // and a name that is not a string does not count as one
+    const odd = join(s.root, "odd-mode-akm.ts");
+    writeFileSync(odd, `const [cmd] = process.argv.slice(2); if (cmd === "search" && process.argv[3] === "--help") console.log("--detail=<detail>"); else console.log(JSON.stringify({ hits: [{ ref: "skills/t2" }], searchMode: 3 }));`);
+    const oddSemantic = { ...s.newSandbox(true), cmd: ["bun", odd] };
+    expect((await akm.ask(oddSemantic, "search", "docker", known, "semantic")).error).toContain("did not say how it searched");
+  });
+
+  test("a call that akm does not answer in time fails as a timeout, which the answer says apart from other failures", async () => {
+    const s = setup();
+    const sb = s.newSandbox();
+    await akm.load(sb, s.corpus.skills);
+    const known = new Set(s.corpus.skills.map((x) => x.id));
+    const slow = await akm.ask(sb, "search", "HANG docker networking", known, "keyword", 1000);
+    expect(slow).toMatchObject({ ranked: [], mode: null, error: "akm search timed out after 1s", timedOut: true });
+    expect(slow.seconds).toBeGreaterThanOrEqual(2); // it was asked twice
+    const broken = await akm.ask(sb, "search", "BROKEN docker networking", known, "keyword", 1000);
+    expect(broken.error).toContain("exited 70");
+    expect(broken.timedOut).toBeUndefined();
+    expect((await akm.ask(sb, "search", "docker networking", known, "keyword", 1000)).timedOut).toBeUndefined();
+  });
+
   test("asks a call again that failed, and gives up on one that fails twice", async () => {
     const s = setup();
     const sb = s.newSandbox();
@@ -157,6 +194,11 @@ describe("runCorpus", () => {
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     expect(stored).toMatchObject({ eval: "skillret", corpus: "public", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 15, workers: 3, n_skills: 6, n_queries: 4 });
     expect(stored.errored).toEqual({ search: 0, semantic_search: 0 });
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null }); // every call answered
+    expect(failureOf([summary])).toBeUndefined();
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this benchmark's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(stored.no_results).toEqual({ search: 0, semantic_search: 0 });
     expect(Object.keys(stored.index_seconds)).toEqual(["keyword", "semantic"]);
     expect(Object.keys(stored.metrics)).toEqual(["search", "semantic_search"]);
@@ -175,7 +217,7 @@ describe("runCorpus", () => {
     expect(stored.by_size["2"]).toMatchObject({ n: 1, semantic_search: { "Completeness@5": 1 } });
     expect(stored.by_size["3"]).toMatchObject({ n: 1, search: { "Completeness@15": 0, "Recall@15": 0.6667 }, semantic_search: { "Completeness@5": 1 } });
     // There are fewer queries than the curate check takes, so it takes all of them, and curate answered like search on both indexes.
-    expect(stored.curate_check).toEqual({ seed: 42, queries: ["q1", "q2", "q3", "q4"], keyword: { compared: 4, same: 4, different: [], errored: 0 }, semantic: { compared: 4, same: 4, different: [], errored: 0 } });
+    expect(stored.curate_check).toEqual({ seed: 42, queries: ["q1", "q2", "q3", "q4"], keyword: { compared: 4, same: 4, different: [], errored: 0, timeouts: 0 }, semantic: { compared: 4, same: 4, different: [], errored: 0, timeouts: 0 } });
 
     const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.map((r) => r.id)).toEqual(["q1", "q2", "q3", "q4"]);
@@ -192,6 +234,63 @@ describe("runCorpus", () => {
     expect(table.indexOf("indexed for semantic search")).toBeLessThan(table.indexOf("indexed for keyword search"));
     expect(table).toContain("BM25");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
+  });
+
+  test("records what the run was made of: the akm that built the semantic index, the configs, the data files and the seed", async () => {
+    const s = setup();
+    const secret = () => {
+      const sb = s.newSandbox();
+      writeConfig(sb, { configVersion: "0.9.0", semanticSearchMode: "off", registries: [], apiKey: "sk-not-for-the-summary" });
+      return sb;
+    };
+    const first = await logged(() => runCorpus(s.corpus, s.ctx({ label: "one", newSandbox: secret }), { assets: s.assets, results: s.results }));
+    const second = await logged(() => runCorpus(s.corpus, s.ctx({ label: "two" }), { assets: s.assets, results: s.results }));
+    const stored = (summary: { results_dir: string }) => JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    const [a, b] = [stored(first.result), stored(second.result)];
+    // who built the index: the new one, and the same record when the next run keeps it
+    expect(a.semantic_index).toBe("cold");
+    expect(a.semantic_index_built_by).toEqual({ version: "0.9.99-test", akm_bin: a.akm_bin, akm_build: a.akm_build, builtAt: "build 1" });
+    expect(b.semantic_index).toBe("warm");
+    expect(b.semantic_index_built_by).toEqual(a.semantic_index_built_by);
+    // the configs the indexes ran with, secrets redacted
+    expect(a.config.keyword).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [], apiKey: "<redacted>" });
+    expect(JSON.stringify(a)).not.toContain("sk-not-for-the-summary");
+    expect(a.config.semantic).toEqual({ configVersion: "0.9.0", semanticSearchMode: "auto", registries: [], embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600000 } });
+    expect(b.config).toEqual({ keyword: { configVersion: "0.9.0", semanticSearchMode: "off", registries: [] }, semantic: a.config.semantic });
+    // the data files: the same digest for the same files, and another for other files
+    expect(a.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(b.assets_sha256).toBe(a.assets_sha256);
+    expect(a.seed).toBeNull();
+    writeFileSync(join(s.assets, "test-qrels.jsonl"), `${readFileSync(join(s.assets, "test-qrels.jsonl"), "utf8")} `);
+    const third = await logged(() => runCorpus(s.corpus, s.ctx({ label: "three" }), { assets: s.assets, results: s.results }));
+    expect(stored(third.result).assets_sha256).not.toBe(a.assets_sha256);
+  });
+
+  test("a private corpus records the seed that drew it and digests the files it read, and a run without the semantic index records no semantic fields", async () => {
+    const s = setup();
+    const corpus: Corpus = { ...s.corpus, corpus: "private" };
+    const { result: summary } = await logged(() => runCorpus(corpus, s.ctx({ label: "p", semantic: false }), { assets: s.assets, results: s.results }));
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(stored.seed).toBe(42);
+    expect(stored.assets_sha256).toBe(assetsDigest(s.assets, "private"));
+    expect(stored.assets_sha256).not.toBe(assetsDigest(s.assets, "public"));
+    expect(Object.keys(stored.config)).toEqual(["keyword"]);
+    expect(stored.semantic_index_built_by).toBeUndefined();
+    expect(stored.engine).toBeUndefined();
+  });
+
+  test("the digest of the data files is of their names in assets/ and their content, wherever assets/ is, and leaves the working folder as it was", () => {
+    const s = setup();
+    const here = process.cwd();
+    const digest = assetsDigest(s.assets, "public");
+    expect(process.cwd()).toBe(here);
+    const copy = join(tmp(), "elsewhere");
+    cpSync(s.assets, copy, { recursive: true });
+    expect(assetsDigest(copy, "public")).toBe(digest);
+    expect(assetsDigest(copy, "private")).not.toBe(digest);
+    rmSync(join(copy, "test-skills.jsonl"));
+    expect(() => assetsDigest(copy, "public")).toThrow();
+    expect(process.cwd()).toBe(here);
   });
 
   test("gives the same rankings with one worker as with several", async () => {
@@ -224,7 +323,7 @@ describe("runCorpus", () => {
     expect(Object.keys(stored.call_seconds)).toEqual(["search"]);
     expect(Object.keys(stored.by_size["1"]).sort()).toEqual(["n", "search"]);
     expect(stored.semantic_model).toBeUndefined();
-    expect(stored.curate_check).toEqual({ seed: 42, queries: ["q1", "q2", "q3", "q4"], keyword: { compared: 4, same: 4, different: [], errored: 0 } });
+    expect(stored.curate_check).toEqual({ seed: 42, queries: ["q1", "q2", "q3", "q4"], keyword: { compared: 4, same: 4, different: [], errored: 0, timeouts: 0 } });
     const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     for (const r of rows) expect(Object.keys(r).sort()).toEqual(["curate", "id", "query", "relevant", "search"]);
     const table = lines.join("\n");
@@ -238,8 +337,8 @@ describe("runCorpus", () => {
     const s = setup();
     const corpus: Corpus = { ...s.corpus, queries: [...s.corpus.queries, { id: "cd", query: "CURATEDIFF compose containers with docker and migrate the postgres database schema", relevant: ["t2", "t3"] }] };
     const { result: summary, lines } = await logged(() => runCorpus(corpus, s.ctx({ label: "d" }), { assets: s.assets, results: s.results }));
-    expect(summary.curate_check.keyword).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0 });
-    expect(summary.curate_check.semantic).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0 });
+    expect(summary.curate_check.keyword).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0, timeouts: 0 });
+    expect(summary.curate_check.semantic).toEqual({ compared: 5, same: 4, different: ["cd"], errored: 0, timeouts: 0 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
     expect(stored.curate_check.keyword.different).toEqual(["cd"]);
     const table = lines.join("\n");
@@ -354,14 +453,20 @@ describe("runCorpus", () => {
     expect(summary.metrics.search["Recall@5"]).toBe(0.6667);
     expect(summary.metrics.semantic_search?.["Recall@5"]).toBe(0.6667);
     // The curate calls of broken and stray failed too, and those queries were not compared. The other three were, and agree.
-    expect(summary.curate_check.keyword).toEqual({ compared: 3, same: 3, different: [], errored: 2 });
-    expect(summary.curate_check.semantic).toEqual({ compared: 3, same: 3, different: [], errored: 2 });
+    expect(summary.curate_check.keyword).toEqual({ compared: 3, same: 3, different: [], errored: 2, timeouts: 0 });
+    expect(summary.curate_check.semantic).toEqual({ compared: 3, same: 3, different: [], errored: 2, timeouts: 0 });
     const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.find((r) => r.id === "broken").curate.error).toContain("exited 70");
     expect(rows.find((r) => r.id === "flaky").search.error).toBeUndefined();
     expect(lines.join("\n")).toContain("errored calls: akm search 2");
     expect(lines.join("\n")).toContain("errored calls: akm search, semantic 2");
     expect(lines.join("\n")).toContain("curate check: 2 curate calls on the semantic index failed");
+    // a run with calls that failed is aborted: the summary says so, with the same reason the run fails with, the 8 calls of search and of the curate check
+    const reason = "8 akm calls failed. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
+    expect(summary).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([summary])).toBe(reason);
+    expect(failureOf([summary, summary])).toStartWith("16 akm calls failed.");
   });
 
   test("stops when akm indexes fewer assets than there are skills", async () => {
@@ -383,6 +488,56 @@ describe("runCorpus", () => {
     const second = await logged(() => runCorpus(corpus, s.ctx(), { assets: s.assets, results: s.results })).catch((e: Error) => e);
     expect((second as Error).message).toContain("akm cannot search with its embedder: akm search searched with fts-fallback, not semantic");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
+  });
+
+  test("stops before the queries when the first semantic search does not say how it searched", async () => {
+    const s = setup();
+    const corpus: Corpus = { ...s.corpus, queries: [{ id: "q", query: "NOMODE docker networking", relevant: ["t2"] }, ...s.corpus.queries] };
+    const failure = await logged(() => runCorpus(corpus, s.ctx(), { assets: s.assets, results: s.results })).catch((e: Error) => e);
+    expect((failure as Error).message).toContain("akm cannot search with its embedder: akm search did not say how it searched (no searchMode)");
+    for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
+  });
+
+  test("a semantic call that does not say how it searched is a failed call, left out of the semantic line and not scored as a semantic ranking", async () => {
+    const s = setup();
+    const corpus: Corpus = { ...s.corpus, queries: [...s.corpus.queries, { id: "nomode", query: "NOMODE docker networking", relevant: ["t2"] }] };
+    const { result: summary } = await logged(() => runCorpus(corpus, s.ctx(), { assets: s.assets, results: s.results }));
+    // the keyword index has semantic search off, so its call is the keyword ranking it was asked for
+    expect(summary.errored).toEqual({ search: 0, semantic_search: 1 });
+    expect(summary.curate_check.keyword).toMatchObject({ compared: 5, errored: 0 });
+    expect(summary.curate_check.semantic).toMatchObject({ compared: 4, errored: 1 });
+    expect(summary.search_mode).toEqual({ keyword: "keyword", semantic: "semantic" });
+    const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.find((r) => r.id === "nomode").semantic_search).toMatchObject({ ranked: [], error: expect.stringContaining("did not say how it searched") });
+    expect(summary.timeouts).toEqual({ search: 0, semantic_search: 0 });
+  });
+
+  test("counts the calls that akm did not answer in time apart from the other failed calls, and marks their rows", async () => {
+    const s = setup();
+    const corpus: Corpus = {
+      ...s.corpus,
+      queries: [
+        { id: "ok", query: "docker networking", relevant: ["t2"] },
+        { id: "hang", query: "HANG docker networking", relevant: ["t2"] },
+        { id: "broken", query: "BROKEN docker networking", relevant: ["t2"] },
+      ],
+    };
+    const { result: summary, lines } = await logged(() => runCorpus(corpus, s.ctx({ label: "slow", semantic: false, workers: 3, callTimeoutMs: 1000 }), { assets: s.assets, results: s.results }));
+    expect(summary.errored).toEqual({ search: 2 });
+    expect(summary.timeouts).toEqual({ search: 1 });
+    expect(summary.curate_check.keyword).toEqual({ compared: 1, same: 1, different: [], errored: 2, timeouts: 1 });
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(stored.timeouts).toEqual({ search: 1 });
+    const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.map((r) => [r.id, r.search.timed_out, r.curate.timed_out])).toEqual([["ok", undefined, undefined], ["hang", true, true], ["broken", undefined, undefined]]);
+    expect(rows[1].search.error).toBe("akm search timed out after 1s");
+    expect(rows[2].search.error).toContain("exited 70");
+    const table = lines.join("\n");
+    expect(table).toContain("errored calls: akm search 2 (left out of its numbers; 1 of them timed out)");
+    expect(table).toContain("curate check: 2 curate calls on the keyword index failed (1 of them timed out)");
+    const reason = "4 akm calls failed, 2 of them by timing out. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
+    expect(stored).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([summary])).toBe(reason);
   });
 
   test("stops with a message when akm cannot be run", async () => {

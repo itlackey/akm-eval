@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCases } from "./build.ts";
+import { refOfFile } from "../../retrieval/src/library.ts";
+import { buildCases, libraryFileOf } from "./build.ts";
 import {
   CLASSES,
   type Case,
@@ -10,16 +12,22 @@ import {
   type Row,
   akmProblems,
   allowOf,
+  assetsSha256,
   atLeast,
   caseProblems,
   cleanProblems,
+  corpusSeed,
+  digestOf,
   fixOf,
+  generatedProblem,
   hasCopiedFrontmatter,
   inject,
   labelledQueries,
   makeRow,
   metrics,
   parseCases,
+  readGenerated,
+  readSeed,
   reflectConfig,
   reflectOutcome,
   refOf,
@@ -28,10 +36,15 @@ import {
   selectCases,
   servedModel,
   splitFrontmatter,
+  timedOutMessage,
 } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library");
+const cleanups: string[] = [];
+afterEach(() => {
+  for (const d of cleanups.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 /** A clean note: akm names nothing in it, and each injection fits it. */
 const NOTE = `---
@@ -201,7 +214,7 @@ describe("the public cases", () => {
   test("each note is a library note with the defect injected, and no two cases use the same note", () => {
     expect(new Set(cases.map((c) => c.path)).size).toBe(cases.length);
     for (const c of cases) {
-      const clean = readFileSync(join(LIBRARY, c.path), "utf8");
+      const clean = readFileSync(join(LIBRARY, libraryFileOf(c.path)), "utf8");
       expect(cleanProblems(clean)).toEqual([]);
       expect(inject(c.class, clean)).toBe(c.source);
     }
@@ -425,6 +438,96 @@ describe("makeRow", () => {
   test("an error has no verdict and keeps its message", () => {
     expect(makeRow(c, { outcome: "error", reason: "HTTP 500", seconds: 2 })).toMatchObject({ correct: null, checks: null, error: "HTTP 500" });
   });
+
+  test("an error that was a timeout says so, and no other row does", () => {
+    expect(makeRow(c, { outcome: "error", reason: "akm improve timed out after 900s", seconds: 900, timedOut: true })).toMatchObject({ outcome: "error", timed_out: true });
+    expect("timed_out" in makeRow(c, { outcome: "error", reason: "HTTP 500", seconds: 2 })).toBe(false);
+    expect("timed_out" in makeRow(c, { outcome: "none", seconds: 1 })).toBe(false);
+  });
+});
+
+describe("timedOutMessage", () => {
+  test("tells a message that says akm timed out from other failures", () => {
+    expect(timedOutMessage("akm improve timed out after 900s")).toBe(true);
+    expect(timedOutMessage("akm index timed out after 0.3s")).toBe(true);
+    expect(timedOutMessage("akm index failed (exit 137): ")).toBe(false);
+    expect(timedOutMessage("non_zero_exit: HTTP 500")).toBe(false);
+  });
+});
+
+describe("assetsSha256", () => {
+  const copy = (): string => {
+    const root = mkdtempSync(join(tmpdir(), "reflect-digest-"));
+    cleanups.push(root);
+    cpSync(join(EVAL_DIR, "assets"), join(root, "assets"), { recursive: true });
+    return join(root, "assets");
+  };
+
+  test("is the same for the same cases in another folder, does not read the README, and changes with a case", () => {
+    const base = assetsSha256(join(EVAL_DIR, "assets"));
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    const other = copy();
+    expect(assetsSha256(other)).toBe(base);
+    writeFileSync(join(other, "README.md"), "changed\n");
+    expect(assetsSha256(other)).toBe(base);
+    writeFileSync(join(other, "cases.jsonl"), `${readFileSync(join(other, "cases.jsonl"), "utf8")}\n `);
+    expect(assetsSha256(other)).not.toBe(base);
+  });
+
+  test("digestOf names files by the name it is given and not by where they are", () => {
+    const root = mkdtempSync(join(tmpdir(), "reflect-digest-"));
+    cleanups.push(root);
+    writeFileSync(join(root, "a"), "one");
+    writeFileSync(join(root, "b"), "two");
+    expect(digestOf([["a", join(root, "a")], ["b", join(root, "b")]])).toBe(digestOf([["b", join(root, "b")], ["a", join(root, "a")]]));
+    expect(digestOf([["a", join(root, "a")]])).not.toBe(digestOf([["c", join(root, "a")]]));
+  });
+});
+
+describe("generated.json", () => {
+  const PUBLIC = join(EVAL_DIR, "assets");
+  const privateDir = (generated?: unknown): string => {
+    const dir = mkdtempSync(join(tmpdir(), "reflect-generated-"));
+    cleanups.push(dir);
+    if (generated !== undefined) writeFileSync(join(dir, "generated.json"), typeof generated === "string" ? generated : JSON.stringify(generated));
+    return dir;
+  };
+
+  test("vouches for assets made from the public cases as they are", () => {
+    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+    expect(generatedProblem(dir, PUBLIC)).toBeUndefined();
+    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+  });
+
+  test("refuses assets without it, with one that is not readable, and with a digest that is not the public one", () => {
+    expect(generatedProblem(privateDir(), PUBLIC)).toContain("generated.json is missing");
+    expect(generatedProblem(privateDir("not json"), PUBLIC)).toContain("holds no seed");
+    expect(generatedProblem(privateDir({ seed: 42, inputs_sha256: assetsSha256(PUBLIC) }), PUBLIC)).toContain("holds no seed");
+    expect(generatedProblem(privateDir({ seed: "42" }), PUBLIC)).toContain("holds no seed");
+    expect(generatedProblem(privateDir({ seed: "42", inputs_sha256: "0".repeat(64) }), PUBLIC)).toContain("other public assets");
+  });
+
+  test("a public case that changed makes the assets made from it stale", () => {
+    const root = mkdtempSync(join(tmpdir(), "reflect-generated-"));
+    cleanups.push(root);
+    cpSync(PUBLIC, join(root, "assets"), { recursive: true });
+    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(join(root, "assets")) });
+    expect(generatedProblem(dir, join(root, "assets"))).toBeUndefined();
+    writeFileSync(join(root, "assets", "cases.jsonl"), `${readFileSync(join(root, "assets", "cases.jsonl"), "utf8")}\n `);
+    expect(generatedProblem(dir, join(root, "assets"))).toContain("other public assets");
+  });
+
+  test("the seed to record: none for the public corpus, the seed the assets were made with for the private one, else private/seed", () => {
+    const dir = privateDir({ seed: "7", inputs_sha256: "x" });
+    writeFileSync(join(dir, "seed"), "123456789012345678\n");
+    expect(corpusSeed("public", dir, join(dir, "seed"))).toBeNull();
+    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("7");
+    expect(corpusSeed("own", dir, join(dir, "seed"))).toBe("123456789012345678");
+    expect(corpusSeed("own", dir, join(dir, "no-seed"))).toBeNull();
+    expect(readSeed(join(dir, "seed"))).toBe("123456789012345678");
+    rmSync(join(dir, "generated.json"));
+    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("123456789012345678");
+  });
 });
 
 describe("metrics", () => {
@@ -535,6 +638,12 @@ describe("reflectConfig", () => {
   test("names no key when there is none", () => {
     expect((reflectConfig("http://localhost:8080/v1", "m", false) as any).engines.reflect.apiKey).toBeUndefined();
   });
+
+  test("sets the engine to temperature 0 with thinking off, as distill does", () => {
+    const engine = (reflectConfig("http://localhost:8080/v1", "m", false) as any).engines.reflect;
+    expect(engine.temperature).toBe(0);
+    expect(engine.enableThinking).toBe(false);
+  });
 });
 
 describe("selectCases", () => {
@@ -564,9 +673,18 @@ describe("refOf", () => {
 
   test("every public note is where akm reads that type", () => {
     for (const c of parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"))) {
-      expect(existsSync(join(LIBRARY, c.path))).toBe(true);
+      const file = libraryFileOf(c.path);
+      expect(existsSync(join(LIBRARY, file))).toBe(true);
       expect(c.path).toMatch(/^(knowledge|agents|commands|workflows)\/.+\.md$|^skills\/.+\/SKILL\.md$/);
+      // The ref the run gives the note is the ref akm gives the file of the library it is made from.
+      expect(refOfFile(file, () => readFileSync(join(LIBRARY, file), "utf8"))).toBe(refOf(c.path));
     }
+  });
+
+  test("a note of a skill is made from the file under skills/, and a note of a type folder from itself", () => {
+    expect(libraryFileOf("knowledge/skills/ai-skills/agent-cli-tools/references/codex.md")).toBe("skills/ai-skills/agent-cli-tools/references/codex.md");
+    expect(libraryFileOf("knowledge/print/fix-team-dispatch-template.md")).toBe("knowledge/print/fix-team-dispatch-template.md");
+    expect(libraryFileOf("skills/akm-migrate/SKILL.md")).toBe("skills/akm-migrate/SKILL.md");
   });
 });
 

@@ -27,6 +27,18 @@ export interface ChatOptions {
 
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+/** The temperature of every request, the benchmark's own for the model and the judge. run.ts records it in summary.json. */
+export const TEMPERATURE = 0;
+
+/** The host (and port) of an endpoint's URL, with no path, query or credentials, for summary.json. Null when it is not a URL. */
+export function endpointHost(baseUrl: string): string | null {
+  try {
+    return new URL(baseUrl).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export function chatUrl(baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
@@ -36,7 +48,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One user message in, the reply text out. Throws when the request fails for good. */
 export async function chat(endpoint: Endpoint, prompt: string, options: ChatOptions = {}): Promise<ChatResult> {
-  const { temperature = 0, maxTokens, timeoutMs = 900_000, retries = 5, retryBackoffMs = 2000 } = options;
+  const { temperature = TEMPERATURE, maxTokens, timeoutMs = 900_000, retries = 5, retryBackoffMs = 2000 } = options;
   const body = JSON.stringify({
     model: endpoint.model,
     messages: [{ role: "user", content: prompt }],

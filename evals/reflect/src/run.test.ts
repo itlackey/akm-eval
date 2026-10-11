@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { type Case, atLeast, inject, parseCases, refOf } from "./lib.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
+import { libraryFileOf } from "./build.ts";
+import { type Case, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -34,7 +36,7 @@ const note = (ref) => [ref + ".md", ref + "/SKILL.md"].map((p) => process.env.AK
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const dbFile = process.env.AKM_DATA_DIR + "/state.db";
 const searches = (ref) => { if (!ref || !existsSync(dbFile)) return []; const db = new Database(dbFile, { readonly: true }); try { return db.prepare("SELECT query FROM usage_events WHERE event_type = 'search' AND source = 'user' AND entry_ref = ?").all("bundle//" + ref).map((r) => r.query); } finally { db.close(); } };
-appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
+appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
 if (cmd === "--version") console.log("akm 0.9.99-test");
 else if (cmd === "index") out({ ok: true });
 else if (cmd === "feedback") { const db = new Database(dbFile); db.exec("CREATE TABLE IF NOT EXISTS usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, query TEXT, entry_id INTEGER, entry_ref TEXT, signal TEXT, metadata TEXT, source TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL DEFAULT (datetime('now')))"); db.close(); state.fed.push(rest[0]); save(); out({ ok: true, ref: rest[0], signal: "negative" }); }
@@ -43,6 +45,7 @@ else if (cmd === "improve") {
   if (!state.fed.includes(ref)) { console.error("no feedback was recorded for " + ref); process.exit(2); }
   const p = plan[ref] ?? { outcome: "none" };
   const action = (mode, result) => out({ ok: true, actions: [{ ref, mode, result }], usageReport: { byProcessEngineModel: [{ process: "reflect", engine: "reflect", model: p.served ?? "served-model", calls: 1 }] } });
+  if (p.outcome === "slow") await new Promise((resolve) => setTimeout(resolve, 30000));
   if (p.outcome === "crash") { console.error(JSON.stringify({ error: "boom", code: "INTERNAL" })); process.exit(70); }
   else if (p.outcome === "proposal") { state.proposal = { id: "prop-1", source: "reflect", ref, content: p.content }; save(); action("reflect", { ok: true, proposal: { id: "prop-1" } }); }
   else if (p.outcome === "none") action("reflect-skipped", { ok: false, reason: "no_change", error: "identical" });
@@ -181,6 +184,49 @@ describe("runCorpus", () => {
     expect(log.every((c) => c.model === "the-model" && c.key === "model-secret")).toBe(true);
   });
 
+  test("sends akm the engine at temperature 0 with thinking off, and the summary records the config without secrets, the engine settings and a digest of the cases", async () => {
+    const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(calls().filter((c) => c.args[0] !== "--version").every((c) => c.temperature === 0 && c.thinking === false)).toBe(true);
+    const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
+    expect(text).not.toContain("model-secret");
+    const stored = JSON.parse(text);
+    expect(stored.config).toEqual(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey)))); // the key is the reference "$MODEL_API_KEY", which holds no secret
+    expect(stored.engine).toEqual({ engine: "reflect", model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { reflect: { model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
+    expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
+    const again = await quiet(() => runCorpus("public", ctx, setup(cases.slice(0, 1), plan).folders));
+    expect(again.assets_sha256).toBe(stored.assets_sha256);
+    const other = await quiet(() => runCorpus("public", ctx, setup(cases.slice(0, 2), plan).folders));
+    expect(other.assets_sha256).not.toBe(stored.assets_sha256);
+  });
+
+  test("the config in the summary has a literal key redacted and the patch merged in", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 1), plan);
+    const root = mkdtempSync(join(tmpdir(), "reflect-patch-"));
+    dirs.push(root);
+    writeFileSync(join(root, "patch.json"), JSON.stringify({ engines: { reflect: { apiKey: "sk-literal-secret", temperature: 0.7 } } }));
+    const configPatch = loadConfigPatch("patch.json", root);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "reflect-only", configPatch } }, folders));
+    const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
+    expect(text).not.toContain("sk-literal-secret");
+    const stored = JSON.parse(text);
+    expect(stored.config.engines.reflect).toMatchObject({ apiKey: "<redacted>", temperature: 0.7 });
+    expect(stored.engine.temperature).toBe(0.7); // what the run was made with, patch included
+  });
+
+  test("the seed of a private run is the one in generated.json, and of an own run the one in private/seed", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 1), plan);
+    const root = join(folders.assets, "..");
+    writeFileSync(join(root, "generated.json"), JSON.stringify({ seed: "42", inputs_sha256: "x" }));
+    writeFileSync(join(root, "seed"), "99\n");
+    const seed = (corpus: "public" | "private", file: string) => quiet(() => runCorpus(corpus, ctx, { ...folders, seed: join(root, file) })).then((s) => s.seed);
+    expect([await seed("public", "seed"), await seed("private", "seed"), await seed("private", "no-seed")]).toEqual([null, "42", "42"]);
+  });
+
   test("runs the strategy it is given, with the config patch merged into the config, and records both", async () => {
     const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
     const root = mkdtempSync(join(tmpdir(), "reflect-patch-"));
@@ -232,10 +278,81 @@ describe("runCorpus", () => {
     expect(summary.n_run).toBe(5);
     expect(summary.n_scored).toBe(0);
   });
+
+  test("a run that stops early says so in the summary it writes before it fails", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
+    const { ctx, folders } = setup(many, Object.fromEntries(many.map((c) => [refOf(c.path), { outcome: "provider" }])));
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("the first 5 cases got no outcome");
+    const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0] as string, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ status: "aborted", n_run: 5, n_cases: 12 });
+    expect(stored.aborted_reason).toBe("the first 5 cases got no outcome, so the run stopped. Last error: non_zero_exit: HTTP 500 from <MODEL_BASE_URL>/chat/completions");
+  });
+
+  test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
+    const slow = [make("slow", "retrieval-miss", "knowledge/s.md"), make("crash", "retrieval-miss", "knowledge/c.md"), make("ok", "retrieval-miss", "knowledge/o.md")];
+    const { ctx, folders } = setup(slow, { "knowledge/s": { outcome: "slow" }, "knowledge/c": { outcome: "crash" } });
+    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 1500 }, folders));
+    const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[0]).toMatchObject({ id: "slow", outcome: "error", timed_out: true, error: "akm improve timed out after 1.5s" });
+    expect(rows[1].outcome).toBe("error");
+    expect("timed_out" in rows[1]).toBe(false);
+    expect("timed_out" in rows[2]).toBe(false);
+    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1 });
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).timeouts).toBe(1);
+  });
 });
 
-/** The akm on this machine, if it is new enough to run this eval. */
+describe("run --corpus private", () => {
+  const EVAL = join(import.meta.dir, "..");
+  const REPO = join(EVAL, "..", "..");
+
+  /** A copy of the code and the public assets in a temp folder, so that the run finds private/ there and never in the repository. */
+  function copyOfRepo(): string {
+    const tree = mkdtempSync(join(tmpdir(), "reflect-tree-"));
+    dirs.push(tree);
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "src"), join(tree, "evals", "reflect", "src"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
+    return tree;
+  }
+  const bun = (tree: string, script: string, args: string[]) => {
+    // akm is not there, so a run that gets past its checks stops at the version probe, before it calls a model.
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: join(tree, "no-akm") };
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "reflect", "src", script), ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+    return { code: p.exitCode, err: p.stderr.toString() };
+  };
+
+  test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "reflect");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    const ready = bun(tree, "run.ts", ["--corpus", "private"]);
+    expect(ready.err).toContain("could not run"); // past the checks, stopped for want of akm
+    expect(ready.err).not.toContain("cannot be used");
+
+    rmSync(join(out, "generated.json"));
+    const missing = bun(tree, "run.ts", ["--corpus", "private"]);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toContain("the private assets cannot be used: generated.json is missing");
+    expect(missing.err).toContain("./generate-assets --only reflect");
+
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    const cases = join(tree, "evals", "reflect", "assets", "cases.jsonl");
+    writeFileSync(cases, `${readFileSync(cases, "utf8")}\n`);
+    const stale = bun(tree, "run.ts", ["--corpus", "all"]);
+    expect(stale.code).toBe(2);
+    expect(stale.err).toContain("made from other public assets");
+  }, 60_000);
+});
+
+/**
+ * The real akm these tests run against, only when AKM_EVAL_REAL_AKM=1 asks for it: an akm that happens to be on PATH, or an
+ * AKM_BIN the caller exported, is never picked up by itself, so the default suite stays fake-only whatever is installed.
+ * It must be new enough to run this eval.
+ */
 function realAkm(): string | undefined {
+  if (process.env.AKM_EVAL_REAL_AKM !== "1") return undefined;
   const cmd = (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
   try {
     const out = Bun.spawnSync([...cmd, "--version"], { stdout: "pipe", stderr: "ignore" });
@@ -255,7 +372,7 @@ describe.skipIf(!realVersion)(`with the akm on this machine (${realVersion})`, (
   function model(mode: "oracle" | "nothing" | "churn") {
     const byRef = new Map(cases.map((c) => [refOf(c.path), c]));
     const original = (c: Case) => {
-      const clean = readFileSync(join(LIBRARY, c.path), "utf8");
+      const clean = readFileSync(join(LIBRARY, libraryFileOf(c.path)), "utf8");
       const fm = Bun.YAML.parse(clean.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "") as Record<string, string>;
       const squash = (s?: string) => (s ? s.replace(/\s+/g, " ").trim() : null);
       return { description: squash(fm.description), when_to_use: squash(fm.when_to_use), title: squash(fm.title) ?? clean.match(/^#[ \t]+(\S.*)$/m)?.[1] ?? null };

@@ -41,7 +41,7 @@ The two notes of a pair are dated by file time when the night starts: the older 
 | `feedback` | what is recorded on the day before: `ref`, `signal` (`negative` or `positive`), `reason`, and for an exact fix `fix`: the `replace` and `with` texts in pairs, and the `source` |
 | `canary` | the canary string above |
 
-A `silent` item has the fields of a `reflect` item and no feedback. A `pair` adds `relation`, `older`, `safe`, `claims`, and `a` and `b`, the paths of its two notes, with the meaning they have in `../consolidate/assets/README.md`. A `reflect` item adds `class`, `path`, `defect`, `correct`, `allow` and, where the class has them, `fix`, `forbid` and `anchors`, as in `../reflect/assets/README.md`. A `distill` item adds `class`, `expect` (`lesson` or `none`), `memory`, and `required` and `forbidden`, the facts a lesson must state and the claims it must not make, as in `../distill/assets/README.md`. A `fix` adds `path`.
+A `silent` item has the fields of a `reflect` item and no feedback. A `pair` adds `relation`, `older`, `safe`, `claims`, and `a` and `b`, the paths of its two notes, with the meaning they have in `../consolidate/assets/README.md`. A `reflect` item adds `class`, `path`, `defect`, `correct`, `allow` and, where the class has them, `fix`, `forbid` and `anchors`, as in `../reflect/assets/README.md`. A `distill` item adds `class`, `expect` (`lesson` or `none`), `memory`, and `required`, `forbidden` and `contradicts`, the facts a lesson must state, the claims it must not make and the phrases that turn the memory's action round, as in `../distill/assets/README.md`. A lesson item has all three, and a `none` item has none. A `fix` adds `path`.
 
 ## Privacy
 

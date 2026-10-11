@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
-import { type Claim, EMBEDDER_ENV, type Relation, type Side, RELATIONS, claimProblems, noteAges } from "../../consolidate/src/lib.ts";
+import { type Claim, EMBEDDER_ENV, type Embedder, type Relation, type Side, RELATIONS, claimProblems, noteAges, withEmbedder } from "../../consolidate/src/lib.ts";
 import { type Class as DistillClass, type Expect, checkLesson, lessonFile, lessonText, memoryBody } from "../../distill/src/lib.ts";
 import { type Case as ReflectCase, type CaseClass, type Field, CLASSES, addedTitle, caseProblems, refOf, score as scoreReflect, splitFrontmatter } from "../../reflect/src/lib.ts";
 
@@ -79,6 +79,8 @@ export interface DistillItem extends Base {
   memory: string;
   required: string[][];
   forbidden: string[][];
+  /** What a lesson must not assert because it turns the memory's action round, as in the distill case (see the distill eval's assets README). A lesson item has some. */
+  contradicts: string[][];
 }
 
 /** Notes that no process has a reason to touch. */
@@ -144,8 +146,9 @@ export function parseItems(text: string, where = "items"): Item[] {
       if (!item.feedback.some((f) => f.fix)) throw new Error(`${at} is a fix with no fix in its feedback`);
     } else if (item.kind === "distill") {
       if (item.expect !== "lesson" && item.expect !== "none") throw new Error(`${at} has expect "${item.expect}"`);
-      if (!isPhraseGroups(item.required) || !isPhraseGroups(item.forbidden)) throw new Error(`${at} needs required and forbidden as lists of lists of phrases`);
-      if ((item.expect === "lesson") !== (item.required.length > 0 && item.forbidden.length > 0)) throw new Error(`${at} expects ${item.expect}, so its required and forbidden do not fit`);
+      if (!isPhraseGroups(item.required) || !isPhraseGroups(item.forbidden) || !isPhraseGroups(item.contradicts)) throw new Error(`${at} needs required, forbidden and contradicts as lists of lists of phrases`);
+      // A lesson item without contradictions would be scored without the check that catches a lesson turning the memory's advice round, so it is refused.
+      if ([item.required, item.forbidden, item.contradicts].some((groups) => (item.expect === "lesson" ? groups.length === 0 : groups.length > 0))) throw new Error(`${at} expects ${item.expect}, so its required, forbidden and contradicts do not fit`);
       inFiles(item.memory, "its memory");
     }
     items.push(item);
@@ -201,11 +204,21 @@ export function selectItems(items: Item[], limit?: number): Item[] {
 
 // --- What the night runs ---------------------------------------------------------------------------------------------
 
-/** The akm config of a night: one LLM engine, the model under test, for every process, and semantic search on, which the pair pass needs. The strategy is akm's own `default`. */
-export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
+/**
+ * The akm config of a night: one LLM engine, the model under test, for every process, and semantic search on, which the pair pass needs.
+ * The strategy is akm's own `default`. Requests use temperature 0 and ask for no thinking, as distill's and extract's do, so a night
+ * does not depend on akm's default sampling. The embedder is the deterministic one unless `real` says akm's built-in model.
+ */
+export function nightlyConfig(baseUrl: string, model: string, hasKey: boolean, embedder: Embedder = "deterministic"): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, "nightly");
-  config.semanticSearchMode = "auto";
-  return config;
+  config.engines.nightly.temperature = 0;
+  config.engines.nightly.enableThinking = false;
+  return withEmbedder(config, embedder);
+}
+
+/** The files of an assets folder that a night reads, relative to it: items.jsonl and the library. assets_sha256 and generated.json digest them. */
+export function nightFiles(assets: string): string[] {
+  return ["items.jsonl", ...listFiles(join(assets, "library")).map((p) => `library/${p}`)];
 }
 
 /** The text of each file under `dir`, by path. */
@@ -494,7 +507,8 @@ function scoreDistill(item: DistillItem, o: Outcome): Row {
   const lessons = o.proposals.filter((p) => p.source === "distill" && p.ref === lessonRef);
   const lesson = lessons.at(-1);
   const action = describeAction(actionFor(o.improve, refOf(item.memory), "distill"));
-  const check = lesson ? checkLesson(item, lessonText(lesson.content), memory) : undefined;
+  // required, forbidden and contradicts: a lesson that states every fact and still turns the memory's advice round is not good
+  const check = lesson ? checkLesson({ required: item.required, forbidden: item.forbidden, contradicts: item.contradicts }, lessonText(lesson.content), memory) : undefined;
   const now = o.after.get(item.memory);
   const checks: Record<string, boolean> =
     item.expect === "lesson" ? { lesson_queued: lesson !== undefined, lesson_good: check?.good ?? false } : { no_lesson: lesson === undefined };
@@ -502,7 +516,7 @@ function scoreDistill(item: DistillItem, o: Outcome): Row {
   checks.lesson_not_accepted = !lessons.some((p) => p.status === "accepted") && o.after.has(`${lessonRef}.md`) === o.before.has(`${lessonRef}.md`);
   checks.memory_kept = now !== undefined && memoryBody(now) === memoryBody(memory) && item.files.filter((p) => p !== item.memory).every((p) => bodyKept(o, p));
   const state = lesson ? `lesson ${lesson.status}${lesson.gate ? `, ${lesson.gate}` : ""}` : action.state;
-  return row(item, item.class, checks, state, { lesson: lesson ? lessonText(lesson.content) : null, missing: check?.missing ?? [], forbidden: check?.forbidden ?? [], ratio: check?.ratio ?? null, gate: lesson?.gate ?? null, judge: lesson?.judgeReason ?? null, action: action.state }, action.error);
+  return row(item, item.class, checks, state, { lesson: lesson ? lessonText(lesson.content) : null, missing: check?.missing ?? [], forbidden: check?.forbidden ?? [], contradicted: check?.contradicted ?? [], ratio: check?.ratio ?? null, gate: lesson?.gate ?? null, judge: lesson?.judgeReason ?? null, action: action.state }, action.error);
 }
 
 /** Notes nothing has a reason to touch are the notes they were. */

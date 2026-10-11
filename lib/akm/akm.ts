@@ -12,8 +12,21 @@
 //
 // A sandbox made with { semantic: true } searches with akm's built-in embedder as well as with keywords. Embedding a library
 // takes minutes to an hour, so index-cache.ts keeps the semantic index of a collection between runs.
+//
+// What akm runs as: AKM_BIN and --akm are a command line, read by parseCommand. Words are separated by whitespace. A single-quoted
+// part is taken as it is, a double-quoted part keeps its whitespace and takes \" \\ \$ and \` as the character after the backslash,
+// and outside quotes a backslash makes the next character part of the word. Nothing is evaluated: no $VARIABLE, no `command`, no
+// glob. A word that starts with ~/ starts at your home folder, quoted or not, unless a backslash comes before its ~. So
+// bun "/tmp/checkout with spaces/cli.ts" is two words, and so is bun ~/code/akm/src/cli.ts.
+//
+// What akm runs with: its own folders, and the environment of the caller without anything that looks like a credential: no
+// variable whose name contains KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH, in any case (OPENAI_API_KEY, GROQ_KEY, HF_TOKEN,
+// SSH_AUTH_SOCK). The exceptions are the variables that the akm config of the sandbox names as $NAME (or ${NAME}): writeConfig reads
+// the config it writes and gives akm those and no others, so a config with two engines gets the key of each, and a key that the
+// config does not name never reaches akm. { keepModelKey: true } gives akm MODEL_API_KEY whatever the config says.
 
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -21,6 +34,8 @@ export interface Sandbox {
   dir: string; // the temp folder, and the working folder of every akm run
   cmd: string[]; // the akm command: the words of AKM_BIN, or `akm`
   env: Record<string, string>; // the environment akm runs in
+  keep?: string[]; // the credential variables the caller gave akm whatever the config says: MODEL_API_KEY for keepModelKey
+  referenced?: string[]; // the credential variables the config in this sandbox names as $NAME, which env holds. writeConfig sets it
 }
 
 export interface AkmResult {
@@ -28,6 +43,7 @@ export interface AkmResult {
   stderr: string;
   code: number;
   ms: number; // how long the command ran
+  timedOut: boolean; // the timeout killed it. Its exit code is 137, and runAkm ends its stderr with "akm timed out after <N>s", so a caller that only prints stderr says why
 }
 
 type RunOptions = { stdin?: string; timeoutMs?: number };
@@ -58,14 +74,23 @@ export const INDEX_CACHE = join(CACHE, "akm-index");
 // within embedding.queryTimeoutMs, 3 seconds unless set: 2 calls of 96 did at eight at once on a busy machine. So the wait is long.
 export const semanticConfig = () => ({ ...plainConfig(), semanticSearchMode: "auto", embedding: { localModel: SEMANTIC_MODEL, queryTimeoutMs: 10 * 60_000 } });
 
+/** Names that contain one of those words and hold none: git reads the author of a commit from them. */
+const NOT_CREDENTIALS = new Set(["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE"]);
+
+/** Does a variable look like it holds a credential, going by its name: it contains KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH, in any case. */
+const looksLikeCredential = (name: string): boolean => /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH/i.test(name) && !NOT_CREDENTIALS.has(name);
+
 /**
- * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no judge
- * key. The model key stays only with `keepModelKey`. A semantic sandbox keeps the embedder's model in MODEL_CACHE.
+ * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no variable that looks
+ * like a credential (see looksLikeCredential), except those in `keep`. The ones the config names are added by writeConfig.
+ * A semantic sandbox keeps the embedder's model in MODEL_CACHE.
  */
-function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Record<string, string> {
+function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
-    if (v !== undefined && !k.startsWith("AKM_") && k !== "JUDGE_API_KEY" && (keepModelKey || k !== "MODEL_API_KEY")) env[k] = v;
+    if (v === undefined || k.startsWith("AKM_")) continue;
+    if (looksLikeCredential(k) && !keep.includes(k)) continue;
+    env[k] = v;
   }
   return {
     ...env,
@@ -81,24 +106,101 @@ function sandboxEnv(dir: string, keepModelKey: boolean, semantic: boolean): Reco
   };
 }
 
-/** The akm command: the words of AKM_BIN, or `akm`. */
-const akmCommand = (): string[] => (process.env.AKM_BIN?.trim() || "akm").split(/\s+/);
+/**
+ * The words of a command line such as AKM_BIN or `--akm`. Words are separated by whitespace. A single-quoted part is taken as it is.
+ * A double-quoted part keeps its whitespace, and a backslash in it before ", \, $ or ` is dropped, so that character stays; any other
+ * backslash stays. Outside quotes a backslash makes the next character part of the word. Quoted and unquoted parts next to each other
+ * are one word. Nothing is evaluated: $VARIABLE, `command` and globs are text. A word that starts with ~/ starts at your home folder,
+ * quoted or not, since bash leaves a ~ alone in a quoted value and in .env; `\~/` keeps the ~. Throws on a quote that is not closed.
+ */
+export function parseCommand(text: string): string[] {
+  const words: string[] = [];
+  let word = "";
+  let started = false; // a quoted "" is a word too
+  let literalTilde = false;
+  const end = (): void => {
+    if (started) words.push(word.startsWith("~/") && !literalTilde ? `${homedir()}/${word.slice(2)}` : word);
+    word = "";
+    started = false;
+    literalTilde = false;
+  };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (/\s/.test(c)) {
+      end();
+    } else if (c === "\\") {
+      if (i + 1 >= text.length) throw new Error(`the command ends with a backslash: ${text}`);
+      if (word === "" && text[i + 1] === "~") literalTilde = true;
+      word += text[++i];
+      started = true;
+    } else if (c === "'") {
+      const close = text.indexOf("'", i + 1);
+      if (close < 0) throw new Error(`the command has a ' that is not closed: ${text}`);
+      word += text.slice(i + 1, close);
+      i = close;
+      started = true;
+    } else if (c === '"') {
+      let j = i + 1;
+      for (; j < text.length && text[j] !== '"'; j++) {
+        if (text[j] === "\\" && j + 1 < text.length && '"\\$`'.includes(text[j + 1])) j++;
+        word += text[j];
+      }
+      if (j >= text.length) throw new Error(`the command has a " that is not closed: ${text}`);
+      i = j;
+      started = true;
+    } else {
+      word += c;
+      started = true;
+    }
+  }
+  end();
+  return words;
+}
+
+/** A word as parseCommand reads it back: as it is when it holds only safe characters, else in single quotes. */
+const quoteWord = (word: string): string => (/^[A-Za-z0-9_@%+=:,./~-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`);
+
+/** The words of a command as one line that parseCommand reads back to the same words. */
+const commandLine = (words: string[]): string => words.map(quoteWord).join(" ");
+
+/** The akm command: the words of AKM_BIN (see parseCommand), or `akm`. */
+function akmCommand(): string[] {
+  const bin = process.env.AKM_BIN?.trim();
+  if (!bin) return ["akm"];
+  try {
+    const words = parseCommand(bin);
+    return words.length > 0 ? words : ["akm"];
+  } catch (e) {
+    throw new Error(`AKM_BIN is not a command: ${(e as Error).message}`);
+  }
+}
 
 /** `--akm`, for parseArgs, and its line of an eval's usage text. */
 export const AKM_OPTIONS = { akm: { type: "string" } } as const;
-export const akmUsage = `  --akm           the command that runs akm, such as "bun ~/code/akm/src/cli.ts". Default: AKM_BIN in .env, else akm on PATH.`;
+export const akmUsage = `  --akm           the command that runs akm, such as "bun ~/code/akm/src/cli.ts". Quote a word with spaces in it. Default: AKM_BIN in .env, else akm on PATH.`;
 
-/** Runs this process's akm as `--akm` says, which wins over AKM_BIN. A leading ~/ in a word is your home folder. `fail` ends the run with a message. */
+/**
+ * Runs this process's akm as `--akm` says, which wins over AKM_BIN. It is read as AKM_BIN is (see parseCommand): a path with spaces
+ * is quoted, and a leading ~/ in a word is your home folder. AKM_BIN is set to the command as it was read, with the home folder
+ * written out and each word quoted if it needs it. `fail` ends the run with a message.
+ */
 export function useAkm(values: { akm?: string }, fail: (message: string) => never, env: Record<string, string | undefined> = process.env): void {
   if (values.akm === undefined) return;
   if (!values.akm.trim()) fail("--akm needs the command that runs akm");
-  env.AKM_BIN = values.akm.trim().replace(/(^|\s)~\//g, `$1${homedir()}/`);
+  let words: string[] = [];
+  try {
+    words = parseCommand(values.akm);
+  } catch (e) {
+    fail(`--akm is not a command: ${(e as Error).message}`);
+  }
+  if (words.length === 0) fail("--akm needs the command that runs akm");
+  env.AKM_BIN = commandLine(words);
 }
 
 /**
- * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, one or more
- * words such as `bun /path/to/akm/src/cli.ts`, or `akm`. akm gets no MODEL_API_KEY unless `keepModelKey` is set, which a
- * config needs when it names the key as $MODEL_API_KEY, as engineConfig does. The config starts plain, keyword search
+ * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, a command
+ * line such as `bun /path/to/akm/src/cli.ts` (see parseCommand), or `akm`. akm gets none of the caller's credentials (see the top of this file), and
+ * MODEL_API_KEY only if the config names it as $MODEL_API_KEY, as engineConfig does, or `keepModelKey` is set. The config starts plain, keyword search
  * only: replace it with writeConfig. With `semantic`, it starts as keyword search fused with the vectors of akm's built-in
  * embedder, whose model is kept in the repository's .cache/ and downloaded once. akm answers such a query with
  * searchMode "semantic", and an eval that scores it has to check that.
@@ -107,8 +209,15 @@ export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?
   for (const folder of FOLDERS) mkdirSync(join(dir, folder), { recursive: true });
   const semantic = opts.semantic ?? false;
   if (semantic) mkdirSync(MODEL_CACHE, { recursive: true });
-  const sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, opts.keepModelKey ?? false, semantic) };
-  if (!existsSync(join(dir, "config", "config.json"))) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
+  const keep = opts.keepModelKey ? ["MODEL_API_KEY"] : [];
+  const sandbox: Sandbox = { dir, cmd: akmCommand(), env: sandboxEnv(dir, keep, semantic), keep };
+  const path = join(dir, "config", "config.json");
+  if (!existsSync(path)) writeConfig(sandbox, semantic ? semanticConfig() : plainConfig());
+  else {
+    try {
+      giveReferencedVariables(sandbox, JSON.parse(readFileSync(path, "utf8")));
+    } catch {} // a config that is not JSON names nothing
+  }
   return sandbox;
 }
 
@@ -121,13 +230,49 @@ export function removeSandbox(sandbox: Sandbox): void {
   rmSync(sandbox.dir, { recursive: true, force: true });
 }
 
-/** Writes akm's config file in the sandbox, in place of the one there. */
-export function writeConfig(sandbox: Sandbox, config: unknown): void {
-  writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
+/** The variables a config names as $NAME or ${NAME} in any string of it, at any depth, each once. */
+function referencedVariables(config: unknown): string[] {
+  const names = new Set<string>();
+  const walk = (x: unknown): void => {
+    if (typeof x === "string") for (const m of x.matchAll(/\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g)) names.add(m[1] ?? m[2]);
+    else if (Array.isArray(x)) x.forEach(walk);
+    else if (typeof x === "object" && x !== null) Object.values(x).forEach(walk);
+  };
+  walk(config);
+  return [...names];
 }
 
-/** Runs akm with these arguments in the sandbox. A command still running after `timeoutMs` is killed with SIGKILL. */
+/**
+ * Gives akm the credential variables that this config names as $NAME, from this process's environment, and takes back those that an
+ * earlier config named and this one does not (unless the caller asked to keep them). A variable that does not look like a credential
+ * is in the environment already, and a name akm sets itself (AKM_) is never the caller's.
+ */
+function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
+  const named = referencedVariables(config).filter((name) => looksLikeCredential(name) && !name.startsWith("AKM_"));
+  for (const name of sandbox.referenced ?? []) if (!named.includes(name) && !(sandbox.keep ?? []).includes(name)) delete sandbox.env[name];
+  for (const name of named) {
+    const value = process.env[name];
+    if (value !== undefined) sandbox.env[name] = value;
+  }
+  sandbox.referenced = named;
+}
+
+/** Writes akm's config file in the sandbox, in place of the one there, and gives akm the credential variables that the config names as $NAME, and no others. */
+export function writeConfig(sandbox: Sandbox, config: unknown): void {
+  writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
+  giveReferencedVariables(sandbox, config);
+}
+
+/** What a timeout is called in a message, such as `timed out after 900s`. */
+const timedOutAfter = (timeoutMs: number): string => `timed out after ${+(timeoutMs / 1000).toFixed(1)}s`;
+
+/**
+ * Runs akm with these arguments in the sandbox. A command still running after `timeoutMs` is killed with SIGKILL, and the result
+ * says `timedOut` and ends its stderr with "akm timed out after <N>s": a killed command prints nothing about it, so a caller that
+ * reports "akm index failed (exit 137): <stderr>" would otherwise report an empty reason.
+ */
 export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions = {}): Promise<AkmResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const t0 = performance.now();
   const proc = Bun.spawn([...sandbox.cmd, ...args], {
     env: sandbox.env,
@@ -135,18 +280,23 @@ export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions 
     stdin: opts.stdin === undefined ? "ignore" : new Blob([opts.stdin]),
     stdout: "pipe",
     stderr: "pipe",
-    timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeout: timeoutMs,
     killSignal: "SIGKILL",
   });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  return { stdout, stderr, code, ms: performance.now() - t0 };
+  const ms = performance.now() - t0;
+  // A killed process exits 137. Bun's `killed` is true for any process that has exited, so the signal decides, and the exit code when Bun gives none.
+  const killed = proc.signalCode !== null ? proc.signalCode === "SIGKILL" : code === 137;
+  const timedOut = killed && ms >= timeoutMs;
+  return { stdout, stderr: timedOut ? [stderr.trimEnd(), `akm ${timedOutAfter(timeoutMs)}`].filter(Boolean).join("\n") : stderr, code, ms, timedOut };
 }
 
 /** Runs akm with `--format json` and parses what it prints. The flag goes before any `--`, so a query after it stays a query. */
 export async function runAkmJson<T = unknown>(sandbox: Sandbox, args: string[], opts: RunOptions = {}): Promise<T> {
   const at = args.indexOf("--");
   const json = ["--format", "json"];
-  const { stdout, stderr, code } = await runAkm(sandbox, at < 0 ? [...args, ...json] : [...args.slice(0, at), ...json, ...args.slice(at)], opts);
+  const { stdout, stderr, code, timedOut } = await runAkm(sandbox, at < 0 ? [...args, ...json] : [...args.slice(0, at), ...json, ...args.slice(at)], opts);
+  if (timedOut) throw new Error(`akm ${args[0]} ${timedOutAfter(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)}`);
   if (code !== 0) throw new Error(`akm ${args[0]} failed (exit ${code}): ${stderr.trim().slice(-300)}`);
   return JSON.parse(stdout) as T;
 }
@@ -194,21 +344,60 @@ export function agentDetailArgs(sandbox: Sandbox): Promise<string[]> {
  * written as `~`, and `akm_build` is `git describe --always --dirty` of the git checkout that command runs from, or null
  * when it does not run from one (an installed release). The words are tried from the last: the script identifies the build, and the
  * runtime before it (`bun`) must never be the one reported, even when it sits inside a repository. Two builds of one version, such as a PR branch and the release it
- * branched from, differ here and not in akm_version. Spread it into the summary: `...akmBuild()`.
+ * branched from, differ here and not in akm_version. `akm_build_fingerprint` tells two edits of one commit apart, which `-dirty` does
+ * not: it is a sha256 over the changes to the tracked files and the content of the files that are not tracked and not ignored (see
+ * dirtyFingerprint), or null for a clean checkout or a release. Spread it into the summary: `...akmBuild()`.
  */
-export function akmBuild(): { akm_bin: string; akm_build: string | null } {
+export interface AkmBuild {
+  akm_bin: string;
+  akm_build: string | null;
+  akm_build_fingerprint: string | null;
+}
+
+/**
+ * A sha256 over what a checkout holds beyond its commit: `git diff HEAD --binary`, which is every change to a tracked file, staged or
+ * not, and each file that is not tracked and not ignored (`git ls-files --others --exclude-standard`) with its path and its content.
+ * The same files give the same fingerprint, whichever way they were edited. Null for a checkout with none of those. `dir` is in the checkout.
+ */
+export function dirtyFingerprint(dir: string): string | null {
+  const git = (cwd: string, ...args: string[]) => Bun.spawnSync(["git", "-C", cwd, ...args], { stdout: "pipe", stderr: "ignore" });
+  const top = git(dir, "rev-parse", "--show-toplevel");
+  if (top.exitCode !== 0) return null;
+  const root = top.stdout.toString().trim();
+  const diff = git(root, "diff", "HEAD", "--binary", "--no-ext-diff");
+  const others = git(root, "ls-files", "-z", "--others", "--exclude-standard");
+  if (diff.exitCode !== 0 || others.exitCode !== 0) return null;
+  const untracked = others.stdout.toString().split("\0").filter(Boolean).sort();
+  if (diff.stdout.length === 0 && untracked.length === 0) return null;
+  const hash = createHash("sha256");
+  hash.update(`diff ${diff.stdout.length}\0`);
+  hash.update(diff.stdout);
+  for (const path of untracked) {
+    const file = join(root, path);
+    let content: Uint8Array | string = "";
+    try {
+      const stat = lstatSync(file);
+      content = stat.isSymbolicLink() ? `-> ${readlinkSync(file)}` : stat.isFile() ? readFileSync(file) : ""; // a folder here is a repository of its own
+    } catch {} // a file that went between the listing and the read has no content
+    hash.update(`\0untracked ${path}\0${createHash("sha256").update(content).digest("hex")}`);
+  }
+  return hash.digest("hex");
+}
+
+/** The akm this process runs, as AkmBuild says: the fields to spread into a summary. */
+export function akmBuild(): AkmBuild {
   const cmd = akmCommand();
   const home = homedir();
-  const akm_bin = cmd.map((w) => (w === home || w.startsWith(`${home}/`) ? `~${w.slice(home.length)}` : w)).join(" ");
+  const akm_bin = commandLine(cmd.map((w) => (w === home || w.startsWith(`${home}/`) ? `~${w.slice(home.length)}` : w)));
   for (const word of [...cmd].reverse()) {
     const path = word.includes("/") ? word : Bun.which(word);
     if (!path || !existsSync(path)) continue;
     const real = realpathSync(path);
     const dir = statSync(real).isDirectory() ? real : dirname(real);
     const git = Bun.spawnSync(["git", "-C", dir, "describe", "--always", "--dirty"], { stdout: "pipe", stderr: "ignore" });
-    if (git.exitCode === 0) return { akm_bin, akm_build: git.stdout.toString().trim() };
+    if (git.exitCode === 0) return { akm_bin, akm_build: git.stdout.toString().trim(), akm_build_fingerprint: dirtyFingerprint(dir) };
   }
-  return { akm_bin, akm_build: null };
+  return { akm_bin, akm_build: null, akm_build_fingerprint: null };
 }
 
 /**

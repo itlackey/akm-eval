@@ -362,7 +362,7 @@ az boards work-item show \
 4. **✅ Test authentication** - Verify both CLI and API access work
 5. **✅ Use query output** - Extract IDs with `--query id -o tsv` for scripting
 6. **✅ Check env/tracker first** - Before making API calls, ensure credentials exist
-7. **❌ Don't put PAT tokens in shared bundles** - `env/tracker` belongs in your own stash, never in akm-shared
+7. **❌ Don't put PAT tokens in shared bundles** - `env/tracker` belongs in your own stash, never in a shared bundle
 8. **❌ Don't use REST API for standard operations** - CLI is faster and more reliable
 
 ## Reference Links

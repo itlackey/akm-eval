@@ -1,0 +1,184 @@
+{
+  "eval": "reflect",
+  "corpus": "public",
+  "label": "before",
+  "date": "2026-10-11T09:00:00.000Z",
+  "git_commit": "5d1c0de",
+  "model": "test-model",
+  "akm_version": "0.9.99-test",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "assets_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seed": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "night"
+    },
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>",
+        "model": "test-model",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 120000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "test-model",
+    "endpoint": "https://gateway.example.com/v1",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 120000,
+    "engines": {
+      "model": {
+        "model": "test-model",
+        "endpoint": "https://gateway.example.com/v1",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 120000
+      }
+    }
+  },
+  "limit": null,
+  "strategy": "reflect-only",
+  "config_patch": null,
+  "n_cases": 10,
+  "n_run": 10,
+  "n_scored": 10,
+  "n_errored": 0,
+  "metrics": {
+    "defects": {
+      "n": 6,
+      "correct": 3,
+      "rate": 0.5
+    },
+    "controls": {
+      "n": 4,
+      "correct": 3,
+      "rate": 0.75
+    },
+    "classes": {
+      "description-period": {
+        "n": 2,
+        "correct": 1,
+        "rate": 0.5,
+        "outcomes": {
+          "proposal": 2,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "description-quote": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 1,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "when-to-use-missing": {
+        "n": 2,
+        "correct": 0,
+        "rate": 0,
+        "outcomes": {
+          "proposal": 1,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "title-missing": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 1,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "retrieval-miss": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "unsupported-ask": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "historical": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "body-defect": {
+        "n": 1,
+        "correct": 0,
+        "rate": 0,
+        "outcomes": {
+          "proposal": 1,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {
+          "body_kept": 1
+        }
+      }
+    },
+    "proposals": {
+      "n": 6,
+      "touched_body": 1
+    }
+  }
+}

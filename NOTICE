@@ -16,7 +16,7 @@ Source: https://opencode.ai/docs, kept in https://github.com/sst/opencode under
 packages/web/src/content/docs. The repository licence is MIT. Its text is at the
 end of this file.
 
-These 23 files are copies of OpenCode documentation pages, saved as Markdown
+These 22 files are copies of OpenCode documentation pages, saved as Markdown
 with front matter added.
 
   In corpus/library/skills/ai-skills/opencode-extensions/references/ (22 files):
@@ -26,14 +26,17 @@ with front matter added.
     rules.md, sdk-docs.md, server.md, share.md, skills.md, tools.md,
     troubleshooting.md, tui.md
 
-  In corpus/library/commands/skills/ai-skills/opencode-extensions/references/ (1 file):
-    commands.md
-
 The other reference files for the same skill are short summaries of these pages.
 They are derived from them and fall under the same notice. They are agents.md,
-config.md, plugins.md and sdk.md in corpus/library/skills/ai-skills/opencode-extensions/
-references/, and the files in corpus/library/knowledge/skills/ai-skills/
-opencode-extensions/references/.
+config.md, plugins.md and sdk.md in the same folder.
+
+Three of the pages are copied again into the fixed libraries of two evals, which
+are built from corpus/library and committed so that a run does not depend on the
+library as it changes: network.md, permissions.md and plugins-docs.md in
+evals/promotion/assets/library/knowledge/skills/ai-skills/opencode-extensions/
+references/ (and their text inside evals/promotion/assets/cases.jsonl), and
+network.md in evals/nightly/assets/library/knowledge/skills/ai-skills/
+opencode-extensions/references/. The same notice covers them.
 
 ----------------------------------------------------------------------------
 2. CGATS21_CRPC1.icc (ICC colour profile)

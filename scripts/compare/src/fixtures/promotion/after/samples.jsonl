@@ -1,0 +1,10 @@
+{"id":"g1","label":"good","category":"good","ref":"knowledge/g1","outcome":"accept","reason":""}
+{"id":"g2","label":"good","category":"good","ref":"knowledge/g2","outcome":"accept","reason":""}
+{"id":"g3","label":"good","category":"good","ref":"knowledge/g3","outcome":"accept","reason":""}
+{"id":"g4","label":"good","category":"good","ref":"knowledge/g4","outcome":"accept","reason":""}
+{"id":"b1","label":"bad","category":"duplicate","ref":"knowledge/b1","outcome":"reject","reason":"duplicate"}
+{"id":"b2","label":"bad","category":"duplicate","ref":"knowledge/b2","outcome":"reject","reason":"duplicate"}
+{"id":"b3","label":"bad","category":"stale","ref":"knowledge/b3","outcome":"reject","reason":"duplicate"}
+{"id":"b4","label":"bad","category":"stale","ref":"knowledge/b4","outcome":"accept","reason":""}
+{"id":"b5","label":"bad","category":"ephemeral","ref":"knowledge/b5","outcome":"accept","reason":""}
+{"id":"b6","label":"bad","category":"ephemeral","ref":"knowledge/b6","outcome":"error","reason":""}

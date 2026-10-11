@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
 import type { Answer } from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
-import { type Judge, grade, labelCollection, makeJudge, pending, poolQueries } from "./label.ts";
-import { type Asset, type Query, parseQrels } from "./lib.ts";
+import { type Judge, grade, labelCollection, makeJudge, pending, poolFromSamples, poolQueries, readRun, staleKeys } from "./label.ts";
+import { type Asset, PROMPT_SHA256, type Qrel, type Query, assetSha256, gradesByQuery, parseQrels } from "./lib.ts";
 import type { Folders } from "./run.ts";
 
 const dirs: string[] = [];
@@ -92,7 +92,7 @@ describe("grade", () => {
       seen.push(messages[1].content);
       return `{"grade": ${seen.length % 4}, "reason": "reason ${seen.length}"}`;
     };
-    const out = await grade(todo, asset, judge, qrels, { concurrency: 1 });
+    const out = await grade(todo, asset, judge, qrels, { model: "the-judge", concurrency: 1 });
     expect(out).toEqual({ total: 4, graded: 4, failed: 0, retried: 0, stopped: false, gaveUp: false });
     expect(seen[0]).toContain("Query: print the pdf\n");
     expect(seen[0]).toContain("Ref: a\n");
@@ -104,13 +104,13 @@ describe("grade", () => {
     const qrels = join(tmp(), "qrels.jsonl");
     let calls = 0;
     const judge: Judge = async () => `{"grade": 2, "reason": "r"}`;
-    const first = await grade(todo, asset, judge, qrels, { concurrency: 1, stop: () => calls++ >= 2 });
+    const first = await grade(todo, asset, judge, qrels, { model: "the-judge", concurrency: 1, stop: () => calls++ >= 2 });
     expect(first).toMatchObject({ graded: 2, stopped: true });
     const done = new Set(parseQrels(readFileSync(qrels, "utf8")).map((r) => `${r.id}\t${r.ref}`));
     expect([...done]).toEqual(["q1\ta", "q1\tb"]);
     const left = pending(queries.slice(0, 1), new Map([["q1", ["a", "b", "c", "d"]]]), done);
     expect(left.map((t) => t.ref)).toEqual(["c", "d"]);
-    const second = await grade(left, asset, judge, qrels, { concurrency: 1 });
+    const second = await grade(left, asset, judge, qrels, { model: "the-judge", concurrency: 1 });
     expect(second).toMatchObject({ graded: 2, stopped: false });
     expect(readFileSync(qrels, "utf8").trim().split("\n")).toHaveLength(4);
   });
@@ -119,7 +119,7 @@ describe("grade", () => {
     const qrels = join(tmp(), "qrels.jsonl");
     const replies = ["I need more room to think", '{"grade": 2, "reason": "second try"}', '{"grade": 3, "reason": "r"}'];
     const judge: Judge = async () => replies.shift() as string;
-    const out = await grade(todo.slice(0, 2), asset, judge, qrels, { concurrency: 1 });
+    const out = await grade(todo.slice(0, 2), asset, judge, qrels, { model: "the-judge", concurrency: 1 });
     expect(out).toMatchObject({ graded: 2, failed: 0, retried: 1 });
     expect(parseQrels(readFileSync(qrels, "utf8")).map((r) => [r.ref, r.grade, r.reason])).toEqual([["a", 2, "second try"], ["b", 3, "r"]]);
   });
@@ -134,10 +134,34 @@ describe("grade", () => {
       return r;
     };
     const lines: string[] = [];
-    const out = await grade(todo, asset, judge, qrels, { concurrency: 1, log: (l) => lines.push(l) });
+    const out = await grade(todo, asset, judge, qrels, { model: "the-judge", concurrency: 1, log: (l) => lines.push(l) });
     expect(out).toMatchObject({ graded: 2, failed: 2, retried: 1, gaveUp: false, lastError: "HTTP 500" });
     expect(parseQrels(readFileSync(qrels, "utf8")).map((r) => r.ref)).toEqual(["a", "d"]);
     expect(lines.filter((l) => l.includes("FAILED"))).toHaveLength(2);
+  });
+
+  test("writes who graded, with which prompt, on what day, and a digest of the asset as the judge read it", async () => {
+    const qrels = join(tmp(), "qrels.jsonl");
+    const judge: Judge = async () => '{"grade": 2, "reason": "r"}';
+    await grade(todo.slice(0, 1), asset, judge, qrels, { model: "the-judge", date: "2026-10-11", concurrency: 1 });
+    const row = JSON.parse(readFileSync(qrels, "utf8"));
+    expect(row).toEqual({ id: "q1", ref: "a", grade: 2, reason: "r", judge: "the-judge", prompt_sha256: PROMPT_SHA256, date: "2026-10-11", asset_sha256: assetSha256("a", "text of a") });
+    await grade(todo.slice(1, 2), asset, judge, qrels, { model: "the-judge", concurrency: 1 });
+    expect(JSON.parse(readFileSync(qrels, "utf8").trim().split("\n")[1]).date).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  test("counts a pair whose asset cannot be found as failed and goes on, without giving up over it", async () => {
+    const qrels = join(tmp(), "qrels.jsonl");
+    const lookup = (ref: string) => {
+      if (ref.startsWith("x")) throw new Error(`akm returned ${ref}, which is not in its own asset listing`);
+      return asset(ref);
+    };
+    const pairs = [...Array.from({ length: 12 }, (_, i) => `x${i}`), "a", "b"].map((ref) => ({ id: "q1", query: "print the pdf", ref }));
+    const lines: string[] = [];
+    const out = await grade(pairs, lookup, async () => '{"grade": 1, "reason": "r"}', qrels, { model: "the-judge", concurrency: 1, log: (l) => lines.push(l) });
+    expect(out).toMatchObject({ total: 14, graded: 2, failed: 12, gaveUp: false, lastError: "akm returned x11, which is not in its own asset listing" });
+    expect(parseQrels(readFileSync(qrels, "utf8")).map((r) => r.ref)).toEqual(["a", "b"]);
+    expect(lines.filter((l) => l.includes("FAILED  x"))).toHaveLength(12);
   });
 
   test("gives up when the endpoint answers nothing, rather than failing every pair", async () => {
@@ -148,7 +172,7 @@ describe("grade", () => {
       calls++;
       throw new Error("connection refused");
     };
-    const out = await grade(many, asset, judge, qrels, { concurrency: 2 });
+    const out = await grade(many, asset, judge, qrels, { model: "the-judge", concurrency: 2 });
     expect(out).toMatchObject({ graded: 0, gaveUp: true, lastError: "connection refused" });
     expect(calls).toBeLessThan(15);
   });
@@ -371,14 +395,16 @@ describe("labelCollection", () => {
     expect(out[0]).toContain("retrieval label (own): akm 0.9.99-test, 4 assets, 3 task queries, judge the-model");
     expect(out[1]).toBe("  4 pooled pairs, 2 already graded, 2 to grade, 2 at a time"); // q1: a, b. q2: c, a. a has a grade for both
 
-    // the new grades follow the old lines, in the format the file has: id, ref, grade, reason
+    // the new grades follow the old lines, in the format the file has (id, ref, grade, reason) and with who graded: the judge, the prompt, the day and the asset
     const after = set.qrels();
     expect(after.startsWith(before)).toBe(true);
     const added = after.slice(before.length).trim().split("\n").map((l) => JSON.parse(l));
-    expect(added.map((r) => Object.keys(r))).toEqual([["id", "ref", "grade", "reason"], ["id", "ref", "grade", "reason"]]);
+    const keys = ["id", "ref", "grade", "reason", "judge", "prompt_sha256", "date", "asset_sha256"];
+    expect(added.map((r) => Object.keys(r))).toEqual([keys, keys]);
+    const made = (ref: string, text: string) => ({ judge: "the-model", prompt_sha256: PROMPT_SHA256, date: new Date().toISOString().slice(0, 10), asset_sha256: assetSha256(ref, text) });
     expect(added.sort((x, y) => (x.id < y.id ? -1 : 1))).toEqual([
-      { id: "q1", ref: "two//knowledge/b", grade: 2, reason: "reason for two//knowledge/b" },
-      { id: "q2", ref: "two//knowledge/c", grade: 0, reason: "reason for two//knowledge/c" },
+      { id: "q1", ref: "two//knowledge/b", grade: 2, reason: "reason for two//knowledge/b", ...made("two//knowledge/b", OWN_FILES["two/b.md"]) },
+      { id: "q2", ref: "two//knowledge/c", grade: 0, reason: "reason for two//knowledge/c", ...made("two//knowledge/c", OWN_FILES["two/c.md"]) },
     ]);
 
     // the judge was told what akm said of the asset, and read its file without the front matter
@@ -460,6 +486,225 @@ describe("labelCollection", () => {
   });
 });
 
+describe("poolFromSamples and readRun", () => {
+  const row = (id: string, columns: Record<string, string[]>) => JSON.stringify({ id, kind: "direct", query: "x", n_relevant: 1, ...Object.fromEntries(Object.entries(columns).map(([k, refs]) => [k, { refs, grades: refs.map(() => null), seconds: 0.1 }])) });
+  const many = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+
+  test("pools the first ten results of every column, the semantic ones too, and the expected assets, each once", () => {
+    const samples = [row("q1", { search: ["a", "b"], curate: ["b", "c"], semantic_search: ["d", "a"], semantic_curate: many("s", 12) }), row("q2", { search: ["e"] })].join("\n");
+    const pooled = poolFromSamples([{ ...queries[0], expected: ["z"] }, queries[1]], `${samples}\n`);
+    expect(pooled.get("q1")).toEqual(["a", "b", "c", "d", ...many("s", 6), "z"].slice(0, 4).concat(many("s", 10), ["z"]));
+    expect(pooled.get("q2")).toEqual(["e"]);
+  });
+
+  test("has no entry for a query the run did not have, and skips a column the run did not have or that failed", () => {
+    const samples = [row("q1", { search: ["a"], curate: [] }), JSON.stringify({ id: "q2", search: { refs: [], error: "boom" } }), row("n1", { search: ["x"] })].join("\n");
+    const pooled = poolFromSamples([...queries, { id: "q3", query: "x", kind: "direct" }], samples);
+    expect([...pooled.keys()]).toEqual(["q1", "q2"]);
+    expect(pooled.get("q1")).toEqual(["a"]);
+    expect(pooled.get("q2")).toEqual([]);
+  });
+
+  test("says which line of samples.jsonl is not usable", () => {
+    expect(() => poolFromSamples(queries, "{oops", 10, "run/samples.jsonl")).toThrow("run/samples.jsonl:1 is not valid JSON");
+    expect(() => poolFromSamples(queries, `${row("q1", { search: ["a"] })}\n{"query": "no id"}`, 10, "run/samples.jsonl")).toThrow('run/samples.jsonl:2 has no string "id"');
+  });
+
+  const runFolder = (summary: object | null, samples = "") => {
+    const dir = tmp();
+    if (summary) writeFileSync(join(dir, "summary.json"), JSON.stringify(summary));
+    writeFileSync(join(dir, "samples.jsonl"), samples);
+    return dir;
+  };
+
+  test("takes the samples of a run of the same corpus and collection", () => {
+    expect(readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }, "the samples"), "public")).toBe("the samples");
+    expect(readRun(runFolder({ eval: "retrieval", corpus: "own", collection: "own" }, "mine"), "own")).toBe("mine");
+  });
+
+  test("refuses the folder of another collection, another corpus, another eval, or no run at all", () => {
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "books" }), "public")).toThrow("is a run of the books collection of the public corpus, and --corpus public grades the library collection of the public corpus");
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "private", collection: "library" }), "public")).toThrow("the library collection of the private corpus");
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }), "own")).toThrow("--corpus own grades the own collection of the own corpus");
+    expect(() => readRun(runFolder({ eval: "nightly", corpus: "public" }), "public")).toThrow("is a run of another eval");
+    expect(() => readRun(runFolder(null), "public")).toThrow("is not a results folder of evals/retrieval/run");
+    expect(() => readRun(join(tmp(), "nothing"), "public")).toThrow("is not a results folder");
+  });
+});
+
+describe("staleKeys", () => {
+  const row = (id: string, ref: string, sha?: string): Qrel => ({ id, ref, grade: 2, reason: "r", ...(sha ? { asset_sha256: sha } : {}) });
+  const now = (ref: string) => ({ a: "new", b: "same" })[ref];
+
+  test("is a pair whose last row has a digest that is not the asset's now", () => {
+    expect([...staleKeys([row("q1", "a", "old"), row("q1", "b", "same"), row("q2", "a", "new")], now)]).toEqual(["q1\ta"]);
+  });
+
+  test("never marks a row with no digest, or an asset that cannot be read, and goes by the last row of a pair", () => {
+    expect([...staleKeys([row("q1", "a"), row("q1", "gone", "old")], now)]).toEqual([]);
+    expect([...staleKeys([row("q1", "a", "old"), row("q1", "a", "new")], now)]).toEqual([]); // it was graded again after the change
+    expect([...staleKeys([row("q1", "a", "new"), row("q1", "a")], now)]).toEqual([]); // the last row is the one that counts
+  });
+});
+
+describe("labelCollection --from", () => {
+  const FILES = { "a.md": "print the pdf with bleed\n", "b.md": "write tests\n", "c.md": "something else\n", "d.md": "unused\n" };
+  const QUERIES = [
+    { id: "q1", query: "print the pdf", kind: "direct" },
+    { id: "q2", query: "write tests", kind: "paraphrase" },
+    { id: "n1", query: "thanks", kind: "chitchat" },
+  ];
+  const ANSWERS: Answers = { "print the pdf": { search: ["a"], curate: ["a"] }, "write tests": { search: ["b"], curate: ["b"] } };
+  const row = (id: string, columns: Record<string, string[]>) => JSON.stringify({ id, kind: "direct", query: "x", n_relevant: 1, ...Object.fromEntries(Object.entries(columns).map(([k, refs]) => [k, { refs, grades: refs.map(() => null), seconds: 0.1 }])) });
+  const from = (rows: string[], summary: object = { eval: "retrieval", corpus: "public", collection: "library" }) => {
+    const dir = tmp();
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(summary));
+    writeFileSync(join(dir, "samples.jsonl"), `${rows.join("\n")}\n`);
+    return dir;
+  };
+
+  test("grades the unjudged results of every column of the run, the semantic ones too, and nothing akm search returns now", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/a", grade: 3, reason: "earlier" }], ANSWERS);
+    const dir = from([row("q1", { search: ["knowledge/a"], curate: ["knowledge/a"], semantic_search: ["knowledge/c", "knowledge/a"], semantic_curate: ["knowledge/d"] }), row("q2", { search: ["knowledge/b"] })]);
+    const { judge, seen } = stubJudge({ "knowledge/c": 2, "knowledge/d": 1, "knowledge/b": 3 });
+    const { result, out } = await printed(() => labelCollection("public", { ...set.ctx(judge), from: dir }, set.folders));
+    expect(result).toBe(0);
+    expect(out.join("\n")).toContain(`pool from ${dir}: 2 of 2 task queries are in the run`);
+    expect(out.join("\n")).toContain("4 pooled pairs, 1 already graded, 3 to grade, 2 at a time"); // q1: a, c, d. q2: b. Not BM25, not what akm returns
+    expect(seen.map((m) => /Ref: (.*)\n/.exec(m)?.[1]).sort()).toEqual(["knowledge/b", "knowledge/c", "knowledge/d"]);
+    expect(set.calls().filter(([cmd]) => cmd === "search" || cmd === "curate").every((c) => c[1] === "--help" || c[1] === "")).toBe(true); // no query was asked
+    const grades = gradesByQuery(parseQrels(set.qrels()));
+    expect(grades.get("q1")).toEqual({ "knowledge/a": 3, "knowledge/c": 2, "knowledge/d": 1 });
+    expect(grades.get("q2")).toEqual({ "knowledge/b": 3 });
+  });
+
+  test("leaves out a result that is not an asset of the library, and says how many", async () => {
+    const set = setup(FILES, QUERIES.slice(0, 1), [], ANSWERS);
+    const dir = from([row("q1", { semantic_search: ["knowledge/c", "knowledge/ghost", "knowledge/other-ghost"] })]);
+    const { judge, seen } = stubJudge({});
+    const { result, out } = await printed(() => labelCollection("public", { ...set.ctx(judge), from: dir }, set.folders));
+    expect(result).toBe(0);
+    expect(out.join("\n")).toContain("and 2 of its results are not assets of this library and are left out");
+    expect(seen).toHaveLength(1);
+  });
+
+  test("says which task queries the run did not have, as for a run with --limit", async () => {
+    const set = setup(FILES, QUERIES, [], ANSWERS);
+    const dir = from([row("q1", { search: ["knowledge/a"] })]);
+    const { out } = await printed(() => labelCollection("public", { ...set.ctx(stubJudge({}).judge), from: dir }, set.folders));
+    expect(out.join("\n")).toContain("1 of 2 task queries are in the run");
+  });
+
+  test("stops before it asks akm or the judge for anything when the folder is not a run of this set", async () => {
+    const set = setup(FILES, QUERIES, [], ANSWERS);
+    const { judge, seen } = stubJudge({});
+    const wrong = from([row("q1", { search: ["knowledge/a"] })], { eval: "retrieval", corpus: "private", collection: "library" });
+    const { result, err } = await printed(() => labelCollection("public", { ...set.ctx(judge), from: wrong }, set.folders));
+    expect(result).toBe(2);
+    expect(err.join("\n")).toContain("retrieval label: ");
+    expect(err.join("\n")).toContain("the library collection of the private corpus");
+    expect(seen).toEqual([]);
+    expect(readFileSync(join(set.root, "calls.jsonl"), "utf8")).toBe(""); // akm was never run
+  });
+
+  test("own: asks akm what it says of the assets the run returned, and grades the ones it can look up", async () => {
+    const files = { "one/a.md": "alpha alpha\n", "two/b.md": "body of b\n" };
+    const set = setup(files, [{ id: "q1", query: "alpha", kind: "task" }], [], { alpha: { search: ["a", "b"], curate: ["a"] } }, { one: "akm", two: "claude" });
+    const dir = from([row("q1", { search: ["one//knowledge/a"], semantic_search: ["two//knowledge/b", "one//knowledge/missing"] })], { eval: "retrieval", corpus: "own", collection: "own" });
+    const { judge, seen } = stubJudge({ "two//knowledge/b": 2 });
+    const { result, out } = await printed(() => labelCollection("own", { ...set.ctx(judge), from: dir }, set.folders));
+    expect(result).toBe(0);
+    expect(out.join("\n")).toContain("and 1 of its results are not assets of this set as akm returns it now and are left out");
+    expect(seen.map((m) => /Ref: (.*)\n/.exec(m)?.[1]).sort()).toEqual(["one//knowledge/a", "two//knowledge/b"]);
+  });
+});
+
+describe("grading a pair again, and the judges of a set", () => {
+  const FILES = { "a.md": "print the pdf version one\n", "b.md": "nothing\n" };
+  const QUERIES = [{ id: "q1", query: "print the pdf", kind: "direct" }];
+  const ANSWERS: Answers = { "print the pdf": { search: ["a"], curate: ["a"] } };
+  const lastGrade = (set: ReturnType<typeof setup>) => gradesByQuery(parseQrels(set.qrels())).get("q1");
+
+  test("grades a pair again when its asset changed since, and the new grade replaces the old", async () => {
+    const set = setup(FILES, QUERIES, [], ANSWERS);
+    const first = await printed(() => labelCollection("public", set.ctx(stubJudge({ "knowledge/a": 3 }).judge), set.folders));
+    expect(first.out.join("\n")).toContain("1 pooled pairs, 0 already graded, 1 to grade, 2 at a time");
+    expect(lastGrade(set)).toEqual({ "knowledge/a": 3 });
+
+    const same = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(same.out.join("\n")).toContain("1 pooled pairs, 1 already graded, 0 to grade, 2 at a time");
+
+    writeFileSync(join(set.root, "library", "a.md"), "print the pdf version two\n");
+    const { judge, seen } = stubJudge({ "knowledge/a": 1 });
+    const again = await printed(() => labelCollection("public", set.ctx(judge), set.folders));
+    expect(again.out.join("\n")).toContain("1 pooled pairs, 0 already graded, 1 to grade, 2 at a time (1 of them were graded from an asset that has changed since)");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain("print the pdf version two");
+    expect(parseQrels(set.qrels())).toHaveLength(2); // the old row stays, and the new one comes after it
+    expect(lastGrade(set)).toEqual({ "knowledge/a": 1 });
+
+    const settled = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(settled.out.join("\n")).toContain("0 to grade");
+  });
+
+  test("grades again a changed asset that the pool no longer returns, for a library that is listed", async () => {
+    const set = setup(FILES, QUERIES, [], ANSWERS);
+    await printed(() => labelCollection("public", set.ctx(stubJudge({ "knowledge/a": 3 }).judge), set.folders));
+    // the same qrels over a library whose a.md changed, with an akm that no longer returns it and a text that BM25 does not match to the query
+    const other = setup(FILES, QUERIES, [], { "print the pdf": { search: [], curate: [] } });
+    writeFileSync(join(other.folders.assets, "qrels.jsonl"), set.qrels());
+    writeFileSync(join(other.folders.library, "a.md"), "something else entirely\n");
+    const { judge, seen } = stubJudge({});
+    const { out } = await printed(() => labelCollection("public", other.ctx(judge), other.folders));
+    expect(out.join("\n")).toContain("1 pooled pairs, 0 already graded, 1 to grade, 2 at a time (1 of them were graded from an asset that has changed since)");
+    expect(seen).toHaveLength(1);
+  });
+
+  test("never grades again a pair from before label wrote digests, even when the asset differs", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/a", grade: 3, reason: "from the first run" }], ANSWERS);
+    const { judge, seen } = stubJudge({});
+    const { out } = await printed(() => labelCollection("public", set.ctx(judge), set.folders));
+    expect(out.join("\n")).toContain("1 pooled pairs, 1 already graded, 0 to grade");
+    expect(seen).toEqual([]);
+  });
+
+  test("a limit leaves the pairs of the other queries as they are", async () => {
+    const two = [...QUERIES, { id: "q2", query: "write tests", kind: "direct" }];
+    const set = setup(FILES, two, [], { ...ANSWERS, "write tests": { search: ["b"], curate: ["b"] } });
+    await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    writeFileSync(join(set.root, "library", "b.md"), "changed\n");
+    const { out } = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge, 1), set.folders));
+    expect(out.join("\n")).toContain("0 to grade"); // q2's b changed, but only q1 is labelled
+  });
+
+  test("warns when the qrels have grades of another judge, and still grades", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r", judge: "the-old-judge" }], ANSWERS);
+    const { judge } = stubJudge({});
+    const { result, err } = await printed(() => labelCollection("public", set.ctx(judge), set.folders));
+    expect(result).toBe(0);
+    expect(err.join("\n")).toContain("assets/qrels.jsonl has grades by the-old-judge, and this run grades with the-model. Grades of different judges do not mix cleanly");
+    const same = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r", judge: "the-model" }], ANSWERS);
+    expect((await printed(() => labelCollection("public", same.ctx(judge), same.folders))).err).toEqual([]);
+  });
+
+  test("warns when the qrels have grades that record no judge, as the library's from before label wrote one do", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r" }], ANSWERS);
+    const { err } = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(err.join("\n")).toContain("assets/qrels.jsonl has 1 grades that record no judge, and this run grades with the-model. Grades of different judges do not mix cleanly");
+    const both = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/b", grade: 0, reason: "r" }, { id: "q1", ref: "knowledge/c", grade: 0, reason: "r", judge: "the-old-judge" }], ANSWERS);
+    expect((await printed(() => labelCollection("public", both.ctx(stubJudge({}).judge), both.folders))).err.join("\n")).toContain("has grades by the-old-judge and 1 grades that record no judge, and this run grades with the-model");
+  });
+
+  test("does not warn of a judge whose grade this run has replaced by grading the pair again", async () => {
+    const set = setup(FILES, QUERIES, [{ id: "q1", ref: "knowledge/a", grade: 2, reason: "r", judge: "the-old-judge", asset_sha256: "not-the-digest" }], ANSWERS);
+    const first = await printed(() => labelCollection("public", set.ctx(stubJudge({ "knowledge/a": 3 }).judge), set.folders));
+    expect(first.err.join("\n")).toContain("has grades by the-old-judge");
+    expect(lastGrade(set)).toEqual({ "knowledge/a": 3 });
+    const second = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(second.err).toEqual([]);
+  });
+});
+
 describe("the command", () => {
   // Bun loads the .env of its working folder. So the command runs in a folder of its own, with the judge settings it is given.
   const run = (args: string[], env: Record<string, string> = {}) => {
@@ -481,8 +726,24 @@ describe("the command", () => {
     expect(run(["--corpus", "private"], judge)).toMatchObject({ code: 2 });
     expect(run(["--corpus", "private"], judge).err).toContain('--corpus must be public or own, not "private"');
     expect(run(["--limit", "0"], judge).err).toContain("--limit must be a positive integer");
+    expect(run(["--from", " "], judge).err).toContain("--from needs the results folder of a run");
     expect(run(["--corpus", "own"]).err).toContain("name the judge: pass --judge-model ID, or set JUDGE_MODEL in .env");
     expect(run(["--nope"]).err).toContain("Usage: evals/retrieval/label [--corpus public|own] [--limit N]");
     expect(run(["--help"]).out).toContain("--corpus  public (default)");
+  });
+
+  test("describes the own guard as models.json says it, and --from", () => {
+    const help = run(["--help"]).out;
+    expect(help).toContain('qrels.jsonl. It sends your notes to the judge, so it runs only when the judge model\'s line in models.json\n            says "private": true. Nothing is inferred from the URL or the name.');
+    expect(help).not.toContain("private network");
+    expect(help).not.toContain("chat/, fast/");
+    expect(help).toContain("--from    pool the first 10 results of every column of a run, semantic search included");
+    expect(help).toContain("[--from RESULTS_DIR]");
+  });
+
+  test("stops with 2 when --from names a folder that is not a run", () => {
+    const done = run(["--from", join(tmp(), "nothing")], { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m" });
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("is not a results folder of evals/retrieval/run");
   });
 });

@@ -254,7 +254,7 @@ While this Node port addresses many previous gaps, certain limitations remain:
 
 For deeper dives, consult these resources:
 
-*   `references/quickstart.md` — Concrete walk-through with a fresh project.
+*   `references/QUICKSTART.md` — Concrete walk-through with a fresh project.
 *   `references/configuration-examples.md` — Full config schemas (OpenAI / LMStudio / Ollama / custom labs).
 *   `references/implementation-guide.md` — Detailed routing rules and priority decisions.
 *   `references/troubleshooting.md` — Common failures and fixes.

@@ -194,5 +194,3 @@ If you are upgrading to 0.9.14 or later, the search index schema changes to v23.
 - `akm lint` and `akm health --format json` have no unexplained failures or plugin compatibility warnings.
 - Packed-curate CLI consumers expect a bare JSON array of `{ ref, tokens, content }` items (or concatenated `## <ref>` sections in text mode); ordinary curate/search and task-history consumers retain their existing contracts.
 - If on 0.9.14+, `akm index status` reports version 23 and search queries return valid results.
-
-See `references/breaking-changes.md` for a compact release delta plus the historical 0.9.2 and 0.9.0 translation tables.

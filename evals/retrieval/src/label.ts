@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 // retrieval label: makes assets/qrels.jsonl. For each task query it pools the top 10 of `akm search`, `akm curate`
 // and a plain BM25 over the library, with the assets the author expected, and a judge model grades each pooled
-// asset 0 to 3. A pair that is already in qrels.jsonl is never graded again, so the run can stop and resume.
+// asset 0 to 3. A pair that is already in qrels.jsonl is not graded again unless its asset changed since, so the run can
+// stop and resume. With --from it pools the results of a run instead, the semantic columns too.
 // With --corpus own it does the same for the own set in private/retrieval/own/, from akm's results alone, and only
-// with a judge on this machine or the local network, since the notes go to the judge. See ../README.md.
+// with a judge that models.json marks "private": true, since the notes go to the judge. See ../README.md.
 //
-//   evals/retrieval/label [--corpus public|own] [--limit N] [--judge-model ID] [--akm COMMAND]
+//   evals/retrieval/label [--corpus public|own] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -14,8 +15,8 @@ import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, createSandbox, removeS
 import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, privateModelError, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
-import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_VERSION, type Query, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool } from "./lib.ts";
-import { type Folders, collectionsFor } from "./run.ts";
+import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_SHA256, PROMPT_VERSION, type Qrel, type Query, assetSha256, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool, qrelProvenance } from "./lib.ts";
+import { type Folders, SYSTEMS, collectionsFor } from "./run.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -23,19 +24,25 @@ const CONCURRENCY = 2;
 const GIVE_UP_AFTER = 10; // grades that fail one after another, and the endpoint is not answering
 type Corpus = "public" | "own";
 
-const USAGE = `Usage: evals/retrieval/label [--corpus public|own] [--limit N] [--judge-model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/retrieval/label [--corpus public|own] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
 
 Grades what akm search, akm curate and a plain BM25 return for each task query in assets/queries.jsonl, and the
 assets the author expected, and appends the grades to assets/qrels.jsonl. A pair that already has a grade is
-skipped, so run it again to resume.
+skipped, so run it again to resume, unless the asset changed since it was graded: then it is graded again, and the
+new grade replaces the old. Each grade is written with the judge, a digest of the prompt, the date and a digest of
+the asset as the judge read it. A pair graded before label wrote them has none, and is never graded again.
 The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root), or the one --judge-model names.
+Use one judge for a set: label warns when the qrels were graded by another, or have grades that record no judge.
 
   --corpus  public (default) grades the public library. own grades your own set in private/retrieval/own/, from what
             akm search and akm curate return for it (no BM25: the library is too big to list), and appends to its
-            qrels.jsonl. It sends your notes to the judge, so it runs only when JUDGE_BASE_URL's host is, or resolves
-            only to, an address on this machine or the private network, and a gateway model is one of ours (chat/, fast/,
-            embed/).
+            qrels.jsonl. It sends your notes to the judge, so it runs only when the judge model's line in models.json
+            says "private": true. Nothing is inferred from the URL or the name.
   --limit   label only the first N task queries
+  --from    pool the first ${DEPTH} results of every column of a run, semantic search included, from the samples.jsonl of
+            RESULTS_DIR (a results folder of evals/retrieval/run of this set), instead of the pool above, and grade what
+            has no grade yet. This is how results that nobody judged get judged. The run must be of the same corpus
+            and collection, and of this library: a result that akm does not list in it is left out.
 ${judgeUsage}
 ${akmUsage}`;
 
@@ -125,6 +132,68 @@ export async function poolQueries(queries: Query[], ask: (system: "search" | "cu
   return pooled;
 }
 
+/**
+ * For each task query, the pool a results folder gives: the first `depth` results of every column the run had (search and curate, on the
+ * keyword index and on the semantic one), and the assets the author expected, each once. `samples` is the text of the run's samples.jsonl.
+ * A query the run does not have, as in a run with --limit, has no entry.
+ */
+export function poolFromSamples(queries: Query[], samples: string, depth = DEPTH, where = "samples.jsonl"): Map<string, string[]> {
+  const rows = new Map<string, Record<string, { refs?: unknown } | undefined>>();
+  samples.split("\n").forEach((line, i) => {
+    if (!line.trim()) return;
+    let row: Record<string, { refs?: unknown } | undefined> & { id?: unknown };
+    try {
+      row = JSON.parse(line);
+    } catch {
+      throw new Error(`${where}:${i + 1} is not valid JSON`);
+    }
+    if (typeof row !== "object" || row === null || typeof row.id !== "string") throw new Error(`${where}:${i + 1} has no string "id"`);
+    rows.set(row.id, row);
+  });
+  const pooled = new Map<string, string[]>();
+  for (const q of queries) {
+    const row = rows.get(q.id);
+    if (!row) continue;
+    const lists = SYSTEMS.map((sys) => row[sys]?.refs).filter((refs): refs is string[] => Array.isArray(refs) && refs.every((r) => typeof r === "string"));
+    pooled.set(q.id, pool([...lists, q.expected ?? []], depth));
+  }
+  return pooled;
+}
+
+/**
+ * The samples.jsonl of a results folder of `run`, after checking that the run is of the set that `label` grades: the library of the
+ * public corpus, or the own set. Throws an Error that says what is wrong.
+ */
+export function readRun(dir: string, corpus: Corpus): string {
+  const summaryFile = join(dir, "summary.json");
+  const samplesFile = join(dir, "samples.jsonl");
+  if (!existsSync(summaryFile) || !existsSync(samplesFile)) throw new Error(`${dir} is not a results folder of evals/retrieval/run: it needs a summary.json and a samples.jsonl.`);
+  let summary: { eval?: unknown; corpus?: unknown; collection?: unknown };
+  try {
+    summary = JSON.parse(readFileSync(summaryFile, "utf8"));
+  } catch {
+    throw new Error(`${summaryFile} is not valid JSON`);
+  }
+  const collection = corpus === "own" ? "own" : "library";
+  if (summary.eval !== "retrieval" || summary.corpus !== corpus || summary.collection !== collection) {
+    throw new Error(`${dir} is a run of ${summary.eval === "retrieval" ? `the ${String(summary.collection)} collection of the ${String(summary.corpus)} corpus` : "another eval"}, and --corpus ${corpus} grades the ${collection} collection of the ${corpus} corpus. Pass the results folder of that run.`);
+  }
+  return readFileSync(samplesFile, "utf8");
+}
+
+/** The pairs of the qrels, `id\tref`, whose last row was graded from an asset that has another digest now. `current` is the digest of an asset today, or undefined for one that cannot be read. A row with no digest is never stale. */
+export function staleKeys(qrels: Qrel[], current: (ref: string) => string | undefined): Set<string> {
+  const last = new Map<string, Qrel>();
+  for (const r of qrels) last.set(`${r.id}\t${r.ref}`, r);
+  const stale = new Set<string>();
+  for (const [key, r] of last) {
+    if (r.asset_sha256 === undefined) continue;
+    const now = current(r.ref);
+    if (now !== undefined && now !== r.asset_sha256) stale.add(key);
+  }
+  return stale;
+}
+
 export interface Todo {
   id: string;
   query: string;
@@ -148,13 +217,16 @@ export interface Outcome {
   lastError?: string;
 }
 
-/** Grades the pairs, `concurrency` at a time, and appends each grade to the qrels file as it arrives. */
+/**
+ * Grades the pairs, `concurrency` at a time, and appends each grade to the qrels file as it arrives, with the judge `model`, the digest of
+ * the prompt, the date and the digest of the asset as the judge read it. A pair whose asset cannot be found counts as failed, and the rest go on.
+ */
 export async function grade(
   todo: Todo[],
   asset: (ref: string) => { asset: Asset; text: string },
   judge: Judge,
   qrelsPath: string,
-  opts: { concurrency?: number; stop?: () => boolean; log?: (line: string) => void } = {},
+  opts: { model: string; date?: string; concurrency?: number; stop?: () => boolean; log?: (line: string) => void },
 ): Promise<Outcome> {
   const log = opts.log ?? (() => {});
   const out: Outcome = { total: todo.length, graded: 0, failed: 0, retried: 0, stopped: false, gaveUp: false };
@@ -167,7 +239,17 @@ export async function grade(
         return;
       }
       const t = todo[next++];
-      const { asset: a, text } = asset(t.ref);
+      let found: { asset: Asset; text: string };
+      try {
+        found = asset(t.ref);
+      } catch (e) {
+        // The endpoint did nothing wrong, so this does not count toward giving up.
+        out.failed++;
+        out.lastError = (e as Error).message;
+        log(`[${out.graded + out.failed}/${todo.length}] ${t.id} FAILED  ${t.ref}  ${(e as Error).message.slice(0, 150)}`);
+        continue;
+      }
+      const { asset: a, text } = found;
       try {
         const messages = judgeMessages(t.query, a, text);
         let g = parseGrade(await judge(messages));
@@ -176,7 +258,8 @@ export async function grade(
           g = parseGrade(await judge(messages));
         }
         if (!g) throw new Error("the reply holds no grade from 0 to 3, twice");
-        appendFileSync(qrelsPath, `${JSON.stringify({ id: t.id, ref: t.ref, grade: g.grade, reason: g.reason })}\n`);
+        const row: Qrel = { id: t.id, ref: t.ref, grade: g.grade, reason: g.reason, judge: opts.model, prompt_sha256: PROMPT_SHA256, date: opts.date ?? new Date().toISOString().slice(0, 10), asset_sha256: assetSha256(a.ref, text) };
+        appendFileSync(qrelsPath, `${JSON.stringify(row)}\n`);
         out.graded++;
         inARow = 0;
         log(`[${out.graded + out.failed}/${todo.length}] ${t.id} grade ${g.grade}  ${t.ref}`);
@@ -196,12 +279,14 @@ export async function grade(
 const stamp = () => new Date().toTimeString().slice(0, 8);
 
 /**
- * Labels one set: pools the results for its task queries, has the judge grade the pairs that have no grade yet, and
- * appends the grades to the set's qrels.jsonl. Returns the exit code. The public library is listed whole and read, so
+ * Labels one set: pools the results for its task queries, has the judge grade the pairs that have no grade yet, or whose
+ * asset has changed since the grade was made, and appends the grades to the set's qrels.jsonl. A grade that is made again comes
+ * after the old one, which a later row of a pair replaces. With `ctx.from`, a results folder of `run`, the pool is what that
+ * run returned in every column, semantic search included, in place of the keyword search, curate and BM25 pool. Returns the exit code. The public library is listed whole and read, so
  * its pool holds a plain BM25 over it. The own library is tens of thousands of assets, and akm lists 200 for a call:
  * its pool is what akm search and akm curate return, and what akm said of an asset is all label knows of it.
  */
-export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
+export async function labelCollection(corpus: Corpus, ctx: { model: string; judge: Judge; limit?: number; from?: string; newSandbox?: () => Sandbox }, folders: Folders): Promise<number> {
   const own = corpus === "own";
   const name = (file: string) => (own ? `private/retrieval/own/${file}` : `assets/${file}`);
   const queriesPath = join(folders.assets, "queries.jsonl");
@@ -214,7 +299,16 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
   const queries = parseQueries(readFileSync(queriesPath, "utf8"), name("queries.jsonl"))
     .filter(isTask)
     .slice(0, ctx.limit);
-  const done = new Set(existsSync(qrelsPath) ? parseQrels(readFileSync(qrelsPath, "utf8"), name("qrels.jsonl")).map((r) => `${r.id}\t${r.ref}`) : []);
+  const existing = existsSync(qrelsPath) ? parseQrels(readFileSync(qrelsPath, "utf8"), name("qrels.jsonl")) : [];
+  let samples: string | undefined;
+  if (ctx.from !== undefined) {
+    try {
+      samples = readRun(ctx.from, corpus);
+    } catch (e) {
+      console.error(`retrieval label: ${(e as Error).message}`);
+      return 2;
+    }
+  }
 
   const stops: (() => void)[] = [];
   const sb = (ctx.newSandbox ?? (() => createSandbox("retrieval")))();
@@ -233,6 +327,11 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
       }
     }
     console.log(`retrieval label${own ? " (own)" : ""}: akm ${version}, ${nAssets} assets, ${queries.length} task queries, judge ${ctx.model}, prompt ${PROMPT_VERSION}, first ${MAX_DOC_CHARS} characters of each asset`);
+    // The last row of each pair is the grade in force. A row that records no judge is of one who is not known, and this run's grades sit beside it.
+    const { judges, unrecorded } = qrelProvenance(existing);
+    const others = judges.filter((j) => j !== ctx.model);
+    const mixed = [...(others.length > 0 ? [`grades by ${others.join(", ")}`] : []), ...(unrecorded > 0 ? [`${unrecorded} grades that record no judge`] : [])];
+    if (mixed.length > 0) console.error(`retrieval label: warning: ${name("qrels.jsonl")} has ${mixed.join(" and ")}, and this run grades with ${ctx.model}. Grades of different judges do not mix cleanly: use one judge for a set.`);
 
     // The own library has no listing: an asset is known by the first hit akm returned for it.
     const ask = async (system: "search" | "curate", q: string) => {
@@ -240,10 +339,48 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
       if (own) for (const h of a.assets) if (!byRef.has(h.ref)) byRef.set(h.ref, h);
       return a;
     };
-    const pooled = await poolQueries(queries, ask, bm25);
+    let pooled: Map<string, string[]>;
+    if (samples === undefined) {
+      pooled = await poolQueries(queries, ask, bm25);
+    } else {
+      // An own library has no listing: what akm says of an asset comes from the hits it returns for the query now.
+      if (own) {
+        for (const q of queries) {
+          await ask("search", q.query);
+          await ask("curate", q.query);
+        }
+      }
+      pooled = poolFromSamples(queries, samples, DEPTH, `${ctx.from}/samples.jsonl`);
+      let unknown = 0;
+      for (const [id, refs] of pooled) {
+        const known = refs.filter((ref) => byRef.has(ref));
+        unknown += refs.length - known.length;
+        pooled.set(id, known);
+      }
+      const absent = queries.filter((q) => !pooled.has(q.id)).length;
+      console.log(`  pool from ${ctx.from}: ${queries.length - absent} of ${queries.length} task queries are in the run${unknown > 0 ? `, and ${unknown} of its results are not assets of this ${own ? "set as akm returns it now" : "library"} and are left out` : ""}`);
+    }
+    // A pair whose asset is not what the judge read is graded again. A pair graded before label wrote digests has none, and stays.
+    const digestOf = (ref: string): string | undefined => {
+      const a = byRef.get(ref);
+      if (!a) return undefined;
+      try {
+        return assetSha256(ref, texts.get(ref) ?? readFileSync(resolve(folders.library, a.path), "utf8"));
+      } catch {
+        return undefined;
+      }
+    };
+    const inScope = new Set(queries.map((q) => q.id));
+    const stale = staleKeys(existing.filter((r) => inScope.has(r.id)), digestOf);
+    for (const key of stale) {
+      const [id, ref] = key.split("\t");
+      const refs = pooled.get(id) ?? [];
+      if (!refs.includes(ref)) pooled.set(id, [...refs, ref]);
+    }
+    const done = new Set(existing.map((r) => `${r.id}\t${r.ref}`).filter((key) => !stale.has(key)));
     const todo = pending(queries, pooled, done);
     const poolSize = [...pooled.values()].reduce((n, refs) => n + refs.length, 0);
-    console.log(`  ${poolSize} pooled pairs, ${poolSize - todo.length} already graded, ${todo.length} to grade, ${CONCURRENCY} at a time`);
+    console.log(`  ${poolSize} pooled pairs, ${poolSize - todo.length} already graded, ${todo.length} to grade, ${CONCURRENCY} at a time${stale.size > 0 ? ` (${stale.size} of them were graded from an asset that has changed since)` : ""}`);
     if (todo.length === 0) return 0;
 
     let stopping = false;
@@ -265,7 +402,7 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
       },
       ctx.judge,
       qrelsPath,
-      { stop: () => stopping, log: (l) => console.log(`  ${stamp()} ${l}`) },
+      { model: ctx.model, stop: () => stopping, log: (l) => console.log(`  ${stamp()} ${l}`) },
     );
     const minutes = ((Date.now() - started) / 60_000).toFixed(1);
     console.log(`retrieval label: ${out.graded} graded, ${out.failed} failed, ${todo.length - out.graded - out.failed} left, in ${minutes} min (prompt ${PROMPT_VERSION}, model ${ctx.model}). ${out.retried} replies had no grade and were asked for again.`);
@@ -278,9 +415,9 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
 }
 
 async function main(): Promise<number> {
-  let values: { corpus?: string; limit?: string; "judge-model"?: string; akm?: string; help?: boolean };
+  let values: { corpus?: string; limit?: string; from?: string; "judge-model"?: string; akm?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, from: { type: "string" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval label: ${(e as Error).message}\n\n${USAGE}`);
     return 2;
@@ -297,6 +434,10 @@ async function main(): Promise<number> {
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
     console.error("retrieval label: --limit must be a positive integer");
+    return 2;
+  }
+  if (values.from !== undefined && !values.from.trim()) {
+    console.error("retrieval label: --from needs the results folder of a run");
     return 2;
   }
   let judgeSettings: ModelSettings;
@@ -317,7 +458,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
-  return labelCollection(corpus, { model, judge, limit }, collectionsFor(corpus)[0].folders);
+  return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from) }, collectionsFor(corpus)[0].folders);
 }
 
 if (import.meta.main) process.exit(await main());

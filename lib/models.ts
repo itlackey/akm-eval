@@ -12,6 +12,13 @@
 // `--model gpt-5.6-terra` then goes to that URL with the key held in OPENAI_API_KEY (set it in .env), and the id names a line, not a gateway model.
 // An eval calls useModel once, after it parses its flags. It writes the resolved settings back to MODEL_BASE_URL, MODEL_NAME and
 // MODEL_API_KEY, which is where the akm sandbox reads the key ($MODEL_API_KEY in the config) and where the harbor evals read theirs.
+//
+// The judge takes the first of these that names an endpoint, and its key goes with it:
+//   1. a models.json line named by the judge id;
+//   2. JUDGE_BASE_URL and JUDGE_API_KEY;
+//   3. the explicit fallback an eval passes to useJudge (the resolved model's endpoint and key, from useModel);
+//   4. MODEL_BASE_URL and MODEL_API_KEY as they stand in the environment.
+// An eval that runs useJudge before useModel passes no fallback, and then step 4 reads the .env gateway, not a --model line.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -48,6 +55,12 @@ export interface ModelSettings {
 
 type Env = Record<string, string | undefined>;
 
+/** An endpoint and key to use when nothing else names one. */
+export interface Endpoint {
+  baseUrl: string;
+  apiKey: string;
+}
+
 /** The lines of models.json, or none when there is no file. Throws an Error that says what is wrong. */
 export function loadModels(file = join(ROOT, "models.json")): Record<string, ModelEntry> {
   if (!existsSync(file)) return {};
@@ -71,9 +84,10 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
 /**
  * The model of a role from the flag, the environment and models.json. The id is the flag, else MODEL_NAME (JUDGE_MODEL). An id that is a
  * line of models.json goes to that line's URL, with the key in its api_key_env. Any other id goes to MODEL_BASE_URL with MODEL_API_KEY
- * (JUDGE_BASE_URL and JUDGE_API_KEY, else the model's). Throws an Error that says what to set.
+ * (JUDGE_BASE_URL and JUDGE_API_KEY, else `fallback` when given, else the model's MODEL_* in `env`). `fallback` is for the judge alone and
+ * ignored for the model. Throws an Error that says what to set.
  */
-export function resolveModel(role: "model" | "judge", flag: string | undefined, env: Env, entries: Record<string, ModelEntry>): ModelSettings {
+export function resolveModel(role: "model" | "judge", flag: string | undefined, env: Env, entries: Record<string, ModelEntry>, fallback?: Endpoint): ModelSettings {
   const [idVar, urlVar, keyVar, flagName] = role === "model" ? (["MODEL_NAME", "MODEL_BASE_URL", "MODEL_API_KEY", "--model"] as const) : (["JUDGE_MODEL", "JUDGE_BASE_URL", "JUDGE_API_KEY", "--judge-model"] as const);
   const id = (flag ?? env[idVar])?.trim();
   if (flag !== undefined && !id) throw new Error(`${flagName} needs a model id`);
@@ -84,8 +98,11 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
     return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", private: entry.private === true };
   }
-  // The judge falls back to the model's endpoint and key when it names none of its own.
-  const [urlName, keyName] = role === "judge" && !env.JUDGE_BASE_URL?.trim() ? (["MODEL_BASE_URL", "MODEL_API_KEY"] as const) : ([urlVar, keyVar] as const);
+  // The judge falls back to the model's endpoint and key when it names none of its own: the explicit fallback, else MODEL_* in env.
+  const judgeOwnsNone = role === "judge" && !env.JUDGE_BASE_URL?.trim();
+  const fallbackUrl = fallback?.baseUrl.trim();
+  if (judgeOwnsNone && fallback && fallbackUrl) return { name: id, baseUrl: fallbackUrl, apiKey: fallback.apiKey.trim(), private: false };
+  const [urlName, keyName] = judgeOwnsNone ? (["MODEL_BASE_URL", "MODEL_API_KEY"] as const) : ([urlVar, keyVar] as const);
   const baseUrl = env[urlName]?.trim();
   if (!baseUrl) throw new Error(`${id} is sent to the gateway: set ${urlName} in .env (and ${keyName} if it needs a key). See .env.example.`);
   return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim(), private: false };
@@ -113,10 +130,13 @@ export function useModel(values: { model?: string }, fail: (message: string) => 
   return { ...m, hasKey: m.apiKey !== "" };
 }
 
-/** The judge for this run, from the parsed flags. It writes nothing to `env`. */
-export function useJudge(values: { "judge-model"?: string }, fail: (message: string) => never, env: Env = process.env, entries?: Record<string, ModelEntry>): ModelSettings {
+/**
+ * The judge for this run, from the parsed flags. It writes nothing to `env`. Pass the model useModel returned as `fallback` and a judge with
+ * no endpoint of its own goes to the model's. Without it, such a judge reads MODEL_* from `env` as it is at the call.
+ */
+export function useJudge(values: { "judge-model"?: string }, fail: (message: string) => never, env: Env = process.env, entries?: Record<string, ModelEntry>, fallback?: Endpoint): ModelSettings {
   try {
-    return resolveModel("judge", values["judge-model"], env, entries ?? loadModels());
+    return resolveModel("judge", values["judge-model"], env, entries ?? loadModels(), fallback);
   } catch (e) {
     return fail((e as Error).message);
   }

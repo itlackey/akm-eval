@@ -18,6 +18,7 @@ budget_tokens = 25000
 budget_wall_ms = 360000
 gold_ref = "skills/drillbit"
 gold_ref_legacy = "skill:drillbit"
+library_tokens = ["provision", "--cluster", "--tier", "--region", "--replicas", "az-west"]
 memory_ability = "procedural_lookup"
 task_family = "drillbit/provision"
 akm_keywords = "drillbit provision tier region edge cluster"

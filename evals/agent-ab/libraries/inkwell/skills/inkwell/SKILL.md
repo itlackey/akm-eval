@@ -65,7 +65,7 @@ spec:
 
 ## healthcheck
 
-The `spec.healthcheck` block configures the HTTP health probe. `interval` is plain integer seconds — no unit suffix. `threshold` is the number of consecutive checks before state change.
+The `spec.healthcheck` block configures the HTTP health probe. `path` is the URL path the probe requests. `interval` is the time between probes, in plain integer seconds — no unit suffix. `threshold` is the number of consecutive checks before state change.
 
 ```yaml
 spec:

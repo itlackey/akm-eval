@@ -9,15 +9,19 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { BAD, type Case, type Drained, type Metrics, type Row, STRATEGY, dispatchFailures, hideEndpoint, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, selectCases } from "./lib.ts";
+import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { BAD, type Case, type Drained, EVENT_COLUMNS, type Metrics, PROPOSAL_COLUMNS, type Row, STRATEGY, assetsSha256, corpusSeed, dispatchFailures, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, schemaProblem, selectCases } from "./lib.ts";
 
 const NAME = "promotion";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
@@ -26,10 +30,10 @@ const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR
 Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --judgment\` with the model in MODEL_BASE_URL,
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
 
-  --corpus  public (default) reads assets/ and corpus/library. own reads private/promotion/own/, and runs only against a
-            model on this machine or the local network. all runs both and prints the two results side by side.
+  --corpus  public (default) reads assets/ (cases.jsonl and library/). own reads private/promotion/own/, and runs only against a
+            model marked "private": true in models.json. all runs both and prints the two results side by side.
   --cases   DIR: run the own corpus from DIR (cases.jsonl and library/, the format of private/promotion/own/) in place of
-            private/promotion/own/. Like own, it runs only against a model on this machine or the local network. A relative
+            private/promotion/own/. Like own, it runs only against a model marked "private": true in models.json. A relative
             DIR is from the repository root. Results go where own results go.
   --limit   run N proposals, one of each category in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
@@ -47,12 +51,13 @@ interface Folders {
   cases: string; // cases.jsonl
   library: string; // a folder with knowledge/ in it: the notes already in the bundle
   results: string;
+  seed?: string; // private/seed, unless a test names another
 }
 
 /** The folders of a corpus. `casesDir` is the own corpus somewhere else than private/promotion/own/. */
 export const foldersFor = (corpus: Corpus, casesDir = join(ROOT, "private", NAME, "own")): Folders =>
   corpus === "public"
-    ? { cases: join(EVAL_DIR, "assets", "cases.jsonl"), library: join(ROOT, "corpus", "library"), results: join(EVAL_DIR, "results") }
+    ? { cases: join(EVAL_DIR, "assets", "cases.jsonl"), library: join(EVAL_DIR, "assets", "library"), results: join(EVAL_DIR, "results") }
     : { cases: join(casesDir, "cases.jsonl"), library: join(casesDir, "library"), results: join(ROOT, "private", NAME, "results") };
 
 interface Summary {
@@ -61,57 +66,38 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   limit: number | null;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
   config_patch: { path: string; sha256: string } | null;
+  /** The akm config the eval wrote, with secrets redacted, and the settings of its engine: temperature, thinking, endpoint host. */
+  config: Record<string, unknown>;
+  engine: EngineSettings;
+  /** One digest over the cases file and the library's knowledge/ files, named relative to their folders. */
+  assets_sha256: string;
+  /** private/seed for the own corpus when there is one. Null for the public corpus and when there is none. */
+  seed: string | null;
+  /** "aborted" when no proposal got a verdict, so the numbers say nothing. Then aborted_reason says why. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   n_cases: number;
   n_run: number;
   n_errored: number;
+  /** Of the errored proposals, how many failed because the model call timed out, by the text akm gave. */
+  timeouts: number;
   seconds: number;
   calls: { n: number; failures: number; served: Record<string, number> } | null;
   metrics: Metrics;
   results_dir: string;
-}
-
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-/** What akm said when a command failed: the last lines of stderr, which is a JSON error object for most failures. */
-function failureMessage(what: string, code: number, stderr: string): string {
-  try {
-    const e = JSON.parse(stderr.trim()) as { error?: unknown };
-    if (typeof e.error === "string") return `${what} failed (exit ${code}): ${e.error}`.slice(0, 400);
-  } catch {
-    // not JSON: fall through to the last lines
-  }
-  return `${what} failed (exit ${code}): ${stderr.trim().split("\n").slice(-3).join(" | ")}`.slice(0, 400);
 }
 
 /**
@@ -133,7 +119,10 @@ export async function plant(sandbox: Sandbox, cases: Case[], libraryDir: string)
   const now = new Date().toISOString();
   const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"));
   try {
-    const insert = db.prepare("INSERT INTO proposals (id, stash_dir, ref, status, source, created_at, updated_at, content, frontmatter_json, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    // akm's tables are its own: a build that lays them out differently is named here, and not found in a SQL error.
+    const problem = schemaProblem(db, "proposals", PROPOSAL_COLUMNS);
+    if (problem) fail(`${problem}. The eval writes its proposals into that table, so it needs a build of akm that lays it out as akm 0.9.26 does. See "Depends on akm's private schema" in evals/promotion/README.md.`, 1);
+    const insert = db.prepare(`INSERT INTO proposals (${PROPOSAL_COLUMNS.join(", ")}) VALUES (${PROPOSAL_COLUMNS.map(() => "?").join(", ")})`);
     for (const c of cases) insert.run(...proposalRow(c, stash, now));
   } finally {
     db.close();
@@ -142,11 +131,20 @@ export async function plant(sandbox: Sandbox, cases: Case[], libraryDir: string)
   if (queued.totalCount !== cases.length) fail(`akm lists ${queued.totalCount ?? "no"} pending proposals, and ${cases.length} were queued. This akm may keep its proposals another way.`, 1);
 }
 
-/** The model calls the drain made, from akm's usage events: how many, how many failed, and the model names the endpoint reported. */
+/**
+ * The model calls the drain made, from akm's usage events: how many, how many failed, and the model names the endpoint reported.
+ * Null, with the reason on stderr, when the events cannot be read: the calls are a side measure, and the run goes on without them.
+ */
 export function callStats(sandbox: Sandbox): Summary["calls"] {
+  const none = (reason: string): null => {
+    console.error(`promotion: no model call counts in the summary: ${reason}`);
+    return null;
+  };
   try {
     const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"), { readonly: true });
     try {
+      const problem = schemaProblem(db, "events", EVENT_COLUMNS);
+      if (problem) return none(problem);
       const rows = db.query("SELECT metadata_json FROM events WHERE event_type = 'llm_usage'").all() as { metadata_json: string }[];
       const served: Record<string, number> = {};
       let failures = 0;
@@ -159,8 +157,8 @@ export function callStats(sandbox: Sandbox): Summary["calls"] {
     } finally {
       db.close();
     }
-  } catch {
-    return null;
+  } catch (e) {
+    return none((e as Error).message);
   }
 }
 
@@ -174,7 +172,7 @@ function printSummary(s: Summary): void {
   console.log(`  precision         ${cell(m.precision.good, m.precision.of, m.precision.value)}   accepted proposals that are good`);
   console.log(`  bad accepted      ${cell(m.bad_accepted.accepted, m.bad_accepted.of, m.bad_accepted.value)}`);
   for (const c of BAD) console.log(`    ${c.padEnd(10)}      ${cell(m.by_category[c].accepted, m.by_category[c].n, m.by_category[c].rate)}`);
-  console.log(`  errored           ${s.n_errored}${s.calls ? `   (${s.calls.n} model calls, ${s.calls.failures} failed)` : ""}`);
+  console.log(`  errored           ${s.n_errored}${s.timeouts > 0 ? ` (${s.timeouts} timed out)` : ""}${s.calls ? `   (${s.calls.n} model calls, ${s.calls.failures} failed)` : ""}`);
   console.log(`  results           ${relative(ROOT, s.results_dir)}/`);
 }
 
@@ -203,6 +201,7 @@ export async function runCorpus(
 ): Promise<Summary> {
   const all = parseCases(readFileSync(folders.cases, "utf8"), folders.cases);
   const cases = selectCases(all, ctx.limit);
+  const assetsDigest = assetsSha256(folders.cases, folders.library);
   const dir = makeResultsDir(folders.results, ctx.label);
   console.log(`${NAME} (${corpus}): ${cases.length} of ${all.length} proposals`);
 
@@ -232,29 +231,40 @@ export async function runCorpus(
   const rows = JSON.parse(hideEndpoint(JSON.stringify(rowsFromDrain(cases, drained, reasons, dispatchFailures(drain.stderr))), ctx.baseUrl)) as Row[];
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
   const errored = rows.filter((r) => r.outcome === "error").length;
+  const aborted = errored === rows.length ? `no proposal got a verdict. First error: ${rows[0]?.error}` : undefined;
+  const config = JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8")) as Record<string, unknown>; // what akm was given: the patch is in it
   const summary: Summary = {
     eval: NAME,
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
     ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
+    config: redactConfig(config),
+    engine: engineSettings(config),
+    assets_sha256: assetsDigest,
+    seed: corpusSeed(corpus, folders.seed ?? join(ROOT, "private", "seed")),
+    status: aborted ? "aborted" : "complete",
+    aborted_reason: aborted ?? null,
     n_cases: all.length,
     n_run: rows.length,
     n_errored: errored,
+    timeouts: rows.filter((r) => r.timed_out).length,
     seconds,
     calls: callStats(ctx.sandbox),
     metrics: metrics(rows),
     results_dir: dir,
   };
+  // The summary is written before the run fails, and says so: a reader of the folder must not take it for a whole run.
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (errored === rows.length) fail(`no proposal got a verdict. First error: ${rows[0]?.error}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env.`, 1);
+  if (aborted) fail(`${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env.`, 1);
   return summary;
 }
 

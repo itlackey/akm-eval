@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNNING, clearRunning, makeResultsDir } from "./results.ts";
+import { RUNNING, clearRunning, makeResultsDir, markRunning } from "./results.ts";
 
 const parents: string[] = [];
 const tmp = () => {
@@ -37,11 +37,24 @@ describe("clearRunning", () => {
   });
 });
 
+describe("markRunning", () => {
+  test("marks a folder that already exists with this process's pid, and clearRunning takes the mark off again", () => {
+    const dir = tmp();
+    expect(existsSync(join(dir, RUNNING))).toBe(false);
+    markRunning(dir);
+    expect(readFileSync(join(dir, RUNNING), "utf8").trim()).toBe(String(process.pid));
+    markRunning(dir); // twice is fine
+    clearRunning(dir);
+    expect(existsSync(join(dir, RUNNING))).toBe(false);
+  });
+});
+
 describe("the .running marker of a run in its own process", () => {
-  /** Runs a script that makes a results folder under `parent`, then does `after`; resolves with the folder and the process once it printed the folder. */
-  async function start(parent: string, after: string) {
+  /** Runs a script that makes a results folder under `parent`, or marks `parent` itself when `resume` is set, then does `after`; resolves with the folder and the process once it printed the folder. */
+  async function start(parent: string, after: string, resume = false) {
     const script = join(parent, "run.ts");
-    writeFileSync(script, `import { makeResultsDir } from ${JSON.stringify(join(import.meta.dir, "results.ts"))};\nconsole.log(makeResultsDir(${JSON.stringify(parent)}, "x"));\n${after}`);
+    const make = resume ? `(markRunning(${JSON.stringify(parent)}), ${JSON.stringify(parent)})` : `makeResultsDir(${JSON.stringify(parent)}, "x")`;
+    writeFileSync(script, `import { makeResultsDir, markRunning } from ${JSON.stringify(join(import.meta.dir, "results.ts"))};\nconsole.log(${make});\n${after}`);
     const proc = Bun.spawn(["bun", script], { stdout: "pipe", stderr: "pipe" });
     const reader = proc.stdout.getReader();
     let out = "";
@@ -52,6 +65,15 @@ describe("the .running marker of a run in its own process", () => {
   test("holds the pid while the run is alive and is gone after a normal end", async () => {
     const parent = tmp();
     const { dir, proc } = await start(parent, "await Bun.sleep(300);");
+    expect(readFileSync(join(dir, RUNNING), "utf8").trim()).toBe(String(proc.pid));
+    expect(await proc.exited).toBe(0);
+    expect(existsSync(join(dir, RUNNING))).toBe(false);
+  });
+
+  test("a folder marked by markRunning, as a resumed run does, holds the pid while the run is alive and is gone after the end", async () => {
+    const parent = tmp();
+    const { dir, proc } = await start(parent, "await Bun.sleep(300);", true);
+    expect(dir).toBe(parent);
     expect(readFileSync(join(dir, RUNNING), "utf8").trim()).toBe(String(proc.pid));
     expect(await proc.exited).toBe(0);
     expect(existsSync(join(dir, RUNNING))).toBe(false);

@@ -1,0 +1,74 @@
+# Runs each eval that drives akm once, on one case, against a stub model and a real akm (scripts/smoke). Every night, on demand, and on a
+# pull request that changes the evals or what they share (the pinned leg only). Two legs:
+#
+#   pinned  the akm release this repository pins, in the contract mode: the stub answers each model call with a reply that is valid, and the
+#           leg fails unless every eval reaches the outcome it counts as its work (a proposal, a lesson, a memory, a verdict, a retirement,
+#           an accepted promotion), and the outcome it has for a reply akm cannot read. This leg is required: when it fails, the workflow fails.
+#           It is the leg a pull request runs; make "smoke (pinned)" a required status check to gate merges on it.
+#   latest  the latest release, in the startup mode: the stub answers {}, and the leg shows that akm still takes the commands and that the
+#           JSON the evals read before the model is readable. It is advisory (continue-on-error), a warning that a change to akm that the evals
+#           cannot read shipped the day before. When it goes red, run `scripts/smoke/run --contract` by hand against that release. A pull
+#           request does not run it: a release of akm is not a change of the pull request.
+#
+# The stub model is a local server, so the job needs no model and no secret.
+name: akm-smoke
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "lib/**"
+      - "evals/**"
+      - "benchmarks/**"
+      - "corpus/**"
+      - "scripts/smoke/**"
+      - ".github/workflows/akm-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.leg.akm }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: ${{ matrix.leg.advisory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both legs at night and on demand; the pinned leg alone on a pull request.
+        leg: ${{ fromJSON(github.event_name == 'pull_request' && '[{"akm":"pinned","flags":"--contract","advisory":false}]' || '[{"akm":"pinned","flags":"--contract","advisory":false},{"akm":"latest","flags":"--strict","advisory":true}]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # akm runs on Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # promotion indexes with akm's embedding model, 133 MB from huggingface.co. It is public, and nothing else goes in this cache.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/models
+          key: akm-embedding-model-bge-small-en-v1.5
+
+      - name: Install akm
+        run: |
+          if [ "${{ matrix.leg.akm }}" = latest ]; then
+            version=latest
+          else
+            # The release the Harbor evals install, pinned in lib/harbor/harbor.ts.
+            version="$(sed -n 's/^export const PINS = .*akm_cli: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)"
+            [ -n "$version" ] || { echo "could not read the akm pin from lib/harbor/harbor.ts" >&2; exit 1; }
+          fi
+          npm i -g "akm-cli@$version"
+          akm --version
+
+      - name: scripts/smoke
+        run: scripts/smoke/run ${{ matrix.leg.flags }}

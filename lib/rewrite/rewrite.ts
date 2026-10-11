@@ -10,12 +10,20 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
-import { COMMON, FIRST, GENERIC_LABELS, KEEP_IPS, KEEP_NUMBERS, KEEP_PORTS, MONTHS_DAYS, SURNAMES, TECH, TOOLS, USER_CONTENT_DOMAINS, WELL_KNOWN_DOMAINS } from "./lexicon.ts";
+import { COMMON, FIRST, GENERIC_LABELS, INVENTED_TOOLS, KEEP_IPS, KEEP_NUMBERS, KEEP_PORTS, MONTHS_DAYS, PLAIN, SURNAMES, TECH, TOOLS, USER_CONTENT_DOMAINS, WELL_KNOWN_DOMAINS } from "./lexicon.ts";
 
 export interface RewriteMap {
   version: 1;
   seed: string;
   dateShiftDays: number;
+  // Which names of tools are renamed: all of TOOLS, or only the made-up ones (`--tools keep`). A saved map keeps its
+  // mode, because a later run that renamed a tool the first run kept would not match it.
+  tools?: ToolNames;
+  // True once the numbers of the map are decided, whether or not any of them changed: by the first run that read a
+  // number or a port, or that was told to keep them. A run that finds the map without it assigns the numbers it has
+  // met; a later run leaves a number the map does not have as it is. A run that read no number decides nothing, so a
+  // map can be started from an empty file.
+  numbersAssigned?: boolean;
   // Lowercase original word -> lowercase replacement. Applies to whole words and to
   // the parts of hostnames and identifiers (acme-corp, AcmeClient, ACME_URL).
   words: Record<string, string>;
@@ -25,11 +33,20 @@ export interface RewriteMap {
   // Informational: full hostname -> rewritten hostname.
   hosts: Record<string, string>;
   ips: Record<string, string>;
+  // A port is a number with a range: it is assigned with the numbers, so `port 8080` and a bare 8080 agree, and it is
+  // written here too, because the ports are what a port hit looks up.
   ports: Record<string, string>;
   uuids: Record<string, string>; // lowercase keys
   hex: Record<string, string>; // lowercase keys
   // Numbers and versions, keyed by the digits as written without thousands commas (0.9.15, 18, 0.65).
   numbers: Record<string, string>;
+}
+
+export type ToolNames = "rename" | "keep";
+
+function toolMode(value: string): ToolNames {
+  if (value !== "rename" && value !== "keep") throw new UsageError(`--tools must be rename or keep, got "${value}"`);
+  return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +263,10 @@ export function shiftDate(text: string, delta: number): string | null {
 // ---------------------------------------------------------------------------
 // Numbers. Each part of a number is changed on its own, under the parts before it: in 0.9.15 the 15 is one of the
 // patch numbers of 0.9. The parts under one prefix keep their order, so 0.9.15 stays below 0.9.21, and a part keeps
-// its number of digits, so a percentage stays a percentage. Single digits, years and the numbers in KEEP_NUMBERS
-// stay as they are, and so does a part with a leading zero (0.05).
+// its number of digits, so a percentage stays a percentage. The fractions of a decimal are ordered as fractions,
+// whatever their number of digits (8.25 stays below 8.375 and 8.5). A port is a number with a smaller range, so port
+// 8080 and 8080 are one number. Single digits, years, the numbers in KEEP_NUMBERS and the ports in KEEP_PORTS stay as
+// they are, and so does a part with a leading zero (0.05).
 
 interface Parsed {
   parts: string[]; // 0.9.15 is 0, 9 and 15
@@ -268,7 +287,7 @@ function partsOf(key: string): Array<[string, string]> {
 }
 
 const changeable = (part: string): boolean => /^[1-9]\d{1,11}$/.test(part);
-const isFixed = (n: number): boolean => KEEP_NUMBERS.has(n) || (n >= 1900 && n <= 2199);
+const isFixed = (n: number): boolean => KEEP_NUMBERS.has(n) || KEEP_PORTS.has(n) || (n >= 1900 && n <= 2199);
 
 /** A factor between 0.65 and 0.9 or between 1.1 and 1.4, so a value is moved by a tenth or more. */
 function nudge(s: Stream): number {
@@ -276,33 +295,62 @@ function nudge(s: Stream): number {
   return r < 0.5 ? 0.65 + r / 2 : 0.8 + r * 0.6;
 }
 
+/** A value to move, with what its new value must keep. */
+export interface Slot {
+  value: number;
+  /** The new value is a multiple of this. Default 1. */
+  step?: number;
+  /** The value stays as it is, and the values between two fixed ones stay between them. */
+  fixed?: boolean;
+  /** The new value lies in [min, max], inside the range of the whole list. */
+  min?: number;
+  max?: number;
+}
+
+const ceilTo = (x: number, step: number): number => Math.ceil(x / step) * step;
+const floorTo = (x: number, step: number): number => Math.floor(x / step) * step;
+
 /**
- * New values for `values`, a sorted list of different numbers in [lo, hi]. The new values are different, in the same
+ * New values for `slots`, a list of values in [lo, hi] sorted from the lowest. The new values are different, in the same
  * order and in the same range. Each value is moved by its own factor, the moved values are put in order and handed out
- * by rank, and neighbours that are equal are pushed apart by one. A value in `fixed` stays as it is, and the values
- * between two fixed ones stay between them.
+ * by rank, and neighbours that are equal are pushed apart. A fixed slot stays as it is, and the values between two
+ * fixed ones stay between them. A slot may ask for multiples of a step (a decimal with fewer places, scaled to the
+ * places of the others) and for a smaller range (a port). A stretch that cannot be placed under these asks stays as it is.
  */
-export function spread(values: number[], fixed: Set<number>, lo: number, hi: number, factor: (v: number) => number): number[] {
-  const out = [...values];
+export function place<T extends Slot>(slots: T[], lo: number, hi: number, factor: (slot: T) => number): number[] {
+  const out = slots.map((s) => s.value);
   let from = 0;
-  for (let to = 0; to <= values.length; to++) {
-    if (to < values.length && !fixed.has(values[to])) continue;
-    const floor = from > 0 ? out[from - 1] + 1 : lo; // the free values from..to-1 lie between two fixed ones
-    const ceil = to < values.length ? values[to] - 1 : hi;
-    const run = values
-      .slice(from, to)
-      .map((v) => {
-        const f = factor(v);
-        const moved = v * f < floor || v * f > ceil ? v / f : v * f; // a value that would leave the range moves the other way
-        return Math.min(ceil, Math.max(floor, Math.round(moved)));
+  for (let to = 0; to <= slots.length; to++) {
+    if (to < slots.length && !slots[to].fixed) continue;
+    const floor = from > 0 ? out[from - 1] + 1 : lo; // the free slots from..to-1 lie between two fixed ones
+    const ceil = to < slots.length ? slots[to].value - 1 : hi;
+    const free = slots.slice(from, to);
+    const step = free.map((s) => s.step ?? 1);
+    const low = free.map((s, i) => ceilTo(Math.max(floor, s.min ?? lo), step[i]));
+    const high = free.map((s, i) => floorTo(Math.min(ceil, s.max ?? hi), step[i]));
+    const moved = free
+      .map((s, i) => {
+        const f = factor(s);
+        return s.value * f < low[i] || s.value * f > high[i] ? s.value / f : s.value * f; // a value that would leave the range moves the other way
       })
       .sort((a, b) => a - b);
-    for (let i = 0; i < run.length; i++) run[i] = Math.max(run[i], i > 0 ? run[i - 1] + 1 : floor);
-    for (let i = run.length - 1; i >= 0; i--) run[i] = Math.min(run[i], i < run.length - 1 ? run[i + 1] - 1 : ceil);
-    out.splice(from, run.length, ...run);
+    const run = moved.map((m, i) => Math.min(high[i], Math.max(low[i], Math.round(m / step[i]) * step[i])));
+    for (let i = 1; i < run.length; i++) run[i] = Math.max(run[i], ceilTo(run[i - 1] + 1, step[i]));
+    for (let i = run.length - 1; i >= 0; i--) run[i] = Math.min(run[i], high[i], i < run.length - 1 ? floorTo(run[i + 1] - 1, step[i]) : Infinity);
+    if (run.every((v, i) => v >= low[i] && v <= high[i] && (i === 0 || v > run[i - 1]))) run.forEach((v, i) => (out[from + i] = v));
     from = to + 1;
   }
   return out;
+}
+
+/** New values for `values`, a sorted list of different numbers in [lo, hi]. See `place`. */
+export function spread(values: number[], fixed: Set<number>, lo: number, hi: number, factor: (v: number) => number): number[] {
+  return place(
+    values.map((value) => ({ value, fixed: fixed.has(value) })),
+    lo,
+    hi,
+    (slot) => factor(slot.value),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -315,14 +363,15 @@ const SURNAME_SET = new Set(SURNAMES);
 
 const baseOf = (word: string): string => word.replace(/\d+$/, "");
 
-function isKnownWord(word: string): boolean {
+/** `kept` is the set of tool names that `--tools keep` leaves alone: they are well-known words like the rest. */
+function isKnownWord(word: string, kept?: ReadonlySet<string>): boolean {
   const b = baseOf(word);
-  return COMMON.has(word) || COMMON.has(b) || TECH.has(word) || TECH.has(b) || MONTHS_DAYS.has(b);
+  return COMMON.has(word) || COMMON.has(b) || TECH.has(word) || TECH.has(b) || MONTHS_DAYS.has(b) || (kept !== undefined && (kept.has(word) || kept.has(b)));
 }
 
 /** Could this word be renamed at all? It must not be a common or well-known word. */
-function eligible(word: string): boolean {
-  return baseOf(word).length >= 3 && !isKnownWord(word);
+function eligible(word: string, kept?: ReadonlySet<string>): boolean {
+  return baseOf(word).length >= 3 && !isKnownWord(word, kept);
 }
 
 function matchCase(original: string, replacement: string): string {
@@ -360,11 +409,11 @@ const TITLES = new Set(["mr", "mrs", "ms", "miss", "dr", "prof", "sir"]);
  * Is the word the second half of a Title Case phrase of ordinary words, like "the Metrics
  * Collector"? A sentence that opens with a verb ("Ask Priya") is not such a phrase.
  */
-function followsTitleWord(text: string, lineStart: number, previous: RegExpMatchArray | undefined, current: RegExpMatchArray): boolean {
+function followsTitleWord(text: string, lineStart: number, previous: RegExpExecArray | undefined, current: RegExpExecArray, kept?: ReadonlySet<string>): boolean {
   if (!previous || !/^[A-Z]/.test(previous[0])) return false;
   const gap = text.slice(lineStart + previous.index + previous[0].length, lineStart + current.index);
   const p = previous[0].toLowerCase();
-  return /^[ \t]+$/.test(gap) && isKnownWord(p) && !TITLES.has(p) && !isSentenceStart(text, lineStart + previous.index);
+  return /^[ \t]+$/.test(gap) && isKnownWord(p, kept) && !TITLES.has(p) && !isSentenceStart(text, lineStart + previous.index);
 }
 
 const COMMON_ENDING = /(?:tion|sion|ment|ness|ity|ities|able|ible|ical|ology|ance|ence|ship|ful|less|ics|ings?|ized|ised|ated|ally|ively|ously|ably|ibly|fully)s?$/;
@@ -410,9 +459,9 @@ const emptyFound = (): Found => ({ words: new Map(), forced: new Set(), hostForc
 const EMAIL_LOCAL_RE = /([A-Za-z0-9._%+-]+)@(?=[A-Za-z0-9-]+\.[A-Za-z])/g;
 
 /** The word in a hostname or email part such as "orion" or "node01", if it may be renamed. */
-function renamable(part: string): { word: string; digits: string } | undefined {
+function renamable(part: string, kept?: ReadonlySet<string>): { word: string; digits: string } | undefined {
   const m = /^([A-Za-z]+)(\d*)$/.exec(part);
-  return m && eligible(m[1].toLowerCase()) && !GENERIC_LABELS.has(m[1].toLowerCase()) ? { word: m[1], digits: m[2] } : undefined;
+  return m && eligible(m[1].toLowerCase(), kept) && !GENERIC_LABELS.has(m[1].toLowerCase()) ? { word: m[1], digits: m[2] } : undefined;
 }
 
 /** Number of trailing labels that are never renamed: all of them for a well-known domain, else the TLD. */
@@ -430,6 +479,11 @@ export interface Options {
   minCount?: number;
   /** Keep numbers and versions as they are. Names, hosts, ids and dates are still rewritten. */
   keepValues?: boolean;
+  /**
+   * "rename" renames every tool in TOOLS (the default). "keep" leaves the real ones as they are, and renames only the
+   * made-up ones, so a model still knows what `uv run` or `vim` is. A saved map keeps the mode it was made with.
+   */
+  tools?: ToolNames;
 }
 
 export class Rewriter {
@@ -437,13 +491,20 @@ export class Rewriter {
   private found = emptyFound();
   private minCount: number;
   private keepValues: boolean;
+  private kept?: ReadonlySet<string>; // the tool names that stay as they are, with `--tools keep`
 
   constructor(seed: string, existing?: RewriteMap, options: Options = {}) {
     this.minCount = options.minCount ?? 2;
     this.keepValues = options.keepValues ?? false;
+    const tools = toolMode(options.tools ?? existing?.tools ?? "rename");
     if (existing) {
       if (existing.seed !== seed) throw new UsageError(`the map was made with seed ${existing.seed}, not ${seed}`);
+      const made = existing.tools ?? "rename";
+      if (tools !== made) throw new UsageError(`the map was made with --tools ${made}, not ${tools}`);
       this.map = existing;
+      this.map.tools = made;
+      // A map from before the flag has decided its numbers when it has any.
+      this.map.numbersAssigned ??= Object.keys(this.map.numbers ?? {}).length > 0;
       this.map.words ??= {};
       this.map.hostWords ??= {};
       this.map.hosts ??= {};
@@ -455,8 +516,9 @@ export class Rewriter {
     } else {
       const shift = new Stream(seed, "date", "shift");
       const days = 30 + shift.next(700);
-      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, words: {}, hostWords: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {}, numbers: {} };
+      this.map = { version: 1, seed, dateShiftDays: shift.next(2) ? days : -days, tools, numbersAssigned: false, words: {}, hostWords: {}, hosts: {}, ips: {}, ports: {}, uuids: {}, hex: {}, numbers: {} };
     }
+    if (tools === "keep") this.kept = new Set([...TOOLS].filter((t) => !INVENTED_TOOLS.has(t)));
   }
 
   /** Pass 1: read a text so its names and values are known. Call finish() after all texts. */
@@ -470,7 +532,7 @@ export class Rewriter {
         const labels = lower.split(".");
         for (const label of labels.slice(0, labels.length - protectedLabels(labels))) {
           for (const part of label.split("-")) {
-            const r = renamable(part);
+            const r = renamable(part, this.kept);
             if (r) f.hostForced.add(r.word.toLowerCase());
           }
         }
@@ -488,7 +550,7 @@ export class Rewriter {
     for (const m of text.matchAll(EMAIL_LOCAL_RE)) {
       email.fill(1, m.index, m.index + m[1].length);
       for (const part of m[1].split(/[._%+-]/)) {
-        const r = renamable(part);
+        const r = renamable(part, this.kept);
         if (r) f.forced.add(r.word.toLowerCase());
       }
     }
@@ -496,18 +558,18 @@ export class Rewriter {
     for (const line of text.split("\n")) {
       const lineTokens = [...line.matchAll(TOKEN_RE)].filter((m) => !touches(claimed, lineStart + m.index, lineStart + m.index + m[0].length));
       const title = /^\s{0,3}#{1,6}\s/.test(line) || isTitleLine(lineTokens.map((m) => m[0])) || (lineTokens.length === 1 && line.trim() === lineTokens[0][0]);
-      let prev: RegExpMatchArray | undefined;
+      let prev: RegExpExecArray | undefined;
       for (const m of lineTokens) {
         const previous = prev;
         prev = m;
         const start = lineStart + m.index;
         const token = m[0];
         const lowerToken = token.toLowerCase();
-        if (isKnownWord(lowerToken)) continue;
+        if (isKnownWord(lowerToken, this.kept)) continue;
         const humps = token.match(HUMP_RE) ?? [];
         for (const run of runs(humps)) {
           const tool = toolOf(run);
-          if (tool) f.forced.add(tool); // the name of a tool is a name in every form
+          if (tool && !this.kept?.has(tool)) f.forced.add(tool); // the name of a tool is a name in every form
         }
         if (humps.length > 1) f.glued.add(token);
         for (const hump of humps) {
@@ -518,7 +580,7 @@ export class Rewriter {
         }
         if (humps.length !== 1) continue; // identifiers like AcmeClient only count as occurrences
         const s = f.words.get(lowerToken) as Stat;
-        if (/^[A-Z][a-z0-9]+$/.test(token) && !title && !followsTitleWord(text, lineStart, previous, m)) {
+        if (/^[A-Z][a-z0-9]+$/.test(token) && !title && !followsTitleWord(text, lineStart, previous, m, this.kept)) {
           s.cap++;
           if (!isSentenceStart(text, start)) s.mid++;
         } else if (token === lowerToken && !email[start] && !"/@".includes(text[start - 1] ?? " ") && !"/@".includes(text[start + token.length] ?? " ")) {
@@ -542,7 +604,9 @@ export class Rewriter {
     }
     for (const [word, s] of f.words) {
       const person = FIRST_SET.has(baseOf(word)) || SURNAME_SET.has(baseOf(word)); // not blocked by slugs like priya-sharma
-      if (s.cap >= 1 && s.mid >= 1 && s.count >= minCount && (s.lower === 0 || person) && /^[a-z]+\d*$/.test(word) && eligible(word) && !hasCommonEnding(word)) names.add(word);
+      // A capitalised word of three letters is more often a heading or an abbreviation than a name, unless it is on the name lists.
+      const long = person || baseOf(word).length >= 4;
+      if (s.cap >= 1 && s.mid >= 1 && s.count >= minCount && (s.lower === 0 || person) && /^[a-z]+\d*$/.test(word) && long && eligible(word, this.kept) && !hasCommonEnding(word)) names.add(word);
     }
     const fresh = [...names].filter((w) => own(map.words, w) === undefined).sort(byCode);
     for (const w of fresh) taken.add(w);
@@ -568,12 +632,17 @@ export class Rewriter {
     }
 
     this.assign(f.ips, map.ips, "ip", (o, s) => makeIp(o, s));
-    this.assign(f.ports, map.ports, "port", (o, s) => makePort(o, s));
     this.assign(f.uuids, map.uuids, "uuid", (o, s) => makeUuid(o, s));
     this.assign(f.hex, map.hex, "hex", (o, s) => s.hex(o.length));
-    // The numbers of a run are changed together, to keep their order. A map that has numbers already keeps them: a
-    // number it does not have, such as one only a label has, is left as it is.
-    if (Object.keys(map.numbers).length === 0) this.assignNumbers(f.numbers);
+    // The numbers of a run, and its ports, are changed together, to keep their order. A map that has decided its numbers
+    // keeps them: a number it does not have, such as one only a label has, is left as it is, even when none of the
+    // numbers the first run met had to change. With --keep-values there are none to decide, and the map still counts as
+    // decided, so a later run does not renumber what the first kept. A run that met no number decides nothing.
+    if (!map.numbersAssigned && (this.keepValues || f.numbers.size > 0 || f.ports.size > 0)) {
+      if (!this.keepValues) this.assignNumbers(f.numbers, f.ports);
+      map.numbersAssigned = true;
+    }
+    this.assignPorts(f.ports);
     for (const h of [...f.hosts].sort(byCode)) {
       const r = this.rewriteHost(h);
       if (r !== h) map.hosts[h] = r;
@@ -595,40 +664,86 @@ export class Rewriter {
     }
   }
 
-  /** Gives each number a new value. The parts of one length under one prefix are changed together, to keep their order. */
-  private assignNumbers(keys: Set<string>): void {
-    const groups = new Map<string, Set<number>>();
-    for (const key of keys) {
-      for (const [prefix, part] of partsOf(key)) {
-        if (!changeable(part)) continue;
-        const group = `${prefix}\0${part.length}`;
-        groups.set(group, (groups.get(group) ?? new Set()).add(Number(part)));
-      }
+  /**
+   * Gives each number a new value. The parts of one length under one prefix are changed together, to keep their order.
+   * The fractions of a decimal (the 25 and 375 of 8.25 and 8.375) are ordered as fractions whatever their length, and a
+   * single digit (the 5 of 8.5) stays where it is, so 8.375 stays below 8.5. A port is one of the numbers, with a
+   * smaller range, so `port 8080` and a bare 8080 are the same number.
+   */
+  private assignNumbers(keys: Set<string>, ports: Set<string>): void {
+    interface Entry {
+      part: string;
+      value: number;
+      digits: number;
+      fixed: boolean;
+      port: boolean;
     }
+    const groups = new Map<string, Map<string, Entry>>();
+    const note = (prefix: string, part: string, port: boolean): void => {
+      const fraction = /^\d+$/.test(prefix); // the fraction of a decimal, or the minor number of a version
+      const free = changeable(part);
+      if (!free && !(fraction && /^[1-9]$/.test(part))) return;
+      const group = `${prefix}\0${fraction ? "*" : part.length}`;
+      const entries = groups.get(group) ?? new Map<string, Entry>();
+      groups.set(group, entries);
+      const known = entries.get(part);
+      entries.set(part, { part, value: Number(part), digits: part.length, fixed: !free || (prefix === "" && isFixed(Number(part))), port: port || (known?.port ?? false) });
+    };
+    const portKeys = [...ports].filter(isPortNumber);
+    for (const key of keys) for (const [prefix, part] of partsOf(key)) note(prefix, part, false);
+    for (const key of portKeys) note("", key, true);
+
     const images = new Map<string, string>(); // `${prefix}\0${part}` -> its new value
-    for (const [group, set] of [...groups].sort(([a], [b]) => byCode(a, b))) {
-      const [prefix, length] = group.split("\0");
-      const values = [...set].sort((a, b) => a - b);
-      const fixed = new Set(prefix === "" ? values.filter(isFixed) : []);
-      const moved = spread(values, fixed, 10 ** (Number(length) - 1), 10 ** Number(length) - 1, (v) => nudge(new Stream(this.map.seed, "number", `${prefix}\0${v}`)));
-      values.forEach((v, i) => images.set(`${prefix}\0${v}`, String(moved[i])));
+    for (const [group, entries] of [...groups].sort(([a], [b]) => byCode(a, b))) {
+      const prefix = group.slice(0, group.indexOf("\0"));
+      const items = [...entries.values()];
+      if (items.every((e) => e.fixed)) continue;
+      const places = Math.max(...items.map((e) => e.digits)); // the values are compared at this many places
+      const slots = items
+        .map((e) => ({ ...e, step: 10 ** (places - e.digits), value: e.value * 10 ** (places - e.digits), original: e.value }))
+        .sort((a, b) => a.value - b.value || a.digits - b.digits)
+        .map((e) => (e.port ? { ...e, min: PORT_MIN, max: PORT_MAX } : e));
+      const moved = place(slots, 10 ** (places - 1), 10 ** places - 1, (slot) => nudge(new Stream(this.map.seed, "number", `${prefix}\0${slot.original}`)));
+      slots.forEach((slot, i) => images.set(`${prefix}\0${slot.part}`, String(moved[i] / slot.step)));
     }
     const image = (prefix: string, part: string): string => images.get(`${prefix}\0${part}`) ?? part;
-    for (const key of [...keys].sort(byCode)) {
+    for (const key of [...new Set([...keys, ...portKeys])].sort(byCode)) {
       const { parts, pre } = parseNumber(key);
       const changed = parts.map((part, i) => image(parts.slice(0, i).join("."), part)).join(".") + (pre ? `-${pre.tag}.${image(`${parts.join(".")}-${pre.tag}`, pre.n)}` : "");
       if (changed !== key) this.map.numbers[key] = changed;
     }
+    // The ports table is what a port hit looks up. A port that stays is written too, so a later run does not choose another.
+    for (const key of portKeys) if (own(this.map.ports, key) === undefined) this.map.ports[key] = image("", key);
+  }
+
+  /** Gives a port that has no image yet one: the image of the same number, or else a seeded one in the range of ports. */
+  private assignPorts(ports: Set<string>): void {
+    const { map } = this;
+    const rest = new Set<string>();
+    for (const port of ports) {
+      if (own(map.ports, port) !== undefined) continue;
+      const number = own(map.numbers, port);
+      if (isPortNumber(port) && isFixed(Number(port))) map.ports[port] = port;
+      else if (number !== undefined && isPortNumber(port) && isPortNumber(number) && number.length === port.length) map.ports[port] = number;
+      else rest.add(port);
+    }
+    this.assign(rest, map.ports, "port", (o, s) => makePort(o, s));
   }
 
   private makeWord(key: string, taken: Set<string>): string {
     const base = baseOf(key);
     const digits = key.slice(base.length);
-    const pool = FIRST_SET.has(base) ? FIRST : SURNAME_SET.has(base) ? SURNAMES : null;
+    // A tool is drawn like a tool even when it is also a given name (gemma): it gets a pseudo-word, not a person.
+    const pool = TOOLS.has(base) ? null : FIRST_SET.has(base) ? FIRST : SURNAME_SET.has(base) ? SURNAMES : null;
     for (let attempt = 0; ; attempt++) {
       const s = new Stream(this.map.seed, "word", key, attempt);
-      const word = (pool && attempt < 50 ? pool[s.next(pool.length)] : pseudoWord(s, base.length)) + digits;
-      if (!taken.has(word) && !isKnownWord(word)) return word;
+      const fromPool = pool !== null && attempt < 50;
+      const word = (fromPool ? pool[s.next(pool.length)] : pseudoWord(s, base.length)) + digits;
+      if (taken.has(word) || isKnownWord(word, this.kept)) continue;
+      // A new name is not a word the text has, nor an ordinary word. A word of one or two letters has few candidates, so
+      // after many tries it settles for one that is not taken.
+      if (attempt < 400 && (this.found.words.has(baseOf(word)) || (!fromPool && isPlainWord(baseOf(word))))) continue;
+      return word;
     }
   }
 
@@ -708,7 +823,7 @@ export class Rewriter {
       labels[i] = labels[i]
         .split("-")
         .map((part) => {
-          const r = renamable(part);
+          const r = renamable(part, this.kept);
           const key = r?.word.toLowerCase();
           const replacement = key && (own(this.map.words, key) ?? own(this.map.hostWords, key));
           return r && replacement ? matchCase(r.word, replacement) + r.digits : part;
@@ -780,6 +895,17 @@ function makeIp(original: string, s: Stream): string {
 function keepPort(port: string): boolean {
   const n = Number(port);
   return n < 1024 || n > 65535 || KEEP_PORTS.has(n);
+}
+
+const PORT_MIN = 1024;
+const PORT_MAX = 65535;
+
+/** A port that is a number as well: four or five digits without a leading zero, in the range of the ports that change. */
+const isPortNumber = (port: string): boolean => /^[1-9]\d{3,4}$/.test(port) && Number(port) >= PORT_MIN && Number(port) <= PORT_MAX;
+
+/** Is this pseudo-word an ordinary word, or a name that the lexicon already has? A replacement is not. */
+function isPlainWord(word: string): boolean {
+  return PLAIN.has(word) || FIRST_SET.has(word) || SURNAME_SET.has(word) || TOOLS.has(word) || GENERIC_LABELS.has(word);
 }
 
 function makePort(original: string, s: Stream): string {
@@ -915,13 +1041,13 @@ export function run(opts: RunOptions): RunResult {
 
 function sortedMap(map: RewriteMap): RewriteMap {
   const sortKeys = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => byCode(a, b)));
-  return { ...map, words: sortKeys(map.words), hosts: sortKeys(map.hosts), ips: sortKeys(map.ips), ports: sortKeys(map.ports), uuids: sortKeys(map.uuids), hex: sortKeys(map.hex), numbers: sortKeys(map.numbers) };
+  return { ...map, words: sortKeys(map.words), hostWords: sortKeys(map.hostWords), hosts: sortKeys(map.hosts), ips: sortKeys(map.ips), ports: sortKeys(map.ports), uuids: sortKeys(map.uuids), hex: sortKeys(map.hex), numbers: sortKeys(map.numbers) };
 }
 
 // ---------------------------------------------------------------------------
 // CLI
 
-const USAGE = `Usage: bun lib/rewrite/rewrite.ts --seed <n> --map <mapping.json> [--min-count <n>] [--keep-values] <in> <out>
+const USAGE = `Usage: bun lib/rewrite/rewrite.ts --seed <n> --map <mapping.json> [--min-count <n>] [--keep-values] [--tools rename|keep] <in> <out>
 
 Rewrites names, tool names, hostnames, URLs, IPs, ports, UUIDs, long hex ids, dates,
 numbers and versions in <in>, a file or a folder, and writes the result to <out>.
@@ -933,6 +1059,10 @@ numbers and versions in <in>, a file or a folder, and writes the result to <out>
                     (default 2).
   --keep-values     keep numbers and versions as they are, for data whose answers are
                     counted from the text. Dates, names and the rest are still rewritten.
+  --tools <mode>    rename (the default) renames every tool in the list of tools.
+                    keep leaves the real ones as they are, so a model still knows
+                    what \`uv run\` or \`vim\` is, and renames only the made-up ones.
+                    The map remembers its mode: pass the same one, or none, again.
 `;
 
 function parseArgs(argv: string[]): RunOptions {
@@ -949,6 +1079,7 @@ function parseArgs(argv: string[]): RunOptions {
     else if (a === "--map") opts.mapPath = value();
     else if (a === "--min-count") opts.minCount = Number(value());
     else if (a === "--keep-values") opts.keepValues = true;
+    else if (a === "--tools") opts.tools = toolMode(value());
     else if (a === "-h" || a === "--help") throw new UsageError("");
     else if (a.startsWith("--")) throw new UsageError(`unknown option ${a}`);
     else positional.push(a);

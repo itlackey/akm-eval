@@ -7,11 +7,16 @@
 // reasons, so a name changes the same way in all of them. The claims and the reasons may not add names to the map: a word
 // that the notes did not make a name must stay a word in them, so the claims stay word for word in the notes. Then it
 // checks that each deciding claim is still in the note it belongs to, and in no other.
+//
+// It works in a temporary folder, private/consolidate/.new, and moves assets/ and map.json into place only when the checks have
+// passed, with generated.json (the seed and the digest of the public cases) beside them. A failed run leaves the previous private
+// cases, map and generated.json as they were. `run --corpus private` stops when generated.json is missing or does not match the public cases.
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Case, claimProblems, parseCases } from "./lib.ts";
+import { assetsDigest, generateInto } from "./inputs.ts";
+import { type Case, INPUT_FILES, claimProblems, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -67,39 +72,43 @@ function rewrite(args: string[]): string {
   return p.stdout.toString().trim();
 }
 
-function main(): void {
+function main(): number {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
   if (values.seed === undefined || values.out === undefined) {
     console.error("Usage: evals/consolidate/generate --seed N --out private/consolidate");
-    process.exit(2);
+    return 2;
   }
+  const seed = values.seed;
   const out = resolve(values.out);
-  const work = join(out, ".work");
-  const assets = join(out, "assets");
-  const map = join(out, "map.json");
 
-  const cases = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"), "assets/cases.jsonl");
-  rmSync(work, { recursive: true, force: true });
-  rmSync(map, { force: true });
-  explode(cases, join(work, "corpus"), join(work, "labels"));
+  const publicAssets = join(EVAL_DIR, "assets");
+  const cases = parseCases(readFileSync(join(publicAssets, "cases.jsonl"), "utf8"), "assets/cases.jsonl");
+  let written = 0;
+  let summary = "";
+  // Everything is made in a temporary folder and moved into place when it has passed the checks, so a failure leaves the previous private set as it was.
+  const problems = generateInto(out, seed, assetsDigest(publicAssets, INPUT_FILES), (stage) => {
+    const work = join(stage.dir, "work");
+    explode(cases, join(work, "corpus"), join(work, "labels"));
+    rewrite(["--seed", seed, "--map", stage.map, join(work, "corpus"), join(work, "corpus-out")]);
+    summary = rewrite(["--map", stage.map, "--min-count", "1000000", join(work, "labels"), join(work, "labels-out")]);
 
-  rewrite(["--seed", values.seed, "--map", map, join(work, "corpus"), join(work, "corpus-out")]);
-  const summary = rewrite(["--map", map, "--min-count", "1000000", join(work, "labels"), join(work, "labels-out")]);
-
-  const rewritten = assemble(cases, join(work, "corpus-out"), join(work, "labels-out"));
-  rmSync(work, { recursive: true, force: true });
-  const problems = rewritten.flatMap((c) => claimProblems(c).map((p) => `${c.id}: ${p}`));
+    const rewritten = assemble(cases, join(work, "corpus-out"), join(work, "labels-out"));
+    const broken = rewritten.flatMap((c) => claimProblems(c).map((p) => `${c.id}: ${p}`));
+    if (broken.length > 0) return broken;
+    const text = `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`;
+    parseCases(text, "the rewritten cases"); // the names are still names, and so on
+    mkdirSync(stage.assets, { recursive: true });
+    writeFileSync(join(stage.assets, "cases.jsonl"), text);
+    written = rewritten.length;
+    return [];
+  });
   if (problems.length > 0) {
     console.error(`consolidate: the rewrite broke ${problems.length} deciding claim${problems.length === 1 ? "" : "s"}, so nothing was written:\n  ${problems.slice(0, 10).join("\n  ")}`);
-    process.exit(1);
+    return 1;
   }
-  const text = `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`;
-  parseCases(text, "the rewritten cases"); // the names are still names, and so on
-  rmSync(assets, { recursive: true, force: true });
-  mkdirSync(assets, { recursive: true });
-  writeFileSync(join(assets, "cases.jsonl"), text);
-  console.log(`consolidate: ${rewritten.length} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
+  console.log(`consolidate: ${written} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
   console.log(summary.split("\n").pop());
+  return 0;
 }
 
-if (import.meta.main) main();
+if (import.meta.main) process.exit(main());

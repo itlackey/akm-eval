@@ -3,8 +3,11 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
+import { assetsDigest } from "./inputs.ts";
+import { sandboxOptions } from "./lib.ts";
 import { runPool } from "./run.ts";
-import { KINDS, type Kind, type Pool, POOL_STRATEGY, budgetWarnings, clusterRows, judgeRetirement, loadPool, poolImproveArgs, poolMetrics, poolProblems, retirementsFrom, scorePool, usageTotals, writePoolNotes } from "./pool.ts";
+import { KINDS, type Kind, type Pool, POOL_STRATEGY, budgetWarnings, clusterRows, judgeRetirement, loadPool, poolFiles, poolImproveArgs, poolMetrics, poolProblems, retirementsFrom, scorePool, usageTotals, writePoolNotes } from "./pool.ts";
 
 const POOL_DIR = join(import.meta.dir, "..", "assets", "pool");
 const pool = loadPool(POOL_DIR);
@@ -319,8 +322,13 @@ import { join } from "node:path";
 const args = process.argv.slice(2);
 const config = JSON.parse(readFileSync(join(process.env.AKM_CONFIG_DIR, "config.json"), "utf8"));
 const proposals = join(process.env.AKM_STATE_DIR, "proposals.json");
-if (args[0] === "index") console.log(JSON.stringify({ ok: true }));
-else if (args[0] === "improve") {
+if (args[0] === "index") {
+  const real = process.env.FAKE_EMBEDDER === "real";
+  if (process.env.FAKE_EMBEDDER && real !== (config.embedding?.localModel === "Xenova/bge-small-en-v1.5" && !!process.env.HF_HOME && !process.env.AKM_EMBED_DETERMINISTIC)) { console.error("not the embedder the test asked for"); process.exit(3); }
+  if (process.env.FAKE_EMBEDDER === "deterministic" && process.env.AKM_EMBED_DETERMINISTIC !== "1") { console.error("no deterministic embedder"); process.exit(3); }
+  console.log(JSON.stringify({ ok: true }));
+} else if (args[0] === "improve") {
+  if (process.env.FAKE_SLEEP) await Bun.sleep(30000);
   if (process.env.FAKE_CRASH) { console.error("boom"); process.exit(70); }
   writeFileSync(proposals, JSON.stringify([{ id: "p1", ref: "bundle//memories/halbrook-deploy-freeze", source: "consolidate-pair", retirement: { retiredRef: "memories/halbrook-deploy-freeze", successorRef: "memories/halbrook-freeze-rules", judgeLabel: "duplicate", judgeReason: "same" } }]));
   console.log(JSON.stringify({ ok: true, consolidation: { totalChunks: 7, warnings: ["fake: probe=" + config.probe + " args=" + args.join(" ")], pairPass: { initiators: 80, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 } } }, usageReport: { byProcessEngineModel: [{ model: "fake-served", calls: 3, failures: 0 }] } }));
@@ -359,7 +367,12 @@ describe("runPool", () => {
       const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
       expect(readdirSync(dir).filter((f) => f !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]);
       expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(47);
-      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).results_dir).toBeUndefined();
+      const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+      expect(stored.results_dir).toBeUndefined();
+      expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+      expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+      expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
+      expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -371,9 +384,69 @@ describe("runPool", () => {
     try {
       await expect(quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")))).rejects.toThrow("exit 70");
       const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
-      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ mode: "pool", n_errored: 1, n_scored: 0, metrics: null, config_patch: null });
+      const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+      expect(stored).toMatchObject({ mode: "pool", n_errored: 1, n_scored: 0, metrics: null, config_patch: null, timeouts: 0 });
+      expect(stored).toMatchObject({ status: "aborted" });
+      expect(stored.aborted_reason).toContain("akm improve failed (exit 70)");
+      expect(stored.aborted_reason).toBe(stored.error);
     } finally {
       delete process.env.FAKE_CRASH;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an akm that the eval kills for running too long is a timeout, apart from other failures", async () => {
+    const { root, ctx } = setup();
+    process.env.FAKE_SLEEP = "1";
+    try {
+      await expect(quiet(() => runPool({ ...ctx, improveTimeoutMs: 1500, overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")))).rejects.toThrow("akm improve timed out after 1.5s");
+      const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
+      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: "akm improve timed out after 1.5s", n_errored: 1, timeouts: 1 });
+    } finally {
+      delete process.env.FAKE_SLEEP;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("records the config it wrote, the engine's settings, the digest of the pool, no seed, and a complete run", async () => {
+    const { root, ctx } = setup();
+    try {
+      const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")));
+      const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+      expect(stored).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
+      expect(stored.assets_sha256).toBe(assetsDigest(POOL_DIR, poolFiles(POOL_DIR)));
+      expect(poolFiles(POOL_DIR)).toHaveLength(81); // labels.json and the 80 notes
+      expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+      expect(stored.config.engines.consolidate).toMatchObject({ endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0, enableThinking: false });
+      expect(JSON.stringify(stored.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("with the real embedder it runs in a semantic sandbox with akm's model in the config, and records it", async () => {
+    const { root, ctx } = setup();
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const newSandbox = () => ({ ...createSandbox("consolidate-pool-test", sandboxOptions("real")), cmd: ["bun", join(root, "fake-akm.ts")] });
+      const summary = await quiet(() => runPool({ ...ctx, newSandbox, embedder: "real", overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")));
+      expect(summary).toMatchObject({ embedder: "real", status: "complete", n_errored: 0 });
+      expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("with the default embedder it sets the hash embedder's switch and no embedding model", async () => {
+    const { root, ctx } = setup();
+    process.env.FAKE_EMBEDDER = "deterministic";
+    try {
+      const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, pool, join(root, "results")));
+      expect(summary).toMatchObject({ embedder: "deterministic", n_errored: 0 });
+      expect(summary.config.embedding).toBeUndefined();
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
       rmSync(root, { recursive: true, force: true });
     }
   });

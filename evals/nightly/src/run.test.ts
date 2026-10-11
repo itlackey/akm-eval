@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { type Item, applyFix, loadNight, nightlyConfig, refOf } from "./lib.ts";
-import { feedbackArgs, hideEndpoint, plant, runCorpus } from "./run.ts";
+import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
+import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
+import { type Item, applyFix, loadNight, nightFiles, nightlyConfig, refOf } from "./lib.ts";
+import { feedbackArgs, plant, runCorpus } from "./run.ts";
 
 const night = loadNight(join(import.meta.dir, "..", "assets"));
 const dirs: string[] = [];
@@ -41,7 +44,11 @@ const apply = (effects) => {
 };
 if (cmd === "index") {
   if (scenario.indexFails) { console.error(JSON.stringify({ ok: false, error: scenario.indexFails })); process.exit(70); }
-  if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.semanticSearchMode !== "auto") { console.error("no deterministic embedder or semantic search is off"); process.exit(3); }
+  if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
+  if (process.env.FAKE_EMBEDDER === "real") {
+    // the real embedder: no switch for the hash one, akm's model in the config, and the model's folder in the environment
+    if (process.env.AKM_EMBED_DETERMINISTIC || config.embedding?.localModel !== "Xenova/bge-small-en-v1.5" || !process.env.HF_HOME) { console.error("the real embedder is not set up"); process.exit(3); }
+  } else if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
   json({ ok: true });
 } else if (cmd === "feedback") {
   json({ ok: true });
@@ -49,6 +56,7 @@ if (cmd === "index") {
   const strategy = args[args.indexOf("--strategy") + 1];
   writeFileSync(process.env.FAKE_LOG + ".config", JSON.stringify(config));
   if (strategy !== (scenario.strategy ?? "default") || !has("--require-engines") || !has("--no-sync") || !has("--json-to-stdout") || !has("--timeout-ms")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
+  if (scenario.improveSleeps) await Bun.sleep(30000);
   if (scenario.improveFails) { console.error(JSON.stringify({ ok: false, error: scenario.improveFails })); process.exit(78); }
   apply(scenario.improveWrites);
   writeFileSync(state, JSON.stringify((scenario.proposals ?? []).map((p) => ({ ...p, status: "pending" }))));
@@ -69,8 +77,11 @@ if (cmd === "index") {
 
 type Scenario = Record<string, unknown>;
 
-/** A temp folder holding a small night of the public night's items, a scenario, and a context that runs the fake akm. */
-function setup(ids: string[], scenario: Scenario) {
+/**
+ * A temp folder holding a small night of the public night's items, a scenario, and a context that runs the fake akm. `made` lists the
+ * folders of the sandboxes that context made, so a test can ask whether its own are gone, whatever else sits in the shared temp folder.
+ */
+function setup(ids: string[], scenario: Scenario, embedder: Embedder = "deterministic") {
   const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
   dirs.push(root);
   const items = ids.map((id) => night.items.find((i) => i.id === id) as Item);
@@ -85,10 +96,22 @@ function setup(ids: string[], scenario: Scenario) {
   process.env.FAKE_SCENARIO = join(root, "scenario.json");
   process.env.FAKE_LOG = join(root, "commands.log");
   writeFileSync(process.env.FAKE_LOG, "");
-  const newSandbox = () => ({ ...createSandbox("nightly-test", { keepModelKey: true }), cmd: ["bun", join(root, "fake-akm.ts")] });
-  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
-  return { ctx, folders: { assets, results: join(root, "results") }, root, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
+  const made: string[] = [];
+  const newSandbox = () => {
+    const sandbox = { ...createSandbox("nightly-test", sandboxOptions(embedder)), cmd: ["bun", join(root, "fake-akm.ts")] };
+    made.push(sandbox.dir);
+    dirs.push(sandbox.dir); // one that a failing test leaves behind is removed with the rest
+    return sandbox;
+  };
+  const ctx = { newSandbox, baseUrl: "http://localhost:1/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t", embedder };
+  return { ctx, folders: { assets, results: join(root, "results") }, root, made, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
 }
+
+/** The sandboxes a test's context made: there was at least one, and none is left on disk. */
+const expectAllRemoved = (made: string[]) => {
+  expect(made.length).toBeGreaterThan(0);
+  expect(made.filter((dir) => existsSync(dir))).toEqual([]);
+};
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -112,7 +135,7 @@ const item = <T extends Item>(id: string) => night.items.find((i) => i.id === id
 // What a good night looks like, for the items of these tests: the first duplicate is retired, the reflect case is fixed, the control is
 // left alone, the exact fix waits, the lesson waits for review, and the note to leave alone is as it was.
 const dup = item<Extract<Item, { kind: "pair" }>>("duplicate-01");
-const period = item<Extract<Item, { kind: "reflect" }>>("description-period-01");
+const period = item<Extract<Item, { kind: "reflect" | "silent" }>>("description-period-01");
 const fix = item<Extract<Item, { kind: "fix" }>>("exact-fix-01");
 const lesson = item<Extract<Item, { kind: "distill" }>>("lesson-01");
 const GOOD_LESSON = "---\ndescription: Do not wait for networkidle on a page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds, so the network is never idle for networkidle. Wait for an element to be visible instead, such as the page heading.\n";
@@ -197,15 +220,6 @@ describe("feedbackArgs", () => {
   });
 });
 
-describe("hideEndpoint", () => {
-  test("writes the endpoint as <MODEL_BASE_URL>, with or without a closing slash, and leaves other text alone", () => {
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions refused", "http://localhost:8080/v1")).toBe("failed: <MODEL_BASE_URL>/chat/completions refused");
-    expect(hideEndpoint("failed: http://localhost:8080/v1/chat/completions", "http://localhost:8080/v1/")).toBe("failed: <MODEL_BASE_URL>/chat/completions");
-    expect(hideEndpoint("nothing to hide", "http://localhost:8080/v1")).toBe("nothing to hide");
-    expect(hideEndpoint("anything", "")).toBe("anything");
-  });
-});
-
 describe("runCorpus", () => {
   test("runs the night as the nightly does: index, the feedback, improve with the default strategy, then the drain, then the proposals", async () => {
     const { ctx, folders, commands } = setup(IDS, good());
@@ -287,8 +301,20 @@ describe("runCorpus", () => {
     expect(Object.keys(summary.seconds)).toEqual(["index", "feedback", "improve", "drain", "total"]);
     expect(rows.map((r) => [r.id, r.ok])).toEqual(IDS.map((id) => [id, true]).sort((a, b) => IDS.indexOf(a[0] as string) - IDS.indexOf(b[0] as string)));
     expect(rows.find((r) => r.id === "duplicate-01")).toMatchObject({ kind: "pair", state: "retired a", detail: { judged_as: "duplicate" } });
-    expect(rows.find((r) => r.id === "lesson-01")).toMatchObject({ state: "lesson pending, deferred/distill-review", detail: { gate: "deferred/distill-review", missing: [], forbidden: [] } });
+    expect(rows.find((r) => r.id === "lesson-01")).toMatchObject({ state: "lesson pending, deferred/distill-review", detail: { gate: "deferred/distill-review", missing: [], forbidden: [], contradicted: [] } });
     expect(rows.find((r) => r.id === "lesson-01")?.detail.lesson).toContain("polls every 20 seconds");
+  });
+
+  test("a queued lesson that states the reverse of its memory's fix fails lesson_good, and the row says what it asserted", async () => {
+    const reversed = good();
+    const queued = (reversed.proposals as { id: string; payload: { content: string } }[]).find((p) => p.id === "p4") as { payload: { content: string } };
+    queued.payload.content = "---\ndescription: A page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds. Wait for networkidle on pages with a polling widget; never wait for the visible heading.\n";
+    const { ctx, folders } = setup(IDS, reversed);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const row = resultsOf(folders).rows.find((r) => r.id === "lesson-01");
+    expect(row).toMatchObject({ ok: false, harm: false, checks: { lesson_queued: true, lesson_good: false }, detail: { forbidden: [], contradicted: ["=wait for networkidle", "never wait for * heading"] } });
+    expect(summary.metrics.failed).toEqual({ lesson_good: 1 });
+    expect(summary.metrics.items).toMatchObject({ n: 6, ok: 5 });
   });
 
   test("counts the harm of a bad night: an unsafe retirement, a note changed outside the items, a lesson accepted, a model call failed", async () => {
@@ -324,10 +350,9 @@ describe("runCorpus", () => {
   });
 
   test("ends with akm's own message when improve fails, with the endpoint hidden, and leaves nothing behind", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
-    const { ctx, folders } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
+    const { ctx, folders, made } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused");
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+    expectAllRemoved(made);
   });
 
   test("ends with akm's message when a step before improve fails, and says when akm reports the run as not ok", async () => {
@@ -340,15 +365,100 @@ describe("runCorpus", () => {
   });
 
   test("removes every sandbox it makes", async () => {
-    const before = readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length;
-    const { ctx, folders } = setup(IDS, good());
+    const { ctx, folders, made } = setup(IDS, good());
     await quiet(() => runCorpus("public", ctx, folders));
-    expect(readdirSync(tmpdir()).filter((f) => f.startsWith("akm-eval-nightly-test-")).length).toBe(before);
+    expectAllRemoved(made);
   });
 
   test("gives akm what it needs: semantic search and the deterministic embedder (the fake refuses to index without them)", async () => {
     const { ctx, folders } = setup(IDS, good());
     await expect(quiet(() => runCorpus("public", ctx, folders))).resolves.toBeDefined();
+  });
+
+  test("with the real embedder it sets akm's model in the config and no switch for the hash one, in a semantic sandbox, and records it", async () => {
+    process.env.FAKE_EMBEDDER = "real"; // the fake refuses to index without the model's folder, the model in the config, and with the switch on
+    try {
+      const { ctx, folders, root } = setup(IDS, good(), "real");
+      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
+      expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
+      expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("the real embedder's config is refused by an akm run with the hash embedder's sandbox, so the two cannot be mixed up", async () => {
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const { ctx, folders } = setup(IDS, good(), "deterministic"); // a plain sandbox: no model folder
+      await expect(quiet(() => runCorpus("public", { ...ctx, embedder: "real" }, folders))).rejects.toThrow("the real embedder is not set up");
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("the default is the deterministic embedder: the summary says so and the config has no embedding model", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    expect(summary).toMatchObject({ embedder: "deterministic" });
+    expect(summary.config.embedding).toBeUndefined();
+    expect(resultsOf(folders).summary.embedder).toBe("deterministic");
+  });
+
+  test("records the config it wrote with the secrets and the endpoint left out, the engine's settings, the digest of the night, no seed for the public night, and a complete run", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    await quiet(() => runCorpus("public", { ...ctx, hasKey: true }, folders));
+    const { summary } = resultsOf(folders);
+    expect(summary).toMatchObject({ status: "complete", aborted_reason: null, seed: null });
+    expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
+    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
+    expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
+    expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+    // every key it wrote before is still there
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
+    // the digest of the code covers the night's own src folder, the consolidate, distill and reflect code it imports, and lib/
+    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => resolve(import.meta.dir, "..", "..", name, "src")) }));
+    expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
+  });
+
+  test("the digest of the night follows the library and the items, and the config follows the config patch", async () => {
+    const [x, y] = [setup(IDS, good()), setup(IDS, good())];
+    writeFileSync(join(y.folders.assets, "library", dup.a), `${textOf(dup.a)}\nAn added line.\n`);
+    const overrides = { strategy: "default", configPatch: { path: "p.json", sha256: "abc", patch: { engines: { nightly: { temperature: 0.3 } } } } };
+    await quiet(() => runCorpus("public", { ...x.ctx, overrides }, x.folders));
+    await quiet(() => runCorpus("public", y.ctx, y.folders));
+    const [a, b] = [resultsOf(x.folders).summary, resultsOf(y.folders).summary];
+    expect(a.assets_sha256).not.toBe(b.assets_sha256);
+    expect(a.engine.temperature).toBe(0.3);
+    expect(a.config.engines.nightly.temperature).toBe(0.3);
+    expect(b.engine.temperature).toBe(0);
+  });
+
+  test("a private run records the seed its assets were made from: generated.json beside them, else private/seed", async () => {
+    const { ctx, folders, root } = setup(IDS, good());
+    const priv = join(root, "private");
+    const assets = join(priv, "nightly", "assets");
+    mkdirSync(dirname(assets), { recursive: true });
+    cpSync(folders.assets, assets, { recursive: true });
+    const private_ = { assets, results: join(priv, "nightly", "results") };
+    expect(await quiet(() => runCorpus("private", ctx, private_))).toMatchObject({ corpus: "private", seed: null });
+    writeFileSync(join(priv, "seed"), "12345\n");
+    expect(await quiet(() => runCorpus("private", { ...ctx, label: "t2" }, private_))).toMatchObject({ seed: "12345" });
+    writeFileSync(join(priv, "nightly", GENERATED), JSON.stringify({ seed: "777", inputs_sha256: "x" }));
+    const last = await quiet(() => runCorpus("private", { ...ctx, label: "t3" }, private_));
+    expect(last.seed).toBe("777");
+    expect(JSON.parse(readFileSync(join(last.results_dir, "summary.json"), "utf8")).seed).toBe("777");
+    expect(last.assets_sha256).toBe(assetsDigest(assets, nightFiles(assets)));
+  });
+
+  test("an improve run the eval kills for running too long ends the night with a message that says so, and leaves nothing behind", async () => {
+    const { ctx, folders, made } = setup(IDS, { ...good(), improveSleeps: true });
+    await expect(quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders))).rejects.toThrow("akm improve timed out after 1.5s");
+    expectAllRemoved(made);
   });
 });
 
@@ -372,6 +482,9 @@ describe("the command", () => {
     expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
     expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
     expect(run(["--repeat", "0"], model).err).toContain("--repeat must be a positive integer");
+    expect(run(["--embedder", "fake"], model)).toMatchObject({ code: 2 });
+    expect(run(["--embedder", "fake"], model).err).toContain('--embedder must be deterministic or real, not "fake"');
+    expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
     expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
@@ -396,6 +509,11 @@ describe("the command", () => {
     writeFileSync(join(root, "patch.json"), "{}");
     const done = run(["--strategy", "thorough", "--config-patch", join(root, "patch.json"), "--repeat", "2"], model);
     expect(done.err).toContain("could not run `no-such-akm-in-this-test --version`");
+  });
+
+  test("takes --embedder real or deterministic, and goes on to the akm check", () => {
+    expect(run(["--embedder", "real"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--embedder", "deterministic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
   test("refuses an akm older than the one it is written for", () => {

@@ -1,7 +1,7 @@
 // Pure helpers for the consolidate eval: the cases, which ones a run takes, the akm config, how akm's result becomes
 // a row, and the metrics. run.ts runs the eval with them and generate.ts makes the private cases.
 
-import { engineConfig } from "../../../lib/akm/akm.ts";
+import { engineConfig, semanticConfig } from "../../../lib/akm/akm.ts";
 
 export type Side = "a" | "b";
 
@@ -30,6 +30,9 @@ export interface Case {
   canary?: string;
 }
 
+/** The files of an assets folder that a per-case run reads, and that `generate` reads from the public one: assets_sha256 and generated.json digest them. */
+export const INPUT_FILES = ["cases.jsonl"];
+
 export type Outcome = "retire" | "keep" | "error";
 
 export interface Row {
@@ -49,6 +52,7 @@ export interface Row {
   seconds: number; // the last try
   retried?: number; // how many times the case was tried again because the endpoint rate limited it
   error?: string;
+  timed_out?: true; // the error is a timeout: the eval killed akm for running past its time limit, which a slower akm or model makes happen
 }
 
 export const isSide = (x: unknown): x is Side => x === "a" || x === "b";
@@ -128,18 +132,58 @@ export function noteAges(older: Side | null): Record<Side, number> {
  */
 export const EMBEDDER_ENV = { AKM_EMBED_DETERMINISTIC: "1" };
 
+/** The embedders a run can use: akm's word-hash one (the default), or its built-in model, which is what a real bundle runs. */
+export const EMBEDDERS = ["deterministic", "real"] as const;
+export type Embedder = (typeof EMBEDDERS)[number];
+
+/** `--embedder`, for parseArgs, and its lines of an eval's usage text. */
+export const EMBEDDER_OPTIONS = { embedder: { type: "string" } } as const;
+export const embedderUsage = `  --embedder      deterministic (default) or real. How akm embeds the notes to find the pairs it judges. deterministic is akm's
+                  word-hash embedder: no model, and the same pairs on every run. real is akm's built-in model (the one retrieval
+                  uses, downloaded once into .cache/), as a real bundle runs it. The pairs were made to pair in the hash space, so
+                  the real embedder may pair others, and its runs are not comparable with deterministic ones.`;
+
+/** The embedder that `--embedder` names. `fail` ends the run with a message. */
+export function parseEmbedder(value: string | undefined, fail: (message: string) => never): Embedder {
+  if (value === undefined) return "deterministic";
+  if (!(EMBEDDERS as readonly string[]).includes(value)) fail(`--embedder must be deterministic or real, not "${value}"`);
+  return value as Embedder;
+}
+
+/** What the embedder needs in akm's environment: the deterministic one is a switch, and the real one needs nothing. */
+export const embedderEnv = (embedder: Embedder): Record<string, string> => (embedder === "real" ? {} : EMBEDDER_ENV);
+
+/** What a run gives createSandbox. A semantic sandbox points akm at the repository's .cache/ for the real embedder's model. */
+export const sandboxOptions = (embedder: Embedder): { keepModelKey: true; semantic: boolean } => ({ keepModelKey: true, semantic: embedder === "real" });
+
 /**
- * The akm config consolidate runs under: one LLM engine, the model under test, as the default engine, and semantic search on,
- * because consolidate finds its candidate pairs among the notes' nearest neighbours by embedding.
+ * Turns semantic search on in the config, as the pair pass needs. The real embedder is set as semanticConfig of lib/akm sets it:
+ * akm's built-in model, and the long wait for a query's embedding. The deterministic one needs no embedding settings.
  */
-export function consolidateConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "consolidate");
+export function withEmbedder(config: Record<string, any>, embedder: Embedder): Record<string, any> {
   config.semanticSearchMode = "auto";
+  if (embedder === "real") config.embedding = semanticConfig().embedding;
   return config;
 }
 
-export function errorRow(c: Case, message: string, seconds: number): Row {
-  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null, served: {}, seconds, error: message };
+/**
+ * The akm config consolidate runs under: one LLM engine, the model under test, as the default engine, and semantic search on,
+ * because consolidate finds its candidate pairs among the notes' nearest neighbours by embedding. Requests use temperature 0 and
+ * ask for no thinking, as distill's and extract's do, so a run does not depend on akm's default sampling.
+ */
+export function consolidateConfig(baseUrl: string, model: string, hasKey: boolean, embedder: Embedder = "deterministic"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "consolidate");
+  config.engines.consolidate.temperature = 0;
+  config.engines.consolidate.enableThinking = false;
+  return withEmbedder(config, embedder);
+}
+
+/** What runAkmJson throws, and what a caller writes, when the eval's time limit killed akm: `akm index timed out after 120s`. */
+export const timeoutMessage = (command: string, timeoutMs: number): string => `akm ${command} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`;
+export const isTimeout = (message: string): boolean => /^akm [\w-]+ timed out after [\d.]+s$/.test(message);
+
+export function errorRow(c: Case, message: string, seconds: number, timedOut = false): Row {
+  return { id: c.id, relation: c.relation, safe_sides: c.safe, outcome: "error", paired: false, judged_as: null, retired: null, safe: null, staged: false, reason: "", only_in_retired: null, only_in_successor: null, served: {}, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
 }
 
 export interface RetireProposal {

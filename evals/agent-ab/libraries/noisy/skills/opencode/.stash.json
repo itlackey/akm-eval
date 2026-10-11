@@ -12,7 +12,9 @@
         "agent cli",
         "opencode config provider env token",
         "disable openai provider",
-        "anthropic api key model"
+        "anthropic api key model",
+        "anthropic default model",
+        "provider token train model"
       ],
       "filename": "SKILL.md",
       "quality": "curated",

@@ -2,7 +2,10 @@
 // that score a result, and the metrics. build.ts makes the public cases with them, generate.ts the private
 // cases and run.ts runs the eval.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
+import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 // The checks read frontmatter with bun's own YAML parser. Without it every result would look like broken YAML.
 if (typeof Bun.YAML?.parse !== "function") throw new Error("reflect: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
@@ -457,11 +460,13 @@ export function caseProblems(c: Case): string[] {
 export const STRATEGY = "reflect-only";
 
 /**
- * The akm config for a run: the model under test as the one engine, and a strategy that runs reflect on its own,
- * with its quality judge off. judge-gate scores the judge, so here every proposal reaches the checks.
+ * The akm config for a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy
+ * that runs reflect on its own, with its quality judge off. judge-gate scores the judge, so here every proposal reaches the checks.
  */
-export function reflectConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, unknown> {
+export function reflectConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
   const config = engineConfig(baseUrl, model, hasKey, "reflect");
+  config.engines.reflect.temperature = 0;
+  config.engines.reflect.enableThinking = false;
   const off = { enabled: false };
   config.defaults.improveStrategy = STRATEGY;
   config.improve = {
@@ -499,6 +504,71 @@ export function atLeast(version: string, minimum: string): boolean {
   }
   return true;
 }
+
+// --- What a run read ----------------------------------------------------------------------------------------------
+
+/**
+ * One digest over files, each named by a name of its own: the digest of sha256Files, except that the name is not the path
+ * the file is read from. A name relative to the corpus folder gives a digest that holds in another checkout.
+ */
+export function digestOf(files: [name: string, path: string][]): string {
+  const sorted = [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return sha256Text(sorted.map(([name, path]) => `${name}\0${sha256File(path)}\n`).join(""));
+}
+
+/** The digest of what a run reads from a corpus folder: its cases.jsonl. */
+export const assetsSha256 = (assets: string): string => digestOf([["cases.jsonl", join(assets, "cases.jsonl")]]);
+
+/** What generate writes beside the private assets: the seed they were made with, and the digest of the public assets they were made from. */
+export interface Generated {
+  seed: string;
+  inputs_sha256: string;
+}
+
+export const GENERATED = "generated.json";
+
+/** generated.json in `dir` (private/reflect), or undefined when it is missing or does not hold a seed and a digest. */
+export function readGenerated(dir: string): Generated | undefined {
+  try {
+    const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
+    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256 } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, and
+ * the public assets it names the digest of are the ones in `publicAssets` now. Assets made before the public ones changed, or by
+ * an older generate, would score a different set than the public run does.
+ */
+export function generatedProblem(dir: string, publicAssets: string): string | undefined {
+  const generated = readGenerated(dir);
+  if (!generated) return `${GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from`;
+  if (generated.inputs_sha256 !== assetsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
+  return undefined;
+}
+
+/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
+export function readSeed(file: string): string | null {
+  try {
+    return readFileSync(file, "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The seed to record for a corpus: none for the public one. The private corpus records the seed its assets were made with
+ * (generated.json beside them), which is not private/seed when generate-assets ran with --seed, and private/seed when there is no generated.json.
+ */
+export function corpusSeed(corpus: string, privateDir: string, seedFile: string): string | null {
+  if (corpus === "public") return null;
+  return (corpus === "private" ? readGenerated(privateDir)?.seed : undefined) ?? readSeed(seedFile);
+}
+
+/** Did the command run past its timeout? runAkm ends the stderr of a command it killed with "akm timed out after <N>s", and runAkmJson throws a message that says so. */
+export const timedOutMessage = (message: string): boolean => /\btimed out after [\d.]+s\b/.test(message);
 
 // --- Cases, outcomes and metrics ---------------------------------------------------------------------------------
 
@@ -600,13 +670,15 @@ export interface Row {
   proposal?: string;
   seconds: number;
   error?: string;
+  /** The error was a timeout: akm ran past its timeout and was killed. Absent on every other row. */
+  timed_out?: true;
 }
 
 /** A row for a case. An error has no verdict. A reply akm could not use, or an edit its own filter refused, is never correct. */
-export function makeRow(c: Case, run: { outcome: Outcome; proposal?: string; reason?: string; served?: string; seconds: number; error?: string }): Row {
+export function makeRow(c: Case, run: { outcome: Outcome; proposal?: string; reason?: string; served?: string; seconds: number; error?: string; timedOut?: boolean }): Row {
   // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
   const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
-  if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason };
+  if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
   const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
   const correct = (run.outcome === "proposal" || run.outcome === "none") && Object.values(checks).every(Boolean);
   return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODEL_OPTIONS, type ModelEntry, loadModels, privateModelError, resolveModel, useJudge, useModel } from "./models.ts";
+import { type Endpoint, MODEL_OPTIONS, type ModelEntry, loadModels, privateModelError, resolveModel, useJudge, useModel } from "./models.ts";
 
 const GATEWAY = "https://gateway.example/v1";
 const ENV = { MODEL_BASE_URL: GATEWAY, MODEL_API_KEY: "gw-key", MODEL_NAME: "my-model" };
@@ -57,6 +57,39 @@ describe("resolveModel", () => {
     expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key", private: false });
     expect(resolveModel("judge", undefined, { ...ENV, JUDGE_MODEL: "my-j2" }, NONE).name).toBe("my-j2");
     expect(() => resolveModel("judge", undefined, ENV, NONE)).toThrow("pass --judge-model ID, or set JUDGE_MODEL");
+  });
+});
+
+describe("the judge's fallback endpoint", () => {
+  const MODEL: Endpoint = { baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" };
+
+  test("a judge with no endpoint of its own goes to the fallback, and not to the gateway of .env", () => {
+    expect(resolveModel("judge", "my-j", ENV, NONE, MODEL)).toEqual({ name: "my-j", baseUrl: MODEL.baseUrl, apiKey: "oa-key", private: false });
+    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_API_KEY: "jk" }, NONE, MODEL).apiKey).toBe("oa-key"); // the key goes with the endpoint
+    expect(resolveModel("judge", "my-j", {}, NONE, MODEL).baseUrl).toBe(MODEL.baseUrl); // no MODEL_* needed
+  });
+
+  test("the judge's own endpoint, or its models.json line, wins over the fallback", () => {
+    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE, MODEL)).toMatchObject({ baseUrl: "http://judge/v1", apiKey: "jk" });
+    expect(resolveModel("judge", "gpt-5.6-terra", { ...ENV, OPENAI_API_KEY: "oa-key2" }, TERRA, { baseUrl: "http://other/v1", apiKey: "x" })).toMatchObject({ baseUrl: "https://api.openai.com/v1", apiKey: "oa-key2" });
+  });
+
+  test("without a fallback it is as before: JUDGE_*, else the MODEL_* of the environment", () => {
+    expect(resolveModel("judge", "my-j", ENV, NONE, undefined)).toEqual(resolveModel("judge", "my-j", ENV, NONE));
+    expect(resolveModel("judge", "my-j", ENV, NONE).baseUrl).toBe(GATEWAY);
+    expect(() => resolveModel("judge", "my-j", {}, NONE)).toThrow("set MODEL_BASE_URL in .env");
+  });
+
+  test("the model ignores a fallback", () => {
+    expect(resolveModel("model", "my-x", ENV, NONE, MODEL)).toEqual(resolveModel("model", "my-x", ENV, NONE));
+  });
+
+  test("useJudge passes it on: with --model a models.json line and no JUDGE_BASE_URL the judge goes to that line's endpoint", () => {
+    const env: Record<string, string | undefined> = { ...ENV, OPENAI_API_KEY: "oa-key" };
+    const judgeFirst = useJudge({ "judge-model": "my-j" }, stop, env, TERRA); // longmemeval's order: the judge before useModel
+    expect(judgeFirst.baseUrl).toBe(GATEWAY);
+    const model = useModel({ model: "gpt-5.6-terra" }, stop, env, TERRA);
+    expect(useJudge({ "judge-model": "my-j" }, stop, env, TERRA, model)).toMatchObject({ name: "my-j", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" });
   });
 });
 
@@ -136,7 +169,9 @@ describe("every eval and benchmark takes its model and akm the same way", () => 
       const model = /useModel\(|MODEL_OPTIONS/.test(r.source);
       const runsModel = /createSandbox\(|preflight\(/.test(r.source) && !/^(evals\/retrieval|benchmarks\/skillret)$/.test(r.name);
       if (runsModel && !model) missing.push(`${r.name}: no --model`);
-      if (/createSandbox\(/.test(r.source) && !/useAkm\(/.test(r.source)) missing.push(`${r.name}: no --akm`);
+      // The Harbor evals (preflight) run their akm in a container: their --akm is an npm release or a checkout (AKM_ARM_OPTIONS in lib/harbor/harbor.ts), not a command for useAkm.
+      const harbor = /preflight\(/.test(r.source);
+      if ((harbor || /createSandbox\(/.test(r.source)) && !(harbor ? /AKM_ARM_OPTIONS/ : /useAkm\(/).test(r.source)) missing.push(`${r.name}: no --akm`);
       if (r.name === "benchmarks/longmemeval" && !/useJudge\(/.test(r.source)) missing.push(`${r.name}: no --judge-model`);
     }
     expect(missing).toEqual([]);

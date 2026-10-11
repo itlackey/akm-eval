@@ -11,21 +11,33 @@ The control arm is Harbor's own `opencode` agent. This class is that agent plus 
 2. akm itself: akm-cli installed, and an akm bundle seeded from the library `AKM_TASK_STASH` names (set in the task's
    `[environment.env]`, or for a task that is not ours in this agent's own `env` in the job), indexed, and left where
    the plugin looks for it.
-3. The AKM_* settings, on every command the agent runs.
+3. The AKM_* settings, on every command the agent runs: the arm's own, then the ones the job adds with `akm_env`.
 4. A check after the run that the plugin was live. Without it a trial where the plugin failed to load scores like a
    trial where the model chose not to call akm, and the treatment arm quietly becomes a second control arm. Such a
    trial is an error, not a score.
 
 The versions come from the job config (`run.ts` writes it): opencode as Harbor's own `version` option, the plugin and
-akm-cli as `akm_plugin_version` and `akm_cli_version`. The plugin depends on that exact akm-cli.
+akm-cli as `akm_plugin_version` and `akm_cli_version`. By default both are npm releases, and the plugin depends on that
+exact akm-cli. A job that tests a checkout of akm gives `packages_dir` instead: a folder of the tarballs that
+`npm pack` made on the host, which `install` uploads with `environment.upload_dir` (Harbor 0.24.0 has no job setting
+for it) and installs from, as `akm_package` and, when the checkout holds the plugin, `plugin_package` name them.
+
+What was installed is recorded, not required to be a version: the install writes `akm_install.json` into the trial's
+agent folder and into the trial's context (`metadata["akm"]`), with what `akm --version` printed, the akm-cli the
+plugin carries, how many assets the index holds and the AKM_* settings the arm ran with. After the run,
+`akm_plugin_status.json` holds the verdict on the plugin; Harbor keeps only the first exception of a trial, so an
+`AgentTimeoutError` hides the error raised here, and the file is how run.ts finds the plugin failure.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 from pathlib import Path
 from typing import override
+
+from pydantic import Field, field_validator, model_validator
 
 from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
 from harbor.environments.base import BaseEnvironment
@@ -35,6 +47,9 @@ from harbor.models.agent.context import AgentContext
 AKM_ROOT = "/opt/akm"
 BUNDLE = f"{AKM_ROOT}/bundle"
 LIBRARIES = f"{AKM_ROOT}/libraries"  # uploaded for the seed, removed after it
+PACKAGES = f"{AKM_ROOT}/packages"  # the tarballs of a checkout, uploaded for the install, removed after it
+PLUGIN_PREFIX = f"{AKM_ROOT}/plugin"  # where a plugin tarball is installed: npm puts the package in node_modules under it
+PLUGIN_DIR = f"{PLUGIN_PREFIX}/node_modules/akm-opencode"
 WARM_DATA = f"{AKM_ROOT}/opencode-warm"  # the warm-up session's XDG_DATA_HOME, so its log is at a known path
 
 # The akm the plugin shells out to. Without this it runs the akm-cli it carries, which opencode installs without
@@ -61,6 +76,14 @@ AKM_ENV = {
     "AKM_PENDING_PROPOSAL_TIMEOUT": "5",
 }
 
+# What a job may not change with `akm_env`: the five directories are one setting (see above), and the plugin must keep
+# running the akm this arm installed.
+FIXED_AKM_ENV = frozenset([k for k in AKM_ENV if k.endswith("_DIR")] + ["AKM_OPENCODE_CLI"])
+
+# Files the arm leaves in a trial's agent folder, for run.ts to read. Both hold JSON.
+INSTALL_FILE = "akm_install.json"
+PLUGIN_STATUS_FILE = "akm_plugin_status.json"
+
 # The plugin writes one of these to opencode's log for every user message, so one is proof it loaded in that session.
 PLUGIN_ACTIVE = "AKM user feedback recorded"
 # And these when a hook or a helper command fails. The plugin logs them and carries on, so the exit status stays 0.
@@ -71,12 +94,47 @@ RUN_LOG_DIR = "opencode/xdg-data/opencode/log"
 NVM = "[ -f ~/.nvm/nvm.sh ] && . ~/.nvm/nvm.sh; "
 
 
+def check_akm_env(env: dict[str, str]) -> dict[str, str]:
+    """The AKM_* settings a job adds to the arm's, or a ValueError that names the one that does not belong."""
+    for key in env:
+        if not re.fullmatch(r"AKM_[A-Z0-9_]+", key):
+            raise ValueError(f"akm_env: {key!r} is not an AKM_* setting")
+        if key in FIXED_AKM_ENV:
+            raise ValueError(f"akm_env: {key} is fixed by the arm. The directories move together and the plugin must run the akm installed here")
+    return env
+
+
 class AkmOpenCodeOptions(OpenCodeOptions):
     akm_cli_version: str
     akm_plugin_version: str
     libraries_dir: str  # one folder per library, each laid out as an akm bundle
     # How many assets akm indexes in the library. Without it, one for every file in it, which holds when each file is an asset.
     library_assets: int | None = None
+    # Extra AKM_* settings for every command the akm arm runs, over the arm's own. A sweep of one setting goes here.
+    akm_env: dict[str, str] = Field(default_factory=dict)
+    # A checkout of akm, packed on the host: a folder of tarballs and the names of the ones to install. `akm_package`
+    # replaces the npm release of akm-cli, `plugin_package` the npm release of the plugin. Each needs `packages_dir`.
+    packages_dir: str | None = None
+    akm_package: str | None = None
+    plugin_package: str | None = None
+
+    @field_validator("akm_env")
+    @classmethod
+    def _akm_env_is_akm(cls, env: dict[str, str]) -> dict[str, str]:
+        return check_akm_env(env)
+
+    @field_validator("akm_package", "plugin_package")
+    @classmethod
+    def _package_is_a_file_name(cls, name: str | None) -> str | None:
+        if name is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.tgz", name):
+            raise ValueError(f"{name!r} is not the name of a tarball in packages_dir")
+        return name
+
+    @model_validator(mode="after")
+    def _packages_come_from_a_folder(self) -> "AkmOpenCodeOptions":
+        if (self.akm_package or self.plugin_package) and not self.packages_dir:
+            raise ValueError("akm_package and plugin_package are files in packages_dir, which is not set")
+        return self
 
 
 class AkmPluginNotLoadedError(RuntimeError):
@@ -95,16 +153,32 @@ def plugin_log_problem(logs: list[str]) -> str | None:
     return None
 
 
+def install_record(seeded: str, checked: str, env: dict[str, str]) -> dict:
+    """What the setup printed, as the record kept with the trial: `akm --version`, the akm-cli the plugin carries and the assets indexed."""
+    check = re.search(r"^AKM-SETUP akm=(\S*) plugin_akm_cli=(\S*)$", checked, re.MULTILINE)
+    assets = re.search(r"^AKM-SETUP assets=(\d+)$", seeded, re.MULTILINE)
+    return {
+        "akm_version": check.group(1) if check else None,
+        "plugin_akm_cli": check.group(2) if check else None,
+        "assets_indexed": int(assets.group(1)) if assets else None,
+        "env": dict(env),
+    }
+
+
 class AkmOpenCode(OpenCode):
     options_model = AkmOpenCodeOptions
     options: AkmOpenCodeOptions
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._plugin = f"akm-opencode@{self.options.akm_plugin_version}"
+        self._plugin_name = f"akm-opencode@{self.options.akm_plugin_version}"
+        # The plugin from the npm registry by name and version. A plugin tarball is installed under PLUGIN_PREFIX and
+        # named as the folder it is in, which opencode loads as it does a local plugin.
+        self._plugin = f"file://{PLUGIN_DIR}" if self.options.plugin_package else self._plugin_name
         # The plugin is the only config the two arms differ in. The rest of the config comes from the job.
         self._opencode_config = {**self._opencode_config, "plugin": [self._plugin]}
         self._proof_checked = False
+        self._installed: dict | None = None  # what install saw, for the trial's context
 
     @staticmethod
     @override
@@ -114,12 +188,21 @@ class AkmOpenCode(OpenCode):
 
     @override
     def version(self) -> str | None:
-        return f"{super().version() or 'unknown'}+{self._plugin}"
+        return f"{super().version() or 'unknown'}+{self._plugin_name}"
 
     @override
     async def exec_as_agent(self, environment, command, env=None, cwd=None, timeout_sec=None):
-        # The caller's env wins, so the model key and the XDG paths Harbor sets for the run are not overwritten.
-        return await super().exec_as_agent(environment, command=command, env={**AKM_ENV, **(env or {})}, cwd=cwd, timeout_sec=timeout_sec)
+        # The arm's settings, then the job's `akm_env` over them, then the caller's env, which wins, so the model key and
+        # the XDG paths Harbor sets for the run are not overwritten.
+        return await super().exec_as_agent(environment, command=command, env={**AKM_ENV, **self.options.akm_env, **(env or {})}, cwd=cwd, timeout_sec=timeout_sec)
+
+    def _record(self, name: str, data: dict) -> None:
+        """Leaves `data` as JSON in the trial's agent folder, where run.ts reads it. A folder that cannot be written is only logged."""
+        try:
+            self.logs_dir.mkdir(parents=True, exist_ok=True)
+            (self.logs_dir / name).write_text(f"{json.dumps(data, indent=2)}\n")
+        except OSError as exc:
+            self.logger.debug(f"Could not write {name}: {exc}")
 
     # -- setup ---------------------------------------------------------------
 
@@ -128,13 +211,19 @@ class AkmOpenCode(OpenCode):
         await super().install(environment)  # Node and the pinned opencode
         owner = shlex.quote(str(environment.default_user or "root"))
         dirs = " ".join(shlex.quote(v) for k, v in AKM_ENV.items() if k.endswith("_DIR"))
-        await self.exec_as_root(environment, command=f"install -d -m 0755 {dirs} {LIBRARIES} && chown -R {owner} {AKM_ROOT}")
+        await self.exec_as_root(environment, command=f"install -d -m 0755 {dirs} {LIBRARIES} {PACKAGES} && chown -R {owner} {AKM_ROOT}")
+        if self.options.packages_dir:
+            await environment.upload_dir(Path(self.options.packages_dir), PACKAGES)
+            await self.exec_as_root(environment, command=f"chown -R {owner} {PACKAGES}")
         await self.exec_as_agent(environment, command=self._install_akm_command())
         found = await self.exec_as_agent(environment, command=f'{NVM}readlink -f "$(command -v akm)"')
         await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
+        if self.options.plugin_package:
+            await self.exec_as_agent(environment, command=self._install_plugin_command())
+        await self.exec_as_agent(environment, command=f"rm -rf {PACKAGES}")
         await environment.upload_dir(Path(self.options.libraries_dir), LIBRARIES)
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
-        await self.exec_as_agent(environment, command=self._seed_command())
+        seeded = await self.exec_as_agent(environment, command=self._seed_command())
         # Boot opencode once with the real config and model, so the plugin is fetched now, not in the measured run.
         # No provider key is passed, so the model call fails and costs nothing: only the start-up is wanted.
         await self.exec_as_agent(
@@ -142,15 +231,29 @@ class AkmOpenCode(OpenCode):
             command=self._warm_command(),
             env={"XDG_DATA_HOME": WARM_DATA, "XDG_STATE_HOME": f"{AKM_ROOT}/opencode-warm-state"},
         )
-        await self.exec_as_agent(environment, command=self._check_command())
+        checked = await self.exec_as_agent(environment, command=self._check_command())
+        self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env})
+        self._record(INSTALL_FILE, self._installed)
+
+    def _akm_target(self) -> str:
+        """What `npm i -g` installs as akm-cli: the tarball of a checkout, or the release the job names."""
+        if self.options.akm_package:
+            return f"{PACKAGES}/{self.options.akm_package}"
+        return f"akm-cli@{self.options.akm_cli_version}"
 
     def _install_akm_command(self) -> str:
-        return f"set -euo pipefail; {NVM}npm i -g akm-cli@{shlex.quote(self.options.akm_cli_version)} && akm --version"
+        return f"set -euo pipefail; {NVM}npm i -g {shlex.quote(self._akm_target())} && akm --version"
+
+    def _install_plugin_command(self) -> str:
+        # Beside the plugin goes the akm-cli tarball, if there is one, so the akm-cli the plugin depends on is the one under
+        # test when the versions agree, and not a release from the registry.
+        tarballs = [f"{PACKAGES}/{name}" for name in (self.options.plugin_package, self.options.akm_package) if name]
+        return f"set -euo pipefail; {NVM}npm install --prefix {PLUGIN_PREFIX} --no-audit --no-fund {' '.join(shlex.quote(t) for t in tarballs)} && test -d {PLUGIN_DIR}"
 
     def _seed_command(self) -> str:
         # A bundle with the fact templates akm scaffolds, then the library's type folders copied in (never loose files
         # such as a README), then a full index. No registry: the agent searches the library and nothing else. Every
-        # asset of the library must be in the index, apart from the scaffold's facts.
+        # asset of the library must be in the index, apart from the scaffold's facts. It prints how many are.
         assets = self.options.library_assets
         want = f'"$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"' if assets is None else str(assets)
         return (
@@ -163,7 +266,8 @@ class AkmOpenCode(OpenCode):
             "akm index --full >/dev/null && "
             "got=$(akm info --format json -q | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
             "const t=JSON.parse(s).indexStats.byType;console.log(Object.entries(t).reduce((n,[k,v])=>n+(k===\"fact\"?0:v),0))})') && "
-            '[ "$got" -ge "$want" ] || { echo "AKM-SETUP FATAL: $got of the $want library assets are indexed" >&2; exit 1; }'
+            '[ "$got" -ge "$want" ] || { echo "AKM-SETUP FATAL: $got of the $want library assets are indexed" >&2; exit 1; }; '
+            'echo "AKM-SETUP assets=$got"'
         )
 
     def _warm_command(self) -> str:
@@ -175,21 +279,22 @@ class AkmOpenCode(OpenCode):
         )
 
     def _check_command(self) -> str:
-        """Fail the setup if akm or the plugin did not come up as pinned."""
-        cli = shlex.quote(self.options.akm_cli_version)
+        """Fail the setup if akm or the plugin did not come up. What came up is printed, not compared with a version."""
         failed = shlex.quote(PLUGIN_FAILED)
+        # Where the akm-cli the plugin carries is: in opencode's cache for a plugin from the registry, under the prefix for a tarball.
+        carried_in = PLUGIN_PREFIX if self.options.plugin_package else '"$HOME/.cache/opencode"'
         return (
             f"set -euo pipefail; {NVM}"
             'fail(){ echo "AKM-SETUP FATAL: $*" >&2; exit 1; }; '
-            f'[ "$(akm --version | tr -d "[:space:]")" = {cli} ] || fail "akm is not {self.options.akm_cli_version}"; '
-            # The akm-cli the plugin carries is the one it runs in process. It must be the pinned one too.
-            'hoisted="$(find "$HOME/.cache/opencode" -path "*/node_modules/akm-cli/package.json" -print -quit)"; '
-            '[ -n "$hoisted" ] || fail "the plugin is not in the opencode cache"; '
-            f'[ "$(node -p "require(process.argv[1]).version" "$hoisted")" = {cli} ] || fail "the plugin carries another akm-cli: $hoisted"; '
+            'version="$(akm --version | tr -d "[:space:]")"; [ -n "$version" ] || fail "akm printed no version"; '
+            # The akm-cli the plugin carries is the one it runs in process. It may differ from the akm installed here, so it is recorded.
+            f'hoisted="$(find {carried_in} -path "*/node_modules/akm-cli/package.json" -print -quit)"; '
+            '[ -n "$hoisted" ] || fail "the plugin is not installed"; '
+            'carried="$(node -p "require(process.argv[1]).version" "$hoisted")"; '
             f"log={WARM_DATA}/opencode/log; "
             f'grep -Fqh {shlex.quote(PLUGIN_ACTIVE)} "$log"/*.log || fail "the plugin did not load in the warm-up session"; '
             f'! grep -Eqh {failed} "$log"/*.log || fail "the plugin logged a failure in the warm-up session"; '
-            'echo "akm setup ok"'
+            'echo "akm setup ok"; echo "AKM-SETUP akm=$version plugin_akm_cli=$carried"'
         )
 
     # -- the proof that the plugin ran ----------------------------------------
@@ -198,9 +303,15 @@ class AkmOpenCode(OpenCode):
     def populate_context_post_run(self, context: AgentContext) -> None:
         # The parent first: a trial that is about to be rejected still used tokens, and they belong in its result.
         super().populate_context_post_run(context)
+        if self._installed is not None:
+            context.metadata = {**(context.metadata or {}), "akm": self._installed}
         if self._proof_checked:  # Harbor calls this again when it recovers the outputs of a failed trial
             return
         self._proof_checked = True
         logs = [p.read_text(errors="replace") for p in sorted((self.logs_dir / RUN_LOG_DIR).glob("*.log"))]
-        if problem := plugin_log_problem(logs):
+        problem = plugin_log_problem(logs)
+        # Before the raise: Harbor keeps only the first exception of a trial, so after an AgentTimeoutError this one is
+        # lost. The file is what lets the reader of the trial see it.
+        self._record(PLUGIN_STATUS_FILE, {"live": problem is None, "problem": problem})
+        if problem:
             raise AkmPluginNotLoadedError(f"not scored, the plugin was not shown to be live in the measured run: {problem}")

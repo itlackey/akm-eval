@@ -1,21 +1,29 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSandbox } from "../../../lib/akm/akm.ts";
+import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { collectionsFor, runCollection, withSemantic } from "./run.ts";
+import * as akm from "./akm.ts";
+import { assetsSha256 } from "./inputs.ts";
+import { collectionsFor, failureOf, runCollection, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
+/** The caller's AKM_BIN. A run records the akm it was started with, so setup() points AKM_BIN at the fake akm it makes, and every test puts the caller's back. */
+const callerAkmBin = process.env.AKM_BIN;
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  if (callerAkmBin === undefined) delete process.env.AKM_BIN;
+  else process.env.AKM_BIN = callerAkmBin;
 });
 
 /**
  * What the fake akm answers to each query: the refs `search` and `curate` return, or an error, and the same for the
- * semantic index. "fallback" is a semantic search that akm answers with keyword search.
+ * semantic index. "fallback" is a semantic search that akm answers with keyword search. "nomode" is an answer that does not say
+ * how it searched, and "hang" is a call that never answers.
  */
-type Reply = string[] | "fail" | "fallback";
+type Reply = string[] | "fail" | "fallback" | "nomode" | "hang";
 const ANSWERS: Record<string, Partial<Record<"search" | "curate" | "semantic_search" | "semantic_curate", Reply>>> = {
   alpha: { search: ["a/z", "a/x", "a/q", "a/y"], curate: ["a/x", "a/y", "a/z"], semantic_search: ["a/x", "a/y", "a/z"], semantic_curate: ["a/x", "a/y", "a/z"] },
   beta: { search: [], curate: ["b/x#one", "b/x#two", "b/y"], semantic_search: ["b/y", "b/x#one"], semantic_curate: ["b/x", "b/y"] },
@@ -24,6 +32,8 @@ const ANSWERS: Record<string, Partial<Record<"search" | "curate" | "semantic_sea
   thanks: { search: [], curate: ["x/1"], semantic_search: ["x/1"], semantic_curate: ["x/1"] },
   "ci passed": { search: ["x/1"], curate: ["x/1"], semantic_search: ["x/1"], semantic_curate: ["x/1"] },
   fallback: { search: ["f/x"], curate: ["f/x"], semantic_search: "fallback", semantic_curate: ["f/x"] },
+  nomode: { search: ["f/x"], curate: ["f/x"], semantic_search: "nomode", semantic_curate: ["f/x"] },
+  slow: { search: "hang", curate: ["s/x"], semantic_search: ["s/x"], semantic_curate: ["s/x"] },
 };
 
 /**
@@ -59,10 +69,12 @@ if (cmd === "info") {
 const query = rest[rest.indexOf("--") + 1];
 const a = answers[query]?.[(semantic ? "semantic_" : "") + cmd];
 if (a === "fail") { console.error("boom"); process.exit(70); }
+if (a === "hang") await new Promise((r) => setTimeout(r, 60000));
 if (!a) { console.error("no answer for " + query); process.exit(1); }
 const fellBack = a === "fallback";
-const hits = (fellBack ? [] : a).map((ref) => ({ ref }));
-const answer = { searchMode: fellBack ? "fts-fallback" : semantic ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
+const noMode = a === "nomode";
+const hits = (fellBack ? [] : noMode ? ["f/x"] : a).map((ref) => ({ ref }));
+const answer = noMode ? {} : { searchMode: fellBack ? "fts-fallback" : semantic ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
 console.log(JSON.stringify(cmd === "search" ? { hits, ...answer } : { items: hits, ...answer }));
 `;
 
@@ -98,7 +110,10 @@ function setup(queries = QUERIES, qrels: object[] = QRELS) {
   const cacheRoot = join(root, "index-cache");
   /** The fake akm for the keyword sandbox, and for the semantic index in the cache, which is in the temp folder. */
   const ctx = { newSandbox, label: "t", semantic: true, cache: { root: cacheRoot, cmd: ["bun", script] } };
-  return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot };
+  // summary.json says which akm the run was started with, by AKM_BIN. It is the fake one, whatever the caller has set; the afterEach above puts the caller's back.
+  const akmBin = `bun ${script}`;
+  process.env.AKM_BIN = akmBin;
+  return { ctx, folders: { library, assets, results: join(root, "results") }, created, root, cacheRoot, akmBin };
 }
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -133,12 +148,16 @@ describe("runCollection", () => {
     // q1 and q2 are scored for search. q4's search call failed, so it is left out and counted.
     const dcg = 1 + 7 / Math.log2(3) + 3 / Math.log2(5);
     const ideal = 7 + 3 / Math.log2(3) + 1 / Math.log2(4);
-    expect(s.metrics.search).toMatchObject({ n: 2, p_5: 0.2, success_5: 0.5, mrr: 0.25, recall_10: 0.5, judged_10: 0.875 });
+    // q2's search returned nothing, so it has no share of judged results: judged_10 is the mean over the queries that returned any.
+    expect(s.metrics.search).toMatchObject({ n: 2, p_5: 0.2, success_5: 0.5, mrr: 0.25, recall_10: 0.5, judged_10: 0.75 });
     expect(s.metrics.search.ndcg_10).toBeCloseTo(dcg / ideal / 2, 3);
+    // q1's unjudged a/q is taken out of the list for the condensed nDCG: the judged a/z, a/x, a/y move up.
+    expect(s.metrics.search.ndcg_10_condensed).toBeCloseTo((1 + 7 / Math.log2(3) + 3 / Math.log2(4)) / ideal / 2, 3);
+    expect(s.metrics.search.ndcg_10_condensed as number).toBeGreaterThan(s.metrics.search.ndcg_10 as number);
     expect(s.errored).toEqual({ search: 1, curate: 0, semantic_search: 0, semantic_curate: 0 });
 
     // q1, q2 and q4 are all scored for curate, and curate put every relevant asset first.
-    expect(s.metrics.curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
+    expect(s.metrics.curate).toEqual({ n: 3, ndcg_10: 1, ndcg_10_condensed: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null, banned_above_first: null });
   });
 
   test("counts the queries with an errored call in any column as n_errored", async () => {
@@ -167,7 +186,7 @@ describe("runCollection", () => {
     // semantic search puts b/y, which is not relevant, before b/x for q2, and q4 answers where keyword search failed.
     expect(s.metrics.semantic_search).toMatchObject({ n: 3, p_5: 0.2667, success_5: 1, mrr: 0.8333, recall_10: 1, judged_10: 1 });
     expect(s.metrics.semantic_search?.ndcg_10).toBeCloseTo((1 + 3 / Math.log2(3) / 3 + 1) / 3, 3);
-    expect(s.metrics.semantic_curate).toEqual({ n: 3, ndcg_10: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null });
+    expect(s.metrics.semantic_curate).toEqual({ n: 3, ndcg_10: 1, ndcg_10_condensed: 1, p_5: 0.2667, success_5: 1, mrr: 1, recall_10: 1, judged_10: 1, banned_above: null, banned_above_first: null });
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[3].search.error).toContain("exited 70");
     expect(rows[3].semantic_search).toMatchObject({ refs: ["d/x"], grades: [3] });
@@ -199,11 +218,19 @@ describe("runCollection", () => {
     const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
     expect(stored.results_dir).toBeUndefined();
     expect(stored.metrics.curate.n).toBe(3);
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
 
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.map((r) => r.id)).toEqual(["q1", "q2", "q3", "q4", "n1", "n2"]);
     expect(rows[0]).toMatchObject({ id: "q1", kind: "name", query: "alpha", n_relevant: 2 });
     expect(rows[0].search).toMatchObject({ refs: ["a/z", "a/x", "a/q", "a/y"], grades: [1, 3, null, 2], scores: { p_5: 0.4, success_5: true, mrr: 0.5 } });
+    // the sample has both nDCGs: a/q has no grade, so the judged results alone score higher
+    expect(rows[0].search.scores.ndcg_10_condensed).toBeCloseTo((1 + 7 / Math.log2(3) + 3 / Math.log2(4)) / (7 + 3 / Math.log2(3) + 1 / Math.log2(4)), 3);
+    expect(rows[0].search.scores.ndcg_10_condensed).toBeGreaterThan(rows[0].search.scores.ndcg_10);
+    expect(rows[0].curate.scores.ndcg_10_condensed).toBe(rows[0].curate.scores.ndcg_10); // every curate result is judged
     expect(rows[1].curate.refs).toEqual(["b/x", "b/y"]); // the sections of b/x fold into it
     expect(rows[2]).toMatchObject({ n_relevant: 0 });
     expect(rows[2].search.scores).toBeUndefined();
@@ -243,6 +270,370 @@ describe("runCollection", () => {
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[6].semantic_search.error).toContain("searched with fts-fallback, not semantic");
     expect(rows[6].search.refs).toEqual(["f/x"]);
+  });
+
+  test("a run with a semantic call that failed is aborted, and says why in the summary it writes, which the run then fails with", async () => {
+    const { ctx, folders } = setup([...QUERIES, { id: "q5", query: "fallback", kind: "direct" }], [...QRELS, grade("q5", "f/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", ctx, folders));
+    const reason = "1 semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.";
+    expect(s).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([s])).toBe(reason);
+    // each collection's summary says it for itself, and the run fails with the failed calls of all of them
+    const clean = setup(QUERIES.filter((q) => q.id !== "q4"), QRELS.filter((r) => r.id !== "q4"));
+    const fine = await quiet(() => runCollection("public", "books", clean.ctx, clean.folders));
+    expect(fine).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(JSON.parse(readFileSync(join(fine.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(failureOf([fine])).toBeUndefined();
+    expect(failureOf([fine, s])).toBe(reason);
+    expect(failureOf([s, s])).toStartWith("2 semantic calls failed");
+  });
+
+  test("a keyword call that failed is counted and left out, and does not abort the run: only the semantic calls do", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+    expect(s.errored).toEqual({ search: 1, curate: 0 }); // q4's search call failed
+    expect(s).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(failureOf([s])).toBeUndefined();
+  });
+
+  test("stops before the queries when the first semantic search does not say how it searched, and counts a later one as an error", async () => {
+    const first = setup([{ id: "f", query: "nomode", kind: "direct" }, ...QUERIES], [...QRELS, grade("f", "f/x", 3)]);
+    await expect(quiet(() => runCollection("public", "library", first.ctx, first.folders))).rejects.toThrow("akm cannot search with its embedder: akm search did not say how it searched (no searchMode), and a semantic call has to say semantic");
+    expect(existsSync(first.folders.results)).toBe(false);
+
+    const later = setup([...QUERIES, { id: "q5", query: "nomode", kind: "direct" }], [...QRELS, grade("q5", "f/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", later.ctx, later.folders));
+    expect(s.errored).toEqual({ search: 1, curate: 0, semantic_search: 1, semantic_curate: 0 });
+    expect(s.metrics.semantic_search?.n).toBe(3); // q5 is left out of the semantic column, as a keyword answer would be
+    expect(s.metrics.search.n).toBe(3); // q1, q2 and q5: the keyword search of q5 answered
+    const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[6].semantic_search.error).toContain("did not say how it searched (no searchMode)");
+    expect(rows[6].semantic_search.refs).toEqual([]);
+  });
+
+  test("counts a call that ran into its time limit as a timeout, apart from the other errors, and marks its row", async () => {
+    const { ctx, folders } = setup([...QUERIES, { id: "q5", query: "slow", kind: "direct" }], [...QRELS, grade("q5", "s/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", { ...ctx, callTimeoutMs: 700 }, folders));
+    expect(s.timeouts).toBe(1);
+    expect(s.errored).toEqual({ search: 2, curate: 0, semantic_search: 0, semantic_curate: 0 }); // q4 failed, q5 timed out: a timeout is an error as well
+    expect(s.n_errored).toBe(2);
+    const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows[6].search).toMatchObject({ refs: [], error: "akm search timed out after 0.7s", timed_out: true });
+    expect(rows[3].search.timed_out).toBeUndefined(); // q4 exited 70 by itself
+    expect(rows[6].curate.timed_out).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8")).timeouts).toBe(1);
+  });
+
+  test("has no timeouts in a run where every call answered", async () => {
+    const { ctx, folders } = setup();
+    expect((await quiet(() => runCollection("public", "library", ctx, folders))).timeouts).toBe(0);
+  });
+
+  describe("what the summary records of the run's inputs", () => {
+    const plain = { configVersion: "0.9.0", semanticSearchMode: "off", registries: [] };
+
+    test("has the config the eval wrote for each index, and the engine of it, which retrieval does not have", async () => {
+      const { ctx, folders } = setup();
+      const s = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(s.config.keyword).toEqual(plain);
+      expect(s.config.semantic).toMatchObject({ configVersion: "0.9.0", semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 } });
+      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
+      const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
+      expect(stored.config).toEqual(s.config);
+      const keyword = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+      expect(Object.keys(keyword.config)).toEqual(["keyword"]);
+    });
+
+    test("redacts a key in the config it records, and names the engine", async () => {
+      const { ctx, folders } = setup();
+      const withKey = { ...plain, engines: { model: { kind: "llm", provider: "openai", endpoint: "https://api.example.com/v1/chat/completions", model: "m", apiKey: "sk-secret", timeoutMs: 1000 } }, defaults: { llmEngine: "model" } };
+      const newSandbox = () => {
+        const sb = ctx.newSandbox();
+        writeConfig(sb, withKey);
+        return sb;
+      };
+      const s = await quiet(() => runCollection("public", "library", { ...ctx, newSandbox }, folders));
+      expect((s.config.keyword as typeof withKey).engines.model.apiKey).toBe("<redacted>");
+      expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).not.toContain("sk-secret");
+      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com/v1/chat/completions", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com/v1/chat/completions" } } });
+    });
+
+    test("has a digest of the queries and qrels the run read, the same on another machine and different when a grade is added", async () => {
+      const a = setup();
+      const b = setup();
+      const here = process.cwd();
+      const first = await quiet(() => runCollection("public", "library", a.ctx, a.folders));
+      expect(process.cwd()).toBe(here);
+      expect(first.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect((await quiet(() => runCollection("public", "library", b.ctx, b.folders))).assets_sha256).toBe(first.assets_sha256); // another folder, the same files
+      expect((await quiet(() => runCollection("public", "library", a.ctx, a.folders))).assets_sha256).toBe(first.assets_sha256);
+      writeFileSync(join(a.folders.assets, "qrels.jsonl"), `${readFileSync(join(a.folders.assets, "qrels.jsonl"), "utf8")}${JSON.stringify(grade("q1", "a/new", 1))}\n`);
+      expect((await quiet(() => runCollection("public", "library", a.ctx, a.folders))).assets_sha256).not.toBe(first.assets_sha256);
+    });
+
+    test("covers bundles.json for a library of bundles", async () => {
+      const { ctx, folders, root } = setup();
+      const library = join(root, "bundles");
+      mkdirSync(join(library, "one"), { recursive: true });
+      writeFileSync(join(library, "one", "a.md"), "a\n");
+      const bundles = join(root, "bundles.json");
+      writeFileSync(bundles, JSON.stringify({ one: "akm" }));
+      const own = { ...folders, library, bundles };
+      const first = await quiet(() => runCollection("own", "own", ctx, own));
+      writeFileSync(bundles, JSON.stringify({ one: "claude" }));
+      expect((await quiet(() => runCollection("own", "own", ctx, own))).assets_sha256).not.toBe(first.assets_sha256);
+    });
+
+    test("has the seed for the private corpus, null when there is none, and none for the public and own corpora", async () => {
+      const { ctx, folders } = setup();
+      const pub = await quiet(() => runCollection("public", "library", { ...ctx, seed: "123" }, folders));
+      expect(Object.hasOwn(pub, "seed")).toBe(false);
+      expect(Object.hasOwn(JSON.parse(readFileSync(join(pub.results_dir, "summary.json"), "utf8")), "seed")).toBe(false);
+      expect((await quiet(() => runCollection("private", "library", { ...ctx, seed: "123" }, folders))).seed).toBe("123");
+      expect((await quiet(() => runCollection("private", "library", ctx, folders))).seed).toBeNull();
+      // The own set is not made from a seed: private/seed is not a property of it, so it is not recorded, even when it is passed.
+      const own = await quiet(() => runCollection("own", "own", { ...ctx, seed: "123" }, folders));
+      expect(Object.hasOwn(own, "seed")).toBe(false);
+      expect(Object.hasOwn(JSON.parse(readFileSync(join(own.results_dir, "summary.json"), "utf8")), "seed")).toBe(false);
+    });
+
+    test("says which akm built the semantic index, for a new index and for a kept one", async () => {
+      const { ctx, folders, akmBin } = setup();
+      const first = await quiet(() => runCollection("public", "library", ctx, folders));
+      const second = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect([first.semantic_index, second.semantic_index]).toEqual(["cold", "warm"]);
+      // The summary writes the home folder as ~, wherever the temp folder is.
+      const home = homedir();
+      const shown = akmBin.split(" ").map((word) => (word === home || word.startsWith(`${home}/`) ? `~${word.slice(home.length)}` : word)).join(" ");
+      const built = { version: "0.9.99-test", akm_bin: shown, akm_build: null, builtAt: "build 1" };
+      expect(first.semantic_index_built_by).toEqual(built);
+      expect(second.semantic_index_built_by).toEqual(built);
+      const stored = JSON.parse(readFileSync(join(second.results_dir, "summary.json"), "utf8"));
+      expect(stored.semantic_index_built_by).toEqual(built);
+      const keyword = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+      expect(Object.hasOwn(keyword, "semantic_index_built_by")).toBe(false);
+    });
+
+    test("records what --semantic said", async () => {
+      const { ctx, folders } = setup();
+      expect((await quiet(() => runCollection("public", "library", ctx, folders))).semantic_flag).toBe("auto");
+      expect((await quiet(() => runCollection("public", "library", { ...ctx, semanticFlag: "on" }, folders))).semantic_flag).toBe("on");
+      const off = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false, semanticFlag: "off" }, folders));
+      expect(off.semantic_flag).toBe("off");
+      expect(JSON.parse(readFileSync(join(off.results_dir, "summary.json"), "utf8")).semantic_flag).toBe("off");
+    });
+  });
+
+  describe("the library in assets_sha256", () => {
+    /** A library of two notes in a folder. Neither is graded in the qrels: the digest covers what akm indexes, judged or not. */
+    const notes = (library: string) => {
+      mkdirSync(join(library, "knowledge"));
+      writeFileSync(join(library, "knowledge", "retry.md"), "Retry busy requests\n");
+      writeFileSync(join(library, "knowledge", "backoff.md"), "Wait longer after each retry\n");
+    };
+    /** Two queries are enough to tell one run from another here, and each run of the fake akm costs a process for every call. */
+    const lean = () => setup([QUERIES[0], QUERIES[4]], QRELS.filter((r) => r.id === "q1"));
+    /** What can happen to an asset of the library. */
+    const CHANGES: Record<string, (library: string) => void> = {
+      "an edited asset": (library) => writeFileSync(join(library, "knowledge", "retry.md"), "Never retry busy requests\n"),
+      "an added asset": (library) => writeFileSync(join(library, "knowledge", "timeouts.md"), "Give every call a time limit\n"),
+      "a removed asset": (library) => rmSync(join(library, "knowledge", "backoff.md")),
+      "a renamed asset": (library) => renameSync(join(library, "knowledge", "backoff.md"), join(library, "knowledge", "waiting.md")),
+    };
+
+    for (const [what, change] of Object.entries(CHANGES)) {
+      test(`${what} changes the digest of a run with a new semantic index, of a run with a kept one, and of a run with keyword search only`, async () => {
+        const { ctx, folders } = lean();
+        notes(folders.library);
+        const run = (over: { semantic?: boolean } = {}) => quiet(() => runCollection("public", "library", { ...ctx, ...over }, folders));
+        const cold = await run();
+        const warm = await run();
+        expect([cold.semantic_index, warm.semantic_index]).toEqual(["cold", "warm"]);
+        // The same library has one identity: a kept index and a run without the semantic search do not change it.
+        expect(warm.assets_sha256).toBe(cold.assets_sha256);
+        expect((await run({ semantic: false })).assets_sha256).toBe(cold.assets_sha256);
+
+        change(folders.library);
+        const keyword = await run({ semantic: false });
+        expect(keyword.assets_sha256).not.toBe(cold.assets_sha256);
+        const rebuilt = await run();
+        expect(rebuilt.semantic_index).toBe("cold"); // the kept index is not used for another library
+        expect(rebuilt.assets_sha256).not.toBe(cold.assets_sha256);
+        const kept = await run();
+        expect(kept.semantic_index).toBe("warm");
+        expect(kept.assets_sha256).not.toBe(cold.assets_sha256);
+        // and the changed library has one identity as well
+        expect([rebuilt.assets_sha256, kept.assets_sha256]).toEqual([keyword.assets_sha256, keyword.assets_sha256]);
+        // Only the library's digest moved: the queries and the qrels are the same files.
+        expect({ ...kept.assets, library_sha256: cold.assets.library_sha256 }).toEqual(cold.assets);
+        expect(kept.assets.library_sha256).not.toBe(cold.assets.library_sha256);
+        expect(JSON.parse(readFileSync(join(kept.results_dir, "summary.json"), "utf8")).assets_sha256).toBe(kept.assets_sha256);
+      });
+    }
+
+    test("is the same for the same library in another folder, whatever the dates of its files, and for a file written again with the text it had", async () => {
+      const [a, b] = [lean(), lean()];
+      for (const { folders } of [a, b]) notes(folders.library);
+      const first = await quiet(() => runCollection("public", "library", a.ctx, a.folders));
+      const other = await quiet(() => runCollection("public", "library", b.ctx, b.folders));
+      expect(other.assets).toEqual(first.assets);
+      expect(other.assets_sha256).toBe(first.assets_sha256);
+      utimesSync(join(b.folders.library, "knowledge", "retry.md"), new Date(0), new Date(0));
+      writeFileSync(join(a.folders.library, "knowledge", "retry.md"), "Retry busy requests\n");
+      expect((await quiet(() => runCollection("public", "library", a.ctx, a.folders))).assets_sha256).toBe(first.assets_sha256);
+      expect((await quiet(() => runCollection("public", "library", b.ctx, b.folders))).assets_sha256).toBe(first.assets_sha256);
+      // the same change to both gives the same digest again
+      for (const { folders } of [a, b]) CHANGES["an edited asset"](folders.library);
+      const [edited, alsoEdited] = [await quiet(() => runCollection("public", "library", a.ctx, a.folders)), await quiet(() => runCollection("public", "library", b.ctx, b.folders))];
+      expect(edited.assets_sha256).not.toBe(first.assets_sha256);
+      expect(alsoEdited.assets_sha256).toBe(edited.assets_sha256);
+    });
+
+    test("is made of digests that the summary keeps: the library, the bundle mapping, the queries and the qrels, each changing with its own file", async () => {
+      const { ctx, folders } = lean();
+      notes(folders.library);
+      const first = await quiet(() => runCollection("public", "library", ctx, folders));
+      const stored = JSON.parse(readFileSync(join(first.results_dir, "summary.json"), "utf8"));
+      expect(stored.assets).toEqual(first.assets);
+      expect(Object.keys(stored.assets)).toEqual(["library_sha256", "bundles_sha256", "queries_sha256", "qrels_sha256"]);
+      expect(stored.assets.library_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(stored.assets.bundles_sha256).toBeNull(); // this library has no bundles.json
+      expect(stored.assets.queries_sha256).toBe(sha256File(join(folders.assets, "queries.jsonl")));
+      expect(stored.assets.qrels_sha256).toBe(sha256File(join(folders.assets, "qrels.jsonl")));
+      expect(stored.assets_sha256).toBe(assetsSha256(stored.assets));
+
+      CHANGES["an edited asset"](folders.library);
+      const edited = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(edited.assets.library_sha256).not.toBe(first.assets.library_sha256);
+      expect({ ...edited.assets, library_sha256: first.assets.library_sha256 }).toEqual(first.assets);
+
+      writeFileSync(join(folders.assets, "qrels.jsonl"), `${readFileSync(join(folders.assets, "qrels.jsonl"), "utf8")}${JSON.stringify(grade("q1", "a/new", 1))}\n`);
+      const graded = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(graded.assets.qrels_sha256).not.toBe(edited.assets.qrels_sha256);
+      expect({ ...graded.assets, qrels_sha256: edited.assets.qrels_sha256 }).toEqual(edited.assets);
+      expect(graded.assets_sha256).not.toBe(edited.assets_sha256);
+
+      writeFileSync(join(folders.assets, "queries.jsonl"), `${readFileSync(join(folders.assets, "queries.jsonl"), "utf8")}${JSON.stringify({ id: "n3", query: "thanks", kind: "chitchat" })}\n`);
+      const asked = await quiet(() => runCollection("public", "library", ctx, folders));
+      expect(asked.assets.queries_sha256).not.toBe(graded.assets.queries_sha256);
+      expect({ ...asked.assets, queries_sha256: graded.assets.queries_sha256 }).toEqual(graded.assets);
+    });
+
+    describe("of a library of bundles", () => {
+      /** Bundles in `root`: `one` is in the library, `two` is a link to a folder outside it, and `three` is named by a path that leaves it. */
+      const layout = (root: string) => {
+        const library = join(root, "bundles");
+        const outside = join(root, "outside");
+        for (const dir of [join(library, "one"), join(outside, "two-notes"), join(root, "shared", "three")]) mkdirSync(dir, { recursive: true });
+        symlinkSync(join(outside, "two-notes"), join(library, "two"));
+        for (const [dir, text] of [[join(library, "one"), "one\n"], [join(outside, "two-notes"), "two\n"], [join(root, "shared", "three"), "three\n"]]) {
+          writeFileSync(join(dir, "a.md"), text);
+          writeFileSync(join(dir, "b.md"), `${text}, too\n`);
+        }
+        const bundles = join(root, "bundles.json");
+        writeFileSync(bundles, JSON.stringify({ one: "akm", two: "akm", "../shared/three": "akm" }));
+        return { library, bundles, folders: { one: join(library, "one"), two: join(outside, "two-notes"), three: join(root, "shared", "three") } };
+      };
+      const STEPS: [string, (dir: string) => void][] = [
+        ["edit", (dir) => writeFileSync(join(dir, "a.md"), "edited\n")],
+        ["add", (dir) => writeFileSync(join(dir, "c.md"), "new\n")],
+        ["remove", (dir) => rmSync(join(dir, "b.md"))],
+        ["rename", (dir) => renameSync(join(dir, "a.md"), join(dir, "z.md"))],
+      ];
+
+      for (const bundle of ["one", "two", "three"] as const) {
+        test(`${bundle === "one" ? "an asset in a bundle of the library" : bundle === "two" ? "an asset in a bundle that is a link to a folder outside the library" : "an asset in a bundle that bundles.json names by a path outside the library"} is covered, whether it is edited, added, removed or renamed`, async () => {
+          const { ctx, folders, root } = lean();
+          const { library, bundles, folders: where } = layout(root);
+          const own = { ...folders, library, bundles };
+          const seen = [(await quiet(() => runCollection("own", "own", ctx, own))).assets_sha256];
+          for (const [step, apply] of STEPS) {
+            apply(where[bundle]);
+            const cold = await quiet(() => runCollection("own", "own", ctx, own));
+            const warm = await quiet(() => runCollection("own", "own", ctx, own));
+            expect([cold.semantic_index, warm.semantic_index]).toEqual(["cold", "warm"]);
+            const keyword = await quiet(() => runCollection("own", "own", { ...ctx, semantic: false }, own));
+            expect(seen, step).not.toContain(cold.assets_sha256); // a digest that no earlier state of the bundles had
+            expect([warm.assets_sha256, keyword.assets_sha256], step).toEqual([cold.assets_sha256, cold.assets_sha256]);
+            seen.push(cold.assets_sha256);
+          }
+        });
+      }
+
+      test("is the same wherever the bundles are, and changes with the adapter and the names but not with the library's path", async () => {
+        const [a, b] = [lean(), lean()];
+        const [one, two] = [layout(a.root), layout(b.root)];
+        const first = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        const other = await quiet(() => runCollection("own", "own", b.ctx, { ...b.folders, library: two.library, bundles: two.bundles }));
+        expect(other.assets).toEqual(first.assets);
+        expect(first.assets.bundles_sha256).toMatch(/^[0-9a-f]{64}$/);
+
+        writeFileSync(one.bundles, JSON.stringify({ "../shared/three": "akm", two: "akm", one: "claude" }));
+        const adapter = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        expect(adapter.assets.bundles_sha256).not.toBe(first.assets.bundles_sha256);
+        expect(adapter.assets.library_sha256).toBe(first.assets.library_sha256); // the same files
+        expect(adapter.assets_sha256).not.toBe(first.assets_sha256);
+
+        writeFileSync(one.bundles, JSON.stringify({ one: "akm", two: "akm" })); // a bundle left out is not indexed, so its files are not part of the library
+        const fewer = await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }));
+        expect(fewer.assets.library_sha256).not.toBe(first.assets.library_sha256);
+        writeFileSync(join(one.folders.three, "a.md"), "edited, but not indexed\n");
+        expect((await quiet(() => runCollection("own", "own", a.ctx, { ...a.folders, library: one.library, bundles: one.bundles }))).assets_sha256).toBe(fewer.assets_sha256);
+      });
+    });
+  });
+
+  describe("the judges of the qrels", () => {
+    const judged = (judge: string, g: ReturnType<typeof grade>) => ({ ...g, judge });
+    const mixed = [...QRELS.slice(1), judged("judge-a", QRELS[0]), judged("judge-b", grade("q1", "a/extra", 0))];
+
+    test("warns once when they hold the grades of more than one judge, however many collections or repeats read them", async () => {
+      const { ctx, folders } = setup(QUERIES, mixed);
+      const { error } = console;
+      const warnings: string[] = [];
+      console.error = (...a: unknown[]) => void warnings.push(a.join(" "));
+      try {
+        await quiet(() => runCollection("public", "library", ctx, folders));
+        await quiet(() => runCollection("public", "library", ctx, folders));
+      } finally {
+        console.error = error;
+      }
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("retrieval: warning: ");
+      expect(warnings[0]).toContain("qrels.jsonl holds grades from 2 judges (judge-a, judge-b), and 8 rows that record no judge");
+    });
+
+    test("says nothing for one judge, or for rows that record none", async () => {
+      const { error } = console;
+      const warnings: string[] = [];
+      console.error = (...a: unknown[]) => void warnings.push(a.join(" "));
+      try {
+        const none = setup();
+        await quiet(() => runCollection("public", "library", none.ctx, none.folders));
+        const one = setup(QUERIES, QRELS.map((g) => judged("judge-a", g)));
+        await quiet(() => runCollection("public", "library", one.ctx, one.folders));
+      } finally {
+        console.error = error;
+      }
+      expect(warnings).toEqual([]);
+    });
+
+    test("warns when one judge's grades sit beside rows that record none, and not once those pairs are graded again", async () => {
+      const { error } = console;
+      const warnings: string[] = [];
+      console.error = (...a: unknown[]) => void warnings.push(a.join(" "));
+      try {
+        const beside = setup(QUERIES, [judged("judge-a", QRELS[0]), judged("judge-a", QRELS[1]), ...QRELS.slice(2)]);
+        await quiet(() => runCollection("public", "library", beside.ctx, beside.folders));
+        const again = setup(QUERIES, [...QRELS, ...QRELS.map((g) => judged("judge-a", g))]); // every pair graded again by one judge: the rows before it are history
+        await quiet(() => runCollection("public", "library", again.ctx, again.folders));
+      } finally {
+        console.error = error;
+      }
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain(`holds grades from 1 judge (judge-a), and ${QRELS.length - 2} rows that record no judge`);
+    });
   });
 
   describe("the semantic index kept between runs", () => {
@@ -343,6 +734,21 @@ describe("runCollection", () => {
     expect(withSemantic("private", 1)).toBe(false);
     expect(withSemantic("own")).toBe(false);
     expect(withSemantic("own", 20)).toBe(false);
+  });
+
+  test("--semantic on scores it for any corpus and with --limit, off never, and auto is the rule above", () => {
+    for (const [corpus, limit] of [["public", undefined], ["public", 20], ["private", 1], ["own", undefined], ["own", 20]] as const) {
+      expect(withSemantic(corpus, limit, "on")).toBe(true);
+      expect(withSemantic(corpus, limit, "off")).toBe(false);
+      expect(withSemantic(corpus, limit, "auto")).toBe(withSemantic(corpus, limit));
+    }
+  });
+
+  test("with --semantic on, a run with --limit builds the semantic index and has the four columns", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection("public", "library", { ...ctx, limit: 3, semantic: withSemantic("public", 3, "on"), semanticFlag: "on" }, folders));
+    expect(s).toMatchObject({ limit: 3, n_queries: 3, semantic_flag: "on", semantic_index: "cold" });
+    expect(Object.keys(s.metrics)).toEqual(["search", "curate", "semantic_search", "semantic_curate"]);
   });
 
   test("runs N queries, in the task and non-task proportion, with --limit", async () => {
@@ -470,6 +876,52 @@ describe("a set of your own", () => {
   });
 });
 
+describe("ask", () => {
+  /** An akm that prints this JSON for every search or curate, with the version and help it needs to be asked at all. */
+  const printing = (json: unknown, sleepMs = 0) => `
+const [cmd, ...rest] = process.argv.slice(2);
+if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
+if (cmd === "search" && rest[0] === "--help") { console.log("--detail=<detail> Detail level, or agent"); process.exit(0); }
+${sleepMs ? `await new Promise((r) => setTimeout(r, ${sleepMs}));` : ""}
+console.log(${JSON.stringify(JSON.stringify(json))});
+`;
+  const boxFor = (json: unknown, sleepMs = 0) => {
+    const root = mkdtempSync(join(tmpdir(), "retrieval-ask-"));
+    dirs.push(root);
+    const script = join(root, "akm.ts");
+    writeFileSync(script, printing(json, sleepMs));
+    return { ...createSandbox("retrieval-ask"), cmd: ["bun", script] };
+  };
+
+  test("a semantic call has to say it searched with embeddings: no searchMode is an error, as keyword and fts-fallback are", async () => {
+    const hits = [{ ref: "a/x" }];
+    const said = await akm.ask(boxFor({ hits, searchMode: "semantic" }), "search", "q", 10, "semantic");
+    expect(said).toMatchObject({ refs: ["a/x"], mode: "semantic" });
+    expect(said.error).toBeUndefined();
+    const silent = await akm.ask(boxFor({ hits }), "search", "q", 10, "semantic");
+    expect(silent).toMatchObject({ refs: [], mode: null });
+    expect(silent.error).toBe("akm search did not say how it searched (no searchMode), and a semantic call has to say semantic: null");
+    const curated = await akm.ask(boxFor({ items: hits }), "curate", "q", 10, "semantic");
+    expect(curated.error).toContain("did not say how it searched");
+    const other = await akm.ask(boxFor({ hits, searchMode: "keyword" }), "search", "q", 10, "semantic");
+    expect(other.error).toContain("searched with keyword, not semantic");
+  });
+
+  test("a keyword call is taken as it comes when it does not say, and fails when it says semantic", async () => {
+    const hits = [{ ref: "a/x" }];
+    expect(await akm.ask(boxFor({ hits }), "search", "q", 10, "keyword")).toMatchObject({ refs: ["a/x"], mode: null });
+    expect((await akm.ask(boxFor({ hits, searchMode: "keyword" }), "search", "q")).mode).toBe("keyword");
+    expect((await akm.ask(boxFor({ hits, searchMode: "semantic" }), "search", "q", 10, "keyword")).error).toContain("searched with semantic, not keyword");
+  });
+
+  test("a call that runs into its time limit is an error that says so, with timedOut set", async () => {
+    const timed = await akm.ask(boxFor({ hits: [] }, 20_000), "search", "q", 10, "keyword", 700);
+    expect(timed).toMatchObject({ refs: [], mode: null, error: "akm search timed out after 0.7s", timedOut: true });
+    const fine = await akm.ask(boxFor({ hits: [] }), "search", "q", 10, "keyword", 30_000);
+    expect(fine.timedOut).toBeUndefined();
+  });
+});
+
 describe("collectionsFor", () => {
   test("public and private corpora hold the library and the books, each scored on its own", () => {
     const pub = collectionsFor("public");
@@ -493,5 +945,38 @@ describe("collectionsFor", () => {
     expect(own[0].folders.library).toEndWith("/private/retrieval/own/library");
     expect(own[0].folders.bundles).toEndWith("/private/retrieval/own/bundles.json");
     expect(own[0].folders.results).toEndWith("/private/retrieval/results");
+  });
+});
+
+describe("the command", () => {
+  const run = (args: string[]) => {
+    const dir = mkdtempSync(join(tmpdir(), "retrieval-cli-"));
+    dirs.push(dir);
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+
+  test("takes --semantic on, off or auto, and says what else is wrong with it", () => {
+    expect(run(["--semantic", "maybe"])).toMatchObject({ code: 2, err: 'retrieval: --semantic must be on, off or auto, not "maybe"\n' });
+    expect(run(["--semantic"]).err).toContain("Usage: evals/retrieval/run");
+  });
+
+  test("lists --semantic, --akm and the own corpus in its usage, and says that a stale private set is refused", () => {
+    const help = run(["--help"]).out;
+    expect(help).toContain("Usage: evals/retrieval/run [--corpus public|private|own|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]");
+    expect(help).toContain("--semantic  on scores the semantic search too, auto (default) only in a full run of the public and private corpora");
+    expect(help).toContain("--akm");
+    expect(help).toContain("made by ./generate-assets --only retrieval. It stops\n            when they were made from public files that have changed since: make them again.");
+  });
+});
+
+describe("AKM_BIN", () => {
+  test("is pointed at the fake akm by setup(), and is the caller's again after the test", () => {
+    expect(setup().akmBin).toBe(process.env.AKM_BIN as string);
+    process.env.AKM_BIN = "/nonexistent/other-akm";
+  });
+
+  test("is the caller's in the test after it", () => {
+    expect(process.env.AKM_BIN).toBe(callerAkmBin);
   });
 });

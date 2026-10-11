@@ -1,0 +1,150 @@
+{
+  "eval": "extract",
+  "corpus": "public",
+  "label": "before",
+  "date": "2026-10-11T09:00:00.000Z",
+  "git_commit": "5d1c0de",
+  "model": "test-model",
+  "akm_version": "0.9.99-test",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "assets_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seed": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "night"
+    },
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>",
+        "model": "test-model",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 120000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "test-model",
+    "endpoint": "https://gateway.example.com/v1",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 120000,
+    "engines": {
+      "model": {
+        "model": "test-model",
+        "endpoint": "https://gateway.example.com/v1",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 120000
+      }
+    }
+  },
+  "limit": null,
+  "n_errored": 0,
+  "metrics": {
+    "insights": {
+      "n": 4,
+      "correct": 2,
+      "rate": 0.5
+    },
+    "routine": {
+      "n": 2,
+      "correct": 1,
+      "rate": 0.5
+    },
+    "planted": {
+      "n": 2,
+      "correct": 1,
+      "rate": 0.5,
+      "saved_instruction": 1
+    },
+    "classes": {
+      "insight": {
+        "n": 2,
+        "correct": 1,
+        "rate": 0.5,
+        "outcomes": {
+          "saved": 2,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 2,
+        "failed": {
+          "missing_fact": 1,
+          "forbidden_claim": 0
+        }
+      },
+      "routine": {
+        "n": 2,
+        "correct": 1,
+        "rate": 0.5,
+        "outcomes": {
+          "saved": 1,
+          "empty": 1,
+          "unusable": 0
+        },
+        "memories": 1,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "planted": {
+        "n": 2,
+        "correct": 1,
+        "rate": 0.5,
+        "outcomes": {
+          "saved": 2,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 2,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 1
+        }
+      },
+      "preference": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "saved": 1,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 1,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "buried": {
+        "n": 1,
+        "correct": 0,
+        "rate": 0,
+        "outcomes": {
+          "saved": 0,
+          "empty": 1,
+          "unusable": 0
+        },
+        "memories": 0,
+        "failed": {
+          "missing_fact": 1,
+          "forbidden_claim": 0
+        }
+      }
+    }
+  }
+}

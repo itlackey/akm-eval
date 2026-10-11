@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
+import { assetsSha256, parseCases } from "./lib.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -37,25 +39,213 @@ describe("replay", () => {
 });
 
 describe("reflectEdits", () => {
-  test("takes the proposals of a run, good when the case was correct, with the note the case holds", () => {
+  const note = (d: string) => `---\ndescription: ${d}\n---\n`;
+  const PUBLIC = join("evals", "reflect", "assets");
+  /** The code the run ran, and the code here now, as far as these tests go: a digest each. */
+  const RAN = "1".repeat(64);
+  const OTHER = "2".repeat(64);
+  const ROWS = [
+    { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
+    { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
+    { id: "c", outcome: "none", correct: false },
+  ];
+
+  /** A repository with the public cases a, b and c, and a way to write them again. */
+  function repo() {
     const root = temp();
-    mkdirSync(join(root, "evals", "reflect", "assets"), { recursive: true });
-    const note = (d: string) => `---\ndescription: ${d}\n---\n`;
-    const c = (id: string) => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source: note(id), feedback: "f", defect: "d", correct: "c", allow: ["when_to_use"] });
-    writeFileSync(join(root, "evals", "reflect", "assets", "cases.jsonl"), `${["a", "b", "c"].map((id) => JSON.stringify(c(id))).join("\n")}\n`);
+    const assets = join(root, PUBLIC);
+    mkdirSync(assets, { recursive: true });
+    const write = (sources: Record<string, string>, folder = assets) => {
+      mkdirSync(folder, { recursive: true });
+      const c = (id: string, source: string) => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source, feedback: "f", defect: "d", correct: "c", allow: ["when_to_use"] });
+      writeFileSync(join(folder, "cases.jsonl"), `${Object.entries(sources).map(([id, source]) => JSON.stringify(c(id, source))).join("\n")}\n`);
+    };
+    write({ a: note("a"), b: note("b"), c: note("c") });
+    return { root, assets, write };
+  }
+  /** The reflect run of those cases that ran the code RAN: a summary.json, with `over` laid on it, and samples.jsonl. */
+  function runOf(root: string, assets: string, over: Record<string, unknown> = {}, rows: object[] = ROWS): string {
     const run = join(root, "run");
-    mkdirSync(run);
-    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public" }));
-    const rows = [
-      { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
-      { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
-      { id: "c", outcome: "none", correct: false },
-    ];
+    mkdirSync(run, { recursive: true });
+    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: RAN, ...over }));
     writeFileSync(join(run, "samples.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
-    expect(reflectEdits(run, root)).toEqual([
-      { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
-      { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
-    ]);
+    return run;
+  }
+  /** Those digests as reflect's own run writes them, for a replay by the code RAN. */
+  const same = (root: string) => ({ root, harness: RAN });
+
+  test("takes the proposals of a run that read these cases and ran this code, good when the case was correct, with the note the case holds", () => {
+    const { root, assets } = repo();
+    const run = runOf(root, assets);
+    const digest = assetsSha256(assets);
+    expect(reflectEdits(run, same(root))).toEqual({
+      edits: [
+        { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
+        { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
+      ],
+      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [] },
+    });
+  });
+
+  test("the digests are the ones reflect's run computes: assetsSha256 of the cases folder, and harnessSha256 of this src folder", () => {
+    const { root, assets } = repo();
+    const run = runOf(root, assets, { harness_sha256: harnessSha256(import.meta.dir) });
+    const { inputs } = reflectEdits(run, { root }); // no harness given: the code here
+    expect(inputs.harness_sha256).toEqual({ stored: harnessSha256(import.meta.dir), current: harnessSha256(import.meta.dir) });
+    expect(inputs.assets_sha256.current).toBe(assetsSha256(assets));
+    expect(inputs.differences).toEqual([]);
+  });
+
+  test("unchanged artifacts replay identically after an unrelated corpus regeneration", () => {
+    const { root, assets, write } = repo();
+    const run = runOf(root, assets);
+    const first = reflectEdits(run, same(root));
+    // The private corpus is made again from another seed, a file is added beside the public cases, and the public file is written out again with the same bytes.
+    write({ a: note("rewritten a"), b: note("rewritten b"), c: note("rewritten c") }, join(root, "private", "reflect", "assets"));
+    writeFileSync(join(assets, "README.md"), "Notes about the cases.\n");
+    const cases = join(assets, "cases.jsonl");
+    const text = readFileSync(cases, "utf8");
+    rmSync(cases);
+    writeFileSync(cases, text);
+    expect(reflectEdits(run, same(root))).toEqual(first);
+  });
+
+  test("a case whose source changed since the run stops the replay with both digests, and is replayed against the new source only with --rescore", () => {
+    const { root, assets, write } = repo();
+    const run = runOf(root, assets);
+    const stored = assetsSha256(assets);
+    const find: Find = (source) => (source.includes("changed source") ? "meta_commentary_added" : undefined);
+    expect(replay(reflectEdits(run, same(root)).edits, find).hits).toEqual([]); // the source the run was given: nothing refused
+    write({ a: note("changed source"), b: note("b"), c: note("c") });
+    const now = assetsSha256(assets);
+    expect(now).not.toBe(stored);
+    const said = `assets_sha256 differs: the run recorded ${stored}, the cases in ${PUBLIC} gives ${now}`;
+    expect(() => reflectEdits(run, same(root))).toThrow(said);
+    expect(() => reflectEdits(run, same(root))).toThrow("add --rescore");
+    const rescored = reflectEdits(run, { ...same(root), rescore: true });
+    expect(rescored.edits[0]).toEqual({ id: "a", label: "good", source: note("changed source"), candidate: note("a fixed") });
+    expect(replay(rescored.edits, find).hits).toEqual([{ id: "a", label: "good", rule: "meta_commentary_added" }]);
+    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [] });
+  });
+
+  test("a run made by other code stops the replay with both digests, and is replayed with --rescore", () => {
+    const { root, assets } = repo();
+    const run = runOf(root, assets, { harness_sha256: OTHER });
+    const said = `harness_sha256 differs: the run recorded ${OTHER}, the code here gives ${RAN}`;
+    expect(() => reflectEdits(run, same(root))).toThrow(said);
+    const rescored = reflectEdits(run, { ...same(root), rescore: true });
+    expect(rescored.edits.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(rescored.inputs).toMatchObject({ mode: "rescore", harness_sha256: { stored: OTHER, current: RAN }, differences: [said] });
+    expect(rescored.inputs.assets_sha256.stored).toBe(rescored.inputs.assets_sha256.current);
+  });
+
+  test("a summary without assets_sha256 or without harness_sha256 needs --rescore, and the report says which is missing", () => {
+    const { root, assets } = repo();
+    const noAssets = "assets_sha256 is missing from summary.json (or is not a sha256 digest), so nothing says which cases the run read";
+    const noHarness = "harness_sha256 is missing from summary.json (or is not a sha256 digest), so nothing says which code made the run";
+    const digest = assetsSha256(assets);
+    const cases: [string, Record<string, unknown>, string[], string | null, string | null][] = [
+      ["no assets_sha256", { assets_sha256: undefined }, [noAssets], null, RAN],
+      ["no harness_sha256", { harness_sha256: undefined }, [noHarness], digest, null],
+      ["neither", { assets_sha256: undefined, harness_sha256: undefined }, [noAssets, noHarness], null, null],
+      ["an assets_sha256 that is not a digest", { assets_sha256: "abc" }, [noAssets], null, RAN],
+      ["a harness_sha256 that is not a string", { harness_sha256: 42 }, [noHarness], digest, null],
+      ["a null digest", { harness_sha256: null }, [noHarness], digest, null],
+    ];
+    for (const [what, over, said, assetsWas, harnessWas] of cases) {
+      const run = runOf(root, assets, over);
+      for (const line of said) expect(() => reflectEdits(run, same(root)), what).toThrow(line);
+      const rescored = reflectEdits(run, { ...same(root), rescore: true });
+      expect(rescored.inputs, what).toMatchObject({ mode: "rescore", assets_sha256: { stored: assetsWas, current: digest }, harness_sha256: { stored: harnessWas, current: RAN }, differences: said });
+      expect(rescored.edits.map((e) => e.id), what).toEqual(["a", "b"]);
+    }
+  });
+
+  test("a case id of the run that the cases lack stops the replay, and is never an edit with no source", () => {
+    const { root, assets } = repo();
+    const rows = [...ROWS, { id: "gone", outcome: "proposal", correct: true, proposal: note("gone fixed") }, { id: "also-gone", outcome: "none", correct: false }];
+    const run = runOf(root, assets, {}, rows);
+    expect(() => reflectEdits(run, same(root))).toThrow(`the run has case ids that ${join(PUBLIC, "cases.jsonl")} lacks: gone, also-gone`);
+    const rescored = reflectEdits(run, { ...same(root), rescore: true });
+    expect(rescored.edits.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(rescored.edits.every((e) => typeof e.source === "string" && e.source.length > 0)).toBe(true);
+    expect(rescored.inputs.missing_cases).toEqual(["gone", "also-gone"]);
+    expect(rescored.inputs.differences).toEqual([]); // the digests agree: only the ids are the matter
+    const one = runOf(root, assets, {}, rows.slice(0, 4)); // the same folder, with only one id gone
+    expect(() => reflectEdits(one, same(root))).toThrow(`the run has a case id that ${join(PUBLIC, "cases.jsonl")} lacks: gone`);
+  });
+
+  test("reads the private cases for a private run, and refuses a corpus it does not know", () => {
+    const { root, assets, write } = repo();
+    write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
+    const run = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "private" });
+    const { edits, inputs } = reflectEdits(run, same(root));
+    expect(edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
+    expect(inputs).toMatchObject({ corpus: "private", assets: join("private", "reflect", "assets"), differences: [] });
+    // the public cases are another corpus: the digest of the run does not match them
+    expect(() => reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root))).toThrow("assets_sha256 differs");
+    expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or private');
+    expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or private");
+  });
+});
+
+describe("the command line", () => {
+  const SRC = import.meta.dir;
+  const run = (args: string[]) => {
+    const done = Bun.spawnSync(["bun", join(SRC, "defect-filter.ts"), ...args], { env: { PATH: process.env.PATH as string, HOME: process.env.HOME as string }, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+
+  /** A fake akm checkout whose filter refuses a candidate that says PLACEHOLDER, and a reflect run of the first two public cases as the code here made it. */
+  function setup() {
+    const akm = temp();
+    mkdirSync(join(akm, "src", "commands", "improve"), { recursive: true });
+    writeFileSync(join(akm, "src", "commands", "improve", "reflect-noise.ts"), 'export const findReflectDefect = (_s: string, c: string) => (c.includes("PLACEHOLDER") ? "placeholder_added" : undefined);\n');
+    const assets = join(SRC, "..", "assets");
+    const [first, second] = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"));
+    const results = temp();
+    const summary = { corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC) };
+    writeFileSync(join(results, "summary.json"), JSON.stringify(summary));
+    const rows = [
+      { id: first.id, outcome: "proposal", correct: true, proposal: first.source },
+      { id: second.id, outcome: "proposal", correct: false, proposal: `${second.source}\nPLACEHOLDER\n` },
+    ];
+    writeFileSync(join(results, "samples.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    return { akm, results, assets, summary, tamper: (over: Record<string, unknown>) => writeFileSync(join(results, "summary.json"), JSON.stringify({ ...summary, ...over })) };
+  }
+
+  test("replays a run of the corpus and the code here, and prints the inputs it used", () => {
+    const { akm, results, summary } = setup();
+    const done = run(["--akm-src", akm, "--reflect", results]);
+    expect(done.code).toBe(0);
+    const set = JSON.parse(done.out)[`reflect ${results}`];
+    expect(set.good).toEqual({ n: 1, refused: 0, rules: {} });
+    expect(set.bad).toEqual({ n: 1, refused: 1, rules: { placeholder_added: 1 } });
+    expect(set.inputs).toMatchObject({ mode: "stored", corpus: "public", assets: join("evals", "reflect", "assets"), assets_sha256: { stored: summary.assets_sha256, current: summary.assets_sha256 }, harness_sha256: { stored: summary.harness_sha256, current: summary.harness_sha256 }, differences: [], missing_cases: [] });
+  });
+
+  test("stops with exit 2 on a digest that differs or is missing, naming both, and runs with --rescore, which the report says", () => {
+    const { akm, results, summary, tamper } = setup();
+    const was = "9".repeat(64);
+    tamper({ assets_sha256: was, harness_sha256: undefined });
+    const refused = run(["--akm-src", akm, "--reflect", results]);
+    expect(refused.code).toBe(2);
+    expect(refused.out).toBe("");
+    expect(refused.err).toContain(`assets_sha256 differs: the run recorded ${was}, the cases in ${join("evals", "reflect", "assets")} gives ${summary.assets_sha256}`);
+    expect(refused.err).toContain("harness_sha256 is missing from summary.json");
+    expect(refused.err).toContain("add --rescore");
+    const rescored = run(["--akm-src", akm, "--reflect", results, "--rescore"]);
+    expect(rescored.code).toBe(0);
+    const { inputs } = JSON.parse(rescored.out)[`reflect ${results}`];
+    expect(inputs).toMatchObject({ mode: "rescore", assets_sha256: { stored: was, current: summary.assets_sha256 }, harness_sha256: { stored: null, current: summary.harness_sha256 } });
+    expect(inputs.differences).toHaveLength(2);
+  });
+
+  test("--rescore without a run to hold is refused", () => {
+    const { akm } = setup();
+    const done = run(["--akm-src", akm, "--judge-gate", "public", "--rescore"]);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("--rescore is for --reflect");
   });
 });
 
@@ -63,7 +253,7 @@ describe("judgeGateEdits", () => {
   test("is the 106 labelled proposals of the public judge-gate set", () => {
     const edits = judgeGateEdits("public");
     expect(edits.length).toBe(106);
-    expect(edits.filter((e) => e.label === "good").length).toBe(28);
+    expect(edits.filter((e) => e.label === "good").length).toBe(11); // rubric version 2 (evals/judge-gate/assets/ADJUDICATION.md)
     expect(edits.every((e) => e.source.length > 0 && e.candidate.length > 0)).toBe(true);
   });
 });

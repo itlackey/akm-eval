@@ -10,6 +10,9 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 cd "$root"
 
+# Settings come from .env at the repository root: KEY=value lines. A variable that is already set wins. See lib/env.sh.
+source lib/env.sh
+
 seed=""
 out=""
 while [ $# -gt 0 ]; do
@@ -24,15 +27,25 @@ done
 command -v bun > /dev/null || { echo "bakeoff: bun is needed. See https://bun.sh" >&2; exit 2; }
 command -v uv > /dev/null || { echo "bakeoff: uv is needed. See https://docs.astral.sh/uv/" >&2; exit 2; }
 
-work="$(mktemp -d)"
+# Everything is made in a work folder beside the result, and moved into place only when the check passes, so a generation that fails
+# leaves the earlier assets, map and generated.json as they were. The marker goes out first and comes in last: assets cut short with
+# no marker are refused by run --corpus private.
+mkdir -p "$out"
+work="$(mktemp -d "$out/.work.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$out" "$work/corpus"
-rm -rf "$out/assets" "$out/map.json"
+staged="$work/staged"
+mkdir -p "$work/corpus" "$staged"
 
 # The files, without cases.json: the words in it must not decide which names are names.
 cp -R "$here/assets/." "$work/corpus/"
 rm "$work/corpus/cases.json"
-bun lib/rewrite/rewrite.ts --seed "$seed" --map "$out/map.json" "$work/corpus" "$out/assets"
-bun lib/rewrite/rewrite.ts --map "$out/map.json" "$here/assets/cases.json" "$out/assets/cases.json"
+bun lib/rewrite/rewrite.ts --seed "$seed" --map "$staged/map.json" "$work/corpus" "$staged/assets"
+bun lib/rewrite/rewrite.ts --map "$staged/map.json" "$here/assets/cases.json" "$staged/assets/cases.json"
 
-uv run --project "$here/src" --frozen python "$here/src/bakeoff.py" check-assets "$out/assets" --against "$here/assets"
+uv run --project "$here/src" --frozen python "$here/src/bakeoff.py" check-assets "$staged/assets" --against "$here/assets" --stamp "$seed"
+
+rm -f "$out/generated.json"
+rm -rf "$out/assets" "$out/map.json"
+mv "$staged/assets" "$out/assets"
+mv "$staged/map.json" "$out/map.json"
+mv "$staged/generated.json" "$out/generated.json"

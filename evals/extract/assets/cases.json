@@ -7,7 +7,7 @@
       ["75"],
       ["stale", "left behind", "leftover", "never removed", "not removed"],
       ["oom", "out of memory", "memory limit", "sigkill", "512"],
-      ["kill 0", "still alive", "is alive", "still running", "is running", "process is dead", "dead process", "liveness"]
+      ["kill 0", "still alive", "is alive", "still running", "process is dead", "dead process", "liveness"]
     ],
     "forbidden": [],
     "good": "Exit code 75 from the nightly export means bin/export-wrapper.sh found var/export.pid and took it for a running export. After the 20 September run was OOM-killed under the service's 512 MB memory limit, a stale pid file was left behind (a SIGKILL skips the EXIT trap), so every later run exited 75. The wrapper now checks the pid with kill -0 and removes the pid file when the process is dead.",
@@ -34,7 +34,7 @@
     "required": [
       ["lexicographic", "alphabetic", "as strings", "string sort", "sort.Strings", "plain strings", "string order", "string comparison"],
       ["numeric prefix", "numerically", "numeric order", "as numbers", "by number", "number prefix", "Atoi"],
-      ["schema_migrations", "renam"]
+      ["schema_migrations", "renam * file", "renam * migration", "run again", "reappl", "re appl"]
     ],
     "forbidden": [],
     "good": "The Quillmark migration runner sorted file names with sort.Strings, so 100_backfill_currency.sql ran before 99_add_currency.sql. Do not fix it by renaming files to zero-padded names: schema_migrations records applied migrations by file name, so renamed files would run again. The runner now sorts by the numeric prefix before the first underscore.",
@@ -47,7 +47,7 @@
     "required": [
       ["Retry-After"],
       ["millisecond", "ms"],
-      ["docs", "documentation", "documented"],
+      ["docs", "documentation", "documented", "vendor reference", "api reference", "reference says", "says seconds", "say seconds"],
       ["Pelican"]
     ],
     "forbidden": [],
@@ -62,7 +62,7 @@
       ["rowpack"],
       ["aarch64", "arm64"],
       ["wheel"],
-      ["1.5.0"],
+      ["1.5.0", "rowpack 1.5", "rowpack v1.5", "rowpack at least 1.5", "rowpack version 1.5", "wheel from 1.5", "wheel since 1.5"],
       ["compil", "from source", "cargo", "rust"]
     ],
     "forbidden": [],
@@ -76,7 +76,7 @@
     "required": [
       ["pg_isready"],
       ["unix socket", "socket", "temporary server", "temp server"],
-      ["init"],
+      ["init script", "init process", "init phase", "init step", "initdb", "initializ", "initialis"],
       ["tcp", "127.0.0.1", "localhost"]
     ],
     "forbidden": [],
@@ -89,7 +89,7 @@
     "expect": "memory",
     "required": [
       ["conventional"],
-      ["60"],
+      ["60", "sixty char"],
       ["refs", "footer"]
     ],
     "forbidden": [],
@@ -143,7 +143,7 @@
     "required": [
       ["cents"],
       ["dollars"],
-      ["2025-03-01", "1 March 2025", "March 1, 2025"],
+      ["2025-03-01", "1 March 2025", "March 1, 2025", "March 1st, 2025", "1st March 2025", "1 Mar 2025", "1st Mar 2025", "Mar 1, 2025", "Mar 1st, 2025", "in Mar 2025", "since Mar 2025", "from Mar 2025", "before Mar 2025", "until Mar 2025", "by Mar 2025", "as of Mar 2025"],
       ["by 100", "divide", "divided", "convert", "normali"]
     ],
     "forbidden": [],

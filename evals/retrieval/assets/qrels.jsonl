@@ -107,7 +107,6 @@
 {"id":"q008","ref":"knowledge/print/fix-team-dispatch-template","grade":0,"reason":"The asset is a template for dispatching print-fix agents, which is unrelated to proving that no code calls an old function."}
 {"id":"q008","ref":"scripts/skills/coding/technical-debt-workflow/run_pilot.py","grade":0,"reason":"This script replays a specific pilot refactor in an isolated branch; it does not search for or prove callers of an arbitrary old function."}
 {"id":"q008","ref":"scripts/skills/ai-skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"The asset is a YAML configuration manager for LiteLLM and does not provide tools to search for function call sites or prove usage."}
-{"id":"q008","ref":"scripts/skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"The asset is a YAML configuration manager for LiteLLM and does not provide tools to search for function call sites or prove usage."}
 {"id":"q008","ref":"scripts/skills/ai-skills/litellm-skill/scripts/config.ts","grade":0,"reason":"The asset is a LiteLLM config CLI script and does not help prove that an old function has no other callers."}
 {"id":"q008","ref":"scripts/skills/administrative/tracker/scripts/lib/credential-resolver.ts","grade":0,"reason":"The asset is a credential resolver script and does not help prove that an old function has no other callers."}
 {"id":"q008","ref":"scripts/skills/administrative/tracker/scripts/platforms/github.ts","grade":0,"reason":"The asset is a GitHub API adapter and does not help find callers of an arbitrary function."}
@@ -231,13 +230,8 @@
 {"id":"q018","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/QUICKSTART","grade":3,"reason":"Directly covers semantic search and content moderation via OpenAI endpoints with example agents and commands."}
 {"id":"q018","ref":"skills/ai-skills/llm-delegation-tool","grade":3,"reason":"Directly covers semantic search and content moderation via OpenAI endpoints with example commands."}
 {"id":"q018","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/commands/moderate","grade":3,"reason":"Directly provides the OpenAI content moderation command and examples requested in the query."}
-{"id":"q018","ref":"commands/skills/ai-skills/llm-delegation-tool/examples/commands/moderate","grade":3,"reason":"Directly provides the OpenAI content moderation command with examples and usage details requested in the query."}
-{"id":"q018","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/content-moderator","grade":3,"reason":"Directly provides the requested example agent and commands for OpenAI content moderation."}
 {"id":"q018","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":2,"reason":"Relevant example agent demonstrating semantic search and moderation workflows, but lacks explicit OpenAI endpoint details or commands."}
-{"id":"q018","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":2,"reason":"Relevant example agent demonstrating semantic search and moderation workflows, but not the single best asset for OpenAI endpoint specifics."}
-{"id":"q018","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/semantic-search","grade":3,"reason":"Directly matches the query for semantic search via OpenAI endpoints with example agents and commands."}
 {"id":"q018","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/troubleshooting","grade":1,"reason":"Troubleshooting guide for OpenAI delegation; related to endpoints but does not provide example agents or commands for semantic search/moderation."}
-{"id":"q018","ref":"commands/skills/ai-skills/llm-delegation-tool/examples/commands/search","grade":2,"reason":"Covers semantic search commands and examples but lacks content moderation or OpenAI endpoint specifics."}
 {"id":"q019","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/fixes","grade":3,"reason":"The asset contains the specific fix procedure (FIX-001) for ProviderInitError, directly answering the query."}
 {"id":"q019","ref":"knowledge/skills/ai-skills/opencode-extensions/references/troubleshooting","grade":3,"reason":"The asset contains a specific section dedicated to resolving ProviderInitError with step-by-step instructions."}
 {"id":"q019","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis","grade":3,"reason":"Directly explains ProviderInitError causes and provides specific grep patterns to diagnose it in logs."}
@@ -245,7 +239,6 @@
 {"id":"q020","ref":"knowledge/skills/print/pdfx-print-pipeline/references/DRIVETHRURPG","grade":3,"reason":"Directly addresses the printer's complaint about high ink coverage by providing TAC limits and rich black specifications."}
 {"id":"q020","ref":"agents/report-reviewer","grade":0,"reason":"The query concerns printer ink issues, while the asset is a report review agent; they are completely unrelated."}
 {"id":"q020","ref":"commands/print/preflight-print","grade":3,"reason":"Directly addresses ink coverage limits (TAC) for print preflight and explains how to measure/fix dark areas holding too much ink."}
-{"id":"q020","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":0,"reason":"The query is about printer ink issues; the asset is a TTRPG lore writer agent."}
 {"id":"q020","ref":"skills/print/pdfx-print-pipeline","grade":3,"reason":"Directly addresses the query by explaining TAC/ink-coverage checks and how to configure limits for print-ready PDFs."}
 {"id":"q020","ref":"knowledge/skills/print/pdfx-print-pipeline/references/drivethrurpg-upload-steps","grade":2,"reason":"Contains specific total ink coverage limits (240%) directly relevant to the printer's complaint about dark areas holding too much ink."}
 {"id":"q020","ref":"knowledge/skills/print/pdf-review/references/ttrpg-standards","grade":0,"reason":"The asset covers TTRPG layout standards and does not address ink coverage or printer issues."}
@@ -322,7 +315,6 @@
 {"id":"q025","ref":"workflows/print-spread-qa-loop","grade":0,"reason":"The asset is a visual QA workflow for print spreads, unrelated to drafting reports from analysis notes."}
 {"id":"q025","ref":"commands/complete-github-issue","grade":0,"reason":"The asset is for completing GitHub issues with code implementation, not drafting reports from analysis notes."}
 {"id":"q025","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":0,"reason":"The asset is a community management agent example, unrelated to drafting decision-ready reports from analysis notes."}
-{"id":"q025","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":0,"reason":"The asset is a community management agent, unrelated to drafting decision-ready reports from analysis notes."}
 {"id":"q026","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/commands/embed","grade":3,"reason":"Directly provides the command and configuration for generating vector embeddings with a configurable model."}
 {"id":"q026","ref":"skills/ai-skills/openviking","grade":1,"reason":"Same general topic of vector embeddings and models, but asset is about interacting with a server API rather than generating embeddings for strings."}
 {"id":"q026","ref":"knowledge/skills/print/pagedjs/references/troubleshooting","grade":0,"reason":"The asset is about Paged.js print layout troubleshooting, completely unrelated to generating vector embeddings."}
@@ -334,8 +326,6 @@
 {"id":"q026","ref":"knowledge/skills/ai-skills/opencode-extensions/references/server","grade":0,"reason":"The asset documents an HTTP server API for the OpenCode system and contains no information about generating vector embeddings."}
 {"id":"q026","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/troubleshooting","grade":1,"reason":"Troubleshooting guide for a specific delegation skill; does not provide code or instructions to generate embeddings."}
 {"id":"q026","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/claude-md-example","grade":1,"reason":"Discusses embedding configuration and models but is a documentation example for agent delegation, not code to generate embeddings."}
-{"id":"q026","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/semantic-search","grade":1,"reason":"Uses embeddings for search but does not provide a tool or function to generate embeddings for an arbitrary list of strings."}
-{"id":"q026","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":1,"reason":"Mentions embeddings but is a high-level agent description, not the actual embedding generation code or API."}
 {"id":"q026","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/semantic-search","grade":1,"reason":"Uses embeddings for search but does not provide a reusable function to generate embeddings for arbitrary string lists."}
 {"id":"q027","ref":"agents/coding/technical-debt/refactoring-orchestrator","grade":3,"reason":"The candidate asset is exactly the refactoring-orchestrator agent requested in the query."}
 {"id":"q026","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/implementation-guide","grade":2,"reason":"Relevant to configurable model embeddings via delegation config, but focused on Claude Code skill implementation rather than direct embedding generation."}
@@ -388,7 +378,6 @@
 {"id":"q030","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/opencode","grade":3,"reason":"Directly shows how to send a prompt to Ollama via OpenCode CLI with host resolution and model selection."}
 {"id":"q030","ref":"skills/ai-skills/agent-cli-tools","grade":2,"reason":"Relevant for local LLM scripting via Qwen Code/Ollama, but focuses on agent CLIs rather than direct API calls."}
 {"id":"q031","ref":"scripts/skills/ai-skills/litellm-skill/lib/yaml-manager.ts","grade":3,"reason":"The query is the exact filename of this asset; loading it directly provides the requested file."}
-{"id":"q031","ref":"scripts/skills/litellm-skill/lib/yaml-manager.ts","grade":3,"reason":"The query is the exact filename of this asset, which directly provides the requested code."}
 {"id":"q031","ref":"scripts/skills/administrative/tracker/scripts/lib/workflow-state.ts","grade":0,"reason":"The query asks for yaml-manager.ts, but this asset is workflow-state.ts. They are different files."}
 {"id":"q031","ref":"skills/ai-skills/litellm-skill","grade":3,"reason":"The asset explicitly documents and provides usage examples for the `yaml-manager.ts` file within its structure."}
 {"id":"q031","ref":"agents/print/markdown-pdf-pipeline","grade":0,"reason":"The candidate is a markdown-to-PDF pipeline agent, which is unrelated to the specific file query 'yaml-manager.ts'."}
@@ -402,7 +391,6 @@
 {"id":"q031","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/configuration-examples","grade":0,"reason":"The query asks for a specific TypeScript file (yaml-manager.ts), but the candidate is documentation about OpenAI API configuration examples."}
 {"id":"q031","ref":"skills/coding/dependency-simplification","grade":0,"reason":"The query asks for a specific file (yaml-manager.ts), while the asset describes dependency simplification skills."}
 {"id":"q031","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/aider","grade":0,"reason":"The query asks for yaml-manager.ts, but this asset documents the Aider CLI tool."}
-{"id":"q031","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":0,"reason":"The query asks for a specific TypeScript file (yaml-manager.ts), but the candidate is an unrelated community management agent."}
 {"id":"q032","ref":"knowledge/skills/ai-skills/opencode-extensions/references/custom-tools","grade":0,"reason":"The asset describes creating custom tools for OpenCode, not methods for passing screenshots or images to a coding agent."}
 {"id":"q032","ref":"agents/development/web-design-expert","grade":0,"reason":"Asset covers web design/CSS expertise; query asks how to pass screenshots to a CLI agent—unrelated."}
 {"id":"q032","ref":"commands/print/qa-spread","grade":1,"reason":"Same topic of using screenshots with an agent, but this asset is a specific print QA command, not the general method requested."}
@@ -494,7 +482,6 @@
 {"id":"q037","ref":"knowledge/skills/ai-skills/opencode-extensions/references/sdk-docs","grade":0,"reason":"The asset is SDK documentation for programmatic control, not a tool for peer review or approval."}
 {"id":"q037","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":0,"reason":"The asset is for generating TTRPG lore, which is unrelated to getting a skeptical review of a write-up."}
 {"id":"q037","ref":"knowledge/skills/ai-skills/opencode-extensions/references/mcp-servers","grade":0,"reason":"The asset documents MCP server configuration for OpenCode, which is unrelated to seeking a skeptical review of a write-up."}
-{"id":"q037","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":0,"reason":"The asset is for generating TTRPG lore, which is unrelated to getting a skeptical review of a write-up."}
 {"id":"q037","ref":"agents/report-reviewer","grade":3,"reason":"This agent provides a strict quality gate review for reports, directly fulfilling the request for a skeptical second opinion to approve a write-up."}
 {"id":"q037","ref":"scripts/skills/coding/technical-debt-workflow/tests/test_runner.py","grade":0,"reason":"The asset is a test runner for technical debt workflows, unrelated to getting skeptical approval on a write-up."}
 {"id":"q038","ref":"scripts/skills/gws-setup/scripts/gws-verify.sh","grade":3,"reason":"The query is the exact filename of this asset; loading it directly provides the requested script."}
@@ -622,11 +609,9 @@
 {"id":"q046","ref":"skills/print/pdf-layout-reviewer","grade":0,"reason":"The asset is a PDF layout review tool for print production, completely unrelated to writing atmospheric descriptions for tabletop games."}
 {"id":"q046","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","grade":0,"reason":"The asset covers print layout and typography issues, which is unrelated to writing atmospheric narrative descriptions for a game."}
 {"id":"q046","ref":"agents/playwright/playwright-test-reviewer","grade":0,"reason":"The asset is a Playwright test reviewer agent, completely unrelated to writing atmospheric descriptions for tabletop games."}
-{"id":"q046","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":3,"reason":"Directly matches the query for atmospheric TTRPG location writing."}
 {"id":"q046","ref":"knowledge/skills/ai-skills/opencode-extensions/references/custom-tools","grade":0,"reason":"The asset documents coding custom tools for OpenCode, which is completely unrelated to writing atmospheric fiction."}
 {"id":"q046","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/auto-routing-example","grade":0,"reason":"The asset is about LLM endpoint routing configuration, completely unrelated to writing atmospheric descriptions for a tabletop game."}
 {"id":"q046","ref":"skills/coding/repository-assessment","grade":0,"reason":"The asset is a technical skill for repository assessment, completely unrelated to creative writing for tabletop games."}
-{"id":"q046","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/auto-routing-example","grade":0,"reason":"The asset is about LLM endpoint routing configuration, completely unrelated to writing atmospheric descriptions for a tabletop game."}
 {"id":"q047","ref":"skills/ai-skills/litellm-skill","grade":3,"reason":"Directly provides the API endpoints and code examples to set monthly budget caps for teams."}
 {"id":"q047","ref":"scripts/skills/ai-skills/litellm-skill/scripts/spend.ts","grade":2,"reason":"Tracks and reports team spend with budget info, but does not set or cap monthly limits."}
 {"id":"q047","ref":"skills/notify","grade":0,"reason":"The asset is about sending notifications via Apprise, not about capping or limiting a team's monthly spend on model calls."}
@@ -769,7 +754,6 @@
 {"id":"q057","ref":"skills/ai-skills/opencode-troubleshoot","grade":0,"reason":"Query is a specific config variable; asset covers OpenCode troubleshooting generally with no mention of APPRISE_NOTIFY_CONFIG."}
 {"id":"q057","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/troubleshooting","grade":0,"reason":"The query asks for APPRISE_NOTIFY_CONFIG, but this asset covers OpenAI delegation troubleshooting and contains no mention of that specific configuration."}
 {"id":"q057","ref":"scripts/skills/ai-skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"The asset manages LiteLLM configuration files, which is unrelated to the APPRISE_NOTIFY_CONFIG query."}
-{"id":"q057","ref":"scripts/skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"The asset manages LiteLLM YAML configuration files, which is unrelated to the specific APPRISE_NOTIFY_CONFIG query."}
 {"id":"q058","ref":"commands/coding/technical-debt/execute-refactoring-slice","grade":3,"reason":"The asset is the exact command for executing a refactoring slice, directly matching the query."}
 {"id":"q057","ref":"scripts/skills/ai-skills/litellm-skill/scripts/config.ts","grade":0,"reason":"Query is APPRISE_NOTIFY_CONFIG; asset is LiteLLM config CLI with no mention of Apprise or notification settings."}
 {"id":"q058","ref":"knowledge/skills/coding/refactoring-executor/assets/execution-report-template","grade":3,"reason":"Directly provides the execution report template required for executing a refactoring slice."}
@@ -879,14 +863,12 @@
 {"id":"q065","ref":"commands/print/validate-links","grade":0,"reason":"The asset validates local markdown links in a build pipeline; it does not provide or manage conversation sharing links for colleagues."}
 {"id":"q065","ref":"skills/cmyk-image-converter","grade":0,"reason":"The asset is about image conversion, which is unrelated to sharing conversation links."}
 {"id":"q065","ref":"workflows/github-issues-parallel-implementer","grade":0,"reason":"The asset describes a complex multi-agent GitHub issue implementation workflow, which is completely unrelated to sharing conversation links."}
-{"id":"q065","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":0,"reason":"The asset is a TTRPG worldbuilding agent; the query asks for sharing a conversation link."}
 {"id":"q065","ref":"skills/notify","grade":0,"reason":"The query asks for a conversation link, but the asset is for sending operational notifications via channels like Slack or email."}
 {"id":"q065","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/codex","grade":0,"reason":"The asset documents the Codex CLI tool, which is unrelated to sharing a conversation link with a colleague."}
 {"id":"q065","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/claude-code","grade":0,"reason":"The asset is a CLI reference for Claude Code; it does not address sharing conversation links."}
 {"id":"q065","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":0,"reason":"The asset is for TTRPG worldbuilding, which is completely unrelated to sharing conversation links."}
 {"id":"q065","ref":"skills/ai-skills/openviking","grade":0,"reason":"The asset is for OpenViking server management and search, not for sharing conversation links."}
 {"id":"q065","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":0,"reason":"The asset describes a community management agent and is unrelated to sharing conversation links."}
-{"id":"q065","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/community-manager","grade":0,"reason":"The asset is a community management agent, unrelated to sharing conversation links."}
 {"id":"q065","ref":"knowledge/skills/administrative/tracker/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET","grade":0,"reason":"The asset is about Azure DevOps work items, which is unrelated to sharing a conversation link."}
 {"id":"q066","ref":"commands/print/build-pdf","grade":3,"reason":"Directly provides exact commands to build a PDF/X-1a file from a gutterpress project."}
 {"id":"q065","ref":"knowledge/skills/ai-skills/opencode-extensions/references/providers","grade":0,"reason":"The asset documents LLM provider configuration for OpenCode, which is unrelated to sharing conversation links."}
@@ -975,7 +957,6 @@
 {"id":"q072","ref":"skills/akm-migrate","grade":1,"reason":"Covers version upgrades but not cutting new releases or semantic versioning/changelogs."}
 {"id":"q072","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","grade":0,"reason":"The asset covers print layout issues, completely unrelated to semantic versioning or changelog creation."}
 {"id":"q072","ref":"knowledge/skills/ai-skills/llm-delegation-tool/references/MODEL-ROUTING-GUIDE","grade":0,"reason":"The asset describes LLM endpoint routing configuration, which is completely unrelated to creating software releases with semantic versions and changelogs."}
-{"id":"q072","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/auto-routing-example","grade":0,"reason":"The asset describes LLM endpoint routing, which is completely unrelated to cutting a release or semantic versioning."}
 {"id":"q072","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/claude-md-example","grade":0,"reason":"The asset documents OpenAI delegation skills and is completely unrelated to creating software releases or changelogs."}
 {"id":"q072","ref":"knowledge/skills/ai-skills/llm-delegation-tool/examples/claude-md-section","grade":0,"reason":"The asset documents OpenAI API delegation configuration and is completely unrelated to cutting a release or semantic versioning."}
 {"id":"q072","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/claude-code","grade":0,"reason":"The asset is a Claude Code CLI reference; it does not cover cutting releases, semantic versioning, or changelogs."}
@@ -1118,7 +1099,6 @@
 {"id":"q082","ref":"scripts/skills/ai-skills/litellm-skill/lib/client.ts","grade":0,"reason":"The asset is a TypeScript LiteLLM client, completely unrelated to Rust lifetime errors or async code."}
 {"id":"q082","ref":"scripts/skills/ai-skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"The asset is a TypeScript script for managing LiteLLM YAML configurations and has no relation to Rust or lifetime errors."}
 {"id":"q082","ref":"knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs","grade":0,"reason":"The asset documents OpenCode plugins and events, which is unrelated to fixing Rust lifetime errors in async code."}
-{"id":"q082","ref":"scripts/skills/litellm-skill/lib/yaml-manager.ts","grade":0,"reason":"Asset is a TypeScript YAML config manager for LiteLLM; unrelated to Rust lifetime errors in async code."}
 {"id":"q083","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/symptom-map","grade":1,"reason":"Covers MCP troubleshooting but does not provide instructions on how to add a new server."}
 {"id":"q083","ref":"knowledge/skills/ai-skills/opencode-extensions/references/mcp-servers","grade":3,"reason":"Directly answers the query with configuration instructions and examples for adding MCP servers to OpenCode."}
 {"id":"q083","ref":"knowledge/skills/ai-skills/opencode-extensions/references/cli","grade":3,"reason":"Directly documents the `opencode mcp add` command required to fulfill the query."}
@@ -1138,7 +1118,6 @@
 {"id":"q084","ref":"scripts/skills/administrative/tracker/scripts/platforms/github.ts","grade":0,"reason":"The asset is a GitHub CLI wrapper for issue tracking, completely unrelated to fine-tuning LoRA adapters on datasets."}
 {"id":"q084","ref":"scripts/skills/administrative/tracker/scripts/platforms/gitea.ts","grade":0,"reason":"The asset is a Gitea API adapter for issue tracking, completely unrelated to fine-tuning LoRA adapters on datasets."}
 {"id":"q084","ref":"agents/report-writer","grade":0,"reason":"The asset is for writing reports, which is unrelated to fine-tuning LoRA adapters."}
-{"id":"q084","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/auto-routing-example","grade":0,"reason":"The asset describes model routing configuration for an LLM delegation tool, which is unrelated to fine-tuning LoRA adapters."}
 {"id":"q084","ref":"knowledge/skills/coding/technical-debt-workflow/references/primary-references","grade":0,"reason":"The asset is about agent skill specifications and technical debt workflows, completely unrelated to fine-tuning a LoRA adapter."}
 {"id":"q084","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/github-copilot-cli","grade":0,"reason":"The asset is about the GitHub Copilot CLI tool, which is unrelated to fine-tuning a LoRA adapter on a custom dataset."}
 {"id":"q084","ref":"knowledge/skills/print/pdfx-print-pipeline/references/drivethrurpg-upload-steps","grade":0,"reason":"The asset is about uploading PDFs to DriveThruRPG for printing, which is completely unrelated to fine-tuning a LoRA adapter."}
@@ -1181,7 +1160,6 @@
 {"id":"q087","ref":"knowledge/print/fix-team-dispatch-template","grade":0,"reason":"Asset is about print-fix agent dispatch templates; unrelated to copy-editing a game manuscript for consistency and house style."}
 {"id":"q087","ref":"skills/print/pdf-layout-reviewer","grade":1,"reason":"Same general topic (document review), but this asset is for PDF layout/print preflight, not copy editing or house style consistency."}
 {"id":"q087","ref":"skills/coding/fta-code-quality","grade":0,"reason":"Query is about copy editing a game manuscript; asset is about TypeScript code quality analysis."}
-{"id":"q087","ref":"agents/skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer","grade":1,"reason":"Same general topic (consistency in game writing), but this asset generates new lore rather than copy-editing a manuscript for house style."}
 {"id":"q087","ref":"agents/report-reviewer","grade":1,"reason":"Checks consistency but targets reports, not game manuscripts or house style editing."}
 {"id":"q087","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","grade":1,"reason":"Covers layout and typography issues but lacks specific guidance on copy editing for narrative consistency or house style."}
 {"id":"q087","ref":"commands/print/compare-pdf","grade":0,"reason":"The asset compares PDFs for regressions; the query asks to copy edit a manuscript for consistency and style."}

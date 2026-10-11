@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseCases as parsePairs } from "../../consolidate/src/lib.ts";
 import { loadCases as loadDistill } from "../../distill/src/lib.ts";
+import { libraryFileOf } from "../../reflect/src/build.ts";
 import { cleanProblems, parseCases as parseReflect } from "../../reflect/src/lib.ts";
 import { type Feedback, type Item, type Night, type Relation, listFiles, nightProblems, refOf } from "./lib.ts";
 
@@ -33,6 +34,7 @@ const DISTILLS: Record<string, string> = {
 const SILENT = ["description-period-02", "description-quote-02", "description-truncated-02", "description-missing-02", "when-to-use-missing-02", "title-missing-02"];
 // Memories and notes that nothing has a reason to touch: no feedback, no pair, nothing wrong.
 const UNTOUCHED_MEMORIES = ["lesson-05", "status-04"];
+// A note of a skill sits in the night's library where akm gives it its ref, and is read from the skill's folder in corpus/library (libraryFileOf).
 const UNTOUCHED_NOTES = ["knowledge/skills/ai-skills/opencode-extensions/references/config.md", "knowledge/skills/ai-skills/opencode-extensions/references/network.md"];
 
 // A note of corpus/library with one wrong fact planted in its body, and the feedback that carries the exact fix.
@@ -90,7 +92,7 @@ export function buildNight(): Night {
     for (const path of own) add(path, readFileSync(join(c.dir, path), "utf8"));
     const memory = `memories/${c.name}.md`;
     const note = c.expect === "lesson" ? `${c.note} The night queues the lesson for review and never accepts it.` : c.note;
-    items.push({ id: c.id, kind: "distill", note, files: own, feedback: [{ ref: refOf(memory), signal: "positive", reason: DISTILLS[c.id] as string }], class: c.class, expect: c.expect, memory, required: c.required, forbidden: c.forbidden });
+    items.push({ id: c.id, kind: "distill", note, files: own, feedback: [{ ref: refOf(memory), signal: "positive", reason: DISTILLS[c.id] as string }], class: c.class, expect: c.expect, memory, required: c.required, forbidden: c.forbidden, contradicts: c.contradicts });
   }
 
   const clean = readFileSync(join(LIBRARY, FIX.path), "utf8");
@@ -101,7 +103,7 @@ export function buildNight(): Night {
 
   const untouched = [
     ...pick(distill, UNTOUCHED_MEMORIES, "distill").map((c) => ({ path: `memories/${c.name}.md`, text: c.memory })),
-    ...UNTOUCHED_NOTES.map((path) => ({ path, text: readFileSync(join(LIBRARY, path), "utf8") })),
+    ...UNTOUCHED_NOTES.map((path) => ({ path, text: readFileSync(join(LIBRARY, libraryFileOf(path)), "utf8") })),
   ];
   untouched.forEach(({ path, text }, i) => {
     const problems = path.startsWith("memories/") ? [] : cleanProblems(text);

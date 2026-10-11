@@ -1,0 +1,115 @@
+{
+  "eval": "promotion",
+  "corpus": "public",
+  "label": "after",
+  "date": "2026-10-11T10:00:00.000Z",
+  "git_commit": "5d1c0de",
+  "model": "test-model",
+  "akm_version": "0.9.99-test",
+  "akm_bin": "bun /work/akm/src/index.ts",
+  "akm_build": "1a2b3c4",
+  "status": "complete",
+  "aborted_reason": null,
+  "assets_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "seed": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "night"
+    },
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>",
+        "model": "test-model",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 120000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "test-model",
+    "endpoint": "https://gateway.example.com/v1",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 120000,
+    "engines": {
+      "model": {
+        "model": "test-model",
+        "endpoint": "https://gateway.example.com/v1",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 120000
+      }
+    }
+  },
+  "limit": null,
+  "strategy": "promotion",
+  "config_patch": null,
+  "n_cases": 10,
+  "n_errored": 1,
+  "metrics": {
+    "proposals": {
+      "n": 9,
+      "good": 4,
+      "share_good": 0.4444
+    },
+    "accepted": {
+      "n": 6,
+      "good": 4
+    },
+    "recall": {
+      "value": 1,
+      "accepted": 4,
+      "of": 4
+    },
+    "precision": {
+      "value": 0.6667,
+      "good": 4,
+      "of": 6
+    },
+    "bad_accepted": {
+      "value": 0.4,
+      "accepted": 2,
+      "of": 5
+    },
+    "by_category": {
+      "duplicate": {
+        "n": 2,
+        "accepted": 0,
+        "rate": 0
+      },
+      "stale": {
+        "n": 2,
+        "accepted": 1,
+        "rate": 0.5
+      },
+      "ephemeral": {
+        "n": 1,
+        "accepted": 1,
+        "rate": 1
+      }
+    },
+    "outcomes": {
+      "good": {
+        "accept": 4,
+        "reject": 0,
+        "defer": 0,
+        "error": 0
+      },
+      "bad": {
+        "accept": 2,
+        "reject": 3,
+        "defer": 0,
+        "error": 1
+      }
+    }
+  }
+}

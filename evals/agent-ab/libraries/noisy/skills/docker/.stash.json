@@ -6,7 +6,7 @@
       "description": "Build and run Docker containers and compose stacks",
       "tags": ["docker", "containers", "compose"],
       "aliases": ["containers"],
-      "searchHints": ["build container image", "run docker compose", "manage container stack"],
+      "searchHints": ["build container image", "run docker compose", "manage container stack", "render merged compose config", "compose env file profile services"],
       "filename": "SKILL.md",
       "quality": "curated",
       "confidence": 0.9

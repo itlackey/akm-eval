@@ -6,11 +6,14 @@
 // Every case's text goes through one rewrite map: the note, its path, the feedback and the terms first, then the
 // defect and the correct result, so a name changes the same way in all of them. Each rewritten case must still
 // hold the defect it names, and only that one, or the script stops and says which case lost it.
+// Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
+// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed and the digest of the
+// public cases, and `run --corpus private` refuses assets without it or with a digest that is no longer the public one.
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Case, caseProblems, parseCases } from "./lib.ts";
+import { type Case, GENERATED, type Generated, assetsSha256, caseProblems, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -76,6 +79,19 @@ function rewrite(args: string[]): string {
   return p.stdout.toString().trim();
 }
 
+/**
+ * Moves the assets, the map and generated.json from `staged` into `out`, in place of the earlier ones. The marker goes out first and
+ * comes in last, so a generation cut short here leaves assets with no marker, which `run --corpus private` refuses.
+ */
+export function install(staged: string, out: string): void {
+  rmSync(join(out, GENERATED), { force: true });
+  rmSync(join(out, "assets"), { recursive: true, force: true });
+  rmSync(join(out, "map.json"), { force: true });
+  renameSync(join(staged, "assets"), join(out, "assets"));
+  renameSync(join(staged, "map.json"), join(out, "map.json"));
+  renameSync(join(staged, GENERATED), join(out, GENERATED));
+}
+
 function main(): void {
   const { values } = parseArgs({ args: Bun.argv.slice(2), options: { seed: { type: "string" }, out: { type: "string" } }, strict: true });
   if (values.seed === undefined || values.out === undefined) {
@@ -83,30 +99,40 @@ function main(): void {
     process.exit(2);
   }
   const out = resolve(values.out);
-  const work = join(out, ".work");
-  const assets = join(out, "assets");
-  const map = join(out, "map.json");
+  const work = join(out, ".work"); // in the same folder as the result, so the rename stays on one disk
+  const staged = join(work, "staged");
+  const map = join(staged, "map.json");
 
   const cases = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"), "assets/cases.jsonl");
   rmSync(work, { recursive: true, force: true });
-  rmSync(map, { force: true });
-  explode(cases, join(work, "corpus"), join(work, "labels"));
+  mkdirSync(staged, { recursive: true });
 
-  rewrite(["--seed", values.seed, "--map", map, join(work, "corpus"), join(work, "corpus-out")]);
-  const summary = rewrite(["--map", map, join(work, "labels"), join(work, "labels-out")]);
+  let refused: string | undefined;
+  try {
+    explode(cases, join(work, "corpus"), join(work, "labels"));
+    rewrite(["--seed", values.seed, "--map", map, join(work, "corpus"), join(work, "corpus-out")]);
+    const summary = rewrite(["--map", map, join(work, "labels"), join(work, "labels-out")]);
 
-  const rewritten = assemble(cases, join(work, "corpus-out"), join(work, "labels-out"));
-  rmSync(work, { recursive: true, force: true });
-  const problems = rewriteProblems(rewritten);
-  if (problems.length > 0) {
-    console.error(`reflect: the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} the cases depend on. Nothing was written. Try another seed.\n  ${problems.join("\n  ")}`);
+    const rewritten = assemble(cases, join(work, "corpus-out"), join(work, "labels-out"));
+    const problems = rewriteProblems(rewritten);
+    if (problems.length > 0) {
+      refused = `reflect: the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} the cases depend on. Nothing was written. Try another seed.\n  ${problems.join("\n  ")}`;
+    } else {
+      mkdirSync(join(staged, "assets"), { recursive: true });
+      writeFileSync(join(staged, "assets", "cases.jsonl"), `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`);
+      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")) };
+      writeFileSync(join(staged, GENERATED), `${JSON.stringify(generated, null, 2)}\n`);
+      install(staged, out);
+      console.log(`reflect: ${rewritten.length} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
+      console.log(summary.split("\n").pop());
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+  if (refused) {
+    console.error(refused);
     process.exit(1);
   }
-  rmSync(assets, { recursive: true, force: true });
-  mkdirSync(assets, { recursive: true });
-  writeFileSync(join(assets, "cases.jsonl"), `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`);
-  console.log(`reflect: ${rewritten.length} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
-  console.log(summary.split("\n").pop());
 }
 
 if (import.meta.main) main();

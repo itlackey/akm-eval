@@ -18,6 +18,7 @@ budget_tokens = 25000
 budget_wall_ms = 360000
 gold_ref = "skills/inkwell"
 gold_ref_legacy = "skill:inkwell"
+library_tokens = ["apiVersion", "inkwell/v2", "kind", "Service", "metadata", "name", "spec", "runtime", "image", "port", "scaling", "min", "max", "metric", "rps", "target", "limits", "burst"]
 memory_ability = "multi_asset_composition"
 task_family = "inkwell/service"
 akm_keywords = "inkwell service yaml scaling limits rps burst"

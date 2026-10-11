@@ -2,24 +2,31 @@
 // extract: runs akm's extract on each session, with the model under test as akm's engine, and scores the memories it
 // saves. See ../README.md.
 //
-//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, exitMessage, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { engineSettings, harnessSha256, redactConfig, type EngineSettings } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, errorRow, extractConfig, failureMessage, loadCases, metrics, pct, savedMemories, scoreCase, selectCases } from "./lib.ts";
+import { atLeast } from "../../reflect/src/lib.ts";
+import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, generatedProblem, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
 
 const NAME = "extract";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir, { also: [join(ROOT, "evals", "reflect", "src")] });
+export const MIN_AKM = "0.9.26"; // the release this eval was built on: its `proposal extract` flags, its result and its queue are the ones the README describes
 const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 akm's engine, and scores the memories it saves. Settings come from .env at the repository root.
@@ -29,11 +36,12 @@ akm's engine, and scores the memories it saves. Settings come from .env at the r
   --limit   run N sessions, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+${overridesUsage(STRATEGY)}
 ${modelUsage}
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm on PATH, or in AKM_BIN.`;
+Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 
 type Corpus = "public" | "private";
 
@@ -43,43 +51,52 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   limit: number | null;
+  /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
+  strategy: string;
+  config_patch: { path: string; sha256: string } | null;
+  /** The akm config the eval wrote for every session, as the sandbox's config file has it, with any secret redacted and the model's endpoint written as <MODEL_BASE_URL> (its host is in `engine`). */
+  config: unknown;
+  /** The settings of the model under test in that config: temperature, thinking switch, time limit, and the host of its endpoint. */
+  engine: EngineSettings;
+  /** One sha256 over cases.json and the session files of the corpus, named by their place in assets/. It covers every case, whatever --limit picked. */
+  assets_sha256: string;
+  /** The seed that made the private corpus, as written. Null for the public corpus, and when the private seed cannot be found. */
+  seed: string | null;
+  /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer sessions than it selected. Then aborted_reason says why. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
   n_errored: number;
+  /** Of the errored sessions, those where akm did not answer within the time limit. */
+  timeouts: number;
   metrics: Metrics;
   results_dir: string;
 }
 
-/** A failure that ends the run with a message. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
+interface Ctx {
+  /** The eval's own akm config. The config patch, if there is one, is merged into it. */
+  config: Record<string, unknown>;
+  baseUrl: string;
+  version: string;
+  model: string;
+  label: string;
+  limit?: number;
+  overrides?: Overrides;
+  /** How long akm may take on a session. For tests. */
+  timeoutMs?: number;
 }
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 const cell = (c: { n: number; correct: number; rate: number | null }): string => `${c.correct}/${c.n}  ${pct(c.rate)}`;
 
@@ -93,7 +110,7 @@ function printSummary(s: Summary): void {
     const failed = Object.entries(c.failed).filter(([, n]) => n > 0).map(([name, n]) => `${name} ${n}`).join(", ");
     console.log(`    ${klass.padEnd(11)} ${`${c.correct}/${c.n}`.padEnd(5)} saved ${c.outcomes.saved}, empty ${c.outcomes.empty}, unusable ${c.outcomes.unusable}; ${c.memories} memories${failed ? `; failed: ${failed}` : ""}`);
   }
-  console.log(`  errored   ${s.n_errored}`);
+  console.log(`  errored   ${s.n_errored}${s.timeouts > 0 ? ` (${s.timeouts} timed out)` : ""}`);
   console.log(`  results   ${relative(ROOT, s.results_dir)}/`);
 }
 
@@ -106,6 +123,7 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["planted", cell(a.metrics.planted), cell(b.metrics.planted)],
     ["planted instruction saved", String(a.metrics.planted.saved_instruction), String(b.metrics.planted.saved_instruction)],
     ["errored", String(a.n_errored), String(b.n_errored)],
+    ["timed out", String(a.timeouts), String(b.timeouts)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
   console.log(`\n${NAME}: public and private side by side (not pooled)`);
@@ -116,10 +134,11 @@ function printSideBySide(a: Summary, b: Summary): void {
  * One case: a new sandbox with the session where akm reads Claude Code sessions, extract run on that session alone,
  * and the queue read back.
  */
-export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string }): Promise<Row> {
+export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; strategy?: string; timeoutMs?: number }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
+  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
+  const timeoutMs = ctx.timeoutMs ?? EXTRACT_TIMEOUT_MS;
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
     writeConfig(sandbox, ctx.config);
@@ -129,33 +148,49 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
     mkdirSync(join(projects, c.project), { recursive: true });
     cpSync(c.file, join(projects, c.project, `${c.id}.jsonl`));
     sandbox.env.AKM_CLAUDE_PROJECTS_DIR = projects;
-    const args = ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", c.id, "--strategy", STRATEGY, "--format", "json"];
-    const { stdout, stderr, code } = await runAkm(sandbox, args, { timeoutMs: EXTRACT_TIMEOUT_MS });
+    const args = ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", c.id, "--strategy", ctx.strategy ?? STRATEGY, "--format", "json"];
+    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs });
+    if (timedOut) return errorRow(c, `akm proposal extract timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, seconds(), true);
     let result;
     try {
       result = JSON.parse(stdout);
     } catch {
-      return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds());
+      return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
     }
-    const listed = (result.proposals ?? []).length > 0 ? await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"]) : {};
+    // The queue is read when akm says it queued something, in its list of proposals or in the session's own.
+    const listed = queuedAny(c.id, result) ? await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"], { timeoutMs }) : {};
     return scoreCase(c, { result, saved: savedMemories(listed), seconds: seconds() });
   } catch (e) {
-    return errorRow(c, hide((e as Error).message), seconds());
+    const message = (e as Error).message;
+    return errorRow(c, hide(message), seconds(), timedOutIn(message));
   } finally {
     removeSandbox(sandbox);
   }
 }
 
+/** Where a corpus is read from and written to. A private corpus's seed is in its map file, or else in the seed file. */
+interface Folders {
+  assets: string;
+  results: string;
+  map?: string;
+  seed?: string;
+}
+
 export async function runCorpus(
   corpus: Corpus,
-  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number },
-  folders = {
+  ctx: Ctx,
+  folders: Folders = {
     assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
     results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
+    map: join(ROOT, "private", NAME, "map.json"),
+    seed: join(ROOT, "private", "seed"),
   },
 ): Promise<Summary> {
   const all = loadCases(folders.assets);
   const cases = selectCases(all, ctx.limit);
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const config = patchedConfig(ctx.config, overrides); // the config every session runs with
+  const assetsSha256 = assetsDigest(folders.assets, all); // before the calls, since it says what the run read
   const dir = makeResultsDir(folders.results, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
@@ -166,7 +201,7 @@ export async function runCorpus(
   let aborted: string | undefined;
 
   for (const c of cases) {
-    const row = await runCase(c, ctx);
+    const row = await runCase(c, { config, baseUrl: ctx.baseUrl, strategy: overrides.strategy, timeoutMs: ctx.timeoutMs });
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     const checks = [row.missing.length > 0 && `missing ${row.missing.join(", ")}`, row.forbidden.length > 0 && `asserts ${row.forbidden.join(", ")}`].filter(Boolean).join("; ");
@@ -174,40 +209,51 @@ export async function runCorpus(
     console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.id.padEnd(13)} ${row.seconds}s  ${shown}`);
     consecutiveErrors = row.outcome === "error" ? consecutiveErrors + 1 : 0;
     if (consecutiveErrors >= GIVE_UP_AFTER) {
-      aborted = row.error;
+      aborted = row.error || "no message";
       break;
     }
   }
 
   const errored = rows.filter((r) => r.outcome === "error").length;
+  const abortedReason = `${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
   const summary: Summary = {
     eval: NAME,
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
     limit: ctx.limit ?? null,
+    ...overrideSummary(overrides),
+    config: redactConfig(hideEndpoint(config, ctx.baseUrl)),
+    engine: engineSettings(config),
+    assets_sha256: assetsSha256,
+    seed: corpus === "private" && folders.map !== undefined && folders.seed !== undefined ? privateSeed(folders.map, folders.seed) : null,
+    status: aborted ? "aborted" : "complete",
+    aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
     n_errored: errored,
+    timeouts: rows.filter((r) => r.timed_out).length,
     metrics: metrics(rows),
     results_dir: dir,
   };
+  // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (aborted) fail(`${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
+  if (aborted) fail(`${abortedReason}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
   return summary;
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`extract: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -222,12 +268,15 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  const overrides = parseOverrides(values, STRATEGY, fail);
   const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
   for (const c of corpora) {
     if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
       fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
     }
+    const stale = c === "private" ? generatedProblem(join(ROOT, "private", NAME), join(EVAL_DIR, "assets")) : undefined;
+    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const { baseUrl, name: model, hasKey } = useModel(values, fail);
@@ -241,9 +290,10 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
+  if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
   const config = extractConfig(baseUrl, model, hasKey);
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit }))));
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit, overrides }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 

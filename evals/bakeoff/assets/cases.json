@@ -641,7 +641,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c01-a.md", "bakeoff/c01-b.md", "bakeoff/c01-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["PrivilegeGate", "/admin/features", "escalation token", "/api/data-platform-modules", "mapFeatureNames", "ACCOUNT_NOT_ELIGIBLE", "ACCESS_DENIED", "409"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -650,7 +652,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c02-a.md", "bakeoff/c02-b.md", "bakeoff/c02-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["article-curator", "curate-to-wiki", "curate-agent-learning", "config/curation", "12:15", "OpenAlex", "39"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -659,7 +663,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c03-a.md", "bakeoff/c03-b.md", "bakeoff/c03-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["resolveImproveProcessRunnerFromProfile", "getDefaultLlmConfig", "profiles.improve.default.processes.consolidate", "Ministral-3b", "akmConsolidate"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -668,7 +674,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c04-a.md", "bakeoff/c04-b.md", "bakeoff/c04-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["inferenceProcessed", "withLlmCache", "memoryInferenceWrites", "MemoryInferTelemetry", "htmlErrorCount", "3918", "517"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -677,7 +685,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c05-a.md", "bakeoff/c05-b.md", "bakeoff/c05-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["docs/reviews/akm-meta-review", "parallel-review", "goal-orientation", "metrics-and-evals", "findings/"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -686,7 +696,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c06-a.md", "bakeoff/c06-b.md", "bakeoff/c06-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["--promote", "--yes", "--max-accepts", "--older-than", "personal-stash", "batch revert", "ImproveProcessConfigSchema"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -695,7 +707,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c07-a.md", "bakeoff/c07-b.md", "bakeoff/c07-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["stale-path", "63", "240", "177", "never delete"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -704,7 +718,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c08-a.md", "bakeoff/c08-b.md", "bakeoff/c08-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["AKM_CONFIG_DIR", "AKM_CACHE_DIR", "AKM_DATA_DIR", "AKM_STASH_DIR", "state.db", "index.db", "akm.lock"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -713,7 +729,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c09-a.md", "bakeoff/c09-b.md", "bakeoff/c09-c.md", "bakeoff/c09-d.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["test:unit", "test:integration", "bun run check", "bunfig.toml", "_preload.ts", "bun test ./tests"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -722,7 +740,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c10-a.md", "bakeoff/c10-b.md", "bakeoff/c10-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["node:crypto", "node:fs", "@atproto/api", "bluesky", "email-automation", "instagram"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -731,7 +751,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c11-a.md", "bakeoff/c11-b.md", "bakeoff/c11-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["forwardSessionCreate", "/oc/", "/channel/inbound", "sessionKey", "ownership map", "title cache"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -740,7 +762,9 @@
   "process": "memory_consolidation",
   "files": ["bakeoff/c12-a.md", "bakeoff/c12-b.md", "bakeoff/c12-c.md"],
   "variant": "grounded_consolidate",
-  "expected": {},
+  "expected": {
+   "required": ["chapterOpen", "pageOpen", "Paged.js", "markdown-it", "document-renderer"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -749,7 +773,9 @@
   "process": "distill",
   "files": ["bakeoff/d01.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["PrivilegeGate", "ACCOUNT_NOT_ELIGIBLE", "ACCESS_DENIED", "409", "@requires-cloud-flow", "/api/data-platform-modules", "AssistantPanel"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -758,7 +784,9 @@
   "process": "distill",
   "files": ["bakeoff/d02.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["PrivilegeGate", "ACCOUNT_NOT_ELIGIBLE", "ACCESS_DENIED", "409", "@requires-cloud-flow", "/api/data-platform-modules", "AssistantPanel"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -767,7 +795,9 @@
   "process": "distill",
   "files": ["bakeoff/d03.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["PrivilegeGate", "ACCOUNT_NOT_ELIGIBLE", "409", "connector-sdk", "runtime-client.ts", "route-bounds.ts", "content-filter.ts", "addons.ts"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -776,7 +806,9 @@
   "process": "distill",
   "files": ["bakeoff/d04.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["akm-workflows-orchestration-plan", "no integration", "resolveModel", "model-aliases", "dispatch lease", "credential snapshot", "harness-agnostic"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -785,7 +817,9 @@
   "process": "distill",
   "files": ["bakeoff/d05.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["@candidate-a/cli", "namespace collision", "8.5", "5.5", "Phase 2"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -794,7 +828,9 @@
   "process": "distill",
   "files": ["bakeoff/d06.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["PrivilegeGate", "ACCOUNT_NOT_ELIGIBLE", "connector-sdk", "route-bounds.ts", "addons.ts", "defense in depth", "GATEWAY_CONTENT_VALIDATION"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -803,7 +839,9 @@
   "process": "distill",
   "files": ["bakeoff/d07.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["saveGitStash", "improve.lock", "MAX_LOCK_AGE_MS", "stash_synced", "isGitBackedStash", "repoDir", "batch revert"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -812,7 +850,9 @@
   "process": "distill",
   "files": ["bakeoff/d08.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["feedback_distillation", "604", "pathExists", "checkPreEmitDedup", "ABORT_MIN_CHUNKS", "Phase 4A", "config_disabled"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -821,7 +861,9 @@
   "process": "distill",
   "files": ["bakeoff/d09.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["incrementalSince", "maxAcceptsPerRun", "7 * * * *", "528", "SQLITE_BUSY", "94", "dangerous-vault-key"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -830,7 +872,9 @@
   "process": "distill",
   "files": ["bakeoff/d10.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["586", "tests/_helpers", "tests/integration", "migrateConfigShape", "lint-tests-isolation", "install-script.test.ts"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -839,7 +883,9 @@
   "process": "distill",
   "files": ["bakeoff/d11.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["586", "tests/_helpers", "tests/integration", "migrateConfigShape", "lint-tests-isolation", "config-migrate"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -848,7 +894,9 @@
   "process": "distill",
   "files": ["bakeoff/d12.md"],
   "variant": "grounded_distill",
-  "expected": {},
+  "expected": {
+   "required": ["586", "tests/_helpers", "tests/integration", "migrateConfigShape", "lint-tests-isolation", "src/cli.ts"]
+  },
   "tier": "deep",
   "track": "legacy"
  },
@@ -1006,7 +1054,8 @@
   "files": ["public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md", "public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md", "public-akm/v0.9.15/docs/architecture/decisions/0005-task-result-vocabulary-and-legacy-read-mapping.md", "public-akm/v0.9.15/docs/architecture/decisions/0006-task-source-version-routing.md", "public-akm/v0.9.15/docs/architecture/decisions/0011-engine-run-loop-invariants.md"],
   "variant": "grounded_consolidate",
   "expected": {
-   "manifest_id": "composite::workflow-decisions"
+   "manifest_id": "composite::workflow-decisions",
+   "required": ["computeUnitInputHash", "computeStepWorkList", "canonicalJsonString", "childEnv", "runManagedSubprocess", "finishDisabledTask", "parseTaskV3Document", "completeWorkflowStep"]
   },
   "tier": "deep",
   "track": "legacy"
@@ -1017,7 +1066,8 @@
   "files": ["public-akm/v0.9.15/docs/architecture/architecture.md", "public-akm/v0.9.15/docs/architecture/adapters.md", "public-akm/v0.9.15/docs/architecture/internals/functional-contract-patterns.md", "public-akm/v0.9.15/docs/architecture/internals/classification.md"],
   "variant": "grounded_consolidate",
   "expected": {
-   "manifest_id": "composite::architecture"
+   "manifest_id": "composite::architecture",
+   "required": ["BundleAdapter", "BUILTIN_ADAPTERS", "parseBundleRef", "SourceProvider", "PLACEMENT_SPECS", "RankingContributor", "looksLikeRoot", "placeNew"]
   },
   "tier": "deep",
   "track": "legacy"
@@ -1028,7 +1078,8 @@
   "files": ["public-akm/v0.9.15/docs/architecture/architecture.md", "public-akm/v0.9.15/docs/architecture/adapters.md", "public-akm/v0.9.15/docs/architecture/improvement.md", "public-akm/v0.9.15/docs/architecture/internals/improve-workflow.md", "public-akm/v0.9.15/docs/architecture/internals/classification.md", "public-akm/v0.9.15/docs/architecture/internals/functional-contract-patterns.md", "public-akm/v0.9.15/docs/architecture/decisions/0002-unit-reuse-and-input-hash-scope.md", "public-akm/v0.9.15/docs/architecture/decisions/0003-child-env-allowlist-and-provenance.md"],
   "variant": "grounded_consolidate",
   "expected": {
-   "manifest_id": "composite::full-system"
+   "manifest_id": "composite::full-system",
+   "required": ["BundleAdapter", "PLACEMENT_SPECS", "experimental.improveAutonomy", "merge_primary_missing", "akm proposal accept", "computeUnitInputHash", "EXEC_DEFAULT_ENV_PASSTHROUGH", "state.db"]
   },
   "tier": "deep",
   "track": "legacy"

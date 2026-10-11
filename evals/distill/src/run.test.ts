@@ -1,8 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { distillConfig } from "./lib.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
+import { assetsSha256, distillConfig } from "./lib.ts";
 import { runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -27,6 +28,7 @@ if (args[0] === "improve") {
   const fake = JSON.parse(readFileSync(join(bundle, "fake.json"), "utf8"));
   const config = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, "config.json"), "utf8"));
   log({ ...seen, files: readdirSync(bundle, { recursive: true }).map(String).sort(), strategy: Object.keys(config.improve.strategies), engine: config.engines.model.model });
+  if (fake.sleep) await new Promise((resolve) => setTimeout(resolve, fake.sleep));
   if (fake.exit) { console.error(JSON.stringify({ ok: false, error: fake.error, code: "FAKE" })); process.exit(fake.exit); }
   if (fake.stdout !== undefined) { console.log(fake.stdout); process.exit(0); }
   if (fake.proposal) writeFileSync(join(state, "proposals.json"), JSON.stringify([fake.proposal]));
@@ -175,7 +177,7 @@ describe("runCorpus", () => {
     expect(summary.metrics.good_lessons).toEqual({ n: 3, good: 1, rate: 0.3333 });
     expect(summary.metrics.wrong_lessons).toEqual({ n: 4, wrong: 2, rate: 0.5 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
-    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, too_long: 0 });
+    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, contradiction: 0, too_long: 0 });
     expect(stored.results_dir).toBeUndefined();
   });
 
@@ -229,6 +231,59 @@ describe("runCorpus", () => {
     expect(summary).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
     const plain = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
     expect(plain).toMatchObject({ strategy: "distill-only", config_patch: null });
+  });
+
+  test("the summary names what the run was made of: the config without secrets, the engine settings and a digest of the assets", async () => {
+    const config = distillConfig("http://localhost:8080/v1", "the-model", true);
+    config.engines.model.apiKey = "sk-literal-secret"; // a patch could put a key here
+    const folders = assetsFor(scenarios.slice(0, 1));
+    const summary = await quiet(() => runCorpus("public", { ...ctx, config }, folders));
+    const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
+    expect(text).not.toContain("sk-literal-secret");
+    const stored = JSON.parse(text);
+    expect(stored.config.engines.model).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
+    expect(stored.config.improve.strategies["distill-only"].engine).toBe("model");
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
+    expect(stored.seed).toBeNull();
+    expect(stored).toMatchObject({ timeouts: 0, status: "complete" });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
+    // the same files give the same digest, whatever their folder; another memory gives another
+    const again = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
+    expect(again.assets_sha256).toBe(summary.assets_sha256);
+    const other = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 2))));
+    expect(other.assets_sha256).not.toBe(summary.assets_sha256);
+  });
+
+  test("the seed of a private run is the one in generated.json, and of an own run the one in private/seed", async () => {
+    const folders = assetsFor(scenarios.slice(0, 1));
+    const root = join(folders.assets, "..");
+    writeFileSync(join(root, "generated.json"), JSON.stringify({ seed: "42", inputs_sha256: "x", rewrite: "y" }));
+    writeFileSync(join(root, "seed"), "99\n");
+    const seeds = {
+      public: (await quiet(() => runCorpus("public", ctx, { ...folders, seed: join(root, "seed") }))).seed,
+      private: (await quiet(() => runCorpus("private", ctx, { ...folders, seed: join(root, "seed") }))).seed,
+      own: (await quiet(() => runCorpus("own", ctx, { ...folders, seed: join(root, "seed") }))).seed,
+      ownWithoutSeed: (await quiet(() => runCorpus("own", ctx, { ...folders, seed: join(root, "no-seed") }))).seed,
+    };
+    expect(seeds).toEqual({ public: null, private: "42", own: "99", ownWithoutSeed: null });
+  });
+
+  test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
+    const folders = assetsFor([
+      { id: "t-slow", class: "dated-status", fake: { sleep: 30_000 } },
+      { id: "t-exit", class: "dated-status", fake: { exit: 78, error: "engine unreachable" } },
+      { id: "t-ok", class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } },
+    ]);
+    const summary = await quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders));
+    const rows = samplesIn(summary.results_dir);
+    expect(rows[0]).toMatchObject({ verdict: "error", timed_out: true, error: "akm exited 137: akm timed out after 1.5s" });
+    expect("timed_out" in rows[1]).toBe(false);
+    expect("timed_out" in rows[2]).toBe(false);
+    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1 });
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).timeouts).toBe(1);
   });
 
   test("each case has a sandbox of its own, and the queue is read back for every state", async () => {
@@ -285,6 +340,16 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
   });
 
+  test("a run that stops early says so in the summary it writes before it fails, and a whole run says it is complete", async () => {
+    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } })));
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("stopped after 5 of 7");
+    const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ status: "aborted", n_run: 5, n_cases: 7 });
+    expect(stored.aborted_reason).toBe("5 cases in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
+    const whole = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 2))));
+    expect(JSON.parse(readFileSync(join(whole.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null });
+  });
+
   test("also stops when the errors start after cases that were scored, but not for errors that are not in a row", async () => {
     const ok = (id: string) => ({ id, class: "dated-status", fake: { result: { outcome: "skipped", skipReason: "lesson_exists" } } });
     const bad = (id: string) => ({ id, class: "dated-status", fake: { exit: 78, error: "engine unreachable" } });
@@ -294,4 +359,73 @@ describe("runCorpus", () => {
     const summary = await quiet(() => runCorpus("public", ctx, scattered));
     expect(summary).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6 });
   });
+});
+
+describe("run --corpus private", () => {
+  const EVAL = join(import.meta.dir, "..");
+  const REPO = join(EVAL, "..", "..");
+
+  /** A copy of the code and the public assets in a temp folder, so that the run finds private/ there and never in the repository. */
+  function copyOfRepo(): string {
+    const tree = mkdtempSync(join(tmpdir(), "distill-tree-"));
+    dirs.push(tree);
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "src"), join(tree, "evals", "distill", "src"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "assets"), join(tree, "evals", "distill", "assets"), { recursive: true });
+    return tree;
+  }
+  const bun = (tree: string, script: string, args: string[]) => {
+    // akm is not there, so a run that gets past its checks stops at the version probe, before it calls a model.
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: join(tree, "no-akm") };
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "distill", "src", script), ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+    return { code: p.exitCode, err: p.stderr.toString() };
+  };
+
+  test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
+    const tree = copyOfRepo();
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
+    const ready = bun(tree, "run.ts", ["--corpus", "private"]);
+    expect(ready.err).toContain("could not run"); // past the checks, stopped for want of akm
+    expect(ready.err).not.toContain("cannot be used");
+
+    rmSync(join(tree, "private", "distill", "generated.json"));
+    const missing = bun(tree, "run.ts", ["--corpus", "private"]);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toContain("the private assets cannot be used: generated.json is missing");
+    expect(missing.err).toContain("./generate-assets --only distill");
+
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
+    writeFileSync(join(tree, "evals", "distill", "assets", "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "A public memory that changed.\n");
+    const stale = bun(tree, "run.ts", ["--corpus", "all"]);
+    expect(stale.code).toBe(2);
+    expect(stale.err).toContain("made from other public assets");
+  }, 60_000);
+
+  test("refuses assets made by a generator or a rewrite that has changed since, and runs on them again when the code is as it was", () => {
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "distill");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toMatchObject({ seed: "5", rewrite: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).not.toContain("cannot be used");
+
+    // The rewrite, its lexicon, generate itself and the checks generate runs: a change to any of them marks the assets stale.
+    for (const file of [join("lib", "rewrite", "lexicon.ts"), join("lib", "rewrite", "rewrite.ts"), join("evals", "distill", "src", "generate.ts"), join("evals", "distill", "src", "lib.ts")]) {
+      const path = join(tree, file);
+      const text = readFileSync(path, "utf8");
+      writeFileSync(path, `${text}\n// changed after the private assets were made\n`);
+      const stale = bun(tree, "run.ts", ["--corpus", "private"]);
+      expect(stale.code, file).toBe(2);
+      expect(stale.err, file).toContain("the private assets cannot be used: they were made by a generator that has changed since");
+      expect(stale.err, file).toContain("./generate-assets --only distill");
+      writeFileSync(path, text);
+      expect(bun(tree, "run.ts", ["--corpus", "private"]).err, file).not.toContain("cannot be used");
+    }
+
+    // Made again by the changed generator, the assets are good for it.
+    writeFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), `${readFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), "utf8")}\n// changed\n`);
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).code).toBe(2);
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).not.toContain("cannot be used");
+  }, 120_000);
 });

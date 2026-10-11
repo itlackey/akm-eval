@@ -22,7 +22,7 @@ akm proposal list --status rejected --detail full        # the judge's reason fo
 ```
 
 - The bundle is indexed with embeddings, as in the retrieval eval. A judge that is shown the nearest knowledge notes of a promotion (akm after #1067) finds them from the stored vector of the promotion's source memory: it looks that memory up in the index, and takes the 5 knowledge notes nearest to it. A run needs that memory in the bundle, and the cases do not carry it, so the eval writes each proposal's note as the memory (`memories/<name>`, the `promotionSource` of the queued row). A real promotion is a rewrite of its memory, so this is close to it, and for a duplicate it puts the note it repeats among the nearest. The run stops if akm did not embed every asset.
-- No command queues a proposal without a model, so the eval writes the rows into the `proposals` table of the sandbox's `state.db`, in the shape akm writes them, and checks that akm lists them all as pending.
+- No command queues a proposal without a model, so the eval writes the rows into the `proposals` table of the sandbox's `state.db`, in the shape akm writes them, and checks that akm lists them all as pending. It checks first that the table has the columns it writes: see "Depends on akm's private schema".
 - The config names one LLM engine, the model under test, and a strategy `promotion` whose triage block is the lab's: enabled, judgment on. It differs in one setting, `applyMode: queue`. A proposal the judge accepts is then staged, and not written. The tier decides the same either way, because the judge only judges: promote mode writes what it accepted afterwards, and promotion lint prints its findings and does not block (akm 0.9.26). Every proposal is judged against the same bundle, so the order does not matter, and no accepted note joins the neighbours of the next.
 - A proposal is *accepted* when akm stages it, *rejected* when the judge rejects it, and *deferred* when the judge defers or gives no usable reply. A deferred proposal waits for a person, which is not an accept. A model call that fails is an error and is left out of the counts.
 - akm 0.9.26 keeps the judge's reason only for a rejection; from 0.9.27-alpha.2 akm keeps it for accepts and defers too, and the eval records all three.
@@ -38,18 +38,24 @@ evals/promotion/run --corpus public --repeat 4
 ```
 
 - `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on `corpus/library`. `own` is your own set in `private/promotion/own/`: see "Run your own set". `all` runs both and prints the two results side by side, never as one number.
-- `--cases DIR` runs the own corpus from DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. It is an own corpus in every way: it holds real notes, so it runs only against a local model (the same check as `own`, which says `--cases` in its refusal), and its results go to `private/promotion/results/` and report the corpus as `own`. A relative DIR is from the repository root. It cannot be combined with `--corpus public` or `all`.
+- `--cases DIR` runs the own corpus from DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. It is an own corpus in every way: it holds real notes, so it runs only against a model whose line in `models.json` says `"private": true` (the same check as `own`, which says `--cases` in its refusal), and its results go to `private/promotion/results/` and report the corpus as `own`. A relative DIR is from the repository root. It cannot be combined with `--corpus public` or `all`.
 - `--limit N` runs N proposals, taking one of each category in turn: good, duplicate, stale, ephemeral. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. Each run plants its own sandbox. See "Repeat a run" in the root README.
 - `--strategy NAME` runs the akm strategy NAME in place of `promotion`, in the drain. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-`own` sends your notes to the model, so it runs only when `MODEL_BASE_URL` is localhost, a private-network address (`10.*`, `172.16.*` to `172.31.*`, `192.168.*`) or a name that resolves only to such addresses, such as a gateway on your network. It stops with an error otherwise.
+`own` sends your notes to the model, so it runs only against a model whose line in `models.json` says `"private": true`. It stops with an error naming the model otherwise. Nothing is inferred from the URL or the name of the model: you say which models may see your notes, in `models.json` (see "Private assets" in the root README).
 
 Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for `own`:
 
-- `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit.
+- `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported; `null` when akm's events table cannot be read, with the reason on stderr), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
+  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept). It holds the endpoint URL of the model.
+  - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (scheme, host, port and path, no credentials), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
+  - `assets_sha256`: one digest over `cases.jsonl` and every file of the library's `knowledge/` folder, which is copied into the bundle, each named relative to its folder (`cases.jsonl`, `library/knowledge/...`), so two runs on the same proposals and notes have the same digest wherever the repository is. A change to a proposal or a note changes it, and `--limit` does not.
+  - `seed`: the content of `private/seed` for the `own` corpus when there is one; `null` for the public corpus and when there is none. promotion makes no private copy of its assets, so no seed shaped them.
+  - `status`: `complete`, or `aborted` when no proposal got a verdict (every row errored). Then `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary has no numbers worth comparing.
+  - `timeouts`: how many of the errored proposals failed because the model call timed out, judging by the text akm gives for the failed call (`timed out`, `timeout`). They are counted in `n_errored` too, and their rows have `timed_out: true`. An akm command that the eval itself kills for running past its timeout ends the run with a message that says so, and has no row.
 - `samples.jsonl`: one line per proposal, with its label and category, the ref, what the tier did, the judge's reason (for a rejection, and from akm 0.9.27-alpha.2 for an accept or a defer too), and the error when a call failed.
 
 ## What it needs from a model
@@ -58,7 +64,7 @@ Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME
 
 - It must follow an instruction to return one JSON object, `{"decision": "accept" | "reject" | "defer", "reason": ...}`. akm reads what lies between the first `{` and the last `}` of the reply. A reply it cannot read leaves the proposal deferred, and the eval cannot tell it from a defer.
 - A call is the proposal plus about 300 tokens of prompt, so a note of 9 KB is about 3k tokens and 8k of context is safe.
-- akm asks the server to turn thinking off. A model that thinks anyway is slow. If yours does, turn it off in the server.
+- The eval sets temperature 0 and `enableThinking: false` on the engine, as distill does, and `summary.json` records both under `engine`. A model that thinks anyway is slow. If yours does, turn it off in the server. `--config-patch` can change either setting, and the summary then records the patched value.
 - Cloud endpoints that reject unknown request fields may refuse the thinking switches akm sends. Run those through a local gateway, or expect failed calls.
 - One call a proposal, one at a time. On a 27B model on a local GPU a call took 8 to 12 seconds: 20 proposals took 3 to 4 minutes and 65 took 9 to 13.
 
@@ -75,6 +81,15 @@ MODEL_BASE_URL=http://localhost:8080/v1
 MODEL_API_KEY=
 MODEL_NAME=qwen3-27b
 ```
+
+## Depends on akm's private schema
+
+The eval reaches into akm's `state.db`, which is not an interface akm promises to keep:
+
+- **Writes** the `proposals` table, because no command queues a proposal without a model. It inserts one row per case with ten columns: `id`, `stash_dir`, `ref`, `status`, `source`, `created_at`, `updated_at`, `content`, `frontmatter_json`, `metadata_json`. Before it inserts, it reads `PRAGMA table_info(proposals)`. If the table is missing or lacks a column, the run stops with a message that names the missing columns and the ones the table has, and writes nothing. A table that gained a required column of its own, without a default, still fails in SQLite's own words.
+- **Reads** the `events` table, to count the model calls of the drain (`calls` in `summary.json`). It reads `event_type` and `metadata_json`. If the table or a column is missing, `calls` is `null` and the reason is printed on stderr; the verdicts do not come from the events, so the run goes on.
+
+So a new akm build can break this eval without a word in its changelog. The tests run the eval against a fake akm with the table as akm 0.9.26 lays it out, and cannot see a change in the real one: a run against a new build is the check. What would end the dependence is a command in akm that imports a proposal into the queue (`reports/review-2026-10-11.md`, A5); until akm has one, a run that stops with the schema message above is this dependence, and the fix is in the eval.
 
 ## Assets
 
