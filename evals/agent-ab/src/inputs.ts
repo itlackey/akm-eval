@@ -97,6 +97,7 @@ export function privateAssetsProblem(assets: string, from: string, where = asset
   const made = readGenerated(assets);
   if (!made) return `the private assets in ${where}/ have no ${GENERATED} in its current format, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
   if (made.inputs_sha256 !== publicInputsSha256(from)) return `the private assets in ${where}/ were made from public tasks or libraries that have changed since. ${again}`;
+  if (made.generator_sha256 !== generatorSha256()) return `the private assets in ${where}/ were made by a generator that has changed since: generate.ts, inputs.ts or lib.ts here, or lib/rewrite (generator_sha256 in ${GENERATED} differs). ${again}`;
   if (made.outputs_sha256 !== outputsSha256(assets)) return `the private assets in ${where}/ are not what generate wrote: a file in them was changed, added or removed since. ${again}`;
   return undefined;
 }

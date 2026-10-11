@@ -292,6 +292,19 @@ describe("privateAssetsProblem", () => {
     expect(privateAssetsProblem(assets, from)).toBeUndefined();
   }, 60_000);
 
+  test("refuses assets made by another generator: a wrong or old generator_sha256, though the inputs and the files are unchanged", () => {
+    const { from, assets } = generated();
+    const manifest = JSON.parse(readFileSync(join(assets, GENERATED), "utf8"));
+    for (const other of ["0".repeat(64), "f".repeat(64)]) {
+      writeFileSync(join(assets, GENERATED), JSON.stringify({ ...manifest, generator_sha256: other }));
+      expect(privateAssetsProblem(assets, from, "private/agent-ab/assets")).toBe(
+        "the private assets in private/agent-ab/assets/ were made by a generator that has changed since: generate.ts, inputs.ts or lib.ts here, or lib/rewrite (generator_sha256 in generated.json differs). Make them again with: ./generate-assets --only agent-ab",
+      );
+    }
+    writeFileSync(join(assets, GENERATED), JSON.stringify(manifest));
+    expect(privateAssetsProblem(assets, from)).toBeUndefined();
+  }, 60_000);
+
   test("refuses assets that are not what generate wrote: a task changed, a file added, one removed", () => {
     const { from, assets } = generated();
     const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0]);
