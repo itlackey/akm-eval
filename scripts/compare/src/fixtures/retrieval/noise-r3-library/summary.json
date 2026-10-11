@@ -24,7 +24,8 @@
     "endpoint": null,
     "temperature": null,
     "enableThinking": null,
-    "timeoutMs": null
+    "timeoutMs": null,
+    "engines": {}
   },
   "limit": null,
   "collection": "library",

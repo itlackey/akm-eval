@@ -156,23 +156,47 @@ export function endpointIdentity(url: unknown): string | null {
   return `${u.protocol}//${u.host}${path}${query}`;
 }
 
-export interface EngineSettings {
-  engine: string | null;
+/** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the config digest of scripts/compare leaves them out. */
+export const ENGINE_KEYS = ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"] as const;
+
+export interface EngineSetting {
   model: string | null;
-  /** The host (and port) of the engine's endpoint, with no path, query or credentials. */
+  /** The endpoint's identity (see endpointIdentity): scheme, host, port and path, with no credentials. */
   endpoint: string | null;
   temperature: number | null;
   enableThinking: boolean | null;
   timeoutMs: number | null;
 }
 
-/** The settings of the LLM engine that `defaults.llmEngine` names in an akm config. Anything the config does not set is null. */
+export interface EngineSettings extends EngineSetting {
+  /** The name of the engine `defaults.llmEngine` names, whose settings are the fields above. */
+  engine: string | null;
+  /** The settings of every engine the config uses, by name: the default one and each one a strategy, a process or a gate is routed to. */
+  engines: Record<string, EngineSetting>;
+}
+
+const settingsOf = (e: any): EngineSetting => ({ model: e?.model ?? null, endpoint: endpointIdentity(e?.endpoint), temperature: e?.temperature ?? null, enableThinking: e?.enableThinking ?? null, timeoutMs: e?.timeoutMs ?? null });
+
+/** The names under a key that ends in "engine" (llmEngine, engine, judgeEngine) anywhere in the config but its `engines` table. */
+function engineNames(x: any, key = "", out = new Set<string>()): Set<string> {
+  if (typeof x === "string") {
+    if (/engine$/i.test(key)) out.add(x);
+  } else if (Array.isArray(x)) {
+    for (const v of x) engineNames(v, key, out);
+  } else if (typeof x === "object" && x !== null) {
+    for (const [k, v] of Object.entries(x)) if (!(key === "" && k === "engines")) engineNames(v, k, out);
+  }
+  return out;
+}
+
+/**
+ * The settings of the LLM engine that `defaults.llmEngine` names in an akm config, and in `engines` those of every engine the config uses
+ * (that `defaults.llmEngine`, `defaults.engine`, or an `engine` of a strategy, a process or a gate names). Anything the config does not set is null.
+ */
 export function engineSettings(config: any): EngineSettings {
   const engine: string | null = config?.defaults?.llmEngine ?? null;
-  const e = engine !== null && Object.hasOwn(config?.engines ?? {}, engine) ? config.engines[engine] : undefined;
-  let endpoint: string | null = null;
-  try {
-    endpoint = new URL(e?.endpoint).host || null;
-  } catch {} // an endpoint that is missing or is not a URL is not recorded
-  return { engine, model: e?.model ?? null, endpoint, temperature: e?.temperature ?? null, enableThinking: e?.enableThinking ?? null, timeoutMs: e?.timeoutMs ?? null };
+  const table = config?.engines ?? {};
+  const used = [...engineNames(config)].filter((name) => Object.hasOwn(table, name)).sort();
+  const engines = Object.fromEntries(used.map((name) => [name, settingsOf(table[name])]));
+  return { engine, ...settingsOf(engine !== null && Object.hasOwn(table, engine) ? table[engine] : undefined), engines };
 }

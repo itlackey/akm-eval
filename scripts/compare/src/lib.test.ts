@@ -13,6 +13,7 @@ import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/l
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
 import { EVAL_METRICS } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
+import { engineSettings } from "../../../lib/provenance.ts";
 import { type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -688,6 +689,8 @@ describe("the command", () => {
 // ---- the comparison policy (F02, F14, F15) -------------------------------------------------------------------------------------
 
 /** What a summary records of how its run was made, complete, so that two of them are fully identified. */
+/** The engine of IDENTITY with the settings of its one engine changed. */
+const engineWith = (over: Record<string, unknown>) => ({ ...IDENTITY.engine, ...over, engines: { model: { ...IDENTITY.engine.engines.model, ...over } } });
 const IDENTITY = {
   eval: "nightly",
   corpus: "public",
@@ -704,7 +707,7 @@ const IDENTITY = {
   assets_sha256: "a".repeat(64),
   git_commit: "5d1c0de",
   config: { defaults: { llmEngine: "model" }, engines: { model: { kind: "llm", model: "m1", endpoint: "<MODEL_BASE_URL>", temperature: 0, enableThinking: false, timeoutMs: 120000 } }, improve: { strategies: { night: { processes: { reflect: {} } } } } },
-  engine: { engine: "model", model: "m1", endpoint: "gateway.example.com", temperature: 0, enableThinking: false, timeoutMs: 120000 },
+  engine: { engine: "model", model: "m1", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, engines: { model: { model: "m1", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000 } } },
 };
 const member = (side: string, name: string, over: Record<string, unknown> = {}): Member => ({ side, name, identity: identityOf({ ...IDENTITY, ...over }) });
 const found = (r: { mismatches: { message: string }[] }): string[] => r.mismatches.map((f) => f.message);
@@ -744,10 +747,10 @@ describe("the comparison policy", () => {
     expect(refused({ config_patch: { sha256: "b".repeat(64) } })).toEqual([`the config patch differs: none in A, ${"b".repeat(12)} in B`]);
     expect(refused({ config: { ...IDENTITY.config, improve: { strategies: {} } } })).toHaveLength(1);
     expect(refused({ model: "m2" })).toEqual(["the model differs: m1 in A, m2 in B"]);
-    expect(refused({ engine: { ...IDENTITY.engine, temperature: 0.7 } })[0]).toMatch(/^the engine settings .* differs: .*temperature 0.* in A, .*temperature 0.7.* in B$/);
-    expect(refused({ engine: { ...IDENTITY.engine, endpoint: "other.example.com" } })).toHaveLength(1);
-    expect(refused({ engine: { ...IDENTITY.engine, enableThinking: true } })).toHaveLength(1);
-    expect(refused({ engine: { ...IDENTITY.engine, timeoutMs: 60000 } })).toHaveLength(1);
+    expect(refused({ engine: engineWith({ temperature: 0.7 }) })[0]).toMatch(/^the engine settings .* differs: .*temperature 0.* in A, .*temperature 0.7.* in B$/);
+    expect(refused({ engine: engineWith({ endpoint: "other.example.com" }) })).toHaveLength(1);
+    expect(refused({ engine: engineWith({ enableThinking: true }) })).toHaveLength(1);
+    expect(refused({ engine: engineWith({ timeoutMs: 60000 }) })).toHaveLength(1);
     expect(refused({ assets_sha256: "c".repeat(64) })).toEqual([`the cases (assets_sha256) differs: ${"a".repeat(12)} in A, ${"c".repeat(12)} in B`]);
     expect(refused({ git_commit: "9999999" })).toEqual(["the eval's code differs: commit 5d1c0de in A, commit 9999999 in B"]);
     expect(refused({ harness_sha256: "d".repeat(64) })).toEqual([]); // one side has a digest and the other does not: they fall back to the commit
@@ -792,13 +795,39 @@ describe("the comparison policy", () => {
     expect(found(permuted)).toEqual(found(r));
   });
 
+  test("the settings of every engine a run uses are compared, a routed engine too, and the endpoint's path with them (R02)", () => {
+    const worker = (over: Record<string, unknown>) => ({ model: "w", endpoint: "https://worker-a.example/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, ...over });
+    const routed = (w: Record<string, unknown>) => ({
+      config: { ...IDENTITY.config, engines: { ...IDENTITY.config.engines, worker: { kind: "llm", model: "w", endpoint: "<WORKER_URL>" } }, improve: { strategies: { night: { processes: { distill: { engine: "worker" } } } } } },
+      engine: { ...IDENTITY.engine, engines: { ...IDENTITY.engine.engines, worker: worker(w) } },
+    });
+    const refused = (b: Record<string, unknown>, treatment: Axis[] = []) => checkMembers([member("A", "a", routed({})), member("B", "b", routed(b))], treatment);
+    expect(found(refused({}))).toEqual([]);
+    for (const change of [{ model: "w2" }, { endpoint: "https://worker-b.example/v1" }, { endpoint: "https://worker-a.example/v2" }, { temperature: 0.7 }, { timeoutMs: 60000 }, { enableThinking: true }]) {
+      const r = refused(change);
+      expect(found(r), JSON.stringify(change)).toHaveLength(1);
+      expect(r.mismatches[0].axis).toBe("model");
+      expect(found(refused(change, ["model"]))).toEqual([]); // declared as a model treatment
+      expect(refused(change, ["model"]).treated).toHaveLength(1);
+    }
+    // the endpoint path of the default engine is part of the identity too
+    expect(found(checkMembers([member("A", "a"), member("B", "b", { engine: { ...IDENTITY.engine, engines: { model: { ...IDENTITY.engine.engines.model, endpoint: "https://gateway.example.com/v2" } } } })], []))).toHaveLength(1);
+  });
+
+  test("the order of the keys of the engine settings does not change the identity, and a credential is not in it (R02)", () => {
+    const [a, b] = [identityOf(IDENTITY), identityOf({ ...IDENTITY, engine: { engines: { model: Object.fromEntries(Object.entries(IDENTITY.engine.engines.model).reverse()) } } })];
+    expect(a.engine).toBe(b.engine);
+    const produced = engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { model: "x", endpoint: "https://user:DUMMY_PASS@h.example/v1?api_key=DUMMY_SECRET" } } });
+    expect(JSON.stringify(identityOf({ ...IDENTITY, engine: produced }))).not.toMatch(/DUMMY/);
+  });
+
   test("evidence that is missing is a gap, on one side or on neither, never a pass", () => {
     const gaps = (a: Record<string, unknown>, b: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", b)], []).gaps.map((f) => f.message);
     expect(gaps({}, {})).toEqual([]);
     expect(gaps({ assets_sha256: null }, {})).toEqual(["the cases (assets_sha256) is not recorded in A"]);
     expect(gaps({ assets_sha256: null }, { assets_sha256: null })).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
     expect(gaps({}, { config: undefined })).toEqual(["the akm config is not recorded in B"]);
-    expect(gaps({ engine: undefined }, {})).toEqual(["the engine settings (temperature, thinking, endpoint host, time limit) is not recorded in A"]);
+    expect(gaps({ engine: undefined }, {})).toEqual(["the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in A"]);
     expect(gaps({ corpus: "private" }, { corpus: "private", seed: 3 })).toEqual(["the seed of the private assets is not recorded in A"]);
     // a declared axis is not checked for evidence
     expect(checkMembers([member("A", "a", { assets_sha256: null }), member("B", "b")], ["inputs"]).gaps).toEqual([]);
@@ -855,7 +884,7 @@ describe("a release against a release", () => {
     const base = release("a", 8);
     const refuse = (over: Record<string, unknown>) => () => comparePair(loadRun(base), loadRun(release("b", 13, { akm_version: "0.10.0", ...over })), { treatment: ["build"] });
     expect(refuse({ model: "m2" })).toThrow(/the model differs: m1 in A, m2 in B/);
-    expect(refuse({ engine: { ...IDENTITY.engine, temperature: 0.7 } })).toThrow(/the engine settings .* differs/);
+    expect(refuse({ engine: engineWith({ temperature: 0.7 }) })).toThrow(/the engine settings .* differs/);
     expect(refuse({ assets_sha256: "c".repeat(64) })).toThrow(/the cases \(assets_sha256\) differs/);
     expect(refuse({ git_commit: "9999999" })).toThrow(/the eval's code differs: commit 5d1c0de in A, commit 9999999 in B/);
     expect(refuse({ strategy: "quick" })).toThrow(/the strategy differs/);
@@ -958,7 +987,7 @@ describe("two sets of repeats", () => {
     const bad = (dirs: string[], over: Record<string, unknown>): string[] => dirs.map((d, i) => (i === 2 ? nightlyRun(join(tmp(), `odd-r${i + 1}`), A[i], over) : d));
     const [aDirs, bDirs] = [runs(A, "a"), runs(B, "b")];
     // the third repeat of A differs in its engine and its commit: the first two agree with each other
-    expect(refuse(bad(aDirs, { engine: { ...IDENTITY.engine, temperature: 0.7 } }), bDirs, ["config"])).toThrow(/the engine settings .* differs.*A /);
+    expect(refuse(bad(aDirs, { engine: engineWith({ temperature: 0.7 }) }), bDirs, ["config"])).toThrow(/the engine settings .* differs.*A /);
     expect(refuse(bad(aDirs, { git_commit: "9999999" }), bDirs, ["config"])).toThrow(/the eval's code differs/);
     // under a build treatment too: the repeats of a side are one configuration whatever is being compared
     const releases = runs(B, "r", { akm_version: "0.10.0" });

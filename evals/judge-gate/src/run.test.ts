@@ -246,7 +246,7 @@ describe("runCorpus", () => {
       hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
       expect(stored.config).toEqual(hidden);
       expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false, apiKey: "$MODEL_API_KEY" });
-      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: "localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.assets_sha256).toBe(casesSha256(folders.assets));
       expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(stored).toMatchObject({ strategy: "default", config_patch: null, seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
@@ -267,10 +267,10 @@ describe("runCorpus", () => {
       writeConfig(ctx.sandbox, judgeConfig("https://user:hunter2@secret-host.example:8443/v1?key=SECRET-KEY", "the-model", true));
       await quiet(() => runCorpus("public", ctx, folders));
       const text = readFileSync(join(resultsOf(folders).dir, "summary.json"), "utf8");
-      for (const leak of ["SECRET-KEY", "hunter2", "user:", "/v1"]) expect(text).not.toContain(leak);
+      for (const leak of ["SECRET-KEY", "hunter2", "user:"]) expect(text).not.toContain(leak);
       const stored = JSON.parse(text);
       expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>");
-      expect(stored.engine.endpoint).toBe("secret-host.example:8443");
+      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443/v1?key=<redacted>"); // scheme, host, port and path; the key is gone
     });
 
     test("the digest changes with the cases, and the seed is the one the run was given", async () => {

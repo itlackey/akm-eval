@@ -286,7 +286,7 @@ describe("what summary.json says about the run", () => {
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code, the reflect code it imports and lib/
     expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: [resolve(import.meta.dir, "..", "..", "reflect", "src")] }));
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "localhost:8080", temperature: 0, enableThinking: false, timeoutMs: 600000 });
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
     expect(stored.config).toEqual({ ...ctx.config, engines: { model: { ...ctx.config.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
     expect(stored.config.engines.model).toMatchObject({ temperature: 0, enableThinking: false });
     expect(stored.assets_sha256).toBe(assetsDigest(folders.assets, loadCases(folders.assets)));
@@ -320,8 +320,9 @@ describe("what summary.json says about the run", () => {
     const summary = await quiet(() => runCorpus("public", hidden, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(stored.engine.endpoint).toBe("gateway.example.com:8443");
-    for (const secret of ["alice", "hunter2", "abc123", "https://"]) expect(JSON.stringify(stored)).not.toContain(secret);
+    expect(stored.engine.endpoint).toBe("https://gateway.example.com:8443/v1?api_key=<redacted>");
+    for (const secret of ["alice", "hunter2", "abc123"]) expect(JSON.stringify(stored)).not.toContain(secret);
+    expect(JSON.stringify(stored.config)).not.toContain("https://");
     expect(JSON.stringify(samplesIn(summary.results_dir))).not.toContain("hunter2");
   });
 
