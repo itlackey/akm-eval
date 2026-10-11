@@ -1475,7 +1475,7 @@ const key = Object.keys(plans).find((k) => label.includes(k));
 const plan = { defects: 0.8, ...(key ? plans[key] : {}) };
 const base = JSON.parse(process.env.FAKE_SUMMARY);
 const summary = (runLabel) => ({ ...base, label: runLabel, ...(plan.status ? { status: plan.status, aborted_reason: plan.status === "aborted" ? "the endpoint went down" : null } : {}), metrics: { defects: { n: 32, correct: 0, rate: plan.defects }, controls: { n: 18, correct: 0, rate: 0.9 }, proposals: { n: 39, touched_body: 0 } } });
-const results = join(root, "evals", "reflect", "results");
+const results = flag("--corpus") === "private" ? join(root, "private", "reflect", "results") : join(root, "evals", "reflect", "results");
 const repeat = flag("--repeat");
 if (repeat === undefined) {
   mkdirSync(join(results, "2026-10-11-" + label), { recursive: true });
@@ -1629,11 +1629,13 @@ describe("a stage as a process: what makes it resume or run again (F07)", () => 
     expect(moved.out).toContain("screen  cfg: running again, the model settings");
     await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1" });
     expect(t.runs()).toBe(4);
-    // only the host counts, so the path does not, and neither does a key
+    // the path counts as well as the host (R03), and a key does not
     await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v2" });
-    expect(t.runs()).toBe(4);
+    expect(t.runs()).toBe(6);
+    await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1" });
+    expect(t.runs()).toBe(8);
     await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-b.example.com/v1", MODEL_API_KEY: "key-two" });
-    expect(t.runs()).toBe(4);
+    expect(t.runs()).toBe(8);
     expect(readFileSync(join(t.out, "state.json"), "utf8")).not.toContain("key-");
   });
 
@@ -1675,6 +1677,29 @@ describe("a stage as a process: what makes it resume or run again (F07)", () => 
     git(t.root, "commit", "-q", "-a", "-m", "commit it");
     await t.stage(["--stage", "screen"], { AKM_BIN: "fake-akm-2" });
     expect(t.runs()).toBe(10);
+  });
+
+  test("a private corpus that is regenerated, and a model endpoint that moves to another path, run the jobs again; neither changed resumes (R03)", async () => {
+    const t = runnerTree();
+    writeFileSync(join(t.root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 2, baseline: { name: "base", eval: "reflect", args: ["--corpus", "private"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus", "private", "--config-patch", "patch.json"] }] }));
+    mkdirSync(join(t.root, "private", "reflect", "assets"), { recursive: true });
+    const cases = join(t.root, "private", "reflect", "assets", "cases.json");
+    writeFileSync(cases, "[1]");
+    await t.stage(["--stage", "screen"]);
+    expect(t.runs()).toBe(2);
+    await t.stage(["--stage", "screen"]);
+    expect(t.runs()).toBe(2); // the results the first run wrote under private/ are not inputs
+    writeFileSync(cases, "[1,2]");
+    const regenerated = await t.stage(["--stage", "screen"]);
+    expect(t.runs()).toBe(4);
+    expect(regenerated.out).toContain("running again, the corpus the job reads (private/ or the public assets) changed since its last run");
+    await t.stage(["--stage", "screen"]);
+    expect(t.runs()).toBe(4);
+    const moved = await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-a.example.com/deployment-B/v1" });
+    expect(t.runs()).toBe(6);
+    expect(moved.out).toContain("the model settings");
+    await t.stage(["--stage", "screen"], { MODEL_BASE_URL: "https://gateway-a.example.com/deployment-B/v1", MODEL_API_KEY: "key-two" });
+    expect(t.runs()).toBe(6); // a key is not an input
   });
 
   test("a result file that is gone or cannot be read, a record from before there were fingerprints, and --force run the job again", async () => {
@@ -1756,9 +1781,66 @@ describe("the fingerprint of a job", () => {
     const base = fingerprintOf(root, job(args), env).sha256;
     const of = (over: Record<string, string>) => fingerprintOf(root, job(args), { ...env, ...over }).sha256;
     expect(of({ MODEL_API_KEY: "key-two", JUDGE_API_KEY: "key-three" })).toBe(base);
-    expect(of({ MODEL_BASE_URL: "https://a.example.com/v2" })).toBe(base);
-    for (const over of [{ MODEL_NAME: "m2" }, { MODEL_BASE_URL: "https://b.example.com/v1" }, { JUDGE_MODEL: "j" }, { JUDGE_BASE_URL: "https://j.example.com/v1" }, { AKM_BIN: "fake-akm-2" }] as Record<string, string>[]) expect(of(over), JSON.stringify(over)).not.toBe(base);
+    for (const over of [{ MODEL_NAME: "m2" }, { MODEL_BASE_URL: "https://b.example.com/v1" }, { MODEL_BASE_URL: "https://a.example.com/v2" }, { JUDGE_MODEL: "j" }, { JUDGE_BASE_URL: "https://j.example.com/v1" }, { AKM_BIN: "fake-akm-2" }] as Record<string, string>[]) expect(of(over), JSON.stringify(over)).not.toBe(base);
     expect(JSON.stringify(fingerprintOf(root, job(args), env))).not.toContain("key-one");
+  });
+
+  test("the model's and the judge's endpoint is its identity: another deployment path on one host is another endpoint, a credential is not (R03)", () => {
+    const { root, args } = setup();
+    const of = (over: Record<string, string>) => fingerprintOf(root, job(args), { ...env, MODEL_BASE_URL: "https://gateway.example/deployment-A/v1", JUDGE_BASE_URL: "https://judge.example/deployment-A/v1", ...over }).sha256;
+    const base = of({});
+    expect(of({ MODEL_BASE_URL: "https://gateway.example/deployment-B/v1" })).not.toBe(base);
+    expect(of({ JUDGE_BASE_URL: "https://judge.example/deployment-B/v1" })).not.toBe(base);
+    expect(of({ MODEL_BASE_URL: "https://user:DUMMY_PASS@gateway.example/deployment-A/v1/?api_key=DUMMY_ONE" })).toBe(of({ MODEL_BASE_URL: "https://other:DUMMY_OTHER@gateway.example/deployment-A/v1?api_key=DUMMY_TWO" }));
+    expect(JSON.stringify(fingerprintOf(root, job(args), { ...env, MODEL_BASE_URL: "https://user:DUMMY_PASS@gateway.example/v1?api_key=DUMMY_ONE" }))).not.toMatch(/DUMMY/);
+  });
+
+  test("covers the corpus the job reads: the public assets, the private tree and the own cases, but not the results written beside them (R03)", () => {
+    const root = tmp();
+    const put = (path: string, text: string) => {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    put("evals/reflect/assets/cases.json", "[]");
+    put("private/reflect/assets/cases.json", "[1]");
+    put("private/reflect/assets/generated.json", '{"seed":1}');
+    put("private/reflect/own/assets/cases.json", "[2]");
+    const of = (corpus?: string) => fingerprintOf(root, job(corpus === undefined ? ["--label", "x"] : ["--corpus", corpus, "--label", "x"]), env);
+    const before = { none: of(), public: of("public"), private: of("private"), own: of("own"), all: of("all") };
+    expect(before.none.parts.corpus).toBe(before.public.parts.corpus); // no flag is the public corpus
+    expect(new Set(Object.values(before).map((f) => f.parts.corpus)).size).toBe(4);
+    // a valid regeneration: other bytes, or another seed in the manifest
+    put("private/reflect/assets/cases.json", "[1,3]");
+    expect(of("private").sha256).not.toBe(before.private.sha256);
+    expect(of("all").sha256).not.toBe(before.all.sha256);
+    expect(of("public").sha256).toBe(before.public.sha256);
+    expect(of("own").sha256).toBe(before.own.sha256);
+    put("private/reflect/assets/cases.json", "[1]");
+    expect(of("private").sha256).toBe(before.private.sha256);
+    put("private/reflect/assets/generated.json", '{"seed":2}');
+    expect(of("private").sha256).not.toBe(before.private.sha256);
+    put("private/reflect/assets/generated.json", '{"seed":1}');
+    put("private/reflect/own/assets/cases.json", "[22]");
+    expect(of("own").sha256).not.toBe(before.own.sha256);
+    // untracked, uncommitted public assets count too, and a seed file at private/
+    put("private/reflect/own/assets/cases.json", "[2]");
+    put("evals/reflect/assets/extra.json", "{}");
+    expect(of("public").sha256).not.toBe(before.public.sha256);
+    // what the run writes is not an input
+    put("private/reflect/results/2026-10-11-x/summary.json", "{}");
+    put("private/reflect/own/results/2026-10-11-x/summary.json", "{}");
+    put("private/reflect/own/results-feedback/2026-10-11-x/summary.json", "{}");
+    expect(of("private").sha256).toBe(before.private.sha256);
+    expect(of("own").sha256).toBe(before.own.sha256);
+    put("private/seed", "42");
+    expect(of("private").sha256).not.toBe(before.private.sha256);
+  });
+
+  test("a failed prior job is not reusable, whatever its fingerprint (R03)", () => {
+    const { root, args } = setup();
+    const fp = fingerprintOf(root, job(args), env);
+    const prior: RunRecord = { stage: "screen", name: "r", eval: "reflect", label: "r", args, repeat: null, started: "", wall_seconds: 1, exit_code: 1, log: "", results: [], fingerprint: fp.sha256, fingerprint_parts: fp.parts };
+    expect(resumable(root, prior, { label: "r", args }, fp)).toEqual({ skip: false, why: "its last run exited 1" });
   });
 
   test("the akm of a Harbor eval is the release it names, or the build of the checkout", () => {

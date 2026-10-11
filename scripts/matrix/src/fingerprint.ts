@@ -1,4 +1,4 @@
-// What a matrix job was made from, as one digest: its arguments, the bytes of every file they name, the model settings it runs with, the akm it
+// What a matrix job was made from, as one digest: its arguments, the bytes of every file they name, the corpus it reads, the model settings it runs with, the akm it
 // runs and this repository's code. A stage skips a job it already ran only when this digest is the same, so editing a config patch in place,
 // pointing MODEL_BASE_URL somewhere else, switching the akm checkout's branch or committing a change to an eval runs the job again.
 // See ../../../README.md ("Run a matrix").
@@ -8,27 +8,28 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { akmBuild, dirtyFingerprint } from "../../../lib/akm/akm.ts";
+import { endpointIdentity } from "../../../lib/provenance.ts";
 import { canonical } from "../../compare/src/policy.ts";
-import { type Job, type RunRecord, HARBOR, flagValue, readJson, runDirs, unusableReason } from "./lib.ts";
+import { type Job, type RunRecord, HARBOR, flagValue, readJson, runDirs, runnerFolder, unusableReason } from "./lib.ts";
 
 const sha256 = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex");
 
 export interface Fingerprint {
   /** The digest of the parts. */
   sha256: string;
-  /** The digest of each part, by name: args, files, model, akm and harness. Enough to say which one changed, and nothing secret. */
+  /** The digest of each part, by name: args, files, corpus, model, akm and harness. Enough to say which one changed, and nothing secret. */
   parts: Record<string, string>;
 }
 
 /** The flags whose value names a file or a folder the eval reads. A relative path is from the repository root, as the evals read it. */
 const PATH_FLAGS = ["--config-patch", "--cases"];
 
-/** The digest of a file's bytes, or of a folder's files by path and bytes, or "missing". */
-function digestPath(root: string, path: string): string {
+/** The digest of a file's bytes, or of a folder's files by path and bytes, or "missing". `skip` names the files and folders (by name) the folder's digest leaves out. */
+function digestPath(root: string, path: string, skip: (name: string) => boolean = () => false): string {
   const abs = isAbsolute(path) ? path : resolve(root, path);
   if (!existsSync(abs)) return "missing";
   if (!statSync(abs).isDirectory()) return sha256(readFileSync(abs));
-  const files = (readdirSync(abs, { recursive: true }) as string[]).filter((f) => statSync(join(abs, f)).isFile()).sort();
+  const files = (readdirSync(abs, { recursive: true }) as string[]).filter((f) => !f.split("/").some(skip) && statSync(join(abs, f)).isFile()).sort();
   return sha256(files.map((f) => `${f}\0${sha256(readFileSync(join(abs, f)))}\n`).join(""));
 }
 
@@ -58,24 +59,36 @@ type Env = Record<string, string | undefined>;
 /** The environment an eval's `run` script sees: the caller's, then the repository's .env for what the caller did not set. */
 const effectiveEnv = (root: string, env: Env): Env => ({ ...readDotEnv(join(root, ".env")), ...Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined)) });
 
-const hostOf = (url: string | undefined): string | null => {
-  if (!url) return null;
-  try {
-    return new URL(url).host;
-  } catch {
-    return `unreadable ${sha256(url).slice(0, 12)}`;
-  }
-};
+/** The identity of an endpoint (scheme, host, port, path; no credentials), as the summaries record it (see endpointIdentity), or a digest of text that is not a URL. */
+const endpointOf = (url: string | undefined): string | null => (!url ? null : endpointIdentity(url) ?? `unreadable ${sha256(url).slice(0, 12)}`);
 
-/** The model settings a run uses, without a key: the model and the endpoint's host of the model under test and of the judge, and the digest of models.json (it holds no keys). */
+/** The model settings a run uses, without a key: the model and the endpoint of the model under test and of the judge, and the digest of models.json (it holds no keys). */
 function modelSettings(root: string, env: Env): Record<string, string | null> {
   return {
     MODEL_NAME: env.MODEL_NAME ?? null,
-    MODEL_BASE_URL: hostOf(env.MODEL_BASE_URL),
+    MODEL_BASE_URL: endpointOf(env.MODEL_BASE_URL),
     JUDGE_MODEL: env.JUDGE_MODEL ?? null,
-    JUDGE_BASE_URL: hostOf(env.JUDGE_BASE_URL),
+    JUDGE_BASE_URL: endpointOf(env.JUDGE_BASE_URL),
     "models.json": existsSync(join(root, "models.json")) ? digestPath(root, "models.json") : null,
   };
+}
+
+/**
+ * The corpus a job reads, as one digest: the public assets and library (`--corpus public`, or no flag); for `private` the tree of
+ * private/<eval> without its own cases, and for `own` and `own-feedback` private/<eval>/own. private/ is git-ignored, so the harness does not
+ * cover it: its generated cases, their generated.json and map.json, the own cases and library, and private/seed. What a run writes (the
+ * results* folders) is not an input and stays out. `all` is the public corpus and the private one.
+ */
+function corpusDigest(root: string, evalName: string, args: string[]): string {
+  const corpus = flagValue(args, "--corpus") ?? "public";
+  const eval_ = `${runnerFolder(evalName)}/${evalName}`;
+  const results = (name: string) => /^results/.test(name);
+  const parts: [string, (name: string) => boolean][] = [];
+  if (corpus === "public" || corpus === "all") for (const f of [`${eval_}/assets`, `${eval_}/tasks`, `${eval_}/libraries`, "corpus"]) parts.push([f, () => false]);
+  if (corpus === "private" || corpus === "all") parts.push([`private/${evalName}`, (name) => results(name) || name === "own"]);
+  if (corpus === "own" || corpus === "own-feedback") parts.push([`private/${evalName}/own`, results]);
+  if (corpus !== "public") parts.push(["private/seed", () => false]);
+  return sha256(canonical(parts.map(([f, skip]) => `${f} ${digestPath(root, f, skip)}`)));
 }
 
 const git = (dir: string, args: string[]): { ok: boolean; out: string } => {
@@ -134,6 +147,7 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
   const parts: Record<string, string> = {
     args: sha256(canonical(job.args)),
     files: sha256(canonical(files)),
+    corpus: corpusDigest(root, job.row.eval, job.args),
     model: sha256(canonical(modelSettings(root, full))),
     akm: sha256(canonical(akmIdentity(job.args, job.row.eval, full))),
     harness: sha256(harnessIdentity(root)),
@@ -141,7 +155,7 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
   return { sha256: sha256(canonical(parts)), parts };
 }
 
-const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", model: "the model settings (MODEL_NAME, the endpoint's host, the judge, models.json)", akm: "the akm (AKM_BIN or --akm, or the build it runs)", harness: "this repository's code" };
+const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus the job reads (private/ or the public assets)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json)", akm: "the akm (AKM_BIN or --akm, or the build it runs)", harness: "this repository's code" };
 
 /** Whether a stage may skip a job it already ran, and when not, why it runs again (empty for a job that was never run). */
 export function resumable(root: string, prior: RunRecord | undefined, job: Pick<Job, "label" | "args">, fp: Fingerprint): { skip: boolean; why: string } {
