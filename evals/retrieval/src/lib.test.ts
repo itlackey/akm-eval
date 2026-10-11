@@ -1,16 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { sha256Text } from "../../../lib/provenance.ts";
 import {
+  JUDGE_SYSTEM_PROMPT,
+  MAX_DOC_CHARS,
+  PROMPT_SHA256,
+  PROMPT_VERSION,
   type Query,
   abstention,
+  assetSha256,
   bannedByQuery,
   foldRefs,
   gradesByQuery,
   isTask,
   judgeMessages,
+  mixedJudgesWarning,
   parseGrade,
   parseQrels,
   parseQueries,
   pool,
+  qrelProvenance,
   scoreQuery,
   selectQueries,
   stripFrontmatter,
@@ -62,6 +70,16 @@ describe("parseQrels and gradesByQuery", () => {
     expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 4, reason: "" }]))).toThrow("expected 0 to 3");
     expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 1.5, reason: "" }]))).toThrow("expected 0 to 3");
     expect(() => parseQrels(lines([{ id: "q1", grade: 1, reason: "" }]))).toThrow('"id" and "ref"');
+  });
+
+  test("reads the provenance of a grade when a row has it, and a row without it as before", () => {
+    const made = { judge: "chat/some-judge", prompt_sha256: "p".repeat(64), date: "2026-10-11", asset_sha256: "a".repeat(64) };
+    const qrels = parseQrels(lines([{ id: "q1", ref: "a/x", grade: 3, reason: "r", ...made }, { id: "q1", ref: "a/y", grade: 1, reason: "r" }]));
+    expect(qrels[0]).toMatchObject(made);
+    expect(qrels[1].judge).toBeUndefined();
+    for (const key of Object.keys(made)) {
+      for (const bad of [3, "", null]) expect(() => parseQrels(lines([{ id: "q1", ref: "a", grade: 1, reason: "", [key]: bad }]))).toThrow(`"${key}" that is not a string`);
+    }
   });
 
   test("reads the assets a query bans, which have grade 0", () => {
@@ -143,6 +161,73 @@ describe("the judge's input", () => {
   });
 });
 
+describe("who graded the qrels", () => {
+  let n = 0;
+  /** A row of a pair of its own, so that rows of one judge do not replace each other. */
+  const row = (judge?: string, prompt?: string, ref = `a/x${n++}`) => ({ id: "q1", ref, grade: 1, reason: "r", ...(judge ? { judge } : {}), ...(prompt ? { prompt_sha256: prompt } : {}) });
+
+  test("lists the judges and prompts the rows record, and counts the rows that record no judge", () => {
+    expect(qrelProvenance([row(), row("b"), row("a", "p1"), row("a", "p1")])).toEqual({ judges: ["a", "b"], prompts: ["p1"], unrecorded: 1 });
+    expect(qrelProvenance([])).toEqual({ judges: [], prompts: [], unrecorded: 0 });
+  });
+
+  test("counts the last row of each pair, so a row that a later one replaced does not count", () => {
+    const old = [row(undefined, undefined, "a/y"), row("a", "p1", "a/z")];
+    expect(qrelProvenance(old)).toEqual({ judges: ["a"], prompts: ["p1"], unrecorded: 1 });
+    // the pair a/y is graded again by b, and a/z by b with another prompt
+    const again = [...old, row("b", "p1", "a/y"), row("b", "p2", "a/z")];
+    expect(qrelProvenance(again)).toEqual({ judges: ["b"], prompts: ["p1", "p2"], unrecorded: 0 });
+    expect(qrelProvenance([row("a", "p1", "a/y"), row(undefined, undefined, "a/y")])).toEqual({ judges: [], prompts: [], unrecorded: 1 }); // the later row is the one in force
+  });
+
+  test("warns when the rows hold more than one judge, or more than one prompt, and says nothing for one judge", () => {
+    expect(mixedJudgesWarning([row(), row()])).toBeNull(); // a set graded before label wrote a judge is not a mix
+    expect(mixedJudgesWarning([row("a"), row("a")])).toBeNull();
+    expect(mixedJudgesWarning([row("a", "p1"), row("a", "p1")])).toBeNull();
+    const two = mixedJudgesWarning([row("a"), row("b"), row()], "assets/qrels.jsonl") as string;
+    expect(two).toStartWith("assets/qrels.jsonl holds grades from 2 judges (a, b), and 1 rows that record no judge.");
+    expect(two).toContain("do not mix cleanly");
+    expect(mixedJudgesWarning([row("a", "p1"), row("a", "p2")])).toStartWith("qrels.jsonl holds grades from 2 prompts.");
+  });
+
+  test("warns when one judge's grades sit beside rows that record no judge, which is what the library's grades are once label adds one", () => {
+    const legacy = Array.from({ length: 3 }, () => row());
+    const warning = mixedJudgesWarning([...legacy, row("new-judge", "p1")], "assets/qrels.jsonl") as string;
+    expect(warning).toStartWith("assets/qrels.jsonl holds grades from 1 judge (new-judge), and 3 rows that record no judge.");
+    expect(warning).toContain("do not mix cleanly");
+  });
+
+  test("does not warn once the pairs of the rows that record no judge are graded again by the one judge", () => {
+    const legacy = [row(undefined, undefined, "a/y"), row(undefined, undefined, "a/z")];
+    expect(mixedJudgesWarning([...legacy, row("j", "p1", "a/y")])).not.toBeNull();
+    expect(mixedJudgesWarning([...legacy, row("j", "p1", "a/y"), row("j", "p1", "a/z")])).toBeNull();
+    // and a grade of another judge that was graded again by this one does not count either
+    expect(mixedJudgesWarning([row("old", "p1", "a/y"), row("j", "p1", "a/y")])).toBeNull();
+  });
+});
+
+describe("the digests of a grade", () => {
+  test("the prompt digest covers the version, the system text, the layout of the user message and the window", () => {
+    const user = "Query: {query}\n\nCandidate asset:\nType: {type}\nRef: {ref}\nName: {name}\nDescription: {description}\n\nContent:\n{content}";
+    expect(PROMPT_SHA256).toBe(sha256Text(JSON.stringify({ version: PROMPT_VERSION, system: JUDGE_SYSTEM_PROMPT, user, max_doc_chars: 16_000 })));
+    // A change to the prompt makes this fail on purpose: grades made with another prompt carry another digest, and run warns about a mix.
+    expect(PROMPT_SHA256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("the asset digest is of the ref, the front matter and the text up to the judge's window", () => {
+    const text = "---\nname: y\ndescription: d\n---\n# Title\nBody\n";
+    const base = assetSha256("knowledge/y", text);
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    expect(assetSha256("knowledge/y", text)).toBe(base);
+    expect(assetSha256("knowledge/other", text)).not.toBe(base); // another ref
+    expect(assetSha256("knowledge/y", text.replace("Body", "Other body"))).not.toBe(base); // another text
+    expect(assetSha256("knowledge/y", text.replace("description: d", "description: e"))).not.toBe(base); // the description the judge is shown
+    const long = (tail: string) => `---\nname: y\n---\n${"z".repeat(MAX_DOC_CHARS)}${tail}`;
+    expect(assetSha256("knowledge/y", long(" past the window"))).toBe(assetSha256("knowledge/y", long(" and another tail"))); // the judge does not read it
+    expect(assetSha256("knowledge/y", `---\nname: y\n---\n${"z".repeat(MAX_DOC_CHARS - 1)}y`)).not.toBe(assetSha256("knowledge/y", long("")));
+  });
+});
+
 describe("parseGrade", () => {
   test("reads the JSON the judge was asked for", () => {
     expect(parseGrade('{"grade": 2, "reason": "Useful."}')).toEqual({ grade: 2, reason: "Useful." });
@@ -188,7 +273,40 @@ describe("scoreQuery", () => {
   });
 
   test("scores nothing returned as nothing found", () => {
-    expect(scoreQuery(grades, [])).toEqual({ ndcg_10: 0, p_5: 0, success_5: false, mrr: 0, recall_10: 0, judged_10: 1, banned_above: null });
+    expect(scoreQuery(grades, [])).toEqual({ ndcg_10: 0, ndcg_10_condensed: 0, p_5: 0, success_5: false, mrr: 0, recall_10: 0, judged_10: null, banned_above: null, banned_above_first: null });
+  });
+
+  test("judged_10 is empty, not 1, when nothing was returned, and a mean leaves such a query out", () => {
+    expect(scoreQuery(grades, []).judged_10).toBeNull();
+    expect(scoreQuery(grades, ["a/q"]).judged_10).toBe(0);
+    expect(summarize([scoreQuery(grades, []), scoreQuery(grades, ["a/q"]), scoreQuery(grades, ["a/x", "a/q"])]).judged_10).toBe(0.25);
+    expect(summarize([scoreQuery(grades, [])]).judged_10).toBeNull();
+  });
+
+  describe("the nDCG of the judged results alone", () => {
+    const g = { "a/x": 3, "a/y": 2, "a/z": 1 };
+    const ideal = 7 + 3 / Math.log2(3) + 1 / Math.log2(4);
+
+    test("takes the results nobody graded out of the list, so the judged ones move up", () => {
+      const s = scoreQuery(g, ["a/q1", "a/q2", "a/x", "a/q3", "a/y"]);
+      expect(s.ndcg_10).toBeCloseTo((7 / Math.log2(4) + 3 / Math.log2(6)) / ideal, 4);
+      expect(s.ndcg_10_condensed).toBeCloseTo((7 + 3 / Math.log2(3)) / ideal, 4);
+      expect(s.judged_10).toBeCloseTo(0.4, 4);
+    });
+
+    test("is never lower than nDCG@10, and equals it when every result is judged", () => {
+      for (const refs of [["a/x", "a/y", "a/z"], ["a/z", "a/y", "a/x"], ["a/q", "a/z", "a/x"], ["a/q1", "a/q2"], []]) {
+        const s = scoreQuery(g, refs);
+        expect(s.ndcg_10_condensed).toBeGreaterThanOrEqual(s.ndcg_10);
+        if (s.judged_10 === 1 || s.judged_10 === null) expect(s.ndcg_10_condensed).toBe(s.ndcg_10);
+      }
+    });
+
+    test("is 0 when no result was judged, and is averaged with the others", () => {
+      expect(scoreQuery(g, ["a/q1", "a/q2"]).ndcg_10_condensed).toBe(0);
+      const rows = [scoreQuery(g, ["a/x", "a/y", "a/z"]), scoreQuery(g, ["a/q1", "a/q2"])];
+      expect(summarize(rows).ndcg_10_condensed).toBe(0.5);
+    });
   });
 
   describe("banned assets", () => {
@@ -211,7 +329,34 @@ describe("scoreQuery", () => {
 
     test("count only when the query bans some", () => {
       expect(scoreQuery(g, ["a/old", "a/x"]).banned_above).toBeNull();
+      expect(scoreQuery(g, ["a/old", "a/x"]).banned_above_first).toBeNull();
       expect(above(["a/x", "a/y"], [])).toBeNull();
+    });
+
+    describe("above the first relevant asset", () => {
+      const aboveFirst = (refs: string[], banned = ["a/old", "a/off"]) => scoreQuery(g, refs, banned).banned_above_first;
+
+      test("is true only when a banned asset ranks before the first relevant one", () => {
+        expect(aboveFirst(["a/old", "a/x", "a/y"])).toBe(true);
+        expect(aboveFirst(["a/x", "a/old", "a/y"])).toBe(false); // it outranks the second relevant asset only
+        expect(aboveFirst(["a/q", "a/x", "a/y", "a/off"])).toBe(false);
+      });
+
+      test("does not call a missing relevant asset a banned-above, as banned_above does", () => {
+        const refs = ["a/x", "a/q", "a/off"]; // a/y is not among the results, so it ranks below the banned asset
+        expect(above(refs)).toBe(true);
+        expect(aboveFirst(refs)).toBe(false);
+      });
+
+      test("is true when no relevant asset is returned and a banned one is", () => {
+        expect(aboveFirst(["a/q", "a/off"])).toBe(true);
+        expect(aboveFirst(["a/q", "a/q2"])).toBe(false);
+      });
+
+      test("is averaged over the queries that ban an asset", () => {
+        const rows = [scoreQuery(g, ["a/old", "a/x"], ["a/old"]), scoreQuery(g, ["a/x", "a/q", "a/old"], ["a/old"]), scoreQuery(g, ["a/x"])];
+        expect(summarize(rows)).toMatchObject({ banned_above: 1, banned_above_first: 0.5 });
+      });
     });
   });
 });
@@ -220,8 +365,8 @@ describe("summarize and abstention", () => {
   test("averages over queries", () => {
     const a = scoreQuery({ "a/x": 3 }, ["a/x"]);
     const b = scoreQuery({ "a/x": 3 }, ["a/q"]);
-    expect(summarize([a, b])).toEqual({ n: 2, ndcg_10: 0.5, p_5: 0.1, success_5: 0.5, mrr: 0.5, recall_10: 0.5, judged_10: 0.5, banned_above: null });
-    expect(summarize([])).toEqual({ n: 0, ndcg_10: null, p_5: null, success_5: null, mrr: null, recall_10: null, judged_10: null, banned_above: null });
+    expect(summarize([a, b])).toEqual({ n: 2, ndcg_10: 0.5, ndcg_10_condensed: 0.5, p_5: 0.1, success_5: 0.5, mrr: 0.5, recall_10: 0.5, judged_10: 0.5, banned_above: null, banned_above_first: null });
+    expect(summarize([])).toEqual({ n: 0, ndcg_10: null, ndcg_10_condensed: null, p_5: null, success_5: null, mrr: null, recall_10: null, judged_10: null, banned_above: null, banned_above_first: null });
   });
 
   test("averages the banned check over the queries that ban an asset only", () => {

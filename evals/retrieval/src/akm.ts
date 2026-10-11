@@ -68,17 +68,25 @@ export interface Answer {
   mode: string | null;
   seconds: number;
   error?: string;
+  /** The call ran into its time limit and was killed. It is an error too, and the only kind that says akm is slow and not wrong. */
+  timedOut?: boolean;
 }
+
+/** How long one call may take before it is killed. */
+const CALL_TIMEOUT_MS = 120_000;
 
 /**
  * One `akm search` or `akm curate` call. A failed call is an answer with an error and no refs. So is an answer that
  * says it searched another way than `mode` (keyword or semantic): when akm cannot embed a query it answers with keyword
- * search, `fts-fallback`, and that is not the semantic result.
+ * search, `fts-fallback`, and that is not the semantic result. A semantic call has to say `searchMode: "semantic"`: an
+ * answer that does not say how it searched could be keyword rankings, and is an error as well. A keyword call that
+ * does not say is taken as it comes.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = DEPTH, mode: "keyword" | "semantic" = "keyword"): Promise<Answer> {
-  const { stdout, stderr, code, ms } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs: 120_000 }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0 }));
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = DEPTH, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS): Promise<Answer> {
+  const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
   const seconds = () => Number((ms / 1000).toFixed(2));
-  const failed = (error: string): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error });
+  const failed = (error: string, extra: { timedOut?: true } = {}): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error, ...extra });
+  if (timedOut) return failed(`akm ${system} timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, { timedOut: true });
   if (code !== 0) return failed(`akm ${system} exited ${code}: ${(stderr.trim() || stdout.trim()).slice(-300)}`);
   type Hit = { ref?: unknown; type?: unknown; name?: unknown; description?: unknown; path?: unknown };
   let out: { hits?: Hit[]; items?: Hit[]; searchMode?: unknown; warnings?: unknown };
@@ -87,7 +95,11 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
   } catch {
     return failed(`akm ${system} printed no JSON: ${stdout.slice(0, 200)}`);
   }
-  if (typeof out.searchMode === "string" && out.searchMode !== mode) return failed(`akm ${system} searched with ${out.searchMode}, not ${mode}: ${JSON.stringify(out.warnings ?? null).slice(0, 300)}`);
+  const said = typeof out.searchMode === "string" ? out.searchMode : null;
+  if (said !== null ? said !== mode : mode === "semantic") {
+    const what = said !== null ? `searched with ${said}, not ${mode}` : "did not say how it searched (no searchMode), and a semantic call has to say semantic";
+    return failed(`akm ${system} ${what}: ${JSON.stringify(out.warnings ?? null).slice(0, 300)}`);
+  }
   const refs: string[] = [];
   const assets = new Map<string, Asset>();
   for (const h of (system === "search" ? out.hits : out.items) ?? []) {
@@ -96,5 +108,5 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
     const [ref] = foldRefs([h.ref]);
     if (ref && !assets.has(ref)) assets.set(ref, { ref, type: String(h.type ?? ""), name: String(h.name ?? ref), description: String(h.description ?? ""), path: String(h.path ?? "") });
   }
-  return { refs: foldRefs(refs), assets: [...assets.values()], mode: typeof out.searchMode === "string" ? out.searchMode : null, seconds: seconds() };
+  return { refs: foldRefs(refs), assets: [...assets.values()], mode: said, seconds: seconds() };
 }
