@@ -1,0 +1,10 @@
+{"id":"d1","class":"description-period","outcome":"proposal","correct":true,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"d2","class":"description-period","outcome":"proposal","correct":true,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"d3","class":"description-quote","outcome":"proposal","correct":true,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"d4","class":"when-to-use-missing","outcome":"proposal","correct":true,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"d5","class":"when-to-use-missing","outcome":"proposal","correct":true,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"d6","class":"title-missing","outcome":"proposal","correct":false,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"c1","class":"retrieval-miss","outcome":"none","correct":true,"checks":{"no_extra_change":true},"changed":[],"values":{},"reason":"","seconds":1}
+{"id":"c2","class":"unsupported-ask","outcome":"proposal","correct":false,"checks":{"body_kept":true,"no_extra_change":true},"changed":["description"],"values":{},"reason":"","seconds":1}
+{"id":"c3","class":"historical","outcome":"none","correct":true,"checks":{"no_extra_change":true},"changed":[],"values":{},"reason":"","seconds":1}
+{"id":"c4","class":"body-defect","outcome":"none","correct":true,"checks":{"no_extra_change":true},"changed":[],"values":{},"reason":"","seconds":1}

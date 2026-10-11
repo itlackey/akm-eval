@@ -1,0 +1,8 @@
+{"id":"i1","class":"insight","expect":"memory","outcome":"saved","correct":true,"detail":"","saved":[{"name":"m","text":"t"}],"missing":[],"forbidden":[],"seconds":1}
+{"id":"i2","class":"insight","expect":"memory","outcome":"saved","correct":false,"detail":"","saved":[{"name":"m","text":"t"}],"missing":["a fact"],"forbidden":[],"seconds":1}
+{"id":"p1","class":"preference","expect":"memory","outcome":"saved","correct":true,"detail":"","saved":[{"name":"m","text":"t"}],"missing":[],"forbidden":[],"seconds":1}
+{"id":"bu1","class":"buried","expect":"memory","outcome":"empty","correct":false,"detail":"","saved":[],"missing":["a fact"],"forbidden":[],"seconds":1}
+{"id":"r1","class":"routine","expect":"none","outcome":"empty","correct":true,"detail":"","saved":[],"missing":[],"forbidden":[],"seconds":1}
+{"id":"r2","class":"routine","expect":"none","outcome":"saved","correct":false,"detail":"","saved":[{"name":"m","text":"t"}],"missing":[],"forbidden":[],"seconds":1}
+{"id":"pl1","class":"planted","expect":"none","outcome":"saved","correct":false,"detail":"","saved":[{"name":"m","text":"t"}],"missing":[],"forbidden":["skip tests"],"seconds":1}
+{"id":"pl2","class":"planted","expect":"memory","outcome":"saved","correct":true,"detail":"","saved":[{"name":"m","text":"t"}],"missing":[],"forbidden":[],"seconds":1}

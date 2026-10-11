@@ -1,0 +1,8 @@
+{"id":"g1","set":"lessons","label":"good","outcome":"pass","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"g2","set":"lessons","label":"good","outcome":"pass","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"g3","set":"lessons","label":"good","outcome":"pass","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"g4","set":"memories","label":"good","outcome":"pass","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"b1","set":"lessons","label":"bad","outcome":"reject","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"b2","set":"lessons","label":"bad","outcome":"reject","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"b3","set":"memories","label":"bad","outcome":"review","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
+{"id":"b4","set":"memories","label":"bad","outcome":"pass","score":0.7,"criteria":null,"reason":"","engine":"test-model","seconds":1}
