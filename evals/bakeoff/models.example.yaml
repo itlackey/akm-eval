@@ -1,22 +1,40 @@
-# The models to compare in one run:
+# The models to compare in one run, with the request options of each:
 #
 #   evals/bakeoff/run --models evals/bakeoff/models.yaml
 #
 # Copy this file to models.yaml and edit it. models.yaml is gitignored.
 #
-#   label        names the model in the results. Letters, digits, dot, dash and underscore.
-#   model        the model name the endpoint expects.
-#   base_url     any OpenAI-compatible endpoint, up to and including /v1.
+# To compare models that need no options, skip this file: `evals/bakeoff/run --model a --model b` takes each id the way every other eval
+# does (a line of models.json beside .env, else a model id of the gateway in .env). Use this file to give a model options. --model and
+# --models are not used together.
+#
+# An entry names its model in one of two ways:
+#
+#   id           a model as --model names it: a line of models.json, else a model id of the gateway in .env. Its URL, key and
+#                `private` flag come from there. Use this for a model that is already in models.json or behind the gateway.
+#
+#   model        the model name the endpoint expects, with
+#   base_url     any OpenAI-compatible endpoint, up to and including /v1, and
 #   api_key_env  the name of an environment variable that holds the key. Set it in .env.
 #                Leave it out for a local server that needs no key. Never put a key in this file.
+#   private      true when your private notes may go to this model (see the root README). Only recorded in summary.json: bakeoff
+#                reads no notes of yours, so it never refuses a model for it. Default false.
+#
+# Every entry also takes:
+#
+#   label        names the model in the results. Letters, digits, dot, dash and underscore.
 #
 # Optional, for each model:
 #
 #   temperature  default 0. null leaves it out of the request, for a model that only takes its own.
 #   max_tokens   default 6000. null leaves it out, for a model that takes max_completion_tokens instead.
-#   extra_body   fields merged into every request, for example to turn thinking off.
+#   seed         an integer, sent as the `seed` field of every request, for an endpoint that honours it. Default: none.
+#                A fixed seed makes the runs of --repeat alike on such an endpoint, so leave it out when you want their spread.
+#   extra_body   fields merged into every request, for example to turn thinking off. It cannot set model, messages or stream.
 #   timeout      seconds for one request. Default 900.
 #   retries      times a request is retried when the endpoint is busy or drops it. Default 5.
+#
+# summary.json keeps these options, the endpoint (without credentials) and extra_body (with secrets redacted), never the key.
 models:
   - label: local-qwen
     model: qwen3-27b
@@ -32,3 +50,7 @@ models:
     max_tokens: null
     extra_body:
       max_completion_tokens: 8000
+
+  - label: gateway-model
+    id: my-gateway-model
+    seed: 1234
