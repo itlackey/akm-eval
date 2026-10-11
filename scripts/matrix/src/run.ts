@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { Fatal, fail } from "../../../lib/cli.ts";
 import { type Job, type Matrix, type RunRecord, type Stage, type State, buildDecision, confirmJobs, emptyState, findResults, parseMatrix, renderMarkdown, schedule, screenJobs, selectForConfirm } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -26,11 +27,6 @@ Runs the evals of a matrix file with the model in .env (or the environment), or 
   --min-delta X    confirm: a config differs when a main or harm metric of the screen moved by more than X (default 0: any change)
   --force          run rows again that a stage already ran with the same arguments
   --dry-run        print what a stage would run`;
-
-class Fatal extends Error {}
-const fail = (m: string): never => {
-  throw new Fatal(m);
-};
 
 function loadState(file: string, m: Matrix): State {
   if (!existsSync(file)) return emptyState(m);

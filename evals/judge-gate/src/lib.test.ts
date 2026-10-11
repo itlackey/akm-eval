@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideEndpoint, hideEndpoints, hideInRow, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, hideInRow, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -203,18 +203,7 @@ describe("errorRow", () => {
   });
 });
 
-describe("hideEndpoint", () => {
-  test("masks the model endpoint, with or without a trailing slash, wherever it is named", () => {
-    expect(hideEndpoint("fetch http://host:8080/v1/chat/completions failed", "http://host:8080/v1")).toBe("fetch <MODEL_BASE_URL>/chat/completions failed");
-    expect(hideEndpoint("a http://host:8080/v1 b http://host:8080/v1", "http://host:8080/v1/")).toBe("a <MODEL_BASE_URL> b <MODEL_BASE_URL>");
-    expect(hideEndpoint("nothing to hide", "http://host:8080/v1")).toBe("nothing to hide");
-  });
-
-  test("leaves the text alone when there is no endpoint", () => {
-    expect(hideEndpoint("abc", "")).toBe("abc");
-    expect(hideEndpoint("abc", "///")).toBe("abc");
-  });
-
+describe("hideEndpoints and hideInRow", () => {
   test("hideEndpoints writes every endpoint of a config as <MODEL_BASE_URL>, and changes nothing else or the config it was given", () => {
     const config = {
       defaults: { llmEngine: "judge" },
@@ -244,22 +233,6 @@ describe("hideEndpoint", () => {
     expect(hideInRow(row, "http://host/v1")).toMatchObject({ error: "akm exited 1: <MODEL_BASE_URL> down", reason: "tried <MODEL_BASE_URL>", id: "id-good-1" });
     const judged = rowFromVerdict(make(1, "good"), { pass: true, score: 4 }, 1);
     expect(hideInRow(judged, "http://host/v1")).toEqual(judged);
-  });
-});
-
-describe("failureMessage", () => {
-  test("reads the error akm prints as JSON on stderr", () => {
-    expect(failureMessage(78, '{\n  "ok": false,\n  "error": "Required engine credential K is not set.",\n  "code": "INVALID_CONFIG_FILE"\n}\n', "")).toBe("akm exited 78: Required engine credential K is not set. (INVALID_CONFIG_FILE)");
-    expect(failureMessage(70, '{"ok": false, "error": "JSON Parse error"}', "")).toBe("akm exited 70: JSON Parse error");
-  });
-
-  test("falls back to the last lines of what it printed", () => {
-    expect(failureMessage(1, "a\nb\nc\nd", "")).toBe("akm exited 1: b | c | d");
-    expect(failureMessage(1, "", "only stdout")).toBe("akm exited 1: only stdout");
-  });
-
-  test("says why a killed akm died", () => {
-    expect(failureMessage(137, "akm timed out after 900s", "")).toBe("akm exited 137: akm timed out after 900s");
   });
 });
 

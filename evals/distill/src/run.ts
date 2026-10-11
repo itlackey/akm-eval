@@ -8,12 +8,13 @@ import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, exitMessage, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsSha256, corpusSeed, distillConfig, errorRow, failureMessage, generatedProblem, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases, timedOutMessage } from "./lib.ts";
+import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsSha256, corpusSeed, distillConfig, errorRow, generatedProblem, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases, timedOutMessage } from "./lib.ts";
 
 const NAME = "distill";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -80,30 +81,6 @@ interface Summary {
   results_dir: string;
 }
 
-/** A failure that ends the run with a message. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 function printSummary(s: Summary): void {
   const m = s.metrics;
   const served = s.served_models.length > 0 && s.served_models.join() !== s.model ? ` (served as ${s.served_models.join(", ")})` : "";
@@ -135,7 +112,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; overrides?: Overrides; improveTimeoutMs?: number }): Promise<Row> {
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
+  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
   try {
     writeConfig(sandbox, ctx.config);
@@ -143,18 +120,18 @@ export async function runCase(c: LoadedCase, ctx: { config: Record<string, unkno
     if (c.feedback?.length) await runAkm(sandbox, ["index"]); // akm records feedback only against an indexed asset
     for (const f of c.feedback ?? []) {
       const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
-      if (fb.code !== 0) return errorRow(c, hide(failureMessage(fb.code, fb.stderr, fb.stdout)), seconds(), fb.timedOut);
+      if (fb.code !== 0) return errorRow(c, hide(exitMessage(fb.code, fb.stderr, fb.stdout)), seconds(), fb.timedOut);
     }
     const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
     const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs: ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS });
-    if (timedOut) return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds(), true);
+    if (timedOut) return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds(), true);
     let improve: unknown;
     try {
       improve = JSON.parse(stdout);
     } catch {
-      return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds());
+      return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
     }
-    if (code !== 0) return errorRow(c, hide(failureMessage(code, stderr, stdout)), seconds());
+    if (code !== 0) return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
     const listed = [];
     for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"])) });
     return scoreCase(c, { improve, proposals: lessonProposals(listed), seconds: seconds() });
@@ -206,7 +183,7 @@ export async function runCorpus(
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

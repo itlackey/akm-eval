@@ -5,6 +5,7 @@
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { sha256File, sha256Text } from "../provenance.ts";
 import { type ArmSummary, type Arm, type Report, type Trial, loadTrials } from "./report.ts";
@@ -18,28 +19,8 @@ export type Pins = Record<keyof typeof PINS, string>;
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
 
-export class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-export function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-export function gitCommit(root: string): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", root, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+// These live in ../cli.ts, which every run.ts imports. They are exported from here too, for what imported them from here.
+export { Fatal, fail, gitCommit, slug } from "../cli.ts";
 
 /** A positive integer flag, or undefined when the flag is not given. */
 export function positive(flag: string, value: string | undefined): number | undefined {

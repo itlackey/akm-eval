@@ -8,13 +8,14 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, exitMessage, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { CASES, casesSha256, privateAssetsProblem, privateSeed } from "./inputs.ts";
-import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, failureMessage, hasVerdict, hideEndpoints, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
 
 const NAME = "judge-gate";
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -94,30 +95,6 @@ interface Ctx {
   timeoutMs?: number;
 }
 
-/** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 const cell = (r: Rate): string => `${r.passed}/${r.n}  ${pct(r.rate)}`;
 const erroredText = (s: Summary): string => `${s.n_errored}${s.timeouts > 0 ? ` (${s.timeouts} timed out)` : ""}`;
 
@@ -182,12 +159,12 @@ export async function runCorpus(
     }
     const { stdout, stderr, code, ms, timedOut } = run;
     const seconds = Number((ms / 1000).toFixed(1));
-    if (timedOut) return hideInRow(errorRow(c, failureMessage(code, stderr, stdout), seconds, true), ctx.baseUrl);
+    if (timedOut) return hideInRow(errorRow(c, exitMessage(code, stderr, stdout), seconds, true), ctx.baseUrl);
     let verdict: unknown;
     try {
       verdict = JSON.parse(stdout);
     } catch {
-      return hideInRow(errorRow(c, failureMessage(code, stderr, stdout), seconds), ctx.baseUrl);
+      return hideInRow(errorRow(c, exitMessage(code, stderr, stdout), seconds), ctx.baseUrl);
     }
     return hideInRow(rowFromVerdict(c, verdict, seconds), ctx.baseUrl);
   };
@@ -216,7 +193,7 @@ export async function runCorpus(
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

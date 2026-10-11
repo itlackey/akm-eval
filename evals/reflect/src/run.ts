@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -89,30 +90,6 @@ interface Ctx {
   timeoutMs?: number;
 }
 
-/** A failure that ends the run with a message. It is thrown, so what the run holds is cleaned up on the way out. */
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
-
-const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 /** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
 const configFor = (ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides">): Record<string, unknown> => patchedConfig(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
 
@@ -124,7 +101,7 @@ export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "has
   const t0 = performance.now();
   const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
   const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
-  const hide = (text: string): string => text.split(ctx.baseUrl.replace(/\/+$/, "")).join("<MODEL_BASE_URL>"); // akm's errors name the endpoint it called, and results get shared
+  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
   try {
     const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
     writeConfig(sandbox, configFor(ctx));
@@ -236,7 +213,7 @@ export async function runCorpus(
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
-    git_commit: gitCommit(),
+    git_commit: gitCommit(ROOT),
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

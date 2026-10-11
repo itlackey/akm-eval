@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { type BuiltBy, type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
 import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -150,32 +151,11 @@ interface Summary {
   results_dir: string;
 }
 
-class Fatal extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-  }
-}
-
-function fail(message: string, code = 2): never {
-  throw new Fatal(message, code);
-}
-
 /** The label of a run without --label. */
 const defaultLabel = (version: string): string => `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 
 /** How a collection is named in the output: `public books`, or `own`. */
 const where = (corpus: Corpus, collection: string): string => (corpus === collection ? corpus : `${corpus} ${collection}`);
-
-function gitCommit(): string {
-  const run = (args: string[]) => Bun.spawnSync(["git", "-C", ROOT, ...args], { stderr: "ignore" });
-  const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
-  const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
-  return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
-}
 
 /** The width of a column of the table: the longest label, "semantic curate". */
 const COLUMN = 15;
@@ -390,7 +370,7 @@ export async function runCollection(
       collection,
       label,
       date: new Date().toISOString(),
-      git_commit: gitCommit(),
+      git_commit: gitCommit(ROOT),
       akm_version: version,
       ...akmBuild(),
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },

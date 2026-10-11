@@ -3,6 +3,7 @@
 
 import { engineConfig } from "../../../lib/akm/akm.ts";
 import { type Overrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { hideEndpoint } from "../../../lib/cli.ts";
 
 /**
  * What a bad revision does to the asset. `churn`: every fact of the source survives and only the form changed (an intro, headings, a
@@ -144,12 +145,6 @@ export function rowFromVerdict(c: Case, verdict: unknown, seconds: number): Row 
 /** Did akm give a verdict on the case? An errored row did not, and neither did a review that akm routed there with a score of -1. */
 export const hasVerdict = (r: Row): boolean => r.score !== null;
 
-/** A text with the model endpoint masked: akm's errors name the endpoint it called, and results get shared. */
-export function hideEndpoint(text: string, baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return base === "" ? text : text.split(base).join("<MODEL_BASE_URL>");
-}
-
 /**
  * A deep copy of the akm config with every `endpoint` written as <MODEL_BASE_URL>. The URL can carry a key in its query or credentials before
  * the host, which redactConfig, going by key name, does not see, and results get shared. The host is in the summary's `engine.endpoint`.
@@ -163,18 +158,6 @@ export function hideEndpoints(config: any): any {
 /** The row with the endpoint masked in the two texts that can name it, akm's reason and the error. */
 export function hideInRow(row: Row, baseUrl: string): Row {
   return { ...row, reason: hideEndpoint(row.reason, baseUrl), ...(row.error === undefined ? {} : { error: hideEndpoint(row.error, baseUrl) }) };
-}
-
-/** What akm said when it failed. It prints its error as a JSON object on stderr. */
-export function failureMessage(code: number, stderr: string, stdout: string): string {
-  const text = stderr.trim();
-  try {
-    const e = JSON.parse(text) as { error?: unknown; code?: unknown };
-    if (typeof e.error === "string") return `akm exited ${code}: ${e.error}${typeof e.code === "string" ? ` (${e.code})` : ""}`.slice(0, 300);
-  } catch {
-    // not JSON: fall through to the last lines
-  }
-  return `akm exited ${code}: ${(text || stdout.trim()).split("\n").slice(-3).join(" | ")}`.slice(0, 300);
 }
 
 /** Is `version` at least `minimum`? Both are semver. A prerelease is below its release and ordered by its tag. */

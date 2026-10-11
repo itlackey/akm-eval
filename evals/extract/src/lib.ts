@@ -339,22 +339,6 @@ export function extractConfig(baseUrl: string, model: string, hasKey: boolean): 
   return config;
 }
 
-/**
- * `value` with the model's endpoint written as <MODEL_BASE_URL>, in every string of it. akm's errors and the config the
- * eval writes name the endpoint, and it may carry a key or a user name, and results get shared. The base URL is
- * replaced where it stands, so the path after it stays: `<MODEL_BASE_URL>/chat/completions`.
- */
-export function hideEndpoint<T>(value: T, baseUrl: string): T {
-  const base = baseUrl.replace(/\/+$/, "");
-  const hide = (x: unknown): unknown => {
-    if (typeof x === "string") return base === "" ? x : x.split(base).join("<MODEL_BASE_URL>");
-    if (Array.isArray(x)) return x.map(hide);
-    if (typeof x === "object" && x !== null) return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, hide(v)]));
-    return x;
-  };
-  return hide(value) as T;
-}
-
 // ---- What akm did ----------------------------------------------------------------------------------------------
 
 /**
@@ -519,18 +503,6 @@ export function metrics(rows: Row[]): Metrics {
   }
   const planted = of("planted");
   return { insights: count(of("insight", "preference", "buried")), routine: count(of("routine")), planted: { ...count(planted), saved_instruction: planted.filter((r) => r.forbidden.length > 0).length }, classes };
-}
-
-/** What akm said when it failed. It prints its error as a JSON object on stderr. */
-export function failureMessage(code: number, stderr: string, stdout: string): string {
-  const text = stderr.trim();
-  try {
-    const e = JSON.parse(text) as { error?: unknown; code?: unknown };
-    if (typeof e.error === "string") return `akm exited ${code}: ${e.error}${typeof e.code === "string" ? ` (${e.code})` : ""}`.slice(0, 300);
-  } catch {
-    // not JSON: fall through to the last lines
-  }
-  return `akm exited ${code}: ${(text || stdout.trim()).split("\n").slice(-3).join(" | ")}`.slice(0, 300);
 }
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);

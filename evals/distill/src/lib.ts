@@ -606,16 +606,4 @@ export function metrics(rows: Row[]): Metrics {
   };
 }
 
-/** What akm said when it failed. It prints its error as a JSON object on stderr. */
-export function failureMessage(code: number, stderr: string, stdout: string): string {
-  const text = stderr.trim();
-  try {
-    const e = JSON.parse(text) as { error?: unknown; code?: unknown };
-    if (typeof e.error === "string") return `akm exited ${code}: ${e.error}${typeof e.code === "string" ? ` (${e.code})` : ""}`.slice(0, 300);
-  } catch {
-    // not JSON: fall through to the last lines
-  }
-  return `akm exited ${code}: ${(text || stdout.trim()).split("\n").slice(-3).join(" | ")}`.slice(0, 300);
-}
-
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
