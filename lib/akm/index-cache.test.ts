@@ -2,12 +2,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Sandbox } from "./akm.ts";
+import { type Sandbox, akmBuild } from "./akm.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex, digest, digestTree } from "./index-cache.ts";
 
 const dirs: string[] = [];
+// The cache asks which akm this process runs from AKM_BIN, so the tests set it and put it back.
+const akmBin = process.env.AKM_BIN;
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  if (akmBin === undefined) delete process.env.AKM_BIN;
+  else process.env.AKM_BIN = akmBin;
 });
 const tmp = (): string => {
   const d = mkdtempSync(join(tmpdir(), "index-cache-"));
@@ -37,6 +41,7 @@ function setup() {
   const root = tmp();
   const script = join(root, "fake-akm.ts");
   writeFileSync(script, FAKE_AKM);
+  process.env.AKM_BIN = `bun ${script}`; // an akm that is not in a git checkout: no build
   const builds: { fresh: boolean }[] = [];
   /** An index to build: it marks the data folder as akm would, with the count and the time it built. */
   const build = async (sandbox: Sandbox): Promise<number> => {
@@ -72,7 +77,7 @@ describe("cachedIndex", () => {
     expect(s.builds).toHaveLength(1);
     expect(second.sandbox.dir).toBe(first.sandbox.dir);
     second.release();
-    expect(s.log).toEqual([]);
+    expect(s.log).toEqual([`  the index skillret-public is kept from an earlier run: it was built by akm 0.9.99 (${second.builtBy.akm_bin}) at build 1.`]);
   });
 
   test("keeps the config that the build wrote, such as bundles that are indexed where they are", async () => {
@@ -135,7 +140,7 @@ describe("cachedIndex", () => {
       expect(index.state).toBe("cold");
       index.release();
     }
-    expect(s.log.filter((l) => l.includes("akm, its embedding model or the index's folder is not the same"))).toHaveLength(2);
+    expect(s.log.filter((l) => l.includes("akm, its build, its embedding model or the index's folder is not the same"))).toHaveLength(2);
 
     // a copy of the cache in another place is not the index that akm made, because akm recorded the paths
     const moved = tmp();
@@ -161,6 +166,18 @@ describe("cachedIndex", () => {
     index.release();
   });
 
+  test("builds a new index when the state was kept before the build of akm was recorded", async () => {
+    const s = setup();
+    (await s.open()).release();
+    const { builtBy: _builtBy, ...old } = JSON.parse(readFileSync(join(s.folder, "state.json"), "utf8"));
+    writeFileSync(join(s.folder, "state.json"), JSON.stringify(old));
+    const index = await s.open();
+    expect(index.state).toBe("cold");
+    expect(s.builds).toEqual([{ fresh: true }, { fresh: true }]);
+    expect(s.log[s.log.length - 1]).toContain("cannot be reused: it was not finished, or it was kept before the build of akm was recorded");
+    index.release();
+  });
+
   test("fails when what akm says of a new index is not what the build said", async () => {
     const s = setup();
     await expect(s.open({}, async (sandbox) => { await s.build(sandbox); return 4; })).rejects.toThrow("akm indexed 4 assets, and says the index holds 3");
@@ -180,6 +197,123 @@ describe("cachedIndex", () => {
     index.release();
   });
 
+  describe("the akm that built the index", () => {
+    /** A checkout of akm: a repository with one commit, whose cli.ts is the fake akm. `commit()` makes another build of it. */
+    const checkout = () => {
+      const dir = tmp();
+      const git = (...args: string[]) => Bun.spawnSync(["git", "-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { stdout: "pipe", stderr: "pipe" });
+      const cli = join(dir, "cli.ts");
+      let commits = 0;
+      writeFileSync(cli, FAKE_AKM);
+      for (const args of [["init", "-q"], ["add", "."], ["commit", "-q", "-m", "first"]]) expect(git(...args).exitCode).toBe(0);
+      return {
+        cli,
+        sha: () => git("rev-parse", "--short", "HEAD").stdout.toString().trim(),
+        commit: () => {
+          writeFileSync(cli, `${FAKE_AKM}// ${++commits}\n`);
+          expect(git("commit", "-q", "-a", "-m", "next").exitCode).toBe(0);
+        },
+      };
+    };
+
+    test.skipIf(!Bun.which("git"))("does not let two builds of akm that print the same version share an index", async () => {
+      const s = setup();
+      const akm = checkout();
+      process.env.AKM_BIN = `bun ${akm.cli}`;
+      const spec = { cmd: ["bun", akm.cli] };
+      const first = await s.open(spec);
+      first.release();
+      const before = akm.sha();
+      expect(first.state).toBe("cold");
+      expect(first.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: "build 1" });
+      expect(first.builtBy.akm_build).toBe(before);
+      const again = await s.open(spec); // the same build
+      again.release();
+      expect(again.state).toBe("warm");
+      expect(s.builds).toHaveLength(1);
+
+      akm.commit();
+      const after = akm.sha();
+      expect(after).not.toBe(before);
+      const other = await s.open(spec); // another build, the same version, the same command
+      other.release();
+      expect(other.state).toBe("cold");
+      expect(s.builds).toEqual([{ fresh: true }, { fresh: true }]); // from nothing
+      expect(other.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: "build 2" });
+      expect(other.builtBy.akm_build).toBe(after);
+      const bin = other.builtBy.akm_bin;
+      expect(s.log[s.log.length - 1]).toBe(
+        `  the index skillret-public in the cache cannot be reused: akm, its build, its embedding model or the index's folder is not the same: it was built by akm 0.9.99 build ${before} (${bin}), and this run is akm 0.9.99 build ${after} (${bin}). Building a new one.`,
+      );
+      const last = await s.open(spec); // and the build that is kept is the one that was built last
+      last.release();
+      expect(last.state).toBe("warm");
+    });
+
+    test.skipIf(!Bun.which("git"))("says on a reuse that the checkout has changes that are not committed", async () => {
+      const s = setup();
+      const akm = checkout();
+      process.env.AKM_BIN = `bun ${akm.cli}`;
+      const spec = { cmd: ["bun", akm.cli] };
+      (await s.open(spec)).release();
+      expect(s.log).toHaveLength(0);
+      writeFileSync(akm.cli, `${FAKE_AKM}// not committed\n`);
+      // the build is now `<sha>-dirty`, so this run is another build and the index is made again
+      const dirty = await s.open(spec);
+      dirty.release();
+      expect(dirty.state).toBe("cold");
+      expect(dirty.builtBy.akm_build).toBe(`${akm.sha()}-dirty`);
+      expect(s.log).toHaveLength(1); // the line that says the earlier index cannot be reused
+      const kept = await s.open(spec);
+      kept.release();
+      expect(kept.state).toBe("warm");
+      expect(s.log[s.log.length - 1]).toContain(`was built by akm 0.9.99 build ${akm.sha()}-dirty (`);
+      expect(s.log[s.log.length - 1]).toContain("The checkout has changes that are not committed");
+    });
+
+    test("uses the index of an akm that is not a checkout again, since its version is all that tells it apart", async () => {
+      const s = setup();
+      const first = await s.open();
+      first.release();
+      expect(first.builtBy).toEqual({ version: "0.9.99", akm_bin: akmBuild().akm_bin, akm_build: null, builtAt: "build 1" });
+      const second = await s.open();
+      second.release();
+      expect(second.state).toBe("warm");
+      expect(second.builtBy).toEqual(first.builtBy);
+      expect(s.builds).toHaveLength(1);
+      const release = await s.open({ version: "0.9.100" }); // a release, not the same one
+      release.release();
+      expect(release.state).toBe("cold");
+    });
+
+    test("does not use the index that another akm command built, when neither is a checkout", async () => {
+      const s = setup();
+      (await s.open()).release();
+      const other = join(s.root, "other-akm.ts");
+      writeFileSync(other, FAKE_AKM);
+      process.env.AKM_BIN = `bun ${other}`;
+      const index = await s.open({ cmd: ["bun", other] });
+      index.release();
+      expect(index.state).toBe("cold");
+      expect(index.builtBy.akm_bin).toBe(akmBuild().akm_bin);
+    });
+
+    test("keeps who built the index in state.json, and gives it back when the index is kept", async () => {
+      const s = setup();
+      const first = await s.open();
+      first.release();
+      const saved = JSON.parse(readFileSync(join(s.folder, "state.json"), "utf8"));
+      expect(saved.builtBy).toEqual(first.builtBy);
+      expect(Object.keys(saved.builtBy)).toEqual(["version", "akm_bin", "akm_build", "builtAt"]);
+      expect(saved.builtBy).toEqual({ version: "0.9.99", ...akmBuild(), builtAt: saved.builtAt });
+      const second = await s.open();
+      second.release();
+      expect(second.state).toBe("warm");
+      expect(second.builtBy).toEqual(saved.builtBy);
+      expect(s.log[s.log.length - 1]).toBe(`  the index skillret-public is kept from an earlier run: it was built by akm 0.9.99 (${saved.builtBy.akm_bin}) at build 1.`);
+    });
+  });
+
   test("builds a new index when akm does not say what the kept one was built as, says so, and reports it as rebuilt", async () => {
     const s = setup();
     for (const [change, said] of [
@@ -195,6 +329,7 @@ describe("cachedIndex", () => {
       expect(s.builds.length).toBe(before + 1);
       expect(s.builds[before]).toEqual({ fresh: true }); // from nothing: the first index was thrown away
       expect(s.log[s.log.length - 1]).toContain(`the index of an earlier run is not what it was built as, and a new one is built from scratch. akm said: ${said}`);
+      expect(s.log[s.log.length - 1]).toContain(`The earlier index was built by akm 0.9.99 (${index.builtBy.akm_bin}) at build ${s.builds.length - 1}.`);
       index.release();
       const next = await s.open(); // and what was rebuilt is kept
       expect(next.state).toBe("warm");
