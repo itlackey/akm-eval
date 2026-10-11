@@ -1,0 +1,10 @@
+{
+  "name": "akm-eval",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "scripts/check",
+    "test": "bun test",
+    "typecheck": "scripts/check typecheck"
+  }
+}

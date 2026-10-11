@@ -129,7 +129,9 @@ describe("runCorpus", () => {
     const { summary: stored, rows } = resultsOf(folders);
     expect(stored.metrics.bad_harmful.rate).toBe(0.3333);
     expect(stored.metrics.bad_churn.rate).toBe(0.6667);
-    expect(rows.map((r) => r.severity)).toEqual(["churn", "churn", "churn", "harmful", "harmful", "harmful", undefined]);
+    // Two cases run at a time and each row is appended when its case finishes, so the file is in completion order. Look the rows up by id.
+    const severityOf = (id: string) => rows.find((r) => r.id === id).severity;
+    expect(["case-1", "case-2", "case-3", "case-4", "case-5", "case-6", "case-7"].map(severityOf)).toEqual(["churn", "churn", "churn", "harmful", "harmful", "harmful", undefined]);
   });
 
   test("a score of -1 routed to review is a review whatever the message says, and one routed nowhere is an error", async () => {

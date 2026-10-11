@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Runs every check of the repository, the ones CI runs, and stops at the first one that fails. See README.md ("Check the repository").
+#
+#   scripts/check [typecheck] [python] [test]
+#
+# With no name it runs all three, the quick ones first:
+#   typecheck  bun install --frozen-lockfile and tsc in every src folder that has a tsconfig.json
+#   python     the bakeoff suite (verify and unittest) and the tests of the akm arm in lib/harbor, with uv
+#   test       bun test at the root. Every test uses a fake akm, so none needs akm or Docker. The tests of bakeoff's --help need uv, and are skipped without it
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+cd "$root"
+
+usage() { sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+run_typecheck() {
+  local tsconfig dir found=0
+  for tsconfig in evals/*/src/tsconfig.json benchmarks/*/src/tsconfig.json scripts/*/src/tsconfig.json; do
+    [ -f "$tsconfig" ] || continue
+    dir="$(dirname "$tsconfig")"
+    found=1
+    echo "-- $dir"
+    (cd "$dir" && bun install --frozen-lockfile && bunx tsc --noEmit -p tsconfig.json) || { echo "check: the typecheck of $dir failed" >&2; return 1; }
+  done
+  [ "$found" = 1 ] || { echo "check: found no src folder with a tsconfig.json" >&2; return 1; }
+}
+
+run_python() {
+  command -v uv > /dev/null || { echo "check: uv is needed for the Python suites. See https://docs.astral.sh/uv/" >&2; return 1; }
+  # The Harbor release is pinned in lib/harbor/harbor.ts, once.
+  local harbor
+  harbor="$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)"
+  [ -n "$harbor" ] || { echo "check: could not read the Harbor pin from lib/harbor/harbor.ts" >&2; return 1; }
+  uv run --project evals/bakeoff/src --frozen python evals/bakeoff/src/bakeoff.py verify || return 1
+  uv run --project evals/bakeoff/src --frozen python -m unittest discover -s evals/bakeoff/src || return 1
+  uv run --no-project --python 3.12 --with "harbor==$harbor" --with pytest pytest lib/harbor || return 1
+}
+
+run_test() {
+  bun test
+}
+
+checks=("$@")
+case "${checks[0]:-}" in -h | --help) usage; exit 0 ;; esac
+[ "${#checks[@]}" -gt 0 ] || checks=(typecheck python test)
+for name in "${checks[@]}"; do
+  case "$name" in typecheck | python | test) ;; *) echo "check: unknown check \"$name\"" >&2; usage >&2; exit 2 ;; esac
+done
+command -v bun > /dev/null || { echo "check: bun is needed. See https://bun.sh" >&2; exit 2; }
+
+for name in "${checks[@]}"; do
+  printf '\n==> check %s\n' "$name"
+  "run_$name" || {
+    printf '\ncheck: FAILED at "%s". The checks after it did not run.\n' "$name" >&2
+    exit 1
+  }
+done
+printf '\ncheck: all passed (%s)\n' "${checks[*]}"
