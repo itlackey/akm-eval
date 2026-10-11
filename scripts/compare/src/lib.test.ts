@@ -753,6 +753,29 @@ describe("the comparison policy", () => {
     expect(refused({ harness_sha256: "d".repeat(64) })).toEqual([]); // one side has a digest and the other does not: they fall back to the commit
   });
 
+  test("the uncommitted changes of the akm build are part of the build: another fingerprint is another build, a value against null is too, and null on both sides matches", () => {
+    const [A, B] = ["a".repeat(64), "b".repeat(64)];
+    const dirty = (fingerprint: string | null) => ({ akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
+    const refused = (a: Record<string, unknown>, b: Record<string, unknown>, treatment: Axis[] = []) => found(checkMembers([member("A", "a", a), member("B", "b", b)], treatment));
+    const label = "the uncommitted changes of the akm build (akm_build_fingerprint)";
+    expect(identityOf({ ...IDENTITY, ...dirty(A) }).akm_build_fingerprint).toBe(A);
+    expect(identityOf(IDENTITY).akm_build_fingerprint).toBeNull();
+    expect(refused({}, {})).toEqual([]); // two clean builds, or two releases, or summaries from before the fingerprint
+    expect(refused(dirty(null), dirty(null))).toEqual([]);
+    expect(refused(dirty(A), dirty(A))).toEqual([]); // the same edits
+    expect(refused(dirty(A), dirty(B))).toEqual([`${label} differs: ${A.slice(0, 12)} in A, ${B.slice(0, 12)} in B`]);
+    expect(refused(dirty(A), dirty(null))).toEqual([`${label} differs: ${A.slice(0, 12)} in A, none in B`]);
+    expect(refused(dirty(null), dirty(A))).toEqual([`${label} differs: none in A, ${A.slice(0, 12)} in B`]);
+    // it is on the build axis: a build treatment lets the sides differ in it, and no other treatment does
+    expect(checkMembers([member("A", "a", dirty(A)), member("B", "b", dirty(B))], ["build"]).treated.map((f) => f.message)).toEqual([`${label} differs: ${A.slice(0, 12)} in A, ${B.slice(0, 12)} in B`]);
+    expect(refused(dirty(A), dirty(B), ["build"])).toEqual([]);
+    for (const treatment of [["config"], ["model"], ["inputs"], ["harness"]] as Axis[][]) expect(refused(dirty(A), dirty(B), treatment)).toHaveLength(1);
+    // the runs of one side are one build, whatever is being compared
+    const repeats = [member("A", "r1", dirty(A)), member("A", "r2", dirty(B)), member("A", "r3", dirty(A)), member("B", "r1", dirty(A))];
+    expect(found(checkMembers(repeats, []))).toEqual([`${label} differs: ${A.slice(0, 12)} in A r1 and r3 and B, ${B.slice(0, 12)} in A r2`]);
+    expect(found(checkMembers(repeats, ["build"]))).toEqual([`${label} differs among the repeats of A: ${A.slice(0, 12)} in A r1 and r3, ${B.slice(0, 12)} in A r2`]);
+  });
+
   test("a declared axis may differ between the sides, and is listed as the treatment; every other still may not", () => {
     const r = checkMembers([member("A", "a"), member("B", "b", { akm_version: "0.10.0", akm_build: "b2", model: "m2" })], ["build"]);
     expect(found(r)).toEqual(["the model differs: m1 in A, m2 in B"]);
@@ -836,6 +859,19 @@ describe("a release against a release", () => {
     expect(refuse({ assets_sha256: "c".repeat(64) })).toThrow(/the cases \(assets_sha256\) differs/);
     expect(refuse({ git_commit: "9999999" })).toThrow(/the eval's code differs: commit 5d1c0de in A, commit 9999999 in B/);
     expect(refuse({ strategy: "quick" })).toThrow(/the strategy differs/);
+  });
+
+  test("two edits of one akm commit are two builds: refused, unless the build is the treatment", () => {
+    const edited = (dir: string, right: number, fingerprint: string | null) => release(dir, right, { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
+    const [a, b] = [edited("a", 8, "a".repeat(64)), edited("b", 13, "b".repeat(64))];
+    const refusal = /the uncommitted changes of the akm build \(akm_build_fingerprint\) differs: aaaaaaaaaaaa in A, bbbbbbbbbbbb in B\. If a difference is what you are measuring, name its axis with --treatment/;
+    expect(() => comparePair(loadRun(a), loadRun(b))).toThrow(refusal);
+    expect(() => comparePair(loadRun(a), loadRun(edited("c", 13, null)))).toThrow(/differs: aaaaaaaaaaaa in A, none in B/);
+    const r = comparePair(loadRun(a), loadRun(b), { treatment: ["build"] });
+    expect(r.treated).toEqual([`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
+    expect(r.exploratory).toEqual([]);
+    // the same edits are the same build
+    expect(comparePair(loadRun(a), loadRun(edited("d", 13, "a".repeat(64)))).views[0].better).toHaveLength(5);
   });
 
   test("the model and the config may differ when they are the treatment, as they did before there was a flag", () => {
@@ -924,6 +960,12 @@ describe("two sets of repeats", () => {
     const releases = runs(B, "r", { akm_version: "0.10.0" });
     expect(refuse(bad(aDirs, { akm_build: "other" }), releases, ["build"])).toThrow(/the akm build differs among the repeats of A/);
     expect(refuse(aDirs, bad(releases, { assets_sha256: "c".repeat(64) }), ["build"])).toThrow(/the cases \(assets_sha256\) differs/);
+    // the third repeat of A was made from other edits of the same akm commit: the same, with or without a build treatment
+    const edited = (dirs: string[]): string[] => dirs.map((d, i) => nightlyRun(join(tmp(), `edit-r${i + 1}`), A[i], { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: (i === 2 ? "b" : "a").repeat(64) }));
+    for (const [treatment, other] of [[["config"], bDirs], [["build"], releases]] as [Axis[], string[]][]) {
+      expect(refuse(edited(aDirs), other, treatment)).toThrow(/the uncommitted changes of the akm build \(akm_build_fingerprint\) differs/);
+    }
+    expect(refuse(edited(aDirs), edited(aDirs), ["build"])).toThrow(/differs among the repeats of A/);
     // and a release against a release works when all of them agree
     const r = compareSets(aDirs.map(loadRun), releases.map(loadRun), { treatment: ["build"] });
     expect(r.exploratory).toEqual([]);

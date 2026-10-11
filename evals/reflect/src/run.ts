@@ -13,12 +13,14 @@ import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { type Case, type Metrics, type Row, CLASSES, STRATEGY, assetsSha256, atLeast, corpusSeed, generatedProblem, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel, timedOutMessage } from "./lib.ts";
 
 const NAME = "reflect";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 export const MIN_AKM = "0.9.25-alpha.3"; // the first release where reflect changes only the frontmatter
 const GIVE_UP_AFTER = 5; // consecutive cases that error, before any case gets an outcome
 
@@ -47,11 +49,15 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   limit: number | null;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
@@ -214,6 +220,7 @@ export async function runCorpus(
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

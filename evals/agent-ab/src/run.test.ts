@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AkmArm, PINS, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -169,7 +170,9 @@ describe("runCorpus", () => {
     const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env }, join(root, "results")));
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ eval: "agent-ab", corpus: "public", model: "openai/x", limit: 3, n_tasks: 3, attempts: 1, harbor_exit: 0 });
-    expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_env: {} });
+    expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_build_fingerprint: null, akm_env: {} });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
     expect(stored.pins).toEqual(PINS);
     // The task list, the options of both agents and the concurrency, from job.json, with no folder of this machine.
     expect(stored.job.datasets).toEqual([{ path: "evals/agent-ab/tasks", task_names: selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3) }]);
@@ -247,13 +250,13 @@ describe("runCorpus", () => {
     const packs = tmp();
     writeFileSync(join(packs, "akm-cli-0.9.27.tgz"), "an akm");
     writeFileSync(join(packs, "akm-opencode-0.9.27.tgz"), "a plugin");
-    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: packs };
+    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc-dirty", build_fingerprint: "e".repeat(64), cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: packs };
     const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, join(root, "results")));
     const kwargs = readJson(join(s.results_dir, "job.json")).agents[1].kwargs;
     expect(kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", packages_dir: join(s.results_dir, "akm-packages"), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(readFileSync(join(s.results_dir, "akm-packages", "akm-opencode-0.9.27.tgz"), "utf8")).toBe("a plugin");
     const stored = readJson(join(s.results_dir, "summary.json"));
-    expect(stored).toMatchObject({ akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(stored).toMatchObject({ akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc-dirty", akm_build_fingerprint: "e".repeat(64), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(stored.pins).toEqual({ ...PINS, akm_cli: "0.9.27", akm_plugin: "0.9.27" });
     expect(stored.akm_install).toMatchObject({ from: "checkout", plugin_from: "checkout", plugin_version: "0.9.27", packages: [{ file: "akm-cli-0.9.27.tgz" }, { file: "akm-opencode-0.9.27.tgz" }] });
     expect(stored.job.agents[1].kwargs).toMatchObject({ packages_dir: "akm-packages", akm_env: { AKM_CURATE_TIMEOUT: "30" } });

@@ -12,6 +12,7 @@ import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAk
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type RunInputs, assetsDigest, privateAssetsProblem, privateSeed, runInputs } from "./inputs.ts";
@@ -22,6 +23,8 @@ const NAME = "consolidate";
 const STRATEGY = "consolidate"; // the strategy akm ships for consolidate alone
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 const INDEX_TIMEOUT_MS = 2 * 60_000;
 const REAL_INDEX_TIMEOUT_MS = 30 * 60_000; // the real embedder loads its model to index, and the first run downloads it (133 MB)
 const IMPROVE_TIMEOUT_MS = 30 * 60_000; // up to three model calls on a slow local model
@@ -71,11 +74,15 @@ interface Summary extends RunInputs {
   status: "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   /** How akm embedded the notes to find pairs: its deterministic word-hash embedder, or its built-in model. */
   embedder: Embedder;
   limit: number | null;
@@ -295,6 +302,7 @@ export async function runCorpus(
     status: stop ? "aborted" : "complete",
     aborted_reason: stop?.reason ?? null,
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
@@ -331,10 +339,14 @@ interface PoolSummary extends RunInputs {
   status: "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   embedder: Embedder;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
@@ -424,6 +436,7 @@ export async function runPool(ctx: PoolContext, pool: Pool = loadPool(POOL_DIR),
     status: result.error ? "aborted" : "complete",
     aborted_reason: result.error ?? null,
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

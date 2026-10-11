@@ -11,7 +11,7 @@ import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAk
 import { Fatal, exitMessage, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
-import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { CASES, casesSha256, privateAssetsProblem, privateSeed, rubricVersion } from "./inputs.ts";
@@ -20,6 +20,8 @@ import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow,
 const NAME = "judge-gate";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 const CONCURRENCY = 2;
 const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
 const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
@@ -52,11 +54,15 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   limit: number | null;
   /** The improve strategy the config makes the default, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
@@ -197,6 +203,7 @@ export async function runCorpus(
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

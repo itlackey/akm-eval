@@ -12,6 +12,7 @@ import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAk
 import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type RunInputs, assetsDigest, privateAssetsProblem, privateSeed, runInputs } from "../../consolidate/src/inputs.ts";
@@ -24,6 +25,8 @@ const STRATEGY = "default"; // the strategy akm ships, and the one the lab runs
 export const MIN_AKM = "0.9.26"; // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => join(ROOT, "evals", name, "src")) });
 const STEP_TIMEOUT_MS = 5 * 60_000; // an akm command that calls no model
 const REAL_INDEX_TIMEOUT_MS = 30 * 60_000; // the real embedder loads its model to index, and the first run downloads it (133 MB)
 const IMPROVE_BUDGET_MS = 45 * 60_000; // akm's own wall-clock budget for the improve run: it skips what it has not reached
@@ -62,11 +65,15 @@ interface Summary extends RunInputs {
   status: "complete";
   aborted_reason: null;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   /** How akm embedded the notes to find pairs: its deterministic word-hash embedder, or its built-in model. */
   embedder: Embedder;
   limit: number | null;
@@ -283,6 +290,7 @@ export async function runCorpus(
     status: "complete",
     aborted_reason: null,
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

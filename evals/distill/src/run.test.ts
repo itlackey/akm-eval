@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsSha256, distillConfig } from "./lib.ts";
 import { runCorpus } from "./run.ts";
 
@@ -246,6 +247,9 @@ describe("runCorpus", () => {
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     // the same files give the same digest, whatever their folder; another memory gives another
     const again = await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
     expect(again.assets_sha256).toBe(summary.assets_sha256);

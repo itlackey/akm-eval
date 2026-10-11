@@ -1,8 +1,9 @@
 // What ties a run to its inputs, for the summary.json every eval writes: digests of the files it read, the config it ran
-// with (secrets redacted) and the settings of the model it called. Pure helpers: they read the files they are given, nothing else.
+// with (secrets redacted), the settings of the model it called, and the code it ran. Pure helpers: they read the files they are given, nothing else.
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const sha256 = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex");
 
@@ -10,13 +11,55 @@ export const sha256Text = (text: string): string => sha256(text);
 
 export const sha256File = (path: string): string => sha256(readFileSync(path));
 
+/** The digest of a manifest: a line for each [name, content digest], in the order of the names. */
+const manifestDigest = (entries: [string, string][]): string =>
+  sha256([...entries].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, digest]) => `${name}\0${digest}\n`).join(""));
+
 /**
  * One digest over the files, in the order of their paths. It covers each path as given and each file's content, so a file
  * renamed, added, dropped or changed gives another digest. Pass paths relative to a fixed folder for a digest that holds on another machine.
  */
 export function sha256Files(paths: string[]): string {
-  const sorted = [...paths].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  return sha256(sorted.map((path) => `${path}\0${sha256File(path)}\n`).join(""));
+  return manifestDigest(paths.map((path) => [path, sha256File(path)]));
+}
+
+/** The repository root, one folder above lib/. */
+const REPO_ROOT = resolve(import.meta.dir, "..");
+
+/** A file that tests the code and is not the code: `*.test.ts`, `test_*.py`, and `fakes.ts`, the test doubles that only tests import. */
+const testFile = (name: string): boolean => /\.test\.ts$/.test(name) || /^test_.*\.py$/.test(name) || name === "fakes.ts";
+
+/** The files in `dir` and the folders below it whose name ends in one of `extensions`, without tests, fixtures, dependencies and caches. */
+function codeFiles(dir: string, extensions: string[]): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name.startsWith(".") || ["node_modules", "__pycache__", "fixtures"].includes(entry.name) ? [] : codeFiles(path, extensions);
+    return entry.isFile() && !testFile(entry.name) && extensions.some((ext) => entry.name.endsWith(ext)) ? [path] : [];
+  });
+}
+
+/**
+ * The digest of the code a run was made with, for the `harness_sha256` of a summary.json: one sha256 over a manifest of the eval's own
+ * source files (every `.ts` and `.py` in `evalSrcDir`, at any depth) and of the shared code it runs on (every `.ts` file under lib/, and
+ * lib/env.sh). The manifest has the path of each file from the repository root, with the digest of its content, in the order of the
+ * paths. It leaves out the tests (`*.test.ts`, `test_*.py`, `fakes.ts`), the fixtures, the dependencies and the READMEs, since none of
+ * them changes what a run measures. The digest does not depend on where the checkout is, and it covers edits that are not committed,
+ * which `git_commit` does not.
+ *
+ * `also` names the src folders of other evals whose code this one imports (nightly scores with the checks of consolidate, distill and
+ * reflect), counted the same way. `root` is the checkout the code is in: this one, but for tests.
+ */
+export function harnessSha256(evalSrcDir: string, options: { also?: string[]; root?: string } = {}): string {
+  const base = resolve(options.root ?? REPO_ROOT);
+  const folders = [evalSrcDir, ...(options.also ?? [])].map((dir) => resolve(dir));
+  for (const dir of folders) {
+    const inside = relative(base, dir);
+    if (inside === "" || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) throw new Error(`${dir} is not inside the repository at ${base}`);
+  }
+  const env = join(base, "lib", "env.sh");
+  const paths = new Set([...folders.flatMap((dir) => codeFiles(dir, [".ts", ".py"])), ...codeFiles(join(base, "lib"), [".ts"]), ...(existsSync(env) ? [env] : [])]);
+  return manifestDigest([...paths].map((path) => [relative(base, path).split(sep).join("/"), sha256File(path)]));
 }
 
 /** A `$NAME` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */

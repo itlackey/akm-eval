@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { type AkmArm, PINS, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -173,12 +174,12 @@ describe("summarize", () => {
 
   test("names the akm as the other evals do, the settings it ran with, and what the run was made of", () => {
     const dir = runDir({ [`${one}__a`]: result(one, "opencode"), [`${one}__b`]: result(one, "akm-opencode") });
-    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: "/p" };
+    const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc-dirty", build_fingerprint: "e".repeat(64), cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: "/p" };
     writeFileSync(join(dir, "jobs", "terminal-bench-public", `${one}__b`, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.27", plugin_akm_cli: "0.9.26", assets_indexed: 259, env: { AKM_CURATE_TIMEOUT: "30" } }));
     const library = { assets: 259, measured_with: { akm_version: "0.9.26", akm_bin: "akm", akm_build: null }, sha256: "ab".repeat(32) };
     const s = summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, attempts: 3, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" }, packages: [{ file: "akm-cli-0.9.27.tgz", sha256: "0".repeat(64) }], library, job: { n_attempts: 3 } });
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    expect(stored).toMatchObject({ attempts: 3, akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc", akm_env: { AKM_CURATE_TIMEOUT: "30" }, job: { n_attempts: 3 } });
+    expect(stored).toMatchObject({ attempts: 3, akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc-dirty", akm_build_fingerprint: "e".repeat(64), akm_env: { AKM_CURATE_TIMEOUT: "30" }, job: { n_attempts: 3 } });
     expect(stored.pins).toEqual(pinsOf(arm));
     expect(stored.pins.akm_cli).toBe("0.9.27");
     expect(stored.akm_install).toMatchObject({ from: "checkout", plugin_from: "release", packages: [{ file: "akm-cli-0.9.27.tgz" }], observed: { akm_version: ["0.9.27"], plugin_akm_cli: ["0.9.26"], assets_indexed: [259], env: { AKM_CURATE_TIMEOUT: "30" } } });
@@ -190,10 +191,13 @@ describe("summarize", () => {
     const dir = runDir({ [`${one}__a`]: result(one, "opencode", { verifier_result: { rewards: { reward: 0 } } }), [`${one}__b`]: result(one, "akm-opencode") });
     summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0 });
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    for (const key of ["eval", "corpus", "model", "akm_version", "akm_bin", "akm_build", "n_errored", "metrics"]) expect(Object.hasOwn(stored, key)).toBe(true);
+    for (const key of ["eval", "corpus", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "harness_sha256", "status", "aborted_reason", "n_errored", "metrics"]) expect(Object.hasOwn(stored, key)).toBe(true);
     expect(stored.akm_version).toBe(PINS.akm_cli);
     expect(stored.akm_bin).toBe(`akm-cli@${PINS.akm_cli}`);
     expect(stored.akm_build).toBeNull();
+    expect(stored.akm_build_fingerprint).toBeNull(); // a release has no checkout to fingerprint
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this benchmark's code, the retrieval code it imports and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: [resolve(import.meta.dir, "..", "..", "..", "evals", "retrieval", "src")] }));
     expect(stored.n_errored).toBe(0);
     expect(stored.metrics).toMatchObject({ control: { pass_rate: 0 }, akm: { pass_rate: 1 }, delta: { value: 1, n: 1 }, engagement: { control_calls: 0 } });
     expect(stored.report.delta.value).toBe(stored.metrics.delta.value);

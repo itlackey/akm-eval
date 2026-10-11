@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
-import { sha256Files } from "../../../lib/provenance.ts";
+import { harnessSha256, sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
@@ -414,6 +414,30 @@ describe("runCorpus", () => {
     }
   });
 
+  test("resume takes two edits of one akm commit for two builds, and a summary from before the fingerprint for a clean one", async () => {
+    const { akm, folders } = setup();
+    const dirOf = (label: string) => join(folders.results, readdirSync(folders.results).find((d) => d.endsWith(`-${label}`)) as string);
+    const build = { akm_bin: "bun ~/code/akm/src/cli.ts", akm_build: "v0.9.26-1-gabc123-dirty" as string | null, akm_build_fingerprint: "a".repeat(64) as string | null };
+    const context = { akm, model: null, judge: null, version: "v", build };
+    await quiet(() => runCorpus("public", { label: "edited", sampleSeed: 1 }, context, folders));
+    const edited = dirOf("edited");
+    expect(JSON.parse(readFileSync(join(edited, "summary.json"), "utf8"))).toMatchObject(build);
+    const resume = (dir: string, c: typeof context) => quiet(() => runCorpus("public", { label: "r", sampleSeed: 1, resume: dir }, c, folders));
+    // the same commit with other edits, or with none, is another build
+    await expect(resume(edited, { ...context, build: { ...build, akm_build_fingerprint: "b".repeat(64) } })).rejects.toThrow(`different akm build fingerprint (${"a".repeat(64)}, now ${"b".repeat(64)})`);
+    await expect(resume(edited, { ...context, build: { ...build, akm_build_fingerprint: null } })).rejects.toThrow(`different akm build fingerprint (${"a".repeat(64)}, now none)`);
+    expect(await resume(edited, context)).toMatchObject({ complete: true, akm_build_fingerprint: "a".repeat(64) }); // the same edits carry on
+
+    // a run of a clean build has none, and neither has a summary written before the key existed: both resume as a clean build, and not as an edited one
+    const clean = { ...build, akm_build: "v0.9.26-1-gabc123", akm_build_fingerprint: null as string | null };
+    await quiet(() => runCorpus("public", { label: "clean", sampleSeed: 1 }, { ...context, build: clean }, folders));
+    const older = dirOf("clean");
+    const { akm_build_fingerprint: _gone, ...before } = JSON.parse(readFileSync(join(older, "summary.json"), "utf8"));
+    writeFileSync(join(older, "summary.json"), JSON.stringify(before));
+    await expect(resume(older, { ...context, build: { ...clean, akm_build_fingerprint: "c".repeat(64) } })).rejects.toThrow(`different akm build fingerprint (none, now ${"c".repeat(64)})`);
+    expect(await resume(older, { ...context, build: clean })).toMatchObject({ complete: true, akm_build_fingerprint: null });
+  });
+
   test("with no model it only measures what akm retrieves", async () => {
     const { akm, folders } = setup();
     const quiet = console.log;
@@ -425,6 +449,11 @@ describe("runCorpus", () => {
       expect(summary.metrics.retrieval).toMatchObject({ n: 2, hit_rate: 0.5 });
       expect(summary.metrics.retrieval_abstention).toEqual({ n: 1 });
       expect(summary).toMatchObject({ model_endpoint: null, judge_endpoint: null, temperature: null, max_tokens: null });
+      const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
+      expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
+      expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this benchmark's code and lib/
+      expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+      expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     } finally {
       console.log = quiet;
     }

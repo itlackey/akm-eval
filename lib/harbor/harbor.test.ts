@@ -272,9 +272,17 @@ describe("packAkm", () => {
     const sha = git("rev-parse", "--short", "HEAD").stdout.toString().trim();
     expect(checkoutBuild(dir)).toBe(sha);
     expect(packAkm(dir, join(tmp(), "pack"), fakePack).arm.build).toBe(sha);
+    expect(packAkm(dir, join(tmp(), "pack"), fakePack).arm.build_fingerprint).toBeNull(); // a clean checkout has no changes to fingerprint
     writeFileSync(join(dir, "src", "cli.ts"), "export const changed = 1;\n");
     expect(checkoutBuild(dir)).toBe(`${sha}-dirty`);
-    expect(packAkm(dir, join(tmp(), "pack"), fakePack).arm.bin).toBe(dir);
+    const edited = packAkm(dir, join(tmp(), "pack"), fakePack).arm;
+    expect(edited.bin).toBe(dir);
+    expect(edited.build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    // The same commit with another edit has the same build and another fingerprint.
+    writeFileSync(join(dir, "src", "cli.ts"), "export const changed = 2;\n");
+    const again = packAkm(dir, join(tmp(), "pack"), fakePack).arm;
+    expect(again.build).toBe(edited.build);
+    expect(again.build_fingerprint).not.toBe(edited.build_fingerprint);
   });
 
   test("packs into a relative folder as into the absolute one, since npm pack runs in the checkout and would read it from there", () => {
@@ -637,14 +645,16 @@ describe("akmSummary", () => {
       akm_version: PINS.akm_cli,
       akm_bin: `akm-cli@${PINS.akm_cli}`,
       akm_build: null,
+      akm_build_fingerprint: null,
       akm_env: {},
       akm_install: { from: "release", plugin_from: "release", plugin_version: PINS.akm_plugin, packages: [], observed },
     });
-    const arm: AkmArm = { bin: "~/akm", build: "v0.9.27-3-gabc", cli: { version: "0.9.27", tarball: "a.tgz" }, plugin: { version: "0.9.27", tarball: null }, packages: "/p" };
+    const arm: AkmArm = { bin: "~/akm", build: "v0.9.27-3-gabc-dirty", build_fingerprint: "f".repeat(64), cli: { version: "0.9.27", tarball: "a.tgz" }, plugin: { version: "0.9.27", tarball: null }, packages: "/p" };
     expect(akmSummary(arm, { AKM_X: "1" }, [{ file: "a.tgz", sha256: "0".repeat(64) }], observed)).toMatchObject({
       akm_version: "0.9.27",
       akm_bin: "~/akm",
-      akm_build: "v0.9.27-3-gabc",
+      akm_build: "v0.9.27-3-gabc-dirty",
+      akm_build_fingerprint: "f".repeat(64),
       akm_env: { AKM_X: "1" },
       akm_install: { from: "checkout", plugin_from: "release", packages: [{ file: "a.tgz" }] },
     });

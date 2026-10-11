@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
@@ -417,7 +418,11 @@ describe("runCorpus", () => {
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
     expect(JSON.stringify(summary)).not.toContain("localhost:1/v1");
     // every key it wrote before is still there
-    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics"]) expect(summary).toHaveProperty(key);
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
+    // the digest of the code covers the night's own src folder, the consolidate, distill and reflect code it imports, and lib/
+    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => resolve(import.meta.dir, "..", "..", name, "src")) }));
+    expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
   test("the digest of the night follows the library and the items, and the config follows the config patch", async () => {

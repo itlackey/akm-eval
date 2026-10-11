@@ -13,6 +13,7 @@ import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandb
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
@@ -24,6 +25,8 @@ import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from 
 const NAME = "longmemeval";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 const TOP_K = 5;
 const DEFAULT_SAMPLE_SEED = 42;
 const MAX_ANSWER_TOKENS = 512;
@@ -111,6 +114,8 @@ interface Summary {
   status: "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string | null;
   judge_model: string | null;
   observed_models: string[];
@@ -125,6 +130,8 @@ interface Summary {
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   top_k: number;
   /** How akm searched: keyword, or semantic (--semantic), in which every search was checked to have come back semantic. */
   search_mode: SearchMode;
@@ -272,6 +279,7 @@ export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; 
     status: ctx.complete ? "complete" : "aborted",
     aborted_reason: ctx.complete ? null : (ctx.abortedReason ?? UNFINISHED),
     git_commit: gitCommit(),
+    harness_sha256: HARNESS,
     model: ctx.model?.model ?? null,
     judge_model: ctx.judge?.model ?? null,
     observed_models: [...new Set([...seen("without_akm", "model"), ...seen("with_akm", "model")])],
@@ -356,8 +364,8 @@ function printSideBySide(a: Summary, b: Summary): void {
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one: the same corpus,
- * model, judge and the hosts they are called at, akm (version, command, build and config), search mode, dataset, the digest of
- * its files and sample. A question with an arm that errored is asked again.
+ * model, judge and the hosts they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and
+ * config), search mode, dataset, the digest of its files and sample. A question with an arm that errored is asked again.
  */
 export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; assets_sha256: string; sample: Sample; version: string; build: Build; searchMode: SearchMode; config: unknown }): Row[] {
   const summaryPath = join(dir, "summary.json");
@@ -376,6 +384,7 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
     ["akm version", prior.akm_version, now.version],
     ["akm command", prior.akm_bin, now.build.akm_bin],
     ["akm build", prior.akm_build, now.build.akm_build],
+    ["akm build fingerprint", prior.akm_build_fingerprint ?? null, now.build.akm_build_fingerprint], // two edits of one commit are two builds; a summary that predates the fingerprint has none
     ["search mode", prior.search_mode, now.searchMode],
     ["akm config", JSON.stringify(prior.config), JSON.stringify(now.config)],
     ["reader order", prior.reader_order, READER_ORDER],

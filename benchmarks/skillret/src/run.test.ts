@@ -3,10 +3,11 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, publicCorpus } from "./dataset.ts";
 import { type Split, fakeAkmScript, sandboxRunning, writeAssets } from "./fakes.ts";
-import { CURATE_CHECK, assetsDigest, curateSample, runCorpus, withSemantic } from "./run.ts";
+import { CURATE_CHECK, assetsDigest, curateSample, failureOf, runCorpus, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -193,6 +194,11 @@ describe("runCorpus", () => {
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     expect(stored).toMatchObject({ eval: "skillret", corpus: "public", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 15, workers: 3, n_skills: 6, n_queries: 4 });
     expect(stored.errored).toEqual({ search: 0, semantic_search: 0 });
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null }); // every call answered
+    expect(failureOf([summary])).toBeUndefined();
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this benchmark's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(stored.no_results).toEqual({ search: 0, semantic_search: 0 });
     expect(Object.keys(stored.index_seconds)).toEqual(["keyword", "semantic"]);
     expect(Object.keys(stored.metrics)).toEqual(["search", "semantic_search"]);
@@ -455,6 +461,12 @@ describe("runCorpus", () => {
     expect(lines.join("\n")).toContain("errored calls: akm search 2");
     expect(lines.join("\n")).toContain("errored calls: akm search, semantic 2");
     expect(lines.join("\n")).toContain("curate check: 2 curate calls on the semantic index failed");
+    // a run with calls that failed is aborted: the summary says so, with the same reason the run fails with, the 8 calls of search and of the curate check
+    const reason = "8 akm calls failed. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
+    expect(summary).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([summary])).toBe(reason);
+    expect(failureOf([summary, summary])).toStartWith("16 akm calls failed.");
   });
 
   test("stops when akm indexes fewer assets than there are skills", async () => {
@@ -523,6 +535,9 @@ describe("runCorpus", () => {
     const table = lines.join("\n");
     expect(table).toContain("errored calls: akm search 2 (left out of its numbers; 1 of them timed out)");
     expect(table).toContain("curate check: 2 curate calls on the keyword index failed (1 of them timed out)");
+    const reason = "4 akm calls failed, 2 of them by timing out. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
+    expect(stored).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([summary])).toBe(reason);
   });
 
   test("stops with a message when akm cannot be run", async () => {
