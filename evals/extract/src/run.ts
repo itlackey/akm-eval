@@ -11,7 +11,7 @@ import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson,
 import { Fatal, exitMessage, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { engineSettings, redactConfig, type EngineSettings } from "../../../lib/provenance.ts";
+import { engineSettings, harnessSha256, redactConfig, type EngineSettings } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
@@ -20,6 +20,8 @@ import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorR
 const NAME = "extract";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir, { also: [join(ROOT, "evals", "reflect", "src")] });
 export const MIN_AKM = "0.9.26"; // the release this eval was built on: its `proposal extract` flags, its result and its queue are the ones the README describes
 const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
@@ -49,11 +51,15 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   limit: number | null;
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
@@ -66,6 +72,9 @@ interface Summary {
   assets_sha256: string;
   /** The seed that made the private corpus, as written. Null for the public corpus, and when the private seed cannot be found. */
   seed: string | null;
+  /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer sessions than it selected. Then aborted_reason says why. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   n_cases: number;
   n_run: number;
   n_scored: number;
@@ -200,18 +209,20 @@ export async function runCorpus(
     console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.id.padEnd(13)} ${row.seconds}s  ${shown}`);
     consecutiveErrors = row.outcome === "error" ? consecutiveErrors + 1 : 0;
     if (consecutiveErrors >= GIVE_UP_AFTER) {
-      aborted = row.error;
+      aborted = row.error || "no message";
       break;
     }
   }
 
   const errored = rows.filter((r) => r.outcome === "error").length;
+  const abortedReason = `${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
   const summary: Summary = {
     eval: NAME,
     corpus,
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),
@@ -221,6 +232,8 @@ export async function runCorpus(
     engine: engineSettings(config),
     assets_sha256: assetsSha256,
     seed: corpus === "private" && folders.map !== undefined && folders.seed !== undefined ? privateSeed(folders.map, folders.seed) : null,
+    status: aborted ? "aborted" : "complete",
+    aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
     n_run: rows.length,
     n_scored: rows.length - errored,
@@ -229,10 +242,11 @@ export async function runCorpus(
     metrics: metrics(rows),
     results_dir: dir,
   };
+  // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
   const { results_dir: _dir, ...stored } = summary;
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(stored, null, 2)}\n`);
   printSummary(summary);
-  if (aborted) fail(`${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
+  if (aborted) fail(`${abortedReason}\nCheck MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and whether the endpoint is rate limiting you.`, 1);
   return summary;
 }
 

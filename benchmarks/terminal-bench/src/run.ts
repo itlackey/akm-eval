@@ -42,13 +42,15 @@ import {
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, buildReport, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
-import { redactConfig } from "../../../lib/provenance.ts";
+import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 
 const NAME = "terminal-bench";
 const BENCH_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir, { also: [join(ROOT, "evals", "retrieval", "src")] });
 
 const DEFAULT_ATTEMPTS = 1; // per task and arm
 const LIBRARY = "library"; // the library's folder in what the akm arm uploads, and so its AKM_TASK_STASH
@@ -104,11 +106,15 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** What `--akm` named, with the home folder as ~: akm-cli@x.y.z or the checkout's folder. akm_build is the checkout's git describe, null for a release. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   akm_env: Record<string, string>;
   akm_install: ReturnType<typeof akmSummary>["akm_install"];
   pins: Pins;
@@ -289,6 +295,7 @@ export function summarize(o: {
     label: o.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: o.model,
     ...akmSummary(arm, akmEnv, o.packages ?? [], observed),
     pins: pinsOf(arm),

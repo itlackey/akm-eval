@@ -3,11 +3,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
-import { sha256File } from "../../../lib/provenance.ts";
+import { harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
-import { collectionsFor, runCollection, withSemantic } from "./run.ts";
+import { collectionsFor, failureOf, runCollection, withSemantic } from "./run.ts";
 
 const dirs: string[] = [];
 /** The caller's AKM_BIN. A run records the akm it was started with, so setup() points AKM_BIN at the fake akm it makes, and every test puts the caller's back. */
@@ -218,6 +218,10 @@ describe("runCollection", () => {
     const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
     expect(stored.results_dir).toBeUndefined();
     expect(stored.metrics.curate.n).toBe(3);
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
 
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.map((r) => r.id)).toEqual(["q1", "q2", "q3", "q4", "n1", "n2"]);
@@ -266,6 +270,31 @@ describe("runCollection", () => {
     const rows = readFileSync(join(s.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[6].semantic_search.error).toContain("searched with fts-fallback, not semantic");
     expect(rows[6].search.refs).toEqual(["f/x"]);
+  });
+
+  test("a run with a semantic call that failed is aborted, and says why in the summary it writes, which the run then fails with", async () => {
+    const { ctx, folders } = setup([...QUERIES, { id: "q5", query: "fallback", kind: "direct" }], [...QRELS, grade("q5", "f/x", 3)]);
+    const s = await quiet(() => runCollection("public", "library", ctx, folders));
+    const reason = "1 semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.";
+    expect(s).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: reason });
+    expect(failureOf([s])).toBe(reason);
+    // each collection's summary says it for itself, and the run fails with the failed calls of all of them
+    const clean = setup(QUERIES.filter((q) => q.id !== "q4"), QRELS.filter((r) => r.id !== "q4"));
+    const fine = await quiet(() => runCollection("public", "books", clean.ctx, clean.folders));
+    expect(fine).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(JSON.parse(readFileSync(join(fine.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(failureOf([fine])).toBeUndefined();
+    expect(failureOf([fine, s])).toBe(reason);
+    expect(failureOf([s, s])).toStartWith("2 semantic calls failed");
+  });
+
+  test("a keyword call that failed is counted and left out, and does not abort the run: only the semantic calls do", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection("public", "library", { ...ctx, semantic: false }, folders));
+    expect(s.errored).toEqual({ search: 1, curate: 0 }); // q4's search call failed
+    expect(s).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(failureOf([s])).toBeUndefined();
   });
 
   test("stops before the queries when the first semantic search does not say how it searched, and counts a later one as an error", async () => {

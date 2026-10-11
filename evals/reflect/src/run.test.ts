@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
 import { type Case, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
@@ -191,6 +192,9 @@ describe("runCorpus", () => {
     expect(stored.engine).toEqual({ engine: "reflect", model: "the-model", endpoint: "localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     const again = await quiet(() => runCorpus("public", ctx, setup(cases.slice(0, 1), plan).folders));
     expect(again.assets_sha256).toBe(stored.assets_sha256);
     const other = await quiet(() => runCorpus("public", ctx, setup(cases.slice(0, 2), plan).folders));

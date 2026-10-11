@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Case, assetsSha256, promotionConfig } from "./lib.ts";
 import { callStats, foldersFor, plant, runCorpus } from "./run.ts";
 
@@ -145,6 +146,9 @@ describe("runCorpus", () => {
     expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: "localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.cases, folders.library));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
   test("the digest of the assets is the same for the same files in another folder, and changes with a case or a library note", async () => {

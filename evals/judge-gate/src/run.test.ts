@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, judgeConfig } from "./lib.ts";
 import { runCorpus } from "./run.ts";
@@ -96,6 +97,9 @@ describe("runCorpus", () => {
     ]);
     const summary = await quiet(() => runCorpus("public", ctx, folders));
     expect(summary).toMatchObject({ eval: "judge-gate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 7, n_run: 7, n_scored: 6, n_errored: 1, timeouts: 0, status: "complete", aborted_reason: null });
+    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of the eval's code and lib/, as lib/provenance.ts counts them
+    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(summary.metrics.good).toEqual({ n: 3, passed: 1, rate: 0.3333 });
     expect(summary.metrics.bad).toEqual({ n: 3, passed: 1, rate: 0.3333 });
     expect(summary.metrics.precision).toEqual({ value: 0.5, passed_good: 1, passed: 2 });

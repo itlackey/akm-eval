@@ -66,6 +66,8 @@ export interface Identity {
   private: boolean;
   akm_version: string | null;
   akm_build: string | null;
+  /** What the akm checkout holds beyond its commit (a digest), null for a clean checkout or a release. */
+  akm_build_fingerprint: string | null;
   akm_bin: string | null;
   strategy: string | null;
   config_patch: string | null;
@@ -92,6 +94,7 @@ export function identityOf(s: Row): Identity {
     private: s.corpus === "private",
     akm_version: text(s.akm_version),
     akm_build: text(s.akm_build),
+    akm_build_fingerprint: text(s.akm_build_fingerprint),
     akm_bin: text(s.akm_bin),
     strategy: text(s.strategy),
     config_patch: isObject(s.config_patch) ? text(s.config_patch.sha256) : null,
@@ -156,6 +159,7 @@ const FIELDS: Field[] = [
   { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases)" },
   { name: "akm_version", axis: "build", label: "the akm version" },
   { name: "akm_build", axis: "build", label: "the akm build", none: "release" },
+  { name: "akm_build_fingerprint", axis: "build", label: "the uncommitted changes of the akm build (akm_build_fingerprint)", none: "none" },
   { name: "akm_bin", axis: "build", label: "the akm command (akm_bin)" },
   { name: "strategy", axis: "config", label: "the strategy" },
   { name: "config_patch", axis: "config", label: "the config patch" },

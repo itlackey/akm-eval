@@ -1210,6 +1210,31 @@ describe("the identity of every run behind a result", () => {
     expect(verdictAndNote(oneConfig([], { treatment: "model" }), { model: "m2" }).verdict).toBe("better");
   });
 
+  test("two edits of one akm commit are two builds: not comparable inside a repeat set and across the sides, unless the build is the treatment", () => {
+    const [A, B] = ["a".repeat(64), "b".repeat(64)];
+    const edited = (fingerprint: string | null) => ({ akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
+    // the runs of the config were made from two edits of the commit
+    const inside = verdictAndNote(quick(), [edited(A), edited(B), edited(A)], edited(A));
+    expect(inside.verdict).toBe("not comparable");
+    expect(inside.note).toContain("the uncommitted changes of the akm build (akm_build_fingerprint) differs");
+    expect(inside.note).toContain(`${A.slice(0, 12)} in the baseline and the config 2026-10-09-sw-pr-c-r1`);
+    expect(inside.note).toContain(`${B.slice(0, 12)} in the config 2026-10-09-sw-pr-c-r2`);
+    // the baseline and the config were made from two edits, or from an edit and from the clean commit
+    expect(verdictAndNote(quick(), edited(B), edited(A)).verdict).toBe("not comparable");
+    expect(verdictAndNote(quick(), edited(A), edited(null)).verdict).toBe("not comparable");
+    expect(verdictAndNote(quick(), edited(null), edited(A)).note).toContain(`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${A.slice(0, 12)} in the baseline, none in the config`);
+    // a clean build has none on both sides, and the same edits have the same fingerprint
+    expect(verdictAndNote(quick(), edited(null), edited(null)).verdict).toBe("better");
+    expect(verdictAndNote(quick(), edited(A), edited(A)).verdict).toBe("better");
+    // a run of a summary written before the key existed is a clean build
+    expect(verdictAndNote(quick(), { akm_build: "v0.9.26-1-gabc123" }, { akm_build: "v0.9.26-1-gabc123", akm_build_fingerprint: null }).verdict).toBe("better");
+    // the build is the treatment of a row that names another akm: the sides may differ, and the repeats of a side still may not
+    const build = oneConfig(["--akm", "bun ~/akm-pr/src/cli.ts"]);
+    expect(verdictAndNote(build, edited(B), edited(A)).verdict).toBe("better");
+    expect(verdictAndNote(build, edited(A), edited(null)).verdict).toBe("better");
+    expect(verdictAndNote(build, [edited(A), edited(B), edited(A)], edited(null)).verdict).toBe("not comparable");
+  });
+
   test("a hash or digest that is missing is exploratory, never a fully comparable decision", () => {
     const sameMissing = verdictAndNote(quick(), { assets_sha256: undefined }, { assets_sha256: undefined });
     expect(sameMissing.verdict).toBe("exploratory");

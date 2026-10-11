@@ -5,6 +5,7 @@
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { sha256File, sha256Text } from "../provenance.ts";
@@ -146,6 +147,8 @@ export interface AkmArm {
   bin: string;
   /** `git describe --always --dirty` of the checkout, null for an npm release. */
   build: string | null;
+  /** The sha256 of the checkout's uncommitted changes (dirtyFingerprint of lib/akm/akm.ts): null for a clean checkout and for a release, and for an arm made by hand. */
+  build_fingerprint?: string | null;
   cli: { version: string; tarball: string | null };
   plugin: { version: string; tarball: string | null };
   /** The folder the tarballs are in. Null when there are none. */
@@ -254,7 +257,7 @@ export function packAkm(checkout: string, into: string, pack: Pack = npmPack): {
   for (const bin of bins) if (!files.includes(`package/${bin.replace(/^\.\//, "")}`)) fail(`the tarball of ${checkout} lacks ${bin}, which its package.json names as a bin. Build the checkout first: npm pack packs what is on disk.`);
   const pluginDir = findPlugin(checkout);
   const plugin = pluginDir ? { version: String(readJson(join(pluginDir, "package.json")).version), tarball: pack(pluginDir, into) } : { version: PINS.akm_plugin, tarball: null };
-  const arm: AkmArm = { bin: withHome(resolve(checkout)), build: checkoutBuild(checkout), cli: { version: pkg.version, tarball: cli }, plugin, packages: into };
+  const arm: AkmArm = { bin: withHome(resolve(checkout)), build: checkoutBuild(checkout), build_fingerprint: dirtyFingerprint(checkout), cli: { version: pkg.version, tarball: cli }, plugin, packages: into };
   const note = pluginDir ? null : `the checkout holds no plugin (no package.json named akm-opencode), so the akm arm keeps the pinned plugin ${PINS.akm_plugin}. It carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`;
   return { arm, note };
 }
@@ -591,12 +594,13 @@ export function assetsSha256(o: { library: string | null; dataset: Record<string
   return sha256Text(JSON.stringify(sorted({ library: o.library, dataset: o.dataset, attempts: o.attempts })));
 }
 
-/** The summary keys about the akm under test, which both evals write: akm_version, akm_bin and akm_build as in the other evals, and what was installed. */
+/** The summary keys about the akm under test, which both evals write: akm_version, akm_bin, akm_build and akm_build_fingerprint as in the other evals, and what was installed. */
 export function akmSummary(arm: AkmArm, akmEnv: Record<string, string>, packages: { file: string; sha256: string }[], observed: Observed) {
   return {
     akm_version: arm.cli.version,
     akm_bin: arm.bin,
     akm_build: arm.build,
+    akm_build_fingerprint: arm.build_fingerprint ?? null,
     akm_env: akmEnv,
     akm_install: {
       from: arm.cli.tarball ? "checkout" : "release",

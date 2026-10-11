@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { GENERATED, assetsDigest } from "./inputs.ts";
 import { type Case, type Embedder, INPUT_FILES, type Relation, sandboxOptions } from "./lib.ts";
 import { failureHint, runCorpus, writeNotes } from "./run.ts";
@@ -326,7 +327,10 @@ describe("runCorpus", () => {
     expect(summary.config.embedding).toBeUndefined();
     expect(JSON.stringify(summary)).not.toContain("localhost:1/v1");
     // every key it wrote before is still there
-    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics"]) expect(summary).toHaveProperty(key);
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
+    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
   test("the digest of the cases follows the cases, and the config follows the config patch", async () => {

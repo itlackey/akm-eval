@@ -678,12 +678,34 @@ class RunTest(unittest.TestCase):
         self.assertEqual(summary["cases_sha256"], hashlib.sha256((REAL_ASSETS / "cases.json").read_bytes()).hexdigest())
         self.assertEqual(summary["assets_sha256"], bakeoff.sha256_tree(REAL_ASSETS))
         self.assertRegex(summary["git_commit"], r"^\S+$")
+        self.assertRegex(summary["harness_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(summary["harness_sha256"], bakeoff.harness_sha256())
+        self.assertEqual((summary["status"], summary["aborted_reason"]), ("complete", None))
         (model,) = summary["models"]
         self.assertEqual(
             model["settings"],
             {"base_url": endpoint.base_url, "api_key_env": "MODEL_API_KEY", "private": False, "temperature": 0, "max_tokens": 6000, "seed": None, "extra_body": {}, "timeout": 900, "retries": 5},
         )
         self.assertIsNone(model["legacy_jobs"])
+
+    def test_a_model_that_got_no_reply_makes_the_summary_aborted_before_the_run_exits_with_1(self):
+        with FakeEndpoint([(400, {"error": "no"})]) as endpoint, sandbox() as root:
+            code, _output, err = run_cli("--limit", "5", "--label", "dead", env=self.env(endpoint))
+            ((_name, summary),) = self.summaries(root).items()
+            requests = len(endpoint.requests)
+        reason = "no request to the-model got a reply. Check its base_url, model name and key."
+        self.assertEqual(code, 1)
+        self.assertEqual((summary["status"], summary["aborted_reason"]), ("aborted", reason))
+        self.assertIn(reason, err)
+        # it gave up on the model after three requests, so it covers 3 of the 5 cases it selected
+        self.assertEqual((requests, summary["n_selected"], summary["n_run"], summary["n_scored"], summary["n_errored"]), (3, 5, 3, 0, 3))
+        self.assertRegex(summary["harness_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_only_a_model_that_did_not_get_through_makes_the_run_aborted(self):
+        models = [{"label": "good", "n_run": 4, "n_scored": 3}, {"label": "dead", "n_run": 3, "n_scored": 0}, {"label": "cut", "n_run": 2, "n_scored": 2}]
+        self.assertEqual(bakeoff.stalled_models(models, 4), ["dead", "cut"])
+        self.assertEqual(bakeoff.stalled_models(models[:1], 4), [])
+        self.assertEqual(bakeoff.stalled_models([{"label": "none", "n_run": 0, "n_scored": 0}], 0), [])
 
     def test_the_summary_names_the_models_file_by_path_and_digest_and_says_what_the_grounded_cases_are_checked_for(self):
         with FakeEndpoint([(200, reply("not json"))]) as endpoint, sandbox() as root:
@@ -816,6 +838,55 @@ class ProvenanceTest(unittest.TestCase):
             (second / "sub" / "x.md").write_text("x")
             (second / "sub" / "x.md").rename(second / "sub" / "z.md")
             self.assertNotEqual(bakeoff.sha256_tree(second), digest)
+
+    def checkout(self, tmp, name):
+        """A copy of bakeoff's src folder at evals/bakeoff/src of a stand-in repository, without the environment and the caches."""
+        root = pathlib.Path(tmp, name)
+        shutil.copytree(bakeoff.HERE, root / "evals" / "bakeoff" / "src", ignore=shutil.ignore_patterns(".venv", "__pycache__", "node_modules"))
+        return root
+
+    def digest(self, root):
+        return bakeoff.harness_sha256(root / "evals" / "bakeoff" / "src", root)
+
+    def test_the_digest_of_the_code_is_the_same_in_two_checkout_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first, second = self.checkout(tmp, "one"), self.checkout(tmp, "two")
+            digest = self.digest(first)
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+            self.assertEqual(self.digest(second), digest)
+        self.assertEqual(bakeoff.harness_sha256(), digest)  # and it is the digest of this checkout, the one a run writes
+
+    def test_an_edit_to_the_code_changes_the_digest_and_an_edit_to_a_test_a_readme_or_a_fixture_does_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.checkout(tmp, "one")
+            src = root / "evals" / "bakeoff" / "src"
+            digest = self.digest(root)
+            for name in ("test_bakeoff.py", "README.md", "pyproject.toml", "fixtures/case.py", "tests/test_more.py"):
+                path = src / name
+                path.parent.mkdir(exist_ok=True)
+                with path.open("a", encoding="utf-8") as handle:
+                    handle.write("\n# edited\n")
+                self.assertEqual(self.digest(root), digest, name)
+            with (src / "bakeoff.py").open("a", encoding="utf-8") as handle:
+                handle.write("\n# edited\n")
+            edited = self.digest(root)
+            self.assertNotEqual(edited, digest)
+            (src / "helper.py").write_text("X = 1\n", encoding="utf-8")  # a file added
+            added = self.digest(root)
+            self.assertNotEqual(added, edited)
+            (src / "helper.py").rename(src / "other.py")  # and renamed
+            self.assertNotEqual(self.digest(root), added)
+
+    def test_the_manifest_is_the_one_lib_provenance_ts_makes(self):
+        # The same files and the same digest as the last test of harnessSha256 in lib/provenance.test.ts: a path from the root, a content digest, sorted.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            src = root / "evals" / "bakeoff" / "src"
+            src.mkdir(parents=True)
+            (src / "helper.py").write_text("X = 1\n")
+            (src / "bakeoff.py").write_text("print('a')\n")
+            (src / "test_bakeoff.py").write_text("ignored\n")
+            self.assertEqual(bakeoff.harness_sha256(src, root), "aa0d380a5736fa683bc2cb7aa9dec98f860df640d388f41e0a0eeed36a5a5129")
 
     def test_the_private_seed_is_the_one_in_the_map_beside_the_assets(self):
         with sandbox(private=True, seed="12345"):

@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -245,7 +246,22 @@ describe("runCorpus", () => {
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     expect(samplesIn(dir)).toHaveLength(5);
-    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
+  });
+
+  test("the summary it writes before it fails says the run was aborted, and why", async () => {
+    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } })));
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
+    const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
+    expect(stored.status).toBe("aborted");
+    expect(stored.aborted_reason).toBe("5 sessions in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/);
+    // and a run that went through every session, with errors that were not in a row, is complete
+    const ok = (id: string) => ({ id, class: "routine", fake: empty() });
+    const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
+    const whole = await quiet(() => runCorpus("public", { ...ctx, label: "whole" }, assetsFor([bad("a"), ok("b"), bad("c"), ok("d")])));
+    expect(JSON.parse(readFileSync(join(whole.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null, n_run: 4, n_errored: 2 });
   });
 
   test("also stops when the errors start after cases that were scored, but not for errors that are not in a row", async () => {
@@ -266,7 +282,10 @@ describe("what summary.json says about the run", () => {
     const folders = assetsFor(scenarios.slice(0, 2));
     const summary = await quiet(() => runCorpus("public", ctx, folders));
     const stored = storedIn(summary.results_dir);
-    expect(stored).toMatchObject({ strategy: "extract-only", config_patch: null, seed: null, timeouts: 0, n_errored: 0 });
+    expect(stored).toMatchObject({ strategy: "extract-only", config_patch: null, seed: null, timeouts: 0, n_errored: 0, status: "complete", aborted_reason: null });
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code, the reflect code it imports and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: [resolve(import.meta.dir, "..", "..", "reflect", "src")] }));
+    expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "localhost:8080", temperature: 0, enableThinking: false, timeoutMs: 600000 });
     expect(stored.config).toEqual({ ...ctx.config, engines: { model: { ...ctx.config.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
     expect(stored.config.engines.model).toMatchObject({ temperature: 0, enableThinking: false });

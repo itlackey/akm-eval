@@ -13,12 +13,14 @@ import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../..
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsSha256, corpusSeed, distillConfig, errorRow, generatedProblem, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases, timedOutMessage } from "./lib.ts";
 
 const NAME = "distill";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two model calls
 const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
@@ -50,11 +52,15 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   /** The model names the endpoint said answered. A gateway may serve one name with another model. */
   served_models: string[];
   limit: number | null;
@@ -184,6 +190,7 @@ export async function runCorpus(
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
+    harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
     ...akmBuild(),

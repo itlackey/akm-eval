@@ -14,7 +14,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
-import { redactConfig, sha256Files } from "../../../lib/provenance.ts";
+import { harnessSha256, redactConfig, sha256Files } from "../../../lib/provenance.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import { type Corpus, type Query, SEED, corpusFiles, draw, loadCorpus, readLock } from "./dataset.ts";
@@ -24,6 +24,8 @@ import { KS, METRICS, type Scores, scoreQuery, summarize } from "./score.ts";
 const NAME = "skillret";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 /** The lines of a run: akm search, asked of the keyword index and, in a run without --limit, of the semantic one. */
 const SYSTEMS = ["search", "semantic_search"] as const;
 type System = (typeof SYSTEMS)[number];
@@ -93,10 +95,14 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   /** What akm said it searched with, for each index. The run stops at a call that says anything else. */
   search_mode: { keyword: string; semantic?: string };
   /** The embedder of the semantic index. Absent from a run without one. */
@@ -113,6 +119,9 @@ interface Summary {
   /** The seed that drew the private library and its queries: SEED, which is in the code. Null for public, whose library is the fixed test split; a --limit draw is in `sample`. */
   seed: number | null;
   sample: Record<string, unknown>;
+  /** "aborted" when an akm call failed, so that its query is left out of the numbers or of the curate check: the run then exits with 1. Then aborted_reason says why. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   depth: number;
   workers: number;
   n_skills: number;
@@ -270,6 +279,22 @@ export function assetsDigest(assetsDir: string, corpus: CorpusName): string {
 /** The akm config a sandbox runs with, as the file in its config folder has it, with any secret redacted. */
 const writtenConfig = (sb: Sandbox): unknown => redactConfig(JSON.parse(readFileSync(join(sb.dir, "config", "config.json"), "utf8")));
 
+/** The akm calls of a run that failed, and those of them that timed out: the search lines and the curate check together. */
+const failedCalls = (s: Pick<Summary, "errored" | "timeouts" | "curate_check">): { errored: number; timedOut: number } => ({
+  errored: SYSTEMS.reduce((n, sys) => n + (s.errored[sys] ?? 0), 0) + MODES.reduce((n, mode) => n + (s.curate_check[mode]?.errored ?? 0), 0),
+  timedOut: SYSTEMS.reduce((n, sys) => n + (s.timeouts[sys] ?? 0), 0) + MODES.reduce((n, mode) => n + (s.curate_check[mode]?.timeouts ?? 0), 0),
+});
+
+/** What a run that had calls fail says, and exits with: those queries are missing from its numbers. */
+const callsFailure = ({ errored, timedOut }: { errored: number; timedOut: number }): string =>
+  `${errored} akm calls failed${timedOut > 0 ? `, ${timedOut} of them by timing out` : ""}. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.`;
+
+/** What the run fails with once its summaries are written: undefined unless one of them is aborted. The message counts the failed calls of all of them. */
+export function failureOf(summaries: Pick<Summary, "status" | "errored" | "timeouts" | "curate_check">[]): string | undefined {
+  if (!summaries.some((s) => s.status === "aborted")) return undefined;
+  return callsFailure(summaries.map(failedCalls).reduce((all, one) => ({ errored: all.errored + one.errored, timedOut: all.timedOut + one.timedOut }), { errored: 0, timedOut: 0 }));
+}
+
 /**
  * Runs one corpus: index its skills for keyword search and, unless `ctx.semantic` is false, for semantic search too, ask
  * akm search for every query, ask akm curate for a sample of them and compare it with search, score and write the
@@ -363,12 +388,17 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
     writeFileSync(samples, ordered.map((r) => `${JSON.stringify(r)}\n`).join(""));
     const scored = (rs: Row[], sys: System) => rs.flatMap((r) => (r[sys] && !r[sys]?.error ? [scoreQuery(r.relevant, (r[sys] as SystemRow).ranked)] : []));
     const lock = readLock(folders.assets);
+    const errored = lines((sys) => ordered.filter((r) => r[sys]?.error).length);
+    const timeouts = lines((sys) => ordered.filter((r) => r[sys]?.timed_out).length);
+    const curateCheck: CurateCheck = { seed: SEED, queries: sample.map((q) => q.id), keyword: agreement(ordered, checked, "keyword"), ...(ctx.semantic ? { semantic: agreement(ordered, checked, "semantic") } : {}) };
+    const failed = failedCalls({ errored, timeouts, curate_check: curateCheck });
     const summary: Summary = {
       eval: NAME,
       corpus: corpus.corpus,
       label,
       date: new Date().toISOString(),
       git_commit: gitCommit(ROOT),
+      harness_sha256: HARNESS,
       akm_version: version,
       ...akmBuild(),
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
@@ -378,12 +408,14 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
       assets_sha256: assetsSha256,
       seed: corpus.corpus === "private" ? SEED : null,
       sample: corpus.sample,
+      status: failed.errored > 0 ? "aborted" : "complete",
+      aborted_reason: failed.errored > 0 ? callsFailure(failed) : null,
       depth: akm.DEPTH,
       workers,
       n_skills: skills.length,
       n_queries: queries.length,
-      errored: lines((sys) => ordered.filter((r) => r[sys]?.error).length),
-      timeouts: lines((sys) => ordered.filter((r) => r[sys]?.timed_out).length),
+      errored,
+      timeouts,
       no_results: lines((sys) => ordered.filter((r) => r[sys] && !r[sys]?.error && r[sys]?.ranked.length === 0).length),
       metrics: lines((sys) => summarize(scored(ordered, sys))),
       by_size: Object.fromEntries(
@@ -394,7 +426,7 @@ export async function runCorpus(corpus: Corpus, ctx: { label?: string; limit?: n
             return [String(size), { n: rs.length, ...lines((sys) => summarize(scored(rs, sys))) }];
           }),
       ),
-      curate_check: { seed: SEED, queries: sample.map((q) => q.id), keyword: agreement(ordered, checked, "keyword"), ...(ctx.semantic ? { semantic: agreement(ordered, checked, "semantic") } : {}) },
+      curate_check: curateCheck,
       index_seconds: { keyword: Number(indexSeconds.keyword.toFixed(1)), ...(ctx.semantic ? { semantic: Number(indexSeconds.semantic.toFixed(1)) } : {}) },
       query_seconds: Number(querySeconds.toFixed(1)),
       call_seconds: lines((sys) => Number((ordered.reduce((a, r) => a + (r[sys]?.seconds ?? 0), 0) / ordered.length).toFixed(3))),
@@ -437,9 +469,9 @@ async function main(): Promise<void> {
     summaries.push(await runCorpus(data, { label: values.label, limit, semantic: withSemantic(limit) }, { assets, results }));
   }
   if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
-  const errored = summaries.reduce((n, s) => n + SYSTEMS.reduce((m, sys) => m + (s.errored[sys] ?? 0), 0) + MODES.reduce((m, mode) => m + (s.curate_check[mode]?.errored ?? 0), 0), 0);
-  const timedOut = summaries.reduce((n, s) => n + SYSTEMS.reduce((m, sys) => m + (s.timeouts[sys] ?? 0), 0) + MODES.reduce((m, mode) => m + (s.curate_check[mode]?.timeouts ?? 0), 0), 0);
-  if (errored > 0) fail(`${errored} akm calls failed${timedOut > 0 ? `, ${timedOut} of them by timing out` : ""}. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.`, 1);
+  // The summaries are written, and say so, before the run fails.
+  const failure = failureOf(summaries);
+  if (failure !== undefined) fail(failure, 1);
 }
 
 if (import.meta.main) {

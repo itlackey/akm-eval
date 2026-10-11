@@ -3057,6 +3057,30 @@ def sha256_tree(root):
     return hashlib.sha256("".join(f"{path}\0{sha256_file(root / path)}\n" for path in paths).encode()).hexdigest()
 
 
+def code_files(folder):
+    """The .py files under folder, as paths, without tests (test_*.py), fixtures, dependencies, caches and hidden folders."""
+    found = []
+    for here, folders, names in os.walk(folder):
+        folders[:] = [name for name in folders if not name.startswith(".") and name not in ("__pycache__", "node_modules", "fixtures")]
+        found.extend(pathlib.Path(here, name) for name in names if name.endswith(".py") and not name.startswith("test_"))
+    return found
+
+
+def harness_sha256(src_dir=None, root=None):
+    """The digest of the code a run was made with, for harness_sha256 in summary.json: one sha256 over a manifest of bakeoff's own .py files
+    that are not tests, each with its path from the repository root and the digest of its content, in the order of the paths. It is the manifest
+    harnessSha256 of lib/provenance.ts makes (bakeoff does not use lib/, so lib/ is not in it), and it does not depend on where the checkout is.
+    An edit to a test, a README or the assets does not change it. root is the checkout the code is in: this one, but for tests."""
+    src_dir = pathlib.Path(HERE if src_dir is None else src_dir).resolve()
+    root = pathlib.Path(HERE.parents[2] if root is None else root).resolve()
+    manifest = sorted((path.resolve().relative_to(root).as_posix(), sha256_file(path)) for path in code_files(src_dir))
+    return hashlib.sha256("".join(f"{name}\0{digest}\n" for name, digest in manifest).encode()).hexdigest()
+
+
+# The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+HARNESS = harness_sha256()
+
+
 def private_seed():
     """The seed the private assets were made with: the one in the map that generate wrote beside them. None when there is no map."""
     try:
@@ -3094,6 +3118,15 @@ def grounded_scope(cases):
     return {"cases": len(grounded), "with_content_terms": with_terms, "scope": scope}
 
 
+def stalled_models(model_summaries, n_selected):
+    """The labels of the models that did not get through the cases: every request they were sent failed, or they were stopped before the last case."""
+    return [model["label"] for model in model_summaries if (model["n_run"] and model["n_scored"] == 0) or model["n_run"] < n_selected]
+
+
+def no_reply(labels):
+    return f"no request to {', '.join(sorted(set(labels)))} got a reply. Check its base_url, model name and key."
+
+
 def run_corpus(corpus, args, models, label):
     assets = EVAL_DIR / "assets" if corpus == "public" else ROOT / "private" / NAME / "assets"
     parent = EVAL_DIR / "results" if corpus == "public" else ROOT / "private" / NAME / "results"
@@ -3109,12 +3142,14 @@ def run_corpus(corpus, args, models, label):
     with open(results_dir / "samples.jsonl", "w", encoding="utf-8") as samples:
         for model in models:
             summaries.append(summarize_model(model, run_model(model, cases, samples)))
+    stalled = stalled_models(summaries, len(cases))
     summary = {
         "eval": NAME,
         "corpus": corpus,
         "label": label,
         "date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "git_commit": git_commit(),
+        "harness_sha256": HARNESS,
         # The prompts are a frozen snapshot, not akm's: see the README. The assets and the models file are identified by digest.
         "prompts_version": PROMPTS_VERSION,
         "include_legacy": include_legacy,
@@ -3126,6 +3161,9 @@ def run_corpus(corpus, args, models, label):
         "models_file": models_file_record(getattr(args, "models", None)),
         "limit": args.limit,
         "tier": args.tier,
+        # "aborted" when a model got no reply to any request, or was stopped before the last case: the run then exits with 1.
+        "status": "aborted" if stalled else "complete",
+        "aborted_reason": no_reply(stalled) if stalled else None,
         "n_cases": len(all_cases),
         "n_selected": len(cases),
         "n_run": sum(model["n_run"] for model in summaries),
@@ -3226,9 +3264,10 @@ def command_run(args):
     # With --repeat each corpus has its own spread, so the two are not set side by side.
     if len(summaries) == 2 and args.repeat is None:
         print_side_by_side(*summaries)
-    stopped = [model["label"] for summary in summaries for model in summary["models"] if model["n_run"] and model["n_scored"] == 0]
+    # The summaries are written, and say so, before the run fails.
+    stopped = [label for summary in summaries for label in stalled_models(summary["models"], summary["n_selected"])]
     if stopped:
-        return fail(f"no request to {', '.join(sorted(set(stopped)))} got a reply. Check its base_url, model name and key.", 1)
+        return fail(no_reply(stopped), 1)
     return 0
 
 

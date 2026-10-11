@@ -12,7 +12,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { type BuiltBy, type CachedIndex, type IndexSpec, cachedIndex } from "../../../lib/akm/index-cache.ts";
-import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
@@ -42,6 +42,8 @@ import {
 const NAME = "retrieval";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
+// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
+const HARNESS = harnessSha256(import.meta.dir);
 /** The columns of a run: akm's two commands, each asked of the keyword index and, in a run that has it, of the semantic one. */
 export const SYSTEMS = ["search", "curate", "semantic_search", "semantic_curate"] as const;
 type System = (typeof SYSTEMS)[number];
@@ -109,10 +111,14 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
+  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
+  harness_sha256: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
   akm_build: string | null;
+  /** A sha256 over the changes to that checkout that are not committed (see dirtyFingerprint in lib/akm/akm.ts), which tells two edits of one commit apart. Null for a clean checkout and for a release. */
+  akm_build_fingerprint: string | null;
   /** What akm said it searched with, for each index. A call that says anything else is an error. */
   search_mode: { keyword: string; semantic?: string };
   /** The embedder of the semantic index. Absent from a run without one. */
@@ -130,6 +136,9 @@ interface Summary {
   n_assets: number;
   /** How long writing and indexing the library took, for each index. A new semantic index embeds every asset. */
   index_seconds: { keyword: number; semantic?: number };
+  /** "aborted" when a semantic call failed, so that its query is left out of the semantic columns: the run then exits with 1. Then aborted_reason says why. Each collection's summary says it for itself. */
+  status: "complete" | "aborted";
+  aborted_reason: string | null;
   /** Task queries with at least one relevant asset. Only these have ranking metrics. */
   n_scored: number;
   /** Queries with at least one errored call, in any column. */
@@ -151,6 +160,15 @@ interface Summary {
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
   abstention: { non_task: Columns<Abstention>; no_answer: Columns<Abstention> };
   results_dir: string;
+}
+
+/** Why a run that had semantic calls fail is aborted, and what it exits with: the queries of those calls are missing from the semantic columns. */
+const semanticFailure = (calls: number): string => `${calls} semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.`;
+
+/** What the run fails with once its summaries are written: undefined unless one of them is aborted. The message counts the failed semantic calls of all of them. */
+export function failureOf(summaries: Pick<Summary, "status" | "errored">[]): string | undefined {
+  if (!summaries.some((s) => s.status === "aborted")) return undefined;
+  return semanticFailure(summaries.reduce((n, s) => n + (s.errored.semantic_search ?? 0) + (s.errored.semantic_curate ?? 0), 0));
 }
 
 /** The label of a run without --label. */
@@ -366,6 +384,8 @@ export async function runCollection(
     const noAnswer = rows.filter((r) => isTask(r) && r.n_relevant === 0);
     const nonTask = rows.filter((r) => !isTask(r));
     const ok = (rs: Row[], s: System) => rs.filter((r) => !at(r, s).error);
+    const erroredCalls = columns((s) => rows.filter((r) => at(r, s).error).length);
+    const failedSemantic = (erroredCalls.semantic_search ?? 0) + (erroredCalls.semantic_curate ?? 0);
     const summary: Summary = {
       eval: NAME,
       corpus,
@@ -373,6 +393,7 @@ export async function runCollection(
       label,
       date: new Date().toISOString(),
       git_commit: gitCommit(ROOT),
+      harness_sha256: HARNESS,
       akm_version: version,
       ...akmBuild(),
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
@@ -384,9 +405,11 @@ export async function runCollection(
       n_queries: rows.length,
       n_assets: nAssets,
       index_seconds: { keyword: indexSeconds.keyword, ...(ctx.semantic ? { semantic: indexSeconds.semantic } : {}) },
+      status: failedSemantic > 0 ? "aborted" : "complete",
+      aborted_reason: failedSemantic > 0 ? semanticFailure(failedSemantic) : null,
       n_scored: scored.length,
       n_errored: rows.filter((r) => systems.some((s) => at(r, s).error)).length,
-      errored: columns((s) => rows.filter((r) => at(r, s).error).length),
+      errored: erroredCalls,
       timeouts: rows.reduce((n, r) => n + systems.filter((s) => at(r, s).timed_out).length, 0),
       config,
       engine: engineSettings(config.keyword),
@@ -462,8 +485,9 @@ async function main(): Promise<void> {
     else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));
   }
   if (summaries.length > 1 && repeat === undefined) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
-  const semanticErrors = summaries.reduce((n, s) => n + (s.errored.semantic_search ?? 0) + (s.errored.semantic_curate ?? 0), 0);
-  if (semanticErrors > 0) fail(`${semanticErrors} semantic calls failed, or answered with keyword search. Their queries are left out of the semantic columns: see the errors in samples.jsonl.`, 1);
+  // The summaries are written, and say so, before the run fails.
+  const failure = failureOf(summaries);
+  if (failure !== undefined) fail(failure, 1);
 }
 
 if (import.meta.main) {

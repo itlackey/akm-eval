@@ -15,6 +15,8 @@ interface Summarized {
   akm_version: string;
   akm_bin: string;
   akm_build: string | null;
+  /** What the akm checkout holds beyond its commit, as a sha256, null for a clean checkout or a release (see akmBuild). Absent from a summary of an eval that runs no akm. */
+  akm_build_fingerprint?: string | null;
   n_errored: number;
   /** Timed-out calls, for the evals that count them apart from the other errors: a number, or an object of numbers (one per arm). */
   timeouts?: unknown;
@@ -66,8 +68,8 @@ export async function repeatRuns<S extends Summarized>(times: number | undefined
   const base = join(dirname(first.results_dir), `${new Date().toISOString().slice(0, 10)}-${label}-repeat-summary`);
   let file = `${base}.json`;
   for (let n = 2; existsSync(file); n++) file = `${base}-${n}.json`;
-  const { eval: name, corpus, model, akm_version, akm_bin, akm_build } = first;
-  const summary = { eval: name, corpus, label, repeat: times, model, akm_version, akm_bin, akm_build, runs: runs.map((r) => basename(r.results_dir)), n_errored: spreadOf(runs.map((r) => r.n_errored)), ...(runs.some((r) => r.timeouts !== undefined) ? { timeouts: spreadOf(runs.map((r) => r.timeouts)) } : {}), seconds: spreadOf(seconds), metrics: spreadOf(runs.map((r) => r.metrics)) };
+  const { eval: name, corpus, model, akm_version, akm_bin, akm_build, akm_build_fingerprint } = first;
+  const summary = { eval: name, corpus, label, repeat: times, model, akm_version, akm_bin, akm_build, akm_build_fingerprint, runs: runs.map((r) => basename(r.results_dir)), n_errored: spreadOf(runs.map((r) => r.n_errored)), ...(runs.some((r) => r.timeouts !== undefined) ? { timeouts: spreadOf(runs.map((r) => r.timeouts)) } : {}), seconds: spreadOf(seconds), metrics: spreadOf(runs.map((r) => r.metrics)) };
   writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(`\n${name} (${corpus}): ${times} runs, spread in ${basename(file)}`);
   return runs;
