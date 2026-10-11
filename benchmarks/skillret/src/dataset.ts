@@ -265,8 +265,11 @@ export function privateCorpus(assetsDir: string, limit?: number): Corpus {
   return { corpus: "private", skills, queries, sample: { split: "train", seed: SEED, limit: limit ?? null, n_skills: skills.length, n_eligible_queries: eligible.length, n_queries: queries.length, queries_per_size: mix(queries) } };
 }
 
+/** The data files a corpus reads: the test split for public, and for private the train split and the test queries, whose mix it follows. */
+export const corpusFiles = (corpus: "public" | "private"): readonly string[] => (corpus === "public" ? FILES.test : [...FILES.train, "test-queries.jsonl", "test-qrels.jsonl"]);
+
 /** Fetches what the corpus needs that is not in assets/ yet, and reads it. */
 export async function loadCorpus(corpus: "public" | "private", assetsDir: string, limit?: number): Promise<Corpus> {
-  await ensureFiles(assetsDir, corpus === "public" ? FILES.test : [...FILES.train, "test-queries.jsonl", "test-qrels.jsonl"]);
+  await ensureFiles(assetsDir, corpusFiles(corpus));
   return corpus === "public" ? publicCorpus(assetsDir, limit) : privateCorpus(assetsDir, limit);
 }

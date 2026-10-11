@@ -9,7 +9,8 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
  * An akm that counts the skills of its bundle and answers `search` and `curate` by how many words of at least four
  * letters of the query a skill's SKILL.md holds, best first and then by id. A query that says FLAKY fails the first time
  * it is asked, BROKEN always fails, STRAY returns a skill that is not in the library, EMPTY returns nothing and
- * CURATEDIFF has curate answer in the reverse of search's order.
+ * CURATEDIFF has curate answer in the reverse of search's order, HANG never answers (so the call's time limit kills it)
+ * and NOMODE leaves searchMode out of the answer, as a build that dropped the field would.
  *
  * Its config says whether it is semantic. A semantic akm embeds every skill when it indexes, except that a skill that says
  * NOEMBED is left out, and answers with every skill, the ones that share no word with the query after the others and
@@ -45,6 +46,7 @@ else if (cmd === "index") {
   const seen = join(process.env.AKM_STATE_DIR as string, "flaky-" + cmd);
   if (query.includes("FLAKY") && !existsSync(seen)) { writeFileSync(seen, "x"); console.error("busy"); process.exit(75); }
   if (query.includes("BROKEN")) { console.error("boom"); process.exit(70); }
+  if (query.includes("HANG")) await Bun.sleep(60_000);
   const words = query.toLowerCase().split(/\\W+/).filter((w) => w.length > 3);
   const scored = ids.map((id) => { const text = readFileSync(join(skills, id, "SKILL.md"), "utf8").toLowerCase(); return { id, n: words.filter((w) => text.includes(w)).length }; });
   const fellBack = semantic && query.includes("FALLBACK");
@@ -54,7 +56,7 @@ else if (cmd === "index") {
   if (query.includes("EMPTY")) refs = [];
   if (cmd === "curate" && query.includes("CURATEDIFF")) refs = refs.reverse();
   const hits = refs.map((ref) => ({ ref }));
-  const answer = { searchMode: fellBack ? "fts-fallback" : vectors ? "semantic" : "keyword", ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
+  const answer = { ...(query.includes("NOMODE") ? {} : { searchMode: fellBack ? "fts-fallback" : vectors ? "semantic" : "keyword" }), ...(fellBack ? { warnings: ["Vector search unavailable: local embedding model is unavailable (request failed)"] } : {}) };
   console.log(JSON.stringify(cmd === "search" ? { hits, ...answer } : { items: hits, ...answer }));
 } else { console.error("unknown command " + cmd); process.exit(1); }
 `;
