@@ -87,7 +87,7 @@ What the contract mode does not show:
 
 ## CI
 
-`.github/workflows/akm-smoke.yml` runs two legs every night and on demand:
+`.github/workflows/akm-smoke.yml` runs two legs every night and on demand. A pull request that changes `lib/`, `evals/`, `benchmarks/`, `corpus/` or `scripts/smoke/` runs the pinned leg alone, as the check `smoke (pinned)`, which the branch protection can require:
 
 - **pinned** runs `scripts/smoke/run --contract` against the akm-cli release that `lib/harbor/harbor.ts` pins. A leg that fails fails the workflow.
 - **latest** runs `scripts/smoke/run --strict`, the startup mode, against the latest release. It is advisory (`continue-on-error`): it is where a change to akm that the evals cannot read shows up on the day it ships, and a red leg there is a reason to run `--contract` by hand against that release and read the output, not a failed check.

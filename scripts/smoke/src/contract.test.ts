@@ -417,24 +417,37 @@ describe(".github/workflows/akm-smoke.yml", () => {
   const workflow = Bun.YAML.parse(readFileSync(resolve(import.meta.dir, "..", "..", "..", ".github", "workflows", "akm-smoke.yml"), "utf8")) as any;
   const job = workflow.jobs.smoke;
 
+  /** The legs of a run. The matrix holds two JSON lists, the first for a pull request and the second for a night or a manual run. */
+  const legs = (pullRequest: boolean): unknown => {
+    const expression = job.strategy.matrix.leg as string;
+    expect(expression).toContain("github.event_name == 'pull_request'");
+    const lists = [...expression.matchAll(/'(\[[^']*\])'/g)].map((m) => JSON.parse(m[1] as string));
+    expect(lists).toHaveLength(2);
+    return lists[pullRequest ? 0 : 1];
+  };
+  const PINNED = { akm: "pinned", flags: "--contract", advisory: false };
+
   test("runs the contract mode on the pinned release as a leg that must pass, and the startup mode on the latest as an advisory one", () => {
     expect(job.strategy["fail-fast"]).toBe(false);
-    expect(job.strategy.matrix.include).toEqual([
-      { akm: "pinned", flags: "--contract", advisory: false },
-      { akm: "latest", flags: "--strict", advisory: true },
-    ]);
-    expect(job["continue-on-error"]).toBe("${{ matrix.advisory }}"); // only the advisory leg may fail without failing the workflow
-    expect(job.steps.find((s: any) => s.name === "scripts/smoke").run).toBe("scripts/smoke/run ${{ matrix.flags }}");
+    expect(legs(false)).toEqual([PINNED, { akm: "latest", flags: "--strict", advisory: true }]);
+    expect(job["continue-on-error"]).toBe("${{ matrix.leg.advisory }}"); // only the advisory leg may fail without failing the workflow
+    expect(job.steps.find((s: any) => s.name === "scripts/smoke").run).toBe("scripts/smoke/run ${{ matrix.leg.flags }}");
+    expect(job.name).toBe("smoke (${{ matrix.leg.akm }})");
+  });
+
+  test("a pull request that changes the evals or what they share runs the pinned contract leg alone", () => {
+    expect(legs(true)).toEqual([PINNED]);
+    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["lib/**", "evals/**", "benchmarks/**", "corpus/**", "scripts/smoke/**", ".github/workflows/akm-smoke.yml"]));
   });
 
   test("installs the release that lib/harbor/harbor.ts pins for the pinned leg, and the latest for the other", () => {
     const install = job.steps.find((s: any) => s.name === "Install akm").run as string;
-    expect(install).toContain('[ "${{ matrix.akm }}" = latest ]');
+    expect(install).toContain('[ "${{ matrix.leg.akm }}" = latest ]');
     expect(install).toContain("lib/harbor/harbor.ts");
   });
 
-  test("runs nightly and on demand, with no secret", () => {
-    expect(Object.keys(workflow.on).sort()).toEqual(["schedule", "workflow_dispatch"]);
+  test("runs nightly, on demand and on a pull request, with no secret", () => {
+    expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "schedule", "workflow_dispatch"]);
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(readFileSync(resolve(import.meta.dir, "..", "..", "..", ".github", "workflows", "akm-smoke.yml"), "utf8")).not.toContain("secrets.");
   });
