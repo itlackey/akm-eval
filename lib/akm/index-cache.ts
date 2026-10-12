@@ -13,8 +13,9 @@
 //  - The first update of the public library of the retrieval eval, an index of 259 assets, gave 15 to 17 of them new ids and new
 //    embeddings though no file had changed, and 89 of its 136 queries then ranked otherwise.
 // Only a new index is built by akm, and it is built in one go. So an index is kept for the collection it was built from, and
-// is built again from nothing when a file changed, is gone or is new, or when akm, its embedding model or the index's folder
-// is not the same. "The same akm" is the version it prints, the command that runs it, and the build of the checkout the command
+// is built again from nothing when a file changed, is gone or is new, or when akm, its embedding model, the code that lays out
+// the bundle (the text of the builder, and the files IndexSpec.builder names) or the index's folder is not the same. "The same akm"
+// is the version it prints, the command that runs it, and the build of the checkout the command
 // runs from (akmBuild() of akm.ts): a pull request prints the version of the release it branched from, and its indexing,
 // chunking or embedding code can differ. A checkout with changes that are not committed is told apart by the fingerprint of its
 // changes (akm_build_fingerprint of summary.json), so two edits at one commit are two builds, and the same edit is one. akm is asked
@@ -59,6 +60,11 @@ export interface IndexSpec {
   files: Record<string, string>;
   /** Whatever else makes an index different, such as where the bundles of a library that is indexed in place are. */
   extra?: string;
+  /**
+   * The source files, as paths, of the code that lays out the bundle and that `build` calls. The text of `build` itself is always part of the key; a builder that
+   * calls into other files names them here, so a change to how a bundle is laid out builds a new index instead of reusing one laid out the old way.
+   */
+  builder?: string[];
   /** Where the cache is, and the akm command to run in it: for tests. */
   root?: string;
   cmd?: string[];
@@ -162,7 +168,7 @@ function whyNot(state: State | undefined, key: string, files: Record<string, str
   if (!state) return "it was not finished, or it was kept before the build of akm was recorded";
   if (state.key !== key) {
     const [built, now] = [who(state.builtBy), who(current)];
-    return `akm, its build, its embedding model or the index's folder is not the same${built === now ? "" : `: it was built by ${built}, and this run is ${now}`}`;
+    return `akm, its build, its embedding model, the code that lays out the bundle or the index's folder is not the same${built === now ? "" : `: it was built by ${built}, and this run is ${now}`}`;
   }
   const changed = Object.entries(state.files).filter(([path, sum]) => files[path] !== sum).length;
   const added = Object.keys(files).filter((path) => !(path in state.files)).length;
@@ -188,7 +194,8 @@ export async function cachedIndex(spec: IndexSpec, build: (sandbox: Sandbox) => 
     // fingerprint of its uncommitted changes. The fingerprint is part of the key only when there is one, so the key of a
     // clean checkout or a release is what it was before the fingerprint, and an index kept then is still used.
     const current = { version: spec.version, ...akmBuild() };
-    const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", JSON.stringify(semanticConfig()), ...(current.akm_build_fingerprint ? [current.akm_build_fingerprint] : [])].join("\0"));
+    const builder = digest([build.toString(), ...(spec.builder ?? []).map((path) => `${path}\0${digest(readFileSync(path))}`)].join("\0"));
+    const key = digest([current.version, current.akm_bin, current.akm_build ?? "", SEMANTIC_MODEL, dir, spec.extra ?? "", builder, JSON.stringify(semanticConfig()), ...(current.akm_build_fingerprint ? [current.akm_build_fingerprint] : [])].join("\0"));
     const previous = readState(dir);
     const sandbox = (): Sandbox => {
       const sb = sandboxIn(dir, { semantic: true });

@@ -890,7 +890,9 @@ console.log(${JSON.stringify(JSON.stringify(json))});
     dirs.push(root);
     const script = join(root, "akm.ts");
     writeFileSync(script, printing(json, sleepMs));
-    return { ...createSandbox("retrieval-ask"), cmd: ["bun", script] };
+    const sandbox = createSandbox("retrieval-ask");
+    dirs.push(sandbox.dir);
+    return { ...sandbox, cmd: ["bun", script] };
   };
 
   test("a semantic call has to say it searched with embeddings: no searchMode is an error, as keyword and fts-fallback are", async () => {

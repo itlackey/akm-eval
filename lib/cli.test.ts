@@ -101,6 +101,16 @@ describe("hideEndpoint", () => {
     expect(config.engines.model.endpoint).toContain("u:p@"); // a copy
   });
 
+  test("hides the endpoint of a base URL that has a query as akm names it, with /chat/completions before the query", () => {
+    const base = "https://user:SYNTH_PASSWORD@gw.example:8443/v1?api_key=SYNTH_KEY&api-version=2024-10-21";
+    const endpoint = "https://user:SYNTH_PASSWORD@gw.example:8443/v1/chat/completions?api_key=SYNTH_KEY&api-version=2024-10-21";
+    expect(hideEndpoint(`akm exited 78: request to ${endpoint} was refused`, base)).toBe("akm exited 78: request to <MODEL_BASE_URL>/chat/completions was refused");
+    expect(hideEndpoint(`${base} and ${endpoint}`, base)).toBe("<MODEL_BASE_URL> and <MODEL_BASE_URL>/chat/completions");
+    expect(hideEndpoint(`request to ${endpoint}`, `${base.replace("?", "/?")}`)).toBe("request to <MODEL_BASE_URL>/chat/completions"); // a slash before the query
+    const full = "https://gw.example/v1/chat/completions?api_key=SYNTH_KEY";
+    expect(hideEndpoint(`request to ${full}`, full)).toBe("request to <MODEL_BASE_URL>");
+  });
+
   test("leaves the text alone when there is no endpoint, and does not put the mark between its characters", () => {
     expect(hideEndpoint("anything", "")).toBe("anything");
     expect(hideEndpoint("abc", "///")).toBe("abc");

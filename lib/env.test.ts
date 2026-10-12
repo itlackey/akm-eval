@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { readDotEnv } from "../scripts/matrix/src/fingerprint.ts";
 import { type Sandbox, createSandbox, removeSandbox } from "./akm/akm.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -80,6 +81,68 @@ describe("lib/env.sh, the .env loader of the bash scripts", () => {
       ["PLAIN", "TABBED", "TWO", "ONLY", "NOSPACE", "DOUBLE", "SINGLE", "QUOTED_SPACES"],
     );
     expect(env).toEqual({ PLAIN: "small", TABBED: "x", TWO: "a", ONLY: "", NOSPACE: "a#b", DOUBLE: "a # b", SINGLE: "a # b", QUOTED_SPACES: "  kept  " });
+  });
+
+  test("a comment may follow the closing quote of a quoted value: the quotes and the comment go, and a # inside the quotes stays", () => {
+    const lines = [
+      'DOUBLE="small" # the local one',
+      "SINGLE='two words' # note",
+      'URL="https://h.example/v1?api-version=2024-10-21#frag" # the gateway',
+      'KEY="sk-abc"\t# a tab before it',
+      'TRAILING="x"   ',
+      'INSIDE="a # b" # c # d',
+      "INSIDE_SINGLE='a # b' #c",
+      'EMPTY="" # nothing',
+      'QUOTED_SPACES="  kept  " # note',
+    ];
+    const names = lines.map((line) => line.split("=")[0]);
+    expect(loadEnv(lines.join("\n"), names)).toEqual({
+      DOUBLE: "small",
+      SINGLE: "two words",
+      URL: "https://h.example/v1?api-version=2024-10-21#frag",
+      KEY: "sk-abc",
+      TRAILING: "x",
+      INSIDE: "a # b",
+      INSIDE_SINGLE: "a # b",
+      EMPTY: "",
+      QUOTED_SPACES: "  kept  ",
+    });
+  });
+
+  test("the matrix reads a .env the way the loader does, line for line: scripts/matrix/src/fingerprint.ts readDotEnv", () => {
+    const values = [
+      "small # the local one",
+      '"small" # the local one',
+      "'two words' # note",
+      '"a # b"',
+      "'a # b'",
+      '"a # b" # c # d',
+      '"v"   ',
+      "v   ",
+      "  v  # c",
+      '"a "b" c"',
+      "\"v\" # say \"hi\"",
+      '"v"#x',
+      "a#b #c",
+      "x\t# note",
+      '"" # nothing',
+      '" "',
+      "# only a comment",
+      "",
+      " # after nothing",
+      "'unclosed",
+      '"unclosed # note',
+      "http://h/v1?a=b#frag",
+      "a=b=c",
+      "\\ #x",
+    ];
+    const lines = [...values.map((v, i) => `K${i}=${v}`), "export EXPORTED=1", "  INDENTED = spaced", "DUP=first", "DUP=second", "NOVALUE", "1BAD=x", "# COMMENTED=1", "TAB\t=tabbed", "LAST=no newline"];
+    const names = [...values.map((_, i) => `K${i}`), "EXPORTED", "INDENTED", "DUP", "NOVALUE", "1BAD", "COMMENTED", "TAB", "LAST"];
+    const text = lines.join("\n");
+    const shell = loadEnv(text, names);
+    const parsed = readDotEnv(join(fakeRoot(text), ".env"));
+    expect(Object.fromEntries(names.map((n) => [n, parsed[n]]))).toEqual(shell);
+    expect([shell.K1, shell.K2, shell.K5, shell.DUP, shell.INDENTED]).toEqual(["small", "two words", "a # b", "first", " spaced"]);
   });
 
   test("does nothing when there is no .env", () => {

@@ -270,7 +270,7 @@ describe("runCorpus", () => {
       for (const leak of ["SECRET-KEY", "hunter2", "user:"]) expect(text).not.toContain(leak);
       const stored = JSON.parse(text);
       expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>");
-      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443/v1?key=<redacted>"); // scheme, host, port and path; the key is gone
+      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443/v1/chat/completions?key=<redacted>"); // scheme, host, port and path, with /chat/completions before the query; the key is gone
     });
 
     test("the digest changes with the cases, and the seed is the one the run was given", async () => {

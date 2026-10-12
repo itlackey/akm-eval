@@ -44,6 +44,9 @@ export interface ModelEntry {
   private?: boolean;
 }
 
+/** The keys a line of models.json may have. Any other is refused, so a typo such as "privat" cannot pass for a setting, and a key cannot sit in the file. */
+const LINE_KEYS = ["model", "base_url", "api_key_env", "private"];
+
 export interface ModelSettings {
   /** The name sent to the endpoint. */
   name: string;
@@ -74,6 +77,11 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
   for (const [id, entry] of Object.entries(json)) {
     const e = entry as Partial<ModelEntry> | null;
     if (typeof e !== "object" || e === null || typeof e.base_url !== "string" || !e.base_url.trim()) throw new Error(`models.json: "${id}" needs a base_url`);
+    for (const key of Object.keys(e)) {
+      if (LINE_KEYS.includes(key)) continue;
+      const hint = key === "api_key" ? ": a key belongs in the environment. Set it in .env and name its variable in api_key_env" : "";
+      throw new Error(`models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`);
+    }
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
     if (e.private !== undefined && typeof e.private !== "boolean") throw new Error(`models.json: "${id}": private must be true or false`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);

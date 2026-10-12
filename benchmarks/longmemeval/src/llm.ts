@@ -30,15 +30,6 @@ const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 /** The temperature of every request, the benchmark's own for the model and the judge. run.ts records it in summary.json. */
 export const TEMPERATURE = 0;
 
-/** The host (and port) of an endpoint's URL, with no path, query or credentials, for summary.json. Null when it is not a URL. */
-export function endpointHost(baseUrl: string): string | null {
-  try {
-    return new URL(baseUrl).host || null;
-  } catch {
-    return null;
-  }
-}
-
 export function chatUrl(baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
