@@ -39,6 +39,28 @@
           "evals/reflect/src/score.ts"
         ]
       }
+    },
+    "skillret": {
+      "collector": {
+        "version": 1,
+        "sha256": "acd3032eaf8de01dfc4daaa7e290ab1c27d1392b2c6c337fbc59d0bc80950417",
+        "files": [
+          "benchmarks/skillret/src/akm.ts",
+          "benchmarks/skillret/src/collect.ts",
+          "benchmarks/skillret/src/sample.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "a6b0c5015a9cbd2a52471c0224c880c608b1b982bf6aa39abb6d263d72440322",
+        "files": [
+          "benchmarks/skillret/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
     }
   }
 }
