@@ -7,13 +7,13 @@
 //   evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, resolveCorpora } from "../../../lib/corpus.ts";
 import { type BuiltBy, type CachedIndex } from "../../../lib/akm/index-cache.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
 import { type EngineSettings, engineSettings, harnessSha256, sha256Text } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -69,7 +69,7 @@ interface Summary {
   corpus: string;
   corpus_kind: string;
   corpus_private: boolean;
-  /** The folder of the corpus from the repository root, or null when it is outside the repository. Never an absolute path: it can name what is in it. */
+  /** The folder of a custom corpus from the repository root, or null when it is outside the repository and for the public corpus. Never an absolute path: it can name what is in it. scripts/rescore reads the cases from it. */
   corpus_folder: string | null;
   /** library or books, or own for a corpus of your own. */
   collection: string;
@@ -143,12 +143,6 @@ const where = (kind: Kind, collection: string): string => (kind === collection ?
 
 /** The folder of the kept semantic index of a collection: `retrieval-public-library`, `retrieval-rewrite-books`. Each own folder has an index of its own, named by its place, so a second one does not replace the first. */
 const indexName = (c: ResolvedCorpus, collection: string): string => `${NAME}-${c.config.kind === "own" ? `own-${sha256Text(c.folder).slice(0, 8)}` : `${c.config.kind}-${collection}`}`;
-
-/** The folder from the repository root, with forward slashes, or null when it is outside the repository. */
-export function insideRepo(folder: string, root = ROOT): string | null {
-  const rel = relative(root, folder);
-  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
-}
 
 /** The width of a column of the table: the longest label, "semantic curate". */
 const COLUMN = 15;
@@ -312,7 +306,7 @@ export async function runCollection(
     const summary: Summary = {
       eval: NAME,
       ...corpusRecord(corpus),
-      corpus_folder: insideRepo(corpus.folder),
+      corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
       collection,
       label,
       date: new Date().toISOString(),

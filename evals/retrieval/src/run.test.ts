@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { commandLine, createSandbox, parseCommand, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { endpointId, harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
-import { lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
 import { INDEX_BUILDER, indexSpec } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { collectionsFor, failureOf, insideRepo, runCollection, withSemantic } from "./run.ts";
+import { collectionsFor, failureOf, runCollection, withSemantic } from "./run.ts";
 
 /** The corpora of a run, as lib/corpus.ts resolves them: the committed cases, the public cases rewritten from a seed, and a folder of your own. */
 const corpusOf = (name: "public" | "custom", kind: "public" | "rewrite" | "own", config: object = {}, folder = "/nowhere"): ResolvedCorpus => ({ name, folder, config: { kind, private: kind === "own", ...config }, configFile: null, flag: name === "public" ? "--corpus public" : "--corpus custom" });
@@ -418,10 +418,12 @@ describe("runCollection", () => {
       const inside = await quiet(() => runCollection(corpusOf("custom", "own", {}, join(ROOT, "private", "retrieval", "own")), "own", ctx, folders));
       expect(inside.corpus_folder).toBe("private/retrieval/own");
       expect(readFileSync(join(own.results_dir, "summary.json"), "utf8")).not.toContain("/nowhere");
-      expect(insideRepo(join(ROOT, "evals", "retrieval", "assets"))).toBe("evals/retrieval/assets");
-      expect(insideRepo(ROOT)).toBeNull();
-      expect(insideRepo(join(ROOT, "..", "x"))).toBeNull();
-      expect(insideRepo("/elsewhere")).toBeNull();
+      // the public corpus records none, and the rewrite is at its place in the repository
+      expect((await quiet(() => runCollection(PUBLIC, "library", ctx, folders))).corpus_folder).toBeNull();
+      const placed = await quiet(() => runCollection(corpusOf("custom", "rewrite", { seed: "123" }, join(ROOT, "private", "retrieval", "assets")), "library", ctx, folders));
+      expect(placed.corpus_folder).toBe("private/retrieval/assets");
+      expect(placed.corpus_folder).toBe(corpusFolderOf(join(ROOT, "private", "retrieval", "assets")));
+      expect(JSON.parse(readFileSync(join(placed.results_dir, "summary.json"), "utf8")).corpus_folder).toBe("private/retrieval/assets");
     });
 
     test("says which akm built the semantic index, for a new index and for a kept one", async () => {

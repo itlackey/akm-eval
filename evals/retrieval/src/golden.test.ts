@@ -127,20 +127,21 @@ describe("the cases and their labels", () => {
 
   test("the queries and qrels of a summary are found by its corpus, with the books in the books folder", () => {
     const at = (rel: string) => join("/repo", rel);
-    expect(setFolder("/repo", { corpus: "public", corpus_folder: "evals/retrieval/assets", collection: "library" })).toBe(at("evals/retrieval/assets"));
-    expect(setFolder("/repo", { corpus: "public", corpus_folder: "evals/retrieval/assets", collection: "books" })).toBe(at("evals/retrieval/assets/books"));
+    expect(setFolder("/repo", { corpus: "public", corpus_folder: null, collection: "library" })).toBe(at("evals/retrieval/assets"));
+    expect(setFolder("/repo", { corpus: "public", corpus_folder: null, collection: "books" })).toBe(at("evals/retrieval/assets/books"));
+    // a custom corpus is where corpus_folder says, which rescore --cases sets and may make absolute
     expect(setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "private/retrieval/own", collection: "own" })).toBe(at("private/retrieval/own"));
-    // a run from before the folder was recorded
+    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "/notes/work", collection: "own" })).toBe("/notes/work");
+    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/retrieval/assets", collection: "books" })).toBe(at("private/retrieval/assets/books"));
+    // a run from before the corpora were renamed
     expect(setFolder("/repo", { corpus: "public", collection: "books" })).toBe(at("evals/retrieval/assets/books"));
     expect(setFolder("/repo", { corpus: "private", collection: "library" })).toBe(at("private/retrieval/assets"));
     expect(setFolder("/repo", { corpus: "own", collection: "own" })).toBe(at("private/retrieval/own"));
     expect(setFolder("/repo", { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null, collection: "books" })).toBe(at("private/retrieval/assets/books"));
   });
 
-  test("refuses a run whose corpus was outside the repository and not named, a folder that leaves the repository, and a collection it does not know", () => {
-    expect(() => setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: null, collection: "own" })).toThrow("the run's corpus was a folder outside the repository, and its summary does not name it");
-    expect(() => setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "../notes", collection: "own" })).toThrow('corpus_folder "../notes" is not a folder of the repository');
-    expect(() => setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "/etc", collection: "own" })).toThrow('corpus_folder "/etc" is not a folder of the repository');
+  test("refuses a run whose corpus was outside the repository and not named, and a collection it does not know", () => {
+    expect(() => setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: null, collection: "own" })).toThrow("the run's corpus was a folder outside the repository, and its summary does not name it (corpus_folder is null). Give it to scripts/rescore with --cases DIR");
     expect(() => setFolder("/repo", { corpus: "public", collection: "papers" })).toThrow('the summary names the collection "papers"');
   });
 });

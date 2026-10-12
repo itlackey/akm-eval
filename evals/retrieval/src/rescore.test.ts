@@ -74,7 +74,7 @@ function run(spec: Spec = {}): string {
     corpus: "public",
     corpus_kind: "public",
     corpus_private: false,
-    corpus_folder: "evals/retrieval/assets",
+    corpus_folder: null,
     collection,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
@@ -217,8 +217,55 @@ describe("rescoring a retrieval run", () => {
     expect(() => rescoreFolder(run({ rows: (rows) => rows.map(({ curate: _c, ...r }) => r) }))).toThrow(/curate \(9 rows: /);
   });
 
-  test("a run of the own corpus outside the repository cannot be found, and the refusal says why", () => {
-    const dir = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null, collection: "own" }, manifest: () => undefined });
-    expect(() => rescoreFolder(dir)).toThrow("the run's corpus was a folder outside the repository, and its summary does not name it");
+  test("a run on a custom corpus is scored against the cases in its corpus_folder", () => {
+    // evals/retrieval/assets is a folder of the repository in the format of a custom corpus too
+    const dir = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "evals/retrieval/assets" }, manifest: (m) => ({ ...m, corpus: "custom" }) });
+    const { out, result } = rescoreFolder(dir);
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(rowsOf(out)).toEqual(rowsOf(dir));
+    expect(summaryOf(out).corpus_folder).toBe("evals/retrieval/assets");
+    // --cases names another folder, holding other grades: the run is scored against those
+    const other = tmp();
+    const grades = jsonl(join(ASSETS, "qrels.jsonl")).map((r) => (r.id === "q003" && r.grade >= 2 ? { ...r, grade: 0 } : r));
+    writeFileSync(join(other, "queries.jsonl"), readFileSync(join(ASSETS, "queries.jsonl")));
+    writeFileSync(join(other, "qrels.jsonl"), grades.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    const moved = rescoreFolder(run({ summary: { corpus: "custom", corpus_kind: "own", corpus_folder: "evals/retrieval/assets" }, manifest: (m) => ({ ...m, corpus: "custom" }) }), { cases: other });
+    expect(moved.result.changed).toEqual(["q003"]); // it has no relevant asset there
+    expect(rowsOf(moved.out).find((r) => r.id === "q003").n_relevant).toBe(0);
+  });
+
+  test("a run of a custom corpus outside the repository records no folder, and --cases names it", () => {
+    const folder = tmp();
+    const cases: Case[] = [{ id: "a1", query: "find the note", kind: "direct", grades: { "notes/it": 3, "notes/other": 1 }, banned: [] }, { id: "n1", query: "thanks", kind: "chitchat", grades: {}, banned: [] }];
+    writeFileSync(join(folder, "queries.jsonl"), cases.map((c) => `${JSON.stringify({ id: c.id, query: c.query, kind: c.kind })}\n`).join(""));
+    writeFileSync(join(folder, "qrels.jsonl"), `${JSON.stringify({ id: "a1", ref: "notes/it", grade: 3, reason: "r" })}\n${JSON.stringify({ id: "a1", ref: "notes/other", grade: 1, reason: "r" })}\n`);
+    const raw = { a1: { search: { refs: ["notes/other", "notes/it"], seconds: 0.2 }, curate: { refs: ["notes/it"], seconds: 0.3 } }, n1: { search: { refs: [], seconds: 0.1 }, curate: { refs: [], seconds: 0.1 } } };
+    const scored = cases.map((c) => MEASUREMENT.score(c, raw[c.id as "a1"]));
+    const manifest = buildManifest({
+      measurement: MEASUREMENT,
+      parts: lockedParts(MEASUREMENT),
+      corpus: "custom",
+      collection: "own",
+      cases: caseDigests(MEASUREMENT, cases, () => LIBRARY),
+      config: { keyword: {} },
+      completion: completionOf(MEASUREMENT, ["a1", "n1"], scored),
+    });
+    const dir = join(tmp(), "2026-10-12-mine-own");
+    mkdirSync(dir, { recursive: true });
+    const summary = { eval: "retrieval", corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null, collection: "own", label: "mine", assets: { ...LIBRARY, queries_sha256: sha256File(join(folder, "queries.jsonl")), qrels_sha256: "2".repeat(64) }, ...MEASUREMENT.summarize(scored), manifest };
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(summary));
+    writeFileSync(join(dir, "samples.jsonl"), scored.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    expect(() => rescoreFolder(dir)).toThrow("was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
+    const { out, result } = rescoreFolder(dir, { cases: folder }); // an absolute folder
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(rowsOf(out)).toEqual(rowsOf(dir));
+    expect(summaryOf(out).corpus_folder).toBeNull(); // the folder is outside the repository: it is not recorded
+    expect(summaryOf(out).metrics.search.ndcg_10).toBe(summaryOf(dir).metrics.search.ndcg_10);
+    // the folder changed its grades: --cases scores the run against them
+    writeFileSync(join(folder, "qrels.jsonl"), `${JSON.stringify({ id: "a1", ref: "notes/it", grade: 1, reason: "r" })}\n`);
+    const changed = rescoreFolder(dir, { cases: folder });
+    expect(changed.result.changed).toEqual(["a1"]);
+    expect(changed.result.relabelled).toEqual(["a1"]);
+    expect(rowsOf(changed.out).find((r) => r.id === "a1").n_relevant).toBe(0);
   });
 });
