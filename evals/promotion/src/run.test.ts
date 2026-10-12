@@ -23,6 +23,13 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+/** A temporary folder, removed after the test. */
+const tmp = (): string => {
+  const d = mkdtempSync(join(tmpdir(), "promotion-root-"));
+  dirs.push(d);
+  return d;
+};
+
 /**
  * An akm with akm's proposals table. Its drain reads the first word of each pending proposal's body as the verdict: ACCEPT,
  * REJECT, DEFER, or CRASH, which fails the model call and leaves the proposal undecided. It writes what it saw to seen.json.
@@ -196,7 +203,7 @@ describe("runCorpus", () => {
   });
 
   test("two runs on identical own notes, made where private/seed holds other seeds, record no seed and compare (#70)", async () => {
-    const runs = [];
+    const runs: Run[] = [];
     for (const seed of ["99", "123456789012345678"]) {
       const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
       dirs.push(root);
@@ -418,9 +425,9 @@ describe("the manifest of a run", () => {
 });
 
 describe("rescore", () => {
-  /** The real public cases and library, run against the fake akm with a verdict for each of their refs, and the results folder cleared for rescore. */
-  async function publicRun() {
-    const real = publicAt(join(EVAL_DIR, "assets"));
+  /** The real public cases and library, run against the fake akm with a verdict for each of their refs, and the results folder cleared for rescore. `as` reads them as another corpus. */
+  async function publicRun(as: (folder: string) => ResolvedCorpus = publicAt) {
+    const real = as(join(EVAL_DIR, "assets"));
     const publicCases = parseCases(readFileSync(join(real.folder, "cases.jsonl"), "utf8"));
     const words = ["ACCEPT", "REJECT", "DEFER", "SLOW", "ACCEPT", "CRASH"];
     process.env.FAKE_VERDICTS = JSON.stringify(Object.fromEntries(publicCases.map((c, i) => [c.ref, words[i % words.length]])));
@@ -449,6 +456,40 @@ describe("rescore", () => {
     expect(now.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(now.summary.manifest.collector).toEqual(was.summary.manifest.collector);
     expect(now.summary.manifest.rescored_from).toMatchObject({ results: basename(summary.results_dir), scorer: was.summary.manifest.scorer, dropped: [] });
+  });
+
+  test("a custom corpus whose folder is in the repository records it, and a rescore finds the cases there (corpus_folder)", async () => {
+    const root = tmp();
+    const { summary } = await publicRun((folder) => customAt(folder, root)); // the committed cases and library, read as a custom corpus
+    const dir = summary.results_dir;
+    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "evals/promotion/assets" });
+    expect(stored(dir).summary.corpus_folder).toBe("evals/promotion/assets"); // from the repository root, with /, never absolute
+    const { out, result } = rescoreFolder(dir);
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(stored(out).rows).toEqual(stored(dir).rows);
+    expect(stored(out).summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets", n_run: 20, n_errored: 6 });
+    expect(MEASUREMENT.loadCases(REPO, stored(dir).summary).map((c) => c.id)).toEqual(parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8")).map((c) => c.id));
+    expect((await publicRun()).summary.corpus_folder).toBeNull(); // the public cases record none
+  });
+
+  test("a custom corpus outside the repository records no folder, a rescore asks for it with --cases, and the cases are read from there", async () => {
+    const { ctx, folders } = setup(cases);
+    const dir = dirname(folders.cases);
+    const summary = await quiet(() => runCorpus(customAt(dir, tmp()), ctx, folders.results));
+    clearRunning(summary.results_dir);
+    expect(stored(summary.results_dir).summary.corpus_folder).toBeNull();
+    expect(() => rescoreFolder(summary.results_dir)).toThrow(/was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts\/rescore with --cases DIR/);
+    const { out, result } = rescoreFolder(summary.results_dir, { cases: dir });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(stored(out).rows).toEqual(stored(summary.results_dir).rows);
+    expect(stored(out).summary.manifest.rescored_from.dropped).toEqual([]);
+    expect(stored(out).summary.corpus_folder).toBeNull(); // the folder is outside the repository, so it is not written down
+    // other cases in the folder are other labels: a case that was relabelled is named
+    const relabelled = cases.map((c) => (c.id === "g-accept" ? { ...c, label: "bad", category: "duplicate" } : c));
+    writeFileSync(join(dir, "cases.jsonl"), relabelled.map((c) => `${JSON.stringify(c)}\n`).join(""));
+    const again = rescoreFolder(summary.results_dir, { cases: dir });
+    expect(again.result.relabelled).toEqual(["g-accept"]);
+    expect(stored(again.out).rows[0]).toMatchObject({ id: "g-accept", label: "bad", category: "duplicate", outcome: "accept" });
   });
 
   test("a run from before the manifest scores again too, when it read the cases that are here now, and is refused when it did not", async () => {

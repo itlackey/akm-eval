@@ -5,12 +5,12 @@
 //   evals/promotion/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -52,19 +52,13 @@ const libraryOf = (c: ResolvedCorpus): string => join(c.folder, "library");
 /** Where the results of a corpus go: the eval's results/ for the public cases, private/promotion/results/ for a custom corpus, which is not published. */
 export const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The folder of a corpus from the repository root, so that rescore finds it again. Null when it is outside the repository: its path is not recorded. */
-function folderRecord(c: ResolvedCorpus): string | null {
-  const rel = relative(ROOT, c.folder);
-  return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel.split(sep).join("/");
-}
-
 interface Summary {
   eval: string;
   /** `public` for the committed cases, `custom` for a folder of your own (corpus_kind says what it is). */
   corpus: string;
   corpus_kind: string;
   corpus_private: boolean;
-  /** The corpus folder from the repository root, or null when it is outside it. Rescore reads the cases from it. */
+  /** A custom corpus: its folder from the repository root, or null when it is outside it (the path would name what is in it). Null for the public cases. Rescore reads the cases of a custom run from it. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -172,7 +166,7 @@ export async function runCorpus(
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(corpus),
-    corpus_folder: folderRecord(corpus),
+    corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),

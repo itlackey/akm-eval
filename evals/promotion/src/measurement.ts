@@ -5,21 +5,24 @@
 // digests of a run, and the scoring itself is in score.ts.
 
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /**
- * The folder a summary's corpus was read from, now. A run records it from the repository root (`corpus_folder`), and null when it was outside it.
- * A summary from before that names the corpus only: the public assets, else the default custom folder, private/promotion/own. A folder outside the
- * repository is not recorded, so a run on it is scored against the default folder, and the rescored manifest shows the cases whose labels differ.
+ * The folder a summary's corpus was read from, now: the public assets, the custom corpus in `corpus_folder` (from the repository root, as
+ * lib/manifest.ts `corpusFolderOf` writes it; scripts/rescore sets it from `--cases DIR` when the run could not record it), and for a run from before
+ * the corpora were renamed (`own`) the default custom folder, private/promotion/own.
  */
 function folderOf(root: string, summary: Record<string, any>): string {
-  const recorded = summary.corpus_folder;
-  if (typeof recorded === "string" && recorded !== "" && !isAbsolute(recorded) && !recorded.split(/[\\/]/).includes("..")) return join(root, recorded);
-  return summary.corpus === "public" ? join(root, "evals", NAME, "assets") : join(root, "private", NAME, "own");
+  if (summary.corpus === "public") return join(root, "evals", NAME, "assets");
+  if (summary.corpus === "custom") {
+    if (typeof summary.corpus_folder !== "string" || summary.corpus_folder.trim() === "") throw new Error("it was made on a custom corpus and records no corpus_folder: give the folder of its cases (scripts/rescore --cases DIR)");
+    return resolve(root, summary.corpus_folder);
+  }
+  return join(root, "private", NAME, "own");
 }
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
