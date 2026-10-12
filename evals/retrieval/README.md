@@ -66,13 +66,13 @@ evals/retrieval/label --cases ~/notes/retrieval
 
 ## Domain mix
 
-The public library has 251 assets and 1,499 graded pairs, by top-level group:
+The public library has 251 assets and 1,502 graded pairs, by top-level group:
 
 | Group | Assets | Graded rows | Share of rows | Relevant rows |
 |---|---:|---:|---:|---:|
-| ai-skills | 87 | 475 | 31.7% | 142 |
-| print | 45 | 410 | 27.4% | 159 |
-| coding | 60 | 196 | 13.1% | 67 |
+| ai-skills | 87 | 478 | 31.8% | 145 |
+| print | 45 | 410 | 27.3% | 159 |
+| coding | 60 | 196 | 13.0% | 67 |
 | e2e-testing | 13 | 142 | 9.5% | 43 |
 | administrative | 20 | 106 | 7.1% | 42 |
 | dev-workflow | 5 | 47 | 3.1% | 8 |
@@ -84,7 +84,7 @@ The public library has 251 assets and 1,499 graded pairs, by top-level group:
 | development | 1 | 8 | 0.5% | 2 |
 | cmyk-image-converter | 1 | 6 | 0.4% | 3 |
 | other | 1 | 2 | 0.1% | 2 |
-| all | 251 | 1499 | 100.0% | 501 |
+| all | 251 | 1502 | 100.0% | 504 |
 
 `bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 59% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
 

@@ -24,6 +24,9 @@ export const PINS = { akm_cli: "0.9.26", akm_plugin: "0.9.26202610051302", openc
 /** The pins of one run, as it was made: the akm under test replaces the pinned akm-cli, and a checkout that holds the plugin replaces the plugin. */
 export type Pins = Record<keyof typeof PINS, string>;
 
+/** Compatible published plugins: each depends on the CLI release named here. Other releases retain the default plugin. */
+export const RELEASE_PLUGINS: Record<string, string> = { [PINS.akm_cli]: PINS.akm_plugin, "0.10.261003-beta": "0.10.261002-beta" };
+
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
 
@@ -167,9 +170,9 @@ export interface AkmArm {
   packages: string | null;
 }
 
-/** The arm of a run with no `--akm`, or with an npm spec: the pinned plugin, and akm-cli at `version`. */
+/** The arm of a run with no `--akm`, or with an npm spec: the compatible plugin when recorded in RELEASE_PLUGINS, otherwise the pinned plugin, and akm-cli at `version`. */
 export function releaseArm(version: string = PINS.akm_cli): AkmArm {
-  return { bin: `akm-cli@${version}`, build: null, cli: { version, tarball: null }, plugin: { version: PINS.akm_plugin, tarball: null }, packages: null };
+  return { bin: `akm-cli@${version}`, build: null, cli: { version, tarball: null }, plugin: { version: RELEASE_PLUGINS[version] ?? PINS.akm_plugin, tarball: null }, packages: null };
 }
 
 export const pinsOf = (arm: AkmArm): Pins => ({ ...PINS, akm_cli: arm.cli.version, akm_plugin: arm.plugin.version });
@@ -292,7 +295,7 @@ export function akmArm(value: string | undefined, into: string, pack?: Pack): { 
   if (source.kind === "checkout") return packAkm(source.path, into, pack);
   const arm = releaseArm(source.version);
   if (source.version === PINS.akm_cli) return { arm, note: null };
-  const other = `the akm arm installs akm-cli ${source.version} from the npm registry, with the pinned plugin ${PINS.akm_plugin}. The plugin carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`;
+  const other = `the akm arm installs akm-cli ${source.version} from the npm registry, with plugin ${arm.plugin.version}. ${RELEASE_PLUGINS[source.version] ? "The plugin depends on this CLI release." : `The plugin carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`}`;
   return { arm, note: lockFolder("akm-cli", source.version) ? other : `${other} ${UNLOCKED}` };
 }
 

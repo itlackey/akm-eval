@@ -808,7 +808,10 @@ describe("the command", () => {
   const RUN = join(import.meta.dir, "run.ts");
   /** run.ts as a command, with the model and the judge of a synthetic gateway and no models.json line for them. */
   const command = (args: string[]) => {
-    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_API_KEY: "", MODEL_NAME: "synthetic-model", JUDGE_MODEL: "synthetic-judge" };
+    // Stop at the version probe after consent; reader retries against a dead endpoint take over a minute.
+    const stub = join(tmp(), "consent-akm.ts");
+    writeFileSync(stub, 'console.error("consent-test-akm reached"); process.exit(1);');
+    const env = { ...process.env, AKM_BIN: commandLine([process.execPath, stub]), MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_API_KEY: "", MODEL_NAME: "synthetic-model", JUDGE_BASE_URL: "http://127.0.0.1:9/v1", JUDGE_MODEL: "synthetic-judge" };
     const run = Bun.spawnSync([process.execPath, RUN, ...args], { env, stdout: "pipe", stderr: "pipe" });
     return { code: run.exitCode, out: run.stdout.toString(), err: run.stderr.toString() };
   };
@@ -827,8 +830,12 @@ describe("the command", () => {
     expect(asked.code).toBe(2);
     expect(asked.err).toContain(`longmemeval: add -y to send the cases in ${notes} to synthetic-model at http://127.0.0.1:9/v1 and synthetic-judge at http://127.0.0.1:9/v1 without asking`);
     // --retrieval-only has no model and no judge, so there is nothing to ask about
-    expect(command(["--cases", notes, "--retrieval-only"]).err).not.toContain("add -y");
-    expect(command(["--cases", notes, "--limit", "1", "--yes"]).err).not.toContain("add -y");
+    const retrieval = command(["--cases", notes, "--retrieval-only"]);
+    expect(retrieval.err).not.toContain("add -y");
+    expect(retrieval.err).toContain("consent-test-akm reached");
+    const approved = command(["--cases", notes, "--limit", "1", "--yes"]);
+    expect(approved.err).not.toContain("add -y");
+    expect(approved.err).toContain("consent-test-akm reached");
   });
 
   test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
@@ -884,7 +891,7 @@ describe("--repeat", () => {
     for (const dir of readdirSync(b.results).filter((n) => !n.endsWith(".json"))) expect(existsSync(join(b.results, dir, ".running")), dir).toBe(false);
     const spread = b.spread("rep");
     expect(spread).toMatchObject({ eval: "longmemeval", corpus: "public", label: "rep", repeat: 2, model: "fake-model", akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 } });
-    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)).sort());
     // every number of the metrics is a spread over the two runs
     expect(spread.metrics.accuracy.with_akm.rate).toEqual({ min: one.metrics.accuracy.with_akm.rate, max: two.metrics.accuracy.with_akm.rate, mean: one.metrics.accuracy.with_akm.rate });
     expect(spread.metrics.retrieval.hit_rate).toEqual({ min: 0.5, max: 0.5, mean: 0.5 });

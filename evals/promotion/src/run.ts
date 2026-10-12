@@ -171,7 +171,7 @@ export async function runCorpus(
     ...build,
     limit: ctx.limit ?? null,
     ...overrideSummary(overrides),
-    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
+    config: redactConfig(hideEndpoint(config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
     engine: engineSettings(config),
     assets_sha256: assetsDigest,
     seed,

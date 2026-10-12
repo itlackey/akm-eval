@@ -1,0 +1,8 @@
+{
+  "name": "akm-eval-akm-cli",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "akm-cli": "0.10.261003-beta"
+  }
+}

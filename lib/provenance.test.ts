@@ -52,6 +52,14 @@ describe("sha256Files", () => {
 });
 
 describe("redactConfig", () => {
+  test("removes URL credentials from nested fields and arrays without changing the rest of the URL or ordinary strings", () => {
+    const url = "https://demo%40user:demo-password@registry.example:8443/bundle?token=demo-token&api%5Fkey=demo-key&branch=main&token=other-token#readme";
+    const config = { registry: { url }, urls: [url, "$REGISTRY_URL", "ordinary text", "https://example.com/path?branch=main"] };
+    const safe = "https://registry.example:8443/bundle?token=<redacted>&api%5Fkey=<redacted>&branch=main&token=<redacted>#readme";
+    expect(redactConfig(config)).toEqual({ registry: { url: safe }, urls: [safe, "$REGISTRY_URL", "ordinary text", "https://example.com/path?branch=main"] });
+    expect(config.registry.url).toBe(url);
+  });
+
   test("replaces the value of every credential field (credentialField), in any case, at any depth, and leaves the rest", () => {
     const config = {
       engines: { m: { apiKey: "sk-1", API_KEY: "sk-2", Token: "t", maxTokens: 5, model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },

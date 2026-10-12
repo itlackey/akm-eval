@@ -301,6 +301,19 @@ const fakePack: Pack = (dir, into) => {
 };
 
 describe("packAkm", () => {
+  test("the 0.10 beta release selects its published compatible plugin and locked dependencies", () => {
+    const { arm, note } = akmArm("akm-cli@0.10.261003-beta", tmp());
+    expect(arm.plugin).toEqual({ version: "0.10.261002-beta", tarball: null });
+    expect(note).toContain("The plugin depends on this CLI release.");
+    expect(note).not.toContain("not locked");
+    for (const [pkg, version] of [["akm-cli", arm.cli.version], ["akm-opencode", arm.plugin.version]]) {
+      const lock = JSON.parse(readFileSync(join(lockFolder(pkg, version) as string, "package-lock.json"), "utf8"));
+      expect(lock.packages[`node_modules/${pkg}`].version).toBe(version);
+    }
+    const pluginLock = JSON.parse(readFileSync(join(lockFolder("akm-opencode", arm.plugin.version) as string, "package-lock.json"), "utf8"));
+    expect(pluginLock.packages["node_modules/akm-cli"].version).toBe(arm.cli.version);
+  });
+
   test("packs a checkout into a tarball of akm-cli, keeps the pinned plugin and says so", () => {
     const into = join(tmp(), "pack");
     const { arm, note } = packAkm(checkout(), into, fakePack);

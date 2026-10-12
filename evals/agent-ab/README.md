@@ -18,7 +18,7 @@ evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 
 - `--limit N` runs N tasks across the families, once per arm. Without it every task runs 3 times per arm (36 trials, about 30 minutes, four at a time).
 - `--model NAME` is the model, resolved as in the other evals (a `models.json` line, or the gateway in `MODEL_BASE_URL` with `MODEL_API_KEY`) and given to opencode as `openai/<id>`. `OPENAI_BASE_URL` and `OPENAI_API_KEY` stand in for empty `MODEL_*` values.
-- `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.9.26`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. `AKM_BIN` is not read.
+- `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.9.26`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. The published CLI `0.10.261003-beta` selects compatible plugin `0.10.261002-beta` (which depends on that exact CLI); both have committed dependency locks. `AKM_BIN` is not read.
 - `--akm-env KEY=VALUE`, repeatable, adds an `AKM_*` setting to the akm arm; this is how a config is swept. The directories, `AKM_OPENCODE_CLI` and credential names are refused.
 
 A run that did not finish everything (Harbor failed, or a task, arm and attempt has no trial) writes its summary with `status: "aborted"`, exits 1, and is no result.

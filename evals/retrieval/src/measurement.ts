@@ -51,6 +51,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));
     // A query that was reworded since the run, or asked of another library, is another case: the results the run stored were not made for it.
     const made = summary.manifest?.cases;
+    // Matrix fingerprints also load the live corpus, before any run or manifest exists.
     if (made === null || typeof made !== "object") return cases;
     return cases.filter((c) => !Object.hasOwn(made, c.id) || made[c.id]?.input_sha256 === sha256Json(inputOf(c, libraryOf(summary))));
   },

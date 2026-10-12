@@ -122,7 +122,7 @@ describe("answerFrom", () => {
 });
 
 describe("the canned replies, against the requests akm 0.9.26 and 0.9.31 send", () => {
-  const contracts = Object.entries(CONTRACTS);
+  const contracts = Object.entries(CONTRACTS).filter(([dir]) => dir !== "evals/bakeoff"); // bakeoff is validated against the real AKM by the contract smoke.
 
   test("every request an eval makes gets a reply that is JSON and, when the request sends a schema, fits it, in each release", () => {
     for (const [release, requests] of Object.entries(RELEASES)) {
@@ -266,7 +266,7 @@ const RUNS: Record<string, { ok: Record<string, unknown>; bad: Record<string, un
 
 describe("what a run must say", () => {
   test("every eval with a failure run takes the row of a run that reached the outcome, and not the row of a malformed one", () => {
-    expect(Object.keys(RUNS).sort()).toEqual(Object.entries(CONTRACTS).filter(([, c]) => c.failure).map(([dir]) => dir).sort());
+    expect(Object.keys(RUNS).sort()).toEqual(Object.entries(CONTRACTS).filter(([dir, c]) => c.failure && dir !== "evals/bakeoff").map(([dir]) => dir).sort());
     for (const [dir, run] of Object.entries(RUNS)) {
       const c = CONTRACTS[dir] as Contract;
       const [ok, bad] = [{ ...run.ok }, { ...run.bad }];
@@ -276,6 +276,16 @@ describe("what a run must say", () => {
       expect({ dir, wrong: verify(c.success, [bad], badSummary, "success").length > 0 }).toEqual({ dir, wrong: true });
       expect({ dir, wrong: verify(c.failure as NonNullable<Contract["failure"]>, [ok], okSummary, "failure").length > 0 }).toEqual({ dir, wrong: true });
     }
+  });
+
+  test("bakeoff requires all five processes to produce outputs and refuses malformed outcomes", () => {
+    const contract = CONTRACTS["evals/bakeoff"] as Contract;
+    const rows = ["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"].map((process) => ({ id: process, process, outcome: "output" }));
+    expect(verify(contract.success, rows, [{ status: "complete" }], "success")).toEqual([]);
+    expect(verify(contract.success, rows.slice(0, 4), [], "success")).toContain("bakeoff must reach all five processes");
+    const malformed = rows.map((row) => ({ ...row, outcome: "unusable" }));
+    expect(verify(contract.failure as NonNullable<Contract["failure"]>, malformed, [], "failure")).toEqual([]);
+    expect(verify(contract.success, malformed, [], "success")).toHaveLength(5);
   });
 
   test("retrieval has only its rows to show: no error", () => {
@@ -498,9 +508,10 @@ describe(".github/workflows/akm-smoke.yml", () => {
     expect(job.name).toBe("smoke (${{ matrix.leg.akm }})");
   });
 
-  test("a pull request that changes the evals or what they share runs the pinned contract leg alone", () => {
+  test("every pull request runs the pinned contract leg alone", () => {
     expect(legs(true)).toEqual([PINNED]);
-    expect(workflow.on.pull_request.paths).toEqual(expect.arrayContaining(["lib/**", "evals/**", "benchmarks/**", "corpus/**", "scripts/smoke/**", ".github/workflows/akm-smoke.yml"]));
+    expect(Object.hasOwn(workflow.on, "pull_request")).toBe(true);
+    expect(workflow.on.pull_request?.paths).toBeUndefined();
   });
 
   test("installs the release that lib/harbor/harbor.ts pins for the pinned leg, and the latest for the other", () => {
