@@ -172,7 +172,7 @@ describe("two runs with a manifest", () => {
     expect(r.a.rescored_from).toBe("stale");
     expect(r.a.scorer).toBe(r.b.scorer);
     const md = renderPair(r);
-    expect(md).toContain("> Scored again. The runs had been scored by different scorers or against different labels");
+    expect(md).toContain("> Scored again. Not every run had been scored by the current scorer and labels");
     expect(md).toContain("| scored again from | `stale` | `now` |");
     expect([a, b].map((d) => readFileSync(join(d, "summary.json"), "utf8") + readFileSync(join(d, "samples.jsonl"), "utf8"))).toEqual(before);
   });
@@ -183,6 +183,27 @@ describe("two runs with a manifest", () => {
     const r = compare(a, b);
     expect(r.rescored.length).toBe(2);
     expect(r.exploratory).toEqual([]);
+  });
+
+  test("runs that agree with each other but were scored by an older scorer are scored again with the current one, as the matrix does", () => {
+    const allRight = (rows: Record<string, any>[]) => rows.map((r) => ({ ...r, correct: true, checks: Object.fromEntries(Object.keys(r.checks ?? {}).map((k) => [k, true])) }));
+    const a = run({ label: "old-a", raw: BAD, manifest: (m) => ({ ...m, scorer: STALE }), rows: allRight });
+    const b = run({ label: "old-b", raw: GOOD, manifest: (m) => ({ ...m, scorer: STALE }) });
+    const r = compare(a, b);
+    expect(r.rescored).toEqual([loadRun(a).dir, loadRun(b).dir]);
+    expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
+    expect(renderPair(r)).toContain("> Scored again. Not every run had been scored by the current scorer and labels");
+  });
+
+  test("runs whose case was relabelled after both were made are scored again against the current labels", () => {
+    const before = (m: RunManifest): RunManifest => ({ ...m, cases: { ...m.cases, [ids[0] as string]: { ...(m.cases[ids[0] as string] as object), label_sha256: "e".repeat(64) } } as RunManifest["cases"] });
+    const r = compare(run({ label: "a", raw: GOOD, manifest: before }), run({ label: "b", raw: BAD, manifest: before }));
+    expect(r.rescored.length).toBe(2);
+    expect(r.exploratory).toEqual([]);
+  });
+
+  test("runs scored by the current scorer against the current labels are not scored again", () => {
+    expect(compare(run({ label: "a", raw: GOOD }), run({ label: "b", raw: BAD })).rescored).toEqual([]);
   });
 
   test("a run that cannot be scored again, for want of the raw output the scorer reads, makes the comparison refused and names the fields", () => {

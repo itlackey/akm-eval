@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { type ManifestReading, loadMeasurement, readManifest } from "../../../lib/manifest.ts";
+import { type ManifestReading, loadMeasurement, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { EVALS, EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
 import { AXES, type Axis, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "./policy.ts";
 
@@ -919,13 +919,24 @@ interface Aligned {
 
 /**
  * Brings runs that carry a manifest to one scorer and one set of inputs before they are compared, as the policy of the foundation says:
- *  - the scorer or a case's labels differ among the runs: each run is scored again with the current scorer and labels (scripts/rescore),
- *    and the report says so. A run that cannot be scored again (its rows lack the raw output) makes the comparison refused.
+ *  - the scorer or a case's labels differ among the runs, or from the current scorer and labels (a scorer fix, or a case relabelled since the
+ *    runs were made): each run is scored again with the current scorer and labels (scripts/rescore), as the matrix does, and the report says
+ *    so. A run that cannot be scored again (its rows lack the raw output) makes the comparison refused when it needs to be.
  *  - the input of a case differs among the runs: the case is left out, and named. When the inputs of more than 1 - MIN_SHARE of the shared
  *    cases differ, the comparison is refused as a difference of inputs, unless `inputs` is the treatment, which keeps them all.
  * A run without a manifest (written before harness-v3) is compared as before and makes the report exploratory, for an eval that can have a
  * manifest. An eval that declares no measurement yet cannot, and is compared by the earlier rules.
  */
+/** The scorer this repository has now for an eval, as MEASUREMENT.lock records it; null when it has none. */
+function currentScorer(evalName: string): { version: number; sha256: string } | null {
+  try {
+    const m = loadMeasurement(evalName);
+    return m ? lockedParts(m).scorer : null;
+  } catch {
+    return null;
+  }
+}
+
 function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
   const out: Aligned = { sides: named.map(([, runs]) => runs), rescored: [], inputsDiffer: [], treated: [], exploratory: [] };
   const evalName = String(named[0]?.[1][0]?.summary.eval);
@@ -946,18 +957,37 @@ function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
   const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r)?.cases[id]?.[field])).size;
   let runs = entries.map((e) => e.run);
   const scorers = [...new Set(runs.map((r) => manifestOf(r)?.scorer.sha256))];
-  if (scorers.length > 1 || sharedIds(runs).some((id) => distinct(runs, id, "label_sha256") > 1)) {
-    const why = scorers.length > 1 ? `the runs were scored by different scorers (${entries.map((e) => `${label(e.side, e.runs, e.run)}: v${manifestOf(e.run)?.scorer.version} ${manifestOf(e.run)?.scorer.sha256.slice(0, 12)}`).join(", ")})` : "the runs were scored against different labels";
+  const now = currentScorer(evalName);
+  // every run scored again with what the repository has now, to see whether a case was relabelled since; one that cannot be refuses only when needed
+  const { RescoreError, rescoreRun } = rescorer();
+  const tried = new Map<Run, { run: Run; relabelled: string[] } | { error: Error }>();
+  for (const e of entries) {
+    try {
+      const result = rescoreRun({ dir: e.run.dir, summary: e.run.summary, rows: e.run.rows });
+      tried.set(e.run, { run: { ...e.run, summary: result.summary, rows: result.rows }, relabelled: result.relabelled });
+    } catch (error) {
+      if (!(error instanceof RescoreError)) throw error;
+      tried.set(e.run, { error });
+    }
+  }
+  const changedSince = [...new Set([...tried.values()].flatMap((t) => ("error" in t ? [] : t.relabelled)))];
+  const part = (r: Run): string => `v${manifestOf(r)?.scorer.version} ${manifestOf(r)?.scorer.sha256.slice(0, 12)}`;
+  const why =
+    scorers.length > 1
+      ? `the runs were scored by different scorers (${entries.map((e) => `${label(e.side, e.runs, e.run)}: ${part(e.run)}`).join(", ")})`
+      : sharedIds(runs).some((id) => distinct(runs, id, "label_sha256") > 1)
+        ? "the runs were scored against different labels"
+        : now !== null && scorers[0] !== now.sha256
+          ? `the runs were scored by a scorer other than the current one (${part(runs[0] as Run)}, now v${now.version} ${now.sha256.slice(0, 12)})`
+          : changedSince.length > 0
+            ? `${changedSince.length === 1 ? "a case has" : `${changedSince.length} cases have`} other labels than when the runs were made (${listIds(changedSince)})`
+            : null;
+  if (why !== null) {
     const again = new Map<Run, Run>();
     for (const e of entries) {
-      const { RescoreError, rescoreRun } = rescorer();
-      try {
-        const result = rescoreRun({ dir: e.run.dir, summary: e.run.summary, rows: e.run.rows });
-        again.set(e.run, { ...e.run, summary: result.summary, rows: result.rows });
-      } catch (error) {
-        if (error instanceof RescoreError) fail(`${why}, so they are scored again with the current scorer before they are compared, and ${label(e.side, e.runs, e.run)} cannot be: ${error.message}`);
-        throw error;
-      }
+      const t = tried.get(e.run) as { run: Run } | { error: Error };
+      if ("error" in t) return fail(`${why}, so they are scored again with the current scorer before they are compared, and ${label(e.side, e.runs, e.run)} cannot be: ${t.error.message}`);
+      again.set(e.run, t.run);
     }
     out.sides = out.sides.map((side) => side.map((r) => again.get(r) as Run));
     out.rescored = entries.map((e) => e.run.dir);
@@ -1308,7 +1338,7 @@ export function renderPair(r: PairReport): string {
   const heads = sets ? [...r.a_runs.map((_, i) => `A r${i + 1}`), ...r.b_runs.map((_, i) => `B r${i + 1}`)] : ["A", "B"];
   const out = [`# Compare ${where(r)}: A and B`, "", ...exploratoryBanner(r.exploratory), ...runTable(sets ? [...r.a_runs, ...r.b_runs] : [r.a, r.b], heads), ""];
   out.push(r.differences.length === 0 ? "A and B have the same settings." : `B differs from A in ${r.differences.map((d) => `${d.field} (${d.a ?? "none"} → ${d.b ?? "none"})`).join(", ")}.`, "");
-  if (r.rescored.length > 0) out.push(`> Scored again. The runs had been scored by different scorers or against different labels, so ${r.rescored.length === 1 ? "the run was" : `each of the ${r.rescored.length} runs was`} scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
+  if (r.rescored.length > 0) out.push(`> Scored again. Not every run had been scored by the current scorer and labels, so ${r.rescored.length === 1 ? "the run was" : `each of the ${r.rescored.length} runs was`} scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
   if (r.inputs_differ.length > 0) out.push(`> Left out. ${plural(r.inputs_differ.length, "case")} ${r.inputs_differ.length === 1 ? "was" : "were"} not given the same input in every run, so ${r.inputs_differ.length === 1 ? "it is" : "they are"} not compared: ${listIds(r.inputs_differ)}.`, "");
   out.push(`Treatment: ${r.treatment.join(", ")}. Nothing else may differ between A and B${sets ? ", or among the repeats of one side" : ""}.${r.treated.length > 0 ? ` They differ in: ${r.treated.join("; ")}.` : ""}`, "");
   for (const w of r.warnings) out.push(`> ${w}`);
@@ -1352,7 +1382,7 @@ export function renderPair(r: PairReport): string {
 
 export function renderRepeats(r: RepeatsReport): string {
   const out = [`# Repeats of ${where(r)}: ${r.runs.length} runs`, "", ...exploratoryBanner(r.exploratory), ...runTable(r.runs, r.runs.map((_, i) => `r${i + 1}`)), ""];
-  if (r.rescored.length > 0) out.push(`> Scored again. The runs had been scored by different scorers or against different labels, so each of the ${r.rescored.length} was scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
+  if (r.rescored.length > 0) out.push(`> Scored again. Not every run had been scored by the current scorer and labels, so each of the ${r.rescored.length} was scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
   if (r.inputs_differ.length > 0) out.push(`> Left out. ${plural(r.inputs_differ.length, "case")} ${r.inputs_differ.length === 1 ? "was" : "were"} not given the same input in every run: ${listIds(r.inputs_differ)}.`, "");
   for (const w of r.warnings) out.push(`> ${w}`);
   if (r.warnings.length > 0) out.push("");
