@@ -45,24 +45,6 @@ export function readGenerated(dir: string): Generated | null {
   }
 }
 
-/** The text of a seed file, such as private/seed, or null when it is not there or is empty. */
-export function readSeed(file: string): string | null {
-  try {
-    return readFileSync(file, "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The seed of the private assets in `assets` (private/<name>/assets): the one generated.json beside them says they were made from,
- * which is private/seed unless `generate-assets --seed` gave another. Else private/seed, when it is there.
- */
-export function privateSeed(assets: string): string | null {
-  const dir = dirname(assets);
-  return readGenerated(dir)?.seed ?? readSeed(join(dirname(dir), "seed"));
-}
-
 /**
  * Why a run on the rewrite of `name` (in `dir`, private/<name>) cannot go ahead, or null when it can. `probe` is the file of the assets that
  * has to be there, and `publicInputs` gives the digest of the public inputs as they are now. Assets made from other public inputs would score

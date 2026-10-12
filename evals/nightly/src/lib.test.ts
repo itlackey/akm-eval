@@ -16,6 +16,7 @@ import {
   type ReflectItem,
   type UntouchedItem,
   actionFor,
+  actionsOf,
   applyFix,
   callStats,
   describeAction,
@@ -28,6 +29,7 @@ import {
   noteAges,
   parseItems,
   parseProposals,
+  proactiveLane,
   refOf,
   sameNote,
   scoreItem,
@@ -37,9 +39,10 @@ import {
 const night = loadNight(join(import.meta.dir, "..", "assets"));
 const find = <T extends Item>(id: string): T => night.items.find((i) => i.id === id) as T;
 
-/** The night as planted, with nothing done to it. Change `after`, add proposals or give akm's result to make a night. */
-function quiet(over: Partial<Outcome> = {}): Outcome {
-  return { before: new Map(night.files), after: new Map(night.files), proposals: [], improve: {}, ...over };
+/** The night as planted, with nothing done to it. Change `after`, add proposals or give akm's improve result (`improve`) to make a night. */
+function quiet(over: Partial<Outcome> & { improve?: unknown } = {}): Outcome {
+  const { improve, ...rest } = over;
+  return { before: new Map(night.files), after: new Map(night.files), proposals: [], actions: actionsOf(improve), lane: proactiveLane(improve), ...rest };
 }
 
 const proposal = (over: Partial<Proposal>): Proposal => ({ id: "p", ref: "", status: "pending", source: "reflect", gate: null, judgeReason: null, retirement: null, content: "", ...over });
@@ -255,15 +258,15 @@ describe("parseProposals, actionFor, describeAction, callStats", () => {
 
   test("actionFor finds the action of one process on one ref, with or without the bundle in the ref", () => {
     const improve = { actions: [{ ref: "skills/x", mode: "reflect", result: { ok: true } }, { ref: "bundle//memories/m", mode: "distill", result: { outcome: "queued" } }, { ref: "memories/m", mode: "reflect-skipped" }] };
-    expect(actionFor(improve, "skills/x", "reflect")?.mode).toBe("reflect");
-    expect(actionFor(improve, "memories/m", "distill")?.mode).toBe("distill");
-    expect(actionFor(improve, "memories/m", "reflect")?.mode).toBe("reflect-skipped");
-    expect(actionFor(improve, "skills/y", "reflect")).toBeUndefined();
+    expect(actionFor(actionsOf(improve), "skills/x", "reflect")?.mode).toBe("reflect");
+    expect(actionFor(actionsOf(improve), "memories/m", "distill")?.mode).toBe("distill");
+    expect(actionFor(actionsOf(improve), "memories/m", "reflect")?.mode).toBe("reflect-skipped");
+    expect(actionFor(actionsOf(improve), "skills/y", "reflect")).toBeUndefined();
     // akm's report that a ref's turn failed, or that the budget ran out at it, is the ref's action for either process
     const stopped = { actions: [{ ref: "skills/z", mode: "error", result: { error: "timeout: improve wall-clock budget exhausted" } }] };
-    expect(actionFor(stopped, "skills/z", "reflect")?.mode).toBe("error");
-    expect(actionFor(stopped, "skills/z", "distill")?.mode).toBe("error");
-    expect(actionFor(null, "skills/x", "reflect")).toBeUndefined();
+    expect(actionFor(actionsOf(stopped), "skills/z", "reflect")?.mode).toBe("error");
+    expect(actionFor(actionsOf(stopped), "skills/z", "distill")?.mode).toBe("error");
+    expect(actionFor(actionsOf(null), "skills/x", "reflect")).toBeUndefined();
   });
 
   test("describeAction says what reflect or distill did in a few words, and the error when a model call failed", () => {
@@ -572,11 +575,11 @@ describe("metrics", () => {
     const improve = { proactiveMaintenance: { selected: 3, dueTotal: 20, neverReflected: 20, selectedRefs: [refOf(silent.path), "knowledge/other", "bundle//knowledge/third"] } };
     const hit = scoreItem(silent, quiet({ improve, proposals: [proposal({ ref: refOf(silent.path), content: "x" })] }));
     const proposals = [proposal({ ref: refOf(silent.path) }), proposal({ ref: "knowledge/other" }), proposal({ ref: "knowledge/b" }), proposal({ source: "distill", ref: "knowledge/other" })];
-    expect(metrics([hit], [], proposals, { calls: 0, failures: 0 }, improve).proactive).toEqual({ selected: 3, due: 20, proposals: 2, on_silent: 1, on_others: 1 });
+    expect(metrics([hit], [], proposals, { calls: 0, failures: 0 }, proactiveLane(improve)).proactive).toEqual({ selected: 3, due: 20, proposals: 2, on_silent: 1, on_others: 1 });
   });
 
   test("has no proactive numbers when the lane did not run", () => {
-    expect(metrics([], [], [proposal({ ref: "knowledge/b" })], { calls: 0, failures: 0 }, { actions: [] }).proactive).toBeNull();
+    expect(metrics([], [], [proposal({ ref: "knowledge/b" })], { calls: 0, failures: 0 }, proactiveLane({ actions: [] })).proactive).toBeNull();
   });
 
   test("adds the paths that changed outside the items and the distilled lessons accepted", () => {

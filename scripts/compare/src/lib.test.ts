@@ -24,7 +24,7 @@ const FIXTURES = join(import.meta.dir, "fixtures");
 // exploratory. The fixtures of these evals are such runs, written to test the earlier rules, which are for an eval that declares no measurement.
 // So that they keep testing those rules, the evals below are read as undeclared in this file. The path of a legacy run of an eval that does
 // declare one is tested with reflect, in manifest.test.ts.
-const FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT = ["consolidate"];
+const FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT = ["consolidate", "nightly"];
 let undeclared: ReturnType<typeof spyOn> | undefined;
 beforeAll(() => {
   const real = manifestModule.loadMeasurement;
@@ -1125,7 +1125,8 @@ describe("a release against a release", () => {
     expect(res.exitCode).toBe(0);
     const out = new TextDecoder().decode(res.stdout);
     expect(out).toContain("# Compare nightly (public): A and B");
-    expect(out).not.toContain("Exploratory");
+    // no banner for any reason of the comparison. These runs are from before the manifest, and nightly declares a measurement now, so the one banner is that they have none.
+    expect(out.split("\n").filter((line) => line.includes("Exploratory")).every((line) => line.includes("have no manifest (written before harness-v3)"))).toBe(true);
     expect(out).toContain("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs");
   });
 });

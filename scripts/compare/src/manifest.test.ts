@@ -3,12 +3,13 @@
 // they exercise: the collector (a difference is refused unless it is the treatment), the scorer and the labels (a difference is scored
 // again), the inputs of each case (a case with another input is left out), the coverage of each side (#41), and the legacy runs.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { endpointId } from "../../../lib/provenance.ts";
 import { rescoreFolder } from "../../rescore/src/lib.ts";
+import * as manifestModule from "../../../lib/manifest.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts } from "../../../lib/manifest.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
@@ -291,9 +292,16 @@ describe("a run without a manifest", () => {
   });
 
   test("an eval that declares no measurement yet has no manifest to write, so its runs are compared by the earlier rules", () => {
-    const fixtures = join(import.meta.dir, "fixtures", "nightly");
-    const r = comparePair(loadRun(join(fixtures, "before")), loadRun(join(fixtures, "after")), { treatment: ["build"] });
-    expect(r.exploratory).toEqual([]);
+    // the fixtures are nightly runs from before the manifest, and nightly declares a measurement now: it is read as if it did not
+    const real = manifestModule.loadMeasurement;
+    const undeclared = spyOn(manifestModule, "loadMeasurement").mockImplementation(((name: string, root?: string) => (name === "nightly" ? null : real(name, root))) as never);
+    try {
+      const fixtures = join(import.meta.dir, "fixtures", "nightly");
+      const r = comparePair(loadRun(join(fixtures, "before")), loadRun(join(fixtures, "after")), { treatment: ["build"] });
+      expect(r.exploratory).toEqual([]);
+    } finally {
+      undeclared.mockRestore();
+    }
   });
 
   test("a manifest that is not sound stops the run being read, and says what is wrong", () => {

@@ -173,8 +173,8 @@ describe("what a rescore refuses", () => {
   });
 
   test("an eval that declares no measurement, a manifest that is not sound, and a folder that is not a run", () => {
-    const other = run({ summary: { eval: "nightly" }, manifest: (m) => ({ ...m, eval: "nightly" }) });
-    expect(() => rescoreFolder(other)).toThrow("is a run of nightly, which declares no measurement yet (it has no src/measurement.ts), so there is no scorer to score it with");
+    const other = run({ summary: { eval: "toy" }, manifest: (m) => ({ ...m, eval: "toy" }) });
+    expect(() => rescoreFolder(other)).toThrow("is a run of toy, which declares no measurement yet (it has no src/measurement.ts), so there is no scorer to score it with");
     expect(() => rescoreFolder(run({ manifest: (m) => ({ ...m, manifest_version: 9 }) }))).toThrow("has a manifest that is not sound: manifest_version is 9");
     const empty = tmp();
     expect(() => rescoreFolder(empty)).toThrow("is not a results folder: it has no summary.json");

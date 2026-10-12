@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
 import { endpointRecord, sha256Files } from "../../../lib/provenance.ts";
-import { GENERATED, assetsDigest, generateInto, privateAssetsProblem, privateSeed, readGenerated, readSeed, replaceDir, runInputs } from "./inputs.ts";
+import { GENERATED, assetsDigest, generateInto, privateAssetsProblem, readGenerated, replaceDir, runInputs } from "./inputs.ts";
 
 const dirs: string[] = [];
 const temp = () => {
@@ -57,8 +57,8 @@ describe("assetsDigest", () => {
   });
 });
 
-describe("readGenerated, readSeed, privateSeed", () => {
-  test("readGenerated reads a seed and a digest, and is null for a missing, broken or incomplete marker", () => {
+describe("readGenerated", () => {
+  test("reads a seed and a digest, and is null for a missing, broken or incomplete marker", () => {
     const dir = temp();
     expect(readGenerated(dir)).toBeNull();
     writeFileSync(join(dir, GENERATED), JSON.stringify({ seed: "42", inputs_sha256: "abc" }));
@@ -69,23 +69,6 @@ describe("readGenerated, readSeed, privateSeed", () => {
     }
   });
 
-  test("readSeed is the text of a seed file without its newline, and null when there is none or it is empty", () => {
-    const dir = put(temp(), { seed: "18446744073709551615\n", empty: " \n" });
-    expect(readSeed(join(dir, "seed"))).toBe("18446744073709551615");
-    expect(readSeed(join(dir, "empty"))).toBeNull();
-    expect(readSeed(join(dir, "none"))).toBeNull();
-  });
-
-  test("privateSeed is the seed the assets were made from, else private/seed, else null", () => {
-    const priv = temp();
-    const assets = join(priv, "consolidate", "assets");
-    mkdirSync(assets, { recursive: true });
-    expect(privateSeed(assets)).toBeNull();
-    writeFileSync(join(priv, "seed"), "7\n");
-    expect(privateSeed(assets)).toBe("7");
-    writeFileSync(join(priv, "consolidate", GENERATED), JSON.stringify({ seed: "99", inputs_sha256: "x" })); // generate-assets --seed 99 leaves private/seed alone
-    expect(privateSeed(assets)).toBe("99");
-  });
 });
 
 describe("privateAssetsProblem", () => {

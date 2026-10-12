@@ -12,13 +12,14 @@
 //
 // It works in a temporary folder, private/nightly/.new, and moves assets/ and map.json into place only when the checks have
 // passed, with generated.json (the seed and the digest of the public night) beside them. A failed run leaves the previous private
-// night, map and generated.json as they were. `run --corpus private` stops when generated.json is missing or does not match the public night.
+// night, map and generated.json as they were. `run` on the custom corpus stops when generated.json is missing or does not match the public night.
 
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { assetsDigest, generateInto } from "../../consolidate/src/inputs.ts";
 import { lessonFile, memoryBody, mentions } from "../../distill/src/lib.ts";
-import { type DistillItem, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
+import type { DistillItem } from "./items.ts";
+import { type Night, loadNight, nightFiles, nightProblems } from "./night.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
