@@ -61,7 +61,7 @@ export interface ReflectItem extends Base {
   anchors?: string[];
 }
 
-/** A note that holds a wrong fact, with negative feedback that carries the exact fix. The night queues the fix and a person accepts it. */
+/** A note that holds a wrong fact, with negative feedback that carries the exact fix. The right night ends with the note fixed and nothing else changed: akm 0.10 applies the fix at once, and 0.9.26 queued it as a proposal for a person to accept. */
 export interface FixItem extends Base {
   kind: "fix";
   path: string;

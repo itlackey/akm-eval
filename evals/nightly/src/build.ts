@@ -102,7 +102,7 @@ export function buildNight(): Night {
   if (clean.split(FIX.right).length !== 2) throw new Error(`${FIX.path} must hold ${FIX.right} once`);
   add(FIX.path, clean.replace(FIX.right, () => FIX.wrong));
   const fix: Feedback = { ref: refOf(FIX.path), signal: "negative", reason: FIX.reason, fix: { replace: [FIX.wrong], with: [FIX.right], source: FIX.source } };
-  items.push({ id: "exact-fix-01", kind: "fix", note: "The exact fix is queued as a proposal for a person to accept. The night does not apply it, and changes nothing else in the note.", files: [FIX.path], feedback: [fix], path: FIX.path });
+  items.push({ id: "exact-fix-01", kind: "fix", note: "The note ends the night with the exact fix and nothing else changed: the fix applied at once, or waiting as a proposal for a person to accept.", files: [FIX.path], feedback: [fix], path: FIX.path });
 
   const untouched = [
     ...pick(distill, UNTOUCHED_MEMORIES, "distill").map((c) => ({ path: `memories/${c.name}.md`, text: c.memory })),

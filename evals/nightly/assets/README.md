@@ -23,7 +23,7 @@ The feedback is what the day before the night leaves on record:
 
 - a reflect item has the feedback of its case, as negative feedback with its text as the reason;
 - a distill item has positive feedback with a reason that says only that the memory helped. Distill skips a memory whose only feedback is a bare positive;
-- the fix has negative feedback with `--replace`, `--with` and `--source`, which akm 0.9.26 turns into a proposal for a person to accept;
+- the fix has negative feedback with `--replace`, `--with` and `--source`, which akm 0.9.26 turns into a proposal for a person to accept and akm 0.10 applies at once;
 - a pair, a note to leave alone and a silent defect have none. Consolidate does not need feedback.
 
 The two notes of a pair are dated by file time when the night starts: the older 3 days old, the newer 1, and a pair from one day 2 each. akm dates a note by its file time when the bundle is not a git repository, and calls the older note A.

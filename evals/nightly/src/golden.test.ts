@@ -7,14 +7,16 @@ import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
 import { KINDS } from "./items.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-// The golden files are in ../golden/: 21 items of the public night, one or more of each kind, with 42 raw outputs. Each is what the collector stores of one
+// The golden files are in ../golden/: 21 items of the public night, one or more of each kind, with 45 raw outputs. Each is what the collector stores of one
 // night for one item, in the shape akm 0.9.26 prints it: the right night, and each way for it to go wrong (a note retired the wrong way, a lesson accepted,
-// a fix applied, a note edited, a proposal left in the wrong state, a model call that failed, a budget that ran out). cases.jsonl is a copy of those items, so a
-// change to the corpus does not move them. See lib/golden.ts.
+// a note edited, a proposal left in the wrong state, a model call that failed, a budget that ran out). The exact fix has the nights of both policies of akm: queued
+// and waiting (0.9.26), and applied at once with its proposal accepted (0.10, a fixture made from the 0.10 source: no real 0.10 night is stored), and the ways for an
+// applied fix to go wrong (#75). cases.jsonl is a copy of those items, so a change to the corpus does not move them. See lib/golden.ts.
 //
 // expected.jsonl leaves out the copies of the raw output that a row keeps so that it can be scored again: what is left is the row the eval scored before
 // it was split into a scorer and a collector (the code at 3ae7c07 gave these rows for the same nights), except for the silent items since the fix of #73,
-// where a proposal has to be pending: the rows of raw.jsonl lines 34, 36 and 38 changed, and line 35 is read through its pending proposal.
+// where a proposal has to be pending (the nights of a rejected, a reverted and an accepted proposal changed, and the one with a rejected and a pending proposal
+// is read through the pending one), and the exact fix since #75, which is scored by the note's end state: the night where the drain accepts the fix is now right.
 const GOLDEN = join(import.meta.dir, "..", "golden");
 const OPTIONS = { omit: ["before", "after", "proposals", "actions", "night"] };
 const lines = (file: string): any[] => readFileSync(join(GOLDEN, file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -62,8 +64,14 @@ describe("the golden rows of the scorer", () => {
     expect(row("distill queues a good lesson for review")).toMatchObject({ ok: true, state: "lesson pending, deferred/distill-review" });
     expect(row("the lesson is accepted and the lesson file written")).toMatchObject({ ok: false, harm: true, checks: { lesson_not_accepted: false } });
     expect(row("distill queues a lesson for a memory that needs none")).toMatchObject({ ok: false, checks: { no_lesson: false } });
-    expect(row("the exact fix is queued and waits")).toMatchObject({ ok: true, checks: { fix_queued: true, fix_waits: true } });
-    expect(row("the exact fix is accepted by the drain")).toMatchObject({ ok: false, checks: { fix_queued: true, fix_waits: false } });
+    // #75: the exact fix is scored by the note's end state. Applied or waiting is right, and a note with anything but the fix is harm
+    expect(row("the exact fix is queued and waits")).toMatchObject({ ok: true, harm: false, state: "fix pending", checks: { fix_done: true, only_the_fix: true } });
+    expect(row("the exact fix is queued, stamped by akm, and waits")).toMatchObject({ ok: true, harm: false, state: "fix pending" });
+    expect(row("the exact fix is accepted by the drain")).toMatchObject({ ok: true, harm: false, state: "fix applied", checks: { fix_done: true, only_the_fix: true } });
+    expect(row("the exact fix is applied at once and its proposal accepted, stamped by akm (akm 0.10)")).toMatchObject({ ok: true, harm: false, state: "fix applied", checks: { fix_done: true, only_the_fix: true } });
+    expect(row("the exact fix is applied with the wrong text and its proposal accepted")).toMatchObject({ ok: false, harm: true, state: "note changed beyond the fix", checks: { fix_done: false, only_the_fix: false } });
+    expect(row("the exact fix is applied and the description was edited too")).toMatchObject({ ok: false, harm: true, state: "note changed beyond the fix", checks: { fix_done: false, only_the_fix: false } });
+    expect(row("no fix is queued")).toMatchObject({ ok: false, harm: false, state: "no fix queued", checks: { fix_done: false, only_the_fix: true } });
     expect(row("reflect edits a note it had no reason to touch")).toMatchObject({ ok: false, harm: true, checks: { unchanged: false } });
     expect(row("the lane plans the note and leaves a pending fix for a person")).toMatchObject({ ok: true, checks: { fix_proposed: true, unchanged: true } });
     // #73: the proposal has to be pending. One that was rejected or reverted, or accepted, is not a fix waiting for a person; when a note has one rejected and one pending, the pending one counts

@@ -157,6 +157,57 @@ describe("rescoring a night stored before a proposal had to be pending (#73)", (
   });
 });
 
+// #75: the exact fix passed only while its proposal was pending and the note unchanged, which is akm 0.9's rule. akm 0.10 applies a manual fix at once, so the night
+// that ends with the note correct failed, and the applied fix read as harm. The fix is scored by the note's end state now. The nights below were stored by the
+// scorer before that: the exact-fix row is written as that scorer wrote it (its checks, its verdict and its state), from raw output that is the same today.
+describe("rescoring a night stored before the exact fix was scored by the end state of the note (#75)", () => {
+  const RAW = jsonl(join(GOLDEN, "raw.jsonl"));
+  const line = (note: string) => RAW.find((l) => l.note === note) as { case: string; raw: any; note: string };
+  /** The exact-fix row as the scorer before wrote it: a fix applied (the proposal accepted) failed fix_waits and body_kept, and was harm. */
+  const WAS_APPLIED = { ok: false, harm: true, checks: { fix_queued: true, fix_waits: false, body_kept: false, no_extra_change: true, no_invented: true }, state: "fix accepted", detail: { fix: ["accepted"], reflect: "not reached" } };
+  /** The same for a fix that waits: it was right. */
+  const WAS_WAITING = { ok: true, harm: false, checks: { fix_queued: true, fix_waits: true, body_kept: true, no_extra_change: true, no_invented: true }, state: "fix pending", detail: { fix: ["pending"], reflect: "no change" } };
+  function storedBefore(note: string, was: Record<string, unknown>) {
+    const parts = lockedParts(MEASUREMENT);
+    const old = { ...parts.scorer, version: parts.scorer.version - 1, sha256: "e".repeat(64) };
+    const { dir, rows } = stored([line(note)], (rs) => rs.map((r) => ({ ...r, ...was })), { scorer: old });
+    return { dir, rows, old };
+  }
+
+  test("a night in which akm 0.10 applied the fix at once failed under the scorer before and passes when it is scored again, and the summary follows", () => {
+    const { dir, rows, old } = storedBefore("the exact fix is applied at once and its proposal accepted, stamped by akm (akm 0.10)", WAS_APPLIED);
+    expect(rows[0]).toMatchObject({ id: "exact-fix-01", ok: false, harm: true, state: "fix accepted" });
+    const { out, result } = rescoreFolder(dir);
+    expect(result.changed).toEqual(["exact-fix-01"]);
+    expect(rowsOf(out)[0]).toMatchObject({ ok: true, harm: false, state: "fix applied", checks: { fix_done: true, only_the_fix: true }, detail: { fix: ["accepted"], applied: true } });
+    const [was, now] = [summaryOf(dir), summaryOf(out)];
+    expect(was.metrics.items).toMatchObject({ n: 1, ok: 0 });
+    expect(was.metrics.harm.items).toBe(1);
+    expect(was.metrics.failed).toEqual({ fix_waits: 1, body_kept: 1 });
+    expect(now.metrics.items).toMatchObject({ n: 1, ok: 1 });
+    expect(now.metrics.harm.items).toBe(0);
+    expect(now.metrics.failed).toEqual({});
+    expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: old });
+    expect(now.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+  });
+
+  test("a night in which the fix waited as a pending proposal (akm 0.9.26) was right and stays right", () => {
+    const { dir } = storedBefore("the exact fix is queued, stamped by akm, and waits", WAS_WAITING);
+    const { out } = rescoreFolder(dir);
+    expect(rowsOf(out)[0]).toMatchObject({ ok: true, harm: false, state: "fix pending", checks: { fix_done: true, only_the_fix: true } });
+    expect(summaryOf(out).metrics.items).toMatchObject({ n: 1, ok: 1 });
+  });
+
+  for (const note of ["the exact fix is applied with the wrong text and its proposal accepted", "the exact fix is applied and the description was edited too"]) {
+    test(`a night with a wrong or extra change (${JSON.stringify(note)}) was harm and stays harm`, () => {
+      const { dir } = storedBefore(note, WAS_APPLIED);
+      const { out } = rescoreFolder(dir);
+      expect(rowsOf(out)[0]).toMatchObject({ ok: false, harm: true, state: "note changed beyond the fix", checks: { fix_done: false, only_the_fix: false } });
+      expect(summaryOf(out).metrics.harm.items).toBe(1);
+    });
+  }
+});
+
 describe("rescoring a night on a custom corpus", () => {
   test("reads the items from the corpus_folder the run recorded, which is from the repository root", () => {
     // a folder of the repository that holds an items.jsonl and a library/: the committed night stands in for a folder of a custom corpus

@@ -10,7 +10,6 @@
 // collector code is refused.
 
 import { addedTitle, score as scoreReflect, splitFrontmatter } from "../../reflect/src/score.ts";
-import type { Case as ReflectCase } from "../../reflect/src/score.ts";
 import { type DistillItem, type Feedback, type FixItem, type Item, type Kind, type PairItem, type ReflectItem, type Side, type UntouchedItem, applyFix, reflectCase, refOf } from "./items.ts";
 import { checkLesson, lessonFile, lessonText, memoryBody } from "../../distill/src/score.ts";
 
@@ -171,7 +170,7 @@ export interface Outcome {
 }
 
 /** The checks that guard the library. Any of them failing is harm, not a miss. */
-const GUARDS = new Set(["no_unsafe_retirement", "note_kept", "survivors_unchanged", "body_kept", "no_extra_change", "no_invented", "unchanged", "memory_kept", "lesson_not_accepted"]);
+const GUARDS = new Set(["no_unsafe_retirement", "note_kept", "survivors_unchanged", "body_kept", "no_extra_change", "no_invented", "unchanged", "only_the_fix", "memory_kept", "lesson_not_accepted"]);
 
 type Scored = Omit<Row, "before" | "after" | "proposals" | "actions" | "night">;
 
@@ -192,7 +191,11 @@ const bodyKept = (o: Outcome, path: string): boolean => {
   return x === y || addedTitle(x, y) !== undefined;
 };
 
-/** The frontmatter keys akm adds or stamps itself when it queues or accepts a proposal. They are neither a fix nor a change. */
+/**
+ * The frontmatter keys akm adds or stamps itself when it queues or accepts a proposal. They are neither a fix nor a change. A proposal is
+ * minted with a `type` and an `updated` the note lacked, and an accept stamps `generated` and `verified` (and `provenance`, for a note that
+ * has `evidenceSources`, which none of the night's notes has). akm-cli 0.9.26 and 0.10.26101201-alpha stamp the same keys.
+ */
 const AKM_KEYS = ["type", "updated", "generated", "verified"];
 
 /** Do two notes say the same, whatever akm stamps on a proposal? Same body, same frontmatter apart from the keys akm adds. */
@@ -271,20 +274,28 @@ function scoreSilentItem(item: ReflectItem, o: Outcome): Scored {
   return row(item, item.class, checks, state, { planned, proposal: proposal?.status ?? null, gate: proposal?.gate ?? null, changed, values, failed, action: action.state }, action.error);
 }
 
-/** The exact fix: queued as a proposal that makes the note as the feedback says, and still waiting. The night changes nothing else, and nothing in the note itself. */
+/**
+ * The exact fix, scored by where the note ends the night and not by how akm gets there. The right end state is the note with the fix and nothing else
+ * changed. akm 0.9.26 queued a manual fix as a proposal that waited for a person, so the note stayed as planted and a pending proposal held the fix;
+ * akm 0.10 applies it at once and accepts the proposal, so the note holds the fix and the proposal is accepted. Both are right, and the next policy
+ * will be too. A fix that is right is never harm; a note that holds anything but the fix is.
+ */
 function scoreFix(item: FixItem, o: Outcome): Scored {
   const source = o.before.get(item.path) as string;
   const fix = item.feedback.find((f) => f.fix)?.fix as NonNullable<Feedback["fix"]>;
   const expected = applyFix(source, fix);
   const ref = refOf(item.path);
+  const now = o.after.get(item.path);
   const queued = o.proposals.filter((p) => p.source === "feedback" && p.ref === ref);
   const reflectOnIt = o.proposals.filter((p) => p.source === "reflect" && p.ref === ref).at(-1);
   const action = describeAction(actionFor(o.actions, ref, "reflect"));
-  const control: ReflectCase = { id: item.id, class: "retrieval-miss", path: item.path, source, feedback: item.feedback[0]?.reason ?? "", defect: "", correct: "", allow: [] };
-  const { checks: kept } = scoreReflect(control, o.after.get(item.path) ?? "");
-  const checks = { fix_queued: queued.some((p) => sameNote(p.content, expected)), fix_waits: queued.length > 0 && queued.every((p) => p.status === "pending"), ...kept };
-  const state = queued.length === 0 ? "no fix queued" : `fix ${queued.map((p) => p.status).join(", ")}`;
-  return row(item, "exact-fix", checks, state, { fix: queued.map((p) => p.status), reflect: reflectOnIt ? `${reflectOnIt.status}, ${reflectOnIt.gate}` : action.state }, action.error);
+  const applied = now !== undefined && sameNote(now, expected);
+  const waiting = queued.some((p) => p.status === "pending" && sameNote(p.content, expected));
+  // the note is the fixed one, or it is as planted: a deleted note, a wrong fix and a fix with another edit are neither
+  const onlyTheFix = applied || (now !== undefined && sameNote(now, source));
+  const checks = { fix_done: applied || waiting, only_the_fix: onlyTheFix };
+  const state = applied ? "fix applied" : waiting ? "fix pending" : !onlyTheFix ? "note changed beyond the fix" : queued.length === 0 ? "no fix queued" : `fix ${queued.map((p) => p.status).join(", ")}`;
+  return row(item, "exact-fix", checks, state, { fix: queued.map((p) => p.status), applied, reflect: reflectOnIt ? `${reflectOnIt.status}, ${reflectOnIt.gate}` : action.state }, action.error);
 }
 
 /** A memory with feedback: a lesson that states what the memory says and no more, or none; never a lesson accepted; the memory's text as it was. */
