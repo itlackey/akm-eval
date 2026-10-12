@@ -19,7 +19,7 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 | [Decision judges](#decision-judges) | AUC 0.59 for a 2B decision model, near chance | `evals/judge-gate`, for generative judges |
 | [Skill-pack evals](#skill-pack-evals) | 48 activation cases, 0 missed, 0 false; the runtime check never ran | Nothing |
 | [Performance](#performance) | Speed depends on card, build and context depth: decode was 79% faster at 114k tokens between two llama.cpp builds | Nothing |
-| [Routing](#routing) | No improve process could move to a smaller model; the 35B won the blind review 8 to 0 | `evals/bakeoff` and the process evals |
+| [Routing](#routing) | No improve process could move to a smaller model; the 35B won the blind review 8 to 0 | The process evals and `evals/bakeoff` |
 | [Bakeoff's frozen-prompt jobs](#bakeoffs-frozen-prompt-jobs) | 105 of 120 cases, in 11 of 13 jobs, scored a model on a copy of akm's prompts (0.9.15-style); 15 cases in 5 jobs stay, now run through akm | `evals/reflect`, `evals/distill`, `evals/extract`, `evals/consolidate`, `evals/judge-gate`, `evals/promotion`; `evals/bakeoff` for the rest |
 
 ## tau-bench
@@ -114,7 +114,7 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 - **Found, July.** Median end-to-end speed on 80-token replies: a 9B model 39 tokens/s on one GPU and about 60 on two; a 27B model 24 on two; a 35B mixture-of-experts model 14 on one and 60 to 70 on two.
 - **Found, September.** 27B at 4-bit: between two llama.cpp builds that differ mainly by one upstream attention change, decode speed rose 7.5% at 4.6k tokens of context, 44% at 36.6k, 65% at 73k and 79% at 114k. Prefill did not change. That is not an isolated test of the change, and the first check missed the gain because the eval items were 1k to 3k tokens long. ik_llama.cpp matched mainline llama.cpp on one mixture-of-experts model for one stream (18.5 against 19.0 tokens/s) and was slower over four streams (10.3 against 17.1).
 - **Retired because.** It is not an akm eval. The numbers are bound to one machine and one build, the July sweeps were superseded by the September bake-off, and each trial reached its conclusion. Speed also says little about quality: one request default, the repeat penalty, moved distill grounding by more than 20 points between two servers with identical weights.
-- **Now.** Nothing, on purpose. `evals/bakeoff` scores quality and records `median_seconds`, which depends on the server, and it dropped the token-rate figures. Reopen if a job needs a latency budget.
+- **Now.** Nothing, on purpose. `evals/bakeoff` records `median_seconds` for its five jobs, which depends on the server, and no token rates. Reopen if a job needs a latency budget.
 
 ## Routing
 
@@ -125,7 +125,7 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 - **Other processes.** Consolidate: the 9B proposed 13 promotions against 57, with 2 malformed refs. Triage: 1 of 31 pending proposals reaches the judge, so there was nothing to move. The reflect and distill judges could not be routed.
 - **Also found.** The same harness compared two graph output formats on 30 files. Compact triples cut completion tokens by 36% (22,817 to 14,533) and wall time by 35%, with 0 failures, and a blind review of 12 documents was about even (5 documents won against 4).
 - **Retired because.** Graph extraction and metadata enrichment were removed in akm 0.9.17 (2026-09-29), so the graph harnesses target deleted code, and the triage harness imports a drain policy that 0.9.17 deleted. The lesson that outlives it: grounding and agreement scores are not a safe test for swapping a model, and a blind pairwise review is.
-- **Now.** `evals/bakeoff` measures which model runs each akm job best, and the process evals (`evals/judge-gate`, `evals/consolidate`, `evals/reflect`, `evals/distill`, `evals/extract`) each run against the endpoint you want to try. Nothing here compares two engines blind on the same documents. Reopen if a process with free-text output, as graph extraction was, is routed again.
+- **Now.** The process evals (`evals/judge-gate`, `evals/consolidate`, `evals/reflect`, `evals/distill`, `evals/extract`) and `evals/bakeoff`, for the five jobs no other eval measures, each run akm with its own prompts against the endpoint you want to try. Nothing here compares two engines blind on the same documents. Reopen if a process with free-text output, as graph extraction was, is routed again.
 
 ## Bakeoff's frozen-prompt jobs
 

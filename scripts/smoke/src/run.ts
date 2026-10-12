@@ -35,7 +35,7 @@ calls no model, is checked on its answers: search and curate must return a ref.
   --keep         keep the results folders the runs made (they are removed otherwise)
   --list         print what the smoke runs and what it skips, and why
 
-It skips what needs Docker (agent-ab, terminal-bench), what downloads a dataset (longmemeval, skillret), and bakeoff, which never runs akm.
+It skips what needs Docker (agent-ab, terminal-bench), what downloads a dataset (longmemeval, skillret), and bakeoff, which the smoke has no canned replies for yet.
 Needs akm on PATH, or in AKM_BIN.`;
 
 class Fatal extends Error {}

@@ -49,7 +49,7 @@ Each run writes two files to `evals/bakeoff/results/<UTC date>-<label>/`, or to 
   - `seed`: for a rewrite, the seed its assets were made with (`corpus.json`); `null` for the public corpus and for your own.
   - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
   - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed.
-- `samples.jsonl`: one line per case, with the outcome, the checks and the raw output: the derived memory, the memory `akm remember` wrote, the repair proposal, the session asset, or the plan and the promotions. The raw output of a case is `outcome`, `reason`, `served`, `seconds`, `error`, `timed_out` and whichever of `derived`, `written`, `proposal`, `asset`, `planned` and `promoted` its process makes; the shape and the checks are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
+- `samples.jsonl`: one line per case, with the outcome, the checks and the raw output: the derived memory, the memory `akm remember` wrote, the repair proposal, the session asset, or the plan and the promotions. The raw output of a case is `outcome`, `reason`, `served`, `seconds`, `error`, `timed_out` and whichever of `derived`, `written`, `proposal`, `asset`, `planned`, `promoted` and `skipped` its process makes; the shape and the checks are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
 
 ## How a case runs
 
@@ -86,7 +86,7 @@ Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME
 - A case is a few thousand tokens, and the largest, a pool of 35 memories, is three chunks of 12, so 16k of context is safe.
 - The eval sets temperature 0 and `enableThinking: false` on the engine, and `summary.json` records both under `engine`. akm's own default is a temperature of 0.3. `--config-patch` can change either.
 - Cloud endpoints that reject unknown request fields may refuse the thinking switches akm sends. Run those through a local gateway, or expect errors in `samples.jsonl`.
-- A full run is 15 cases, one at a time, and takes a few minutes on a 27B model on a local GPU.
+- A full run is 15 cases, one at a time: about 30 model calls, and one more for each improve run to probe the engine (`--require-engines`).
 
 ## The collector, the scorer and the golden files
 
@@ -99,7 +99,10 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 
 ```
 scripts/rescore/run evals/bakeoff/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
+scripts/rescore/run --cases ~/notes/bakeoff <results folder>      # a custom run whose corpus is outside the repository
 ```
+
+A run on the public corpus is scored again against the committed cases. A run on a custom corpus is scored against the folder its summary records as `corpus_folder`, which is a path from the repository root and is `null` for a folder outside the repository (its name can say what is in it): then `--cases DIR` names the folder. A result of the Python bakeoff is legacy and cannot be scored again.
 
 `src/real.test.ts` runs every case of the public corpus through the real akm, against a model that answers as a script says: right, in prose and not at all. It runs only with `AKM_EVAL_REAL_AKM=1`, and with `AKM_BIN` naming the akm. The other tests use a fake akm (`src/fakes.ts`).
 
@@ -133,7 +136,7 @@ No judge model scores a case. Each check looks at the file or the plan akm made.
 
 A term is found with case and spacing ignored. A term of one word that ends in `y` also finds `ies`, `ied` and `ying`, so an inflection costs nothing.
 
-The promotion check reads the model's plan, `consolidation.planned`, and not the queue. akm drops some promotions before it queues them: it did not queue a hot memory that the model chose to promote, nor a note it found a reason against. Reading the queue would hide the model's choice. The queue is stored in the row as `promoted`.
+The promotion check reads the model's plan, `consolidation.planned`, and not the queue. akm drops a promotion of the plan before it queues it: it did not queue a memory that was too small to promote (`promote_source_too_small`: the hot `operator-preference` and the one-line `cache-ttl-current` of the public pool are two), whatever the model chose. Reading the queue would hide the model's choice. The queue is stored in the row as `promoted`, and akm's reason for each promotion it dropped as `skipped`.
 
 ## Read the results
 
