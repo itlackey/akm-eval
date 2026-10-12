@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
 import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { checkMembers, identityOf } from "../../../scripts/compare/src/policy.ts";
 import { endpointRecord, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -281,6 +282,26 @@ describe("runCorpus", () => {
     for (const run of [publicRun, rewrite, own]) for (const f of folders) expect(JSON.stringify(run)).not.toContain(f.assets); // no summary names the folder it read
   });
 
+  test("two runs on identical own assets, made where private/seed holds different seeds, record no seed and compare (#70)", async () => {
+    const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
+    const own: CorpusConfig = { kind: "own", private: true };
+    const [a, b] = ["99", "100"].map((seed) => {
+      const folders = assetsFor(scenarios.slice(0, 1));
+      writeFileSync(join(folders.assets, "..", "seed"), `${seed}\n`); // the private/seed of that machine, next to the assets
+      return folders;
+    });
+    const [sa, sb] = [stored(await quiet(() => runFolders(ctx, a, own))), stored(await quiet(() => runFolders(ctx, b, own)))];
+    expect(sa.assets_sha256).toBe(sb.assets_sha256);
+    expect([sa.seed, sb.seed, sa.manifest.settings.seed, sb.manifest.settings.seed]).toEqual([null, null, null, null]);
+    const members = [sa, sb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
+    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare checks summaries, and the matrix when it reads the manifest
+    expect(checkMembers(members, [], { manifest: true })).toMatchObject({ mismatches: [], gaps: [] });
+    // a rewrite is different: its seed made the assets, so two seeds are two inputs
+    const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { kind: "rewrite", private: false, seed: "1", generated: "generated.json" }))), stored(await quiet(() => runFolders(ctx, b, { kind: "rewrite", private: false, seed: "2", generated: "generated.json" })))];
+    const rewrites = [ra, rb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
+    expect(checkMembers(rewrites, []).mismatches.map((f) => f.field)).toContain("seed");
+  });
+
   test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
     const folders = assetsFor([
       { id: "t-slow", class: "dated-status", fake: { sleep: 30_000 } },
@@ -533,6 +554,25 @@ describe("run --corpus custom", () => {
     expect(stale.code).toBe(2);
     expect(stale.err).toContain("made from other public assets");
   }, 60_000);
+
+  test("assets whose stored generator digest is zeroed are refused, and freshly generated ones pass (#44), with --corpus custom, --corpus private and --corpus all", () => {
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "distill");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    const marker = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
+    expect(marker.rewrite).toMatch(/^[0-9a-f]{64}$/);
+    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).not.toContain("cannot be used");
+    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).toContain("distill: --corpus private is now --corpus custom. The old value works for one more release.");
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ ...marker, rewrite: "0".repeat(64) }));
+    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) {
+      const refused = bun(tree, "run.ts", flags);
+      expect(refused.code, flags.join(" ")).toBe(2);
+      expect(refused.err, flags.join(" ")).toContain("cannot be used: they were made by a generator that has changed since");
+      expect(refused.err, flags.join(" ")).toContain("./generate-assets --only distill");
+    }
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
+  }, 120_000);
 
   test("refuses assets made by a generator or a rewrite that has changed since, and runs on them again when the code is as it was", () => {
     const tree = copyOfRepo();
