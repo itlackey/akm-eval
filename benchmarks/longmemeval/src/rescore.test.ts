@@ -60,12 +60,15 @@ function checkout(questions: Question[]): string {
   return root;
 }
 
-/** A run of the tiny dataset with a model and a judge, written as run.ts writes it, in a results folder of its own. */
-async function stored(): Promise<{ dir: string; root: string }> {
+/**
+ * A run of the tiny dataset with a model and a judge, written as run.ts writes it, in a results folder of its own. On the public corpus, or
+ * on a custom corpus of your own (`own`), whose folder is outside the repository and so is not recorded.
+ */
+async function stored(on: "public" | "own" = "public"): Promise<{ dir: string; root: string }> {
   const work = tmp();
   const assets = join(work, "assets");
   writePublicAssets(assets);
-  const corpus: ResolvedCorpus = { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" };
+  const corpus: ResolvedCorpus = on === "public" ? { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" } : { name: "custom", folder: assets, config: { kind: "own", private: true }, configFile: null, flag: `--cases ${assets}` };
   server = fakeEndpoint();
   const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
   const log = console.log;
@@ -164,6 +167,29 @@ describe("scripts/rescore on a run of longmemeval", () => {
     expect(readStored(dir).rows).toHaveLength(3);
   });
 
+  test("a run on a custom corpus is scored again from the folder its summary records, or from the one --cases names", async () => {
+    const { dir, root } = await stored("own");
+    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    // the run recorded the kind and that its folder, which is outside the repository, is not recorded
+    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null });
+    expect(() => rescoreFolder(dir, { root })).toThrow("was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
+    // --cases names the folder, and the result says where the cases were read from this time
+    cpSync(join(root, "benchmarks", "longmemeval", "assets"), join(root, "private", "longmemeval", "own"), { recursive: true });
+    const named = rescoreFolder(dir, { root, cases: "private/longmemeval/own" });
+    expect(named.result).toMatchObject({ changed: [], dropped: [] });
+    expect(JSON.parse(readFileSync(join(named.out, "summary.json"), "utf8"))).toMatchObject({ corpus: "custom", corpus_folder: "private/longmemeval/own", n_scored: 3 });
+    // a run that recorded its folder (one inside the repository) needs no --cases, and its labels are those of that folder: a key changed there is seen
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...summary, corpus_folder: "private/longmemeval/own" }));
+    writePublicAssets(join(root, "private", "longmemeval", "own"), tinyDataset().map((q, i) => (i === 0 ? { ...q, answer_session_ids: ["filler_0"] } : q)));
+    const recorded = rescoreFolder(dir, { root });
+    expect(recorded.result.relabelled).toEqual(["q-secret"]);
+    expect(recorded.result.changed).toEqual(["q-secret"]); // akm returned answer_1, which is no longer the evidence
+    expect(JSON.parse(readFileSync(join(recorded.out, "summary.json"), "utf8")).corpus_folder).toBe("private/longmemeval/own");
+    // a folder that is not there is named
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...summary, corpus_folder: "private/longmemeval/moved" }));
+    expect(() => rescoreFolder(dir, { root })).toThrow("was made on the custom corpus in private/longmemeval/moved, which is not a folder here");
+  });
+
   test("the questions of a custom corpus are read from the folder the summary names, and a public one from the benchmark's assets", async () => {
     const { root } = await stored();
     mkdirSync(join(root, "private", "longmemeval"), { recursive: true });
@@ -173,7 +199,10 @@ describe("scripts/rescore on a run of longmemeval", () => {
     // a custom one from corpus_folder, which is relative to the repository root
     cpSync(join(root, "benchmarks", "longmemeval", "assets"), join(root, "private", "longmemeval", "assets"), { recursive: true });
     expect(m.loadCases(root, { corpus: "custom", corpus_folder: "private/longmemeval/assets" })).toHaveLength(3);
+    // a summary from before the corpora were renamed (`private`) has the rewrite where generate-assets puts it
+    expect(m.loadCases(root, { corpus: "private" })).toHaveLength(3);
     expect(() => m.loadCases(root, { corpus: "custom", corpus_folder: null })).toThrow("does not say which folder holds its questions");
+    expect(() => m.loadCases(root, { corpus: "own" })).toThrow("does not say which folder holds its questions");
     expect(() => m.loadCases(root, { corpus: "custom", corpus_folder: "private/longmemeval/nowhere" })).toThrow("private/longmemeval/nowhere/longmemeval_s_cleaned.json is missing");
   });
 });

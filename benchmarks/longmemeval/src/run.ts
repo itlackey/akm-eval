@@ -7,12 +7,12 @@
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
@@ -75,7 +75,7 @@ interface Summary extends ReturnType<typeof summarize> {
   corpus: string;
   corpus_kind: string;
   corpus_private: boolean;
-  /** The folder of the questions from the repository root, so that scripts/rescore finds them. Null for a folder outside the repository, which is never recorded. */
+  /** The folder of the questions of a custom corpus from the repository root (corpusFolderOf), so that scripts/rescore finds them. Null for the public corpus, and for a folder outside the repository, which is never recorded: rescore takes --cases DIR for it. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -131,12 +131,6 @@ const gitCommit = (): string => (commit ??= commitOf(ROOT)); // asked once: the 
 
 /** Why a summary that is not complete says aborted when nothing gave up: the run was cut short, or is still going and writes it again after the next question. */
 const UNFINISHED = "the run had not asked every question when this summary was written";
-
-/** The folder from the repository root, or null when it is outside it: a folder outside is not recorded, since its path can say what is in it. */
-function insideRepository(folder: string): string | null {
-  const rel = relative(ROOT, folder);
-  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
-}
 
 const questions = (n: number): string => `${n} question${n === 1 ? "" : "s"}`;
 const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
@@ -336,7 +330,7 @@ export async function runCorpus(
     const summary: Summary = {
       eval: NAME,
       ...corpusRecord(corpus),
-      corpus_folder: insideRepository(assets),
+      corpus_folder: isPublic ? null : corpusFolderOf(assets),
       label: args.label,
       date: new Date().toISOString(),
       complete,

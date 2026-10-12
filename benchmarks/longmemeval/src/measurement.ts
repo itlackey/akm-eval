@@ -5,7 +5,7 @@
 // digests of a run, and the scoring itself is in score.ts.
 
 import { existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
 import { DATA_FILE, loadQuestions } from "./dataset.ts";
@@ -20,7 +20,16 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   // What turns the raw output of a question into a row and the rows into metrics. The labels are the questions (the dataset), digested per case.
   scorer: ["benchmarks/longmemeval/src/score.ts"],
   loadCases: (root, summary) => {
-    const folder = summary.corpus === "public" ? join(root, "benchmarks", NAME, "assets") : typeof summary.corpus_folder === "string" ? join(root, summary.corpus_folder) : null;
+    // The public questions are fetched into the benchmark's assets. A custom corpus is in corpus_folder (scripts/rescore sets it from --cases when the
+    // run could not record it), and a run from before the corpora were renamed (`private`) has the rewrite where generate-assets puts it.
+    const folder =
+      summary.corpus === "public"
+        ? join(root, "benchmarks", NAME, "assets")
+        : summary.corpus === "private"
+          ? join(root, "private", NAME, "assets")
+          : summary.corpus === "custom" && typeof summary.corpus_folder === "string"
+            ? resolve(root, summary.corpus_folder)
+            : null;
     if (folder === null) throw new Error("the summary does not say which folder holds its questions (a custom corpus outside the repository is not recorded), so there are no labels to score against");
     const file = join(folder, DATA_FILE);
     if (!existsSync(file)) throw new Error(`${relative(root, file)} is missing. A public corpus is fetched by a run of benchmarks/${NAME}/run; a custom one is made by ./generate-assets --only ${NAME}`);
