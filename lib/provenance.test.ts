@@ -380,7 +380,7 @@ describe("harnessSha256", () => {
     expect(() => digest(root, ["../elsewhere"])).toThrow("is not inside the repository");
   });
 
-  test("makes the manifest that bakeoff's harness_sha256 makes: path from the root, content digest, sorted (the same digest as in test_bakeoff.py)", () => {
+  test("digests a folder of Python files as a manifest of path from the root and content digest, sorted, with test_*.py left out: a fixed digest, so a change to how it is made shows", () => {
     const root = mkdtempSync(join(tmpdir(), "harness-golden-"));
     roots.push(root);
     const src = join(root, "evals", "bakeoff", "src");
