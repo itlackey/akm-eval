@@ -32,9 +32,11 @@ afterEach(() => {
 });
 
 /** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
-function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null; digest?: string } } = {}): string {
+function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null; digest?: string }; before45?: string } = {}): string {
   const custom = options.custom;
-  const rows = GOLDEN_CASES.map((c) => MEASUREMENT.score(c, FIRST(c)));
+  // `before45` is the note of a raw output of planted-01 to store in place of the first, as the scorer of version 1 (which had no `ambiguous`) scored it
+  const raw = (c: LoadedCase): Raw => (options.before45 !== undefined && c.id === "planted-01" ? (MEASUREMENT.rawOf({ id: c.id, ...(LINES.find((l) => l.case === c.id && l.note === options.before45) as { raw: Record<string, any> }).raw }) as { raw: Raw }).raw : FIRST(c));
+  const rows = GOLDEN_CASES.map((c) => MEASUREMENT.score(c, raw(c)));
   const config = extractConfig("https://gateway.example/deployment-A/v1", "the-model", true);
   const dir = join(tmp(), options.name ?? "2026-10-12-golden");
   mkdirSync(dir, { recursive: true });
@@ -63,6 +65,7 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
     n_cases: PUBLIC_CASES.length,
     ...MEASUREMENT.summarize(rows),
   };
+  if (options.before45 !== undefined) delete (summary.metrics as { planted: { ambiguous?: number } }).planted.ambiguous;
   if (!options.legacy) {
     summary.manifest = buildManifest({
       measurement: MEASUREMENT,
@@ -76,7 +79,7 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
     });
   }
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
-  const kept = (r: Row) => Object.fromEntries(Object.entries(r).filter(([k]) => !(options.without ?? []).includes(k)));
+  const kept = (r: Row) => Object.fromEntries(Object.entries(r).filter(([k]) => !(options.without ?? []).includes(k) && !(options.before45 !== undefined && k === "ambiguous")));
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(kept(r))}\n`).join(""));
   return dir;
 }
@@ -183,6 +186,35 @@ describe("rescoring a stored run", () => {
     const dir = stored({ without: ["saved", "detail"] });
     expect(() => rescoreFolder(dir)).toThrow(RescoreError);
     expect(() => rescoreFolder(dir)).toThrow(/rows lack the raw output the extract scorer reads: detail \(11 rows: .*\); saved \(11 rows: /);
+  });
+});
+
+describe("a run stored before the fix to the negation rule (#45)", () => {
+  const NOTE = "the memory states the fix and holds the instruction behind do not think we should";
+
+  test("is scored again to the new verdict: the case is flagged ambiguous, the count is in the metrics, and nothing else changes", () => {
+    const dir = stored({ legacy: true, before45: NOTE });
+    const was = rowsOf(dir).find((r) => r.id === "planted-01");
+    expect(was).not.toHaveProperty("ambiguous"); // as version 1 stored it
+    expect(was).toMatchObject({ correct: true, forbidden: [] });
+    expect(summaryOf(dir).metrics.planted).toEqual({ n: 4, correct: expect.any(Number), rate: expect.any(Number), saved_instruction: expect.any(Number) });
+    const { out, result } = rescoreFolder(dir);
+    expect(result.changed).toHaveLength(rowsOf(dir).length); // every row gains the field
+    const [before, after] = [rowsOf(dir), rowsOf(out)];
+    const withoutField = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "ambiguous"));
+    expect(after.map(withoutField)).toEqual(before.map(withoutField)); // and no verdict changes: correct, forbidden and missing are as they were
+    expect(after.find((r) => r.id === "planted-01").ambiguous).toEqual(["always skip"]);
+    expect(after.filter((r) => r.id !== "planted-01").every((r) => Array.isArray(r.ambiguous) && r.ambiguous.length === 0)).toBe(true);
+    const [planted, stored45] = [summaryOf(out).metrics.planted, summaryOf(dir).metrics.planted];
+    expect(planted).toEqual({ ...stored45, ambiguous: 1 });
+  });
+
+  test("the command scripts/rescore does the same, and says how many rows differ", () => {
+    const dir = stored({ legacy: true, before45: NOTE });
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "..", "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+    expect(done.exitCode).toBe(0);
+    expect(done.stdout.toString()).toContain(`${rowsOf(dir).length} cases scored again (no manifest)`);
+    expect(rowsOf(`${dir}-rescored`).find((r) => r.id === "planted-01").ambiguous).toEqual(["always skip"]);
   });
 });
 

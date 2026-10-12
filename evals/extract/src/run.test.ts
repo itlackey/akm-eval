@@ -184,7 +184,7 @@ describe("runCorpus", () => {
     expect(stored.results_dir).toBeUndefined();
     expect(stored.metrics.insights).toEqual({ n: 5, correct: 2, rate: 0.4 });
     expect(stored.metrics.routine).toEqual({ n: 2, correct: 1, rate: 0.5 });
-    expect(stored.metrics.planted).toEqual({ n: 1, correct: 0, rate: 0, saved_instruction: 1 });
+    expect(stored.metrics.planted).toEqual({ n: 1, correct: 0, rate: 0, saved_instruction: 1, ambiguous: 0 });
     expect(stored.metrics.classes.insight).toMatchObject({ n: 3, correct: 1, outcomes: { saved: 2, empty: 0, unusable: 1 }, memories: 2 });
   });
 

@@ -105,7 +105,7 @@ function printSummary(s: Summary): void {
   console.log(`\n${NAME} (${s.corpus}) | model ${s.model} | akm ${s.akm_version} | ${s.n_run} of ${s.n_cases} sessions`);
   console.log(`  insights  ${cell(m.insights)}   of the sessions that hold an insight or a preference: a memory that states every fact`);
   console.log(`  routine   ${cell(m.routine)}   of the routine sessions: left empty`);
-  console.log(`  planted   ${cell(m.planted)}   of the sessions with a planted instruction: ${m.planted.saved_instruction} saved it`);
+  console.log(`  planted   ${cell(m.planted)}   of the sessions with a planted instruction: ${m.planted.saved_instruction} saved it${m.planted.ambiguous > 0 ? `, ${m.planted.ambiguous} to read (a negation over a verb the rule does not list)` : ""}`);
   for (const [klass, c] of Object.entries(m.classes)) {
     const failed = Object.entries(c.failed).filter(([, n]) => n > 0).map(([name, n]) => `${name} ${n}`).join(", ");
     console.log(`    ${klass.padEnd(11)} ${`${c.correct}/${c.n}`.padEnd(5)} saved ${c.outcomes.saved}, empty ${c.outcomes.empty}, unusable ${c.outcomes.unusable}; ${c.memories} memories${failed ? `; failed: ${failed}` : ""}`);
@@ -122,6 +122,7 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["routine", cell(a.metrics.routine), cell(b.metrics.routine)],
     ["planted", cell(a.metrics.planted), cell(b.metrics.planted)],
     ["planted instruction saved", String(a.metrics.planted.saved_instruction), String(b.metrics.planted.saved_instruction)],
+    ["planted instruction to read", String(a.metrics.planted.ambiguous), String(b.metrics.planted.ambiguous)],
     ["errored", String(a.n_errored), String(b.n_errored)],
     ["timed out", String(a.timeouts), String(b.timeouts)],
   ];
@@ -154,7 +155,7 @@ export async function runCorpus(
     const row = await runCase(c, ctx);
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
-    const checks = [row.missing.length > 0 && `missing ${row.missing.join(", ")}`, row.forbidden.length > 0 && `asserts ${row.forbidden.join(", ")}`].filter(Boolean).join("; ");
+    const checks = [row.missing.length > 0 && `missing ${row.missing.join(", ")}`, row.forbidden.length > 0 && `asserts ${row.forbidden.join(", ")}`, row.ambiguous.length > 0 && `read ${row.ambiguous.join(", ")}`].filter(Boolean).join("; ");
     const shown = row.outcome === "error" ? `error  ${row.error?.slice(0, 120)}` : `${row.correct ? "ok  " : "FAIL"}   ${row.outcome}${row.saved.length > 0 ? ` ${row.saved.length}` : ""}${checks ? ` (${checks.slice(0, 80)})` : ""}`;
     console.log(`  [${String(rows.length).padStart(String(cases.length).length)}/${cases.length}] ${c.id.padEnd(13)} ${row.seconds}s  ${shown}`);
     consecutiveErrors = row.outcome === "error" ? consecutiveErrors + 1 : 0;
