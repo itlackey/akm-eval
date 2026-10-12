@@ -469,6 +469,8 @@ describe("run --corpus custom", () => {
     cpSync(join(EVAL, "src"), join(tree, "evals", "reflect", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
     cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
+    mkdirSync(join(tree, "evals", "retrieval", "assets"), { recursive: true }); // the labelled queries that --retrieval-queries reads
+    for (const file of ["queries.jsonl", "qrels.jsonl"]) cpSync(join(REPO, "evals", "retrieval", "assets", file), join(tree, "evals", "retrieval", "assets", file));
     return tree;
   }
   const bun = (tree: string, script: string, args: string[]) => {
@@ -521,6 +523,28 @@ describe("run --corpus custom", () => {
     expect(mine.err).not.toContain("could not run");
   }, 60_000);
 
+  test("--retrieval-queries takes the queries through the map of the rewrite, and a missing file stops the run before it starts, with the instruction to make the assets again (#60)", () => {
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "reflect");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
+    const ready = bun(tree, "run.ts", ["--corpus", "all", "--retrieval-queries"]);
+    expect(ready.err).toContain("could not run"); // both corpora have their queries, and the run stopped for want of akm
+    expect(ready.err).not.toContain("--retrieval-queries");
+
+    rmSync(join(out, "map.json"));
+    const noMap = bun(tree, "run.ts", ["--corpus", "all", "--retrieval-queries"]);
+    expect(noMap.code).toBe(2);
+    expect(noMap.err).toContain("--retrieval-queries maps the queries through the rewrite map that generate writes beside the assets, and private/reflect/map.json is missing. Make the private assets again with: ./generate-assets --only reflect");
+    expect(noMap.err).not.toContain("could not run");
+    expect(bun(tree, "run.ts", ["--corpus", "public", "--retrieval-queries"]).err).toContain("could not run"); // the public corpus needs no map
+
+    rmSync(join(tree, "evals", "retrieval", "assets", "qrels.jsonl"));
+    const noQrels = bun(tree, "run.ts", ["--corpus", "public", "--retrieval-queries"]);
+    expect(noQrels.code).toBe(2);
+    expect(noQrels.err).toContain("--retrieval-queries reads the retrieval eval's labelled queries, and evals/retrieval/assets/qrels.jsonl is missing");
+    expect(noQrels.err).not.toContain("could not run");
+  }, 60_000);
+
   test("--corpus private works for one more release: it says so and runs as the custom corpus", () => {
     const tree = copyOfRepo();
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "reflect")]).code).toBe(0);
@@ -545,6 +569,9 @@ describe("run --corpus custom", () => {
     writeFileSync(join(notes, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
     writeFileSync(join(tree, "models.json"), "{}");
     expect(bun(tree, "run.ts", ["--cases", notes]).err).toContain("could not run"); // its corpus.json says nothing is private in it
+    const queried = bun(tree, "run.ts", ["--cases", notes, "--retrieval-queries"]);
+    expect(queried.code).toBe(2);
+    expect(queried.err).toContain(`--retrieval-queries does not apply to --cases ${notes}`); // the queries are those of the public notes: they are matched by public ref
   }, 60_000);
 });
 

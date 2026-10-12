@@ -16,8 +16,9 @@ import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, ov
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
-import { type CaseContext, NAME, STRATEGY, configFor, labelledQueries, refOf, runCase } from "./collect.ts";
+import { type CaseContext, NAME, STRATEGY, configFor, refOf, runCase } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
+import { retrievalSearches } from "./queries.ts";
 import { type Metrics, type Row, CLASSES, assetsSha256, atLeast, generatedProblem, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
 export { runCase };
@@ -39,7 +40,8 @@ ${corpusUsage}
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
   --retrieval-queries  record the retrieval eval's labelled queries for each note as searches that found it, so the retrieval
-            check of akm's reflect (it runs after the quality judge passes an edit: see patches/judge-on.json) has queries to grade
+            check of akm's reflect (it runs after the quality judge passes an edit: see patches/judge-on.json) has queries to grade.
+            The queries are those of the public notes: a rewrite takes them through its own map.json, matched by public ref. Not for an own corpus.
 ${overridesUsage(STRATEGY)}
 ${modelUsage}
 ${akmUsage}
@@ -273,6 +275,17 @@ async function main(): Promise<void> {
     const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
     if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
+  // The searches of every corpus are made now, so that a file that is missing stops the run here and not after the first corpus has run.
+  const searches = new Map<ResolvedCorpus, Map<string, string[]>>();
+  if (values["retrieval-queries"]) {
+    for (const c of corpora) {
+      try {
+        searches.set(c, retrievalSearches(c, ROOT));
+      } catch (e) {
+        fail((e as Error).message);
+      }
+    }
+  }
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -288,8 +301,7 @@ async function main(): Promise<void> {
   const ctx: Ctx = { baseUrl, model, hasKey, version, label, limit, overrides };
   const summaries: Summary[] = [];
   for (const c of corpora) {
-    const retrieval = join(c.name === "public" ? join(ROOT, "evals", "retrieval") : join(ROOT, "private", "retrieval"), "assets");
-    const queries = values["retrieval-queries"] ? labelledQueries(readFileSync(join(retrieval, "queries.jsonl"), "utf8"), readFileSync(join(retrieval, "qrels.jsonl"), "utf8")) : undefined;
+    const queries = searches.get(c);
     summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel, queries }))));
   }
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);

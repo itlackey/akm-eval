@@ -31,6 +31,7 @@ import {
   refOf,
   refusalOf,
   score,
+  searchesFor,
   selectCases,
   servedModel,
   splitFrontmatter,
@@ -672,6 +673,22 @@ describe("labelledQueries", () => {
 
   test("a note whose only grades are below 2 has none", () => {
     expect(labelledQueries(queries, qrel("q1", "a", 1)).has("a")).toBe(false);
+  });
+});
+
+describe("searchesFor", () => {
+  const note = (path: string, id: string): Case => mk("retrieval-miss", NOTE, { id, path });
+  const labelled = new Map([["knowledge/a", ["rotate signing keys", "key expiry"]], ["knowledge/b", ["only b"]]]);
+  const publicCases = [note("knowledge/a.md", "one"), note("knowledge/b.md", "two"), note("knowledge/c.md", "three")];
+
+  test("the public corpus gets the queries of its own notes, as they are labelled", () => {
+    expect([...searchesFor(publicCases, publicCases, labelled)]).toEqual([["knowledge/a", ["rotate signing keys", "key expiry"]], ["knowledge/b", ["only b"]]]);
+  });
+
+  test("a rewrite takes the queries of the public case with its id, written as the rewrite wrote the note, under the ref of its own note (#60)", () => {
+    const rewritten = [note("knowledge/x/a-renamed.md", "one"), note("knowledge/b.md", "two"), note("knowledge/c-renamed.md", "three"), note("knowledge/new.md", "added")];
+    const found = searchesFor(rewritten, publicCases, labelled, (q) => q.replace("signing", "SIGNED"));
+    expect([...found]).toEqual([["knowledge/x/a-renamed", ["rotate SIGNED keys", "key expiry"]], ["knowledge/b", ["only b"]]]); // a case with no queries, or with no public case, has none
   });
 });
 
