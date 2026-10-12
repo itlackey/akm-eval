@@ -241,7 +241,7 @@ describe("reflectEdits with a manifest", () => {
     const parts = lockedParts(MEASUREMENT);
     const run = runOf(root, cases, {}, { collector: { version: 9, sha256: "7".repeat(64) }, harness_version: 9 });
     expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
-    expect(parts.collector.version).toBe(1);
+    expect(parts.collector.version).not.toBe(9); // the run's version 9 is not the live one, and the replay still went ahead
   });
 
   test("a case whose note changed since the run stops the replay, and the replay with --rescore reads the new note and says so", () => {

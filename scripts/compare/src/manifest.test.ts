@@ -125,12 +125,15 @@ describe("two runs with a manifest", () => {
     expect(md).toContain("Scored: A 10 of 10 cases, B 10 of 10. Every number below is over the 10 scored in both.");
     expect(md).toContain("| defects.rate ↑ | 1 | 0 | -1 |");
     expect(md).toContain("| 6 of 10 |");
-    expect(md).toContain(`| collector | v1 ${parts.collector.sha256.slice(0, 12)} | v1 ${parts.collector.sha256.slice(0, 12)} |`);
+    expect(md).toContain(`| collector | v${parts.collector.version} ${parts.collector.sha256.slice(0, 12)} | v${parts.collector.version} ${parts.collector.sha256.slice(0, 12)} |`);
   });
 
   test("a different collector is refused, naming both, unless the collector (harness) is the treatment, and then it is listed as the treatment", () => {
+    // the version the lock gives reflect now, and another one: the test holds whatever version the live lock is at
+    const live = lockedParts(MEASUREMENT).collector.version;
+    const other = live + 1;
     const a = run({ label: "a", raw: GOOD });
-    const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, collector: { version: 2, sha256: "d".repeat(64) } }) });
+    const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, collector: { version: other, sha256: "d".repeat(64) } }) });
     const then = (f: () => unknown) => {
       try {
         f();
@@ -141,10 +144,10 @@ describe("two runs with a manifest", () => {
     };
     const refused = then(() => compare(a, b));
     expect(refused).toContain("these two runs cannot be compared case by case");
-    expect(refused).toMatch(/the eval's code differs: collector 1 [0-9a-f]{12} \(harness 3\) in A, collector 2 dddddddddddd \(harness 3\) in B/);
+    expect(refused).toMatch(new RegExp(`the eval's code differs: collector ${live} [0-9a-f]{12} \\(harness 3\\) in A, collector ${other} dddddddddddd \\(harness 3\\) in B`));
     expect(refused).toContain("--treatment");
     const allowed = compare(a, b, { treatment: ["config", "model", "harness"] });
-    expect(allowed.treated.join(" ")).toMatch(/the eval's code differs: collector 1 .* in A, collector 2 dddddddddddd/);
+    expect(allowed.treated.join(" ")).toMatch(new RegExp(`the eval's code differs: collector ${live} .* in A, collector ${other} dddddddddddd`));
     expect(allowed.exploratory).toEqual([]);
   });
 
@@ -280,7 +283,7 @@ describe("a run without a manifest", () => {
     writeFileSync(join(dir, "summary.json"), JSON.stringify(rest));
     const { out } = rescoreFolder(dir);
     const current = run({ label: "new", raw: GOOD });
-    expect(() => compare(out, current)).toThrow(/the eval's code differs: collector 0 b{12} \(harness 0\) in A, collector 1 [0-9a-f]{12} \(harness 3\) in B/);
+    expect(() => compare(out, current)).toThrow(new RegExp(`the eval's code differs: collector 0 b{12} \\(harness 0\\) in A, collector ${lockedParts(MEASUREMENT).collector.version} [0-9a-f]{12} \\(harness 3\\) in B`));
     const r = compare(out, current, { treatment: ["config", "model", "harness"] });
     expect(r.exploratory).toEqual(["A was collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned"]);
     expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
@@ -401,7 +404,7 @@ describe("the policy", () => {
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     const identity = identityOf(summary);
     const parts = lockedParts(MEASUREMENT);
-    expect(identity).toMatchObject({ manifest: true, akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: `1 ${parts.collector.sha256}`, scorer: `1 ${parts.scorer.sha256}`, harness_version: String(parts.harness_version), hints: null });
+    expect(identity).toMatchObject({ manifest: true, akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: `${parts.collector.version} ${parts.collector.sha256}`, scorer: `${parts.scorer.version} ${parts.scorer.sha256}`, harness_version: String(parts.harness_version), hints: null });
     expect(identity.config).toBe(configDigest(summary.config)); // the digest the earlier summaries get
     expect(identity.engine).toContain(endpointId("http://localhost:9/v1/chat/completions") as string);
     expect(identity.engine).not.toContain("localhost:9/v1");
