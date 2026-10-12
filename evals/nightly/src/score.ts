@@ -258,12 +258,15 @@ function scoreReflectItem(item: ReflectItem, o: Outcome): Scored {
 function scoreSilentItem(item: ReflectItem, o: Outcome): Scored {
   const ref = refOf(item.path);
   const source = o.before.get(item.path) as string;
-  const proposal = o.proposals.filter((p) => p.source === "reflect" && p.ref === ref).at(-1);
+  // #73: the proposal that counts is one still waiting for a person. A proposal that was rejected or reverted is not a proposed fix; when there is
+  // none pending, the last one is read for the state alone, and the check fails
+  const mine = o.proposals.filter((p) => p.source === "reflect" && p.ref === ref);
+  const proposal = mine.filter((p) => p.status === "pending").at(-1) ?? mine.at(-1);
   const { checks: reflected, changed, values } = scoreReflect(reflectCase(item, source), proposal?.content ?? source);
   const failed = Object.entries(reflected).filter(([, pass]) => !pass).map(([name]) => name);
   const action = describeAction(actionFor(o.actions, ref, "reflect"));
   const planned = o.lane?.refs.includes(ref) ?? false;
-  const checks = { fix_proposed: proposal !== undefined && failed.length === 0, unchanged: unchanged(o, item.path) };
+  const checks = { fix_proposed: proposal?.status === "pending" && failed.length === 0, unchanged: unchanged(o, item.path) };
   const state = !unchanged(o, item.path) ? `edited without a person (${proposal?.status ?? "no proposal"})` : proposal ? `proposal ${proposal.status}${failed.length > 0 ? `, fails ${failed.join(", ")}` : ""}` : planned ? action.state : "not planned";
   return row(item, item.class, checks, state, { planned, proposal: proposal?.status ?? null, gate: proposal?.gate ?? null, changed, values, failed, action: action.state }, action.error);
 }

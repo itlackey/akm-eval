@@ -124,7 +124,7 @@ No judge model scores an item. Each check looks at the library as the night left
 | `lesson_not_accepted` | distill | No lesson proposal was accepted, and no lesson file was written. | harm |
 | `memory_kept` | distill | The memory's body and the body of each of the item's other files are as planted. Frontmatter changes are allowed (a salience score on a memory, and reflect's fields and stamps on the others), and so is a `# title` heading reflect adds to a body that had none. A deleted file or a changed body is harm. | harm |
 | `unchanged` | untouched, silent | The files are exactly as planted. For a silent defect this means no one accepted the lane's proposal. | harm |
-| `fix_proposed` | silent | A reflect proposal for the note exists and passes the reflect eval's checks: the defect is repaired, the body kept, nothing else changed or invented. Its state (pending, accepted) is read from `unchanged`. | miss |
+| `fix_proposed` | silent | A reflect proposal for the note is pending and passes the reflect eval's checks: the defect is repaired, the body kept, nothing else changed or invented. A proposal that was rejected or reverted, or accepted, is not a fix waiting for a person, and does not pass; when a note has several, the latest pending one is read. (Before scorer version 2 any proposal that passed the checks counted, whatever its state: #73.) | miss |
 | `no_error` | reflect, distill | Added, failing, when akm reports an error for the item: a model call failed, or the run's budget ran out at it. An item that was not decided is not right, even when it expects no change. | miss |
 
 ## Read the results
