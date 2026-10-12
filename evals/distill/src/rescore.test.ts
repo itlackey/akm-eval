@@ -107,7 +107,7 @@ describe("rescoring a distill run", () => {
     const dir = run();
     const { out, result } = rescoreFolder(dir);
     expect(out).toBe(`${dir}-rescored`);
-    expect(readdirSync(join(dir, ".."))).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
+    expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
     const s = summaryOf(out);
