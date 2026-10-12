@@ -1,17 +1,22 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
+import { ALIASES, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
+import { type Run, comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { type Case, assetsSha256, bundleSha256, callStats, digestOf, parseCases, plant, promotionConfig } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { foldersFor, runCorpus } from "./run.ts";
+import { resultsOf, runCorpus } from "./run.ts";
+
+const EVAL_DIR = resolve(import.meta.dir, "..");
+const REPO = resolve(EVAL_DIR, "..", "..");
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -104,6 +109,15 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   }
 };
 
+/** The public corpus held in `root`, which holds cases.jsonl and library/. */
+const publicAt = (root: string): ResolvedCorpus => ({ name: "public", folder: root, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+
+/** The custom corpus that `--cases DIR` names, resolved the way the command does it, in a repository root of its own. */
+const customAt = (dir: string, root: string): ResolvedCorpus => resolveCorpora({ eval: "promotion", values: { cases: dir }, publicFolder: join(root, "assets"), default: "own", aliases: { own: ALIASES.own }, root })[0] as ResolvedCorpus;
+
+/** runCorpus on the public corpus that `folders` describes: the folder of cases.jsonl and library/, and where the results go. */
+const runPublic = (ctx: Parameters<typeof runCorpus>[1], folders: { cases: string; results: string }) => runCorpus(publicAt(dirname(folders.cases)), ctx, folders.results);
+
 const cases = [
   make("g-accept", "good", "ACCEPT"),
   make("g-defer", "good", "DEFER"),
@@ -118,7 +132,7 @@ const cases = [
 describe("runCorpus", () => {
   test("queues the proposals, runs the drain with its judgment tier, and counts what it accepted", async () => {
     const { ctx, sandbox, folders } = setup(cases);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary).toMatchObject({ eval: "promotion", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 8, n_run: 8, n_errored: 1 });
     expect(summary.metrics.proposals).toEqual({ n: 7, good: 3, share_good: 0.4286 });
     expect(summary.metrics.accepted).toEqual({ n: 3, good: 1 });
@@ -143,7 +157,7 @@ describe("runCorpus", () => {
     const config = promotionConfig("http://localhost:1/v1", "the-model", true);
     config.engines.judge.apiKey = "sk-literal-secret"; // a patch could put a key here
     writeConfig(sandbox, config);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
     expect(text).not.toContain("sk-literal-secret");
     const stored = JSON.parse(text);
@@ -167,20 +181,57 @@ describe("runCorpus", () => {
     expect(assetsSha256(c.folders.cases, c.folders.library)).not.toBe(assetsSha256(a.folders.cases, a.folders.library));
   });
 
-  test("the seed of an own run is the one in private/seed, and the public run has none", async () => {
-    const seedFile = join(mkdtempSync(join(tmpdir(), "promotion-seed-")), "seed");
-    dirs.push(join(seedFile, ".."));
-    writeFileSync(seedFile, "99\n");
-    const seed = async (corpus: "public" | "own", file: string) => {
-      const { ctx, folders } = setup(cases.slice(0, 2)); // a sandbox for each run: the planted proposals have fixed ids
-      return (await quiet(() => runCorpus(corpus, ctx, { ...folders, seed: file }))).seed;
-    };
-    expect([await seed("public", seedFile), await seed("own", seedFile), await seed("own", `${seedFile}-missing`)]).toEqual([null, "99", null]);
+  test("a custom corpus of your own notes is private, records no seed and where the folder is, and the public cases record none either", async () => {
+    const [pub, own] = [setup(cases.slice(0, 2)), setup(cases.slice(0, 2))]; // a sandbox for each run: the planted proposals have fixed ids
+    const summary = await quiet(() => runPublic(pub.ctx, pub.folders));
+    expect(summary).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null });
+    const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
+    dirs.push(root);
+    const dir = dirname(own.folders.cases);
+    const custom = await quiet(() => runCorpus(customAt(dir, root), own.ctx, own.folders.results));
+    expect(custom).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    expect(custom.corpus_folder).toBe(relative(REPO, dir).startsWith("..") ? null : relative(REPO, dir)); // the folder, from the repository root, when it is inside it
+    expect(custom.manifest).toMatchObject({ corpus: "custom", settings: { seed: null } });
+    expect(readFileSync(join(custom.results_dir, "summary.json"), "utf8")).not.toContain(dir); // the file does not name the folder
+  });
+
+  test("two runs on identical own notes, made where private/seed holds other seeds, record no seed and compare (#70)", async () => {
+    const runs = [];
+    for (const seed of ["99", "123456789012345678"]) {
+      const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
+      dirs.push(root);
+      mkdirSync(join(root, "private"));
+      writeFileSync(join(root, "private", "seed"), `${seed}\n`);
+      const { ctx, folders } = setup(cases);
+      const summary = await quiet(() => runCorpus(customAt(dirname(folders.cases), root), ctx, folders.results));
+      clearRunning(summary.results_dir);
+      runs.push(loadRun(summary.results_dir));
+    }
+    expect(runs.map((r) => [r.summary.seed, r.summary.manifest.settings.seed])).toEqual([[null, null], [null, null]]);
+    const report = comparePair(runs[0] as Run, runs[1] as Run);
+    expect(report.exploratory).toEqual([]);
+    expect(report.views.length).toBeGreaterThan(0);
+    // what the fix is for: a run that recorded the seed file, as these did before, is refused against one that recorded another
+    const was = (run: Run, seed: string): Run => ({ ...run, summary: { ...run.summary, seed, manifest: { ...run.summary.manifest, settings: { ...run.summary.manifest.settings, seed } } } });
+    expect(() => comparePair(was(runs[0] as Run, "99"), was(runs[1] as Run, "123456789012345678"))).toThrow("the seed of the private assets differs");
+  });
+
+  test("a rewrite corpus records the seed its corpus.json holds", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 2));
+    const dir = dirname(folders.cases);
+    const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
+    dirs.push(root);
+    mkdirSync(join(dir, "assets"));
+    writeFileSync(join(dir, "assets", "generated.json"), JSON.stringify({ seed: "42" }));
+    writeFileSync(join(dir, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "42", generated: "assets/generated.json" }));
+    const summary = await quiet(() => runCorpus(customAt(dir, root), ctx, folders.results));
+    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "42" });
+    expect(summary.manifest.settings.seed).toBe("42");
   });
 
   test("a proposal whose model call timed out is an errored row marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
     const { ctx, folders } = setup([make("g-ok", "good", "ACCEPT"), make("s-slow", "stale", "SLOW"), make("e-crash", "ephemeral", "CRASH"), make("d-ok", "duplicate", "REJECT")]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     const rows = readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows[1]).toMatchObject({ id: "s-slow", outcome: "error", timed_out: true, error: "LLM request timed out after 600000ms" });
     expect(rows[2].outcome).toBe("error");
@@ -193,7 +244,7 @@ describe("runCorpus", () => {
     process.env.FAKE_STRATEGY = "lab-strategy";
     try {
       const { ctx, folders } = setup(cases);
-      const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "lab-strategy", configPatch: { path: "patches/p.json", sha256: "abc123", patch: {} } } }, folders));
+      const summary = await quiet(() => runPublic({ ...ctx, overrides: { strategy: "lab-strategy", configPatch: { path: "patches/p.json", sha256: "abc123", patch: {} } } }, folders));
       expect(summary).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
       expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ strategy: "lab-strategy", config_patch: { path: "patches/p.json", sha256: "abc123" } });
     } finally {
@@ -203,12 +254,12 @@ describe("runCorpus", () => {
 
   test("without the flags it runs its own strategy and records no patch", async () => {
     const { ctx, folders } = setup(cases);
-    expect(await quiet(() => runCorpus("public", ctx, folders))).toMatchObject({ strategy: "promotion", config_patch: null });
+    expect(await quiet(() => runPublic(ctx, folders))).toMatchObject({ strategy: "promotion", config_patch: null });
   });
 
   test("writes the endpoint of a failed call as <MODEL_BASE_URL>", async () => {
     const { ctx, folders } = setup(cases);
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runPublic(ctx, folders));
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     const row = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((r) => r.outcome === "error");
     expect(row.error).toBe("LLM request failed: <MODEL_BASE_URL>/chat/completions refused");
@@ -217,7 +268,7 @@ describe("runCorpus", () => {
 
   test("holds out the notes the cases write, keeps the others, and runs under the strategy with judgment on", async () => {
     const { ctx, sandbox, folders } = setup(cases);
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runPublic(ctx, folders));
     const seen = JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "seen.json"), "utf8"));
     expect(seen.library).toEqual(["kept.md"]);
     expect(seen.config.improve.strategies.promotion.processes.triage).toEqual({ enabled: true, applyMode: "queue", judgment: { enabled: true } });
@@ -225,7 +276,7 @@ describe("runCorpus", () => {
 
   test("indexes the bundle with embeddings and writes each case's note as the memory its promotion names", async () => {
     const { ctx, sandbox, folders } = setup(cases);
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runPublic(ctx, folders));
     expect(sandbox.env.HF_HOME).toContain(".cache");
     expect(JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "indexed.json"), "utf8")).memories).toEqual(cases.map((c) => `${c.id}.md`).sort());
     const seen = JSON.parse(readFileSync(join(sandbox.env.AKM_DATA_DIR, "seen.json"), "utf8"));
@@ -235,12 +286,12 @@ describe("runCorpus", () => {
   test("stops when akm embedded fewer assets than it indexed", async () => {
     const { ctx, sandbox, folders } = setup(cases);
     writeConfig(sandbox, { ...promotionConfig("http://localhost:1/v1", "the-model", false), semanticSearchMode: "off" });
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("embedded 0 of 9 assets");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("embedded 0 of 9 assets");
   });
 
   test("a limit queues a mix of the categories", async () => {
     const { ctx, folders } = setup(cases);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 4 }, folders));
+    const summary = await quiet(() => runPublic({ ...ctx, limit: 4 }, folders));
     expect(summary).toMatchObject({ limit: 4, n_cases: 8, n_run: 4 });
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
@@ -249,7 +300,7 @@ describe("runCorpus", () => {
 
   test("stops with a message when no proposal got a verdict, after writing a summary that says the run was aborted", async () => {
     const { ctx, folders } = setup([make("only", "duplicate", "CRASH")]);
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("no proposal got a verdict");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("no proposal got a verdict");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
     expect(stored).toMatchObject({ status: "aborted", n_run: 1, n_errored: 1 });
     expect(stored.aborted_reason).toBe("no proposal got a verdict. First error: LLM request failed: <MODEL_BASE_URL>/chat/completions refused");
@@ -259,7 +310,7 @@ describe("runCorpus", () => {
     process.env.FAKE_PROPOSALS_DDL = "CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, stash TEXT NOT NULL, ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}')";
     try {
       const { ctx, sandbox, folders } = setup(cases);
-      const message = await quiet(() => runCorpus("public", ctx, folders)).then(() => "", (e: Error) => e.message);
+      const message = await quiet(() => runPublic(ctx, folders)).then(() => "", (e: Error) => e.message);
       expect(message).toContain("akm's proposals table has no column stash_dir, frontmatter_json (it has id, stash, ref, status, source, created_at, updated_at, content, metadata_json)");
       expect(message).toContain("Depends on akm's private schema");
       expect(new Database(join(sandbox.env.AKM_DATA_DIR, "state.db")).query("SELECT COUNT(*) AS n FROM proposals").get()).toEqual({ n: 0 });
@@ -272,7 +323,7 @@ describe("runCorpus", () => {
     process.env.FAKE_PROPOSALS_DDL = "SELECT 1"; // creates nothing
     try {
       const { ctx, folders } = setup(cases);
-      const message = await quiet(() => runCorpus("public", ctx, folders)).then(() => "", (e: Error) => e.message);
+      const message = await quiet(() => runPublic(ctx, folders)).then(() => "", (e: Error) => e.message);
       expect(message).toContain("akm's state.db has no proposals table.");
     } finally {
       delete process.env.FAKE_PROPOSALS_DDL;
@@ -286,7 +337,7 @@ describe("runCorpus", () => {
     console.error = (...a: unknown[]) => void errors.push(a.join(" "));
     try {
       const { ctx, folders } = setup(cases);
-      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      const summary = await quiet(() => runPublic(ctx, folders));
       expect(summary.calls).toBeNull();
       expect(summary.metrics.accepted).toEqual({ n: 3, good: 1 }); // the verdicts do not come from the events
     } finally {
@@ -299,7 +350,7 @@ describe("runCorpus", () => {
   test("stops when akm lists fewer proposals than were queued", async () => {
     const { ctx, sandbox, folders } = setup(cases);
     sandbox.env.AKM_BUNDLE_DIR = join(sandbox.dir, "elsewhere"); // the fake lists the proposals of the folder it is told
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("pending proposals");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("pending proposals");
   });
 });
 
@@ -312,7 +363,7 @@ const stored = (dir: string) => ({
 describe("the manifest of a run", () => {
   test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
     const { ctx, folders } = setup(cases);
-    const { summary } = stored((await quiet(() => runCorpus("public", ctx, folders))).results_dir);
+    const { summary } = stored((await quiet(() => runPublic(ctx, folders))).results_dir);
     const { manifest } = summary;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(summary).kind).toBe("manifest");
@@ -331,7 +382,7 @@ describe("the manifest of a run", () => {
 
   test("holds the config without the engine's settings and without the endpoint, and the engine settings by name", async () => {
     const { ctx, folders } = setup(cases);
-    const { summary } = stored((await quiet(() => runCorpus("public", ctx, folders))).results_dir);
+    const { summary } = stored((await quiet(() => runPublic(ctx, folders))).results_dir);
     expect(summary.manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(summary.config)));
     expect(JSON.stringify(summary.manifest.config.redacted)).not.toContain("localhost");
     expect(summary.manifest.engines).toEqual(summary.engine.engines);
@@ -344,7 +395,7 @@ describe("the manifest of a run", () => {
     const digests = async (more: Partial<Parameters<typeof runCorpus>[1]>, edit?: (library: string) => void) => {
       const { ctx, folders } = setup(cases);
       edit?.(folders.library);
-      return stored((await quiet(() => runCorpus("public", { ...ctx, ...more }, folders))).results_dir).summary.manifest.cases;
+      return stored((await quiet(() => runPublic({ ...ctx, ...more }, folders))).results_dir).summary.manifest.cases;
     };
     const base = await digests({});
     expect(await digests({})).toEqual(base);
@@ -369,13 +420,13 @@ describe("the manifest of a run", () => {
 describe("rescore", () => {
   /** The real public cases and library, run against the fake akm with a verdict for each of their refs, and the results folder cleared for rescore. */
   async function publicRun() {
-    const real = foldersFor("public");
-    const publicCases = parseCases(readFileSync(real.cases, "utf8"));
+    const real = publicAt(join(EVAL_DIR, "assets"));
+    const publicCases = parseCases(readFileSync(join(real.folder, "cases.jsonl"), "utf8"));
     const words = ["ACCEPT", "REJECT", "DEFER", "SLOW", "ACCEPT", "CRASH"];
     process.env.FAKE_VERDICTS = JSON.stringify(Object.fromEntries(publicCases.map((c, i) => [c.ref, words[i % words.length]])));
     try {
       const { ctx, folders } = setup([make("x", "good", "ACCEPT")]);
-      const summary = await quiet(() => runCorpus("public", ctx, { ...real, results: folders.results }));
+      const summary = await quiet(() => runCorpus(real, ctx, folders.results));
       clearRunning(summary.results_dir);
       return { summary, publicCases };
     } finally {
@@ -470,38 +521,50 @@ describe("callStats", () => {
   });
 });
 
-describe("--cases", () => {
+describe("the corpus on the command line", () => {
   const RUN = join(import.meta.dir, "run.ts");
   const cli = async (args: string[], env: Record<string, string>) => {
     const proc = Bun.spawn(["bun", RUN, ...args], { env: { ...process.env, MODEL_NAME: "m", MODEL_API_KEY: "", ...env }, stdout: "pipe", stderr: "pipe" });
     const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
     return { out, err, code };
   };
+  const ENV = { MODEL_BASE_URL: "http://127.0.0.1:9/v1" };
 
-  test("reads the own corpus from the folder it names, and writes results where own results go", () => {
-    const own = foldersFor("own");
-    const elsewhere = foldersFor("own", "/some/notes");
-    expect(elsewhere).toEqual({ cases: "/some/notes/cases.jsonl", library: "/some/notes/library", results: own.results });
-    expect(own.cases).toEndWith("private/promotion/own/cases.jsonl");
+  test("the results of a corpus go where the README says: the eval's results/ for the public cases, private/promotion/results/ for a custom corpus", () => {
+    const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
+    dirs.push(root);
+    expect(resultsOf(publicAt("/some/cases"))).toBe(join(EVAL_DIR, "results"));
+    expect(resultsOf(customAt("/some/notes", root))).toBe(join(REPO, "private", "promotion", "results"));
   });
 
   test("a folder of notes is refused before it is read when the model is not marked private in models.json", async () => {
     const { folders } = setup(cases);
-    const dir = join(folders.cases, "..");
-    const refused = await cli(["--cases", dir], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" });
+    const dir = dirname(folders.cases);
+    const refused = await cli(["--cases", dir], ENV);
     expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--cases sends your notes to m, which is not marked "private": true in models.json');
+    expect(refused.err).toContain(`--cases ${dir} sends your notes to m, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private.`);
   });
 
-  test("is an own corpus, so it cannot be combined with another corpus, and a folder without a set is named", async () => {
+  test("--cases is a custom corpus, so it cannot be combined with the public one, and a folder without a set is named", async () => {
     const { folders } = setup(cases);
-    const dir = join(folders.cases, "..");
-    expect((await cli(["--cases", dir, "--corpus", "public"], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" })).err).toContain("--cases is an own corpus");
+    const dir = dirname(folders.cases);
+    expect((await cli(["--cases", dir, "--corpus", "public"], ENV)).err).toContain("--cases is a custom corpus: use it alone, or with --corpus custom");
     const empty = mkdtempSync(join(tmpdir(), "promotion-empty-"));
     dirs.push(empty);
-    const missing = await cli(["--cases", empty], { MODEL_BASE_URL: "http://127.0.0.1:9/v1" });
+    const missing = await cli(["--cases", empty], ENV);
     expect(missing.code).toBe(2);
-    expect(missing.err).toContain("the own set is missing");
+    expect(missing.err).toContain("the custom set is missing");
+  });
+
+  test("--corpus own still works for one release, with the line that names the new form, and --corpus private is not a corpus of this eval", async () => {
+    const own = await cli(["--corpus", "own"], ENV);
+    expect(own.err).toContain("promotion: --corpus own is now --corpus custom. The old value works for one more release.");
+    expect((await cli(["--corpus", "private"], ENV)).err).toContain('--corpus must be public, custom or all, not "private"');
+  });
+
+  test("the help lists the corpora public, custom and all, and the flag --cases", async () => {
+    const help = (await cli(["--help"], ENV)).out;
+    expect(help).toContain("[--corpus public|custom|all] [--cases DIR]");
   });
 });
 

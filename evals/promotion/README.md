@@ -31,29 +31,30 @@ akm proposal list --status rejected --detail full        # the judge's reason fo
 
 ```
 evals/promotion/run --corpus public
-evals/promotion/run --corpus own
+evals/promotion/run --corpus custom
 evals/promotion/run --corpus all
 evals/promotion/run --cases ~/notes/night-2026-10-07
 evals/promotion/run --corpus public --repeat 4
 ```
 
-- `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on `corpus/library`. `own` is your own set in `private/promotion/own/`: see "Run your own set". `all` runs both and prints the two results side by side, never as one number.
-- `--cases DIR` runs the own corpus from DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. It is an own corpus in every way: it holds real notes, so it runs only against a model whose line in `models.json` says `"private": true` (the same check as `own`, which says `--cases` in its refusal), and its results go to `private/promotion/results/` and report the corpus as `own`. A relative DIR is from the repository root. It cannot be combined with `--corpus public` or `all`.
+- `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on `corpus/library`. `custom` is a folder of your own set with a `corpus.json`, `private/promotion/own/` unless `--cases` names another: see "Run your own set" and "Corpora" in the root README. `all` runs `public` and the default custom corpus and prints the two results side by side, never as one number. `--corpus own` works for one more release, as `--corpus custom`, with a line that says so.
+- `--cases DIR` runs the custom corpus in DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. Without a `corpus.json` in DIR it is your own notes and is private: it runs only against a model whose line in `models.json` says `"private": true`, and the refusal names `--cases`. Its results go to `private/promotion/results/` and report the corpus as `custom`. A relative DIR is from the repository root. It cannot be combined with `--corpus public`.
 - `--limit N` runs N proposals, taking one of each category in turn: good, duplicate, stale, ephemeral. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. Each run plants its own sandbox. See "Repeat a run" in the root README.
 - `--strategy NAME` runs the akm strategy NAME in place of `promotion`, in the drain. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-`own` sends your notes to the model, so it runs only against a model whose line in `models.json` says `"private": true`. It stops with an error naming the model otherwise. Nothing is inferred from the URL or the name of the model: you say which models may see your notes, in `models.json` (see "Private assets" in the root README).
+A private custom corpus sends your notes to the model, so it runs only against a model whose line in `models.json` says `"private": true`. It stops with an error naming the model otherwise, before anything runs. Nothing is inferred from the URL or the name of the model: you say which models may see your notes, in `models.json` (see "The private flag" in the root README).
 
-Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for `own`:
+Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported; `null` when akm's events table cannot be read, with the reason on stderr), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
   - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept). The endpoint of the model is written as `<MODEL_BASE_URL>`; `engine` and `manifest` hold its host and a digest of its identity.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (its host and port only) and `endpoint_id` (a sha256 of the endpoint's identity), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `assets_sha256`: one digest over `cases.jsonl` and every file of the library's `knowledge/` folder, which is copied into the bundle, each named relative to its folder (`cases.jsonl`, `library/knowledge/...`), so two runs on the same proposals and notes have the same digest wherever the repository is. A change to a proposal or a note changes it, and `--limit` does not.
-  - `seed`: the content of `private/seed` for the `own` corpus when there is one; `null` for the public corpus and when there is none. promotion makes no private copy of its assets, so no seed shaped them.
+  - `corpus`, `corpus_kind`, `corpus_private` and `corpus_folder`: `public` or `custom`; for a custom corpus `own` (your notes) or `rewrite`; whether it is private; and its folder from the repository root, or `null` when the folder is outside it (the path of a folder outside it can name what is in it, so it is not recorded). `scripts/rescore` reads the cases from `corpus_folder`.
+  - `seed`: the seed of a `rewrite` corpus, and `null` otherwise. Your own notes were made by no seed, so a run on them records none: `private/seed` is not read. Two runs on the same notes compare whatever their `private/seed` files hold.
   - `status`: `complete`, or `aborted` when no proposal got a verdict (every row errored). Then `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary has no numbers worth comparing.
   - `timeouts`: how many of the errored proposals failed because the model call timed out, judging by the text akm gives for the failed call (`timed out`, `timeout`). They are counted in `n_errored` too, and their rows have `timed_out: true`. An akm command that the eval itself kills for running past its timeout ends the run with a message that says so, and has no row.
 - `samples.jsonl`: one line per proposal, with its label and category, the ref, what the tier did (`outcome`), the judge's reason (for a rejection, and from akm 0.9.27-alpha.2 for an accept or a defer too), and the error when a call failed. The outcome, the reason and the error are the raw output of the case, which the scorer reads: see "Rescore and the golden rows".
@@ -110,10 +111,11 @@ The proposals are in `cases.jsonl`, and the notes they may repeat are the librar
 
 ## Run your own set
 
-The public proposals have the cue that decides each one in their text, so they are easy: a model that cannot tell them apart is not usable, and one that can has shown little. The set that tests a judge is a labelled set of real promotions. Put it in `private/promotion/own/`. Nothing in `own/` is published. The folder holds:
+The public proposals have the cue that decides each one in their text, so they are easy: a model that cannot tell them apart is not usable, and one that can has shown little. The set that tests a judge is a labelled set of real promotions. Put it in `private/promotion/own/` (or any folder, with `--cases`). Nothing in `private/` is published. The folder holds:
 
 - `cases.jsonl`: one proposal a line, with the fields of `assets/README.md`: `id`, `label` (`good` or `bad`), `category` (`good`, `duplicate`, `stale` or `ephemeral`), `ref` (`knowledge/<name>`) and `content` (the note as proposed, frontmatter and body). Strip the `generated:` and `verified:` lines that akm stamps into a note it accepts, so that an accepted note does not give its label away. Extra fields are ignored.
 - `library/`: a folder with a `knowledge/` folder in it. It is copied into the sandbox as the bundle, and the note of each case is taken out, so put in the notes a proposal may repeat, such as the nearest notes of each. Notes of other types are not read.
+- `corpus.json` (optional): `{ "kind": "own", "private": true }`. Without it the folder is your own notes and is private. Write `"private": false` to say that the set holds nothing that must stay from other models. See "corpus.json" in the root README.
 
 The run stops with an error that says this when the folder holds no set in this format. The lab's set, how it was labelled and how it was made are in `private/promotion/own/README.md`.
 

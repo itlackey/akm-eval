@@ -3,7 +3,7 @@
 //
 // The scorer is score.ts and the collector is collect.ts (see measurement.ts); this file re-exports both, so the eval imports from one place.
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 import { BAD, type Case } from "./score.ts";
@@ -80,15 +80,3 @@ export function bundleSha256(libraryDir: string, cases: Case[]): string {
   const written = new Set(cases.map((c) => `${c.ref}.md`));
   return digestOf(notesOf(libraryDir).filter((f) => !written.has(`knowledge/${f}`)).map((f): [string, string] => [`knowledge/${f}`, join(libraryDir, "knowledge", f)]));
 }
-
-/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
-export function readSeed(file: string): string | null {
-  try {
-    return readFileSync(file, "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-/** The seed to record for a corpus: none for the public one, private/seed for an own one. promotion has no generated assets, so no run has a seed of its own. */
-export const corpusSeed = (corpus: string, seedFile: string): string | null => (corpus === "public" ? null : readSeed(seedFile));

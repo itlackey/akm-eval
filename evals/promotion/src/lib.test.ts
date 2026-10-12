@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
 import { Database } from "bun:sqlite";
-import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, readSeed, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
+import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = BUNDLE_DIR; // the notes a run holds in its bundle, as build.ts makes them from corpus/library
@@ -159,15 +159,6 @@ describe("what a run read", () => {
     const f = folder({ "a.md": "one" });
     expect(digestOf([["a", f.cases]])).not.toBe(digestOf([["b", f.cases]]));
     expect(digestOf([["a", f.cases], ["b", join(f.library, "knowledge", "a.md")]])).toBe(digestOf([["b", join(f.library, "knowledge", "a.md")], ["a", f.cases]]));
-  });
-
-  test("the seed to record: none for the public corpus, private/seed for an own one when there is a file", () => {
-    const f = folder({});
-    writeFileSync(join(f.dir, "seed"), "123456789012345678\n");
-    expect(corpusSeed("public", join(f.dir, "seed"))).toBeNull();
-    expect(corpusSeed("own", join(f.dir, "seed"))).toBe("123456789012345678");
-    expect(corpusSeed("own", join(f.dir, "no-seed"))).toBeNull();
-    expect(readSeed(join(f.dir, "seed"))).toBe("123456789012345678");
   });
 });
 
