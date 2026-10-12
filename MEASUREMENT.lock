@@ -2,6 +2,29 @@
   "lock_version": 1,
   "harness_version": 3,
   "evals": {
+    "longmemeval": {
+      "collector": {
+        "version": 1,
+        "sha256": "2b4bb0d1d092a24dd2fa96e2f493fb687c0b2795f11882110f1a4b739a976258",
+        "files": [
+          "benchmarks/longmemeval/src/akm.ts",
+          "benchmarks/longmemeval/src/collect.ts",
+          "benchmarks/longmemeval/src/llm.ts",
+          "benchmarks/longmemeval/src/prompts.ts",
+          "lib/akm/akm.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "ba3b3ecaf208dd99d9ba5a8ea44cc78e82dae455cd6b0c584f807daa64d88c06",
+        "files": [
+          "benchmarks/longmemeval/src/metrics.ts",
+          "benchmarks/longmemeval/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,
