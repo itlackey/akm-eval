@@ -14,8 +14,8 @@ import { spreadOf } from "../../../lib/repeat.ts";
 import { type Case, type Raw, type Row, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { buildDecision, renderMarkdown } from "./decision.ts";
-import { fingerprintOf, resumable } from "./fingerprint.ts";
-import { type Matrix, type ResultRef, type RunRecord, emptyState, incompleteReason, loadMeasured, parseMatrix, selectForConfirm } from "./lib.ts";
+import { fingerprintOf, inputsDigest, resumable } from "./fingerprint.ts";
+import { type Matrix, type ResultRef, type RunRecord, emptyState, findResults, incompleteReason, loadMeasured, parseMatrix, resultsParents, selectForConfirm } from "./lib.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -369,5 +369,136 @@ describe("the fingerprint of a job whose eval declares a measurement", () => {
     cpSync(root, copy, { recursive: true });
     writeFileSync(join(copy, "evals", "tiny", "src", "measurement.ts"), "throw new Error('broken');\n");
     expect(Object.keys(fingerprintOf(copy, job("tiny"), env).parts)).toContain("harness");
+  });
+});
+
+describe("a relabelled case does not run a row again", () => {
+  const env = { AKM_BIN: "fake-akm", MODEL_NAME: "m1", MODEL_BASE_URL: "https://a.example.com/v1" };
+  const job = (evalName: string, args: string[]) => ({ args, row: { name: "r", eval: evalName, args: [] } });
+  const fingerprint = (evalName: string, dir: string) => fingerprintOf(ROOT, job(evalName, ["--cases", dir]), env);
+  const changed = (a: { parts: Record<string, string> }, b: { parts: Record<string, string> }): string[] => [...new Set([...Object.keys(a.parts), ...Object.keys(b.parts)])].filter((k) => a.parts[k] !== b.parts[k]).sort();
+  const write = (dir: string, file: string, rows: object[]) => writeFileSync(join(dir, file), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
+
+  /** A custom corpus of reflect's golden cases, in a folder outside the checkout whose name has a space. */
+  function reflectCorpus(): { dir: string; cases: Record<string, any>[] } {
+    const dir = join(tmp(), "my notes");
+    mkdirSync(dir, { recursive: true });
+    const cases = jsonl(join(GOLDEN, "cases.jsonl"));
+    write(dir, "cases.jsonl", cases);
+    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":false}');
+    return { dir, cases };
+  }
+
+  test("the labels of a case are not in the fingerprint: another allow, forbid, class or anchors runs nothing again, in the corpus and in the files its --cases names", () => {
+    const { dir, cases } = reflectCorpus();
+    const first = fingerprint("reflect", dir);
+    write(dir, "cases.jsonl", cases.map((c, i) => (i === 2 ? { ...c, allow: [...(c.allow ?? []), "when_to_use"], forbid: ["a term"], anchors: ["2026-01-01"] } : c)));
+    expect(fingerprint("reflect", dir)).toEqual(first);
+    write(dir, "cases.jsonl", cases.map((c, i) => (i === 4 ? { ...c, class: "title-missing" } : c)));
+    expect(fingerprint("reflect", dir)).toEqual(first);
+  });
+
+  test("a case whose input changed, one added and one removed run the row again; so do the other files of the corpus", () => {
+    const { dir, cases } = reflectCorpus();
+    const first = fingerprint("reflect", dir);
+    const was = jsonl(join(dir, "cases.jsonl"));
+    expect(was.length).toBe(cases.length);
+    write(dir, "cases.jsonl", cases.map((c, i) => (i === 1 ? { ...c, feedback: `${c.feedback} It also reads badly.` } : c)));
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus"]);
+    write(dir, "cases.jsonl", cases.map((c, i) => (i === 1 ? { ...c, source: `${c.source}\nA new line.\n` } : c)));
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus"]);
+    write(dir, "cases.jsonl", cases.slice(1));
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus"]);
+    write(dir, "cases.jsonl", [...cases, { ...cases[0], id: "description-period-99" }]);
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus"]);
+    write(dir, "cases.jsonl", cases);
+    expect(fingerprint("reflect", dir)).toEqual(first);
+    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":true}'); // a file of the corpus that is not a case file counts by its bytes
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus", "files"]);
+  });
+
+  test("cases that cannot be read count by their bytes, so an edit to them is still a change", () => {
+    const { dir } = reflectCorpus();
+    writeFileSync(join(dir, "cases.jsonl"), "not json\n");
+    const first = fingerprint("reflect", dir);
+    expect(fingerprint("reflect", dir)).toEqual(first);
+    writeFileSync(join(dir, "cases.jsonl"), "still not json\n");
+    expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus", "files"]);
+  });
+
+  test("retrieval: the qrels are labels and the queries are inputs", () => {
+    const dir = join(tmp(), "my notes");
+    mkdirSync(dir, { recursive: true });
+    const [queries, qrels] = ["queries", "qrels"].map((name) => jsonl(join(ROOT, "evals", "retrieval", "assets", `${name}.jsonl`)));
+    write(dir, "queries.jsonl", queries as object[]);
+    write(dir, "qrels.jsonl", qrels as object[]);
+    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":false}');
+    const first = fingerprint("retrieval", dir);
+    write(dir, "qrels.jsonl", (qrels as Record<string, any>[]).map((r, i) => (i === 0 ? { ...r, grade: r.grade === 3 ? 2 : 3 } : r))); // a pair graded again
+    expect(fingerprint("retrieval", dir)).toEqual(first);
+    write(dir, "queries.jsonl", (queries as Record<string, any>[]).map((q, i) => (i === 0 ? { ...q, query: `${q.query}, in small steps` } : q)));
+    expect(changed(first, fingerprint("retrieval", dir))).toEqual(["corpus"]);
+  });
+
+  test("promotion --cases DIR: the row finds its results in private/promotion/results, where the run writes them", () => {
+    const root = tmp();
+    const label = "sw-p-s";
+    const results = join(root, "private", "promotion", "results", `2026-10-12-${label}`);
+    mkdirSync(results, { recursive: true });
+    writeFileSync(join(results, "summary.json"), JSON.stringify({ eval: "promotion", label, status: "complete", metrics: { precision: { value: 1 } } }));
+    const args = ["--cases", "my notes", "--label", label];
+    expect(resultsParents(root, "promotion", args)).toEqual([join(root, "private", "promotion", "results"), join(root, "private", "promotion", "own", "results"), join(root, "private", "promotion", "own", "results-feedback")]);
+    expect(findResults(root, { label, repeat: null, args, row: { name: "p", eval: "promotion", args: ["--cases", "my notes"] } }, 0)).toEqual([{ scope: "", kind: "run", file: `private/promotion/results/2026-10-12-${label}/summary.json` }]);
+    // the public corpus is the eval's own results folder, which the same label in it would not be taken for
+    expect(findResults(root, { label, repeat: null, args: ["--label", label], row: { name: "p", eval: "promotion", args: [] } }, 0)).toEqual([]);
+  });
+});
+
+describe("results scored against labels that have changed since are scored again", () => {
+  /** Both sides were scored against labels that have since changed: their manifests hold another label digest for every case, the same on both sides, so they agree with each other. */
+  const oldLabels = (m: RunManifest): RunManifest => ({ ...m, cases: Object.fromEntries(Object.entries(m.cases).map(([id, c]) => [id, { ...c, label_sha256: "e".repeat(64) }])) });
+  /** An older labelling called every defect fixed: it scored the rows right, and the stored numbers say so. */
+  const calledRight = (rows: Row[]): Record<string, any>[] => rows.map((r) => ({ ...r, correct: true, checks: Object.fromEntries(Object.keys(r.checks ?? {}).map((k) => [k, true])) }));
+
+  test("a relabelled case is scored again with the current labels, though the two sides agree with each other, and the row says so", () => {
+    const { row } = decide({ raw: BAD, manifest: oldLabels, rows: calledRight }, { raw: GOOD, manifest: oldLabels });
+    expect(row).toMatchObject({ verdict: "better", rescored: true });
+    expect(row.metrics.find((x) => x.path === "defects.rate")).toMatchObject({ baseline: { mean: 0 }, config: { mean: 1 }, signal: "better" }); // the stored numbers said 1 and 1
+    expect(row.note).toContain(`${ids.length} cases have other labels than when the runs were made (${ids.slice(0, 5).join(", ")}, and ${ids.length - 5} more), so both were scored again with the current scorer`);
+    expect(row.paired).toMatchObject({ better: 10 }); // the paired comparison reads the rescored rows too
+  });
+
+  test("so are results scored by an older scorer, on both sides", () => {
+    const { row } = decide({ raw: BAD, manifest: (m) => ({ ...m, scorer: STALE() }), rows: calledRight }, { raw: GOOD, manifest: (m) => ({ ...m, scorer: STALE() }) });
+    expect(row).toMatchObject({ verdict: "better", rescored: true });
+    expect(row.note).toContain(`the runs were scored by a scorer other than the current one (v${STALE().version} cccccccccccc, now v${live().scorer.version} ${live().scorer.sha256.slice(0, 12)}), so both were scored again with the current scorer`);
+  });
+
+  test("results scored by the current scorer against the current labels are taken as they are", () => {
+    const { row } = decide({ raw: BAD, rows: calledRight }, { raw: GOOD });
+    expect(row.rescored).toBe(false);
+    expect(row.metrics.find((x) => x.path === "defects.rate")).toMatchObject({ baseline: { mean: 1 }, config: { mean: 1 }, signal: "same" });
+  });
+
+  test("a run that cannot be scored again is refused when the labels have changed, and taken as stored when nothing says that they have", () => {
+    const noProposal = (rows: Row[]) => rows.map((r) => (r.outcome === "proposal" ? Object.fromEntries(Object.entries(r).filter(([k]) => k !== "proposal")) : r));
+    const refused = decide({ raw: GOOD, manifest: oldLabels, rows: noProposal }, { raw: GOOD, manifest: oldLabels }).row;
+    expect(refused.verdict).toBe("not comparable");
+    expect(refused.note).toMatch(/^10 cases have other labels than when the runs were made \(.*\), so both are scored again with the current scorer before they are compared, and the baseline cannot be: .*its rows lack the raw output the reflect scorer reads: proposal/);
+    const as = decide({ raw: BAD, rows: noProposal }, { raw: GOOD, rows: noProposal }).row;
+    expect(as).toMatchObject({ verdict: "better", rescored: false });
+  });
+});
+
+describe("the cases of the public corpus count by their inputs", () => {
+  test("every eval that keeps its cases in files has the digest of the inputs of its public cases, and the labels are not in it", () => {
+    for (const name of ["reflect", "distill", "extract", "judge-gate", "promotion", "retrieval", "bakeoff"]) {
+      expect(inputsDigest(ROOT, name, []), name).toMatch(/^[0-9a-f]{64}$/);
+      expect(inputsDigest(ROOT, name, ["--corpus", "public"]), name).toBe(inputsDigest(ROOT, name, []));
+    }
+    // an eval that is not in the table, and an eval that declares no measurement yet, have none: they count by their bytes
+    for (const name of ["agent-ab", "terminal-bench", "longmemeval", "skillret", "nightly", "consolidate", "not-an-eval"]) expect(inputsDigest(ROOT, name, []), name).toBeNull();
+    // a custom corpus that is not there has none, and the job counts by the bytes it finds
+    expect(inputsDigest(ROOT, "reflect", ["--cases", join(tmp(), "nothing here")])).toBeNull();
   });
 });

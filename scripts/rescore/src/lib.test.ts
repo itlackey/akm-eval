@@ -2,7 +2,7 @@
 // eval's own scorer, and written as results folders. A stale run is the same run with rows another scorer gave and the manifest of that scorer.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
@@ -255,6 +255,8 @@ describe("the command", () => {
     expect(refused.out).toContain("-rescored-2"); // the first was still done
     expect(cmd().code).toBe(2);
     expect(cmd("--help").out).toContain("Usage: scripts/rescore/run [--cases DIR] RESULTS_DIR...");
+    // it says what it does with a custom corpus that is a split of a dataset, which has no folder
+    expect(cmd("--help").out).toContain('benchmarks/skillret is a split of its dataset and has no folder (corpus_kind "split"): its queries are drawn from the dataset files\nagain, with no --cases, and a --cases given with it has no folder to apply to and is left unused.');
   });
 });
 
@@ -368,5 +370,94 @@ describe("the cases of a run on a custom corpus", () => {
     expect(given.code).toBe(2);
     expect(given.err).toContain('was made on the "public" corpus, and --cases names the folder of a custom one');
     expect(cmd("--cases", " ", dir)).toMatchObject({ code: 2, err: expect.stringContaining("--cases needs a folder") });
+  });
+});
+
+// ---- a custom corpus that is a split of a dataset: skillret's train split has no folder -----------------------------------------------------
+
+describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"split\")", () => {
+  /**
+   * A checkout of its own with skillret's code and the lock of this one, through links, and a dataset of a few skills and queries in assets/ where the
+   * benchmark's data files are fetched to. The train queries are drawn from it as a run draws them, so the cases of a custom run are there to be read.
+   */
+  async function checkout() {
+    const root = tmp();
+    mkdirSync(join(root, "benchmarks", "skillret", "assets"), { recursive: true });
+    symlinkSync(join(ROOT, "lib"), join(root, "lib"));
+    symlinkSync(join(ROOT, "benchmarks", "skillret", "src"), join(root, "benchmarks", "skillret", "src"));
+    copyFileSync(join(ROOT, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
+    const assets = join(root, "benchmarks", "skillret", "assets");
+    const lines = (rows: object[]) => rows.map((r) => `${JSON.stringify(r)}\n`).join("");
+    const skills = (prefix: string) => ["1", "2", "3"].map((n) => ({ id: `${prefix}${n}`, skill_md: `---\nname: ${prefix}${n}\n---\nA skill.` }));
+    const queries = (prefix: string, skill: string) => [
+      { id: `${prefix}1`, query: "one", skill_ids: [`${skill}1`] },
+      { id: `${prefix}2`, query: "two", skill_ids: [`${skill}2`] },
+      { id: `${prefix}3`, query: "three", skill_ids: [`${skill}2`, `${skill}3`] },
+    ];
+    const qrels = (prefix: string, skill: string) => [[`${prefix}1`, `${skill}1`], [`${prefix}2`, `${skill}2`], [`${prefix}3`, `${skill}2`], [`${prefix}3`, `${skill}3`]].map(([query_id, skill_id]) => ({ query_id, skill_id, relevance: 1 }));
+    const files: Record<string, object[]> = { "test-skills.jsonl": skills("t"), "test-queries.jsonl": queries("q", "t"), "test-qrels.jsonl": qrels("q", "t"), "train-skills.jsonl": skills("s"), "train-queries.jsonl": queries("a", "s"), "train-qrels.jsonl": qrels("a", "s") };
+    for (const [name, rows] of Object.entries(files)) writeFileSync(join(assets, name), lines(rows));
+    const locked = Object.fromEntries(Object.entries(files).map(([name, rows]) => [name, { url: `https://example.test/${name}`, bytes: 1, sha256: "a".repeat(64), records: rows.length }]));
+    writeFileSync(join(assets, "ASSETS.lock"), JSON.stringify({ dataset: "tiny", paper: "", source: "", licence: "", revision: "r", files: locked }));
+    const { MEASUREMENT } = (await import(join(root, "benchmarks", "skillret", "src", "measurement.ts"))) as { MEASUREMENT: any };
+    return { root, MEASUREMENT };
+  }
+
+  /** The stored run of the split: every query found first by both lines, with the manifest of the scorer `scorer` and, optionally, scores another scorer gave. */
+  function stored(M: any, root: string, scorer?: { version: number; sha256: string }, wrongScores = false) {
+    const summary0 = { corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, sample: { limit: null } };
+    const cases = M.loadCases(root, summary0);
+    const raws = cases.map((q: any) => ({ search: { ranked: [...q.relevant, "x"], seconds: 1 }, semantic_search: { ranked: [...q.relevant, "x"], seconds: 2 } }));
+    const rows = cases.map((q: any, i: number) => M.score(q, raws[i]));
+    const written = wrongScores ? rows.map((r: any) => ({ ...r, search: { ...r.search, scores: { ...r.search.scores, "NDCG@10": 0.123 } } })) : rows;
+    const parts = lockedParts(M);
+    const manifest = buildManifest({ measurement: M, parts: { ...parts, ...(scorer ? { scorer } : {}) }, corpus: "custom", cases: caseDigests(M, cases), akm: { version: "0.9.99-test", bin: "akm" }, settings: { seed: "42" }, completion: completionOf(M, cases.map((q: any) => q.id), rows) });
+    const dir = join(tmp(), "2026-10-12-split");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "skillret", ...summary0, label: "split", seed: "42", status: "complete", ...M.summarize(written), manifest }));
+    writeFileSync(join(dir, "samples.jsonl"), written.map((r: any) => `${JSON.stringify(r)}\n`).join(""));
+    return { dir, cases, rows };
+  }
+
+  test("is scored again from the dataset files, with no folder recorded and none asked for", async () => {
+    const { root, MEASUREMENT: M } = await checkout();
+    const { dir, cases, rows } = stored(M, root);
+    expect(cases.map((q: any) => q.id)).toEqual(["a1", "a2", "a3"]); // the train queries, drawn as a run draws them
+    const result = rescoreRun(readStored(dir), { root });
+    expect(result).toMatchObject({ dropped: [], changed: [], relabelled: [], legacy: false });
+    expect(result.rows).toEqual(rows);
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+    expect(manifestProblems(result.summary.manifest)).toEqual([]);
+    expect(result.summary.manifest).toMatchObject({ corpus: "custom", rescored_from: { results: "2026-10-12-split", dropped: [] } });
+    // and into a folder beside the original, as the command does
+    const { out } = rescoreFolder(dir, { root });
+    expect(out).toBe(`${dir}-rescored`);
+    expect(summaryOf(out)).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+  });
+
+  test("a run scored by an older scorer is scored again with the current one, from the ranked results", async () => {
+    const { root, MEASUREMENT: M } = await checkout();
+    const { dir, rows } = stored(M, root, { version: 7, sha256: "c".repeat(64) }, true);
+    expect(rowsOf(dir).every((r) => r.search.scores["NDCG@10"] === 0.123)).toBe(true);
+    const result = rescoreRun(readStored(dir), { root });
+    expect(result.changed).toEqual(["a1", "a2", "a3"]);
+    expect(result.rows).toEqual(rows);
+    expect(result.summary.manifest.scorer).toEqual(lockedParts(M).scorer);
+    expect(result.summary.manifest.rescored_from.scorer).toEqual({ version: 7, sha256: "c".repeat(64) });
+  });
+
+  test("a --cases given with it, as the benchmark's README used to say, has no folder to apply to: the run is scored the same, and no folder is recorded", async () => {
+    const { root, MEASUREMENT: M } = await checkout();
+    const { dir, rows } = stored(M, root);
+    const result = rescoreRun(readStored(dir), { root, cases: "benchmarks/skillret/assets" });
+    expect(result.rows).toEqual(rows);
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+  });
+
+  test("the data files not being there is a refusal that names them, as it is for the public corpus", async () => {
+    const { root, MEASUREMENT: M } = await checkout();
+    const { dir } = stored(M, root);
+    rmSync(join(root, "benchmarks", "skillret", "assets", "train-queries.jsonl"));
+    expect(() => rescoreRun(readStored(dir), { root })).toThrow(/the cases .* was scored against cannot be read: train-queries\.jsonl is not in .*benchmarks\/skillret\/assets\. A run of benchmarks\/skillret fetches them\./);
   });
 });

@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { type RunManifest, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { type PartRef, type RunManifest, loadMeasurement, lockedParts, measurementPath, readManifest } from "../../../lib/manifest.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
@@ -60,6 +60,8 @@ const harbor = (): EvalSpec => ({ main: [main("delta.value")], harm: [harm("akm.
 const spec = (m: MetricSpec[], h: MetricSpec[]): EvalSpec => ({ main: m, harm: h, completeness: { errors: ["n_errored"] } });
 /** The columns of the retrieval eval's summary: akm's search and curate, keyword and semantic. */
 const RETRIEVAL = ["search", "curate", "semantic_search", "semantic_curate"];
+/** The lines of skillret's summary: akm's search on the keyword index and on the semantic one. */
+const SKILLRET = ["search", "semantic_search"];
 
 /**
  * The metrics each eval is judged on, with its completeness policy. Every path was read from a real summary.json (and repeat-summary.json,
@@ -73,17 +75,27 @@ export const EVALS: Record<string, EvalSpec> = {
   reflect: spec([main("defects.rate")], [harm("controls.rate", "up"), harm("proposals.touched_body")]),
   promotion: spec([main("precision.value"), main("recall.value")], [harm("bad_accepted.value")]),
   "judge-gate": spec([main("precision.value"), main("good.rate")], [harm("bad_harmful.rate"), harm("bad_churn.rate")]),
-  extract: spec([main("insights.rate")], [harm("routine.rate", "up"), harm("planted.saved_instruction")]),
+  // planted.ambiguous counts the planted sessions whose memory holds the planted phrase behind a negation the scorer cannot read, and asserts none. It is a count to look at, not judged.
+  extract: { ...spec([main("insights.rate")], [harm("routine.rate", "up"), harm("planted.saved_instruction")]), context: ["planted.ambiguous"] },
   retrieval: { ...spec(RETRIEVAL.map((c) => main(`${c}.ndcg_10`)), []), context: RETRIEVAL.flatMap((c) => [`${c}.ndcg_10_condensed`, `${c}.judged_10`]), graded: RETRIEVAL.map((c) => `${c}.judged_10`) },
   "agent-ab": harbor(),
   "terminal-bench": harbor(),
+  // bakeoff scores what akm wrote for each case against checks: the cases that pass, and the share of checks that hold. It names no harm.
+  bakeoff: { ...spec([main("case_pass.rate"), main("checks.rate")], []), context: ["valid_output.rate"] },
+  // longmemeval answers a question twice, with the whole history and with akm's five sessions. What akm changes is the second answer and the sessions it
+  // returns; the first is the control, and the difference between the two follows from both. A retrieval-only run has the retrieval metrics alone.
+  longmemeval: { ...spec([main("accuracy.with_akm.rate"), main("retrieval.hit_rate"), main("retrieval.recall")], []), context: ["accuracy.without_akm.rate", "accuracy.difference.value", "retrieval.mrr", "retrieval.ndcg"] },
+  // skillret ranks the skills of a library for a request, on the keyword index and, in a run without --limit, the semantic one. NDCG@10 is the headline.
+  skillret: { ...spec(SKILLRET.map((line) => main(`${line}.NDCG@10`)), []), context: SKILLRET.flatMap((line) => ["Recall@10", "Completeness@10", "MAP@10"].map((metric) => `${line}.${metric}`)) },
 };
 
 /** Every metric of each eval, the main ones first. */
 export const EVAL_METRICS: Record<string, MetricSpec[]> = Object.fromEntries(Object.entries(EVALS).map(([name, e]) => [name, [...e.main, ...e.harm]]));
 
 /** What a row's `eval` names that lives in benchmarks/<name>/run and not in evals/<name>/run. */
-const BENCHMARKS = ["terminal-bench"];
+const BENCHMARKS = ["terminal-bench", "longmemeval", "skillret"];
+/** The evals that call no model, so the file's top-level "model" is not given to them: their runner has no --model. */
+const NO_MODEL = ["retrieval", "skillret"];
 /** The evals that run in Harbor. Their --akm is an npm release or a checkout's folder, not a command (see lib/harbor/harbor.ts). */
 export { HARBOR };
 
@@ -206,12 +218,21 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
 }
 
 /**
+ * The flags that make a run another measurement, whatever the corpus: consolidate's `--pool` (another set of cases), longmemeval's `--retrieval-only` (no
+ * model, no answers: its summary has `mode: "retrieval-only"`), bakeoff's `--process` (one process only) and longmemeval's `--sample-seed` (another draw of
+ * the questions). A full longmemeval run is never compared with a retrieval-only one, so a config of one has no baseline in the other.
+ */
+const MODE_FLAGS = ["--pool", "--retrieval-only"];
+const VALUE_MODE_FLAGS = ["--process", "--sample-seed"];
+
+/**
  * Rows are only compared when they ran the same cases: the same eval, corpus, pool or per-case mode, cases file and explicit limit.
  * What differs between a baseline and a config (strategy, patch, timeout, ...) is the treatment.
  */
 export function scopeKey(r: Row): string {
   const bits = [r.eval, `corpus=${corpusOf(r.eval, r.args)}`];
-  if (hasFlag(r.args, "--pool")) bits.push("pool");
+  for (const f of MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(f.slice(2));
+  for (const f of VALUE_MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
   const folder = customFolder(r.eval, r.args);
   if (folder !== null && !hasFlag(r.args, "--cases")) bits.push(`folder=${folder}`); // the old values name other folders: distill's own is not its default custom corpus
   for (const f of ["--cases", "--limit"]) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
@@ -262,7 +283,7 @@ function makeJob(m: Matrix, row: Row, stage: Stage): Job {
   const label = labelOf(m.prefix, row.name, stage);
   const args = [...row.args];
   if (m.akm && !hasFlag(args, "--akm") && !HARBOR.includes(row.eval)) args.unshift("--akm", m.akm);
-  if (m.model && row.eval !== "retrieval" && !hasFlag(args, "--model")) args.unshift("--model", m.model);
+  if (m.model && !NO_MODEL.includes(row.eval) && !hasFlag(args, "--model")) args.unshift("--model", m.model);
   let repeat: number | null = null;
   if (stage === "screen") {
     const limit = m.screenLimit[row.eval];
@@ -343,6 +364,9 @@ const CUSTOM: Record<string, { corpus: string; default: Kind; aliases: Record<st
   retrieval: { corpus: "retrieval", default: "rewrite", aliases: ALIASES },
   "agent-ab": { corpus: "agent-ab", default: "rewrite", aliases: { private: ALIASES.private } },
   "terminal-bench": { corpus: "retrieval", default: "rewrite", aliases: { private: ALIASES.private } },
+  bakeoff: { corpus: "bakeoff", default: "rewrite", aliases: { private: ALIASES.private } },
+  longmemeval: { corpus: "longmemeval", default: "rewrite", aliases: { private: ALIASES.private } },
+  skillret: { corpus: "skillret", default: "split", aliases: { private: { folder: "", kind: "split" } } }, // a split of the dataset: it has no folder
 };
 
 /** The old `--corpus` values, which name a custom corpus. */
@@ -380,7 +404,7 @@ export function customCorpus(root: string, evalName: string, args: string[]): Re
  */
 export function customFolder(evalName: string, args: string[]): string | null {
   const spec = CUSTOM[evalName];
-  if (corpusOf(evalName, args) === "public") return null;
+  if (corpusOf(evalName, args) === "public" || spec?.default === "split") return null; // a split of a dataset (skillret's custom corpus) has no folder
   const cases = flagValue(args, "--cases");
   if (cases !== undefined) return cases;
   const corpus = flagValue(args, "--corpus");
@@ -644,12 +668,23 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
 
 // ---- results from different scorers, and runs from before the manifest -----------------------------------------------------
 
+/** The scorer the eval has now: the version MEASUREMENT.lock gives it and the digest of its files as they are. Null for an eval that declares none, or when the lock cannot say. */
+function currentScorer(evalName: string): PartRef | null {
+  try {
+    const m = loadMeasurement(evalName);
+    return m ? lockedParts(m).scorer : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Brings the results of the two sides to one scorer, the way scripts/compare does (README, "How results stay comparable"). When the runs behind
- * them were scored by different scorers, or a case they share has other labels in some run, every run of both sides is scored again in memory
- * with the scorer and labels this repository has now (scripts/rescore), and the numbers are those of the new rows. Nothing is written. A run
- * that cannot be scored again, for want of the raw output its scorer reads, refuses the pair, with the reason. Results with no manifest are
- * left as they are: the decision calls them exploratory (`manifestReasons`).
+ * Brings the results of the two sides to the scorer and the labels this repository has now, the way scripts/compare does (README, "How results stay
+ * comparable"). Every run of both sides is scored again in memory (scripts/rescore) when the runs behind them were scored by different scorers, or a case
+ * they share has other labels in some run, and also when they were all scored by a scorer other than the current one, or a case has been relabelled since:
+ * a relabelled case does not run a row again (fingerprint.ts), so a stored result may have been scored against labels that have changed. The numbers
+ * are those of the new rows; nothing is written. A run that cannot be scored again, for want of the raw output its scorer reads, refuses the pair when
+ * the runs need it, with the reason. Results with no manifest are left as they are: the decision calls them exploratory (`manifestReasons`).
  */
 export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; again: string | null } | { refusal: string } {
   const runs = [...base.runs, ...cfg.runs];
@@ -659,21 +694,39 @@ export function scoredAlike(root: string, base: Measured, cfg: Measured): { base
   const scorers = [...new Set(all.map((m) => m.scorer.sha256))];
   const shared = Object.keys(all[0].cases).filter((id) => all.every((m) => m.cases[id] !== undefined));
   const relabelled = shared.some((id) => new Set(all.map((m) => m.cases[id].label_sha256)).size > 1);
-  if (scorers.length === 1 && !relabelled) return { base, cfg, again: null };
-  const again = scorers.length > 1 ? `the runs were scored by different scorers (${[...new Set(all.map((m) => `v${m.scorer.version} ${m.scorer.sha256.slice(0, 12)}`))].join(", ")})` : "the runs were scored against different labels";
+  const part = (p: PartRef): string => `v${p.version} ${p.sha256.slice(0, 12)}`;
+  const now = currentScorer(all[0].eval);
   const { RescoreError, readStored, rescoreRun } = rescorer();
-  const score = (side: string, m: Measured): Measured => {
-    const done = (m.dirs ?? []).map((dir) => {
-      const shown = isAbsolute(dir) && relative(root, dir).startsWith("..") ? dir : relative(root, dir);
-      try {
-        const stored = readStored(dir);
-        const result = rescoreRun({ ...stored, dir: shown });
-        return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run };
-      } catch (e) {
-        if (e instanceof RescoreError) throw new RescoreError(`${again}, so both are scored again with the current scorer before they are compared, and ${side} cannot be: ${e.message}`);
-        throw e;
-      }
-    });
+  // each run scored again with what the repository has now; one that cannot be is told apart, and refuses the pair only when it has to be
+  type Attempt = { summary: Record<string, any>; run: Run; relabelled: string[] } | { error: InstanceType<typeof RescoreError> };
+  const attempt = (dir: string): Attempt => {
+    const shown = isAbsolute(dir) && relative(root, dir).startsWith("..") ? dir : relative(root, dir);
+    try {
+      const result = rescoreRun({ ...readStored(dir), dir: shown });
+      return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run, relabelled: result.relabelled };
+    } catch (e) {
+      if (e instanceof RescoreError) return { error: e };
+      throw e;
+    }
+  };
+  const tried = { base: (base.dirs ?? []).map(attempt), cfg: (cfg.dirs ?? []).map(attempt) };
+  const changedSince = [...new Set([...tried.base, ...tried.cfg].flatMap((t) => ("error" in t ? [] : t.relabelled)))];
+  const stale = now !== null && all.some((m) => m.scorer.sha256 !== now.sha256);
+  const again =
+    scorers.length > 1
+      ? `the runs were scored by different scorers (${[...new Set(all.map((m) => part(m.scorer)))].join(", ")})`
+      : relabelled
+        ? "the runs were scored against different labels"
+        : stale
+          ? `the runs were scored by a scorer other than the current one (${part(all[0].scorer)}, now ${part(now as PartRef)})`
+          : changedSince.length > 0
+            ? `${changedSince.length === 1 ? "a case has" : `${changedSince.length} cases have`} other labels than when the runs were made (${changedSince.slice(0, 5).join(", ")}${changedSince.length > 5 ? `, and ${changedSince.length - 5} more` : ""})`
+            : null;
+  if (again === null) return { base, cfg, again: null };
+  const score = (side: string, m: Measured, attempts: Attempt[]): Measured => {
+    const failed = attempts.find((a): a is { error: InstanceType<typeof RescoreError> } => "error" in a);
+    if (failed) throw new RescoreError(`${again}, so both are scored again with the current scorer before they are compared, and ${side} cannot be: ${failed.error.message}`);
+    const done = attempts as { summary: Record<string, any>; run: Run }[];
     const summaries = done.map((d) => d.summary);
     const rescored = summaries.map((summary) => {
       const reading = readManifest(summary);
@@ -686,7 +739,7 @@ export function scoredAlike(root: string, base: Measured, cfg: Measured): { base
     return { ...m, ...numbers, runs, rescored: done.map((d) => d.run) };
   };
   try {
-    return { base: score("the baseline", base), cfg: score("the config", cfg), again };
+    return { base: score("the baseline", base, tried.base), cfg: score("the config", cfg, tried.cfg), again };
   } catch (e) {
     if (e instanceof RescoreError) return { refusal: e.message };
     throw e;

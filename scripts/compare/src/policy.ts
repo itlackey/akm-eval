@@ -234,7 +234,7 @@ const FIELDS: Field[] = [
   { name: "corpus", axis: "scope", label: "the corpus" },
   { name: "corpus_kind", axis: "scope", label: "the kind of the custom corpus (a rewrite of the public cases from a seed, or your own)", values: corpusKinds },
   { name: "collection", axis: "scope", label: "the collection" },
-  { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases)" },
+  { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases, and longmemeval --retrieval-only another measurement)" },
   // Runs with --embedder real and --embedder deterministic pair notes in different spaces: whatever the treatment, they are not the same measurement (#69).
   { name: "hints", axis: "scope", label: "the settings that change what a run measures (the embedder)" },
   { name: "akm_version", axis: "build", label: "the akm version" },

@@ -1050,7 +1050,7 @@ describe("the paired comparison in the confirm stage", () => {
     expect(buildDecision(moved.root, m, moved.state, 0).rows[0]).toMatchObject({ verdict: "not comparable", paired: null });
   });
 
-  test("an eval compare has no per-case reading for has no paired column and no note", () => {
+  test("a result without the samples of its runs has no paired column, and the note says why", () => {
     const m = parseMatrix({ prefix: "sw", baseline: { name: "base", eval: "agent-ab" }, configs: [{ name: "cfg", eval: "agent-ab", args: ["--akm-env", "AKM_X=1"] }] }, FILE);
     const root = tmp();
     const state = emptyState(m);
@@ -1060,7 +1060,9 @@ describe("the paired comparison in the confirm stage", () => {
       writeRepeat(root, "agent-ab", label, v.map((x) => ({ eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_build: null, n_errored: 0, completion: { expected: 9, completed: 9, failed: 0, missing: 0 }, ...harborIdentity(n === "cfg" ? { AKM_X: "1" } : {}), metrics: metrics(x) })));
       state.confirm[n] = record("confirm", n, "agent-ab", label, root, "repeat", 3);
     }
-    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "better", paired: null, note: "" });
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row).toMatchObject({ verdict: "better", paired: null });
+    expect(row.note).toMatch(/^no paired comparison: .*has no samples\.jsonl$/);
   });
 });
 
@@ -1822,7 +1824,8 @@ describe("the fingerprint of a job", () => {
       expect(publicPaths.length, name).toBeGreaterThan(0);
       for (const path of publicPaths) expect(existsSync(join(REPO, path)), `${name}: ${path}`).toBe(true);
       const second = corpusPaths(name, ["--corpus", name === "promotion" ? "own" : "private"]);
-      expect(second.some((p) => p.startsWith("private/")), name).toBe(true);
+      // skillret's custom corpus is a split of the dataset the public lock pins: it has no folder under private/
+      if (name !== "skillret") expect(second.some((p) => p.startsWith("private/")), name).toBe(true);
       expect(corpusPaths(name, ["--corpus", "custom"]), name).toEqual(second); // the old value names the default custom corpus
       for (const path of [...publicPaths, ...second]) expect(path, name).not.toMatch(/(^|\/)results/); // a run's own output is no input
       expect(corpusPaths(name, ["--corpus", "all"]).sort(), name).toEqual([...new Set([...publicPaths, ...second])].sort());
@@ -2506,6 +2509,19 @@ describe("--help (#74)", () => {
     expect(out).toContain("OPENAI_BASE_URL for a Harbor eval");
     expect(out).toContain("version it prints");
     expect(out).not.toContain("the host of MODEL_BASE_URL");
+  });
+
+  test("names every flag it takes, every benchmark it runs from benchmarks/, and the evals that are given no model", async () => {
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(proc.stdout).text();
+    for (const flag of ["--stage", "--parallel", "--out", "--prefix", "--only", "--min-delta", "--force", "--dry-run"]) expect(out, flag).toContain(flag);
+    for (const name of Object.keys(EVALS).filter((n) => runnerFolder(n) === "benchmarks")) expect(out, name).toContain(name);
+    const words = out.replace(/\s+/g, " ");
+    expect(words).toContain('retrieval and skillret call no model and are not given the file\'s "model"');
+    expect(words).toContain("count by what they present to akm and not by their labels");
+    // and the flags it does not take are refused
+    const bad = Bun.spawn([process.execPath, join(import.meta.dir, "run.ts"), "--bogus"], { stdout: "pipe", stderr: "pipe" });
+    expect(await bad.exited).toBe(2);
   });
 });
 

@@ -15,9 +15,10 @@ const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 const USAGE = `Usage: scripts/matrix/run MATRIX.json --stage screen|confirm|report [--parallel N] [--out DIR] [--prefix NAME] [--only A,B] [--min-delta X] [--force] [--dry-run]
 
-Runs the evals and benchmarks of a matrix file (a row's "eval" is an eval of evals/ or terminal-bench of benchmarks/) with the model in
-.env (or the environment), or the file's "model" and "akm". The Harbor evals (agent-ab, terminal-bench) are not given the file's "akm":
-their --akm is a release or a checkout's folder, so a row names its own. A config row whose --akm differs from its baseline's, or with
+Runs the evals and benchmarks of a matrix file (a row's "eval" is an eval of evals/, or terminal-bench, longmemeval or skillret of
+benchmarks/) with the model in .env (or the environment), or the file's "model" and "akm". The Harbor evals (agent-ab, terminal-bench) are
+not given the file's "akm": their --akm is a release or a checkout's folder, so a row names its own. retrieval and skillret call no
+model and are not given the file's "model". A config row whose --akm differs from its baseline's, or with
 "treatment": "build", compares two akm builds; "treatment" may name any of build, config, model, inputs and harness (or a list), and
 every axis it does not name must be the same in the baseline and the config. Stages:
 
@@ -40,7 +41,8 @@ a config or to reach a verdict. A summary is a result only when it says status "
                    filters almost nothing. Read X from the noise floor that confirm prints)
   --force          run rows again that a stage already ran, though nothing they were made from has changed. A stage skips a row only when it
                    exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the corpus it
-                   reads (the folder of a custom corpus with its corpus.json), the model settings (MODEL_NAME,
+                   reads (the folder of a custom corpus with its corpus.json; the cases of an eval with a measurement count by what
+                   they present to akm and not by their labels, so a relabelled case is not run again), the model settings (MODEL_NAME,
                    MODEL_BASE_URL and JUDGE_BASE_URL each whole with its path, JUDGE_MODEL, models.json,
                    and OPENAI_BASE_URL for a Harbor eval), its akm (the command, its build and uncommitted changes, and the
                    version it prints) and the eval's code are the same as when it ran. The code of an eval with a measurement is its

@@ -37,7 +37,8 @@ only in the treatment. Reads ${SUPPORTED.join(", ")}.
   --md FILE         write the report as markdown (it is printed to the terminal in any case)
   --seed N          the bootstrap's seed (default ${DEFAULTS.seed}); the same seed gives the same intervals
   --resamples N     bootstrap resamples (default ${DEFAULTS.resamples})
-  --tie X           retrieval: a query whose ndcg moved by X or less did not change (default ${DEFAULTS.tie})`;
+  --tie X           for a score that is not a verdict (retrieval's ndcg, skillret's, a Harbor task's difference): a case whose score
+                    moved by X or less did not change (default ${DEFAULTS.tie})`;
 
 function integer(value: string | undefined, flag: string, fallback: number, min: number): number {
   if (value === undefined) return fallback;
