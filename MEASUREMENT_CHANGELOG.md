@@ -18,3 +18,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | extract | scorer | 1 | first lock entry | 8d7b7b291a81 |
 | 2026-10-12 | judge-gate | collector | 1 | first lock entry | de09348fb964 |
 | 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |
+| 2026-10-12 | extract | scorer | 2 | negation over a verb the shared rule does not list marks the case ambiguous (row.ambiguous, planted.ambiguous) (#45). correct, forbidden and saved_instruction do not change; rows and metrics gain the field | ef8c7daf8a23 |
