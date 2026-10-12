@@ -6,7 +6,7 @@
 //   evals/bakeoff/run [--corpus public|custom|all] [--cases DIR] [--process NAME] [--limit N] [--repeat N] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
@@ -18,7 +18,7 @@ import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
-import { type CaseContext, GENERATED, NAME, PROCESSES, type Process, type Row, type Metrics, assetsSha256, configFor, loadCases, pct, privateAssetsProblem, runCase, selectCases, summarize } from "./lib.ts";
+import { type CaseContext, NAME, PROCESSES, type Process, type Row, type Metrics, assetsSha256, configFor, loadCases, pct, runCase, selectCases, summarize } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 export { runCase };
@@ -141,21 +141,12 @@ function printSideBySide(a: Summary, b: Summary): void {
 /** The folder a corpus's results go to: the eval's results/ for the public corpus, private/bakeoff/results for a custom one. */
 const resultsFolder = (corpus: ResolvedCorpus): string => (corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The generated.json of a rewrite: where its corpus.json says, else beside the assets folder. */
-const generatedFile = (corpus: ResolvedCorpus): string => (corpus.configFile && corpus.config.generated ? resolve(dirname(corpus.configFile), corpus.config.generated) : join(dirname(corpus.folder), GENERATED));
-
-/**
- * Why a corpus cannot be run, in a sentence that says what to do, or undefined when it can. A custom corpus needs its cases.json. A rewrite of
- * the public cases (the old --corpus private) must have been made from the public assets as they are now, by the generator as it is now, and
- * must be as generate wrote it: see privateAssetsProblem.
- */
-export function corpusProblem(corpus: ResolvedCorpus, publicFolder: string = join(EVAL_DIR, "assets")): string | undefined {
+/** Why a corpus cannot be run, in a sentence that says what to do, or undefined when it can. A custom corpus needs its cases.json. */
+export function corpusProblem(corpus: ResolvedCorpus): string | undefined {
   if (corpus.name === "public") return undefined;
   const where = corpusFolderOf(corpus.folder) ?? corpus.folder;
   const again = corpus.config.kind === "rewrite" ? ". Make it with: ./generate-assets --only bakeoff" : "";
-  if (!existsSync(join(corpus.folder, "cases.json"))) return `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
-  const stale = corpus.config.kind === "rewrite" ? privateAssetsProblem(corpus.folder, generatedFile(corpus), publicFolder, where) : undefined;
-  return stale ? `the ${corpus.flag} corpus cannot be used: ${stale}` : undefined;
+  return existsSync(join(corpus.folder, "cases.json")) ? undefined : `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
 }
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent: string = resultsFolder(corpus)): Promise<Summary> {

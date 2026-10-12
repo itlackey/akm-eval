@@ -5,7 +5,7 @@
 //   evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
@@ -17,7 +17,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { type CaseContext, IMPROVE_TIMEOUT_MS, NAME, STRATEGY, configFor, runCase } from "./collect.ts";
-import { assetsSha256, generatedProblem, loadCases, selectCases } from "./lib.ts";
+import { assetsSha256, loadCases, selectCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Metrics, type Row, pct, summarize } from "./score.ts";
 
@@ -252,8 +252,6 @@ async function main(): Promise<void> {
     if (!existsSync(join(c.folder, "cases.json"))) {
       fail(`${c.flag} has no cases.json in ${corpusFolderOf(c.folder) ?? c.folder}.${c.config.kind === "rewrite" ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
     }
-    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
-    if (stale) fail(`the rewrite in ${corpusFolderOf(c.folder) ?? c.folder} cannot be used: ${stale}. Make it again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const settings = useModel(values, fail);

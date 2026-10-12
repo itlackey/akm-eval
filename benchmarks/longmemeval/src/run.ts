@@ -20,7 +20,7 @@ import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
 import { type Context, NAME, READER_ORDER, TOP_K, collectQuestion, openSandbox, sampling } from "./collect.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Sample } from "./dataset.ts";
 import { CHAT_TIMEOUT_MS, TEMPERATURE, type Endpoint } from "./llm.ts";
-import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
+import { digestFiles, readGenerated } from "./manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import type { Rate } from "./metrics.ts";
 import { type Row, summarize } from "./score.ts";
@@ -42,9 +42,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
 .env at the repository root.
 
   --corpus          public (default) fetches the pinned dataset into assets/ if it is not there. custom reads
-                    private/longmemeval/assets/, made by ./generate-assets, and refuses them when
-                    private/longmemeval/generated.json is missing or does not match the files, the public
-                    lock or the generator. all runs both and prints the two results side by side.
+                    private/longmemeval/assets/, made by ./generate-assets. all runs both and prints the two
+                    results side by side.
   --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format, and a
                     corpus.json. It is --corpus custom. See "Corpora" in README.md.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
@@ -251,29 +250,18 @@ export function resumableRows(dir: string, now: { manifest: RunManifest; retriev
   return rows.filter((r) => r.retrieval !== null && (now.retrievalOnly || (r.without_akm?.ok === true && r.with_akm?.ok === true)));
 }
 
-/**
- * Why the custom assets in `tree` (private/longmemeval) may not be used, or undefined when generated.json vouches for them. The
- * public lock is the one in `publicAssets`.
- */
-export const privateProblem = (tree: string, publicAssets = join(EVAL_DIR, "assets"), where = relative(ROOT, tree) || tree): string | undefined => treeProblem(tree, publicAssets, where);
-
 export async function runCorpus(
   corpus: ResolvedCorpus,
   args: { limit?: number; label: string; sampleSeed: number; resume?: string },
   ctx: Context & { version: string; build?: Build },
-  folders: { results?: string; publicAssets?: string } = {},
+  folders: { results?: string } = {},
 ): Promise<Summary> {
   const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const isPublic = corpus.name === "public";
   const parent = folders.results ?? (isPublic ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
-  // The assets of a rewrite are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
-  let seed: string | null = null;
-  if (corpus.config.kind === "rewrite") {
-    const problem = privateProblem(dirname(assets), folders.publicAssets);
-    if (problem !== undefined) fail(problem);
-    seed = readGenerated(dirname(assets))?.seed ?? null;
-  }
+  // The seed of a rewrite is the one in its generated.json, whatever private/seed holds now.
+  const seed = corpus.config.kind === "rewrite" ? readGenerated(dirname(assets))?.seed ?? null : null;
   const searchMode = ctx.akm.mode;
   const retrievalOnly = ctx.model === null;
   const config = ctx.akm.config();
@@ -460,13 +448,9 @@ async function main(): Promise<void> {
   if (refusal !== undefined) fail(refusal);
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const tree = dirname(c.folder);
     if (!existsSync(join(c.folder, DATA_FILE))) {
       fail(c.config.kind === "rewrite" ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
     }
-    // Before the first corpus runs: under --corpus all the public run takes hours, and the custom one would refuse after it.
-    const problem = c.config.kind === "rewrite" ? privateProblem(tree) : undefined;
-    if (problem !== undefined) fail(problem);
   }
   const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");

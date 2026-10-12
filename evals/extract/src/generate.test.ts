@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRewrite } from "./generate.ts";
-import { type LoadedCase, generatedProblem, generatorFiles, generatorSha256, inputsSha256, loadCases } from "./lib.ts";
+import { type LoadedCase, loadCases } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -53,11 +53,10 @@ describe("generate", () => {
     }
   });
 
-  test("writes generated.json beside the assets with the seed, the digest of the public cases and the digest of the generator, and leaves no work folder", () => {
+  test("writes generated.json beside the assets with the seed, and leaves no work folder", () => {
     const { out, code } = generate("7");
     expect(code).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "7", inputs_sha256: inputsSha256(PUBLIC), rewrite: generatorSha256() });
-    expect(generatedProblem(out, PUBLIC)).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "7" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
@@ -65,7 +64,7 @@ describe("generate", () => {
     const out = mkdtempSync(join(tmpdir(), "extract-generate-"));
     mkdirSync(join(out, "assets"), { recursive: true });
     writeFileSync(join(out, "assets", "left-over.txt"), "from an earlier generation\n");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old" }));
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1" }));
     expect(generate("8", out).code).toBe(0);
     expect(existsSync(join(out, "assets", "left-over.txt"))).toBe(false);
     expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("8");
@@ -81,66 +80,6 @@ describe("generate", () => {
     expect(failed.stderr).toContain("--seed must be a non-negative integer");
     expect(state()).toEqual(was);
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
-    expect(generatedProblem(out, PUBLIC)).toBeUndefined();
-  });
-
-  test("generated.json no longer vouches for the assets once the public cases or a session change", () => {
-    const { out } = generate("7");
-    const pub = mkdtempSync(join(tmpdir(), "extract-public-"));
-    dirs.push(pub);
-    cpSync(PUBLIC, pub, { recursive: true });
-    expect(generatedProblem(out, pub)).toBeUndefined();
-    const session = loadCases(pub)[0]?.file as string;
-    writeFileSync(session, `${readFileSync(session, "utf8")}\n`);
-    expect(generatedProblem(out, pub)).toContain("other public assets");
-    rmSync(join(out, "generated.json"));
-    expect(generatedProblem(out, PUBLIC)).toContain("generated.json is missing");
-  });
-
-  test("generated.json no longer vouches for the assets once the generator has changed: a zeroed digest, the older format without one, or a changed file (#44)", () => {
-    const { out } = generate("7");
-    const stored = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
-    expect(generatedProblem(out, PUBLIC)).toBeUndefined();
-    for (const rewrite of ["0".repeat(64), "f".repeat(64)]) {
-      writeFileSync(join(out, "generated.json"), JSON.stringify({ ...stored, rewrite }));
-      expect(generatedProblem(out, PUBLIC)).toBe("they were made by a generator that has changed since: evals/extract/src/generate.ts, lib.ts or score.ts, lib/negation.ts or lib/rewrite (rewrite in generated.json differs)");
-    }
-    const { rewrite: _digest, ...older } = stored;
-    writeFileSync(join(out, "generated.json"), JSON.stringify(older));
-    expect(generatedProblem(out, PUBLIC)).toContain("generated.json is missing or holds no seed, inputs_sha256 and rewrite");
-    // the digest is the generator's files in the repository it is asked about
-    writeFileSync(join(out, "generated.json"), JSON.stringify(stored));
-    const root = mkdtempSync(join(tmpdir(), "extract-generator-"));
-    dirs.push(root);
-    for (const file of generatorFiles()) {
-      mkdirSync(join(root, file, ".."), { recursive: true });
-      cpSync(join(import.meta.dir, "..", "..", "..", file), join(root, file));
-    }
-    expect(generatorSha256(root)).toBe(stored.rewrite);
-    expect(generatedProblem(out, PUBLIC, root)).toBeUndefined();
-    writeFileSync(join(root, "lib", "negation.ts"), `${readFileSync(join(root, "lib", "negation.ts"), "utf8")}\n`);
-    expect(generatedProblem(out, PUBLIC, root)).toContain("generator that has changed since");
-  });
-
-  test("the digest covers the files of the generator and the code of lib/rewrite with its lexicon, and nothing else", () => {
-    expect(generatorSha256()).toMatch(/^[0-9a-f]{64}$/);
-    expect(generatorFiles()).toEqual(["evals/extract/src/generate.ts", "evals/extract/src/lib.ts", "evals/extract/src/score.ts", "lib/negation.ts", "lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts"]);
-    const was = generatorSha256();
-    const root = mkdtempSync(join(tmpdir(), "extract-generator-"));
-    dirs.push(root);
-    for (const file of generatorFiles()) {
-      mkdirSync(join(root, file, ".."), { recursive: true });
-      cpSync(join(import.meta.dir, "..", "..", "..", file), join(root, file));
-    }
-    expect(generatorSha256(root)).toBe(was);
-    writeFileSync(join(root, "lib", "rewrite", "rewrite.test.ts"), "// a test of the rewrite\n");
-    writeFileSync(join(root, "evals", "extract", "src", "run.ts"), "// the runner\n");
-    expect(generatorSha256(root)).toBe(was);
-    for (const file of generatorFiles()) {
-      writeFileSync(join(root, file), `${readFileSync(join(root, file), "utf8")}\n// edited\n`);
-      expect({ file, changed: generatorSha256(root) !== was }).toEqual({ file, changed: true });
-      cpSync(join(import.meta.dir, "..", "..", "..", file), join(root, file));
-    }
   });
 
   test("needs a seed and a folder", () => {

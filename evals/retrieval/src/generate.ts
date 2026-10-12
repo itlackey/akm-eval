@@ -13,8 +13,7 @@
 // terminal-bench hands the private library to an agent that runs the real tools.
 //
 // Everything is made in a folder beside the private assets and moved into place only when every collection is sound,
-// so a failed run leaves the assets and maps of the run before as they were. generated.json, beside the assets, says
-// what they were made from: run --corpus private refuses assets that it does not match.
+// so a failed run leaves the assets and maps of the run before as they were. generated.json, beside the assets, holds the seed.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -22,7 +21,7 @@ import { parseArgs } from "node:util";
 import { akmVersion, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { TOOLS } from "../../../lib/rewrite/lexicon.ts";
 import * as akm from "./akm.ts";
-import { GENERATED, type Generated, filesUnder, publicInputsSha256, rewriteSha256 } from "./inputs.ts";
+import { GENERATED, filesUnder } from "./inputs.ts";
 import { type Qrel, type Query, RELEVANT, parseQrels, parseQueries } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -282,9 +281,6 @@ export async function generate(opts: Options): Promise<Result> {
   const root = opts.root ?? ROOT;
   const out = resolve(opts.out);
   const staging = join(out, ".staging");
-  // Before anything is read or run: an input or a rewrite that changes during the run makes the assets stale, not fresh.
-  const inputs = publicInputsSha256(root);
-  const code = rewriteSha256();
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
   try {
@@ -292,8 +288,7 @@ export async function generate(opts: Options): Promise<Result> {
     for (const c of collectionsOf(root)) collections.push({ name: c.name, target: c.target, ...(await makeCollection(c, staging, opts.seed)) });
     const installed = collections.every((c) => c.found.length === 0);
     if (installed) {
-      const made: Generated = { seed: opts.seed, inputs_sha256: inputs, rewrite: code };
-      writeFileSync(join(staging, "assets", GENERATED), `${JSON.stringify(made, null, 2)}\n`);
+      writeFileSync(join(staging, "assets", GENERATED), `${JSON.stringify({ seed: opts.seed }, null, 2)}\n`);
       install(staging, out);
     }
     return { collections, installed };

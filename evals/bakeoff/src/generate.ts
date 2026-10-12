@@ -7,14 +7,12 @@
 // and in what a correct result must hold. Each rewritten case must still hold what it expects (every term of the public case is in its files,
 // or still out of them, as it was) and every ref it expects must be the ref of one of its files, or the script stops and says which case lost it.
 // Everything is written into a work folder in the output folder and moved into place only when the checks pass, so a generation that fails
-// leaves the earlier assets, map and generated.json as they were. generated.json holds the seed, the digest of the public assets, the digest of
-// this generator's code (lib/rewrite included) and the digest of the assets as written, and `run --corpus custom` refuses assets whose
-// generated.json is missing or differs from what is here now.
+// leaves the earlier assets, map and generated.json as they were. generated.json holds the seed.
 
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { CASES_FILE, GENERATED, type Generated, assetsSha256, generatorSha256, loadCases, termProblems } from "./inputs.ts";
+import { CASES_FILE, GENERATED, loadCases, termProblems } from "./inputs.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -37,7 +35,7 @@ export function rewriteProblems(assets: string, from: string): string[] {
 
 /**
  * Moves the assets, the map and generated.json from `staged` into `out`, in place of the earlier ones. The marker goes out first and
- * comes in last, so a generation cut short here leaves assets with no marker, which `run --corpus custom` refuses.
+ * comes in last, so a generation cut short here leaves assets with no marker.
  */
 export function install(staged: string, out: string): void {
   rmSync(join(out, GENERATED), { force: true });
@@ -65,8 +63,7 @@ export function generate(seed: string, out: string, from: string = join(EVAL_DIR
     const summary = rewrite(["--map", map, join(from, CASES_FILE), join(staged, "assets", CASES_FILE)]);
     const problems = rewriteProblems(join(staged, "assets"), from);
     if (problems.length > 0) throw new Error(`the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} the cases depend on. Nothing was written. Try another seed.\n  ${problems.join("\n  ")}`);
-    const made: Generated = { version: 1, seed, inputs_sha256: assetsSha256(from), generator_sha256: generatorSha256(), outputs_sha256: assetsSha256(join(staged, "assets")) };
-    writeFileSync(join(staged, GENERATED), `${JSON.stringify(made, null, 2)}\n`);
+    writeFileSync(join(staged, GENERATED), `${JSON.stringify({ seed }, null, 2)}\n`);
     install(staged, out);
     return { cases: loadCases(join(out, "assets")).length, summary: summary.split("\n").pop() ?? "" };
   } finally {

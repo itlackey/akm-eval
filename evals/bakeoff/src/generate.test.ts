@@ -1,10 +1,10 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { generate, install, rewriteProblems } from "./generate.ts";
-import { CASES_FILE, GENERATED, GENERATOR_CODE, assetsSha256, generatorSha256, loadCases, privateAssetsProblem, readGenerated } from "./inputs.ts";
+import { CASES_FILE, GENERATED, assetsSha256, loadCases } from "./inputs.ts";
 import { corpusProblem } from "./run.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
@@ -59,28 +59,8 @@ describe("generate", () => {
     expect(assetsSha256(join(other, "assets"))).not.toBe(assetsSha256(join(rewrite(), "assets")));
   });
 
-  test("generated.json holds the seed and the digests of the public assets, of the generator and of the assets as written", () => {
-    const out = rewrite();
-    expect(readGenerated(join(out, GENERATED))).toEqual({ version: 1, seed: "42", inputs_sha256: assetsSha256(PUBLIC), generator_sha256: generatorSha256(), outputs_sha256: assetsSha256(join(out, "assets")) });
-  });
-
-  test("the digest of the generator covers generate.ts, inputs.ts, lib/rewrite and its lexicon", () => {
-    expect(GENERATOR_CODE.map((p) => p.split("/").join("/"))).toEqual(["evals/bakeoff/src/generate.ts", "evals/bakeoff/src/inputs.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]);
-    // a change to any of them changes the digest: a copy of the repository's four files
-    const root = temp();
-    for (const rel of GENERATOR_CODE) {
-      mkdirSync(dirname(join(root, rel)), { recursive: true });
-      cpSync(join(import.meta.dir, "..", "..", "..", rel), join(root, rel));
-    }
-    const same = generatorSha256(root);
-    expect(same).toBe(generatorSha256());
-    for (const rel of GENERATOR_CODE) {
-      const before = readFileSync(join(root, rel), "utf8");
-      writeFileSync(join(root, rel), `${before}\n// edited\n`);
-      expect(generatorSha256(root)).not.toBe(same);
-      writeFileSync(join(root, rel), before);
-    }
-    expect(generatorSha256(root)).toBe(same);
+  test("generated.json holds the seed", () => {
+    expect(JSON.parse(readFileSync(join(rewrite(), GENERATED), "utf8"))).toEqual({ seed: "42" });
   });
 
   test("stops and writes nothing when a rewritten case no longer holds, and leaves the earlier assets, map and generated.json as they were", () => {
@@ -113,67 +93,18 @@ describe("generate", () => {
 /** The custom corpus of a rewrite at `out`, as lib/corpus.ts resolves it. */
 const corpusOf = (out: string): ResolvedCorpus => ({ name: "custom", folder: join(out, "assets"), config: { kind: "rewrite", private: false, seed: "42", generated: GENERATED }, configFile: join(out, "corpus.json"), flag: "--corpus custom" });
 
-describe("run refuses a rewrite that does not fit the public assets and the generator as they are now (#44)", () => {
-  const problem = (out: string): string | undefined => privateAssetsProblem(join(out, "assets"), join(out, GENERATED), PUBLIC, "private/bakeoff/assets");
-
-  test("a rewrite just made passes", () => {
-    expect(problem(rewrite())).toBeUndefined();
-    expect(corpusProblem(corpusOf(rewrite()), PUBLIC)).toBeUndefined();
-  });
-
-  test("assets whose stored generator digest is zeroed are refused, with the instruction to make them again", () => {
-    const out = copyOf();
-    const made = JSON.parse(readFileSync(join(out, GENERATED), "utf8"));
-    writeFileSync(join(out, GENERATED), JSON.stringify({ ...made, generator_sha256: "0".repeat(64) }));
-    expect(problem(out)).toBe("the private assets in private/bakeoff/assets/ were made by a generator that has changed since: generate.ts or inputs.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in generated.json differs). Make them again with: ./generate-assets --only bakeoff");
-    expect(corpusProblem(corpusOf(out), PUBLIC)).toContain("the --corpus custom corpus cannot be used: the private assets in ");
-    expect(corpusProblem(corpusOf(out), PUBLIC)).toContain("generator_sha256 in generated.json differs");
-  });
-
-  test("assets made from other public assets are refused", () => {
-    const out = copyOf();
-    const made = JSON.parse(readFileSync(join(out, GENERATED), "utf8"));
-    writeFileSync(join(out, GENERATED), JSON.stringify({ ...made, inputs_sha256: "0".repeat(64) }));
-    expect(problem(out)).toContain("were made from public assets that have changed since");
-    const from = temp();
-    cpSync(PUBLIC, from, { recursive: true });
-    appendTo(join(from, "memories", "signed-artifacts.md"), "\nAn added line.\n");
-    expect(privateAssetsProblem(join(rewrite(), "assets"), join(rewrite(), GENERATED), from)).toContain("were made from public assets that have changed since");
-  });
-
-  test("assets changed after generate wrote them are refused", () => {
-    const out = copyOf();
-    appendTo(join(out, "assets", "memories", "signed-artifacts.md"), "\nEdited by hand.\n");
-    expect(problem(out)).toContain("are not what generate wrote: a file in them was changed, added or removed since");
-    const added = copyOf();
-    writeFileSync(join(added, "assets", "memories", "extra.md"), "x");
-    expect(problem(added)).toContain("are not what generate wrote");
-  });
-
-  test("assets with no generated.json, one that is not JSON or one in another format, or no assets at all, are refused", () => {
-    const none = copyOf();
-    rmSync(join(none, GENERATED));
-    expect(problem(none)).toContain("have no generated.json in its current format");
-    const text = copyOf();
-    writeFileSync(join(text, GENERATED), "not json");
-    expect(problem(text)).toContain("have no generated.json in its current format");
-    const old = copyOf();
-    writeFileSync(join(old, GENERATED), JSON.stringify({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) }));
-    expect(problem(old)).toContain("have no generated.json in its current format");
-    const empty = temp();
-    expect(problem(empty)).toBe("the private assets are missing (private/bakeoff/assets/cases.json). Make them with: ./generate-assets --only bakeoff");
-    expect(corpusProblem(corpusOf(empty), PUBLIC)).toContain("has no cases.json");
+describe("corpusProblem", () => {
+  test("a rewrite just made passes, and one with no assets is told how to make them", () => {
+    expect(corpusProblem(corpusOf(rewrite()))).toBeUndefined();
+    expect(corpusProblem(corpusOf(temp()))).toContain("has no cases.json");
+    expect(corpusProblem(corpusOf(temp()))).toContain("Make it with: ./generate-assets --only bakeoff");
   });
 
   test("a corpus of your own needs only its cases.json, and the public corpus nothing", () => {
     const own = temp();
-    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" }, PUBLIC)).toContain("the --cases mine corpus has no cases.json in ");
+    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" })).toContain("the --cases mine corpus has no cases.json in ");
     cpSync(PUBLIC, own, { recursive: true });
-    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" }, PUBLIC)).toBeUndefined();
-    expect(corpusProblem({ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }, PUBLIC)).toBeUndefined();
+    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" })).toBeUndefined();
+    expect(corpusProblem({ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" })).toBeUndefined();
   });
 });
-
-function appendTo(file: string, text: string): void {
-  writeFileSync(file, readFileSync(file, "utf8") + text);
-}

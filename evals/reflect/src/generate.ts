@@ -7,14 +7,12 @@
 // defect and the correct result, so a name changes the same way in all of them. Each rewritten case must still
 // hold the defect it names, and only that one, or the script stops and says which case lost it.
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
-// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed, the digest of the public cases and
-// the digest of this file and of lib/rewrite (generator_sha256), and `run --corpus custom` refuses assets without it, with a digest that is
-// no longer the public one, or made by a generator that has changed since.
+// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Case, GENERATED, type Generated, assetsSha256, caseProblems, generatorSha256, parseCases } from "./lib.ts";
+import { type Case, GENERATED, caseProblems, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -82,7 +80,7 @@ function rewrite(args: string[]): string {
 
 /**
  * Moves the assets, the map and generated.json from `staged` into `out`, in place of the earlier ones. The marker goes out first and
- * comes in last, so a generation cut short here leaves assets with no marker, which `run --corpus private` refuses.
+ * comes in last, so a generation cut short here leaves assets with no marker.
  */
 export function install(staged: string, out: string): void {
   rmSync(join(out, GENERATED), { force: true });
@@ -121,8 +119,7 @@ function main(): void {
     } else {
       mkdirSync(join(staged, "assets"), { recursive: true });
       writeFileSync(join(staged, "assets", "cases.jsonl"), `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`);
-      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")), generator_sha256: generatorSha256() };
-      writeFileSync(join(staged, GENERATED), `${JSON.stringify(generated, null, 2)}\n`);
+      writeFileSync(join(staged, GENERATED), `${JSON.stringify({ seed: values.seed }, null, 2)}\n`);
       install(staged, out);
       console.log(`reflect: ${rewritten.length} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
       console.log(summary.split("\n").pop());

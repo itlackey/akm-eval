@@ -19,7 +19,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import { type IndexInput, INDEX_STATE, NAME, collectQuery, openIndexes, systemsFor } from "./collect.ts";
-import { type AssetsDigests, assetsDigests, assetsSha256, staleAssets } from "./inputs.ts";
+import { type AssetsDigests, assetsDigests, assetsSha256 } from "./inputs.ts";
 import { type Qrel, type Query, casesOf, fixed, isTask, mixedJudgesWarning, parseQrels, parseQueries, pct, selectQueries } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Abstention, type Columns, DEPTH, RELEVANT, type Row, type System, type SystemMetrics, SYSTEMS, at, semanticFailure, summarizeRows } from "./score.ts";
@@ -49,8 +49,8 @@ scored with keyword search only, unless --semantic on says otherwise. Needs akm 
 
   --corpus  public (default) runs the collections in assets/: the library in corpus/library and the books.
             custom runs a corpus of your own (--cases DIR), else the default one: the rewrite of the public collections in
-            private/retrieval/assets/, made by ./generate-assets --only retrieval. It stops when they were made from public
-            files that have changed since: make them again. all runs public and the default custom corpus.
+            private/retrieval/assets/, made by ./generate-assets --only retrieval.
+            all runs public and the default custom corpus.
   --cases   the folder of a custom corpus of your own: queries.jsonl, qrels.jsonl and library/, and bundles.json for a library
             of bundles. It is --corpus custom. See "Run your own set" in evals/retrieval/README.md.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only,
@@ -372,12 +372,6 @@ async function main(): Promise<void> {
   for (const { corpus: c, folders: f } of sets) {
     if (c.name === "public" || [f.library, join(f.assets, "queries.jsonl"), join(f.assets, "qrels.jsonl")].every(existsSync)) continue;
     fail(c.config.kind === "own" ? `${c.flag} does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
-  }
-  // The rewrite is of public files: if those changed since (label appended grades, the library moved), it is another set.
-  for (const c of corpora) {
-    if (c.config.kind !== "rewrite") continue;
-    const stale = staleAssets(c.folder, ROOT, relative(ROOT, c.folder));
-    if (stale) fail(stale);
   }
   const summaries: Summary[] = [];
   let label = values.label;

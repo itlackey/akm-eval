@@ -535,69 +535,16 @@ describe("run --corpus custom", () => {
     return { code: p.exitCode, err: p.stderr.toString() };
   };
 
-  test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
-    const tree = copyOfRepo();
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    const ready = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(ready.err).toContain("could not run"); // past the checks, stopped for want of akm
-    expect(ready.err).not.toContain("cannot be used");
-
-    rmSync(join(tree, "private", "distill", "generated.json"));
-    const missing = bun(tree, "run.ts", ["--corpus", "custom"]);
+  test("stops and says how to make the assets when there are none", () => {
+    const missing = bun(copyOfRepo(), "run.ts", ["--corpus", "custom"]);
     expect(missing.code).toBe(2);
-    expect(missing.err).toContain("cannot be used: generated.json is missing");
     expect(missing.err).toContain("./generate-assets --only distill");
+  });
 
+  test("runs on the assets generate wrote, with --corpus custom, --corpus private and --corpus all", () => {
+    const tree = copyOfRepo();
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    writeFileSync(join(tree, "evals", "distill", "assets", "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "A public memory that changed.\n");
-    const stale = bun(tree, "run.ts", ["--corpus", "all"]);
-    expect(stale.code).toBe(2);
-    expect(stale.err).toContain("made from other public assets");
-  }, 60_000);
-
-  test("assets whose stored generator digest is zeroed are refused, and freshly generated ones pass (#44), with --corpus custom, --corpus private and --corpus all", () => {
-    const tree = copyOfRepo();
-    const out = join(tree, "private", "distill");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    const marker = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
-    expect(marker.rewrite).toMatch(/^[0-9a-f]{64}$/);
-    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).not.toContain("cannot be used");
+    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).toContain("could not run"); // past the checks, stopped for want of akm
     expect(bun(tree, "run.ts", ["--corpus", "private"]).err).toContain("distill: --corpus private is now --corpus custom. The old value works for one more release.");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ ...marker, rewrite: "0".repeat(64) }));
-    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) {
-      const refused = bun(tree, "run.ts", flags);
-      expect(refused.code, flags.join(" ")).toBe(2);
-      expect(refused.err, flags.join(" ")).toContain("cannot be used: they were made by a generator that has changed since");
-      expect(refused.err, flags.join(" ")).toContain("./generate-assets --only distill");
-    }
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
-  }, 120_000);
-
-  test("refuses assets made by a generator or a rewrite that has changed since, and runs on them again when the code is as it was", () => {
-    const tree = copyOfRepo();
-    const out = join(tree, "private", "distill");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toMatchObject({ seed: "5", rewrite: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
-
-    // The rewrite, its lexicon, generate itself and the checks generate runs: a change to any of them marks the assets stale.
-    for (const file of [join("lib", "rewrite", "lexicon.ts"), join("lib", "rewrite", "rewrite.ts"), join("evals", "distill", "src", "generate.ts"), join("evals", "distill", "src", "lib.ts"), join("evals", "distill", "src", "score.ts")]) {
-      const path = join(tree, file);
-      const text = readFileSync(path, "utf8");
-      writeFileSync(path, `${text}\n// changed after the private assets were made\n`);
-      const stale = bun(tree, "run.ts", ["--corpus", "custom"]);
-      expect(stale.code, file).toBe(2);
-      expect(stale.err, file).toContain("cannot be used: they were made by a generator that has changed since");
-      expect(stale.err, file).toContain("./generate-assets --only distill");
-      writeFileSync(path, text);
-      expect(bun(tree, "run.ts", ["--corpus", "custom"]).err, file).not.toContain("cannot be used");
-    }
-
-    // Made again by the changed generator, the assets are good for it.
-    writeFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), `${readFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), "utf8")}\n// changed\n`);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).code).toBe(2);
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
   }, 120_000);
 });

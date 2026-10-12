@@ -1,23 +1,9 @@
-// What a retrieval run records of its inputs, and what ties the private assets to the public ones they were made from:
-// the digest of what a run read (the library it indexed, the bundle mappings, the queries and the qrels), the digest of the public inputs that generate rewrote, the digest of the code that rewrote them, and the seed.
-// run.ts, generate.ts and the tests use them.
+// What a retrieval run records of its inputs: the digest of what a run read (the library it indexed, the bundle mappings, the queries and
+// the qrels), the seed, and the name of the generated.json that generate writes beside the private assets. run.ts, generate.ts and the tests use them.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
-import { sha256File, sha256Files, sha256Text } from "../../../lib/provenance.ts";
-
-const ROOT = resolve(import.meta.dir, "..", "..", "..");
-
-/** Runs `f` with `dir` as the working folder, and then puts the old one back. sha256Files reads the paths it is given, so a digest that holds on another machine needs paths relative to a fixed folder. */
-export function inFolder<T>(dir: string, f: () => T): T {
-  const before = process.cwd();
-  process.chdir(dir);
-  try {
-    return f();
-  } finally {
-    process.chdir(before);
-  }
-}
+import { join } from "node:path";
+import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 
 /** Every file under `dir`, links followed as a copy of the folder follows them. */
 export function filesUnder(dir: string): string[] {
@@ -72,58 +58,5 @@ export function readSeed(root: string): string | null {
   }
 }
 
-/** The file generate writes beside the private assets, to say what they were made from. */
+/** The file generate writes beside the private assets: the seed they were made with. */
 export const GENERATED = "generated.json";
-
-export interface Generated {
-  /** The seed of the rewrite. */
-  seed: string;
-  /** publicInputsSha256 when the assets were made. */
-  inputs_sha256: string;
-  /** rewriteSha256 when the assets were made: a digest of the code that rewrote them. */
-  rewrite: string;
-}
-
-/**
- * The code that decides what generate makes of the public inputs, by its path from the repository root: the rewrite and its lexicon of tool
- * names (every file of lib/rewrite that runs), generate itself, which says which tools keep their names, and this file, whose `filesUnder`
- * lists the library files generate reads them from. Not the sandbox code that only checks the result.
- */
-export const REWRITE_CODE = [join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts"), join("evals", "retrieval", "src", "inputs.ts")];
-
-/** One digest over REWRITE_CODE in this repository. It is the rewrite that runs, so it never depends on the root of the inputs. A change to the rewrite, the lexicon or the pins changes it. */
-export const rewriteSha256 = (): string => inFolder(ROOT, () => sha256Files(REWRITE_CODE));
-
-/** The public files the private assets are made from, by their path from the repository root: the library and the books' library, and each collection's queries and qrels. */
-export function publicInputs(root: string): string[] {
-  const assets = join("evals", "retrieval", "assets");
-  const libraries = [join("corpus", "library"), join(assets, "books", "library")];
-  const files = [join(assets, "queries.jsonl"), join(assets, "qrels.jsonl"), join(assets, "books", "queries.jsonl"), join(assets, "books", "qrels.jsonl")];
-  return [...libraries.flatMap((dir) => filesUnder(join(root, dir)).map((file) => relative(root, file))), ...files];
-}
-
-/** One digest over the public inputs, the same on every machine. A change to the library, the queries or the qrels (label appends to them) changes it. */
-export const publicInputsSha256 = (root: string): string => inFolder(root, () => sha256Files(publicInputs(root)));
-
-/** What generate wrote beside the assets, or undefined when there is no such file or it is not in this format. */
-export function readGenerated(assets: string): Generated | undefined {
-  try {
-    const made = JSON.parse(readFileSync(join(assets, GENERATED), "utf8")) as Partial<Generated>;
-    return typeof made.seed === "string" && typeof made.inputs_sha256 === "string" && typeof made.rewrite === "string" ? (made as Generated) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Why run --corpus private must not use the private assets in `assets`, in a sentence that says what to do, or undefined when they are
- * the rewrite of the public inputs as they are now. `where` is how the folder is named in the message.
- */
-export function staleAssets(assets: string, root: string, where = assets): string | undefined {
-  const again = "Make them again with: ./generate-assets --only retrieval";
-  const made = readGenerated(assets);
-  if (!made) return `the private assets in ${where}/ have no ${GENERATED}, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
-  if (made.inputs_sha256 !== publicInputsSha256(root)) return `the private assets in ${where}/ were made from public inputs that have changed since: the library, the queries or the qrels. ${again}`;
-  if (made.rewrite !== rewriteSha256()) return `the private assets in ${where}/ were made by a rewrite that has changed since: lib/rewrite, its lexicon or the tools that generate pins. ${again}`;
-  return undefined;
-}

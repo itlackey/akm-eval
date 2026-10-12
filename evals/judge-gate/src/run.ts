@@ -35,7 +35,7 @@ judge, on labelled proposals. Settings come from .env at the repository root.
 
 ${corpusUsage}
             The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
-            cases, not held-out data. It stops when they were made from public cases that have changed since: make them again.
+            cases, not held-out data.
   --limit   run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     if (c.name === "public") continue;
     const where = corpusFolderOf(c.folder) ?? c.folder; // from the repository root when it is inside, else as it was given
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
     if (problem) fail(problem);
   }
   const { baseUrl, name: model, hasKey } = settings;

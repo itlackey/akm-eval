@@ -1,14 +1,12 @@
 // What the bakeoff eval reads and what generate writes: the cases of a corpus folder and the files they name, the checks on them, the digests
-// of a corpus, and generated.json with the checks that keep a private corpus tied to the public one and to the generator that made it.
+// of a corpus, and the name of the generated.json that generate writes beside a private corpus.
 // Neither the scorer nor the collector (see measurement.ts): run.ts, generate.ts and measurement.ts use it.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 import type { LoadedCase } from "./collect.ts";
 import { type Expected, PROCESSES, type Process, refOf } from "./score.ts";
-
-const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 /** The cases of a corpus folder. */
 export const CASES_FILE = "cases.json";
@@ -147,54 +145,5 @@ export const assetsSha256 = (assets: string): string => treeSha256(assets);
 
 // --- generated.json ----------------------------------------------------------------------------------------------
 
+/** The file generate writes beside the private assets: the seed they were made with. */
 export const GENERATED = "generated.json";
-
-/** The code that decides what generate makes of the public assets, by its path from the repository root: generate itself and what it asks of the cases, the rewrite and its lexicon of tool names. */
-export const GENERATOR_CODE = [join("evals", "bakeoff", "src", "generate.ts"), join("evals", "bakeoff", "src", "inputs.ts"), join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts")];
-
-/** generator_sha256: one digest over GENERATOR_CODE in this repository. */
-export const generatorSha256 = (root = ROOT): string => sha256Text(GENERATOR_CODE.map((rel) => `${rel}\0${sha256File(join(root, rel))}\n`).join(""));
-
-/** What generate writes beside the private assets (private/bakeoff/generated.json). */
-export interface Generated {
-  /** The format of this file. */
-  version: 1;
-  /** The seed of the rewrite. */
-  seed: string;
-  /** assetsSha256 of the public assets when the private ones were made. */
-  inputs_sha256: string;
-  /** generatorSha256 when they were made. */
-  generator_sha256: string;
-  /** assetsSha256 of the private assets as they were written. */
-  outputs_sha256: string;
-}
-
-const DIGEST = /^[0-9a-f]{64}$/;
-
-/** What generate wrote beside the assets, or undefined when there is no such file or it is not in this format. */
-export function readGenerated(file: string): Generated | undefined {
-  try {
-    const made = JSON.parse(readFileSync(file, "utf8")) as Partial<Generated>;
-    const ok = made.version === 1 && typeof made.seed === "string" && [made.inputs_sha256, made.generator_sha256, made.outputs_sha256].every((d) => typeof d === "string" && DIGEST.test(d));
-    return ok ? (made as Generated) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Why `run` must not use the rewritten corpus in `assets`, in a sentence that says what to do, or undefined when it is the rewrite of the
- * public assets as they are now, made by the generator as it is now, still as generate wrote it. `generated` is the generated.json beside
- * it, `from` the folder of the public assets, `where` how the corpus is named in the message, and `root` the repository whose generator code
- * is compared (a test passes a copy).
- */
-export function privateAssetsProblem(assets: string, generated: string, from: string, where = assets, root = ROOT): string | undefined {
-  const again = "Make them again with: ./generate-assets --only bakeoff";
-  if (!existsSync(join(assets, CASES_FILE))) return `the private assets are missing (${where}/${CASES_FILE}). Make them with: ./generate-assets --only bakeoff`;
-  const made = readGenerated(generated);
-  if (!made) return `the private assets in ${where}/ have no ${GENERATED} in its current format, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
-  if (made.inputs_sha256 !== assetsSha256(from)) return `the private assets in ${where}/ were made from public assets that have changed since. ${again}`;
-  if (made.generator_sha256 !== generatorSha256(root)) return `the private assets in ${where}/ were made by a generator that has changed since: generate.ts or inputs.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in ${GENERATED} differs). ${again}`;
-  if (made.outputs_sha256 !== assetsSha256(assets)) return `the private assets in ${where}/ are not what generate wrote: a file in them was changed, added or removed since. ${again}`;
-  return undefined;
-}
