@@ -14,6 +14,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
 import { generate } from "./generate.ts";
+import { isFictional, publicInputs } from "./inputs.ts";
 import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
@@ -112,11 +113,18 @@ describe("the public tasks", () => {
   const tasks = taskNames(join(EVAL_DIR, "tasks"));
   const stash = (task: string) => readFileSync(join(EVAL_DIR, "tasks", task, "task.toml"), "utf8").match(/^AKM_TASK_STASH\s*=\s*"([^"]+)"/m)?.[1];
 
-  test("are the nine of the discriminating slice", () => {
-    expect(tasks).toHaveLength(9);
+  test("are the six with made-up tools: the three real-tool tasks were dropped, because an agent can pass them unaided and then they measure nothing about akm (#48)", () => {
+    expect(tasks).toHaveLength(6);
     expect(tasks.filter((t) => t.startsWith("drillbit--"))).toHaveLength(3);
     expect(tasks.filter((t) => t.startsWith("inkwell--"))).toHaveLength(3);
-    expect(tasks.filter((t) => t.startsWith("workflow-compliance--"))).toHaveLength(3);
+    for (const t of tasks) expect(isFictional(join(EVAL_DIR, "tasks", t)), t).toBe(true);
+    for (const gone of ["workflow-compliance--feedback-trap-az-tag-list", "workflow-compliance--feedback-trap-docker-compose-render", "workflow-compliance--repeated-fail-opencode-provider-token-train"]) {
+      expect(tasks).not.toContain(gone);
+      expect(existsSync(join(EVAL_DIR, "tasks", gone))).toBe(false);
+    }
+    expect(readdirSync(join(EVAL_DIR, "libraries")).sort()).toEqual(["drillbit", "inkwell"]); // the libraries only the dropped tasks seeded went with them
+    // generate rewrites every public task now, and the private assets made before are the rewrite of these six: dropping the others left no input of theirs changed
+    expect(publicInputs(EVAL_DIR)).toEqual({ tasks, libraries: ["drillbit", "inkwell"] });
   });
 
   test("each has an instruction, a solution, a verifier and a library to seed", () => {
@@ -219,6 +227,17 @@ describe("runCorpus", () => {
     expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries"))); // the component stays, to say which part moved
   });
 
+  test("a run selects only those six, in the manifest as in the job", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "six", env }, join(root, "results")));
+    const tasks = taskNames(join(EVAL_DIR, "tasks"));
+    expect(Object.keys(readJson(join(s.results_dir, "summary.json")).manifest.cases).sort()).toEqual(tasks);
+    expect(readJson(join(s.results_dir, "job.json")).datasets[0].task_names).toEqual(tasks);
+    expect(tasks.some((t) => t.startsWith("workflow-compliance--"))).toBe(false);
+    expect(s.completion).toMatchObject({ expected: 6 * 2 * 3, completed: 6 * 2 * 3, missing: 0 }); // six tasks, two arms, three attempts
+    expect(readdirSync(join(s.results_dir, "libraries")).sort()).toEqual(["drillbit", "inkwell"]);
+  });
+
   test("writes a manifest that says what the run was made of: the cases with their digests, the parts, the engine, the attempts and which tasks were scored", async () => {
     const { root, env } = fakeUv();
     const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "m", limit: 3, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: "http://192.0.2.5:8080/v1" } }, join(root, "results")));
@@ -243,7 +262,7 @@ describe("runCorpus", () => {
     expect(m.cases).toEqual(caseDigests(MEASUREMENT, casesIn(EVAL_DIR, tasks)));
     expect(m.completion).toEqual({ selected: tasks, scored: tasks, errored: [] });
     // one row per task in samples.jsonl, each with its trials
-    expect(rowsOf(s.results_dir).map((r) => [r.id, r.trials.length, r.paired])).toEqual(tasks.map((t) => [t, 2, true]));
+    expect(rowsOf(s.results_dir).map((r) => [r.id, r.trials.length, r.paired]).sort()).toEqual(tasks.map((t) => [t, 2, true]).sort());
   });
 
   test("lists a task with a trial in one arm only as selected and not scored, and the tasks Harbor never started as selected only", async () => {
