@@ -3,7 +3,7 @@
 // answered twice by the same model, once with the whole chat history (without akm) and once with only
 // the sessions akm retrieves (with akm), and a judge grades both. See ../README.md.
 //
-//   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
+//   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -15,6 +15,7 @@ import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyErro
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
 import { type Context, NAME, READER_ORDER, TOP_K, collectQuestion, openSandbox, sampling } from "./collect.ts";
@@ -32,7 +33,7 @@ const HARNESS = harnessSha256(import.meta.dir);
 const DEFAULT_SAMPLE_SEED = 42;
 const GIVE_UP_AFTER = 3; // questions in a row that failed the same way, before the first one that did not
 
-const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
+const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
                                   [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
                                   [--model ID] [--judge-model ID] [--akm COMMAND]
 
@@ -50,6 +51,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.
+  --repeat N        run each corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+                    <UTC date>-<label>-repeat-summary.json beside them. Every run asks the same questions. It does not go with --resume.
   --retrieval-only  no model and no judge: ingest, search, and score what akm retrieves against the
                     sessions that hold the answer
   --semantic        search with akm's semantic search as well as its keyword index: akm embeds each question's sessions
@@ -429,9 +432,9 @@ export function resolveEndpoints(values: { model?: string; "judge-model"?: strin
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`longmemeval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -448,6 +451,9 @@ async function main(): Promise<void> {
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  if (repeat !== undefined && values.resume !== undefined) fail("--resume carries on one run, so it does not go with --repeat");
   const sampleSeed = values["sample-seed"] === undefined ? DEFAULT_SAMPLE_SEED : Number(values["sample-seed"]);
   if (!Number.isInteger(sampleSeed) || sampleSeed < 0) fail("--sample-seed must be a non-negative integer");
   if (values.resume !== undefined && corpora.length > 1) fail("--resume carries on one run, so pick one corpus with --corpus public or --corpus custom");
@@ -476,8 +482,16 @@ async function main(): Promise<void> {
     const akm = new Akm(sandbox, searchMode);
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(await runCorpus(c, { limit, label, sampleSeed, resume: values.resume }, { akm, model: endpoints?.model ?? null, judge: endpoints?.judge ?? null, version }));
-    if (summaries.length === 2) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
+    for (const c of corpora) {
+      // Every run of a repeat asks the same questions of the same sandbox, which `load` empties for each question.
+      await repeatRuns(repeat, label, async (runLabel) => {
+        const summary = await runCorpus(c, { limit, label: runLabel, sampleSeed, resume: values.resume }, { akm, model: endpoints?.model ?? null, judge: endpoints?.judge ?? null, version });
+        summaries.push(summary);
+        // The summary names its folder from the repository root, and a repeat summary goes beside the folders: an absolute path says where whatever the working folder. A run with no model has none.
+        return { ...summary, model: summary.model ?? undefined, results_dir: resolve(ROOT, summary.results_dir) };
+      });
+    }
+    if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
   } finally {
     removeSandbox(sandbox);
   }

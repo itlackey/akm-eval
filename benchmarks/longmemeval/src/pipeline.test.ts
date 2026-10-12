@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
+import { basename, dirname, join } from "node:path";
+import { commandLine, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { endpointId, harnessSha256, sha256Files } from "../../../lib/provenance.ts";
@@ -902,4 +902,76 @@ describe("the command", () => {
     expect(help.out).toContain("--corpus public|custom|all");
     expect(help.out).toContain("--cases DIR");
   });
+});
+
+describe("--repeat", () => {
+  /**
+   * The benchmark in a repository root of its own, as a checkout holds it: its code, lib/ and the lock of this checkout around the tiny dataset in
+   * assets/. run.ts reads its assets and writes its results beside itself, so a run of it touches nothing of this checkout. Its akm is the fake one,
+   * and its model and judge, when it has them, are the endpoint of the test. A command that has a model is run without blocking, so that the endpoint answers.
+   */
+  function benchmark() {
+    const here = join(import.meta.dir, "..", "..", "..");
+    const root = tmp();
+    cpSync(join(here, "lib"), join(root, "lib"), { recursive: true, filter: (src) => basename(src) !== "node_modules" });
+    const code = join(root, "benchmarks", "longmemeval", "src");
+    mkdirSync(code, { recursive: true });
+    for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts") && !file.endsWith(".test.ts")) cpSync(join(import.meta.dir, file), join(code, file));
+    cpSync(join(here, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
+    writePublicAssets(join(root, "benchmarks", "longmemeval", "assets"));
+    const script = fakeAkmScript(root);
+    const results = join(root, "benchmarks", "longmemeval", "results");
+    const run = async (args: string[], model = false) => {
+      server ??= Bun.serve({ port: 0, fetch: () => Response.json({ model: "fake-model", choices: [{ message: { content: "yes" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) });
+      const env = { ...process.env, AKM_BIN: commandLine(["bun", script]), MODEL_BASE_URL: `http://127.0.0.1:${server.port}/v1`, MODEL_API_KEY: "", MODEL_NAME: "fake-model", JUDGE_BASE_URL: "", JUDGE_API_KEY: "", JUDGE_MODEL: "fake-judge" };
+      const proc = Bun.spawn(["bun", join(code, "run.ts"), ...args], { env, stdout: "pipe", stderr: "pipe" });
+      const [out, err, exit] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+      return { code: exit, out, err };
+    };
+    /** What the run left in results/, without the date the folders start with. */
+    const names = () => (existsSync(results) ? readdirSync(results).sort().map((n) => n.replace(/^\d{4}-\d{2}-\d{2}-/, "")) : []);
+    const folder = (name: string) => join(results, readdirSync(results).find((n) => n.endsWith(`-${name}`)) as string);
+    return { root, results, run, names, read: (name: string) => JSON.parse(readFileSync(join(folder(name), "summary.json"), "utf8")), spread: (label: string) => JSON.parse(readFileSync(folder(`${label}-repeat-summary.json`), "utf8")) };
+  }
+
+  test("--repeat 2 writes two runs of every question, each a whole run, and the spread of their metrics beside them", async () => {
+    const b = benchmark();
+    const r = await b.run(["--repeat", "2", "--label", "rep"]);
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["rep-r1", "rep-r2", "rep-repeat-summary.json"]);
+    const [one, two] = [b.read("rep-r1"), b.read("rep-r2")];
+    expect([one.label, one.status, one.n_run, two.label, two.status, two.n_run]).toEqual(["rep-r1", "complete", 3, "rep-r2", "complete", 3]);
+    expect([readManifest(one).kind, readManifest(two).kind]).toEqual(["manifest", "manifest"]);
+    for (const dir of readdirSync(b.results).filter((n) => !n.endsWith(".json"))) expect(existsSync(join(b.results, dir, ".running")), dir).toBe(false);
+    const spread = b.spread("rep");
+    expect(spread).toMatchObject({ eval: "longmemeval", corpus: "public", label: "rep", repeat: 2, model: "fake-model", akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 } });
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    // every number of the metrics is a spread over the two runs
+    expect(spread.metrics.accuracy.with_akm.rate).toEqual({ min: one.metrics.accuracy.with_akm.rate, max: two.metrics.accuracy.with_akm.rate, mean: one.metrics.accuracy.with_akm.rate });
+    expect(spread.metrics.retrieval.hit_rate).toEqual({ min: 0.5, max: 0.5, mean: 0.5 });
+    expect(spread.seconds.min).toBeGreaterThanOrEqual(0);
+  }, 120_000);
+
+  test("a run with no model repeats too, and its repeat summary has no model", async () => {
+    const b = benchmark();
+    const r = await b.run(["--repeat", "2", "--retrieval-only"]);
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["retrieval-r1", "retrieval-r2", "retrieval-repeat-summary.json"]);
+    const spread = b.spread("retrieval");
+    expect(spread).toMatchObject({ eval: "longmemeval", repeat: 2, metrics: { accuracy: null, retrieval: { hit_rate: { min: 0.5, max: 0.5, mean: 0.5 } } } });
+    expect("model" in spread).toBe(false);
+    expect(b.read("retrieval-r1").manifest).toMatchObject({ mode: "retrieval-only" });
+    // a run without --repeat is as it was: one folder, no repeat summary
+    const once = benchmark();
+    expect((await once.run(["--retrieval-only", "--label", "once"])).code).toBe(0);
+    expect(once.names()).toEqual(["once"]);
+  }, 120_000);
+
+  test("--repeat must be a positive integer, and does not go with --resume: a refused command runs nothing", async () => {
+    const b = benchmark();
+    for (const value of ["0", "1.5", "two"]) expect(await b.run(["--repeat", value, "--retrieval-only"]), value).toMatchObject({ code: 2, err: expect.stringContaining("--repeat must be a positive integer") });
+    expect(await b.run(["--repeat", "2", "--resume", join(b.root, "somewhere"), "--retrieval-only"])).toMatchObject({ code: 2, err: expect.stringContaining("--resume carries on one run, so it does not go with --repeat") });
+    expect(b.names()).toEqual([]);
+    expect((await b.run(["--help"])).out).toContain("--repeat N        run each corpus N times");
+  }, 60_000);
 });
