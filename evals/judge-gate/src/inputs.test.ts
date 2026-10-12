@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CASES, GENERATED, RUBRIC, casesSha256, privateAssetsProblem, privateSeed, readGenerated, readSeed, rubricVersion, staleAssets } from "./inputs.ts";
+import { CASES, GENERATED, RUBRIC, casesSha256, privateAssetsProblem, readGenerated, rubricVersion, staleAssets } from "./inputs.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -64,30 +64,6 @@ describe("rubricVersion", () => {
 
   test("the public assets state one", () => {
     expect(rubricVersion(join(import.meta.dir, "..", "assets"))).toBe(2);
-  });
-});
-
-describe("readSeed and privateSeed", () => {
-  test("readSeed is the text of private/seed, and null when there is none or it is empty", () => {
-    const root = tmp();
-    expect(readSeed(root)).toBeNull();
-    mkdirSync(join(root, "private"));
-    writeFileSync(join(root, "private", "seed"), "\n");
-    expect(readSeed(root)).toBeNull();
-    writeFileSync(join(root, "private", "seed"), "12345678901234567890\n");
-    expect(readSeed(root)).toBe("12345678901234567890");
-  });
-
-  test("privateSeed is the seed generate used, else private/seed, else null", () => {
-    const root = tmp();
-    const made = assetsWith("x\n", { seed: "7", inputs_sha256: "a", rewrite: "lib/rewrite" });
-    const bare = assetsWith("x\n");
-    expect(privateSeed(made, root)).toBe("7");
-    expect(privateSeed(bare, root)).toBeNull();
-    mkdirSync(join(root, "private"));
-    writeFileSync(join(root, "private", "seed"), "99\n");
-    expect(privateSeed(bare, root)).toBe("99");
-    expect(privateSeed(made, root)).toBe("7");
   });
 });
 

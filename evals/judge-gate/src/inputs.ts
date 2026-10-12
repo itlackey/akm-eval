@@ -1,6 +1,5 @@
 // What a judge-gate run records of its inputs, and what ties the private cases to the public ones they were made from: the digest
-// of the cases file, the seed, and the generated.json that generate writes beside the private cases. run.ts, generate.ts and the
-// tests use them.
+// of the cases file and the generated.json that generate writes beside the private cases. run.ts, generate.ts and the tests use them.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -40,15 +39,6 @@ export function inFolder<T>(dir: string, f: () => T): T {
 /** assets_sha256 of summary.json: the digest of the cases file of an assets folder, named by its place in it. It changes when a case or a label does. */
 export const casesSha256 = (assets: string): string => inFolder(assets, () => sha256Files([CASES]));
 
-/** The seed in private/seed, or null when there is none. generate-assets makes the file. */
-export function readSeed(root: string): string | null {
-  try {
-    return readFileSync(join(root, "private", "seed"), "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
 export interface Generated {
   /** The seed of the rewrite. */
   seed: string;
@@ -67,12 +57,6 @@ export function readGenerated(assets: string): Generated | undefined {
     return undefined;
   }
 }
-
-/**
- * The seed of a private run: the one generate used for the cases, which generated.json holds, else the one in private/seed (generate-assets
- * can be given another with --seed and leaves the file alone), else null. The public corpus has none.
- */
-export const privateSeed = (assets: string, root: string): string | null => readGenerated(assets)?.seed ?? readSeed(root);
 
 /**
  * Why run --corpus private must not use the private cases in `assets`, in a sentence that says what to do, or undefined when they are the

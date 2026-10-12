@@ -2,40 +2,40 @@
 // judge-gate: runs akm's reflect quality judge, with the model under test as the judge, on labelled
 // proposals. See ../README.md.
 //
-//   evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { Fatal, exitMessage, fail, gitCommit, slug } from "../../../lib/cli.ts";
+import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
+import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { CASES, casesSha256, privateAssetsProblem, privateSeed, rubricVersion } from "./inputs.ts";
-import { type Case, type Rate, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, hideInRow, metrics, orderFeedback, parseCases, pct, rowFromVerdict, selectCases } from "./lib.ts";
+import { CASES, casesSha256, privateAssetsProblem, rubricVersion } from "./inputs.ts";
+import { CONCURRENCY, NAME, STRATEGY, judgeCase, openSandbox } from "./collect.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { type Case, type Rate, type Row, atLeast, hasVerdict, hideEndpoints, metrics, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
-const NAME = "judge-gate";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const HARNESS = harnessSha256(import.meta.dir);
-const CONCURRENCY = 2;
-const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
 const MIN_AKM = "0.9.25-alpha.2"; // the first release with `akm improve judge`
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, at any point of the run
 
-const USAGE = `Usage: evals/judge-gate/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's reflect quality judge, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as the
 judge, on labelled proposals. Settings come from .env at the repository root.
 
-  --corpus  public (default) reads assets/. private reads private/judge-gate/assets/, made by
-            ./generate-assets: a light rewrite of the same cases, not held-out data. It stops when they were
-            made from public cases that have changed since: make them again. all runs both and prints the two
-            results side by side.
+${corpusUsage}
+            The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
+            cases, not held-out data. It stops when they were made from public cases that have changed since: make them again.
   --limit   run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -46,11 +46,14 @@ ${akmUsage}
 
 Needs akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.`;
 
-type Corpus = "public" | "private";
-
 interface Summary {
   eval: string;
-  corpus: Corpus;
+  /** `public` or `custom` (see lib/corpus.ts). */
+  corpus: string;
+  corpus_kind: string;
+  corpus_private: boolean;
+  /** The folder of the corpus from the repository root, null when it is outside it: what `scripts/rescore` reads the cases from. */
+  corpus_folder: string | null;
   label: string;
   date: string;
   git_commit: string;
@@ -83,9 +86,11 @@ interface Summary {
   assets_sha256: string;
   /** The version of the rubric the labels were adjudicated under (assets/README.md). Scores from other versions do not compare. */
   rubric_version: number;
-  /** The seed that made the private cases (generated.json, else private/seed), null for the public corpus or when none is recorded. */
+  /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
 }
 
@@ -98,7 +103,6 @@ interface Ctx {
   label: string;
   limit?: number;
   overrides?: Overrides;
-  seed?: string | null;
   /** The time limit of one case. Tests shorten it. */
   timeoutMs?: number;
 }
@@ -132,57 +136,41 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["errored", erroredText(a), erroredText(b)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
+  console.log(`\n${NAME}: ${a.corpus} and ${b.corpus} side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
+/** The folder from the repository root, or null when it is not inside the repository. */
+function insideRepository(folder: string): string | null {
+  const rel = relative(ROOT, folder);
+  return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel;
+}
+
 export async function runCorpus(
-  corpus: Corpus,
+  corpus: ResolvedCorpus,
   ctx: Ctx,
-  folders = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
-  },
+  results = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
 ): Promise<Summary> {
-  const { assets, results: resultsParent } = folders;
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
+  const assets = corpus.folder;
   const rubric = rubricVersion(join(EVAL_DIR, "assets")); // the private cases are a rewrite of the public ones, so their labels are the public rubric's
   const all = parseCases(readFileSync(join(assets, CASES), "utf8"), join(assets, CASES));
   const cases = selectCases(all, ctx.limit);
-  const dir = makeResultsDir(resultsParent, ctx.label);
+  const dir = makeResultsDir(results, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
-  console.log(`${NAME} (${corpus}): ${cases.length} of ${all.length} cases, ${CONCURRENCY} at a time`);
+  console.log(`${NAME} (${corpus.name}): ${cases.length} of ${all.length} cases, ${CONCURRENCY} at a time`);
 
   const rows: Row[] = [];
   let next = 0;
   let consecutiveFailures = 0;
   let aborted: string | undefined;
 
-  const judge = async (c: Case): Promise<Row> => {
-    const input = JSON.stringify({ source: c.source, candidate: c.candidate, feedback: orderFeedback(c.feedback) });
-    let run: Awaited<ReturnType<typeof runAkm>>;
-    try {
-      run = await runAkm(ctx.sandbox, ["improve", "judge", "--format", "json"], { stdin: input, timeoutMs: ctx.timeoutMs ?? JUDGE_TIMEOUT_MS });
-    } catch (e) {
-      return hideInRow(errorRow(c, (e as Error).message, 0), ctx.baseUrl);
-    }
-    const { stdout, stderr, code, ms, timedOut } = run;
-    const seconds = Number((ms / 1000).toFixed(1));
-    if (timedOut) return hideInRow(errorRow(c, exitMessage(code, stderr, stdout), seconds, true), ctx.baseUrl);
-    let verdict: unknown;
-    try {
-      verdict = JSON.parse(stdout);
-    } catch {
-      return hideInRow(errorRow(c, exitMessage(code, stderr, stdout), seconds), ctx.baseUrl);
-    }
-    return hideInRow(rowFromVerdict(c, verdict, seconds), ctx.baseUrl);
-  };
-
   const worker = async () => {
     while (next < cases.length && !aborted) {
       const index = next++;
-      const c = cases[index];
-      const row = await judge(c);
+      const c: Case = cases[index];
+      const row = await judgeCase(c, ctx);
       rows.push(row);
       appendFileSync(samples, `${JSON.stringify(row)}\n`);
       const note = row.error ?? (hasVerdict(row) ? "" : row.reason);
@@ -193,35 +181,46 @@ export async function runCorpus(
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, cases.length) }, worker));
 
-  const errored = rows.filter((r) => r.outcome === "error").length;
   const written = redactConfig(JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8"))); // the endpoint is whole here, for the engine's host
   const config = hideEndpoints(written);
   const abortedReason = aborted === undefined ? null : `${GIVE_UP_AFTER} cases in a row got no verdict, so the run stopped after ${rows.length} of ${cases.length}. Last: ${aborted}`;
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const build = akmBuild();
+  const seed = corpus.config.seed ?? null;
+  const counts = summarize(rows);
+  const manifest = buildManifest({
+    measurement: MEASUREMENT,
+    parts,
+    corpus: corpus.name,
+    cases: caseDigests(MEASUREMENT, cases),
+    akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+    config: written,
+    settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.timeoutMs ?? null, seed },
+    completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
+  });
   const summary: Summary = {
     eval: NAME,
-    corpus,
+    ...corpusRecord(corpus),
+    corpus_folder: insideRepository(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
+    ...build,
     limit: ctx.limit ?? null,
-    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
+    ...overrideSummary(overrides),
     status: abortedReason === null ? "complete" : "aborted",
     aborted_reason: abortedReason,
     n_cases: all.length,
-    n_run: rows.length,
-    n_scored: rows.length - errored,
-    n_errored: errored,
-    timeouts: rows.filter((r) => r.timed_out).length,
+    ...counts,
     config,
     engine: engineSettings(written),
     assets_sha256: casesSha256(assets),
     rubric_version: rubric,
-    seed: ctx.seed ?? null,
-    metrics: metrics(rows),
+    seed,
+    manifest,
     results_dir: dir,
   };
   const { results_dir: _dir, ...stored } = summary;
@@ -232,9 +231,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`judge-gate: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -243,36 +242,40 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  try {
+    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
+  } catch (e) {
+    fail((e as Error).message);
+  }
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  useAkm(values, fail);
+  const settings = useModel(values, fail);
+  const refusal = privacyError(corpora, { model: settings }, "notes");
+  if (refusal) fail(refusal);
 
-  const privateAssets = join(ROOT, "private", NAME, "assets");
-  if (corpora.includes("private")) {
-    const problem = privateAssetsProblem(privateAssets, join(EVAL_DIR, "assets"), `private/${NAME}/assets`);
+  for (const c of corpora) {
+    if (c.name === "public") continue;
+    const where = relative(ROOT, c.folder);
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
     if (problem) fail(problem);
   }
-  useAkm(values, fail);
-  const { baseUrl, name: model, hasKey } = useModel(values, fail);
+  const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
-  const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
+  const sandbox = openSandbox(baseUrl, model, hasKey, overrides);
   try {
-    writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides));
-
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     if (!atLeast(version, MIN_AKM)) fail(`akm ${version} has no \`improve judge\` command. This eval needs akm ${MIN_AKM} or later.`);
 
     const summaries: Summary[] = [];
     for (const c of corpora) {
-      const seed = c === "private" ? privateSeed(privateAssets, ROOT) : null;
-      summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit, overrides, seed }))));
+      summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit, overrides }))));
     }
     if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
   } finally {

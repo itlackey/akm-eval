@@ -2,10 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
-import { endpointId, endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
+import { commandLine, completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
 import { casesSha256 } from "./inputs.ts";
-import { type Case, judgeConfig } from "./lib.ts";
+import { type Case, type Raw, judgeConfig, parseCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -62,6 +65,10 @@ function setup(cases: Spec[]) {
   return { ctx, folders: { assets, results: join(root, "results") } };
 }
 
+/** A corpus read from `assets`: the public one, or a custom one with this config. */
+const corpusOf = (assets: string, config?: CorpusConfig): ResolvedCorpus => (config ? { name: "custom", folder: assets, config, configFile: null, flag: "--corpus custom" } : { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+const runPublic = (ctx: Parameters<typeof runCorpus>[1], folders: { assets: string; results: string }) => runCorpus(corpusOf(folders.assets), ctx, folders.results);
+
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
   console.log = () => {};
@@ -95,7 +102,7 @@ describe("runCorpus", () => {
       { word: "CRASH", label: "bad", severity: "churn" },
       { word: "UNREADABLE", label: "good" },
     ]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary).toMatchObject({ eval: "judge-gate", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 7, n_run: 7, n_scored: 6, n_errored: 1, timeouts: 0, status: "complete", aborted_reason: null });
     expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of the eval's code and lib/, as lib/provenance.ts counts them
     expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir));
@@ -126,7 +133,7 @@ describe("runCorpus", () => {
       { word: "REVIEW", label: "bad", severity: "harmful" },
       { word: "PASS", label: "good" },
     ]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary.metrics.bad).toEqual({ n: 6, passed: 3, rate: 0.5 });
     expect(summary.metrics.bad_churn).toEqual({ n: 3, passed: 2, rate: 0.6667 });
     expect(summary.metrics.bad_harmful).toEqual({ n: 3, passed: 1, rate: 0.3333 });
@@ -145,7 +152,7 @@ describe("runCorpus", () => {
       { word: "REWORDED", label: "good" },
       { word: "FAILCLOSED", label: "good" },
     ]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary).toMatchObject({ n_scored: 3, n_errored: 1, status: "complete" });
     expect(summary.metrics.good).toEqual({ n: 3, passed: 0, rate: 0 });
     expect(summary.metrics.outcomes.good).toEqual({ pass: 0, review: 3, reject: 0, error: 1 });
@@ -154,7 +161,7 @@ describe("runCorpus", () => {
 
   test("runs akm in the sandbox and puts negative feedback first", async () => {
     const { ctx, folders } = setup([{ word: "PASS", label: "good", feedback: "[positive] fine\n[negative] stale" }]);
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runPublic(ctx, folders));
     const seen = JSON.parse(resultsOf(folders).rows[0].reason);
     expect(seen.feedback).toBe("[negative] stale\n[positive] fine");
     expect(seen.env).toBe(ctx.sandbox.env.AKM_CONFIG_DIR);
@@ -162,7 +169,7 @@ describe("runCorpus", () => {
 
   test("a limit runs a good/bad mix", async () => {
     const { ctx, folders } = setup([...repeat(4, { word: "PASS", label: "good" }), ...repeat(12, { word: "REJECT", label: "bad" })]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 4 }, folders));
+    const summary = await quiet(() => runPublic({ ...ctx, limit: 4 }, folders));
     expect(summary).toMatchObject({ limit: 4, n_cases: 16, n_run: 4 });
     expect(summary.metrics.good.n).toBe(1);
     expect(summary.metrics.bad.n).toBe(3);
@@ -171,18 +178,18 @@ describe("runCorpus", () => {
   describe("giving up", () => {
     test("stops early when no case gets a verdict, writes the summary as aborted first, and says what to check", async () => {
       const { ctx, folders } = setup(repeat(12, { word: "CRASH", label: "bad" }));
-      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 cases in a row got no verdict");
+      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 cases in a row got no verdict");
       const { summary } = resultsOf(folders);
       expect(summary.n_run).toBeLessThan(12);
       expect(summary.n_scored).toBe(0);
       expect(summary.status).toBe("aborted");
       expect(summary.aborted_reason).toStartWith(`5 cases in a row got no verdict, so the run stopped after ${summary.n_run} of 12.`);
-      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env");
+      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env");
     });
 
     test("stops on five errors in a row after the first verdict too", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }, ...repeat(10, { word: "CRASH", label: "bad" })]);
-      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 cases in a row got no verdict");
+      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 cases in a row got no verdict");
       const { summary, rows } = resultsOf(folders);
       expect(summary.n_run).toBeLessThan(11);
       expect(summary).toMatchObject({ status: "aborted", n_scored: 1, metrics: { good: { n: 1, passed: 1 } } });
@@ -193,13 +200,13 @@ describe("runCorpus", () => {
       const pattern: Spec[] = [];
       for (let i = 0; i < 4; i++) pattern.push({ word: "PASS", label: "good" }, ...repeat(2, { word: "CRASH", label: "bad" }));
       const { ctx, folders } = setup(pattern);
-      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      const summary = await quiet(() => runPublic(ctx, folders));
       expect(summary).toMatchObject({ n_run: 12, n_errored: 8, status: "complete", aborted_reason: null });
     });
 
     test("five replies in a row that akm could not read stop the run, since the model gave no verdict either", async () => {
       const { ctx, folders } = setup(repeat(10, { word: "UNREADABLE", label: "bad" }));
-      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("Last: judge parse failed — routed to review");
+      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("Last: judge parse failed — routed to review");
       const { summary } = resultsOf(folders);
       expect(summary).toMatchObject({ status: "aborted", n_errored: 0 });
       expect(summary.metrics.bad.n).toBe(summary.n_run);
@@ -208,7 +215,7 @@ describe("runCorpus", () => {
 
   test("masks the model endpoint in the error rows, in akm's reasons and in the reason for giving up", async () => {
     const { ctx, folders } = setup([{ word: "CRASH", label: "bad" }, { word: "LEAK", label: "bad" }]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary.n_errored).toBe(1);
     const { rows, dir } = resultsOf(folders);
     expect(rows.find((r) => r.id === "case-1").error).toBe("akm exited 70: boom <MODEL_BASE_URL>/chat/completions");
@@ -217,13 +224,13 @@ describe("runCorpus", () => {
     expect(readFileSync(join(dir, "summary.json"), "utf8")).not.toContain("localhost:9");
 
     const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
-    await expect(quiet(() => runCorpus("public", dead.ctx, dead.folders))).rejects.toThrow("Last: akm exited 70: boom <MODEL_BASE_URL>/chat/completions");
+    await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("Last: akm exited 70: boom <MODEL_BASE_URL>/chat/completions");
     expect(readFileSync(join(resultsOf(dead.folders).dir, "summary.json"), "utf8")).not.toContain("localhost:9");
   });
 
   test("counts a case that akm did not answer in time as a timeout, apart from the other errors", async () => {
     const { ctx, folders } = setup([{ word: "HANG", label: "good" }, { word: "CRASH", label: "bad" }, { word: "PASS", label: "good" }]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 600 }, folders));
+    const summary = await quiet(() => runPublic({ ...ctx, timeoutMs: 600 }, folders));
     expect(summary).toMatchObject({ n_errored: 2, timeouts: 1, n_scored: 1 });
     const { rows, summary: stored } = resultsOf(folders);
     expect(stored.timeouts).toBe(1);
@@ -240,7 +247,7 @@ describe("runCorpus", () => {
     test("the effective config, the engine's settings, the cases' digest, the strategy and no seed for the public corpus", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
       writeConfig(ctx.sandbox, cfg);
-      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      const summary = await quiet(() => runPublic(ctx, folders));
       const { summary: stored } = resultsOf(folders);
       const hidden = JSON.parse(JSON.stringify(cfg));
       hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
@@ -256,7 +263,7 @@ describe("runCorpus", () => {
     test("never a secret", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
       writeConfig(ctx.sandbox, { ...cfg, engines: { judge: { ...cfg.engines.judge, apiKey: "sk-real-secret" } } });
-      await quiet(() => runCorpus("public", ctx, folders));
+      await quiet(() => runPublic(ctx, folders));
       const text = readFileSync(join(resultsOf(folders).dir, "summary.json"), "utf8");
       expect(text).not.toContain("sk-real-secret");
       expect(JSON.parse(text).config.engines.judge.apiKey).toBe("<redacted>");
@@ -265,7 +272,7 @@ describe("runCorpus", () => {
     test("never the model endpoint, which can hold a key in its query or credentials, but its host in engine", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
       writeConfig(ctx.sandbox, judgeConfig("https://user:hunter2@secret-host.example:8443/v1?key=SECRET-KEY", "the-model", true));
-      await quiet(() => runCorpus("public", ctx, folders));
+      await quiet(() => runPublic(ctx, folders));
       const text = readFileSync(join(resultsOf(folders).dir, "summary.json"), "utf8");
       for (const leak of ["SECRET-KEY", "hunter2", "user:"]) expect(text).not.toContain(leak);
       const stored = JSON.parse(text);
@@ -274,14 +281,23 @@ describe("runCorpus", () => {
       expect(stored.engine.endpoint_id).toBe(endpointId(completionsUrl("https://secret-host.example:8443/v1?key=another-key"))); // the digest of the identity, which the key is not part of
     });
 
-    test("the digest changes with the cases, and the seed is the one the run was given", async () => {
+    test("the digest changes with the cases, and a rewrite records the seed of its corpus.json", async () => {
       const a = setup([{ word: "PASS", label: "good" }]);
       const b = setup([{ word: "REJECT", label: "good" }]);
-      const one = await quiet(() => runCorpus("private", { ...a.ctx, seed: "12345678901234567890" }, a.folders));
-      const two = await quiet(() => runCorpus("private", b.ctx, b.folders));
+      const rewrite = corpusOf(a.folders.assets, { kind: "rewrite", private: false, seed: "12345678901234567890", generated: "generated.json" });
+      const one = await quiet(() => runCorpus(rewrite, a.ctx, a.folders.results));
+      const two = await quiet(() => runPublic(b.ctx, b.folders));
       expect(one.assets_sha256).not.toBe(two.assets_sha256);
-      expect(one.seed).toBe("12345678901234567890");
-      expect(two.seed).toBeNull();
+      expect(one).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "12345678901234567890" });
+      expect(one.manifest).toMatchObject({ corpus: "custom", settings: { seed: "12345678901234567890" } });
+      expect(two).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
+    });
+
+    test("your own cases are recorded as a private custom corpus, and the folder is not recorded when it is outside the repository", async () => {
+      const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
+      const own = await quiet(() => runCorpus(corpusOf(folders.assets, { kind: "own", private: true }), ctx, folders.results));
+      expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null, corpus_folder: null });
+      expect(JSON.stringify(resultsOf(folders).summary)).not.toContain(folders.assets);
     });
 
     test("the version of the rubric the labels follow, from the public assets README, for either corpus and for a run that gave up", async () => {
@@ -289,21 +305,132 @@ describe("runCorpus", () => {
       const version = Number(/^rubric_version: (\d+)$/m.exec(readme)?.[1]);
       expect(version).toBe(2);
       const pub = setup([{ word: "PASS", label: "good" }]);
-      expect((await quiet(() => runCorpus("public", pub.ctx, pub.folders))).rubric_version).toBe(version);
+      expect((await quiet(() => runPublic(pub.ctx, pub.folders))).rubric_version).toBe(version);
       expect(resultsOf(pub.folders).summary.rubric_version).toBe(version);
       const priv = setup([{ word: "PASS", label: "good" }]);
-      expect((await quiet(() => runCorpus("private", priv.ctx, priv.folders))).rubric_version).toBe(version);
+      expect((await quiet(() => runCorpus(corpusOf(priv.folders.assets, { kind: "rewrite", private: false, seed: "7", generated: "generated.json" }), priv.ctx, priv.folders.results))).rubric_version).toBe(version);
       const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
-      await expect(quiet(() => runCorpus("public", dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row got no verdict");
+      await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row got no verdict");
       expect(resultsOf(dead.folders).summary).toMatchObject({ status: "aborted", rubric_version: version });
     });
 
     test("the strategy and the config patch of the overrides", async () => {
       const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
       const configPatch = { path: "patches/tight.json", sha256: "ab".repeat(32), patch: { defaults: { improveStrategy: "tight" } } };
-      await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "tight", configPatch } }, folders));
+      await quiet(() => runPublic({ ...ctx, overrides: { strategy: "tight", configPatch } }, folders));
       expect(resultsOf(folders).summary).toMatchObject({ strategy: "tight", config_patch: { path: "patches/tight.json", sha256: "ab".repeat(32) } });
     });
+  });
+});
+
+describe("the manifest of a run", () => {
+  const specs: Spec[] = [
+    { word: "PASS", label: "good" },
+    { word: "REVIEW", label: "good" },
+    { word: "REJECT", label: "bad" },
+    { word: "NOVERDICT", label: "bad", severity: "churn" },
+    { word: "FAILCLOSED", label: "bad" },
+    { word: "CRASH", label: "bad" },
+  ];
+
+  test("is sound, names the parts the lock gives, and holds the digest of every selected case and what was scored", async () => {
+    const { ctx, folders } = setup(specs);
+    writeConfig(ctx.sandbox, judgeConfig(BASE_URL, "the-model", true));
+    await quiet(() => runPublic(ctx, folders));
+    const { summary: stored } = resultsOf(folders);
+    const { manifest } = stored;
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(readManifest(stored).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "judge-gate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: null, seed: null });
+    const loaded = parseCases(readFileSync(join(folders.assets, "cases.jsonl"), "utf8"));
+    expect(Object.keys(manifest.cases)).toEqual(loaded.map((c) => c.id));
+    expect(manifest.cases).toEqual(caseDigests(MEASUREMENT, loaded));
+    const ids = loaded.map((c) => c.id);
+    expect(manifest.completion).toEqual({ selected: ids, scored: ids.filter((id) => id !== "case-5" && id !== "case-6"), errored: ["case-5", "case-6"] });
+    // the config without the engine's settings, and the engine with the digest of its endpoint
+    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(stored.config)));
+    expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
+    expect(manifest.engines).toEqual(stored.engine.engines);
+    expect(manifest.engines.judge).toEqual({ model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+  });
+
+  test("stores in every row the raw output the scorer reads: scored again from the row, a case gives the row it stored", async () => {
+    const mixed: Spec[] = [{ word: "PASS", label: "good" }, { word: "REVIEW", label: "good" }, { word: "REJECT", label: "bad" }, { word: "NOVERDICT", label: "bad", severity: "churn" }, { word: "PASS", label: "good" }, { word: "FAILCLOSED", label: "bad" }, { word: "REVIEW", label: "good" }, { word: "CRASH", label: "bad" }, { word: "REJECT", label: "bad" }, { word: "HANG", label: "good" }, { word: "PASS", label: "good" }, { word: "UNREADABLE", label: "good" }];
+    const { ctx, folders } = setup(mixed);
+    await quiet(() => runPublic({ ...ctx, timeoutMs: 600 }, folders));
+    const { rows } = resultsOf(folders);
+    const byId = new Map(parseCases(readFileSync(join(folders.assets, "cases.jsonl"), "utf8")).map((c) => [c.id, c]));
+    expect(rows.map((r) => r.outcome).sort()).toEqual(["error", "error", "error", "pass", "pass", "pass", "reject", "reject", "review", "review", "review", "review"]);
+    expect(rows.some((r) => r.timed_out === true)).toBe(true);
+    for (const row of rows) {
+      const read = MEASUREMENT.rawOf(row);
+      expect({ id: row.id, missing: "missing" in read ? read.missing : [] }).toEqual({ id: row.id, missing: [] });
+      expect(MEASUREMENT.score(byId.get(row.id) as Case, (read as { raw: Raw }).raw)).toEqual(row);
+    }
+    // what akm printed is in the row, as the scorer read it, with the endpoint masked and only the fields it reads
+    expect(rows.find((r) => r.id === "case-2").verdict).toEqual({ pass: false, score: 3, reviewNeeded: true, reason: "needs a person", engine: "judge" });
+    expect(rows.find((r) => r.id === "case-4").verdict).toEqual({ pass: false, score: -1, reviewNeeded: true, reason: "judge timeout/error", engine: "judge" });
+    expect(rows.find((r) => r.id === "case-8")).not.toHaveProperty("verdict"); // akm printed none
+  });
+
+  test("a run that stops early keeps every selected case in the manifest, with those it never ran in neither list", async () => {
+    const dead = setup(repeat(8, { word: "CRASH", label: "bad" }));
+    await expect(quiet(() => runPublic(dead.ctx, dead.folders))).rejects.toThrow("5 cases in a row got no verdict");
+    const { manifest, n_run } = resultsOf(dead.folders).summary;
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(manifest.completion.selected).toHaveLength(8);
+    expect(manifest.completion.scored).toEqual([]);
+    expect(manifest.completion.errored).toHaveLength(n_run);
+    expect(n_run).toBeLessThan(8);
+  });
+});
+
+describe("the command", () => {
+  // Bun loads the .env of its working folder, and the repository's holds the model settings. So the command runs in a folder of its own
+  // and with an akm that does not exist, and never reaches a model, whatever .env says.
+  const run = (args: string[], env: Record<string, string> = {}) => {
+    const { MODEL_BASE_URL: _u, MODEL_NAME: _m, AKM_BIN: _a, ...rest } = process.env;
+    const cwd = mkdtempSync(join(tmpdir(), "judge-gate-cmd-"));
+    dirs.push(cwd);
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd, env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  };
+  const model = { MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" };
+
+  test("your own cases go only to a model that models.json marks private, and the refusal comes before anything runs", () => {
+    const notes = mkdtempSync(join(tmpdir(), "judge-gate-notes-"));
+    dirs.push(notes);
+    const done = run(["--cases", notes], model);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain(`--cases ${notes} sends your notes to the-model, which is not marked "private": true in models.json.`);
+    expect(done.err).toContain("The corpus is private: it has no corpus.json, and an own corpus without one is private.");
+    expect(done.err).not.toContain("no-such-akm-in-this-test"); // the akm was never asked for
+    // a corpus.json that says nothing private is in it lifts the refusal
+    writeFileSync(join(notes, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
+    const lifted = run(["--cases", notes], model);
+    expect(lifted.err).not.toContain("sends your notes");
+    expect(lifted.err).toContain("the custom corpus is missing"); // and the run goes on to look for the cases
+  });
+
+  test("--corpus private still works for one more release, with a line that names the new form", () => {
+    expect(run(["--corpus", "private"], model).err).toContain("judge-gate: --corpus private is now --corpus custom. The old value works for one more release.");
+  });
+
+  test("--corpus takes public, custom or all, and refuses another value", () => {
+    expect(run(["--corpus", "everything"], model).err).toContain('--corpus must be public, custom or all, not "everything"');
+    expect(run(["--help"]).out).toContain("[--corpus public|custom|all] [--cases DIR]");
+  });
+
+  test("refuses an akm older than the one it was built on", () => {
+    const root = mkdtempSync(join(tmpdir(), "judge-gate-cmd-"));
+    dirs.push(root);
+    writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.24");');
+    const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("akm 0.9.24 has no `improve judge` command. This eval needs akm 0.9.25-alpha.2 or later.");
   });
 });
 
