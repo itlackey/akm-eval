@@ -1,0 +1,31 @@
+# Publishes a release of akm-eval: the tag v<version> on the commit the workflow runs on, with releases/v<version>.md as its notes.
+# Run it by hand on main once the notes are merged: from the Actions tab, or `gh workflow run release.yml -f version=0.2`.
+# What a run records as its measurement versions is MEASUREMENT.lock, not the tag (see MEASUREMENT_CHANGELOG.md).
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release, such as 0.2. The tag is v<version>, and releases/v<version>.md holds the notes."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then echo "release: the version is MAJOR.MINOR, such as 0.2, not \"$VERSION\"" >&2; exit 1; fi
+          notes="releases/v$VERSION.md"
+          if [ ! -f "$notes" ]; then echo "release: $notes is not in this commit; merge the notes first" >&2; exit 1; fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "akm-eval $VERSION" --notes-file "$notes"

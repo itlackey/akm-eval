@@ -7,7 +7,7 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 
 `scripts/measurement/run check` (part of `scripts/check` and of CI) fails when a part changed and the lock was not bumped. `scripts/measurement/run bump EVAL collector|scorer --reason "..."` updates the lock, raises the minor number of that part's version by one ("0.1" to "0.2", "0.9" to "0.10") and adds the row; write whether the scores change, or "no score change" for a refactor that keeps every row. Rows are added at the end, oldest first. The story, and how to compare against a result from an older harness version, is in the README: "How results stay comparable".
 
-`harness` rows are the deliberate breaks of every eval at once. Harness version 3 is the measurement foundation: the manifest in every `summary.json`, the lock, rescore, and the comparison policy over them. Every eval starts at version 0.1 of both parts.
+`harness` rows are the deliberate breaks of every eval at once. Harness version 3 is the measurement foundation: the manifest in every `summary.json`, the lock, rescore, and the comparison policy over them. Every eval starts at version 0.1 of both parts. Release 0.2 is the first release of akm-eval: every part of every eval is at 0.2 in it, so every run made with it records 0.2. A later release changes no version by itself: a part changes version only when its files change, so runs of two releases compare wherever their parts are the same.
 
 What harness-v3 changed, against results from before it (which compare only as exploratory, see the README):
 
@@ -52,3 +52,29 @@ The versions that were taken while harness-v3 was built were folded into 0.1 wit
 | 2026-10-12 | skillret | scorer | 0.1 | harness-v3: first lock entry, version 0.1, approved by the maintainer in the harness-v3 reconciliation | a6b0c5015a9c |
 | 2026-10-12 | terminal-bench | collector | 0.1 | harness-v3: first lock entry, version 0.1, approved by the maintainer in the harness-v3 reconciliation | f76ab669f4e8 |
 | 2026-10-12 | terminal-bench | scorer | 0.1 | harness-v3: first lock entry, version 0.1, approved by the maintainer in the harness-v3 reconciliation | d440c7e333b9 |
+| 2026-10-12 | agent-ab | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 2c8cddfe2257 |
+| 2026-10-12 | agent-ab | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | d440c7e333b9 |
+| 2026-10-12 | bakeoff | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | b95da4e2ca88 |
+| 2026-10-12 | bakeoff | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 2ca17e24721e |
+| 2026-10-12 | consolidate | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 0f59751f560e |
+| 2026-10-12 | consolidate | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 3e604024d2b9 |
+| 2026-10-12 | distill | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | c610a71c3e3c |
+| 2026-10-12 | distill | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | e51aca32c46d |
+| 2026-10-12 | extract | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 714cbadd73a8 |
+| 2026-10-12 | extract | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 84172d25a167 |
+| 2026-10-12 | judge-gate | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 0ef7d870a298 |
+| 2026-10-12 | judge-gate | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | e2d745fa97c2 |
+| 2026-10-12 | longmemeval | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 24ee168a4881 |
+| 2026-10-12 | longmemeval | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 7a80b0bc611b |
+| 2026-10-12 | nightly | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 3b6779881a41 |
+| 2026-10-12 | nightly | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 20d4c81368bc |
+| 2026-10-12 | promotion | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 1c7b3bfdbde6 |
+| 2026-10-12 | promotion | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 66d76aedd254 |
+| 2026-10-12 | reflect | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 7c37dcb317cb |
+| 2026-10-12 | reflect | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 3c8b75841346 |
+| 2026-10-12 | retrieval | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 3ec3a06b3212 |
+| 2026-10-12 | retrieval | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | 0429da784b92 |
+| 2026-10-12 | skillret | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | f7998935e63f |
+| 2026-10-12 | skillret | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | a6b0c5015a9c |
+| 2026-10-12 | terminal-bench | collector | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | f76ab669f4e8 |
+| 2026-10-12 | terminal-bench | scorer | 0.2 | release 0.2, the first release of harness-v3: no change to the files since 0.1, and every run of this release records 0.2 | d440c7e333b9 |
