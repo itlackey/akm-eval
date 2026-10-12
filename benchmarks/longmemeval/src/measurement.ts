@@ -1,7 +1,7 @@
-// What the longmemeval benchmark declares about its own measurement: which files collect, which files score, and how a stored question is
-// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the longmemeval benchmark declares about its own measurement: its version, and how a stored question is
+// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
 import { existsSync } from "node:fs";

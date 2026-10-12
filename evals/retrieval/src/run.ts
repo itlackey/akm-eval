@@ -51,7 +51,7 @@ scored with keyword search only, unless --semantic on says otherwise. Needs akm 
             all runs public and the default custom corpus.
   --cases   the folder of a custom corpus of your own: queries.jsonl, qrels.jsonl and library/, and bundles.json for a library
             of bundles. It is --corpus custom. See "Run your own set" in evals/retrieval/README.md.
-  -y, --yes  accepted and not needed: this eval sends your set to no model. The matrix passes it to every row with --cases.
+  -y, --yes  accepted and not needed: this eval sends your set to no model.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only,
             unless --semantic on.
   --semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora (not with

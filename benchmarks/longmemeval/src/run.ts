@@ -61,7 +61,7 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     indexes them, so a question takes longer. A search that does not come back as semantic is an
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
-  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, collector, scorer,
+  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, eval version,
                     model, judge and their endpoints, akm version, command, build and uncommitted changes, and config) and
                     code (harness_sha256), it asks only the questions that are not done.
                     Rows made by other code are refused, not carried on: start a new run, without --resume
@@ -217,7 +217,7 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one, which its manifest says: the same
- * corpus, the questions (each by the digest of what it presents and of what it is judged by), the collector and the scorer, the model, the
+ * corpus, the questions (each by the digest of what it presents and of what it is judged by), the eval's version, the model, the
  * judge and the endpoints they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and config), and
  * harness. A question with an arm that errored is asked again. A run made by other code is refused, not continued: the summary would name
  * this run's code for rows that code did not make, and there is no mixed-version mode. A summary with no manifest or no harness_sha256 is

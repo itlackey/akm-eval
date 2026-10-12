@@ -1,7 +1,7 @@
-// What the nightly eval declares about its own measurement: which files collect, which files score, and how a stored night is scored again.
-// lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the nightly eval declares about its own measurement: its version, and how a stored night is scored again.
+// lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case digests
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case digests
 // of a run, and the scoring itself is in score.ts. The night is one run of many items: each item is a case, scored from its own files, proposals
 // and actions and from the part of the night that is the same for every item.
 

@@ -8,7 +8,7 @@
 export const PROCESSES = ["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"] as const;
 export type Process = (typeof PROCESSES)[number];
 
-/** What a case expects. Which keys it uses depends on its process (see README.md, "The checks"). */
+/** What a case expects. Which keys it uses depends on its process (see README.md, "How a case is scored"). */
 export interface Expected {
   /** Terms the output must keep (memory-inference, session-summary). */
   required?: string[];

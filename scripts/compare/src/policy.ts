@@ -3,7 +3,7 @@
 // See ../README.md ("The comparison policy").
 //
 // Runs differ along five axes: build (the akm), config (strategy, config patch, the akm config, the time limit), model (the model and
-// the settings of its engine), inputs (the cases and the private seed) and harness (this repository's code, as the eval ran it). A
+// the settings of its engine), inputs (the cases and the seed of a rewrite) and harness (the eval's version and the harness version). A
 // comparison declares the axes that are its treatment, the thing it measures. Every other axis must be the same in every run, in every
 // run of a repeat set and not only the first, and the policy says so when it is not: a mismatch is a refusal ("not comparable"). An
 // axis that cannot be checked, because a run does not record the evidence for it, makes the comparison exploratory: it is computed and

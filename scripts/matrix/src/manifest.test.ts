@@ -1,5 +1,5 @@
 // The matrix over runs that carry a manifest (harness-v3), and the fingerprint of a job whose eval declares a measurement. reflect is the eval
-// that writes a manifest, so these tests build reflect runs from the raw outputs in fixtures/ of evals/reflect/golden, score them with the eval's
+// that writes a manifest, so these tests build reflect runs from the raw outputs in evals/reflect/fixtures, score them with the eval's
 // own scorer, and write them as results folders with a manifest, the way scripts/compare's manifest.test.ts does. What they exercise: the
 // identity a result is read by (the manifest, through lib/manifest.ts), the collector and scorer versions in a decision row, the two sides scored
 // by different scorers (both are scored again), a different collector or case input, and the runs from before the manifest.

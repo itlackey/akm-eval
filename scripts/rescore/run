@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scores stored results folders again with the current scorer and labels of their eval, into new folders beside them. See the README's "How results stay comparable".
+# Scores stored results folders again with the current scorer and labels of their eval, into new folders beside them. See the README's "Compare two runs".
 #
 #   scripts/rescore/run [--cases DIR] RESULTS_DIR...
 set -euo pipefail
