@@ -283,3 +283,57 @@ describe("a run on a custom corpus (#47)", () => {
     expect(verdict(rescoreRun(old("private"), { root: tree, cases: OWN }).rows, "lesson-01")).toBe("bad");
   });
 });
+
+describe("a negation over a verb the shared rule does not list (#45)", () => {
+  // Each is a stored raw output that scorer 1 scored by word order and called good (or, for the last, bad) without a word of doubt: the negation
+  // excused the phrase, or denied the action, and the row had no `ambiguous`. scorer 2 keeps the verdict and names the phrase.
+  const SAMPLES: [id: string, note: string, phrase: string][] = [
+    ["lesson-01", "the lesson holds the advice behind do not think we should", "=wait for networkidle"],
+    ["lesson-01", "the lesson holds the reversal behind did not ignore", "=wait for networkidle"],
+    ["lesson-01", "the lesson holds the reversal behind a verdict after it", "=wait for networkidle"],
+    ["lesson-01", "the lesson states the action only behind do not think we should", "+wait * heading"],
+    ["lesson-01", "the lesson leaves the action behind a verdict after it", "+wait * heading"],
+    ["claim-01", "the lesson holds the claim behind did not dispute", "works * all * layout"],
+  ];
+
+  /** A run as scorer 1 stored it: rows with no `ambiguous`, and a summary whose counts have none either. */
+  function storedBefore(id: string, note: string): string {
+    const raw = (c: LoadedCase): Raw => (c.id === id ? rawFor(id, note) : FIRST(c));
+    const metrics = MEASUREMENT.summarize(CASES_SCORED(raw)).metrics;
+    delete (metrics.good_lessons as { ambiguous?: number }).ambiguous;
+    delete (metrics.lesson_updates as { ambiguous?: number }).ambiguous;
+    return run({ raw, manifest: (m) => ({ ...m, scorer: STALE }), rows: (rows) => rows.map(({ ambiguous: _ambiguous, ...rest }) => rest), summary: { metrics } });
+  }
+  const CASES_SCORED = (raw: (c: LoadedCase) => Raw): Row[] => CASES.map((c) => MEASUREMENT.score(c, raw(c)));
+
+  test.each(SAMPLES)("%s, %s: scripts/rescore keeps the verdict and names the phrase", (id, note, phrase) => {
+    const dir = storedBefore(id, note);
+    const stored = rowsOf(dir);
+    expect(stored.find((r) => r.id === id)).not.toHaveProperty("ambiguous");
+    expect(summaryOf(dir).metrics.good_lessons).not.toHaveProperty("ambiguous");
+
+    const { out, result } = rescoreFolder(dir);
+    const again = rowsOf(out);
+    expect(result.changed).toHaveLength(stored.length); // every row gains the list
+    expect(again.find((r) => r.id === id)?.ambiguous).toEqual([phrase]);
+    expect(again.filter((r) => r.id !== id).every((r) => Array.isArray(r.ambiguous) && r.ambiguous.length === 0)).toBe(true);
+    // and nothing else about a row moved: not the verdict, the facts it misses, the claims it makes, the reversals it asserts
+    const without = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "ambiguous"));
+    expect(again.map(without)).toEqual(stored.map(without));
+    const after = summaryOf(out).metrics;
+    const before = summaryOf(dir).metrics;
+    expect(after.good_lessons).toEqual({ ...before.good_lessons, ambiguous: 1 });
+    expect(after.lesson_updates).toEqual({ ...before.lesson_updates, ambiguous: 0 });
+    expect({ ...after, good_lessons: null, lesson_updates: null }).toEqual({ ...before, good_lessons: null, lesson_updates: null });
+    expect(summaryOf(out).manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+    expect(summaryOf(out).manifest.rescored_from.scorer).toEqual(STALE);
+  });
+
+  test("the command does the same, and the verdict that scorer 1 gave a lesson that turns the advice round is still good: only the phrase is named", () => {
+    const dir = storedBefore("lesson-01", "the lesson holds the reversal behind did not ignore");
+    const done = Bun.spawnSync(["bun", join(ROOT, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+    expect(done.exitCode).toBe(0);
+    expect(done.stdout.toString()).toContain(`${rowsOf(dir).length} cases scored again`);
+    expect(rowsOf(`${dir}-rescored`).find((r) => r.id === "lesson-01")).toMatchObject({ verdict: "good", contradicted: [], ambiguous: ["=wait for networkidle"] });
+  });
+});
