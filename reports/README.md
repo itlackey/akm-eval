@@ -1,53 +1,29 @@
 # reports
 
-Published results of the evals, and notes. Scores only, never private items.
+Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
-- `<akm version>/`: results worth keeping. None are published yet.
+- [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): Bifrost runs, limitations, and reproduction commands.
 
-A results folder in `evals/<name>/results/` is gitignored. A result that others have to check, or that a later run will be compared with, is copied here and committed.
+Each public run contains its original `summary.json` and `samples.jsonl`. Compare rescoring reads the current repository's public cases; it does not rewrite the published artifacts. Custom cases and private outputs are never included.
 
-## Layout
-
+```sh
+scripts/compare/run --repeats reports/0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10
 ```
-reports/
-  <akm version>/              akm_version of the summary, such as 0.9.26
-    <eval>/                   the folder name under evals/ or benchmarks/
-      <label>/                the run's label, without the date (a --repeat is <label>-r1 to -rN)
-        summary.json
-        samples.jsonl         public corpus only
-    matrix/<prefix>/
-      decision.json
-      decision.md
-```
-
-Two builds of one version print the same version: put the build in the label and read `akm_build` in the summary.
-
-## What goes in
-
-| Corpus | `summary.json` | `samples.jsonl` |
-|---|---|---|
-| `public` | yes | yes |
-| `custom` (a rewrite, or your own cases) | yes, without its `seed` | never: its rows hold the custom cases |
-
-Nothing else: no `logs/`, no `.running`, nothing from `private/`, `.env` or `models.json`. For a matrix, copy `decision.json` and `decision.md`, and publish the runs it compared under their evals. Read `decision.json` first: it names the matrix file by its path on your machine.
-
-Before you commit a summary, remove `seed` from a custom run (the seed makes the rewrite again) and read the per-case parts of a run of your own cases for anything private. Endpoints are recorded as a host, never a path.
-
-## Compare with a published run
-
-`scripts/compare/run` takes a published folder as it takes any results folder:
-
-```
-scripts/compare/run --treatment build reports/0.9.26/nightly/base evals/nightly/results/2026-10-12-pr1071-1
-scripts/compare/run --repeats reports/0.9.26/nightly/base
-```
-
-Only a public folder, which has `samples.jsonl`, can be compared case by case. compare scores the baseline again with the current scorer, so a published run keeps its value after a scorer fix. A baseline of another eval version is compared only with `--treatment harness`; one made before akm-eval 0.2 is refused.
-
-## Index
 
 | akm | eval | label | corpus | model | what it is |
 |---|---|---|---|---|---|
-
-Add a row for every folder you commit.
+| 0.10.261003-beta | agent-ab | [bifrost-gpt120-compatible-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-compatible-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected cases; demonstration |
+| 0.10.261003-beta | agent-ab | [bifrost-gpt120-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected cases; demonstration; 1 errored |
+| 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | longmemeval | [bifrost-gpt120-pilot](0.10.261003-beta/longmemeval/bifrost-gpt120-pilot) | public | freellm/gpt-oss:120b | full public run; 1 errored |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r1](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r1) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r2](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r2) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r3](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r3) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-base-s](0.10.261003-beta/reflect/bifrost-reflect-example-base-s) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-filter-off-c-r1](0.10.261003-beta/reflect/bifrost-reflect-example-filter-off-c-r1) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-filter-off-c-r2](0.10.261003-beta/reflect/bifrost-reflect-example-filter-off-c-r2) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-filter-off-c-r3](0.10.261003-beta/reflect/bifrost-reflect-example-filter-off-c-r3) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | reflect | [bifrost-reflect-example-filter-off-s](0.10.261003-beta/reflect/bifrost-reflect-example-filter-off-s) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
+| 0.10.261003-beta | terminal-bench | [bifrost-gpt120-pilot](0.10.261003-beta/terminal-bench/bifrost-gpt120-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected cases; demonstration |
