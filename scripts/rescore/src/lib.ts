@@ -59,14 +59,19 @@ function measurementOf(stored: Stored, root: string): Measurement {
 /** The corpus names of a run on a custom corpus: `custom`, and the names a run from before the corpora were renamed has. */
 const CUSTOM = ["custom", "private", "own", "own-feedback"];
 
+/** The run is on a custom corpus that is a split of a dataset (skillret's train split): it has no folder. */
+const isSplit = (summary: Obj): boolean => summary.corpus === "custom" && summary.corpus_kind === "split";
+
 /**
  * The summary the eval's `loadCases` reads to find the cases of the run. A run on the public corpus, and a run from before the corpora were renamed
  * (`private`, `own`), are read as they are: the eval knows where those cases are. A run on a custom corpus has them in `corpus_folder` (lib/manifest.ts
  * `corpusFolderOf`), and `cases` names the folder instead when the run did not record it or it has moved. Refuses, saying what to do, when the
- * folder is not known or is not there.
+ * folder is not known or is not there. A custom corpus of kind `split` (skillret's train split) is drawn from a dataset and has no folder at all
+ * (lib/corpus.ts): the eval finds its cases itself, so the summary is read as it is, and a `--cases` has no folder to apply to and is left unused.
  */
 function summaryForCases(stored: Stored, root: string, cases: string | undefined): Obj {
   const { summary } = stored;
+  if (isSplit(summary)) return summary;
   const custom = CUSTOM.includes(String(summary.corpus));
   if (cases === undefined && summary.corpus !== "custom") return summary;
   if (!custom) throw new RescoreError(`${stored.dir} was made on the ${JSON.stringify(summary.corpus)} corpus, and --cases names the folder of a custom one`);
@@ -170,7 +175,7 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
 
   const engine = isObject(summary.engine) ? { ...summary.engine, ...recordedEngine(summary.engine), ...(isObject(summary.engine.engines) ? { engines: Object.fromEntries(Object.entries<any>(summary.engine.engines).map(([name, e]) => [name, recordedEngine(e)])) } : {}) } : summary.engine;
   const out: Obj = { ...summary, ...(engine === undefined ? {} : { engine }), ...m.summarize(rows), manifest };
-  if (options.cases !== undefined) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time
+  if (options.cases !== undefined && !isSplit(summary)) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time
   if (typeof summary.label === "string") out.label = `${summary.label}-rescored`;
   return { summary: out, rows, dropped, changed, relabelled, legacy: reading.kind === "legacy" };
 }
