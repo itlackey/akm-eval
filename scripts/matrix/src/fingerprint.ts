@@ -1,25 +1,28 @@
-// What a matrix job was made from, as one digest: its arguments, the bytes of every file they name, the corpus it reads (the public assets, the
-// private assets that ./generate-assets made with their generated.json, or an own corpus), the model settings it runs with (the endpoints
-// whole, path included), the akm it runs and this repository's code. A stage skips a job it already ran only when this digest is the same, so
-// editing a config patch in place, regenerating the private assets, pointing MODEL_BASE_URL at another deployment, switching the akm
-// checkout's branch or committing a change to an eval runs the job again.
+// What a matrix job was made from, as one digest: its arguments, the bytes of every file they name, the corpus it reads (the public assets, or
+// the custom corpus: its folder, its corpus.json and, for a rewrite, its generated.json), the model settings it runs with (the endpoints
+// whole, path included), the akm it runs and the eval's code. The code of an eval that declares a measurement is its collector, as the run's
+// manifest will record it (lib/manifest.ts): a change to its scorer, or to another eval, is no reason to run the job again, since a stored
+// result is scored again when it is compared. A stage skips a job it already ran only when this digest is the same, so editing a config
+// patch in place, regenerating the private assets, pointing MODEL_BASE_URL at another deployment, switching the akm checkout's branch or
+// committing a change to an eval's collector runs the job again.
 // See ../../../README.md ("Run a matrix").
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { akmBuild, dirtyFingerprint, parseCommand } from "../../../lib/akm/akm.ts";
+import { REPO_ROOT, corpusFolderOf, loadMeasurement, lockedParts } from "../../../lib/manifest.ts";
 import { endpointIdentity } from "../../../lib/provenance.ts";
 import { canonical } from "../../compare/src/policy.ts";
-import { type Job, type RunRecord, HARBOR, flagValue, hasFlag, readJson, runDirs, unusableReason } from "./lib.ts";
+import { type Job, type RunRecord, HARBOR, corpusOf, customCorpus, customFolder, flagValue, hasFlag, readJson, runDirs, unusableReason } from "./lib.ts";
 
 const sha256 = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex");
 
 export interface Fingerprint {
   /** The digest of the parts. */
   sha256: string;
-  /** The digest of each part, by name: args, files, corpus, model, akm and harness. Enough to say which one changed, and nothing secret. */
+  /** The digest of each part, by name: args, files, corpus, model, akm and the code (collector for an eval on the manifest, else harness). Enough to say which one changed, and nothing secret. */
   parts: Record<string, string>;
 }
 
@@ -47,53 +50,68 @@ function digestPath(root: string, path: string): string {
 // ---- the corpus a job reads ---------------------------------------------------------------------------------------------
 
 const SEED = "private/seed";
-/** The private assets that ./generate-assets makes for an eval: its assets folder, and generated.json, which sits beside it or in it. */
-const made = (name: string): string[] => [`private/${name}/assets`, `private/${name}/generated.json`];
+
+/** The queries and qrels of an eval's retrieval assets: what `reflect --retrieval-queries` reads of the retrieval eval. */
+const queries = (assets: string): string[] => [`${assets}/queries.jsonl`, `${assets}/qrels.jsonl`];
 
 /**
- * What each eval reads for each of its corpora, by path from the repository root: the folders and files its run.ts opens, so that a corpus
- * regenerated with another seed, an input edited in place and an own corpus swapped for another each change the fingerprint. A folder counts by
- * the path and bytes of every file in it. The seed file is there for the corpora whose summary records it from there (an own corpus).
- * `--corpus all` is the public corpus and the second one the eval names (private, and own for promotion). Results folders are never inputs.
+ * What each eval reads for its public corpus, by path from the repository root: the folders and files its run.ts opens, so that an input edited
+ * in place changes the fingerprint. A folder counts by the path and bytes of every file in it. The labels are among the bytes: a relabelled case
+ * runs the job again, though a stored result needs no new run to be compared (it is scored again).
  */
-const CORPORA: Record<string, (args: string[]) => Record<string, string[]>> = {
-  nightly: () => ({ public: ["evals/nightly/assets"], private: made("nightly") }),
-  consolidate: () => ({ public: ["evals/consolidate/assets"], private: made("consolidate") }), // --pool is the public assets/pool
-  distill: () => ({
-    public: ["evals/distill/assets"],
-    private: made("distill"),
-    own: ["private/distill/own/assets", SEED],
-    "own-feedback": ["private/distill/own/assets-feedback", SEED],
-  }),
-  reflect: (args) => {
-    // --retrieval-queries reads the queries and qrels of the retrieval eval's matching corpus
-    const queries = (assets: string) => (hasFlag(args, "--retrieval-queries") ? [`${assets}/queries.jsonl`, `${assets}/qrels.jsonl`] : []);
-    return { public: ["evals/reflect/assets", ...queries("evals/retrieval/assets")], private: [...made("reflect"), ...queries("private/retrieval/assets")] };
-  },
-  // --cases DIR is the own corpus from somewhere else: its bytes are in the files part
-  promotion: (args) => ({ public: ["evals/promotion/assets"], own: [...(hasFlag(args, "--cases") ? [] : ["private/promotion/own"]), SEED] }),
-  "judge-gate": () => ({ public: ["evals/judge-gate/assets"], private: [...made("judge-gate"), "evals/judge-gate/assets/README.md"] }), // the private cases take the public rubric
-  extract: () => ({ public: ["evals/extract/assets"], private: [...made("extract"), "private/extract/map.json", SEED] }), // its seed is read from the map, else the seed file
-  retrieval: () => ({ public: ["corpus/library", "evals/retrieval/assets"], private: made("retrieval"), own: ["private/retrieval/own"] }),
-  "agent-ab": () => ({ public: ["evals/agent-ab/tasks", "evals/agent-ab/libraries"], private: made("agent-ab") }),
-  // The Harbor benchmark's tasks are pinned by its lock. Its private corpus is the library that evals/retrieval made.
-  "terminal-bench": () => {
-    const lock = "benchmarks/terminal-bench/assets/ASSETS.lock";
-    return { public: [lock, "corpus/library"], private: [lock, "private/retrieval/assets/library", "private/retrieval/assets/generated.json", "private/retrieval/generated.json"] };
-  },
+const PUBLIC: Record<string, (args: string[]) => string[]> = {
+  nightly: () => ["evals/nightly/assets"],
+  consolidate: () => ["evals/consolidate/assets"], // --pool is the public assets/pool
+  distill: () => ["evals/distill/assets"],
+  reflect: (args) => ["evals/reflect/assets", ...(hasFlag(args, "--retrieval-queries") ? queries("evals/retrieval/assets") : [])], // --retrieval-queries reads the queries and qrels of the retrieval eval's matching corpus
+  promotion: () => ["evals/promotion/assets"],
+  "judge-gate": () => ["evals/judge-gate/assets"],
+  extract: () => ["evals/extract/assets"],
+  retrieval: () => ["corpus/library", "evals/retrieval/assets"],
+  "agent-ab": () => ["evals/agent-ab/tasks", "evals/agent-ab/libraries"],
+  "terminal-bench": () => [LOCK, "corpus/library"], // the Harbor benchmark's tasks are pinned by its lock
+};
+const LOCK = "benchmarks/terminal-bench/assets/ASSETS.lock";
+
+/**
+ * What an eval reads of its custom corpus beyond the corpus.json and the generated.json beside the folder: `inside`, the part of the folder it
+ * opens (terminal-bench takes the library of retrieval's rewrite and nothing else of it), and `more`, other files its runner opens.
+ */
+const CUSTOM_READS: Record<string, { inside?: string; more?: (args: string[]) => string[] }> = {
+  reflect: { more: (args) => (hasFlag(args, "--retrieval-queries") ? queries("private/retrieval/assets") : []) },
+  "judge-gate": { more: () => ["evals/judge-gate/assets/README.md"] }, // the custom cases take the public rubric
+  extract: { more: () => ["private/extract/map.json", SEED] }, // its seed is read from the map, else the seed file
+  "terminal-bench": { inside: "library", more: () => [LOCK] },
 };
 
-/** The paths, from the repository root, of what a job reads for the corpus its `--corpus` names (public, unless a promotion job names `--cases`). */
-export function corpusPaths(evalName: string, args: string[]): string[] {
-  const corpora = CORPORA[evalName]?.(args);
-  if (corpora === undefined) return [];
-  const chosen = flagValue(args, "--corpus") ?? (evalName === "promotion" && hasFlag(args, "--cases") ? "own" : "public");
-  const names = chosen === "all" ? ["public", evalName === "promotion" ? "own" : "private"] : [chosen];
-  return [...new Set(names.flatMap((name) => corpora[name] ?? []))].sort();
+/** A path for the digest: from the repository root when it is inside it, else as it is (a custom corpus may be a folder anywhere). */
+const fromRoot = (root: string, abs: string): string => corpusFolderOf(abs, root) ?? abs;
+
+/**
+ * What a job reads of its custom corpus: the folder as lib/corpus.ts resolves it (`--cases DIR`, the folder of an old `--corpus` value, or the
+ * eval's default), the corpus.json and the generated.json that sit beside a folder called `assets` (./generate-assets writes them there), and
+ * for an own corpus private/seed. A folder inside the corpus folder is covered by the folder.
+ */
+function customPaths(root: string, evalName: string, args: string[]): string[] {
+  const found = customCorpus(root, evalName, args);
+  const folder = found?.folder ?? resolve(root, customFolder(evalName, args) ?? "");
+  const reads = CUSTOM_READS[evalName];
+  const beside = basename(folder) === "assets" ? [join(dirname(folder), "corpus.json"), join(dirname(folder), "generated.json")] : [];
+  const read = reads?.inside ? [join(folder, reads.inside), join(folder, "corpus.json"), join(folder, "generated.json")] : [folder];
+  return [...[...read, ...beside].map((p) => fromRoot(root, p)), ...(found?.config.kind === "own" ? [SEED] : []), ...(reads?.more?.(args) ?? [])];
 }
 
-/** The digest of the corpus a job reads: each path of corpusPaths, by name, with the digest of its bytes. It holds no content and no checkout path. */
-const corpusDigest = (root: string, evalName: string, args: string[]): string => sha256(corpusPaths(evalName, args).map((path) => `${path}\0${digestPath(root, path)}\n`).join(""));
+/** The paths, from the repository root, of what a job reads for the corpus its flags name: the public one, the custom one, or both for `--corpus all`. A path outside the repository (a custom folder elsewhere) is absolute. */
+export function corpusPaths(evalName: string, args: string[], root: string = REPO_ROOT): string[] {
+  const publicPaths = PUBLIC[evalName];
+  if (publicPaths === undefined) return [];
+  const chosen = corpusOf(evalName, args);
+  const names = chosen === "all" ? ["public", "custom"] : [chosen];
+  return [...new Set(names.flatMap((name) => (name === "public" ? publicPaths(args) : name === "custom" ? customPaths(root, evalName, args) : [])))].sort();
+}
+
+/** The digest of the corpus a job reads: each path of corpusPaths, by name, with the digest of its bytes. It holds no content and no checkout path. A folder outside the repository is named by its last part only. */
+const corpusDigest = (root: string, evalName: string, args: string[]): string => sha256(corpusPaths(evalName, args, root).map((path) => `${isAbsolute(path) ? `outside/${basename(path)}` : path}\0${digestPath(root, path)}\n`).join(""));
 
 /** The settings of a `.env` the way lib/env.sh reads them: KEY=value lines, `export ` allowed, quotes dropped, an unquoted value ends at ` #`, a quoted one at its closing quote and a ` #` comment after it; the first line of a key wins. */
 export function readDotEnv(file: string): Record<string, string> {
@@ -195,11 +213,27 @@ function akmIdentity(args: string[], evalName: string, env: Env): { command: str
 }
 
 /** This repository's code as the job runs it: the commit, and the digest of the changes to tracked files that are not committed. */
-function harnessIdentity(root: string): string {
+function repositoryCode(root: string): string {
   const head = git(root, ["rev-parse", "HEAD"]);
   if (!head.ok) return "not a git checkout";
   const diff = git(root, ["diff", "HEAD"]);
   return `${head.out.trim()}${diff.ok && diff.out !== "" ? `+${sha256(diff.out)}` : ""}`;
+}
+
+/**
+ * The collector of an eval that declares a measurement and has a lock entry, as the manifest of the run will record it: the harness version, and the
+ * collector's version and digest (lib/manifest.ts; the same `lockedParts` the run takes them from). The scorer is left out on purpose: a scorer change
+ * leaves a stored result as it was, and the decision scores both sides again. Null for any other eval, whose code is then the repository's.
+ */
+function collectorIdentity(root: string, evalName: string): string | null {
+  try {
+    const m = loadMeasurement(evalName, root);
+    if (!m) return null;
+    const parts = lockedParts(m, root);
+    return canonical({ harness_version: parts.harness_version, ...parts.collector });
+  } catch {
+    return null; // no lock entry yet, or a declaration that cannot be read: the run itself stops on it
+  }
 }
 
 /** The fingerprint of a job: see the header. `env` is the environment the job runs in, the matrix process's by default. */
@@ -215,12 +249,15 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
     corpus: corpusDigest(root, job.row.eval, job.args),
     model: sha256(canonical(modelSettings(root, full, job.row.eval))),
     akm: sha256(canonical(akmIdentity(job.args, job.row.eval, full))),
-    harness: sha256(harnessIdentity(root)),
   };
+  // An eval on the manifest is made from its collector, the others from this repository's code.
+  const collector = collectorIdentity(root, job.row.eval);
+  if (collector !== null) parts.collector = sha256(collector);
+  else parts.harness = sha256(repositoryCode(root));
   return { sha256: sha256(canonical(parts)), parts };
 }
 
-const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the assets, library and generated.json of the public, private or own corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code" };
+const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the public assets, or the folder, corpus.json and generated.json of the custom corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code", collector: "the eval's collector (the code that decides what akm is asked, its version and the harness version)" };
 
 /** Whether a stage may skip a job it already ran, and when not, why it runs again (empty for a job that was never run). */
 export function resumable(root: string, prior: RunRecord | undefined, job: Pick<Job, "label" | "args">, fp: Fingerprint): { skip: boolean; why: string } {

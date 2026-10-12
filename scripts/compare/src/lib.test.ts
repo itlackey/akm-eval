@@ -396,7 +396,38 @@ describe("refusals", () => {
   });
 
   test("two different corpora", () => {
-    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "private" }))).toContain("the corpus differs: public in A, private in B");
+    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "rewrite" }))).toContain("the corpus differs: public in A, custom in B");
+    // the old name of a rewrite reads as the custom corpus it stands for, so the public corpus differs from it the same way
+    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "private" }))).toContain("the corpus differs: public in A, custom in B");
+  });
+
+  test("two custom corpora of another kind are refused, and a summary from before the corpora were renamed is the custom corpus of its kind (#47)", () => {
+    const rewrite = variant(fx("nightly", "before"), { corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: 7 });
+    const own = variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "own", corpus_private: true });
+    expect(message(rewrite, own, BUILD)).toContain("the kind of the custom corpus (a rewrite of the public cases from a seed, or your own) differs: rewrite in A, own in B");
+    // `private` was the rewrite and `own` your notes: an old run is comparable with a new one of the same corpus
+    expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }), BUILD)).toBe("");
+    expect(message(own, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toBe("");
+    expect(message(own, variant(fx("nightly", "after"), { corpus: "own-feedback" }), BUILD)).toBe("");
+    expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toContain("the kind of the custom corpus");
+    // a public run and a custom one differ in the corpus, said once
+    const m = message(fx("nightly", "before"), rewrite, BUILD);
+    expect(m).toContain("the corpus differs: public in A, custom in B");
+    expect(m).not.toContain("the kind of the custom corpus");
+  });
+
+  test("the seed is evidence for a rewrite, whatever the corpus is called, and not for your own notes", () => {
+    const identity = (s: Record<string, unknown>) => identityOf({ ...IDENTITY, ...s });
+    expect(identity({ corpus: "custom", corpus_kind: "rewrite" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
+    expect(identity({ corpus: "private" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
+    expect(identity({ corpus: "custom", corpus_kind: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "own-feedback" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "public" })).toMatchObject({ corpus: "public", corpus_kind: "public", private: false });
+    expect(identity({ corpus: "public", corpus_kind: undefined })).toMatchObject({ corpus_kind: "public" });
+    const gaps = (a: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", a)], []).gaps.map((f) => f.message);
+    expect(gaps({ corpus: "custom", corpus_kind: "rewrite" })).toEqual(["the seed of the private assets is not recorded in A and B"]);
+    expect(gaps({ corpus: "custom", corpus_kind: "own" })).toEqual([]);
   });
 
   test("two different akm versions", () => {
