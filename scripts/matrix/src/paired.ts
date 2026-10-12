@@ -2,7 +2,7 @@
 // baseline's repeats. compare reads summary.json and samples.jsonl of results folders; this file only turns what it reports into the
 // few numbers a decision row carries. See ../../compare/README.md and ../../../README.md ("Run a matrix").
 
-import { CompareError, SUPPORTED, compareRepeats, compareSets, loadRun, viewsOf } from "../../compare/src/lib.ts";
+import { CompareError, type Run, SUPPORTED, compareRepeats, compareSets, loadRun, viewsOf } from "../../compare/src/lib.ts";
 import { PolicyError, type Axis } from "../../compare/src/policy.ts";
 import type { Dir, Signal } from "./lib.ts";
 
@@ -41,6 +41,10 @@ export interface Paired {
   warnings: string[];
 }
 
+/** A run to compare: the results folder to read, or the run as it is already (scored again with the current scorer, which is in no folder). */
+export type Source = string | Run;
+const load = (x: Source): Run => (typeof x === "string" ? loadRun(x) : x);
+
 /** What compare says when it refuses. Anything else it throws is reported too, since a decision should not be lost to a bad results folder. */
 const why = (e: unknown): string => (e instanceof CompareError || e instanceof PolicyError ? e.message : `scripts/compare failed: ${e instanceof Error ? e.message : String(e)}`);
 
@@ -49,10 +53,10 @@ const why = (e: unknown): string => (e instanceof CompareError || e instanceof P
  * with a note, when compare refuses the runs (a run with no samples, a table the runs do not share, ...); null without one for an eval compare
  * has no per-case reading for.
  */
-export function pairedOf(evalName: string, baseDirs: string[], cfgDirs: string[], treatment: Axis[]): { paired: Paired | null; note: string | null } {
+export function pairedOf(evalName: string, baseDirs: Source[], cfgDirs: Source[], treatment: Axis[]): { paired: Paired | null; note: string | null } {
   if (!SUPPORTED.includes(evalName) || baseDirs.length === 0 || cfgDirs.length === 0) return { paired: null, note: null };
   try {
-    const report = compareSets(baseDirs.map(loadRun), cfgDirs.map(loadRun), { treatment });
+    const report = compareSets(baseDirs.map(load), cfgDirs.map(load), { treatment });
     const first = report.views[0];
     const paired: Paired = {
       repeats: { baseline: report.a_runs.length, config: report.b_runs.length },
@@ -99,10 +103,10 @@ const meanOf = (xs: number[]): number => Number((xs.reduce((a, b) => a + b, 0) /
  * it). Two sides with the same number of errored cases can have failed on different cases, and a rate over each is then over other cases. Null,
  * with a note when compare cannot read the runs, and null without one for an eval compare has no per-case reading for.
  */
-export function casesOf(evalName: string, baseDirs: string[], cfgDirs: string[]): { cases: Cases | null; note: string | null } {
+export function casesOf(evalName: string, baseDirs: Source[], cfgDirs: Source[]): { cases: Cases | null; note: string | null } {
   if (!SUPPORTED.includes(evalName) || baseDirs.length === 0 || cfgDirs.length === 0) return { cases: null, note: null };
   try {
-    const sides = [baseDirs, cfgDirs].map((dirs) => dirs.map((d) => loadRun(d)).map((run) => ({ errored: run.summary.n_errored, views: viewsOf(run) })));
+    const sides = [baseDirs, cfgDirs].map((dirs) => dirs.map(load).map((run) => ({ errored: run.summary.n_errored, views: viewsOf(run) })));
     const [base, cfg] = sides;
     const names = base[0].views.map((v) => v.name).filter((name) => sides.every((runs) => runs.every((r) => r.views.some((v) => v.name === name))));
     if (names.length === 0) return { cases: null, note: null };
