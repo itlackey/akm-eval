@@ -22,6 +22,25 @@
         ]
       }
     },
+    "judge-gate": {
+      "collector": {
+        "version": 1,
+        "sha256": "de09348fb9640ea96f5fe8e6be43c3938dc13a7b0d5b923e7b8f7f326effacf8",
+        "files": [
+          "evals/judge-gate/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "e2d745fa97c253183522609716b9f6512e12851f0157f26d84c967460e300df8",
+        "files": [
+          "evals/judge-gate/src/score.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,

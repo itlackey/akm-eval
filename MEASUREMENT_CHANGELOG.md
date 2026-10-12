@@ -16,3 +16,5 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | reflect | collector | 2 | wave 1 merge: lib/akm credential allowlist, completionsUrl, relative AKM_BIN paths; hideEndpoint (no score change; harness-v3 not yet released) | 0cb87ac1f033 |
 | 2026-10-12 | extract | collector | 1 | first lock entry | 24ae1173ca2b |
 | 2026-10-12 | extract | scorer | 1 | first lock entry | 8d7b7b291a81 |
+| 2026-10-12 | judge-gate | collector | 1 | first lock entry | de09348fb964 |
+| 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |
