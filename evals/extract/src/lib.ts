@@ -132,57 +132,7 @@ export function assetsDigest(assets: string, cases: LoadedCase[]): string {
   return sha256Text(names.map((name) => `${name}\0${sha256File(join(assets, name))}\n`).join(""));
 }
 
-/** The repository root. The generator's code is read from here, so a copy of the repository digests its own files. */
-const ROOT = resolve(import.meta.dir, "..", "..", "..");
-
-/**
- * The code that decides what generate makes of the public assets and whether it accepts the result, by its path from `root`: generate.ts,
- * this file (reading the cases), score.ts (the checks generate runs on what the rewrite made), lib/negation.ts (the rule of negation those
- * checks use) and the code of lib/rewrite, without its tests.
- */
-export function generatorFiles(root = ROOT): string[] {
-  const inRewrite = readdirSync(join(root, "lib", "rewrite"), { recursive: true }).map(String).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();
-  return ["evals/extract/src/generate.ts", "evals/extract/src/lib.ts", "evals/extract/src/score.ts", "lib/negation.ts", ...inRewrite.map((f) => `lib/rewrite/${f}`)];
-}
-
-/** One digest over generatorFiles, each named by its path from the root. A change to the generator, to its checks or to the rewrite changes it. */
-export const generatorSha256 = (root = ROOT): string => sha256Text(generatorFiles(root).map((name) => `${name}\0${sha256File(join(root, name))}\n`).join(""));
-
-/** What generate writes beside the private assets: the seed they were made with, the digest of the public assets they were made from, and the digest of the code that made them. */
-export interface Generated {
-  seed: string;
-  inputs_sha256: string;
-  /** generatorSha256 when the assets were made. */
-  rewrite: string;
-}
-
 export const GENERATED = "generated.json";
-
-/** The digest of the public assets a private set is made from: cases.json and the sessions it names. */
-export const inputsSha256 = (assets: string): string => assetsDigest(assets, loadCases(assets));
-
-/** generated.json in `dir` (private/extract), or undefined when it is missing or does not hold a seed and the two digests. */
-export function readGenerated(dir: string): Generated | undefined {
-  try {
-    const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
-    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" && typeof g.rewrite === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256, rewrite: g.rewrite } : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, the public
- * assets it names the digest of are the ones in `publicAssets` now, and the generator that made them is the one in `root` now. Assets made
- * from other public cases, or by a generator or a rewrite that has changed since, would score a different set than the public run does.
- */
-export function generatedProblem(dir: string, publicAssets: string, root = ROOT): string | undefined {
-  const generated = readGenerated(dir);
-  if (!generated) return `${GENERATED} is missing or holds no seed, inputs_sha256 and rewrite, so nothing shows what they were made from`;
-  if (generated.inputs_sha256 !== inputsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
-  if (generated.rewrite !== generatorSha256(root)) return `they were made by a generator that has changed since: evals/extract/src/generate.ts, lib.ts or score.ts, lib/negation.ts or lib/rewrite (rewrite in ${GENERATED} differs)`;
-  return undefined;
-}
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
 

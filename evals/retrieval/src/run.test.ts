@@ -1098,7 +1098,7 @@ describe("the command", () => {
     expect(help).toContain("Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]");
     expect(help).toContain("--semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora");
     expect(help).toContain("--akm");
-    expect(help).toContain("made by ./generate-assets --only retrieval. It stops when they were made from public\n            files that have changed since: make them again.");
+    expect(help).toContain("made by ./generate-assets --only retrieval.\n            all runs public and the default custom corpus.");
   });
 });
 

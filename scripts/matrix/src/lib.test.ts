@@ -2078,7 +2078,7 @@ describe("the fingerprint of a job", () => {
     mkdirSync(join(t.root, "private", "reflect", "assets"), { recursive: true });
     const regenerate = (seed: string, text: string) => {
       writeFileSync(assets, text);
-      writeFileSync(join(t.root, "private", "reflect", "generated.json"), JSON.stringify({ seed, inputs_sha256: "a".repeat(64) }));
+      writeFileSync(join(t.root, "private", "reflect", "generated.json"), JSON.stringify({ seed }));
     };
     regenerate("11", '{"id":"c1"}\n');
     const A = { MODEL_BASE_URL: "https://gateway.example/deployment-A/v1" };

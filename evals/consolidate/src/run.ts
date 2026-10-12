@@ -19,7 +19,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { INPUT_FILES, RELATIONS, parseCases, selectCases } from "./cases.ts";
 import { type CollectContext, NAME, POOL_STRATEGY, type PoolContext, RATE_LIMIT_TRIES, STRATEGY, collectPool, effectiveConfig, runCase } from "./collect.ts";
-import { GENERATOR_CODE, type RunInputs, assetsDigest, generatorSha256, privateAssetsProblem, runInputs } from "./inputs.ts";
+import { type RunInputs, privateAssetsProblem, runInputs } from "./inputs.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { loadPool, poolCases, poolFiles } from "./pool.ts";
 import { type PoolMetrics, type PoolRaw, type PoolRow, makePoolRow, poolSummarize } from "./pool-score.ts";
@@ -42,8 +42,7 @@ Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODE
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.
 
 ${corpusUsage}
-            The default custom corpus is private/consolidate/assets, made by ./generate-assets; the run stops if it is missing or was
-            made from other public cases, or by another generator, than the ones in this checkout.
+            The default custom corpus is private/consolidate/assets, made by ./generate-assets; the run stops if it is missing.
   --limit   run N cases, taking the first of each relation in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -413,7 +412,7 @@ async function main(): Promise<void> {
   const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl", () => assetsDigest(publicAssets, INPUT_FILES), () => generatorSha256(GENERATOR_CODE)) : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl") : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
     if (problem) fail(problem);
   }
   const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");

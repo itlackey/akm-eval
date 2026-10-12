@@ -6,7 +6,7 @@ import { commandLine, completionsUrl, createSandbox, writeConfig } from "../../.
 import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
-import { casesSha256, generatorSha256 } from "./inputs.ts";
+import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, judgeConfig, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
@@ -424,26 +424,6 @@ describe("the command", () => {
     const lifted = run(["--cases", notes], model);
     expect(lifted.err).not.toContain("sends your notes");
     expect(lifted.err).toContain("the custom corpus is missing"); // and the run goes on to look for the cases
-  });
-
-  test("run --corpus private refuses assets whose stored generator digest is zeroed, and takes freshly generated ones (#44)", () => {
-    const out = mkdtempSync(join(tmpdir(), "judge-gate-generated-"));
-    dirs.push(out);
-    const made = Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", "7", "--out", out], { stdout: "pipe", stderr: "pipe" });
-    expect(made.exitCode).toBe(0);
-    writeFileSync(join(out, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "7", generated: "assets/generated.json" }));
-    const generated = join(out, "assets", "generated.json");
-    const stored = JSON.parse(readFileSync(generated, "utf8"));
-    expect(stored.rewrite).toBe(generatorSha256()); // a digest of the generator's code, not the literal "lib/rewrite"
-    const fresh = run(["--cases", join(out, "assets")], model);
-    expect(fresh.err).not.toContain("generator that has changed since");
-    expect(fresh.err).toContain("no-such-akm-in-this-test"); // it went on to the akm check
-    writeFileSync(generated, JSON.stringify({ ...stored, rewrite: "0".repeat(64) }));
-    const zeroed = run(["--cases", join(out, "assets")], model);
-    expect(zeroed.code).toBe(2);
-    expect(zeroed.err).toContain(`the private cases in ${join(out, "assets")}/ were made by a generator that has changed since`);
-    expect(zeroed.err).toContain("Make them again with: ./generate-assets --only judge-gate");
-    expect(zeroed.err).not.toContain("no-such-akm-in-this-test");
   });
 
   test("--corpus private still works for one more release, with a line that names the new form", () => {

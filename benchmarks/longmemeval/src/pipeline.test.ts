@@ -10,7 +10,6 @@ import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
 import { evidence, fakeAkmScript, sandboxRunning, tinyDataset, writePublicAssets } from "./fakes.ts";
-import { GENERATED, basisOf, manifestOf } from "./manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { resolveEndpoints, runCorpus } from "./run.ts";
 import { isAbstentionQuestion } from "./prompts.ts";
@@ -309,7 +308,7 @@ describe("runCorpus", () => {
 
     // private: rewrite.json and the questions, and the seed generate recorded, as the string it holds
     const { assets } = await privateTree(root, folders.assets, "18446744073709551615");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    const mine = { assets, results: join(root, "private-results") };
     const priv = await quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1 }, retrieval, mine));
     expect(priv.seed).toBe("18446744073709551615");
     expect(priv).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, manifest: { corpus: "custom", settings: { seed: "18446744073709551615" } } });
@@ -329,7 +328,7 @@ describe("runCorpus", () => {
     const { tree, assets } = await privateTree(root, folders.assets, "222");
     expect(readFileSync(seedFile, "utf8")).toBe("111\n");
     expect(JSON.parse(readFileSync(join(tree, "map.json"), "utf8")).seed).toBe("222");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    const mine = { assets, results: join(root, "private-results") };
 
     const drawn = await quiet(() => runCorpus(rewriteOf(mine), { label: "d", sampleSeed: 7, limit: 2 }, retrieval, mine));
     expect(drawn).toMatchObject({ seed: "222", sample_seed: 7, n_run: 2 });
@@ -342,42 +341,6 @@ describe("runCorpus", () => {
     // the public corpus has no rewrite seed, and its draw has a sample seed
     const pub = await quiet(() => runCorpus(publicOf(folders), { label: "u", sampleSeed: 9, limit: 2 }, retrieval, folders));
     expect(pub).toMatchObject({ seed: null, sample_seed: 9 });
-  });
-
-  test("a private run refuses a tree that generated.json does not vouch for, before it makes a results folder", async () => {
-    const { root, akm, folders } = setup();
-    const retrieval = { akm, model: null, judge: null, version: "v" };
-    const { tree, assets } = await privateTree(root, folders.assets, "222");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
-    const refused = async (message: string) => {
-      const run = () => quiet(() => runCorpus(rewriteOf(mine), { label: "r", sampleSeed: 1 }, retrieval, mine));
-      await expect(run()).rejects.toThrow(message);
-      await expect(run()).rejects.toThrow("Make them again with: ./generate-assets --only longmemeval");
-      expect(existsSync(mine.results)).toBe(false); // nothing ran
-    };
-    const [manifest, data, lock] = [readFileSync(join(tree, GENERATED)), readFileSync(join(assets, DATA_FILE)), readFileSync(join(folders.assets, "ASSETS.lock"), "utf8")];
-
-    rmSync(join(tree, GENERATED));
-    await refused("have no generated.json");
-    writeFileSync(join(tree, GENERATED), manifest);
-
-    // the public dataset moved on since the assets were made
-    writeFileSync(join(folders.assets, "ASSETS.lock"), lock.replace("r".repeat(40), "s".repeat(40)));
-    await refused("another public dataset");
-    writeFileSync(join(folders.assets, "ASSETS.lock"), lock);
-
-    // the generator that made the assets has changed since (#44): the digest of its code in generated.json is another one
-    writeFileSync(join(tree, GENERATED), JSON.stringify({ ...JSON.parse(manifest.toString()), generator_sha256: "0".repeat(64) }));
-    await refused("made by a generator that has changed since");
-    writeFileSync(join(tree, GENERATED), manifest);
-
-    // the questions were edited by hand
-    writeFileSync(join(assets, DATA_FILE), Buffer.concat([data, Buffer.from(" ")]));
-    await refused("not the ones generate wrote");
-    writeFileSync(join(assets, DATA_FILE), data);
-
-    // everything is as generate left it: the run goes ahead
-    expect((await quiet(() => runCorpus(rewriteOf(mine), { label: "ok", sampleSeed: 1 }, retrieval, mine))).seed).toBe("222");
   });
 
   test("the reader gets the sessions akm returns in the order of the haystack, and not by rank", async () => {
@@ -815,16 +778,14 @@ describe("runCorpus", () => {
     await expect(quiet(() => runCorpus(publicOf(folders), { label: "a", sampleSeed: 1, resume: publicDir }, retrieval, folders))).rejects.toThrow("was run with different questions (1 of 3 differ in what they present or are judged by");
     writePublicAssets(folders.assets);
 
-    // private: generated.json refuses questions that were edited, and where someone made it again to vouch for the edit, the manifest is what notices
-    const { tree, assets } = await privateTree(root, folders.assets, "5");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    // private: questions that were edited are other questions
+    const { assets } = await privateTree(root, folders.assets, "5");
+    const mine = { assets, results: join(root, "private-results") };
     await quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1 }, retrieval, mine));
     const privateDir = join(mine.results, readdirSync(mine.results)[0]);
     const resume = () => quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1, resume: privateDir }, retrieval, mine));
     expect((await resume()).n_run).toBe(3); // the same files carry on
     writeFileSync(join(assets, DATA_FILE), JSON.stringify(tinyDataset().map((q, i) => (i === 0 ? { ...q, answer: "RED" } : q))));
-    await expect(resume()).rejects.toThrow("not the ones generate wrote");
-    writeFileSync(join(tree, GENERATED), JSON.stringify(manifestOf(tree, "5", basisOf(folders.assets))));
     await expect(resume()).rejects.toThrow("was run with different questions (3 of 3 differ"); // the file is the public tiny dataset, which the rewrite changed in every question
   });
 });

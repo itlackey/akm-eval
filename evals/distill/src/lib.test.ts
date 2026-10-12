@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readClaims, readGenerated, readStated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
-import { MEASUREMENT } from "./measurement.ts";
+import { join } from "node:path";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readClaims, readStated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -885,104 +884,6 @@ describe("assetsSha256", () => {
     writeFileSync(join(root, "b"), "two");
     expect(digestOf([["a", join(root, "a")], ["b", join(root, "b")]])).toBe(digestOf([["b", join(root, "b")], ["a", join(root, "a")]]));
     expect(digestOf([["a", join(root, "a")]])).not.toBe(digestOf([["c", join(root, "a")]]));
-  });
-});
-
-describe("generated.json", () => {
-  const privateDir = (generated?: unknown): string => {
-    const dir = mkdtempSync(join(tmpdir(), "distill-generated-"));
-    dirs.push(dir);
-    if (generated !== undefined) writeFileSync(join(dir, "generated.json"), typeof generated === "string" ? generated : JSON.stringify(generated));
-    return dir;
-  };
-
-  const marker = (extra: Record<string, unknown> = {}) => ({ seed: "42", inputs_sha256: assetsSha256(PUBLIC), rewrite: generatorSha256(), ...extra });
-
-  test("vouches for assets made from the public assets and by the generator as they are", () => {
-    const dir = privateDir(marker());
-    expect(generatedProblem(dir, PUBLIC)).toBeUndefined();
-    expect(readGenerated(dir)).toEqual(marker());
-  });
-
-  test("refuses assets without it, with one that is not readable or not whole, and with a digest that is not the public one", () => {
-    expect(generatedProblem(privateDir(), PUBLIC)).toContain("generated.json is missing");
-    expect(generatedProblem(privateDir("not json"), PUBLIC)).toContain("generated.json is missing or holds no seed");
-    expect(generatedProblem(privateDir(marker({ seed: 42 })), PUBLIC)).toContain("holds no seed");
-    expect(generatedProblem(privateDir({ seed: "42" }), PUBLIC)).toContain("holds no seed");
-    expect(generatedProblem(privateDir(marker({ inputs_sha256: "0".repeat(64) })), PUBLIC)).toContain("other public assets");
-  });
-
-  test("a marker made before it held the generator's digest is refused, and says what is missing", () => {
-    const old = privateDir({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
-    expect(readGenerated(old)).toBeUndefined();
-    expect(generatedProblem(old, PUBLIC)).toContain("holds no seed, inputs_sha256 and rewrite");
-  });
-
-  test("a public case that changed makes the assets made from it stale", () => {
-    const changed = mkdtempSync(join(tmpdir(), "distill-generated-"));
-    dirs.push(changed);
-    cpSync(PUBLIC, join(changed, "assets"), { recursive: true });
-    const dir = privateDir(marker({ inputs_sha256: assetsSha256(join(changed, "assets")) }));
-    expect(generatedProblem(dir, join(changed, "assets"))).toBeUndefined();
-    writeFileSync(join(changed, "assets", "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "changed\n");
-    expect(generatedProblem(dir, join(changed, "assets"))).toContain("other public assets");
-  });
-
-  describe("the generator's digest", () => {
-    const REPO = join(import.meta.dir, "..", "..", "..");
-    /** A copy of the generator's files in a folder of their own, laid out as in the repository. */
-    const copyOfGenerator = (): string => {
-      const root = mkdtempSync(join(tmpdir(), "distill-generator-"));
-      dirs.push(root);
-      for (const name of generatorFiles(REPO)) {
-        mkdirSync(dirname(join(root, name)), { recursive: true });
-        cpSync(join(REPO, name), join(root, name));
-      }
-      return root;
-    };
-
-    test("covers generate.ts, lib.ts and score.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
-      const files = generatorFiles(REPO);
-      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
-      expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
-      expect(files.every((f) => existsSync(join(REPO, f)))).toBe(true);
-      expect(generatorSha256(REPO)).toMatch(/^[0-9a-f]{64}$/);
-    });
-
-    test("is the same for a copy of the files in another folder, and changes with any of them", () => {
-      const base = generatorSha256(REPO);
-      const root = copyOfGenerator();
-      expect(generatorSha256(root)).toBe(base);
-      for (const name of generatorFiles(REPO)) {
-        const file = join(root, name);
-        const text = readFileSync(file, "utf8");
-        writeFileSync(file, `${text}\n// changed\n`);
-        expect(generatorSha256(root), name).not.toBe(base);
-        writeFileSync(file, text);
-        expect(generatorSha256(root), name).toBe(base);
-      }
-    });
-
-    test("assets made by a generator or a rewrite that has changed since are refused, naming the generator", () => {
-      const root = copyOfGenerator();
-      const dir = privateDir(marker({ rewrite: generatorSha256(root) }));
-      expect(generatedProblem(dir, PUBLIC, root)).toBeUndefined();
-      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts"]) {
-        const file = join(root, name);
-        const text = readFileSync(file, "utf8");
-        writeFileSync(file, `${text}\n// changed\n`);
-        const stale = generatedProblem(dir, PUBLIC, root);
-        expect(stale, name).toContain("made by a generator that has changed since");
-        expect(stale, name).toContain("lib/rewrite");
-        writeFileSync(file, text);
-        expect(generatedProblem(dir, PUBLIC, root), name).toBeUndefined();
-      }
-      expect(generatedProblem(privateDir(marker({ rewrite: "0".repeat(64) })), PUBLIC)).toContain("made by a generator that has changed since");
-    });
-
-    test("the public assets are checked before the generator, as retrieval checks its inputs before its rewrite", () => {
-      expect(generatedProblem(privateDir(marker({ inputs_sha256: "0".repeat(64), rewrite: "0".repeat(64) })), PUBLIC)).toContain("other public assets");
-    });
   });
 });
 

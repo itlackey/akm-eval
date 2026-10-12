@@ -10,7 +10,6 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { staleAssets } from "../../../evals/retrieval/src/inputs.ts";
 import {
   AKM_ARM_OPTIONS,
   type AkmArm,
@@ -278,9 +277,7 @@ export async function runCorpus(
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = relative(ROOT, libraryOf(c));
-  if (!existsSync(libraryOf(c))) return `the ${c.name} library is missing (${where}).${c.config.kind === "rewrite" ? " Make it with: ./generate-assets --only retrieval" : ""}`;
-  // The rewritten library is the retrieval eval's: it is used only when its generated.json says it was made from the public inputs as they are now.
-  return c.config.kind === "rewrite" ? staleAssets(c.folder, ROOT, relative(ROOT, c.folder)) : undefined;
+  return existsSync(libraryOf(c)) ? undefined : `the ${c.name} library is missing (${where}).${c.config.kind === "rewrite" ? " Make it with: ./generate-assets --only retrieval" : ""}`;
 }
 
 async function main(): Promise<void> {

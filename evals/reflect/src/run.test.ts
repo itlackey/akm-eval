@@ -473,58 +473,6 @@ describe("run --corpus custom", () => {
     return dir;
   }
 
-  test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
-    const tree = copyOfRepo();
-    const out = join(tree, "private", "reflect");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    const ready = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(ready.err).toContain("could not run"); // past the checks, stopped for want of akm
-    expect(ready.err).not.toContain("cannot be used");
-
-    rmSync(join(out, "generated.json"));
-    const missing = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(missing.code).toBe(2);
-    expect(missing.err).toContain("the private assets cannot be used: generated.json is missing");
-    expect(missing.err).toContain("./generate-assets --only reflect");
-
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    const cases = join(tree, "evals", "reflect", "assets", "cases.jsonl");
-    writeFileSync(cases, `${readFileSync(cases, "utf8")}\n`);
-    const stale = bun(tree, "run.ts", ["--corpus", "all"]);
-    expect(stale.code).toBe(2);
-    expect(stale.err).toContain("made from other public assets");
-  }, 60_000);
-
-  test("refuses assets whose generator digest is zeroed, made by an older generate, or made before the rewrite changed, and runs on the ones generate just wrote (#44)", () => {
-    const tree = copyOfRepo();
-    const out = join(tree, "private", "reflect");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    const stored = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
-    expect(stored.generator_sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).toContain("could not run"); // freshly generated: past the checks
-
-    const refused = (what: string) => {
-      const run = bun(tree, "run.ts", ["--corpus", "custom"]);
-      expect([what, run.code]).toEqual([what, 2]);
-      expect(run.err, what).toContain("the private assets cannot be used:");
-      expect(run.err, what).toContain("Make them again with: ./generate-assets --only reflect");
-      expect(run.err, what).not.toContain("could not run");
-      return run.err;
-    };
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ ...stored, generator_sha256: "0".repeat(64) }));
-    expect(refused("a zeroed digest")).toContain("they were made by a generator that has changed since: generate.ts of this eval, or lib/rewrite and its lexicon");
-    const { generator_sha256: _digest, ...older } = stored;
-    writeFileSync(join(out, "generated.json"), JSON.stringify(older));
-    expect(refused("assets of an older generate")).toContain("has no generator_sha256");
-    writeFileSync(join(out, "generated.json"), JSON.stringify(stored));
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).toContain("could not run");
-    const lexicon = join(tree, "lib", "rewrite", "lexicon.ts");
-    writeFileSync(lexicon, `${readFileSync(lexicon, "utf8")}\n// a word added to the lexicon\n`);
-    expect(refused("a change to the lexicon of lib/rewrite")).toContain("generator that has changed since");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0); // made again, by the rewrite as it is now
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).toContain("could not run");
-  }, 60_000);
-
   test("stops before anything runs when the custom corpus is not there", () => {
     const tree = copyOfRepo();
     const none = bun(tree, "run.ts", ["--corpus", "custom"]);

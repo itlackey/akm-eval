@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assemble, explode, rewriteProblems } from "./generate.ts";
-import { type Case, assetsSha256, caseProblems, generatedProblem, generatorSha256, parseCases } from "./lib.ts";
+import { type Case, caseProblems, parseCases } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const cases = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"));
@@ -97,15 +97,10 @@ describe("generate", () => {
     expect(readFileSync(join(a, "assets", "cases.jsonl"), "utf8")).not.toBe(readFileSync(join(c, "assets", "cases.jsonl"), "utf8"));
   });
 
-  test("writes generated.json beside the assets with the seed, the digest of the public cases and the digest of its own code, and leaves no work folder", () => {
+  test("writes generated.json beside the assets with the seed, and leaves no work folder", () => {
     const out = temp();
     expect(generate("7", out).exitCode).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "7", inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")), generator_sha256: generatorSha256() });
-    expect(generatedProblem(out, join(EVAL_DIR, "assets"))).toBeUndefined(); // assets just generated pass
-    const made = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ ...made, generator_sha256: "0".repeat(64) })); // a zeroed digest is refused (#44)
-    expect(generatedProblem(out, join(EVAL_DIR, "assets"))).toContain("made by a generator that has changed since");
-    writeFileSync(join(out, "generated.json"), JSON.stringify(made));
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "7" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
@@ -113,7 +108,7 @@ describe("generate", () => {
     const out = temp();
     mkdirSync(join(out, "assets"), { recursive: true });
     writeFileSync(join(out, "assets", "left-over.txt"), "from an earlier generation\n");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old" }));
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1" }));
     expect(generate("8", out).exitCode).toBe(0);
     expect(existsSync(join(out, "assets", "left-over.txt"))).toBe(false);
     expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("8");
@@ -130,7 +125,6 @@ describe("generate", () => {
     expect(failed.stderr.toString()).toContain("--seed must be a non-negative integer");
     expect(state()).toEqual(was);
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
-    expect(generatedProblem(out, join(EVAL_DIR, "assets"))).toBeUndefined();
   });
 
   test("asks for a seed and an output folder", () => {

@@ -498,7 +498,6 @@ describe("the command", () => {
 
   test("lists --embedder in its usage", () => {
     expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
-    expect(run(["--help"]).out).toContain("made from other public cases");
   });
 
   test("lists the corpora public and custom, and --cases", () => {

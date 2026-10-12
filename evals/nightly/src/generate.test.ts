@@ -2,9 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assetsDigest, generatorSha256, readGenerated } from "../../consolidate/src/inputs.ts";
 import { checkRewrite } from "./generate.ts";
-import { type DistillItem, GENERATOR_CODE, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
+import { type DistillItem, type Night, loadNight, nightProblems } from "./lib.ts";
 
 const publicNight = loadNight(join(import.meta.dir, "..", "assets"));
 
@@ -84,9 +83,8 @@ describe("generate", () => {
     const same = [...night.files.entries()].filter(([path, text]) => publicNight.files.get(path) === text).length;
     expect(same).toBeLessThan(night.files.size / 2);
     expect(readFileSync(join(out, "assets", "items.jsonl"), "utf8")).not.toBe(readFileSync(join(import.meta.dir, "..", "assets", "items.jsonl"), "utf8"));
-    // it says which seed and which public night the set was made from, and leaves no temporary folder behind
-    const publicAssets = join(import.meta.dir, "..", "assets");
-    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: assetsDigest(publicAssets, nightFiles(publicAssets)), generator_sha256: generatorSha256(GENERATOR_CODE) });
+    // it says which seed the set was made from, and leaves no temporary folder behind
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
@@ -118,7 +116,7 @@ describe("generate", () => {
     expect(generate("2", out).exitCode).toBe(0);
     expect(readFileSync(join(out, "assets", "items.jsonl"), "utf8")).not.toBe(first);
     expect(readdirSync(join(out, "assets")).sort()).toEqual(["items.jsonl", "library"]);
-    expect(readGenerated(out)?.seed).toBe("2");
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("2");
     expect(JSON.parse(readFileSync(join(out, "map.json"), "utf8")).seed).toBe("2"); // the map is the second run's too
   });
 

@@ -5,7 +5,7 @@
 //   evals/reflect/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
@@ -19,7 +19,7 @@ import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from
 import { type CaseContext, NAME, STRATEGY, configFor, refOf, runCase } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { retrievalSearches } from "./queries.ts";
-import { type Metrics, type Row, CLASSES, assetsSha256, atLeast, generatedProblem, parseCases, pct, selectCases, summarize } from "./lib.ts";
+import { type Metrics, type Row, CLASSES, assetsSha256, atLeast, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
 export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -269,8 +269,6 @@ async function main(): Promise<void> {
     if (!existsSync(join(c.folder, "cases.jsonl"))) {
       fail(c.config.kind === "rewrite" ? `the private assets are missing (${shown}/cases.jsonl). Make them with: ./generate-assets --only ${NAME}` : `${c.flag}: ${shown}/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl, as assets/ does`);
     }
-    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
-    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   // The searches of every corpus are made now, so that a file that is missing stops the run here and not after the first corpus has run.
   const searches = new Map<ResolvedCorpus, Map<string, string[]>>();

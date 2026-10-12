@@ -14,7 +14,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
 import { generate } from "./generate.ts";
-import { isFictional, publicInputs } from "./inputs.ts";
+import { isFictional } from "./inputs.ts";
 import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
@@ -123,8 +123,6 @@ describe("the public tasks", () => {
       expect(existsSync(join(EVAL_DIR, "tasks", gone))).toBe(false);
     }
     expect(readdirSync(join(EVAL_DIR, "libraries")).sort()).toEqual(["drillbit", "inkwell"]); // the libraries only the dropped tasks seeded went with them
-    // generate rewrites every public task now, and the private assets made before are the rewrite of these six: dropping the others left no input of theirs changed
-    expect(publicInputs(EVAL_DIR)).toEqual({ tasks, libraries: ["drillbit", "inkwell"] });
   });
 
   test("each has an instruction, a solution, a verifier and a library to seed", () => {
@@ -626,10 +624,9 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(summary("plain").assets_sha256).toBe(s.assets_sha256);
   }, 60_000);
 
-  test("run --corpus custom refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
+  test("run --corpus custom says how to make the assets when there are none, and runs on the ones generate wrote", () => {
     const { root, run, summary } = repo();
     const out = join(root, "private", "agent-ab");
-    const assets = join(out, "assets");
     const refused = (said: string) => {
       const done = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
       expect(done.code).toBe(2);
@@ -638,28 +635,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
 
     refused("the private assets are missing (private/agent-ab/assets/tasks)");
     expect(generate({ seed: "7", out, from: join(root, "evals", "agent-ab") }).installed).toBe(true);
-
-    const manifest = readFileSync(join(assets, "generated.json"), "utf8");
-    rmSync(join(assets, "generated.json"));
-    refused("the private assets in private/agent-ab/assets/ have no generated.json in its current format");
-    writeFileSync(join(assets, "generated.json"), manifest);
-
-    const library = join(root, "evals", "agent-ab", "libraries", "drillbit", "skills", "drillbit", "SKILL.md");
-    const libraryText = readFileSync(library, "utf8");
-    writeFileSync(library, `${libraryText}\nChanged after the private tasks were made.\n`);
-    refused("were made from public tasks or libraries that have changed since");
-    writeFileSync(library, libraryText);
-
-    // Made by another generator: the manifest of assets an older generate wrote, with the same public inputs and the same files.
-    writeFileSync(join(assets, "generated.json"), JSON.stringify({ ...JSON.parse(manifest), generator_sha256: "0".repeat(64) }));
-    refused("were made by a generator that has changed since");
-    writeFileSync(join(assets, "generated.json"), manifest);
-
-    const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0], "instruction.md");
-    const taskText = readFileSync(task, "utf8");
-    writeFileSync(task, `${taskText}\nEdited by hand.\n`);
-    refused("are not what generate wrote");
-    writeFileSync(task, taskText);
 
     const ran = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
     expect(ran.code).toBe(0);

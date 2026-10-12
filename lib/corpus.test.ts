@@ -74,9 +74,9 @@ describe("the corpus config", () => {
 
     const file = putJson(join(dir, "a", "corpus.json"), REWRITE);
     expect(messageOf(() => readCorpusConfig(file))).toBe(`${file}: assets/generated.json is missing or holds no seed, so the rewrite it describes is not there. Make it again with ./generate-assets`);
-    putJson(join(dir, "a", "assets", "generated.json"), { seed: "7", inputs_sha256: "x" });
+    putJson(join(dir, "a", "assets", "generated.json"), { seed: "7" });
     expect(messageOf(() => readCorpusConfig(file))).toBe(`${file}: seed is ${SEED}, but assets/generated.json says 7, so the assets were made again since. Run ./generate-assets again`);
-    putJson(join(dir, "a", "assets", "generated.json"), { seed: SEED, inputs_sha256: "x" });
+    putJson(join(dir, "a", "assets", "generated.json"), { seed: SEED });
     expect(readCorpusConfig(file)).toEqual(REWRITE);
   });
 
@@ -98,7 +98,7 @@ describe("the config of a rewrite generate made", () => {
 
   test("a generated.json with no seed, or a seed that is not a seed, is not one", () => {
     const dir = temp();
-    putJson(join(dir, "generated.json"), { inputs_sha256: "x" });
+    putJson(join(dir, "generated.json"), {});
     expect(rewriteConfig(dir)).toBeUndefined();
     putJson(join(dir, "generated.json"), { seed: "forty-two" });
     expect(rewriteConfig(dir)).toBeUndefined();

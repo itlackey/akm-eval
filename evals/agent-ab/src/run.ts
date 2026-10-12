@@ -244,8 +244,7 @@ export async function runCorpus(
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = corpusFolderOf(c.folder) ?? "the folder of --cases";
-  // The rewritten tasks are used only when their generated.json says they are the rewrite of the public ones as they are now, unchanged since.
-  if (c.config.kind === "rewrite") return privateAssetsProblem(c.folder, EVAL_DIR, where);
+  if (c.config.kind === "rewrite") return privateAssetsProblem(c.folder, where);
   if (c.name === "custom" && !(existsSync(join(c.folder, "tasks")) && existsSync(join(c.folder, "libraries")))) return `${where} must hold tasks/ and libraries/, laid out as the public ones are (see "Run your own set" in the README)`;
   return undefined;
 }

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import { assemble, commandWords, explode, generate, install, pinnedTools, problems } from "./generate.ts";
-import { publicInputsSha256, readGenerated, rewriteSha256, staleAssets } from "./inputs.ts";
 import { type Qrel, type Query, parseQrels } from "./lib.ts";
 
 const REWRITE = resolve(import.meta.dir, "..", "..", "..", "lib", "rewrite", "rewrite.ts");
@@ -344,12 +343,10 @@ describe("generate", () => {
     expect(qrels.some((r) => r.asset_sha256 !== undefined)).toBe(false);
   });
 
-  test("writes generated.json beside the assets: the seed, a digest of the public inputs, and a digest of the rewrite's code", async () => {
+  test("writes generated.json beside the assets: the seed", async () => {
     const { root, out } = publicRepo();
     await generate({ seed: "7", out, root });
-    expect(JSON.parse(readFileSync(join(out, "assets", "generated.json"), "utf8"))).toEqual({ seed: "7", inputs_sha256: publicInputsSha256(root), rewrite: rewriteSha256() });
-    expect(readGenerated(join(out, "assets"))?.rewrite).toMatch(/^[0-9a-f]{64}$/);
-    expect(readGenerated(join(out, "assets"))?.seed).toBe("7");
+    expect(JSON.parse(readFileSync(join(out, "assets", "generated.json"), "utf8"))).toEqual({ seed: "7" });
     expect(readdirSync(out).sort()).toEqual(["assets", "books-map.json", "map.json"]); // no staging folder is left
   });
 
@@ -396,46 +393,10 @@ describe("generate", () => {
     expect(readdirSync(out).sort()).toEqual(["assets", "books-map.json", "map.json"]);
   });
 
-  test("run --corpus private takes the assets it made and refuses them once the public inputs change", async () => {
+  test("a pair that label graded again, which has two rows, is not two assets that became one", async () => {
     const { root, out, write } = publicRepo();
-    await generate({ seed: "7", out, root });
-    const assets = join(out, "assets");
-    expect(staleAssets(assets, root)).toBeUndefined();
-
-    // label graded a pair again: its row comes after the old one, and the pair has two rows
     write("evals/retrieval/assets/qrels.jsonl", `${readFileSync(join(root, "evals/retrieval/assets/qrels.jsonl"), "utf8")}${JSON.stringify({ id: "q1", ref: "knowledge/other", grade: 1, reason: "Graded again." })}\n`);
-    expect(staleAssets(assets, root, "private/retrieval/assets")).toBe(
-      "the private assets in private/retrieval/assets/ were made from public inputs that have changed since: the library, the queries or the qrels. Make them again with: ./generate-assets --only retrieval",
-    );
-    const again = await generate({ seed: "7", out, root });
-    expect(again.installed).toBe(true); // a pair with two rows is not two assets that became one
-    expect(staleAssets(assets, root)).toBeUndefined();
-    write("corpus/library/other.md", "# Other\n\nChanged.\n");
-    expect(staleAssets(assets, root)).toContain("have changed since");
-  });
-
-  test("run --corpus private refuses assets that another rewrite made", async () => {
-    const { root, out } = publicRepo();
-    await generate({ seed: "7", out, root });
-    const assets = join(out, "assets");
-    const made = JSON.parse(readFileSync(join(assets, "generated.json"), "utf8"));
-    writeFileSync(join(assets, "generated.json"), JSON.stringify({ ...made, rewrite: "0".repeat(64) }));
-    expect(staleAssets(assets, root, "private/retrieval/assets")).toBe(
-      "the private assets in private/retrieval/assets/ were made by a rewrite that has changed since: lib/rewrite, its lexicon or the tools that generate pins. Make them again with: ./generate-assets --only retrieval",
-    );
-    writeFileSync(join(assets, "generated.json"), JSON.stringify(made)); // the digest it wrote is the one it checks
-    expect(staleAssets(assets, root)).toBeUndefined();
-  });
-
-  test("run --corpus private refuses assets that have no generated.json", async () => {
-    const { root, out } = publicRepo();
-    await generate({ seed: "7", out, root });
-    rmSync(join(out, "assets", "generated.json"));
-    expect(staleAssets(join(out, "assets"), root, "private/retrieval/assets")).toBe(
-      "the private assets in private/retrieval/assets/ have no generated.json, so nothing says what they were made from (an older generate, or a generate that stopped). Make them again with: ./generate-assets --only retrieval",
-    );
-    writeFileSync(join(out, "assets", "generated.json"), "{not json");
-    expect(staleAssets(join(out, "assets"), root)).toContain("have no generated.json");
+    expect((await generate({ seed: "7", out, root })).installed).toBe(true);
   });
 });
 

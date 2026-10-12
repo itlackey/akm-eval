@@ -5,7 +5,7 @@
 //   evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
@@ -18,7 +18,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type CaseContext, NAME, STRATEGY, configFor, runCase } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { type Metrics, type Row, assetsDigest, atLeast, generatedProblem, loadCases, pct, selectCases, summarize } from "./lib.ts";
+import { type Metrics, type Row, assetsDigest, atLeast, loadCases, pct, selectCases, summarize } from "./lib.ts";
 
 export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -239,8 +239,6 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     if (c.name === "public") continue;
     if (!existsSync(join(c.folder, "cases.json"))) fail(`the custom corpus is missing (${corpusFolderOf(c.folder) ?? c.folder}/cases.json). A rewrite of the public cases is made with: ./generate-assets --only ${NAME}`);
-    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
-    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
