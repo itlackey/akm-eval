@@ -38,8 +38,8 @@
         ]
       },
       "scorer": {
-        "version": 1,
-        "sha256": "79c9e2ca97d36a35d078df986652766d2b8ec85377ccde56e7e5762be2cc2139",
+        "version": 2,
+        "sha256": "015be4d69fdd4a5f55de3fa3c9a37ffb8c95e56a29d81b42a0946fc9813bf6d5",
         "files": [
           "evals/consolidate/src/cases.ts",
           "evals/nightly/src/items.ts",

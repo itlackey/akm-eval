@@ -18,3 +18,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | consolidate | scorer | 1 | first lock entry | 3e604024d2b9 |
 | 2026-10-12 | nightly | collector | 1 | first lock entry | 38c8623ab257 |
 | 2026-10-12 | nightly | scorer | 1 | first lock entry | 79c9e2ca97d3 |
+| 2026-10-12 | nightly | scorer | 2 | silent items: fix_proposed needs the reflect proposal to be pending, not rejected or reverted (#73). Scores change. | 015be4d69fdd |
