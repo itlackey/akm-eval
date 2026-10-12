@@ -86,7 +86,7 @@ A proposal passes three gates before it is queued, and the eval runs with the fi
 | The quality judge | Refuses an edit whose score is not 4 or more on every criterion. Off in `reflect-only`. | `patches/judge-on.json` turns it on. judge-gate scores the judge on labelled edits. |
 | The retrieval check | After the judge passes an edit, grades the old and the new note on up to five of the queries that retrieved the note, and refuses the edit when the new one grades lower. It runs only when the note has queries in the usage log. | `patches/judge-on.json` with `--retrieval-queries`. Without the flag the notes have no queries, the check has nothing to grade, and the same run is the baseline. |
 
-`metrics.refused` counts the refused edits by what refused them: `filter`, `judge`, `retrieval` or `other`. A refused edit is never correct, so the gates cost `defects` and `controls` whatever they refuse, and the comparison that shows what a gate is worth is the one with it on and off, with `--repeat`, on the same model.
+`metrics.refused` counts the refused edits by what refused them: `filter`, `judge`, `retrieval` or `other`. A refused edit never reaches the note, so it is scored by the note as it ends up: as a note left alone, right for a control and a miss for a defect. A gate that refuses a bad edit of a control saves it, and one that refuses a fix of a defect costs it. The comparison that shows what a gate is worth is the one with it on and off, with `--repeat`, on the same model.
 
 ```
 evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --label judge
@@ -142,7 +142,7 @@ No judge model scores a case. Each check looks at the proposal and the note.
 | `no_invented` | every case | Each number, name with two capitals, path or dotted name in a new value is in the note, and the new values hold none of the case's forbidden terms. |
 | `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical. Leaving it alone passes. |
 
-A case is correct when reflect gave a usable answer and every check that applies passes.
+A case is correct when reflect gave a usable answer and every check that applies passes, on the note as it ends up: a refused edit leaves the note as it was.
 
 ## Read the results
 
@@ -153,7 +153,7 @@ A case is correct when reflect gave a usable answer and every check that applies
 | `proposals` | How many proposals reflect made, and how many of them touched the body. |
 | `classes` | The same per class, with the `outcomes` and the `failed` checks. |
 
-`outcomes` splits each class by what reflect did: `proposal`, `none` (it proposed no change), `refused` (akm's own filter refused the revision because it held placeholder text, talk about the edit itself, or frontmatter copied into the body), `unusable` (the reply was not the JSON akm asked for, even after its repair turn) and `error`. A refused or an unusable answer is never correct: the model failed. A timeout, a provider error or an akm failure is `error` and is left out of the counts. `failed` counts, for each check, the cases that failed it.
+`outcomes` splits each class by what reflect did: `proposal`, `none` (it proposed no change), `refused` (a gate of akm refused the revision: its filter, for placeholder text, talk about the edit itself or frontmatter copied into the body, the quality judge, or the retrieval check), `unusable` (the reply was not the JSON akm asked for, even after its repair turn) and `error`. An unusable answer is never correct: the model failed. A refused edit is scored as the note left alone, so the gate that refused it is what made a control right or a defect missed. A timeout, a provider error or an akm failure is `error` and is left out of the counts. `failed` counts, for each check, the cases that failed it.
 
 `touched_body` should be 0. With akm 0.9.26 the body changes only by the heading akm adds for a missing title, and that is not counted. A count above 0 means akm edited a body, and this guards against that.
 

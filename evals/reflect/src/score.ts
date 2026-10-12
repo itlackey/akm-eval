@@ -345,13 +345,16 @@ export interface Raw {
   timedOut?: boolean;
 }
 
-/** A row for a case. An error has no verdict. A reply akm could not use, or an edit its own filter refused, is never correct. */
+/**
+ * A row for a case. An error has no verdict. A reply akm could not use is never correct. An edit that a gate refused never reaches the note,
+ * which ends as it was, so it is scored as a note left alone: right for a control, a miss for a defect.
+ */
 export function makeRow(c: Case, run: Raw): Row {
   // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
   const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
   if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
   const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
-  const correct = (run.outcome === "proposal" || run.outcome === "none") && Object.values(checks).every(Boolean);
+  const correct = run.outcome !== "unusable" && Object.values(checks).every(Boolean);
   return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };
 }
 

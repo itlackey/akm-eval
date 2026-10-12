@@ -428,9 +428,26 @@ describe("makeRow", () => {
     expect(makeRow(c, { outcome: "refused", seconds: 1 }).proposal).toBeUndefined();
   });
 
-  test("a reply akm could not use, or an edit its own filter refused, is never correct", () => {
+  test("a reply akm could not use is never correct", () => {
     expect(makeRow(c, { outcome: "unusable", reason: "parse_error", seconds: 1 })).toMatchObject({ correct: false, outcome: "unusable" });
-    expect(makeRow(c, { outcome: "refused", reason: "quality_rejected", seconds: 1 })).toMatchObject({ correct: false });
+  });
+
+  test("an edit a gate refused leaves the note as it was, and is scored as a note left alone: right for a control, a miss for a defect (#57)", () => {
+    const refused = { outcome: "refused", reason: "quality_rejected: Reflect proposal refused before the judge: placeholder_added", seconds: 1 } as const;
+    expect(makeRow(c, refused)).toMatchObject({ outcome: "refused", correct: true, changed: [], checks: { body_kept: true, no_extra_change: true, no_invented: true } });
+    const fix = mk("when-to-use-missing", inject("when-to-use-missing", NOTE) as string);
+    expect(makeRow(fix, refused)).toMatchObject({ outcome: "refused", correct: false, checks: { defect_fixed: false } });
+    // the same for each of the gates that refuse
+    for (const reason of ['quality_rejected: Reflect proposal quality gate rejected: score=3.0, reason="adds a claim"', "quality_rejected: Reflect proposal refused: retrieval regression: grade 3.00 -> 2.20 over 5 retrieval queries"]) {
+      expect([makeRow(c, { outcome: "refused", reason, seconds: 1 }).correct, makeRow(fix, { outcome: "refused", reason, seconds: 1 }).correct]).toEqual([true, false]);
+    }
+  });
+
+  test("a control whose bad edit the gate refuses is right with the gate on and wrong with it off (#57)", () => {
+    const bad = NOTE.replace(/^description:.*$/m, "description: Rewrites how signing keys are rotated, with a new claim about AWS.");
+    const off = makeRow(c, { outcome: "proposal", proposal: bad, seconds: 1 }); // the gate is off: the bad edit is proposed and the checks score it
+    const on = makeRow(c, { outcome: "refused", reason: "quality_rejected: Reflect proposal quality gate rejected: score=2.0", seconds: 1 }); // the gate is on: the note stays as it was
+    expect([off.correct, on.correct]).toEqual([false, true]);
   });
 
   test("an error has no verdict and keeps its message", () => {

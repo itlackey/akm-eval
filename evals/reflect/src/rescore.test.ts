@@ -17,6 +17,8 @@ const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").fi
 const CASES: Case[] = jsonl(join(EVAL, "golden", "cases.jsonl"));
 const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(EVAL, "golden", "raw.jsonl"));
 const raw = (id: string, note: string): Raw => (RAW.find((l) => l.case === id && l.note === note) as { raw: Raw }).raw;
+/** The scorer of a run made before a fix: another digest than the one here. */
+const STALE = { version: lockedParts(MEASUREMENT).scorer.version, sha256: "c".repeat(64) };
 const CONFIG = reflectConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 const dirs: string[] = [];
@@ -29,13 +31,13 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** A results folder of `rows` for `cases`, as a run writes it: a summary with its manifest, and the rows. `summary` adds to or replaces what the summary holds. */
-function storedRun(parent: string, name: string, cases: Case[], rows: Record<string, any>[], summary: Record<string, unknown> = {}): string {
+/** A results folder of `rows` for `cases`, as a run writes it: a summary with its manifest, and the rows. `summary` adds to or replaces what the summary holds, and `scorer` is the scorer the manifest says scored it. */
+function storedRun(parent: string, name: string, cases: Case[], rows: Record<string, any>[], summary: Record<string, unknown> = {}, scorer = lockedParts(MEASUREMENT).scorer): string {
   const dir = join(parent, name);
   mkdirSync(dir, { recursive: true });
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts: lockedParts(MEASUREMENT),
+    parts: { ...lockedParts(MEASUREMENT), scorer },
     corpus: String(summary.corpus ?? "public"),
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: "0.9.99-test", bin: "akm" },
@@ -118,5 +120,40 @@ describe("scripts/rescore on a custom corpus", () => {
     const named = (folder: string) => rescoreRun({ ...stored, summary: { ...stored.summary, corpus_folder: folder } }, { root: tree });
     expect(named("somewhere/else").changed).toEqual([]);
     expect(named(join(tree, "somewhere", "else")).changed).toEqual([]);
+  });
+});
+
+/** scripts/rescore on a results folder, run as the command: the folder it writes beside it, read back. */
+function rescoreWithCommand(dir: string) {
+  const p = Bun.spawnSync(["bun", join(REPO, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+  expect(p.stderr.toString()).toBe("");
+  expect(p.exitCode).toBe(0);
+  const out = `${dir}-rescored`;
+  return { rows: jsonl(join(out, "samples.jsonl")), summary: JSON.parse(readFileSync(join(out, "summary.json"), "utf8")), stdout: p.stdout.toString() };
+}
+
+/** The golden run with the rows of `before` (as the scorer wrote them before a fix) in place of the right answers of their cases. */
+const runBefore = (parent: string, before: Record<string, any>[]): string => {
+  const ids = new Set(before.map((r) => r.id));
+  return storedRun(parent, "2026-10-12-before", CASES, [...rightRows().filter((r) => !ids.has(r.id)), ...before], {}, STALE);
+};
+
+describe("a run stored before the fix of #57", () => {
+  // The golden refusal of a control by the quality judge, as the scorer wrote it then: a refused edit was always wrong.
+  const BEFORE = { id: "retrieval-miss-04", class: "retrieval-miss", outcome: "refused", reason: 'quality_rejected: Reflect proposal quality gate rejected: score=2.5, reason="the new when_to_use claims a use the note does not support"', served: "qwen3-27b", seconds: 61.2, correct: false, checks: { body_kept: true, no_extra_change: true, no_invented: true }, changed: [], values: {} };
+
+  test("scores the refused control right when it is scored again, through scripts/rescore, and leaves the folder it read as it was", () => {
+    const dir = runBefore(tmp(), [BEFORE]);
+    const stored = readFileSync(join(dir, "samples.jsonl"), "utf8");
+    expect(MEASUREMENT.summarize(jsonl(join(dir, "samples.jsonl"))).metrics.controls).toEqual({ n: 4, correct: 3, rate: 0.75 }); // the gate cost a control
+    const { rows, summary, stdout } = rescoreWithCommand(dir);
+    expect(rows.find((r) => r.id === "retrieval-miss-04")).toEqual({ ...BEFORE, correct: true });
+    expect(rows.filter((r) => r.correct === false)).toEqual([]);
+    expect(summary.metrics.controls).toEqual({ n: 4, correct: 4, rate: 1 });
+    expect(summary.metrics.refused).toMatchObject({ judge: 1 });
+    expect(stdout).toContain("1 rows differ from the stored ones: retrieval-miss-04");
+    expect(summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+    expect(summary.manifest.rescored_from.scorer).toEqual(STALE);
+    expect(readFileSync(join(dir, "samples.jsonl"), "utf8")).toBe(stored);
   });
 });

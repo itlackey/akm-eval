@@ -140,13 +140,13 @@ describe("runCorpus", () => {
     "knowledge/h": { outcome: "crash" },
   };
 
-  test("scores each outcome, keeps the unusable and the refused as misses, and leaves an error out of the counts", async () => {
+  test("scores each outcome, keeps the unusable as a miss, scores the refused edit of a control by the note it leaves, and leaves an error out of the counts", async () => {
     const { ctx, folders } = setup(cases, plan);
     const summary = await quiet(() => runPublic(ctx, folders));
     expect(summary).toMatchObject({ eval: "reflect", corpus: "public", model: "the-model", akm_version: "0.9.99-test", n_cases: 8, n_run: 8, n_scored: 6, n_errored: 2 });
     expect(summary.metrics.defects).toEqual({ n: 2, correct: 1, rate: 0.5 });
-    expect(summary.metrics.controls).toEqual({ n: 4, correct: 1, rate: 0.25 });
-    expect(summary.metrics.classes["retrieval-miss"]).toMatchObject({ n: 4, correct: 1, outcomes: { none: 1, proposal: 1, refused: 1, unusable: 1, error: 2 }, failed: { no_extra_change: 1 } });
+    expect(summary.metrics.controls).toEqual({ n: 4, correct: 2, rate: 0.5 });
+    expect(summary.metrics.classes["retrieval-miss"]).toMatchObject({ n: 4, correct: 2, outcomes: { none: 1, proposal: 1, refused: 1, unusable: 1, error: 2 }, failed: { no_extra_change: 1 } });
     expect(summary.metrics.classes["when-to-use-missing"]).toMatchObject({ n: 2, correct: 1, outcomes: { proposal: 1, none: 1 }, failed: { defect_fixed: 1 } });
     expect(summary.metrics.proposals).toEqual({ n: 2, touched_body: 0 });
     expect(summary.served).toEqual({ "served-model": 5, "other-name": 1 }); // an error, whether akm crashed or the provider failed, answered nothing
@@ -162,7 +162,7 @@ describe("runCorpus", () => {
       ["fix-none", "none", false],
       ["keep-ok", "none", true],
       ["keep-churn", "proposal", false],
-      ["refused", "refused", false],
+      ["refused", "refused", true],
       ["unusable", "unusable", false],
       ["provider", "error", null],
       ["crash", "error", null],
