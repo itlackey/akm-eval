@@ -14,7 +14,7 @@ import { AKM_OPTIONS, SEMANTIC_MODEL, akmBuild, akmUsage, useAkm } from "../../.
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { type ResolvedCorpus, CORPUS_OPTIONS, corpusRecord, resolveCorpora } from "../../../lib/corpus.ts";
 import { type CachedIndex } from "../../../lib/akm/index-cache.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, type RunManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
@@ -109,7 +109,7 @@ interface Summary {
   query_seconds: number;
   /** The mean time of one search, in seconds, with `workers` calls in flight. */
   call_seconds: Lines<number>;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -208,7 +208,6 @@ export function failureOf(summaries: Pick<Summary, "status" | "errored" | "timeo
  * The semantic index is the one of lib/akm's index cache, which keeps it from run to run: `cache` says where, and which akm, for tests.
  */
 export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: string; limit?: number }, folders: Folders): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const { skills, queries } = corpus;
   const resolved = resolvedOf(corpus);
   const library = sha256Json(akm.skillFiles(skills)); // what every query is asked of
@@ -233,7 +232,6 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
   const seed = corpus.corpus === "private" ? String(SEED) : null;
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: resolved.name,
     // every query is asked of the same library: a skill that changed, or another akm layout of it, is another input for all of them
     cases: caseDigests(MEASUREMENT, queries, () => library),

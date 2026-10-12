@@ -6,7 +6,7 @@ import { commandLine } from "../../../lib/akm/akm.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointId, endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
 import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
@@ -359,14 +359,14 @@ describe("the manifest of a run", () => {
   const stored = (summary: { results_dir: string }) => JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
   const samples = (summary: { results_dir: string }) => readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every case it selected", async () => {
     const { ctx, folders } = setup(cases, plan);
     const summary = await quiet(() => runPublic(ctx, folders));
     const { manifest } = stored(summary);
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored(summary)).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "reflect", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "reflect", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(cases.map((c) => c.id));
@@ -441,19 +441,6 @@ describe("the manifest of a run", () => {
     expect(manifestProblems(manifest)).toEqual([]);
     expect(manifest.completion).toEqual({ selected: many.map((c) => c.id), scored: [], errored: many.slice(0, 5).map((c) => c.id) });
   });
-
-  test("a run stops before it collects anything when MEASUREMENT.lock has no entry for the eval", async () => {
-    const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
-    const lock = join(import.meta.dir, "..", "..", "..", "MEASUREMENT.lock");
-    const before = readFileSync(lock, "utf8");
-    try {
-      writeFileSync(lock, JSON.stringify({ ...JSON.parse(before), evals: {} }));
-      await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("has no entry for reflect");
-    } finally {
-      writeFileSync(lock, before);
-    }
-    expect(calls()).toEqual([]);
-  });
 });
 
 describe("run --corpus custom", () => {
@@ -468,7 +455,6 @@ describe("run --corpus custom", () => {
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "reflect", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
-    cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     mkdirSync(join(tree, "evals", "retrieval", "assets"), { recursive: true }); // the labelled queries that --retrieval-queries reads
     for (const file of ["queries.jsonl", "qrels.jsonl"]) cpSync(join(REPO, "evals", "retrieval", "assets", file), join(tree, "evals", "retrieval", "assets", file));
     return tree;

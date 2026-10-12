@@ -1,7 +1,7 @@
 // What the evals that run an agent in Harbor share: the versions a run is made of, the model, the two arms and
 // Harbor itself. evals/agent-ab and benchmarks/terminal-bench both run opencode alone and with the akm plugin on the
 // same tasks, and both import this. The akm arm is akm_opencode.py beside it, trials.ts reads what the run leaves, and report.ts and
-// score.ts score it. This file and trials.ts are the collector of both evals (see measured.ts); report.ts and score.ts are their scorer.
+// score.ts score it.
 
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";

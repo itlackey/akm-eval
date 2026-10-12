@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
@@ -89,7 +89,7 @@ interface Summary {
   /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -145,7 +145,6 @@ export async function runCorpus(
   ctx: Ctx,
   results = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const rubric = rubricVersion(join(EVAL_DIR, "assets")); // the private cases are a rewrite of the public ones, so their labels are the public rubric's
   const all = parseCases(readFileSync(join(assets, CASES), "utf8"), join(assets, CASES));
@@ -184,7 +183,6 @@ export async function runCorpus(
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -237,7 +235,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

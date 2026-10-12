@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { FAKE_AKM } from "./fakes.ts";
 import { type Case, assetsSha256, loadCases, selectCases } from "./lib.ts";
@@ -151,10 +151,10 @@ describe("runCorpus", () => {
   test("writes a manifest that names the collector and the scorer of the lock, the digest of each case and which cases were scored", async () => {
     const { corpus, ctx, results } = setup(SPECS, { ...PLAN, session: { s1: { none: true } } });
     const summary = await quiet(() => runCorpus(corpus, ctx, results));
-    const parts = lockedParts(MEASUREMENT);
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(manifestProblems(summary.manifest)).toEqual([]);
     expect(readManifest(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).kind).toBe("manifest");
-    expect(summary.manifest).toMatchObject({ eval: "bakeoff", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, settings: { strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null } });
+    expect(summary.manifest).toMatchObject({ eval: "bakeoff", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, settings: { strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null } });
     expect(Object.keys(summary.manifest.cases)).toEqual(SPECS.map((s) => s.id));
     expect(summary.manifest.completion).toEqual({ selected: SPECS.map((s) => s.id), scored: SPECS.map((s) => s.id), errored: [] });
     expect(summary.manifest.akm).toMatchObject({ version: "0.9.99-test" });

@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
@@ -106,7 +106,7 @@ interface Summary extends RunInputs, CorpusFields {
   /** The improve run's model calls by process and the model name the endpoint reported. A gateway may serve one name from several providers. */
   calls_by: CallRow[];
   metrics: Metrics;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -165,7 +165,6 @@ function printSideBySide(a: Summary, b: Summary): void {
 type RunContext = CollectContext & { version: string; label: string; limit?: number };
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, resultsParent = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results")): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const night = loadNight(corpus.folder);
   const items = selectItems(night.items, ctx.limit);
   console.log(`${NAME} (${corpus.name}): ${items.length} of ${night.items.length} items, one night, one model call at a time`);
@@ -217,7 +216,6 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     metrics: counts.metrics,
     manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       cases: caseDigests(MEASUREMENT, planted(items, night.files)),
       akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },

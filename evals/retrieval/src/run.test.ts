@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { commandLine, createSandbox, parseCommand, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { endpointId, harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
-import { corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { corpusFolderOf, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
@@ -834,10 +834,10 @@ describe("runCollection", () => {
 describe("the manifest", () => {
   const stored = (dir: string) => JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
 
-  test("is in summary.json with the versions MEASUREMENT.lock has, the settings of the run and what was scored", async () => {
+  test("is in summary.json with the eval's version, the settings of the run and what was scored", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
-    const parts = lockedParts(MEASUREMENT);
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(readManifest(stored(s.results_dir)).kind).toBe("manifest");
     expect(s.manifest).toMatchObject({
       manifest_version: 1,
@@ -847,7 +847,6 @@ describe("the manifest", () => {
       mode: null,
       harness_version: parts.harness_version,
       collector: parts.collector,
-      scorer: parts.scorer,
       akm: { version: "0.9.99-test", build: null, build_fingerprint: null },
       settings: { strategy: null, config_patch_sha256: null, timeout_ms: akm.CALL_TIMEOUT_MS, seed: null },
       engines: {},

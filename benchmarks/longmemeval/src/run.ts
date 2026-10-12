@@ -12,7 +12,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
@@ -121,7 +121,7 @@ interface Summary extends ReturnType<typeof summarize> {
   /** The seed of the draw of the questions (--sample-seed), a different thing from `seed`. Null when no draw was made because every question was asked. The same number is in sample.seed. */
   sample_seed: number | null;
   sample: Omit<Sample, "items">;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -187,15 +187,13 @@ const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, ...endpointR
 export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
   const out: string[] = [];
   const show = (x: unknown) => (x === null || x === undefined ? "none" : String(x));
-  const part = (p: { version: string; sha256: string }) => `version ${p.version}, ${p.sha256.slice(0, 12)}`;
   const note = (what: string, was: unknown, is: unknown) => {
     if (was !== is) out.push(`a different ${what} (${show(was)}, now ${show(is)})`);
   };
   note("eval", prior.eval, now.eval);
   note("corpus", prior.corpus, now.corpus);
   note("mode", prior.mode, now.mode);
-  note("collector", part(prior.collector), part(now.collector));
-  note("scorer", part(prior.scorer), part(now.scorer));
+  note("version", prior.collector.version, now.collector.version);
   note("harness version", prior.harness_version, now.harness_version);
   note("akm version", prior.akm.version, now.akm.version);
   note("akm command", prior.akm.bin, now.akm.bin);
@@ -263,7 +261,6 @@ export async function runCorpus(
   ctx: Context & { version: string; build?: Build },
   folders: { results?: string; publicAssets?: string } = {},
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const isPublic = corpus.name === "public";
   const parent = folders.results ?? (isPublic ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
@@ -302,7 +299,6 @@ export async function runCorpus(
   const manifestOf = (completion: { selected: string[]; scored: string[]; errored: string[] }): RunManifest =>
     buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       mode: retrievalOnly ? "retrieval-only" : null,
       cases: digests,
@@ -441,7 +437,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

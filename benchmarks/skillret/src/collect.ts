@@ -4,9 +4,8 @@
 // (see measurement.ts and lib/manifest.ts): the sandboxes and the configs akm runs with, the layout of the bundle, the commands and what is
 // recorded of the answers. The scoring is score.ts.
 //
-// A change to this file, to akm.ts or sample.ts, or to the lib/ files they import, changes what akm is asked or what is recorded of its answer.
-// Raw outputs from before the change are no longer comparable with raw outputs after it. It is a measurement change: bump the collector in
-// MEASUREMENT.lock (scripts/measurement/run bump skillret collector --reason "...") in the same change.
+// A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
+// measurement.ts by hand.
 
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";

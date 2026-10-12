@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { checkMembers, identityOf } from "../../../scripts/compare/src/policy.ts";
 import { endpointRecord, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
@@ -403,14 +403,14 @@ describe("the manifest of a run", () => {
   const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
   const samples = (s: { results_dir: string }) => samplesIn(s.results_dir);
 
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every case it selected", async () => {
     const folders = assetsFor(scenarios);
     const summary = await quiet(() => runFolders(ctx, folders));
     const { manifest } = stored(summary);
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored(summary)).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "distill", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "distill", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "distill-only", config_patch_sha256: null, timeout_ms: 900_000, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(scenarios.map((s) => s.id));
@@ -421,7 +421,6 @@ describe("the manifest of a run", () => {
       label_sha256: sha256Json({ class: "lesson-worthy", expect: "lesson", required: LESSON.required, forbidden: LESSON.forbidden, contradicts: [], existing: null, existing_body: null, memory: first.memory }),
     });
     expect(manifest.completion).toEqual({ selected: scenarios.map((s) => s.id), scored: ["a-good", "b-rejected", "c-skip", "d-update"], errored: ["e-error"] });
-    expect(manifest.collector.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   test("the input of a case is its bundle and its feedback, and its labels are what the scorer reads: a changed memory changes both, a changed phrase only the labels", async () => {
@@ -498,19 +497,6 @@ describe("the manifest of a run", () => {
     expect(manifestProblems(manifest)).toEqual([]);
     expect(manifest.completion).toEqual({ selected: many.map((s) => s.id), scored: [], errored: many.slice(0, 5).map((s) => s.id) });
   });
-
-  test("a run stops before it collects anything when MEASUREMENT.lock has no entry for the eval", async () => {
-    const before = calls().length;
-    const lock = join(import.meta.dir, "..", "..", "..", "MEASUREMENT.lock");
-    const text = readFileSync(lock, "utf8");
-    try {
-      writeFileSync(lock, JSON.stringify({ ...JSON.parse(text), evals: {} }));
-      await expect(quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))))).rejects.toThrow("has no entry for distill");
-    } finally {
-      writeFileSync(lock, text);
-    }
-    expect(calls().length).toBe(before);
-  });
 });
 
 describe("run --corpus custom", () => {
@@ -525,7 +511,6 @@ describe("run --corpus custom", () => {
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "distill", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "distill", "assets"), { recursive: true });
-    cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     return tree;
   }
   const bun = (tree: string, script: string, args: string[]) => {

@@ -3,8 +3,7 @@
 // collector (collect.ts) builds each row by calling `makeRow` with the verdict it got, and scripts/rescore calls the same function with the
 // verdict it reads back from a stored row, so a fix to the rule, or a relabelled case, scores every stored run again.
 //
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump judge-gate scorer --reason "...") and update the golden files (golden/) in the same change.
+// A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 /**
  * What a bad revision does to the asset. `churn`: every fact of the source survives and only the form changed (an intro, headings, a

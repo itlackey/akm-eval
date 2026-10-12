@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, currentDigests, lockedParts, nextVersion } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests } from "../../../lib/manifest.ts";
 import { loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { actual, judgedLessons, namesReusable, readScores, report, route } from "./pass-bar.ts";
@@ -133,7 +133,7 @@ describe("judgedLessons", () => {
   function manifestOf(assets: string, version: string | null = "0.9.27-alpha.2"): RunManifest {
     const cases = loadCases(assets);
     const ids = cases.map((c) => c.id);
-    return buildManifest({ measurement: MEASUREMENT, parts: lockedParts(MEASUREMENT), corpus: "public", cases: caseDigests(MEASUREMENT, cases), akm: { version }, completion: { selected: ids, scored: ids, errored: [] } });
+    return buildManifest({ measurement: MEASUREMENT, corpus: "public", cases: caseDigests(MEASUREMENT, cases), akm: { version }, completion: { selected: ids, scored: ids, errored: [] } });
   }
   /** The distill run of those cases: a summary.json, with `over` laid on it, and samples.jsonl. A manifest of null is a run from before the manifest. */
   function runOf(root: string, assets: string, over: Record<string, unknown> = {}, rows: object[] = rowsOf(realCases()), manifest: RunManifest | null = manifestOf(assets)): string {
@@ -144,7 +144,6 @@ describe("judgedLessons", () => {
     return run;
   }
   const goodness = (r: { judged: { id: string; good: boolean }[] }) => r.judged.map((j) => [j.id, j.good]);
-  const scorer = currentDigests(MEASUREMENT).scorer;
 
   test("judges the lessons of a run that was scored by this scorer against these cases, and reports the inputs", () => {
     const { root, assets } = repo();
@@ -153,7 +152,7 @@ describe("judgedLessons", () => {
     expect(goodness(r)).toEqual([["lesson-01", true], ["lesson-02", false], ["status-01", false]]);
     expect(r.skipped).toBe(1); // the update, which is not judged
     expect(r.noScores).toBe(1); // the row with no scores
-    expect(r.inputs).toEqual({ mode: "stored", corpus: "public", assets: PUBLIC, manifest: "manifest", akm_version: "0.9.27-alpha.2", judge_first_criterion: "reusable", scorer_sha256: { stored: scorer, current: scorer }, differences: [], changed_cases: [], missing_cases: [] });
+    expect(r.inputs).toEqual({ mode: "stored", corpus: "public", assets: PUBLIC, manifest: "manifest", akm_version: "0.9.27-alpha.2", judge_first_criterion: "reusable", differences: [], changed_cases: [], missing_cases: [] });
   });
 
   test("a run of akm 0.9.26, whose judge names the first criterion novelty, is judged with novelty as reusable, and says so (#61)", () => {
@@ -193,11 +192,9 @@ describe("judgedLessons", () => {
     expect(() => judgedLessons(runOf(root, assets, {}, rowsOf(cases, { novelty: 5 }), manifestOf(assets, "0.9.26")), { root })).toThrow("reads reusable, nonRedundancy and grounding");
   });
 
-  test("the digests are the ones the run records: the scorer of the eval, and the input and the labels of each case, from lib/manifest.ts", () => {
+  test("the digests are the ones the run records: the input and the labels of each case, from lib/manifest.ts", () => {
     const { root, assets } = repo();
     const m = manifestOf(assets);
-    expect(m.scorer.sha256).toBe(scorer);
-    expect(m.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(Object.keys(m.cases)).toEqual(IDS);
     expect(judgedLessons(runOf(root, assets), { root }).inputs.differences).toEqual([]);
   });
@@ -241,26 +238,14 @@ describe("judgedLessons", () => {
     expect(judgedLessons(run, { root, rescore: true }).inputs.changed_cases).toEqual(["lesson-01"]);
   });
 
-  test("a run scored by another scorer stops the read with both digests, and is judged with --rescore", () => {
-    const { root, assets } = repo();
-    const OTHER = "9".repeat(64);
-    const m = manifestOf(assets);
-    const run = runOf(root, assets, {}, rowsOf(realCases()), { ...m, scorer: { version: nextVersion(m.scorer.version), sha256: OTHER } });
-    const said = `scorer.sha256 differs: the run was scored by scorer ${nextVersion(m.scorer.version)}, ${OTHER}, and the checks here give ${scorer}`;
-    expect(() => judgedLessons(run, { root })).toThrow(said);
-    const rescored = judgedLessons(run, { root, rescore: true });
-    expect(rescored.judged).toHaveLength(3);
-    expect(rescored.inputs).toMatchObject({ mode: "rescore", scorer_sha256: { stored: OTHER, current: scorer }, differences: [said] });
-  });
-
   test("a run with no manifest has nothing to compare, and needs --rescore, which says so", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, {}, rowsOf(realCases(), OLD), null);
-    expect(() => judgedLessons(run, { root })).toThrow("the run has no manifest (it was made before harness-v3), so nothing says which scorer and which cases scored it");
+    expect(() => judgedLessons(run, { root })).toThrow("the run has no manifest (it was made before harness-v3), so nothing says which cases it was scored against");
     expect(() => judgedLessons(run, { root })).toThrow("add --rescore");
     const rescored = judgedLessons(run, { root, rescore: true });
     expect(rescored.judged).toHaveLength(3);
-    expect(rescored.inputs).toMatchObject({ mode: "rescore", manifest: "legacy", scorer_sha256: { stored: null, current: scorer }, akm_version: "0.9.26", judge_first_criterion: "novelty" });
+    expect(rescored.inputs).toMatchObject({ mode: "rescore", manifest: "legacy", akm_version: "0.9.26", judge_first_criterion: "novelty" });
   });
 
   test("a manifest that is not sound, a manifest without the case, and a run of another eval are refused", () => {
@@ -332,7 +317,7 @@ describe("the command line", () => {
     dirs.push(results);
     const cases = loadCases(REAL);
     const [one, two] = cases.filter((c) => c.expect === "lesson");
-    const manifest = buildManifest({ measurement: MEASUREMENT, parts: lockedParts(MEASUREMENT), corpus: "public", cases: caseDigests(MEASUREMENT, cases), akm: { version }, completion: { selected: cases.map((c) => c.id), scored: [], errored: [] } });
+    const manifest = buildManifest({ measurement: MEASUREMENT, corpus: "public", cases: caseDigests(MEASUREMENT, cases), akm: { version }, completion: { selected: cases.map((c) => c.id), scored: [], errored: [] } });
     const summary = { eval: "distill", corpus: "public", akm_version: version, manifest };
     writeFileSync(join(results, "summary.json"), JSON.stringify(summary));
     const scores = { [first]: 5, nonRedundancy: 5, grounding: 5 };
@@ -353,7 +338,7 @@ describe("the command line", () => {
     expect(out.mismatch).toBe(0);
     expect(out.bars.shipped.pass).toEqual({ good: 1, bad: 1 });
     expect(out.inputs).toHaveLength(1);
-    expect(out.inputs[0]).toMatchObject({ results, mode: "stored", corpus: "public", assets: join("evals", "distill", "assets"), manifest: "manifest", akm_version: "0.9.26", judge_first_criterion: "novelty", scorer_sha256: { stored: summary.manifest.scorer.sha256, current: summary.manifest.scorer.sha256 }, differences: [], changed_cases: [], missing_cases: [] });
+    expect(out.inputs[0]).toMatchObject({ results, mode: "stored", corpus: "public", assets: join("evals", "distill", "assets"), manifest: "manifest", akm_version: "0.9.26", judge_first_criterion: "novelty", differences: [], changed_cases: [], missing_cases: [] });
   });
 
   test("a run of a later akm with reusable scores is routed the same way", () => {
@@ -382,23 +367,14 @@ describe("the command line", () => {
     expect(done.err).toContain("2 have no judge scores");
   });
 
-  test("stops with exit 2 on a scorer that differs or a run with no manifest, naming it, and runs with --rescore, which the report says", () => {
-    const { results, summary, tamper } = setup();
-    const was = "9".repeat(64);
-    tamper({ manifest: { ...summary.manifest, scorer: { version: nextVersion(summary.manifest.scorer.version), sha256: was } } });
+  test("stops with exit 2 on a run with no manifest, naming it, and runs with --rescore, which the report says", () => {
+    const { results, tamper } = setup();
+    tamper({ manifest: undefined });
     const refused = run([results]);
     expect(refused.code).toBe(2);
-    expect(refused.out).toBe("");
-    expect(refused.err).toContain(`scorer.sha256 differs: the run was scored by scorer ${nextVersion(summary.manifest.scorer.version)}, ${was}, and the checks here give ${summary.manifest.scorer.sha256}`);
+    expect(refused.err).toContain("the run has no manifest");
     expect(refused.err).toContain("add --rescore");
-    const rescored = run(["--rescore", results]);
-    expect(rescored.code).toBe(0);
-    const [inputs] = JSON.parse(rescored.out).inputs;
-    expect(inputs).toMatchObject({ mode: "rescore", scorer_sha256: { stored: was, current: summary.manifest.scorer.sha256 } });
-    expect(inputs.differences).toHaveLength(1);
-    tamper({ manifest: undefined });
-    expect(run([results]).err).toContain("the run has no manifest");
-    expect(JSON.parse(run(["--rescore", results]).out).inputs[0]).toMatchObject({ manifest: "legacy", scorer_sha256: { stored: null } });
+    expect(JSON.parse(run(["--rescore", results]).out).inputs[0]).toMatchObject({ mode: "rescore", manifest: "legacy" });
   });
 
   test("asks for a folder, and says what it takes with --help", () => {

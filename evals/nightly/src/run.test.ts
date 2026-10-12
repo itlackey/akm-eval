@@ -7,7 +7,7 @@ import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts
 import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { assetsDigest } from "../../consolidate/src/inputs.ts";
@@ -468,9 +468,9 @@ describe("runCorpus", () => {
     const stored = resultsOf(folders).summary;
     expect(manifestProblems(stored.manifest)).toEqual([]);
     expect(readManifest(stored).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
-    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: { embedder: "deterministic" } });
+    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
     expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(Object.keys(m.cases)).toEqual(IDS);
     expect(m.completion.selected).toEqual(IDS);

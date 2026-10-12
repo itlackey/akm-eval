@@ -3,8 +3,7 @@
 // query's row by calling `makeRow` with the results akm returned, and scripts/rescore calls the same function with the results it reads
 // back from a stored row, so a fix to a metric, or a change to the qrels, scores every stored run again.
 //
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump retrieval scorer --reason "...") and update the golden files (golden/) in the same change.
+// A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { type Retrieval, mean, retrievalMetrics } from "../../../lib/ir.ts";
 

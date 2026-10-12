@@ -33,11 +33,8 @@ export function casesFolder(root: string, summary: Record<string, any>): string 
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandbox and the akm config this eval builds, the commands it runs,
-  // and the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/reflect/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns the raw output of a case into a row and the rows into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
-  scorer: ["evals/reflect/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const file = join(casesFolder(root, summary), "cases.jsonl");
     return parseCases(readFileSync(file, "utf8"), file);

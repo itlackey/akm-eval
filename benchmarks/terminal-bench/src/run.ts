@@ -35,7 +35,7 @@ import {
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
-import { type Parts, type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
 import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -126,7 +126,7 @@ interface Summary {
   /** The Harbor job that ran: attempts, concurrency, setup time, the agents with their options and the datasets. */
   job: Record<string, unknown>;
   report: Report;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -165,8 +165,7 @@ export const sideBySide = (a: Pick<Summary, "corpus" | "report">, b: Pick<Summar
 
 /**
  * What a run says about itself, from the trials Harbor left in `dir`. Writes summary.json and samples.jsonl there. `arm`, `akmEnv`,
- * `packages`, `library` and `job` are what the run was made of, which the caller knows and the trials do not. `parts` are the versions
- * and digests of the collector and the scorer as they were when the run started (lockedParts), else as they are now.
+ * `packages`, `library` and `job` are what the run was made of, which the caller knows and the trials do not.
  */
 export function summarize(o: {
   corpus: ResolvedCorpus;
@@ -185,7 +184,6 @@ export function summarize(o: {
   /** The endpoint the model was sent to, as endpointOf records it: its host and the digest of its identity. Both null for the provider's own. */
   endpoint?: ReturnType<typeof endpointOf>;
   job?: Record<string, unknown>;
-  parts?: Parts;
 }): Summary {
   const jobDir = join(o.dir, "jobs", jobName(o.corpus.name));
   const { trials, observed } = loadRunTrials(jobDir); // none when Harbor made no job: every cell is then missing, and the run is aborted
@@ -207,7 +205,6 @@ export function summarize(o: {
   const { datasets: _datasets, n_attempts: _attempts, ...jobSettings } = o.job ?? {}; // the tasks and the attempts are the cases and the hint below
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts: o.parts ?? lockedParts(MEASUREMENT),
     corpus: o.corpus.name,
     // what each task presented to the agent: the task as the pinned dataset has it, and the library the akm arm seeded
     cases: caseDigests(MEASUREMENT, o.tasks.map((id) => caseOf(id, o.lock.tasks[id], o.library?.sha256))),
@@ -265,7 +262,6 @@ export async function runCorpus(
   ctx: { model: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the benchmark
   const lock = readLock();
   const tasks = selectTasks(lock, ctx.limit);
   const attempts = ctx.attempts ?? DEFAULT_ATTEMPTS;
@@ -273,7 +269,7 @@ export async function runCorpus(
   const akmEnv = ctx.akmEnv ?? {};
   const dir = makeResultsDir(results, ctx.label);
   const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, env: ctx.env, arm, akmEnv });
-  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointOf(ctx.env), job: jobRecord(got.cfg, dir, ROOT), parts });
+  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointOf(ctx.env), job: jobRecord(got.cfg, dir, ROOT) });
   printSummary(summary);
   if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;
@@ -304,7 +300,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this benchmark: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

@@ -1,11 +1,11 @@
-// scripts/rescore on reflect, the first eval on the manifest: the runs are built from the golden raw outputs of evals/reflect/golden, scored with the
+// scripts/rescore on reflect, the first eval on the manifest: the runs are built from the raw outputs in fixtures/ of evals/reflect/golden, scored with the
 // eval's own scorer, and written as results folders. A stale run is the same run with rows another scorer gave and the manifest of that scorer.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FIRST_VERSION, type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, nextVersion, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { endpointId, engineSettings } from "../../../lib/provenance.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
@@ -13,14 +13,14 @@ import { RescoreError, readStored, rescoreFolder, rescoreRun, rescoredName } fro
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const GOLDEN = join(ROOT, "evals", "reflect", "golden");
-const CASES: Case[] = jsonl(join(GOLDEN, "cases.jsonl"));
-const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(GOLDEN, "raw.jsonl"));
+const FIXTURES = join(ROOT, "evals", "reflect", "fixtures");
+const CASES: Case[] = jsonl(join(FIXTURES, "cases.jsonl"));
+const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(FIXTURES, "raw.jsonl"));
 const raw = (id: string, note: string): Raw => (RAW.find((l) => l.case === id && l.note === note) as { raw: Raw }).raw;
 const GOOD = (c: Case): Raw => raw(c.id, isDefect(c.class) ? "the model restores what the injection took away" : "the model leaves the note alone");
 const BAD = (c: Case): Raw => raw(c.id, isDefect(c.class) ? "the model proposes no change" : "the model rewrites the description and the when_to_use");
-const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) }; // a scorer other than the live one
-const OTHER_COLLECTOR = { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) };
+const STALE = { version: "9.9", sha256: "c".repeat(64) }; // a scorer other than the live one
+const OTHER_COLLECTOR = { version: "9.9", sha256: "d".repeat(64) };
 const CONFIG = reflectConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 const dirs: string[] = [];
@@ -46,7 +46,6 @@ function run(spec: Spec = {}): string {
   const scored = CASES.map((c) => MEASUREMENT.score(c, (spec.raw ?? GOOD)(c)));
   const base = buildManifest({
     measurement: MEASUREMENT,
-    parts: lockedParts(MEASUREMENT),
     corpus: "public",
     cases: caseDigests(MEASUREMENT, CASES),
     akm: { version: "0.9.99-test", bin: "akm" },
@@ -104,7 +103,7 @@ describe("rescoreFolder", () => {
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_run: 10, metrics: o.metrics, served: o.served, n_errored: o.n_errored });
     expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: o.manifest.scorer, dropped: [] });
+    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
     expect(s.manifest.rescored_from.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(readManifest(s).kind).toBe("manifest");
   });
@@ -114,7 +113,6 @@ describe("rescoreFolder", () => {
     const { out } = rescoreFolder(dir);
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
-    expect(now.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(now.collector).toEqual(OTHER_COLLECTOR);
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
@@ -141,7 +139,7 @@ describe("rescoreFolder", () => {
     expect(rowsOf(out)).toEqual(rowsOf(legacy));
     const m = summaryOf(out).manifest as RunManifest;
     expect(manifestProblems(m)).toEqual([]);
-    expect(m).toMatchObject({ eval: "reflect", corpus: "public", harness_version: 0, collector: { version: UNVERSIONED, sha256: "b".repeat(64) }, scorer: lockedParts(MEASUREMENT).scorer, akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null } });
+    expect(m).toMatchObject({ eval: "reflect", corpus: "public", harness_version: 0, collector: { version: UNVERSIONED }, akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null } });
     expect(m.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: null, dropped: [] });
     expect(Object.keys(m.cases)).toEqual(CASES.map((c) => c.id));
     expect(m.completion.selected).toEqual(CASES.map((c) => c.id));
@@ -270,8 +268,7 @@ describe("the command", () => {
  */
 const TINY = `export const MEASUREMENT = {
   eval: "tiny",
-  collector: ["evals/tiny/src/collect.ts"],
-  scorer: ["evals/tiny/src/score.ts"],
+  version: "0.1",
   loadCases: (root, summary) => {
     const fs = require("node:fs");
     const path = require("node:path");
@@ -299,8 +296,6 @@ describe("the cases of a run on a custom corpus", () => {
     write(join(root, "evals", "tiny", "src", "collect.ts"), "export const collect = 1;\n");
     write(join(root, "evals", "tiny", "src", "score.ts"), "export const score = 1;\n");
     write(join(root, "evals", "tiny", "src", "measurement.ts"), TINY);
-    const part = { version: FIRST_VERSION, sha256: "a".repeat(64), files: [] };
-    write(join(root, "MEASUREMENT.lock"), JSON.stringify({ lock_version: 1, harness_version: 3, evals: { tiny: { collector: part, scorer: part } } }));
     const cases = (want: string) => ["a", "b"].map((id) => JSON.stringify({ id, q: `q${id}`, want })).join("\n") + "\n";
     write(join(root, "evals", "tiny", "assets", "cases.jsonl"), cases("public"));
     write(join(root, "notes", "cases.jsonl"), cases("mine"));
@@ -386,7 +381,6 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
     mkdirSync(join(root, "benchmarks", "skillret", "assets"), { recursive: true });
     symlinkSync(join(ROOT, "lib"), join(root, "lib"));
     symlinkSync(join(ROOT, "benchmarks", "skillret", "src"), join(root, "benchmarks", "skillret", "src"));
-    copyFileSync(join(ROOT, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
     const assets = join(root, "benchmarks", "skillret", "assets");
     const lines = (rows: object[]) => rows.map((r) => `${JSON.stringify(r)}\n`).join("");
     const skills = (prefix: string) => ["1", "2", "3"].map((n) => ({ id: `${prefix}${n}`, skill_md: `---\nname: ${prefix}${n}\n---\nA skill.` }));
@@ -411,8 +405,8 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
     const raws = cases.map((q: any) => ({ search: { ranked: [...q.relevant, "x"], seconds: 1 }, semantic_search: { ranked: [...q.relevant, "x"], seconds: 2 } }));
     const rows = cases.map((q: any, i: number) => M.score(q, raws[i]));
     const written = wrongScores ? rows.map((r: any) => ({ ...r, search: { ...r.search, scores: { ...r.search.scores, "NDCG@10": 0.123 } } })) : rows;
-    const parts = lockedParts(M);
-    const manifest = buildManifest({ measurement: M, parts: { ...parts, ...(scorer ? { scorer } : {}) }, corpus: "custom", cases: caseDigests(M, cases), akm: { version: "0.9.99-test", bin: "akm" }, settings: { seed: "42" }, completion: completionOf(M, cases.map((q: any) => q.id), rows) });
+    const manifest = buildManifest({ measurement: M, corpus: "custom", cases: caseDigests(M, cases), akm: { version: "0.9.99-test", bin: "akm" }, settings: { seed: "42" }, completion: completionOf(M, cases.map((q: any) => q.id), rows) });
+    if (scorer) manifest.scorer = scorer; // a run from before the version was set by hand
     const dir = join(tmp(), "2026-10-12-split");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "skillret", ...summary0, label: "split", seed: "42", status: "complete", ...M.summarize(written), manifest }));
@@ -438,13 +432,12 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
 
   test("a run scored by an older scorer is scored again with the current one, from the ranked results", async () => {
     const { root, MEASUREMENT: M } = await checkout();
-    const older = { version: nextVersion(lockedParts(M).scorer.version), sha256: "c".repeat(64) };
+    const older = { version: "9.9", sha256: "c".repeat(64) };
     const { dir, rows } = stored(M, root, older, true);
     expect(rowsOf(dir).every((r) => r.search.scores["NDCG@10"] === 0.123)).toBe(true);
     const result = rescoreRun(readStored(dir), { root });
     expect(result.changed).toEqual(["a1", "a2", "a3"]);
     expect(result.rows).toEqual(rows);
-    expect(result.summary.manifest.scorer).toEqual(lockedParts(M).scorer);
     expect(result.summary.manifest.rescored_from.scorer).toEqual(older);
   });
 

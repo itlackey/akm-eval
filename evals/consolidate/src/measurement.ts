@@ -37,11 +37,8 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<AnyCase, Raw | PoolRaw, AnyRow> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer, in both modes: the sandbox and the akm config this eval builds, the
-  // commands it runs, the notes it plants, and the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/consolidate/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns the raw output of a case into a row and the rows into metrics: the pair pass, and the pool.
-  scorer: ["evals/consolidate/src/score.ts", "evals/consolidate/src/pool-score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     if (summary.mode === "pool") return poolCases(loadPool(join(root, "evals", NAME, "assets", "pool")));
     const file = join(assetsOf(root, summary), "cases.jsonl");

@@ -3,8 +3,7 @@
 // collector (collect.ts) builds each row by calling `makeRow` with the outcome the drain gave, and scripts/rescore calls the same function with
 // the outcome it reads back from a stored row, so a fix here scores every stored run again.
 //
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump promotion scorer --reason "...") and update the golden files (golden/) in the same change.
+// A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 export const BAD = ["duplicate", "stale", "ephemeral"] as const;
 export type Bad = (typeof BAD)[number];

@@ -13,7 +13,7 @@ import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersi
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, resolveCorpora } from "../../../lib/corpus.ts";
 import { type BuiltBy, type CachedIndex } from "../../../lib/akm/index-cache.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "../../../lib/manifest.ts";
 import { type EngineSettings, engineSettings, harnessSha256, sha256Text } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -124,7 +124,7 @@ interface Summary {
   metrics: Columns<SystemMetrics>;
   /** The share of inputs where akm returned nothing: for non-task inputs, and for task queries with no relevant asset. */
   abstention: { non_task: Columns<Abstention>; no_answer: Columns<Abstention> };
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -244,7 +244,6 @@ export async function runCollection(
   folders: Folders,
 ): Promise<Summary> {
   const kind = corpus.config.kind;
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   let all: Query[];
   let qrels: Qrel[];
   const queriesFile = join(folders.assets, "queries.jsonl");
@@ -293,7 +292,6 @@ export async function runCollection(
     const seed = corpus.config.seed ?? null;
     const manifest = buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       collection,
       // what each query presents to akm: its text, in the library the run indexed. A library with another file in it is another input for every query.
@@ -353,7 +351,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

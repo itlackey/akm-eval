@@ -1,7 +1,6 @@
 // The scorer of the bakeoff eval: what akm wrote for a case (a derived memory, an enriched memory, a repair proposal, a session asset, the
-// promotions consolidate queued) is checked against what the case expects, with no judge model and no akm. It is the SCORER part of the
-// eval's measurement (see measurement.ts and lib/manifest.ts): a change to this file changes what the eval scores. Bump the scorer in
-// MEASUREMENT.lock (scripts/measurement/run bump bakeoff scorer --reason "...") in the same change, and write the golden files again.
+// promotions consolidate queued) is checked against what the case expects, with no judge model and no akm. A fix here applies to stored
+// runs too: scripts/rescore scores them again from their raw outputs.
 //
 // The checks are those of the Python bakeoff this eval replaced, ported where they still apply: the same terms are looked for the same way.
 // What changed is what they are looked for in. They read the file or the proposal akm made, not a model's reply to a prompt of our own.

@@ -1,17 +1,17 @@
 // scripts/rescore on nightly: a stored night is scored again from what its samples.jsonl holds, with no akm. The night is one run of many items, so each
-// row holds its item's files, proposals and actions and the whole night's part. The runs are built from the golden raw outputs (../golden), scored with
+// row holds its item's files, proposals and actions and the whole night's part. The runs are built from the raw outputs in fixtures/ (../fixtures), scored with
 // the eval's own scorer, and written as results folders.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildManifest, caseDigests, completionOf, lockedParts, manifestProblems } from "../../../lib/manifest.ts";
+import { type PartRef, buildManifest, caseDigests, completionOf, manifestProblems } from "../../../lib/manifest.ts";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
-const GOLDEN = join(import.meta.dir, "..", "golden");
+const FIXTURES = join(import.meta.dir, "..", "fixtures");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
 const dirs: string[] = [];
@@ -19,19 +19,17 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** The first golden raw output of each item: a night has one row per item. */
+/** The first raw output in fixtures/ of each item: a night has one row per item. */
 const onePerItem = (lines: { case: string; raw: any }[]) => lines.filter((l, i) => lines.findIndex((x) => x.case === l.case) === i);
-const LINES = onePerItem(jsonl(join(GOLDEN, "raw.jsonl")));
+const LINES = onePerItem(jsonl(join(FIXTURES, "raw.jsonl")));
 
-/** A results folder of a night of the golden raw outputs `lines`, scored against the public night, as run.ts writes it. */
-function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[] = (rows) => rows, extra: { corpus?: "public" | "custom"; corpus_folder?: string | null; scorer?: ReturnType<typeof lockedParts>["scorer"] } = {}): { dir: string; rows: any[] } {
+/** A results folder of a night of the raw outputs in fixtures/ `lines`, scored against the public night, as run.ts writes it. */
+function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[] = (rows) => rows, extra: { corpus?: "public" | "custom"; corpus_folder?: string | null; scorer?: PartRef } = {}): { dir: string; rows: any[] } {
   const corpus = MEASUREMENT.loadCases(ROOT, { corpus: "public" });
   const used = lines.map((l) => corpus.find((c) => c.id === l.case) as never);
   const rows = lines.map((l, i) => MEASUREMENT.score(used[i], (MEASUREMENT.rawOf({ id: l.case, ...l.raw }) as { raw: any }).raw));
-  const parts = lockedParts(MEASUREMENT);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts: { ...parts, scorer: extra.scorer ?? parts.scorer },
     corpus: extra.corpus ?? "public",
     cases: caseDigests(MEASUREMENT, used),
     akm: { version: "0.9.99-test", bin: "akm" },
@@ -39,6 +37,7 @@ function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[
     treatment_hints: { embedder: "deterministic" },
     completion: completionOf(MEASUREMENT, used.map((c: any) => c.id), rows),
   });
+  if (extra.scorer) manifest.scorer = extra.scorer; // a run from before the version was set by hand
   const dir = join(mkdtempSync(join(tmpdir(), "nightly-rescore-")), "2026-10-12-golden");
   dirs.push(join(dir, ".."));
   mkdirSync(dir, { recursive: true });
@@ -62,7 +61,6 @@ describe("rescoring a night", () => {
     const now = summaryOf(out);
     expect(now).toMatchObject({ label: "golden-rescored", n_planted: LINES.length, metrics: was.metrics, n_errored: was.n_errored, outside_changed: was.outside_changed });
     expect(manifestProblems(now.manifest)).toEqual([]);
-    expect(now.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(now.manifest.treatment_hints).toEqual({ embedder: "deterministic" });
     expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
   });
@@ -104,9 +102,9 @@ describe("rescoring a night", () => {
 // was asked. The proposal has to be pending. The nights below were stored by the scorer before that: each silent row is written as that scorer wrote it (the
 // verdict and the state in the pre-fix table), from raw output that is the same today, and scripts/rescore gives the verdict of the scorer now.
 describe("rescoring a night stored before a proposal had to be pending (#73)", () => {
-  const RAW = jsonl(join(GOLDEN, "raw.jsonl"));
+  const RAW = jsonl(join(FIXTURES, "raw.jsonl"));
   const line = (note: string) => RAW.find((l) => l.note === note) as { case: string; raw: any; note: string };
-  /** What the scorer before the fix wrote for the silent items of the golden raw outputs, by the note that names the night. */
+  /** What the scorer before the fix wrote for the silent items of the raw outputs in fixtures/, by the note that names the night. */
   const BEFORE: Record<string, { ok: boolean; fix_proposed: boolean; state: string; proposal: string }> = {
     "the lane's proposal was rejected": { ok: true, fix_proposed: true, state: "proposal rejected", proposal: "rejected" },
     "the lane's proposal was reverted after it was accepted": { ok: true, fix_proposed: true, state: "proposal reverted", proposal: "reverted" },
@@ -117,8 +115,7 @@ describe("rescoring a night stored before a proposal had to be pending (#73)", (
   /** The run stored by the scorer before the fix: the silent row as it wrote it, and the manifest of a scorer older than the live one. */
   function storedBefore(note: string) {
     const was = BEFORE[note] as (typeof BEFORE)[string];
-    const parts = lockedParts(MEASUREMENT);
-    const old = { ...parts.scorer, version: "0.0", sha256: "e".repeat(64) }; // older than any version the lock can have
+    const old = { version: "0.0", sha256: "e".repeat(64) }; // a scorer older than this one
     const edit = (rows: any[]) => rows.map((r) => ({ ...r, ok: was.ok, checks: { ...r.checks, fix_proposed: was.fix_proposed }, state: was.state, detail: { ...r.detail, proposal: was.proposal } }));
     return { ...stored([line(note)], edit, { scorer: old }), old };
   }
@@ -135,7 +132,6 @@ describe("rescoring a night stored before a proposal had to be pending (#73)", (
       expect(now.metrics.items).toMatchObject({ n: 1, ok: 0 });
       expect(now.metrics.failed).toEqual({ fix_proposed: 1 });
       expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: old });
-      expect(now.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     });
   }
 
@@ -161,15 +157,14 @@ describe("rescoring a night stored before a proposal had to be pending (#73)", (
 // that ends with the note correct failed, and the applied fix read as harm. The fix is scored by the note's end state now. The nights below were stored by the
 // scorer before that: the exact-fix row is written as that scorer wrote it (its checks, its verdict and its state), from raw output that is the same today.
 describe("rescoring a night stored before the exact fix was scored by the end state of the note (#75)", () => {
-  const RAW = jsonl(join(GOLDEN, "raw.jsonl"));
+  const RAW = jsonl(join(FIXTURES, "raw.jsonl"));
   const line = (note: string) => RAW.find((l) => l.note === note) as { case: string; raw: any; note: string };
   /** The exact-fix row as the scorer before wrote it: a fix applied (the proposal accepted) failed fix_waits and body_kept, and was harm. */
   const WAS_APPLIED = { ok: false, harm: true, checks: { fix_queued: true, fix_waits: false, body_kept: false, no_extra_change: true, no_invented: true }, state: "fix accepted", detail: { fix: ["accepted"], reflect: "not reached" } };
   /** The same for a fix that waits: it was right. */
   const WAS_WAITING = { ok: true, harm: false, checks: { fix_queued: true, fix_waits: true, body_kept: true, no_extra_change: true, no_invented: true }, state: "fix pending", detail: { fix: ["pending"], reflect: "no change" } };
   function storedBefore(note: string, was: Record<string, unknown>) {
-    const parts = lockedParts(MEASUREMENT);
-    const old = { ...parts.scorer, version: "0.0", sha256: "e".repeat(64) }; // older than any version the lock can have
+    const old = { version: "0.0", sha256: "e".repeat(64) }; // a scorer older than this one
     const { dir, rows } = stored([line(note)], (rs) => rs.map((r) => ({ ...r, ...was })), { scorer: old });
     return { dir, rows, old };
   }
@@ -188,7 +183,6 @@ describe("rescoring a night stored before the exact fix was scored by the end st
     expect(now.metrics.harm.items).toBe(0);
     expect(now.metrics.failed).toEqual({});
     expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: old });
-    expect(now.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
   });
 
   test("a night in which the fix waited as a pending proposal (akm 0.9.26) was right and stays right", () => {

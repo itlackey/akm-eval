@@ -1,6 +1,4 @@
-# Runs scripts/check on every push and pull request: the measurement lock, the typecheck of every src folder, the Python suites and bun test.
-# The measurement lock is the gate on what the evals measure: a change to an eval's collector or scorer fails the job until the version
-# is bumped in MEASUREMENT.lock, with a row in MEASUREMENT_CHANGELOG.md (scripts/measurement/run bump).
+# Runs scripts/check on every push and pull request: the typecheck of every src folder, the Python suites and bun test.
 # Every test uses a fake akm, so the job needs no akm, no Docker, no model and no secret. The job that runs the evals against a
 # real akm is akm-smoke.yml.
 name: check
@@ -32,10 +30,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: false
-
-      # The measurement check first and on its own, so that a change nobody bumped shows as that, and not among the tests.
-      - name: measurement lock
-        run: scripts/check measurement
 
       - name: scripts/check
         run: scripts/check

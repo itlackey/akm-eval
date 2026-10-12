@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { caseDigests, buildManifest, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { caseDigests, buildManifest, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -95,7 +95,7 @@ interface Summary {
   /** The model names that answered, as the responses give them, with how many cases each answered. */
   served: Record<string, number>;
   metrics: Metrics;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -151,7 +151,6 @@ export const defaultResults = (corpus: ResolvedCorpus, root = ROOT): string => (
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent: string = defaultResults(corpus)): Promise<Summary> {
   const assets = corpus.folder;
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl"));
   const cases = selectCases(all, ctx.limit);
   const assetsDigest = assetsSha256(assets);
@@ -190,7 +189,6 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     // what each case presented to akm includes the searches this run recorded for its note, so a run with --retrieval-queries is not the run without it (#37)
     cases: caseDigests(MEASUREMENT, cases, (c) => ctx.queries?.get(refOf(c.path)) ?? []),
@@ -250,7 +248,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

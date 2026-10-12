@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { type CaseDigest, type Measurement, type PartRef, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, readManifest, REPO_ROOT, UNVERSIONED } from "../../../lib/manifest.ts";
+import { type CaseDigest, type Measurement, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, readManifest, REPO_ROOT, UNVERSIONED } from "../../../lib/manifest.ts";
 import { canonical, recordedEngine, sha256Json } from "../../../lib/provenance.ts";
 
 type Obj = Record<string, any>;
@@ -44,7 +44,6 @@ export interface RescoreOptions {
 }
 
 const isObject = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
-const ZEROS = "0".repeat(64);
 const short = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${ids.length > n ? `, and ${ids.length - n} more` : ""}`;
 
 /** The measurement of the run's eval, or a refusal that says the eval is not on the manifest yet. */
@@ -136,7 +135,6 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
 
   const rows = kept.map(({ c, raw }) => m.score(c, raw));
   const changed = kept.filter(({ row }, i) => canonical(row) !== canonical(rows[i])).map(({ row }) => String(row.id));
-  const parts = lockedParts(m, root);
   const labelOf = (id: string): string => sha256Json(m.labels(byId.get(id)));
   const scoredIds = kept.map(({ row }) => String(row.id));
   const rescoredFrom = { results: basename(stored.dir), scorer: reading.kind === "manifest" ? reading.manifest.scorer : null, at: now.toISOString(), dropped };
@@ -150,14 +148,13 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
     const selected = old.completion.selected.filter((id) => byId.has(id));
     const cases: Record<string, CaseDigest> = Object.fromEntries(selected.map((id) => [id, { input_sha256: (old.cases[id] as CaseDigest).input_sha256, label_sha256: labelOf(id) }]));
     relabelled = selected.filter((id) => (old.cases[id] as CaseDigest).label_sha256 !== cases[id]?.label_sha256);
-    manifest = { ...old, scorer: parts.scorer, cases, completion: completionOf(m, selected, rows), rescored_from: rescoredFrom };
+    manifest = { ...old, cases, completion: completionOf(m, selected, rows), rescored_from: rescoredFrom };
+    delete manifest.scorer; // the version is what runs are compared by; a scorer digest no longer says anything
   } else {
     const engines = isObject(summary.engine?.engines) ? Object.fromEntries(Object.entries<any>(summary.engine.engines).map(([name, e]) => [name, recordedEngine(e)])) : {};
     manifest = {
       ...buildManifest({
         measurement: m,
-        // a run before harness-v3 has no collector version: its code is known by the harness_sha256 it recorded, as version 0.0
-        parts: { collector: { version: UNVERSIONED, sha256: typeof summary.harness_sha256 === "string" && /^[0-9a-f]{64}$/.test(summary.harness_sha256) ? summary.harness_sha256 : ZEROS }, scorer: parts.scorer, harness_version: 0 },
         corpus: String(summary.corpus),
         collection: typeof summary.collection === "string" ? summary.collection : null,
         mode: typeof summary.mode === "string" ? summary.mode : null,
@@ -169,6 +166,9 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
         treatment_hints: typeof summary.embedder === "string" ? { embedder: summary.embedder } : {},
         completion: completionOf(m, scoredIds, rows),
       }),
+      // a run before harness-v3 has no version
+      harness_version: 0,
+      collector: { version: UNVERSIONED },
       rescored_from: rescoredFrom,
     };
   }

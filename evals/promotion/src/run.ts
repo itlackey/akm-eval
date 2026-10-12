@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -94,7 +94,7 @@ interface Summary {
   seconds: number;
   calls: Calls | null;
   metrics: Metrics;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -136,7 +136,6 @@ export async function runCorpus(
   ctx: { sandbox: Sandbox; version: string; model: string; baseUrl: string; label: string; limit?: number; overrides?: Overrides },
   results: string = resultsOf(corpus),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const [casesFile, library] = [casesOf(corpus), libraryOf(corpus)];
   const all = parseCases(readFileSync(casesFile, "utf8"), casesFile);
   const cases = selectCases(all, ctx.limit);
@@ -154,7 +153,6 @@ export async function runCorpus(
   const build = akmBuild();
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     // what each case presented to akm includes the notes of the bundle it was planted among
     cases: caseDigests(MEASUREMENT, cases, () => bundleSha256(library, cases)),

@@ -55,7 +55,6 @@ function checkout(questions: Question[]): string {
   const code = (src: string) => !/(^|[\\/])(node_modules|__pycache__|fixtures)([\\/]|$)|\.test\.ts$/.test(src);
   cpSync(join(REPO, "lib"), join(root, "lib"), { recursive: true, filter: code });
   cpSync(join(REPO, "benchmarks", "longmemeval", "src"), join(root, "benchmarks", "longmemeval", "src"), { recursive: true, filter: code });
-  cpSync(join(REPO, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
   writePublicAssets(join(root, "benchmarks", "longmemeval", "assets"), questions);
   return root;
 }

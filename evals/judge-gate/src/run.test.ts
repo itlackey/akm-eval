@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { commandLine, completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
-import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
 import { casesSha256, generatorSha256 } from "./inputs.ts";
@@ -352,8 +352,8 @@ describe("the manifest of a run", () => {
     const { manifest } = stored;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "judge-gate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "judge-gate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: null, seed: null });
     const loaded = parseCases(readFileSync(join(folders.assets, "cases.jsonl"), "utf8"));

@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
-import { UNVERSIONED, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { UNVERSIONED, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -562,14 +562,14 @@ const stored = (dir: string) => ({
 describe("the manifest of a run", () => {
   const folders = (s: ReturnType<typeof setup>) => ({ assets: s.assets, results: s.results });
 
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every query", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every query", async () => {
     const s = setup();
     const { summary } = stored((await logged(() => runCorpus(s.corpus, s.ctx({ label: "m" }), folders(s)))).result.results_dir);
     const { manifest } = summary;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(summary).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "skillret", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {}, engines: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "skillret", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {}, engines: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(["q1", "q2", "q3", "q4"]);
@@ -651,7 +651,6 @@ describe("rescore", () => {
     cpSync(join(here, "lib"), join(root, "lib"), { recursive: true });
     mkdirSync(join(root, "benchmarks", "skillret", "src"), { recursive: true });
     for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts")) cpSync(join(import.meta.dir, file), join(root, "benchmarks", "skillret", "src", file));
-    cpSync(join(here, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
     cpSync(s.assets, join(root, "benchmarks", "skillret", "assets"), { recursive: true });
     return root;
   }
@@ -669,7 +668,6 @@ describe("rescore", () => {
     for (const field of ["metrics", "by_size", "errored", "timeouts", "no_results", "curate_check", "status", "aborted_reason", "n_queries", "call_seconds"]) expect([field, again.summary[field]]).toEqual([field, was.summary[field]]);
     expect(again.summary.status).toBe("aborted"); // a call failed, and it still says so
     expect(manifestProblems(again.summary.manifest)).toEqual([]);
-    expect(again.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(again.summary.manifest.collector).toEqual(was.summary.manifest.collector);
     expect(again.summary.manifest.cases).toEqual(was.summary.manifest.cases);
   });

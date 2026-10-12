@@ -44,11 +44,8 @@ const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, libr
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: how a library is laid out and indexed for akm, the config of the sandbox,
-  // the commands that are run, and the lib/akm files that run akm and keep an index between runs.
-  collector: ["evals/retrieval/src/collect.ts", "evals/retrieval/src/akm.ts", "lib/akm/akm.ts", "lib/akm/index-cache.ts", "lib/cli.ts"],
-  // What turns the results of a query into a row and the rows into metrics. The labels are the qrels, digested per case.
-  scorer: ["evals/retrieval/src/score.ts", "lib/ir.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));

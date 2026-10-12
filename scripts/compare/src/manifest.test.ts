@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { endpointId } from "../../../lib/provenance.ts";
 import { rescoreFolder } from "../../rescore/src/lib.ts";
 import * as manifestModule from "../../../lib/manifest.ts";
-import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, nextVersion } from "../../../lib/manifest.ts";
+import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
@@ -19,9 +19,9 @@ import { type Member, checkMembers, configDigest, identityOf } from "./policy.ts
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const GOLDEN = join(ROOT, "evals", "reflect", "golden");
-const CASES: Case[] = jsonl(join(GOLDEN, "cases.jsonl"));
-const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(GOLDEN, "raw.jsonl"));
+const FIXTURES = join(ROOT, "evals", "reflect", "fixtures");
+const CASES: Case[] = jsonl(join(FIXTURES, "cases.jsonl"));
+const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(FIXTURES, "raw.jsonl"));
 const raw = (id: string, note: string): Raw => (RAW.find((l) => l.case === id && l.note === note) as { raw: Raw }).raw;
 
 /** What a model that does well, and one that does badly, answers for a case. */
@@ -66,7 +66,6 @@ function run(spec: Spec): string {
   });
   const base = buildManifest({
     measurement: MEASUREMENT,
-    parts: lockedParts(MEASUREMENT),
     corpus: "public",
     cases: caseDigests(MEASUREMENT, cases, spec.searches),
     akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null },
@@ -108,18 +107,18 @@ function run(spec: Spec): string {
 }
 
 const compare = (a: string, b: string, options = {}) => comparePair(loadRun(a), loadRun(b), options);
-const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) }; // a scorer other than the live one
+const STALE = { version: "9.9", sha256: "c".repeat(64) }; // a scorer other than the live one
 const lit = (version: string): string => version.replace(/\./g, "\\."); // a version as the text of a regular expression
 const metric = (r: ReturnType<typeof compare>, path: string) => r.views[0]?.metrics.find((m) => m.path === path);
 
 describe("two runs with a manifest", () => {
-  test("compare when their collector, scorer and cases are the same, and the report shows the parts and the denominators", () => {
+  test("compare when their version and cases are the same, scoring both again, and the report shows the version and the denominators", () => {
     const r = compare(run({ label: "good", raw: GOOD }), run({ label: "bad", raw: BAD }));
     expect(r.exploratory).toEqual([]);
-    expect(r.rescored).toEqual([]);
+    expect(r.rescored).toHaveLength(2);
     expect(r.inputs_differ).toEqual([]);
-    const parts = lockedParts(MEASUREMENT);
-    expect(r.a).toMatchObject({ collector: `v${parts.collector.version} ${parts.collector.sha256.slice(0, 12)}`, scorer: `v${parts.scorer.version} ${parts.scorer.sha256.slice(0, 12)}`, rescored_from: null });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(r.a).toMatchObject({ collector: `v${parts.collector.version}`, label: "good", rescored_from: null }); // scored again in memory: the report shows the run as stored
     expect(r.views[0]?.coverage).toEqual({ selected_a: 10, selected_b: 10, scored_a: 10, scored_b: 10, errored_a: [], errored_b: [], in_both: 10, scored_only_a: [], scored_only_b: [] });
     expect(metric(r, "defects.rate")).toMatchObject({ a: 1, b: 0, n: 6 });
     expect(metric(r, "controls.rate")).toMatchObject({ a: 1, b: 0, n: 4 });
@@ -127,14 +126,14 @@ describe("two runs with a manifest", () => {
     expect(md).toContain("Scored: A 10 of 10 cases, B 10 of 10. Every number below is over the 10 scored in both.");
     expect(md).toContain("| defects.rate ↑ | 1 | 0 | -1 |");
     expect(md).toContain("| 6 of 10 |");
-    expect(md).toContain(`| collector | v${parts.collector.version} ${parts.collector.sha256.slice(0, 12)} | v${parts.collector.version} ${parts.collector.sha256.slice(0, 12)} |`);
+    expect(md).toContain(`| version | v${parts.collector.version} | v${parts.collector.version} |`);
   });
 
   test("a different collector is refused, naming both, unless the collector (harness) is the treatment, and then it is listed as the treatment", () => {
     // the version the lock gives reflect now, and another one: the test holds whatever version the live lock is at
-    const live = lockedParts(MEASUREMENT).collector.version;
-    const other = nextVersion(live);
-    const harness = lockedParts(MEASUREMENT).harness_version;
+    const live = MEASUREMENT.version;
+    const other = "9.9";
+    const harness = HARNESS_VERSION;
     const a = run({ label: "a", raw: GOOD });
     const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, collector: { version: other, sha256: "d".repeat(64) } }) });
     const then = (f: () => unknown) => {
@@ -147,20 +146,14 @@ describe("two runs with a manifest", () => {
     };
     const refused = then(() => compare(a, b));
     expect(refused).toContain("these two runs cannot be compared case by case");
-    expect(refused).toMatch(new RegExp(`the eval's code differs: collector ${lit(live)} [0-9a-f]{12} \\(harness ${harness}\\) in A, collector ${lit(other)} dddddddddddd \\(harness ${harness}\\) in B`));
+    expect(refused).toContain(`the eval's code differs: version ${live} (harness ${harness}) in A, version ${other} (harness ${harness}) in B`);
     expect(refused).toContain("--treatment");
     const allowed = compare(a, b, { treatment: ["config", "model", "harness"] });
-    expect(allowed.treated.join(" ")).toMatch(new RegExp(`the eval's code differs: collector ${lit(live)} .* in A, collector ${lit(other)} dddddddddddd`));
+    expect(allowed.treated.join(" ")).toContain(`the eval's code differs: version ${live} (harness ${harness}) in A, version ${other} (harness ${harness}) in B`);
     expect(allowed.exploratory).toEqual([]);
   });
 
-  test("a change to the scorer alone is no difference: another version of the scorer is not an axis", () => {
-    const a = run({ label: "a", raw: GOOD });
-    const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, scorer: { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: lockedParts(MEASUREMENT).scorer.sha256 } }) });
-    expect(compare(a, b).rescored).toEqual([]); // the same digest under another version: nothing differs that scoring would change
-  });
-
-  test("runs scored by different scorers are each scored again with the current scorer, the report says so, and the folders are not touched", () => {
+  test("runs scored by different scorers are each scored again with the current scorer, and the folders are not touched", () => {
     // A was scored by an older scorer that called every row of the defect cases right; B by the current one
     const a = run({ label: "stale", raw: BAD, manifest: (m) => ({ ...m, scorer: STALE }), rows: (rows) => rows.map((r) => ({ ...r, correct: true, checks: Object.fromEntries(Object.keys(r.checks ?? {}).map((k) => [k, true])) })) });
     const b = run({ label: "now", raw: GOOD });
@@ -170,11 +163,7 @@ describe("two runs with a manifest", () => {
     expect(r.exploratory).toEqual([]);
     // the numbers are the current scorer's: A answered nothing for every defect, whatever its old rows say
     expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
-    expect(r.a.rescored_from).toBe("stale");
-    expect(r.a.scorer).toBe(r.b.scorer);
-    const md = renderPair(r);
-    expect(md).toContain("> Scored again. Not every run had been scored by the current scorer and labels");
-    expect(md).toContain("| scored again from | `stale` | `now` |");
+    expect(r.a.rescored_from).toBeNull(); // scored again in memory: nothing was written
     expect([a, b].map((d) => readFileSync(join(d, "summary.json"), "utf8") + readFileSync(join(d, "samples.jsonl"), "utf8"))).toEqual(before);
   });
 
@@ -193,7 +182,6 @@ describe("two runs with a manifest", () => {
     const r = compare(a, b);
     expect(r.rescored).toEqual([loadRun(a).dir, loadRun(b).dir]);
     expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
-    expect(renderPair(r)).toContain("> Scored again. Not every run had been scored by the current scorer and labels");
   });
 
   test("runs whose case was relabelled after both were made are scored again against the current labels", () => {
@@ -203,14 +191,12 @@ describe("two runs with a manifest", () => {
     expect(r.exploratory).toEqual([]);
   });
 
-  test("runs scored by the current scorer against the current labels are not scored again", () => {
-    expect(compare(run({ label: "a", raw: GOOD }), run({ label: "b", raw: BAD })).rescored).toEqual([]);
-  });
-
-  test("a run that cannot be scored again, for want of the raw output the scorer reads, makes the comparison refused and names the fields", () => {
+  test("a run that cannot be scored again, for want of the raw output the scorer reads, is compared as it was scored, and the report says so and names the fields", () => {
     const a = run({ label: "a", raw: GOOD, manifest: (m) => ({ ...m, scorer: STALE }), rows: (rows) => rows.map((r) => (r.outcome === "proposal" ? Object.fromEntries(Object.entries(r).filter(([k]) => k !== "proposal")) : r)) });
     const b = run({ label: "b", raw: BAD });
-    expect(() => compare(a, b)).toThrow(/cannot be: .*its rows lack the raw output the reflect scorer reads: proposal \(6 rows: .*\)/);
+    const r = compare(a, b);
+    expect(r.rescored).toEqual([]);
+    expect(r.warnings.join(" ")).toMatch(/A cannot be scored again with the current scorer \(.*its rows lack the raw output the reflect scorer reads: proposal \(6 rows: .*\), so the runs are compared as they were scored/);
   });
 
   test("a case given another input in a few runs is left out and named; the verdict is over the rest", () => {
@@ -307,9 +293,9 @@ describe("a run without a manifest", () => {
     writeFileSync(join(dir, "summary.json"), JSON.stringify(rest));
     const { out } = rescoreFolder(dir);
     const current = run({ label: "new", raw: GOOD });
-    expect(() => compare(out, current)).toThrow(new RegExp(`the eval's code differs: collector ${lit(UNVERSIONED)} b{12} \\(harness 0\\) in A, collector ${lit(lockedParts(MEASUREMENT).collector.version)} [0-9a-f]{12} \\(harness ${lockedParts(MEASUREMENT).harness_version}\\) in B`));
+    expect(() => compare(out, current)).toThrow(`the eval's code differs: version ${UNVERSIONED} (harness 0) in A, version ${MEASUREMENT.version} (harness ${HARNESS_VERSION}) in B`);
     const r = compare(out, current, { treatment: ["config", "model", "harness"] });
-    expect(r.exploratory).toEqual(["A was collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned"]);
+    expect(r.exploratory).toEqual(["A was collected before harness-v3 (version 0.0), so what it asked akm is not versioned"]);
     expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
   });
 
@@ -343,17 +329,16 @@ describe("a run without a manifest", () => {
 });
 
 describe("repeats with a manifest", () => {
-  test("repeats that were scored by different scorers are scored again, and the report says so", () => {
+  test("repeats that were scored by different scorers are all scored again with the current one", () => {
     const runs = ["r1", "r2", "r3"].map((label, i) => run({ label, raw: (c) => (i === 1 && c.id === ids[0] ? BAD(c) : GOOD(c)), manifest: i === 0 ? (m) => ({ ...m, scorer: STALE }) : undefined }));
     const r = compareRepeats(runs.map(loadRun));
     expect(r.rescored.length).toBe(3);
     expect(r.exploratory).toEqual([]);
-    expect(renderRepeats(r)).toContain("> Scored again.");
     expect(r.views[0]?.n_compared).toBe(10);
   });
 
   test("repeats of one configuration whose collector differs are refused", () => {
-    const runs = [run({ label: "r1", raw: GOOD }), run({ label: "r2", raw: GOOD, manifest: (m) => ({ ...m, collector: { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) } }) })];
+    const runs = [run({ label: "r1", raw: GOOD }), run({ label: "r2", raw: GOOD, manifest: (m) => ({ ...m, collector: { version: "9.9", sha256: "d".repeat(64) } }) })];
     expect(() => compareRepeats(runs.map(loadRun))).toThrow("these runs are not repeats of one configuration: the eval's code differs");
   });
 });
@@ -434,8 +419,8 @@ describe("the policy", () => {
     const dir = run({ label: "a", raw: GOOD });
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     const identity = identityOf(summary);
-    const parts = lockedParts(MEASUREMENT);
-    expect(identity).toMatchObject({ manifest: true, akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: `${parts.collector.version} ${parts.collector.sha256}`, scorer: `${parts.scorer.version} ${parts.scorer.sha256}`, harness_version: String(parts.harness_version), hints: null });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(identity).toMatchObject({ manifest: true, akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: parts.collector.version, harness_version: String(parts.harness_version), hints: null });
     expect(identity.config).toBe(configDigest(summary.config)); // the digest the earlier summaries get
     expect(identity.engine).toContain(endpointId("http://localhost:9/v1/chat/completions") as string);
     expect(identity.engine).not.toContain("localhost:9/v1");

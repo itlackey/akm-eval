@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
 import { ALIASES, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { type Run, comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
@@ -368,14 +368,14 @@ const stored = (dir: string) => ({
 });
 
 describe("the manifest of a run", () => {
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every case it selected", async () => {
     const { ctx, folders } = setup(cases);
     const { summary } = stored((await quiet(() => runPublic(ctx, folders))).results_dir);
     const { manifest } = summary;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(summary).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "promotion", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "promotion", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "promotion", config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(cases.map((c) => c.id));
@@ -453,9 +453,8 @@ describe("rescore", () => {
     expect(now.summary.metrics).toEqual(was.summary.metrics);
     expect(now.summary).toMatchObject({ n_run: 20, n_errored: 6, timeouts: 3 });
     expect(manifestProblems(now.summary.manifest)).toEqual([]);
-    expect(now.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(now.summary.manifest.collector).toEqual(was.summary.manifest.collector);
-    expect(now.summary.manifest.rescored_from).toMatchObject({ results: basename(summary.results_dir), scorer: was.summary.manifest.scorer, dropped: [] });
+    expect(now.summary.manifest.rescored_from).toMatchObject({ results: basename(summary.results_dir), dropped: [] });
   });
 
   test("a custom corpus whose folder is in the repository records it, and a rescore finds the cases there (corpus_folder)", async () => {

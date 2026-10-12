@@ -10,7 +10,6 @@
 
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { HARBOR_COLLECTOR, HARBOR_SCORER } from "../../../lib/harbor/measured.ts";
 import { sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "../../../lib/harbor/score.ts";
 import type { Measurement } from "../../../lib/manifest.ts";
@@ -51,11 +50,8 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what the agent is given and what is kept of its run: the job and the copy of the tasks (collect.ts), and the Harbor job, the
-  // akm arm and the lockfiles it installs from, and the reading of Harbor's folders (lib/harbor).
-  collector: ["evals/agent-ab/src/collect.ts", ...HARBOR_COLLECTOR],
-  // What turns the trials of a task into a row and the rows into the report. The tasks are digested per case.
-  scorer: HARBOR_SCORER,
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => casesIn(assetsOf(root, summary)),
   legacyProblem: () => "its samples.jsonl has one line per trial, and the manifest evals have one line per task with its trials",
   caseId: (c) => c.id,

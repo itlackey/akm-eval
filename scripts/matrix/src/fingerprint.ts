@@ -13,7 +13,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { akmBuild, dirtyFingerprint, parseCommand } from "../../../lib/akm/akm.ts";
-import { REPO_ROOT, corpusFolderOf, loadMeasurement, lockedParts } from "../../../lib/manifest.ts";
+import { HARNESS_VERSION, REPO_ROOT, corpusFolderOf, loadMeasurement } from "../../../lib/manifest.ts";
 import { endpointIdentity, sha256Json } from "../../../lib/provenance.ts";
 import { canonical } from "../../compare/src/policy.ts";
 import { type Job, type RunRecord, HARBOR, corpusOf, customCorpus, customFolder, flagValue, hasFlag, readJson, runDirs, runnerFolder, unusableReason } from "./lib.ts";
@@ -287,19 +287,13 @@ function repositoryCode(root: string): string {
   return `${head.out.trim()}${diff.ok && diff.out !== "" ? `+${sha256(diff.out)}` : ""}`;
 }
 
-/**
- * The collector of an eval that declares a measurement and has a lock entry, as the manifest of the run will record it: the harness version, and the
- * collector's version and digest (lib/manifest.ts; the same `lockedParts` the run takes them from). The scorer is left out on purpose: a scorer change
- * leaves a stored result as it was, and the decision scores both sides again. Null for any other eval, whose code is then the repository's.
- */
+/** The version of an eval that declares a measurement, with the harness version: a row runs again when it changes. Null for any other eval, whose code is then the repository's. */
 function collectorIdentity(root: string, evalName: string): string | null {
   try {
     const m = loadMeasurement(evalName, root);
-    if (!m) return null;
-    const parts = lockedParts(m, root);
-    return canonical({ harness_version: parts.harness_version, ...parts.collector });
+    return m ? canonical({ harness_version: HARNESS_VERSION, version: m.version }) : null;
   } catch {
-    return null; // no lock entry yet, or a declaration that cannot be read: the run itself stops on it
+    return null; // a declaration that cannot be read: the run itself stops on it
   }
 }
 
@@ -327,7 +321,7 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
   return { sha256: sha256(canonical(parts)), parts };
 }
 
-const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the public assets, or the folder, corpus.json and generated.json of the custom corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code", collector: "the eval's collector (the code that decides what akm is asked, its version and the harness version)" };
+const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the public assets, or the folder, corpus.json and generated.json of the custom corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code", collector: "the eval's version (in its src/measurement.ts) or the harness version" };
 
 /** Whether a stage may skip a job it already ran, and when not, why it runs again (empty for a job that was never run). */
 export function resumable(root: string, prior: RunRecord | undefined, job: Pick<Job, "label" | "args">, fp: Fingerprint): { skip: boolean; why: string } {

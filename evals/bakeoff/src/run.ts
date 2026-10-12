@@ -12,7 +12,7 @@ import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandb
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -89,7 +89,7 @@ interface Summary {
   /** The model names that answered, as the responses give them, with how many cases each answered. */
   served: Record<string, number>;
   metrics: Metrics;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -159,7 +159,6 @@ export function corpusProblem(corpus: ResolvedCorpus, publicFolder: string = joi
 }
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent: string = resultsFolder(corpus)): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = loadCases(corpus.folder);
   const cases = selectCases(all, ctx.limit, ctx.process);
   if (cases.length === 0) fail(`no case to run: the corpus has none for ${ctx.process}`);
@@ -197,7 +196,6 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const seed = corpus.config.seed ?? null;
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -256,7 +254,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

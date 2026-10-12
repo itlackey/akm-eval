@@ -117,10 +117,8 @@ export interface Identity {
   hints: string | null;
   /** The summary carries a valid manifest (see lib/manifest.ts). A summary without one is legacy. */
   manifest: boolean;
-  /** The collector of the run, "version sha256", when it has a manifest. A collector of version 0.0 (UNVERSIONED) is a legacy run's, known only by its harness_sha256. */
+  /** The eval's version the run was made with, when it has a manifest. Version 0.0 (UNVERSIONED) is a legacy run's. */
   collector: string | null;
-  /** The scorer of the run, "version sha256", when it has a manifest. The scorer is not an axis: a run is scored again. */
-  scorer: string | null;
   harness_version: string | null;
   /** The `input_sha256` of each case of the run as JSON, when it has a manifest: what each case presents to akm. */
   case_inputs: string | null;
@@ -154,7 +152,6 @@ export function identityOf(s: Row): Identity {
   const engine = harbor ? harborEngine(s) : m ? recorded(m.engines) : isObject(s.engine) && isObject(s.engine.engines) ? recorded(s.engine.engines) : null;
   const embedder = text(s.embedder);
   const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
-  const part = (p: { version: string; sha256: string }): string => `${p.version} ${p.sha256}`;
   const corpus = corpusOf(s);
   return {
     eval: text(s.eval),
@@ -180,8 +177,7 @@ export function identityOf(s: Row): Identity {
     limit: text(s.limit),
     hints: Object.keys(hints).length === 0 ? null : canonical(hints),
     manifest: m !== null,
-    collector: m ? part(m.collector) : null,
-    scorer: m ? part(m.scorer) : null,
+    collector: m ? m.collector.version : null,
     harness_version: m ? String(m.harness_version) : null,
     case_inputs: m ? canonical(Object.fromEntries(Object.entries(m.cases).map(([id, c]) => [id, c.input_sha256]))) : null,
   };
@@ -295,12 +291,9 @@ function hintsText(v: string): string {
   }
 }
 
-/** The harness of each member when every run has a manifest: the collector's version and digest, and the harness version. A legacy collector (version 0.0) with no digest of its code is unidentified. */
-function collectorValues(ms: Member[]): (string | null)[] {
-  return ms.map((m) => {
-    const [version, sha] = (m.identity.collector ?? "").split(" ");
-    return version === UNVERSIONED && /^0+$/.test(sha ?? "") ? null : `collector ${m.identity.collector} (harness ${m.identity.harness_version})`;
-  });
+/** The harness of each member when every run has a manifest: the eval's version and the harness version. */
+function collectorValues(ms: Member[]): string[] {
+  return ms.map((m) => `version ${m.identity.collector} (harness ${m.identity.harness_version})`);
 }
 
 export interface CheckOptions {

@@ -11,7 +11,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sha256Dir } from "../../../lib/harbor/harbor.ts";
-import { HARBOR_COLLECTOR, HARBOR_SCORER } from "../../../lib/harbor/measured.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "../../../lib/harbor/score.ts";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { type Lock, NAME } from "./collect.ts";
@@ -29,11 +28,8 @@ export const caseOf = (id: string, task_digest: string | null | undefined, libra
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what the agent is given and what is kept of its run: the job, the library and the akm that counts it (collect.ts), and the
-  // Harbor job, the akm arm and the lockfiles it installs from, and the reading of Harbor's folders (lib/harbor).
-  collector: ["benchmarks/terminal-bench/src/collect.ts", ...HARBOR_COLLECTOR],
-  // What turns the trials of a task into a row and the rows into the report. The tasks are digested per case.
-  scorer: HARBOR_SCORER,
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   // The tasks of the pinned dataset, with the library the akm arm seeds. The tasks are Harbor's and are not in this repository; the library is
   // the one in the run's corpus folder (corpus/ for the public corpus, `corpus_folder` for a custom one, which scripts/rescore sets from --cases
   // DIR when the run could not record it), else the digest the run recorded.

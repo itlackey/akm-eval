@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, lockedParts, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, measurementPath, readManifest } from "../../../lib/manifest.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
@@ -668,64 +668,31 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
 
 // ---- results from different scorers, and runs from before the manifest -----------------------------------------------------
 
-/** The scorer the eval has now: the version MEASUREMENT.lock gives it and the digest of its files as they are. Null for an eval that declares none, or when the lock cannot say. */
-function currentScorer(evalName: string): PartRef | null {
-  try {
-    const m = loadMeasurement(evalName);
-    return m ? lockedParts(m).scorer : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Brings the results of the two sides to the scorer and the labels this repository has now, the way scripts/compare does (README, "How results stay
- * comparable"). Every run of both sides is scored again in memory (scripts/rescore) when the runs behind them were scored by different scorers, or a case
- * they share has other labels in some run, and also when they were all scored by a scorer other than the current one, or a case has been relabelled since:
- * a relabelled case does not run a row again (fingerprint.ts), so a stored result may have been scored against labels that have changed. The numbers
- * are those of the new rows; nothing is written. A run that cannot be scored again, for want of the raw output its scorer reads, refuses the pair when
- * the runs need it, with the reason. Results with no manifest are left as they are: the decision calls them exploratory (`manifestReasons`).
+ * Scores every run of both sides again, in memory, with the current scorer and labels (scripts/rescore), as scripts/compare does: a scorer fix
+ * or a relabelled case applies to results already made. Nothing is written. A run that cannot be scored again, for want of the raw output its
+ * scorer reads, refuses the pair, with the reason. Results with no manifest are left as they are: the decision calls them exploratory.
  */
-export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; again: string | null } | { refusal: string } {
+export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; unscored?: string } {
   const runs = [...base.runs, ...cfg.runs];
   const manifests = runs.map((r) => r.manifest);
-  if (manifests.length === 0 || manifests.some((m) => !m) || !base.dirs?.length || !cfg.dirs?.length) return { base, cfg, again: null };
-  const all = manifests as RunManifest[];
-  const scorers = [...new Set(all.map((m) => m.scorer.sha256))];
-  const shared = Object.keys(all[0].cases).filter((id) => all.every((m) => m.cases[id] !== undefined));
-  const relabelled = shared.some((id) => new Set(all.map((m) => m.cases[id].label_sha256)).size > 1);
-  const part = (p: PartRef): string => `v${p.version} ${p.sha256.slice(0, 12)}`;
-  const now = currentScorer(all[0].eval);
+  if (manifests.length === 0 || manifests.some((m) => !m) || !base.dirs?.length || !cfg.dirs?.length) return { base, cfg };
   const { RescoreError, readStored, rescoreRun } = rescorer();
-  // each run scored again with what the repository has now; one that cannot be is told apart, and refuses the pair only when it has to be
-  type Attempt = { summary: Record<string, any>; run: Run; relabelled: string[] } | { error: InstanceType<typeof RescoreError> };
+  type Attempt = { summary: Record<string, any>; run: Run } | { error: InstanceType<typeof RescoreError> };
   const attempt = (dir: string): Attempt => {
     const shown = isAbsolute(dir) && relative(root, dir).startsWith("..") ? dir : relative(root, dir);
     try {
       const result = rescoreRun({ ...readStored(dir), dir: shown });
-      return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run, relabelled: result.relabelled };
+      return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run };
     } catch (e) {
       if (e instanceof RescoreError) return { error: e };
       throw e;
     }
   };
   const tried = { base: (base.dirs ?? []).map(attempt), cfg: (cfg.dirs ?? []).map(attempt) };
-  const changedSince = [...new Set([...tried.base, ...tried.cfg].flatMap((t) => ("error" in t ? [] : t.relabelled)))];
-  const stale = now !== null && all.some((m) => m.scorer.sha256 !== now.sha256);
-  const again =
-    scorers.length > 1
-      ? `the runs were scored by different scorers (${[...new Set(all.map((m) => part(m.scorer)))].join(", ")})`
-      : relabelled
-        ? "the runs were scored against different labels"
-        : stale
-          ? `the runs were scored by a scorer other than the current one (${part(all[0].scorer)}, now ${part(now as PartRef)})`
-          : changedSince.length > 0
-            ? `${changedSince.length === 1 ? "a case has" : `${changedSince.length} cases have`} other labels than when the runs were made (${changedSince.slice(0, 5).join(", ")}${changedSince.length > 5 ? `, and ${changedSince.length - 5} more` : ""})`
-            : null;
-  if (again === null) return { base, cfg, again: null };
   const score = (side: string, m: Measured, attempts: Attempt[]): Measured => {
     const failed = attempts.find((a): a is { error: InstanceType<typeof RescoreError> } => "error" in a);
-    if (failed) throw new RescoreError(`${again}, so both are scored again with the current scorer before they are compared, and ${side} cannot be: ${failed.error.message}`);
+    if (failed) throw new RescoreError(`${side} cannot be scored again with the current scorer: ${failed.error.message}`);
     const done = attempts as { summary: Record<string, any>; run: Run }[];
     const summaries = done.map((d) => d.summary);
     const rescored = summaries.map((summary) => {
@@ -739,9 +706,10 @@ export function scoredAlike(root: string, base: Measured, cfg: Measured): { base
     return { ...m, ...numbers, runs, rescored: done.map((d) => d.run) };
   };
   try {
-    return { base: score("the baseline", base, tried.base), cfg: score("the config", cfg, tried.cfg), again };
+    return { base: score("the baseline", base, tried.base), cfg: score("the config", cfg, tried.cfg) };
   } catch (e) {
-    if (e instanceof RescoreError) return { refusal: e.message };
+    // compared as they were scored, and the row says why
+    if (e instanceof RescoreError) return { base, cfg, unscored: `${e.message}, so both sides are compared as they were scored` };
     throw e;
   }
 }
@@ -905,10 +873,7 @@ export function selectForConfirm(root: string, m: Matrix, state: State, opts: { 
       const bm0 = b.find((x) => x.scope === cm.scope);
       if (!bm0) return [];
       const same = scoredAlike(root, bm0, cm);
-      if ("refusal" in same) {
-        notes.push(same.refusal);
-        return [];
-      }
+      if (same.unscored) notes.push(same.unscored);
       const bm = same.base;
       const why = incomparable(bm, same.cfg, axes, config.eval);
       if (why) {

@@ -19,11 +19,8 @@ const assetsOf = (root: string): string => join(root, "benchmarks", NAME, "asset
 
 export const MEASUREMENT: Measurement<Query, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandboxes and configs, how the skills are written into the bundle and indexed,
-  // the calls, the sample that curate is checked on. The lib/ files that run akm and keep the semantic index are covered through its imports.
-  collector: ["benchmarks/skillret/src/collect.ts"],
-  // What turns the ranked results of a query into its scores and the rows into metrics. The labels are the qrels, digested per query.
-  scorer: ["benchmarks/skillret/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   // The queries are drawn from the data files in assets/ as the run drew them, with the --limit it recorded. Nothing is fetched.
   loadCases: (root, summary) => {
     const limit = typeof summary.sample?.limit === "number" ? summary.sample.limit : undefined;

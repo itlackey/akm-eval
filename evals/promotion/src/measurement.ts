@@ -27,11 +27,8 @@ function folderOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandbox and the akm config this eval builds, the proposals it plants, the
-  // drain it runs and how it reads the drain. The lib/ files that run akm and hide the endpoint in akm's messages are covered through its imports.
-  collector: ["evals/promotion/src/collect.ts"],
-  // What turns the drain's outcome for a proposal into a row and the rows into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
-  scorer: ["evals/promotion/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const file = join(folderOf(root, summary), "cases.jsonl");
     return parseCases(readFileSync(file, "utf8"), file);

@@ -11,12 +11,8 @@ import { type LoadedCase, type Raw, type Row, errored, makeRow, rawOf, summarize
 
 export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandbox and the akm config this eval builds, the commands it runs,
-  // and the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/distill/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns the raw output of a case into a row and the rows into metrics, with the rule of negation it shares with extract (lib/negation.ts,
-  // covered because score.ts imports it). The labels are the cases (assets/cases.json), digested per case.
-  scorer: ["evals/distill/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => loadCases(corpusFolder(root, summary)),
   caseId: (c) => c.id,
   // The files of the case's bundle go into the sandbox as they are, and the feedback is recorded against the memory before distill runs.

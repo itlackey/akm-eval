@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointId, harnessSha256, sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
@@ -261,14 +261,12 @@ describe("runCorpus", () => {
     expect(summary.manifest).toEqual(stored.manifest);
     const reading = readManifest(stored);
     expect(reading.kind).toBe("manifest"); // the one validator reads it
-    const lock = lockedParts(MEASUREMENT);
     expect(stored.manifest).toMatchObject({
       eval: "longmemeval",
       corpus: "public",
       mode: null,
-      harness_version: lock.harness_version,
-      collector: { version: lock.collector.version, sha256: lock.collector.sha256 },
-      scorer: { version: lock.scorer.version, sha256: lock.scorer.sha256 },
+      harness_version: HARNESS_VERSION,
+      collector: { version: MEASUREMENT.version },
       akm: { version: "0.9.99-test" },
       completion: { selected: ["q-secret", "q-cats", "q-passport_abs"], scored: ["q-secret", "q-cats", "q-passport_abs"], errored: [] },
     });

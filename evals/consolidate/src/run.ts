@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
@@ -104,7 +104,7 @@ interface Summary extends RunInputs, CorpusFields {
   n_paired: number;
   served_models: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   metrics: ReturnType<typeof metrics>;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -160,7 +160,6 @@ function printSideBySide(a: Summary, b: Summary): void {
 type RunContext = CollectContext & { version: string; label: string; limit?: number };
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, resultsParent = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results")): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const all = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl"));
   const cases = selectCases(all, ctx.limit);
@@ -231,7 +230,6 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     ...counts,
     manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       cases: caseDigests(MEASUREMENT, cases),
       akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -292,7 +290,7 @@ interface PoolSummary extends RunInputs {
   served_models: Record<string, number>;
   metrics: PoolMetrics | null;
   error?: string;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -329,7 +327,6 @@ function printPool(s: PoolSummary): void {
  * sequence, and the calls the endpoint turned away show in `calls.failures`.
  */
 export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), resultsParent = join(EVAL_DIR, "results"), poolDir = POOL_DIR): Promise<PoolSummary> {
-  const parts = lockedParts(MEASUREMENT);
   const config = effectiveConfig(ctx);
   const dir = makeResultsDir(resultsParent, ctx.label);
   console.log(`${NAME} --pool: ${Object.keys(pool.texts).length} notes in ${pool.clusters.length} clusters, one improve run (${ctx.overrides.strategy})`);
@@ -364,7 +361,6 @@ export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), re
     ...counts,
     manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: "public",
       mode: "pool",
       cases: caseDigests(MEASUREMENT, cases),

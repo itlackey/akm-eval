@@ -3,8 +3,6 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readClaims, readGenerated, readStated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
-import { importClosure } from "../../../lib/closure.ts";
-import { measuredFiles } from "../../../lib/manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
@@ -949,16 +947,6 @@ describe("generated.json", () => {
       expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
       expect(files.every((f) => existsSync(join(REPO, f)))).toBe(true);
       expect(generatorSha256(REPO)).toMatch(/^[0-9a-f]{64}$/);
-    });
-
-    test("covers every file that generate.ts reaches by an import, but the collector's files and the digest helper: a check that moves to a new file is caught here (#44)", () => {
-      const imports = [...readFileSync(join(REPO, "evals/distill/src/generate.ts"), "utf8").matchAll(/from "(\.\.?\/[^"]+)"/g)].map((m) => m[1]);
-      expect(imports).toEqual(["./lib.ts"]); // generate.ts reaches the rest through lib.ts; a new import of its own would need its closure here
-      const reached = importClosure(["evals/distill/src/lib.ts"], REPO).files;
-      const collector = measuredFiles(MEASUREMENT, REPO).collector; // what the checks do not run on: akm and the config, which make no asset
-      const digested = generatorFiles(REPO);
-      expect(reached.filter((f) => !digested.includes(f) && !collector.includes(f) && f !== "lib/provenance.ts")).toEqual([]);
-      expect(reached).toEqual(expect.arrayContaining(["evals/distill/src/score.ts", "lib/negation.ts"]));
     });
 
     test("is the same for a copy of the files in another folder, and changes with any of them", () => {

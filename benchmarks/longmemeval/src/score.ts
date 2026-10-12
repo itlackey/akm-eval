@@ -8,8 +8,7 @@
 // cannot be scored again without the judge. This file reads the verdicts that are stored: "yes" in the reply is correct, as the
 // benchmark's evaluate_qa.py has it.
 //
-// A change to this file changes what the benchmark scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump longmemeval scorer --reason "...") and update the golden files (golden/) in the same change.
+// A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import type { Question } from "./dataset.ts";

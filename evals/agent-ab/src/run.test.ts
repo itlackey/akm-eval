@@ -9,7 +9,7 @@ import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
-import { caseDigests, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -246,8 +246,8 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const m = stored.manifest;
     const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
-    const parts = lockedParts(MEASUREMENT);
-    expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
     expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
     expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1"), temperature: null, enableThinking: null, timeoutMs: null } });
     expect(m.treatment_hints).toEqual({ attempts: 1 }); // a run of three attempts is not compared with a run of one
@@ -291,7 +291,7 @@ describe("runCorpus", () => {
     const again = readJson(join(out, "summary.json"));
     for (const key of ["report", "metrics", "timeouts", "n_errored"]) expect(again[key], key).toEqual(stored[key]);
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(s.results_dir, "samples.jsonl"), "utf8"));
-    expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), scorer: stored.manifest.scorer, dropped: [] });
+    expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), dropped: [] });
     expect(again.manifest.collector).toEqual(stored.manifest.collector);
     expect(again.manifest.cases).toEqual(stored.manifest.cases);
     expect(again.manifest.completion).toEqual(stored.manifest.completion);

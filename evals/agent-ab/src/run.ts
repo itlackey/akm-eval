@@ -33,7 +33,7 @@ import {
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, buildReport, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize } from "../../../lib/harbor/score.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
 import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -122,7 +122,7 @@ interface Summary {
   /** The Harbor job that ran: the tasks it ran (datasets), attempts, concurrency, setup time and the agents with their options. */
   job: Record<string, unknown>;
   report: Report;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -164,7 +164,6 @@ export async function runCorpus(
   ctx: { model: string; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = taskNames(join(c.folder, "tasks"));
   const tasks = selectTasks(all, ctx.limit);
   const attempts = attemptsFor(ctx.limit);
@@ -192,7 +191,6 @@ export async function runCorpus(
   const { datasets: _datasets, n_attempts: _attempts, ...jobSettings } = job; // the tasks and the attempts are the cases and the hint below
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: c.name,
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
@@ -265,7 +263,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }

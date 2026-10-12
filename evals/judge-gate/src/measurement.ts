@@ -26,11 +26,8 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the config and the sandbox this eval builds, the command it runs, and
-  // the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/judge-gate/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns akm's verdict into an outcome and the outcomes into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
-  scorer: ["evals/judge-gate/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const file = join(assetsOf(root, summary), CASES);
     return parseCases(readFileSync(file, "utf8"), file);
