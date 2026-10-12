@@ -20,6 +20,28 @@
           "evals/reflect/src/score.ts"
         ]
       }
+    },
+    "retrieval": {
+      "collector": {
+        "version": 1,
+        "sha256": "65c76d1b9cb254c4f59427c2f3dbba691fd2084bd11fef5723a8c122dda8590a",
+        "files": [
+          "evals/retrieval/src/akm.ts",
+          "evals/retrieval/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "0429da784b9256b1a887a221151926d0895ef703ccf9babbb3c58d252dc3c957",
+        "files": [
+          "evals/retrieval/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
     }
   }
 }
