@@ -115,6 +115,26 @@ describe("scripts/rescore on a run of longmemeval", () => {
     expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics.accuracy.with_akm).toMatchObject({ n: 3, correct: 2 });
   });
 
+  test("a run from before an empty answer was kept from the judge is scored again to the new verdict, and the summary counts the empty and cut-off answers (#62)", async () => {
+    const { dir, root } = await stored();
+    // as an earlier run stored them: the reader returned nothing and the judge said yes to it, and another answer was cut off
+    const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    Object.assign(rows[0].without_akm, { hypothesis: "", verdict: "yes", correct: true, decidable: true, completion_tokens: 0 });
+    rows[1].with_akm.finish_reason = "length";
+    writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
+    const { answers_cut_off: _cut, answers_empty: _empty, ...before } = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")); // as that run's summary had it: no counts
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(before));
+    expect(before.metrics.accuracy.without_akm).toMatchObject({ n: 3, correct: 3 });
+    const { out, result } = rescoreFolder(dir, { root });
+    expect(result.changed).toEqual([rows[0].id]);
+    const again = readFileSync(join(out, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(again[0].without_akm).toMatchObject({ ok: true, hypothesis: "", verdict: "yes", correct: false, decidable: null });
+    const summary = JSON.parse(readFileSync(join(out, "summary.json"), "utf8"));
+    expect(summary.metrics.accuracy.without_akm).toMatchObject({ n: 3, correct: 2 });
+    expect(summary).toMatchObject({ answers_empty: { without_akm: 1, with_akm: 0 }, answers_cut_off: { without_akm: 0, with_akm: 1 } });
+    expect(summary.notes).toContainEqual(expect.stringContaining("1 of 6 answers stopped at the token limit (finish_reason length), and 1 had no text left for the judge"));
+  });
+
   test("a run whose rows lack part of the raw output is refused, and the fields are named", async () => {
     const { dir, root } = await stored();
     const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));

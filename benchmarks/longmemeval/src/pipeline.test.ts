@@ -414,6 +414,51 @@ describe("runCorpus", () => {
     expect(withAkm).not.toContain("BETA");
   });
 
+  test("a reply that is only reasoning is recorded as empty, is not put to the judge, is wrong, and the summary counts it (#62)", async () => {
+    const { akm, folders } = setup();
+    const judged: string[] = [];
+    let reply = { content: "<think>The key might be BLUE42, or 3, or RED7. Let me check the chats", finish: "length" };
+    server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const prompt = ((await req.json()) as { messages: { content: string }[] }).messages[0].content;
+        const answer = (content: string, finish_reason = "stop") => Response.json({ model: "fake-model", choices: [{ message: { content }, finish_reason }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+        if (!prompt.includes("Model Response:")) return answer(reply.content, reply.finish);
+        // a judge that says yes when the response holds the key, as the probe of the review had it
+        judged.push(prompt);
+        const key = /(?:Correct Answer|Explanation): (.*)/.exec(prompt)?.[1] ?? "";
+        return answer((/Model Response: (.*)/.exec(prompt)?.[1] ?? "").includes(key) ? "yes" : "no");
+      },
+    });
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
+    const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
+    // a thinking model cut off inside its reasoning, which lists BLUE42, 3 and RED7: the judge would have marked two of the three right
+    const summary = await quiet(() => runCorpus(publicOf(folders), { label: "think", sampleSeed: 1 }, context, folders));
+    expect(judged).toEqual([]); // nothing was left to ask about
+    const rows = readFileSync(join(folders.results, readdirSync(folders.results)[0], "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    for (const row of rows) {
+      for (const arm of [row.without_akm, row.with_akm]) expect(arm).toMatchObject({ ok: true, correct: false, decidable: null, hypothesis: "", verdict: null, error: null, finish_reason: "length", judge_model: null });
+    }
+    expect(summary.metrics.accuracy).toMatchObject({ without_akm: { n: 3, correct: 0, n_errored: 0 }, with_akm: { n: 3, correct: 0, n_errored: 0 } });
+    expect(summary).toMatchObject({ status: "complete", n_scored: 3, answers_cut_off: { without_akm: 3, with_akm: 3 }, answers_empty: { without_akm: 3, with_akm: 3 }, judge_undecidable: 0 });
+    expect(summary.notes).toEqual([expect.stringContaining("6 of 6 answers stopped at the token limit (finish_reason length), and 6 had no text left for the judge")]);
+
+    // a reply that has its answer after the reasoning is judged on the answer alone
+    reply = { content: "<think>It could be RED7, or 3, or BLUE42.</think>\nBLUE42", finish: "stop" };
+    const answered = await quiet(() => runCorpus(publicOf(folders), { label: "answer", sampleSeed: 1 }, context, folders));
+    expect(judged).toHaveLength(6);
+    for (const prompt of judged) {
+      expect(prompt).toContain("Model Response: BLUE42\n");
+      expect(prompt).not.toContain("RED7");
+      expect(prompt).not.toContain("think");
+    }
+    expect(answered.metrics.accuracy?.without_akm).toMatchObject({ n: 3, correct: 1 });
+    expect(answered).toMatchObject({ answers_cut_off: { without_akm: 0, with_akm: 0 }, answers_empty: { without_akm: 0, with_akm: 0 } });
+    expect(answered.notes.filter((note) => note.includes("token limit"))).toEqual([]);
+    const done = readFileSync(join(folders.results, readdirSync(folders.results).find((d) => d.endsWith("-answer")) as string, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(done[0].without_akm).toMatchObject({ hypothesis: "BLUE42", verdict: "yes", correct: true });
+  });
+
   test("a judge that answers as the benchmark's judge leaves no note, and one that is only called gpt-4o does not", async () => {
     const { akm, folders } = setup();
     server = fakeEndpoint();

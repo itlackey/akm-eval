@@ -12,6 +12,21 @@ export interface SessionView {
   turns: Turn[];
 }
 
+/**
+ * The answer a reader gave, without its reasoning: what the judge is sent. A model that thinks first writes the thinking in a block
+ * (`<think>...</think>`, and the `thinking`, `thought` and `reasoning` forms of it), and the judge must grade the answer and not the
+ * candidates it weighed on the way. A block that never closes was cut off (the reply stopped at the token limit inside it), so it runs to
+ * the end of the reply; a closing tag with no opening one before it ends reasoning that began in the prompt (some templates put the opening
+ * tag there), so it takes everything before it. What is left is trimmed, and is empty when the reply was only reasoning.
+ */
+export function stripReasoning(reply: string): string {
+  return reply
+    .replace(/<(think|thinking|thought|reasoning)>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(?:think|thinking|thought|reasoning)>[\s\S]*$/i, "")
+    .replace(/^[\s\S]*<\/(?:think|thinking|thought|reasoning)>/i, "")
+    .trim();
+}
+
 export const renderSession = (s: SessionView, n: number): string => `### Session ${n}\nSession Date: ${s.date}\n${s.turns.map((t) => `${t.role}: ${t.content}`).join("\n")}`;
 
 /** The question and the chats the model may use: every session of the haystack, or the ones akm returned. */

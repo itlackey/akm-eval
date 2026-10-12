@@ -13,7 +13,7 @@ import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 import { Akm, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import type { Question } from "./dataset.ts";
 import { type ChatResult, type Endpoint, TEMPERATURE, chat } from "./llm.ts";
-import { type SessionView, isAbstentionQuestion, judgePrompt, readerPrompt } from "./prompts.ts";
+import { type SessionView, isAbstentionQuestion, judgePrompt, readerPrompt, stripReasoning } from "./prompts.ts";
 import { type Raw, type RawArm, type Row, makeRow } from "./score.ts";
 
 export const NAME = "longmemeval";
@@ -42,8 +42,11 @@ async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpo
   } catch (e) {
     return failedArm((e as Error).message);
   }
-  const hypothesis = reply.text.trim();
+  // The judge is sent the answer without its reasoning. A reply that was only reasoning (a thinking model cut off at the token limit) has
+  // no answer: it is recorded as empty, the judge is not asked about it, and the scorer counts it wrong.
+  const hypothesis = stripReasoning(reply.text);
   const got = { hypothesis, seconds: reply.seconds, prompt_tokens: reply.promptTokens, completion_tokens: reply.completionTokens, finish_reason: reply.finishReason, model: reply.model };
+  if (hypothesis === "") return { ...failedArm(""), ...got, error: null };
   try {
     const verdictReply = await chat(judge, judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstentionQuestion(q.question_id)), { maxTokens: MAX_JUDGE_TOKENS });
     return { ...failedArm(""), ...got, error: null, verdict: verdictReply.text.trim().slice(0, 200), judge_model: verdictReply.model };

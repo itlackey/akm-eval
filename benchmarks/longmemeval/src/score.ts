@@ -35,9 +35,9 @@ export const isDecidable = (verdict: string): boolean => ["yes", "no"].includes(
 
 /** What the collector got back for one arm of a question: the reader's answer, the judge's verdict on it, and what the calls cost. */
 export interface RawArm {
-  /** The answer the judge was shown. Null when the reader failed. */
+  /** The answer the judge was shown, without the reader's reasoning. Empty when the reader gave no answer. Null when the reader failed. */
   hypothesis: string | null;
-  /** The judge's reply, cut at 200 characters. Null when the judge was not reached. */
+  /** The judge's reply, cut at 200 characters. Null when the judge was not reached, and when it was not asked: the answer was empty. */
   verdict: string | null;
   /** Why the arm has no verdict: the reader or the judge failed, or akm did (the with-akm arm of a question akm could not search). */
   error: string | null;
@@ -93,16 +93,20 @@ export interface Row {
   with_akm: Arm | null;
 }
 
-/** An arm that was answered and graded is scored by its verdict. One that has no verdict is not scored. */
+/**
+ * An arm that was answered and graded is scored by its verdict. An empty answer is wrong whatever the judge said of it: a reader that gave
+ * nothing has not answered, and has not named a question as unanswerable. An arm that has no verdict and an answer is not scored.
+ */
 function scoreArm(raw: RawArm | null): Arm | null {
   if (raw === null) return null;
-  const ok = raw.error === null && raw.verdict !== null;
+  const empty = raw.error === null && raw.hypothesis === "";
+  const ok = empty || (raw.error === null && raw.verdict !== null);
   return {
     ok,
-    correct: ok ? isYes(raw.verdict as string) : null,
+    correct: ok ? !empty && isYes(raw.verdict as string) : null,
     hypothesis: raw.hypothesis,
     verdict: raw.verdict,
-    decidable: ok ? isDecidable(raw.verdict as string) : null,
+    decidable: ok && !empty ? isDecidable(raw.verdict as string) : null,
     error: raw.error,
     seconds: raw.seconds,
     prompt_tokens: raw.prompt_tokens,
@@ -162,6 +166,12 @@ export const errored = (row: Row): boolean => (row.without_akm === null && row.w
 
 // --- The metrics ---------------------------------------------------------------------------------------------------
 
+/** The answers of each arm that the judge could not grade as they stood. */
+export interface ArmCounts {
+  without_akm: number;
+  with_akm: number;
+}
+
 export interface Metrics {
   accuracy: { without_akm: Rate & { n_errored: number }; with_akm: Rate & { n_errored: number }; difference: PairedDifference } | null;
   by_type: Record<string, { n: number; without_akm: Rate; with_akm: Rate }> | null;
@@ -188,7 +198,12 @@ export function summarize(rows: Row[]) {
   const scoredQuestions = retrievalOnly ? rows.filter((r) => r.retrieval).length : both.length;
   const arms = rows.flatMap((r) => [r.without_akm, r.with_akm]).filter((a): a is Arm => a !== null);
   const undecidable = arms.filter((a) => a.ok && a.decidable === false).length;
+  const judged = arms.filter((a) => a.ok && a.decidable !== null).length; // the arms the judge gave a verdict on: an empty answer was not put to it
   const timeouts = rows.filter((r) => r.timed_out === true).length;
+  const answered = arms.filter((a) => a.hypothesis !== null).length;
+  const countArm = (keep: (a: Arm) => boolean): ArmCounts => ({ without_akm: rows.filter((r) => r.without_akm && keep(r.without_akm)).length, with_akm: rows.filter((r) => r.with_akm && keep(r.with_akm)).length });
+  const cutOff = countArm((a) => a.finish_reason === "length");
+  const empty = countArm((a) => a.hypothesis === "");
   const searched = rows.filter((r) => r.retrieval !== null);
   const seen = (arm: ArmName, key: "model" | "judge_model") => [...new Set(rows.map((r) => r[arm]?.[key]).filter((m): m is string => !!m))].sort();
   const observedJudges = [...new Set([...seen("without_akm", "judge_model"), ...seen("with_akm", "judge_model")])];
@@ -196,8 +211,10 @@ export function summarize(rows: Row[]) {
   if (!retrievalOnly) {
     // The name the endpoint answers with counts, since a name such as "gpt-4o" can mean any snapshot.
     if (observedJudges.length > 0 && !observedJudges.every((j) => j.toLowerCase() === BENCHMARK_JUDGE)) notes.push(`The judge is not ${BENCHMARK_JUDGE}, the judge the benchmark specifies (it answered as ${observedJudges.join(", ")}). These scores are not comparable to published LongMemEval numbers.`);
-    if (undecidable > 0.02 * Math.max(arms.filter((a) => a.ok).length, 1)) notes.push(`The judge gave an answer other than yes or no for ${undecidable} of ${arms.filter((a) => a.ok).length} verdicts. Use a judge that answers directly.`);
+    if (undecidable > 0.02 * Math.max(judged, 1)) notes.push(`The judge gave an answer other than yes or no for ${undecidable} of ${judged} verdicts. Use a judge that answers directly.`);
   }
+  const [cut, none] = [cutOff.without_akm + cutOff.with_akm, empty.without_akm + empty.with_akm];
+  if (cut + none > 0) notes.push(`${cut} of ${answered} answers stopped at the token limit (finish_reason length), and ${none} had no text left for the judge, because the reader gave none or wrote only reasoning, which is removed before the judge sees an answer. An empty answer is scored wrong. A model that thinks before it answers can use its tokens on the thinking: use one that answers directly, or turn its thinking off.`);
   if (timeouts > 0) notes.push(`akm timed out on ${timeouts} of ${rows.length} questions (an index or a search took longer than its limit), and they count as errored. A slower akm shows up here.`);
   const types = [...new Set(rows.map((r) => r.question_type))].sort();
   const withType = (t: string, arm: ArmName): Rate => {
@@ -220,6 +237,8 @@ export function summarize(rows: Row[]) {
     n_scored: scoredQuestions,
     n_errored: rows.length - scoredQuestions,
     timeouts,
+    answers_cut_off: cutOff,
+    answers_empty: empty,
     metrics,
     judge_undecidable: undecidable,
     notes,

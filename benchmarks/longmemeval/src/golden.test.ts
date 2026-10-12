@@ -9,7 +9,7 @@ import { QUESTION_TYPES } from "./dataset.ts";
 import { RETRIEVAL_K } from "./score.ts";
 import { TOP_K } from "./collect.ts";
 
-// The golden files are in ../golden/: seven questions, one of each type and two abstention questions, with 30 raw outputs for them. Each is a
+// The golden files are in ../golden/: seven questions, one of each type and two abstention questions, with 33 raw outputs for them. Each is a
 // realistic answer of the collector: the sessions akm returned, what the reader answered in each arm and what the judge said. They cover a
 // right answer and each way to get it wrong, a reader that cannot take the history or returns nothing or is cut off, a judge that cannot be
 // reached or says more than yes or no, an akm that times out or fails, and the runs with no model. cases.jsonl is a copy of the questions, with
@@ -64,8 +64,15 @@ describe("the golden rows of the scorer", () => {
     expect(refused.with_akm).toMatchObject({ ok: true, correct: true });
     const unjudged = row("the judge cannot be reached for the arm with akm, and the answer is kept");
     expect(unjudged.with_akm).toMatchObject({ ok: false, correct: null, hypothesis: "Tuscan white bean soup", error: "judge: HTTP 429: rate limit reached for requests" });
-    // a reader that returns nothing, and one that is cut off, are judged as the judge says
-    expect(right("the reader returns nothing, and the judge is asked about an empty answer")).toEqual([false, false]);
+    // a reader that returns nothing, or only reasoning (#62), has no answer: it is wrong, whatever the judge said of it, and counts as answered and graded
+    const nothing = row("the reader returns nothing, so the judge is not asked");
+    expect(nothing.without_akm).toMatchObject({ ok: true, correct: false, decidable: null, hypothesis: "", verdict: null, judge_model: null });
+    expect(right("the reader returns nothing, so the judge is not asked")).toEqual([false, false]);
+    expect(row("the reader thinks until the token limit and writes no answer, so nothing is left for the judge").without_akm).toMatchObject({ ok: true, correct: false, hypothesis: "", finish_reason: "length", completion_tokens: 512 });
+    // a stored run from before the judge was kept from an empty answer: its "yes" is not read as a right answer
+    expect(row("a run from before an empty answer was kept from the judge: it said yes to nothing").without_akm).toMatchObject({ ok: true, correct: false, decidable: null, verdict: "yes" });
+    expect(right("an empty answer to an abstention question is not a right answer, whatever the judge said of it")).toEqual([true, false]);
+    // a reader that is cut off but wrote an answer is judged as it stands
     expect(row("the reader is cut off at the token limit, and what it wrote is judged as it is").without_akm).toMatchObject({ ok: true, correct: true, finish_reason: "length" });
     // akm: a timeout is not a failure, and a failure has no retrieval, and the arm with akm has no answer
     const timedOut = row("akm timed out on the index, so there is no retrieval and the arm with akm has no answer");
@@ -90,16 +97,17 @@ describe("the golden rows of the scorer", () => {
     const score = (line: any) => MEASUREMENT.score(cases.find((c) => c.question_id === line.case), (MEASUREMENT.rawOf({ id: line.case, ...line.raw }) as { raw: any }).raw);
     const withModel = raw.filter((l) => l.raw.without_akm !== null || l.raw.with_akm !== null).map(score);
     const summary = MEASUREMENT.summarize(withModel);
-    expect(summary).toMatchObject({ n_run: 26, n_scored: 21, n_errored: 5, timeouts: 1, observed_models: ["qwen3-27b"], observed_judge_models: ["gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18"], sessions_loaded: 79, sessions_over_projection_limit: 1 });
-    expect(summary.metrics.accuracy).toMatchObject({ without_akm: { n: 24, correct: 18, n_errored: 2 }, with_akm: { n: 22, correct: 12, n_errored: 4 } });
-    expect(summary.metrics.accuracy?.difference).toMatchObject({ n: 21, only_with_akm: 1, only_without_akm: 5, both_correct: 10, neither: 5 });
-    expect(summary.metrics.retrieval_abstention).toEqual({ n: 3 });
-    expect(summary.metrics.retrieval).toMatchObject({ k: RETRIEVAL_K, n: 21 });
+    expect(summary).toMatchObject({ n_run: 29, n_scored: 24, n_errored: 5, timeouts: 1, answers_cut_off: { without_akm: 2, with_akm: 0 }, answers_empty: { without_akm: 3, with_akm: 3 }, observed_models: ["qwen3-27b"], observed_judge_models: ["gpt-4o-2024-08-06", "gpt-4o-mini-2024-07-18"], sessions_loaded: 87, sessions_over_projection_limit: 1 });
+    expect(summary.metrics.accuracy).toMatchObject({ without_akm: { n: 27, correct: 19, n_errored: 2 }, with_akm: { n: 25, correct: 13, n_errored: 4 } });
+    expect(summary.metrics.accuracy?.difference).toMatchObject({ n: 24, only_with_akm: 2, only_without_akm: 6, both_correct: 10, neither: 6 });
+    expect(summary.metrics.retrieval_abstention).toEqual({ n: 4 });
+    expect(summary.metrics.retrieval).toMatchObject({ k: RETRIEVAL_K, n: 23 });
     expect(summary.judge_undecidable).toBe(2);
     expect(summary.notes).toEqual([
       "The judge is not gpt-4o-2024-08-06, the judge the benchmark specifies (it answered as gpt-4o-2024-08-06, gpt-4o-mini-2024-07-18). These scores are not comparable to published LongMemEval numbers.",
       "The judge gave an answer other than yes or no for 2 of 46 verdicts. Use a judge that answers directly.",
-      "akm timed out on 1 of 26 questions (an index or a search took longer than its limit), and they count as errored. A slower akm shows up here.",
+      "2 of 53 answers stopped at the token limit (finish_reason length), and 6 had no text left for the judge, because the reader gave none or wrote only reasoning, which is removed before the judge sees an answer. An empty answer is scored wrong. A model that thinks before it answers can use its tokens on the thinking: use one that answers directly, or turn its thinking off.",
+      "akm timed out on 1 of 29 questions (an index or a search took longer than its limit), and they count as errored. A slower akm shows up here.",
     ]);
     // a run with no model has no accuracy, and counts a question scored when akm searched it
     const retrievalOnly = MEASUREMENT.summarize(raw.filter((l) => l.raw.without_akm === null && l.raw.with_akm === null).map(score));
