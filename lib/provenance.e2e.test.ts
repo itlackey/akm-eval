@@ -10,6 +10,7 @@ import { distillConfig } from "../evals/distill/src/lib.ts";
 import { runCorpus } from "../evals/distill/src/run.ts";
 import { commandLine } from "./akm/akm.ts";
 import { useModel } from "./models.ts";
+import { endpointId } from "./provenance.ts";
 
 const QUERY_SECRET = "DUMMY_QUERY_SECRET";
 const USER_PASSWORD = "DUMMY_USER_PASSWORD";
@@ -127,11 +128,15 @@ describe("what a run writes holds no endpoint credential", () => {
     // None of it holds a secret, anywhere in any file.
     for (const [name, text] of Object.entries(written)) for (const secret of SECRETS) expect(`${name}: ${text.includes(secret)}`).toBe(`${name}: false`);
 
-    // And the summary still says which endpoint it was: scheme, host, port and path, with the credentials gone.
+    // And the summary still says which endpoint it was: the host and port, and a digest of the endpoint's identity (scheme, host, port, path and the
+    // query with the credentials gone). Its `engine` holds no path, whatever the config of this eval keeps (#65).
     const stored = JSON.parse(written["summary.json"]);
     expect(stored.config.engines.model.endpoint).toStartWith("https://gateway.example:8443/v1?api_key=<redacted>");
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
-    expect(stored.engine.endpoint).toBe("https://gateway.example:8443/v1?api_key=<redacted>");
+    expect(stored.engine.endpoint).toBe("https://gateway.example:8443");
+    expect(stored.engine.endpoint_id).toBe(endpointId(BASE_URL));
+    expect(stored.engine.endpoint_id).toBe(endpointId(`https://gateway.example:8443/v1?api_key=other`)); // the key is not part of it
+    expect(JSON.stringify(stored.engine)).not.toContain("/v1");
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
     expect(existsSync(join(summary.results_dir, "summary.json"))).toBe(true);
   });

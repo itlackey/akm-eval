@@ -3,10 +3,13 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
+import { hideEndpoint } from "../../../lib/cli.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { endpointId, endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
-import { type Case, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
+import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -192,8 +195,10 @@ describe("runCorpus", () => {
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
     expect(text).not.toContain("model-secret");
     const stored = JSON.parse(text);
-    expect(stored.config).toEqual(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey)))); // the key is the reference "$MODEL_API_KEY", which holds no secret
-    expect(stored.engine).toEqual({ engine: "reflect", model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { reflect: { model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.config).toEqual(hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl)); // the key is the reference "$MODEL_API_KEY", which holds no secret, and the endpoint is <MODEL_BASE_URL>
+    const settings = { model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 };
+    expect(stored.engine).toEqual({ engine: "reflect", ...settings, engines: { reflect: settings } });
+    expect(settings.endpoint).toBe("http://localhost:9"); // the host, and the digest of the identity in endpoint_id: never the path
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
@@ -303,6 +308,121 @@ describe("runCorpus", () => {
   });
 });
 
+describe("the manifest of a run", () => {
+  const cases = [
+    make("fix-ok", "when-to-use-missing", "knowledge/a.md"),
+    make("keep-ok", "retrieval-miss", "skills/c/SKILL.md"),
+    make("refused", "retrieval-miss", "knowledge/e.md"),
+    make("provider", "retrieval-miss", "knowledge/g.md"),
+    make("crash", "retrieval-miss", "knowledge/h.md"),
+  ];
+  const plan = {
+    "knowledge/a": { outcome: "proposal", content: NOTE },
+    "skills/c": { outcome: "none" },
+    "knowledge/e": { outcome: "refused" },
+    "knowledge/g": { outcome: "provider" },
+    "knowledge/h": { outcome: "crash" },
+  };
+  const stored = (summary: { results_dir: string }) => JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+  const samples = (summary: { results_dir: string }) => readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+
+  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+    const { ctx, folders } = setup(cases, plan);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const { manifest } = stored(summary);
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(readManifest(stored(summary)).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "reflect", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.settings).toEqual({ strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(Object.keys(manifest.cases)).toEqual(cases.map((c) => c.id));
+    const first = cases[0] as Case;
+    expect(manifest.cases["fix-ok"]).toEqual({
+      input_sha256: sha256Json({ path: first.path, source: first.source, feedback: first.feedback, searches: [] }),
+      label_sha256: sha256Json({ class: first.class, source: first.source, allow: first.allow, forbid: [], anchors: [] }),
+    });
+    expect(manifest.completion).toEqual({ selected: cases.map((c) => c.id), scored: ["fix-ok", "keep-ok", "refused"], errored: ["provider", "crash"] });
+  });
+
+  test("holds the config without the model's settings and the engines with a host and a digest, and the summary's config has the same digest", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 1), plan);
+    const { manifest, config, engine } = stored(await quiet(() => runCorpus("public", ctx, folders)));
+    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(config)));
+    expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
+    expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
+    expect(manifest.engines).toEqual(engine.engines);
+    expect(manifest.engines.reflect).toEqual({ model: "the-model", endpoint: "http://localhost:9", endpoint_id: sha256Text("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+  });
+
+  test("a path segment of the model URL is in no summary and no row, only its host and the digest (#65)", async () => {
+    const { ctx, folders } = setup(cases, plan);
+    const url = "https://gateway.example/k-DUMMYSECRET0123/v1";
+    const summary = await quiet(() => runCorpus("public", { ...ctx, baseUrl: url }, folders));
+    for (const file of ["summary.json", "samples.jsonl"]) {
+      const text = readFileSync(join(summary.results_dir, file), "utf8");
+      expect(text).not.toContain("DUMMYSECRET0123");
+      expect(text).not.toContain("k-DUMMY");
+    }
+    const { manifest, engine } = stored(summary);
+    expect(manifest.engines.reflect).toMatchObject({ endpoint: "https://gateway.example", endpoint_id: endpointId(`${url}/chat/completions`) });
+    expect(engine.endpoint).toBe("https://gateway.example");
+    // two deployments on one host are two endpoints
+    const other = stored(await quiet(() => runCorpus("public", { ...ctx, baseUrl: "https://gateway.example/deployment-B/v1" }, setup(cases.slice(0, 1), plan).folders)));
+    expect(other.manifest.engines.reflect.endpoint).toBe("https://gateway.example");
+    expect(other.manifest.engines.reflect.endpoint_id).not.toBe(manifest.engines.reflect.endpoint_id);
+  });
+
+  test("the searches a run records are part of the input of the notes they are for, so --retrieval-queries is part of the run's identity (#37)", async () => {
+    const { ctx, folders } = setup(cases, plan);
+    const without = stored(await quiet(() => runCorpus("public", ctx, folders))).manifest;
+    const queries = new Map([["knowledge/a", ["rotate signing keys"]], ["skills/c", ["key expiry", "unrelated"]]]);
+    const withQueries = stored(await quiet(() => runCorpus("public", { ...ctx, queries }, setup(cases, plan).folders))).manifest;
+    const changed = Object.keys(without.cases).filter((id) => without.cases[id].input_sha256 !== withQueries.cases[id].input_sha256);
+    expect(changed).toEqual(["fix-ok", "keep-ok"]); // the two notes that have searches; the other three present what they did before
+    for (const id of Object.keys(without.cases)) expect(withQueries.cases[id].label_sha256).toBe(without.cases[id].label_sha256);
+    expect({ ...withQueries, cases: null, akm: null }).toEqual({ ...without, cases: null, akm: null }); // and nothing else of the run differs (the fake akm is in a folder of its own each time)
+    // other searches for one note are another input for that note only
+    const moved = stored(await quiet(() => runCorpus("public", { ...ctx, queries: new Map([["knowledge/a", ["rotate signing keys"]], ["skills/c", ["key expiry", "something else"]]]) }, setup(cases, plan).folders))).manifest;
+    expect(Object.keys(without.cases).filter((id) => moved.cases[id].input_sha256 !== withQueries.cases[id].input_sha256)).toEqual(["keep-ok"]);
+  });
+
+  test("every row holds the raw output the scorer reads: scoring it again gives the row (outcomes proposal, none, refused, error)", async () => {
+    const { ctx, folders } = setup(cases, plan);
+    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const rows = samples(summary);
+    expect(rows.map((r) => r.outcome)).toEqual(["proposal", "none", "refused", "error", "error"]);
+    rows.forEach((row, i) => {
+      const read = MEASUREMENT.rawOf(row);
+      expect("raw" in read).toBe(true);
+      expect(MEASUREMENT.score(cases[i] as Case, (read as { raw: Raw }).raw)).toEqual(row);
+    });
+    expect(MEASUREMENT.summarize(rows)).toMatchObject({ n_run: 5, n_scored: 3, n_errored: 2, metrics: summary.metrics });
+  });
+
+  test("a run that stops early keeps every selected case in the manifest, with those it never ran in neither list", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
+    const { ctx, folders } = setup(many, Object.fromEntries(many.map((c) => [refOf(c.path), { outcome: "provider" }])));
+    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("the first 5 cases got no outcome");
+    const { manifest } = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0] as string, "summary.json"), "utf8"));
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(manifest.completion).toEqual({ selected: many.map((c) => c.id), scored: [], errored: many.slice(0, 5).map((c) => c.id) });
+  });
+
+  test("a run stops before it collects anything when MEASUREMENT.lock has no entry for the eval", async () => {
+    const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
+    const lock = join(import.meta.dir, "..", "..", "..", "MEASUREMENT.lock");
+    const before = readFileSync(lock, "utf8");
+    try {
+      writeFileSync(lock, JSON.stringify({ ...JSON.parse(before), evals: {} }));
+      await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("has no entry for reflect");
+    } finally {
+      writeFileSync(lock, before);
+    }
+    expect(calls()).toEqual([]);
+  });
+});
+
 describe("run --corpus private", () => {
   const EVAL = join(import.meta.dir, "..");
   const REPO = join(EVAL, "..", "..");
@@ -315,6 +435,7 @@ describe("run --corpus private", () => {
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "reflect", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
+    cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     return tree;
   }
   const bun = (tree: string, script: string, args: string[]) => {

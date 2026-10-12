@@ -10,7 +10,10 @@
 // shown, and it is not a conclusion.
 
 import { createHash } from "node:crypto";
-import { ENGINE_KEYS } from "../../../lib/provenance.ts";
+import { readManifest } from "../../../lib/manifest.ts";
+import { canonical, endpointDisplay, recordedEngine, withoutEngineSettings } from "../../../lib/provenance.ts";
+
+export { canonical };
 
 export const AXES = ["build", "config", "model", "inputs", "harness"] as const;
 export type Axis = (typeof AXES)[number];
@@ -29,24 +32,6 @@ export function parseAxes(text: string): Axis[] {
 type Row = Record<string, any>;
 const isObject = (x: unknown): x is Row => typeof x === "object" && x !== null && !Array.isArray(x);
 const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
-
-/** JSON with the keys of every object in order, so the same value always gives the same text. */
-export function canonical(x: unknown): string {
-  if (Array.isArray(x)) return `[${x.map(canonical).join(",")}]`;
-  if (isObject(x)) return `{${Object.keys(x).sort().map((k) => `${JSON.stringify(k)}:${canonical(x[k])}`).join(",")}}`;
-  return JSON.stringify(x) ?? "null";
-}
-
-function withoutEngineSettings(x: unknown): unknown {
-  if (Array.isArray(x)) return x.map(withoutEngineSettings);
-  if (!isObject(x)) return x;
-  return Object.fromEntries(
-    Object.entries(x).map(([key, value]) => {
-      if (key === "engines" && isObject(value)) return [key, Object.fromEntries(Object.entries(value).map(([name, e]) => [name, isObject(e) ? Object.fromEntries(Object.entries(e).filter(([k]) => !(ENGINE_KEYS as readonly string[]).includes(k))) : e]))];
-      return [key, withoutEngineSettings(value)];
-    }),
-  );
-}
 
 /** The evals that run in a container with Harbor. Their summaries hold the job as `config`, not an akm config, and no engine table. */
 export const HARBOR = ["agent-ab", "terminal-bench"];
@@ -83,7 +68,7 @@ function harborEngine(s: Row): string | null {
   if (!isObject(s.engine) || typeof s.engine.model !== "string") return null;
   const endpoint = s.engine.endpoint ?? null;
   if (endpoint !== null && !(typeof endpoint === "string" && endpoint.includes("://"))) return null;
-  return canonical({ opencode: { model: s.engine.model, endpoint } });
+  return canonical({ opencode: recordedEngine({ model: s.engine.model, endpoint, endpoint_id: s.engine.endpoint_id }) });
 }
 
 /** The akm version of a run; for a Harbor run with the plugin's, which it installs beside akm and which the build includes. */
@@ -123,35 +108,60 @@ export interface Identity {
   harness_sha256: string | null;
   git_commit: string | null;
   limit: string | null;
+  /** Settings that change what a run measures and belong to its scope, such as the embedder of consolidate and nightly (#69): a digest, null for none. */
+  hints: string | null;
+  /** The summary carries a valid manifest (see lib/manifest.ts). A summary without one is legacy. */
+  manifest: boolean;
+  /** The collector of the run, "version sha256", when it has a manifest. A collector of version 0 is a legacy run's, known only by its harness_sha256. */
+  collector: string | null;
+  /** The scorer of the run, "version sha256", when it has a manifest. The scorer is not an axis: a run is scored again. */
+  scorer: string | null;
+  harness_version: string | null;
 }
 
 const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : typeof x === "number" && Number.isFinite(x) ? String(x) : null);
 
+/**
+ * What a summary says about how its run was made. A summary with a manifest (lib/manifest.ts) is read from it: the akm, the config, the
+ * engines, the settings and the hints. One without is legacy, and is read from the fields every summary has. Either way an engine's
+ * endpoint is its host and the digest of its identity, never its path (#65).
+ */
 export function identityOf(s: Row): Identity {
+  const reading = readManifest(s);
+  const m = reading.kind === "manifest" ? reading.manifest : null;
   // the settings of every engine the run used, by name; a summary that records only the default engine's does not say what a routed one used
   const harbor = HARBOR.includes(s.eval);
-  const engine = harbor ? harborEngine(s) : isObject(s.engine) && isObject(s.engine.engines) ? canonical(s.engine.engines) : null;
+  const recorded = (engines: Row): string => canonical(Object.fromEntries(Object.entries(engines).map(([name, e]) => [name, recordedEngine(e)])));
+  const engine = harbor ? harborEngine(s) : m ? recorded(m.engines) : isObject(s.engine) && isObject(s.engine.engines) ? recorded(s.engine.engines) : null;
+  const embedder = text(s.embedder);
+  const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
+  const part = (p: { version: number; sha256: string }): string => `${p.version} ${p.sha256}`;
   return {
     eval: text(s.eval),
     corpus: text(s.corpus),
     collection: text(s.collection),
     mode: text(s.mode),
     private: s.corpus === "private",
-    akm_version: akmVersionOf(s),
-    akm_build: text(s.akm_build),
-    akm_build_fingerprint: text(s.akm_build_fingerprint),
-    akm_bin: text(s.akm_bin),
-    strategy: text(s.strategy),
-    config_patch: isObject(s.config_patch) ? text(s.config_patch.sha256) : null,
-    timeout_ms: text(s.timeout_ms),
-    config: harbor ? harborConfigDigest(s) : configDigest(s.config),
+    akm_version: m && !harbor ? m.akm.version : akmVersionOf(s),
+    akm_build: m && !harbor ? m.akm.build : text(s.akm_build),
+    akm_build_fingerprint: m && !harbor ? m.akm.build_fingerprint : text(s.akm_build_fingerprint),
+    akm_bin: m && !harbor ? m.akm.bin : text(s.akm_bin),
+    strategy: m ? m.settings.strategy : text(s.strategy),
+    config_patch: m ? m.settings.config_patch_sha256 : isObject(s.config_patch) ? text(s.config_patch.sha256) : null,
+    timeout_ms: m ? text(m.settings.timeout_ms) : text(s.timeout_ms),
+    config: harbor ? harborConfigDigest(s) : m ? m.config.sha256 : configDigest(s.config),
     model: text(s.model),
     engine,
     assets_sha256: text(s.assets_sha256),
-    seed: text(s.seed),
+    seed: m ? m.settings.seed : text(s.seed),
     harness_sha256: text(s.harness_sha256),
     git_commit: text(s.git_commit),
     limit: text(s.limit),
+    hints: Object.keys(hints).length === 0 ? null : canonical(hints),
+    manifest: m !== null,
+    collector: m ? part(m.collector) : null,
+    scorer: m ? part(m.scorer) : null,
+    harness_version: m ? String(m.harness_version) : null,
   };
 }
 
@@ -202,6 +212,8 @@ const FIELDS: Field[] = [
   { name: "corpus", axis: "scope", label: "the corpus" },
   { name: "collection", axis: "scope", label: "the collection" },
   { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases)" },
+  // Runs with --embedder real and --embedder deterministic pair notes in different spaces: whatever the treatment, they are not the same measurement (#69).
+  { name: "hints", axis: "scope", label: "the settings that change what a run measures (the embedder)" },
   { name: "akm_version", axis: "build", label: "the akm version" },
   { name: "akm_build", axis: "build", label: "the akm build", none: "release" },
   { name: "akm_build_fingerprint", axis: "build", label: "the uncommitted changes of the akm build (akm_build_fingerprint)", none: "none" },
@@ -230,14 +242,45 @@ function harnessValues(ms: Member[]): (string | null)[] {
 }
 
 const short = (v: string): string => v.replace(/\b[0-9a-f]{64}\b/g, (h) => h.slice(0, 12));
+
+/** Engines as a message names them: by name, then each setting that is set. An endpoint is its host and the start of its digest, never its path (#65). */
 function engineText(v: string): string {
   try {
     const engines = Object.entries(JSON.parse(v) as Row);
-    const one = (e: Row) => Object.entries(e).filter(([, x]) => x !== null).map(([k, x]) => `${k} ${x}`).join(", ") || "none";
+    const one = (e: Row) =>
+      [e.model === null || e.model === undefined ? null : `model ${e.model}`, e.endpoint === null && e.endpoint_id === null ? null : `endpoint ${endpointDisplay(e)}`, ...["temperature", "enableThinking", "timeoutMs"].map((k) => (e[k] === null || e[k] === undefined ? null : `${k} ${e[k]}`))]
+        .filter((x) => x !== null)
+        .join(", ") || "none";
     return engines.length === 0 ? "none" : engines.map(([name, e]) => `${name}: ${one(e)}`).join("; ");
   } catch {
     return v;
   }
+}
+
+/** Hints as a message names them: `embedder real`. */
+function hintsText(v: string): string {
+  try {
+    return Object.entries(JSON.parse(v) as Row).map(([k, x]) => `${k} ${x}`).join(", ") || "none";
+  } catch {
+    return v;
+  }
+}
+
+/** The harness of each member when every run has a manifest: the collector's version and digest, and the harness version. A legacy collector (version 0) with no digest of its code is unidentified. */
+function collectorValues(ms: Member[]): (string | null)[] {
+  return ms.map((m) => {
+    const [version, sha] = (m.identity.collector ?? "").split(" ");
+    return version === "0" && /^0+$/.test(sha ?? "") ? null : `collector ${m.identity.collector} (harness ${m.identity.harness_version})`;
+  });
+}
+
+export interface CheckOptions {
+  /**
+   * Read the harness from the manifest: the collector's version and digest, and the harness version, when every run has a manifest. Another scorer
+   * is no difference, since a run is scored again (scripts/rescore); and the cases are compared one by one by their digests, so
+   * `assets_sha256` is not compared. Off by default, which is how scripts/matrix uses the policy: the harness is then the digest of the eval's whole code.
+   */
+  manifest?: boolean;
 }
 
 /**
@@ -246,8 +289,9 @@ function engineText(v: string): string {
  * runs of each side, since the sides are meant to differ there. A run that lacks evidence for an undeclared axis is a gap.
  * The messages do not depend on the order of the runs within a side.
  */
-export function checkMembers(members: Member[], treatment: Axis[]): PolicyResult {
+export function checkMembers(members: Member[], treatment: Axis[], options: CheckOptions = {}): PolicyResult {
   const out: PolicyResult = { treatment, mismatches: [], gaps: [], treated: [] };
+  const byManifest = options.manifest === true && members.every((m) => m.identity.manifest);
   const sides = [...new Set(members.map((m) => m.side))];
   /** "A", or "the baseline and the config", or "the baseline r2 and r3" when only some of the runs of a side are meant. */
   const who = (group: Member[]): string => {
@@ -276,9 +320,9 @@ export function checkMembers(members: Member[], treatment: Axis[]): PolicyResult
     return { missing, groups: ordered };
   };
 
-  const fields: Field[] = [...FIELDS, HARNESS];
+  const fields: Field[] = [...FIELDS.filter((f) => !(byManifest && f.name === "assets_sha256")), byManifest ? { ...HARNESS, values: collectorValues, gap: "is not identified (a run from before harness-v3 with no harness_sha256)" } : HARNESS];
   for (const f of fields) {
-    const display = (v: string | null): string => (v === null ? (f.none ?? "none") : f.name === "engine" ? engineText(v) : short(v));
+    const display = (v: string | null): string => (v === null ? (f.none ?? "none") : f.name === "engine" ? engineText(v) : f.name === "hints" ? hintsText(v) : short(v));
     const describe = (groups: [string | null, Member[]][]) => groups.map(([v, ms]) => `${display(v)} in ${who(ms)}`).join(", ");
     const declared = f.axis !== "scope" && treatment.includes(f.axis);
     const among = (ms: Member[], where: string) => {
@@ -295,7 +339,7 @@ export function checkMembers(members: Member[], treatment: Axis[]): PolicyResult
       continue;
     }
     if (all.groups.length > 1) out.mismatches.push({ axis: f.axis, field: f.name, message: `${f.label} differs: ${describe(all.groups)}` });
-    if (all.missing.length > 0) out.gaps.push({ axis: f.axis, field: f.name, message: `${f.label} ${f.gap ?? "is not recorded"} in ${who(all.missing)}${f.name === "harness" ? " (no harness_sha256, and git_commit is missing or has changes that are not committed)" : ""}` });
+    if (all.missing.length > 0) out.gaps.push({ axis: f.axis, field: f.name, message: `${f.label} ${f.gap ?? "is not recorded"} in ${who(all.missing)}${f.name === "harness" && !byManifest ? " (no harness_sha256, and git_commit is missing or has changes that are not committed)" : ""}` });
   }
   return out;
 }

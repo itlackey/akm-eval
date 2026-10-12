@@ -14,7 +14,7 @@ This layout replaces the earlier harness. The old content stays under the tag `l
 |---|---|---|---|---|---|
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `public`, `private`, `own` | `--repeat` `--akm` `--semantic` | 0.9.26 | for each collection: `search_mode`, `n_assets`, `index_seconds`, `metrics` of `search` and `curate` (and the two semantic columns in a full run), with `ndcg_10_condensed`, the judged results alone, beside `ndcg_10`; `abstention`, `errored`, `timeouts`, `semantic_index`, `semantic_index_built_by`; `assets_sha256`, over the content of the indexed library, the bundle mappings, the queries and the qrels, and `assets`, with the digest of each of the four; it calls no model |
 | `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `public`, `private` | `--repeat` `--strategy` `--config-patch` `--model` `--akm` | 0.9.25-alpha.2 or later | `metrics` for `good`, `bad` (split into `bad_harmful` and `bad_churn`), `precision` and `outcomes`; `rubric_version`; `status`, `aborted_reason`, `timeouts` |
-| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `public`, `private` | `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` | 0.9.25-alpha.3 or later | `metrics` for `defects`, `controls`, `proposals`, `refused` and `classes`; `served`; `retrieval_queries`; `status`, `aborted_reason`, `timeouts` |
+| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `public`, `private` | `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` | 0.9.25-alpha.3 or later | `metrics` for `defects`, `controls`, `proposals`, `refused` and `classes`; `served`; `retrieval_queries`; `manifest`; `status`, `aborted_reason`, `timeouts` |
 | `evals/distill` | Do distilled lessons say only what the source memory says? | `public`, `private`, `own`, `own-feedback` | `--repeat` `--strategy` `--config-patch` `--model` `--akm` | 0.9.26 (the `lesson-update` class needs 0.10.0) | `metrics` for `good_lessons`, `wrong_lessons`, `lesson_updates`, `by_class`, `outcomes`; `served_models`; `status`, `aborted_reason`, `timeouts` |
 | `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `public`, `private` | `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--pool` `--timeout-ms` | 0.9.26 | `metrics` for `unsafe`, `precision`, `recall`, `classes` (with `--pool` also `pairs`, `calls`, `chunks`); `embedder`, `n_paired`, `served_models`; `status`, `aborted_reason`, `timeouts` |
 | `evals/extract` | Does extraction pull durable insights and preferences from session logs, and leave routine sessions empty? | `public`, `private` | `--repeat` `--strategy` `--config-patch` `--model` `--akm` | 0.9.26 or later | `metrics` for `insights`, `routine`, `planted` (with `saved_instruction`) and `classes`; `timeouts` |
@@ -32,7 +32,7 @@ Reading the table:
 - **Flags.** Every `run` takes `--corpus`, `--limit` and `--label`. `--akm` is the command that runs akm, and for the two Harbor evals an `akm-cli@x.y.z` release or the folder of an akm checkout. `--model` is the model of the run, and `--judge-model` the judge. `--repeat N` runs the corpus N times. `--strategy` and `--config-patch` run another akm strategy, or another config, than the eval's own. `--embedder` and `--semantic` pick how akm embeds: see below. `--attempts` runs each Terminal-Bench task N times per arm. The flags of one eval only are in its README.
 - **akm.** The lowest release the eval works with. "Or later" means the run stops on an older akm. A bare version is the one the eval was written for, which its README names, and no floor is checked. [`COMPATIBILITY.md`](COMPATIBILITY.md) has the range of each, the last release it was run on, the akm commands it runs, the JSON it reads and the parts of akm it relies on that akm does not promise.
 - **Sampling.** The seven evals that run a model through akm (`judge-gate`, `reflect`, `distill`, `consolidate`, `extract`, `nightly` and `promotion`) set temperature 0 and thinking off in the engine of the config they write, and record it under `engine`.
-- **What a summary records.** Each of those seven records `model`, `akm_version`, `akm_bin`, `akm_build`, `akm_build_fingerprint`, `limit`, `strategy`, `config_patch`, `config`, `engine`, `assets_sha256`, `seed`, `n_errored` and `metrics`, as well as what its row says. `config` is the akm config the eval wrote, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>`. `config` names the model's endpoint: `judge-gate`, `extract`, `consolidate` and `nightly` write it as `<MODEL_BASE_URL>`, and `reflect`, `distill` and `promotion` keep the URL whole, so read it before you publish a summary. `engine` is that config's engine: `model`, the `endpoint` (scheme, host, port and path, with no credentials), `temperature`, `enableThinking` and `timeoutMs`, and `engines`, the same settings of every engine the config uses, those a strategy, a process or a gate is routed to included (what the policy compares). `assets_sha256` is one digest over the files a run read, wherever the repository is. `seed` is the private seed of a run on `private` assets, and null otherwise. Every eval and benchmark, those seven and the rest, records `status` (`complete` or `aborted`) and `aborted_reason`. A run that did not finish what it set out to do is `aborted`: it writes its summary, exits non-zero, and `scripts/matrix` never compares it. Every summary also records `harness_sha256`, a digest of the code the run used: the eval's own source files (with those of the evals whose code it imports: consolidate, distill and reflect for `nightly`, reflect for `extract`, retrieval for `terminal-bench`), every `.ts` and `.py` file under `lib/`, and `lib/env.sh` (for `bakeoff`, which uses nothing in `lib/`, its own Python files only). Tests, test doubles (`fakes.ts`), fixtures and READMEs are left out. It covers edits that are not committed, so two runs of different eval code are told apart even from a checkout with uncommitted changes. All but `nightly` count `timeouts`, the cases in which akm was killed for running past its time limit, apart from the other errors.
+- **What a summary records.** Each of those seven records `model`, `akm_version`, `akm_bin`, `akm_build`, `akm_build_fingerprint`, `limit`, `strategy`, `config_patch`, `config`, `engine`, `assets_sha256`, `seed`, `n_errored` and `metrics`, as well as what its row says. `config` is the akm config the eval wrote, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>`. `config` names the model's endpoint: `judge-gate`, `extract`, `consolidate`, `nightly` and `reflect` write it as `<MODEL_BASE_URL>`, and `distill` and `promotion` keep the URL whole, so read it before you publish a summary. `engine` is that config's engine: `model`, the `endpoint` (its host and port only: never the path, which can name a deployment or carry a key), `endpoint_id` (a sha256 of the endpoint's identity, scheme, host, port and path with the credentials removed, which is what is compared), `temperature`, `enableThinking` and `timeoutMs`, and `engines`, the same settings of every engine the config uses, those a strategy, a process or a gate is routed to included (what the policy compares). `evals/reflect` also records a `manifest` (see "How results stay comparable"), and the other evals will. `assets_sha256` is one digest over the files a run read, wherever the repository is. `seed` is the private seed of a run on `private` assets, and null otherwise. Every eval and benchmark, those seven and the rest, records `status` (`complete` or `aborted`) and `aborted_reason`. A run that did not finish what it set out to do is `aborted`: it writes its summary, exits non-zero, and `scripts/matrix` never compares it. Every summary also records `harness_sha256`, a digest of the code the run used: the eval's own source files (with those of the evals whose code it imports: consolidate, distill and reflect for `nightly`, reflect for `extract`, retrieval for `terminal-bench`), every `.ts` and `.py` file under `lib/`, and `lib/env.sh` (for `bakeoff`, which uses nothing in `lib/`, its own Python files only). Tests, test doubles (`fakes.ts`), fixtures and READMEs are left out. It covers edits that are not committed, so two runs of different eval code are told apart even from a checkout with uncommitted changes. All but `nightly` count `timeouts`, the cases in which akm was killed for running past its time limit, apart from the other errors.
 - **Which akm.** `evals/retrieval`, `evals/judge-gate`, `evals/reflect`, `evals/distill`, `evals/consolidate`, `evals/extract`, `evals/nightly`, `evals/promotion`, `benchmarks/longmemeval` and `benchmarks/skillret` run the akm on this machine and record `akm_version`, `akm_bin` and `akm_build`. The two Harbor evals record the three too, from `--akm`: `akm-cli@0.9.26` by default, and the checkout's `git describe` as `akm_build`. `evals/bakeoff` never runs akm, so it records no akm and has `prompts_version` instead.
 - **judge-gate.** Its 106 cases are 11 good and 95 bad (67 harmful, 28 churn), labelled under rubric version 2, which the summary records as `rubric_version`. A summary with no `rubric_version` was scored under version 1, and results from version 1 do not compare with these.
 
@@ -43,6 +43,8 @@ Older evals and experiments that were retired instead of moved in are summarised
 ```
 README.md            this file
 COMPATIBILITY.md     which akm each eval works with: range, commands, JSON fields, private surfaces
+MEASUREMENT.lock     the version and digest of each eval's collector and scorer, and the harness version (see "How results stay comparable")
+MEASUREMENT_CHANGELOG.md  one row for every change to what an eval measures
 LICENSE              MPL-2.0, for everything here
 NOTICE               third-party items under their own licences
 package.json         the root package, with the scripts check, test and typecheck, and no dependencies
@@ -57,6 +59,8 @@ lib/env.sh           the .env loader that every run, generate and label script a
 lib/models.ts        --model, --judge-model and models.json: which model a run uses, and whether it may see your private notes
 lib/negation.ts      the rule of negation that the checks of extract and distill share
 lib/provenance.ts    the digests, the redacted akm config and the engine settings that go into summary.json
+lib/manifest.ts      the run manifest in every summary.json, the lock, and the contract an eval declares itself by (MEASUREMENT)
+lib/golden.ts        the golden tests of a scorer: raw outputs with the rows the scorer must give
 lib/results.ts       the results folder of a run and its .running marker
 lib/repeat.ts        --repeat
 lib/harbor/          the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
@@ -65,6 +69,8 @@ scripts/check        the typecheck of every src folder, the Python suites and bu
 scripts/smoke/       runs each eval that drives akm once, on one case, against a stub model; --contract also checks that each reaches its outcome
 scripts/matrix/      runs a matrix of eval configurations in two stages and writes a decision table
 scripts/compare/     compares two results folders case by case, or the runs of a --repeat, and measures an eval's noise floor
+scripts/rescore/     scores stored results folders again with the current scorer and labels, into new folders beside them
+scripts/measurement/ checks MEASUREMENT.lock against the files of each eval, and bumps a part when it changes
 reports/             notes, and the layout for published results (reports/README.md): scores only, never private items
 retired/             code of retired evals, kept to read and never run here
 private/             your private assets (gitignored, never published)
@@ -149,6 +155,91 @@ evals/promotion/run --corpus public --repeat 4 --label pr1071-2
 
 A spread of min, max and mean cannot tell which cases changed. `scripts/compare/run --repeats evals/nightly/results/<UTC date>-<label>` reads the runs `-r1` to `-rN` case by case and reports each case's flip rate and the eval's noise floor: the mean flip rate, which is how many cases change verdict between two runs of one configuration with nothing changed. A change that flips about that many cases is no change.
 
+## How results stay comparable
+
+akm-eval exists to say which of two akm builds is better: run akm A and akm B through the same eval and compare. A result loses that value when akm-eval itself changes and no earlier result can be compared with a new one. So a result has to stay comparable across changes to akm and across changes and fixes to akm-eval's own tools. This section is the design, and the contract an eval follows to be on it. `reflect` is the first eval on it; the others follow, and until one does its summaries are compared by the earlier rules (see "What a comparison may differ in").
+
+### The three parts of a run
+
+| Part | What it is | Its code |
+|---|---|---|
+| **Collection** | The cases go into a sandbox, akm is called with a config and a model, and akm's outputs come back. The only part that needs akm and a model. | The **collector**: the eval's run code that builds the sandbox, the akm config and its engine settings, the commands it runs, and `lib/akm`. |
+| **Raw outputs** | Everything akm and the model returned for each case: the proposal, the lesson, the saved memory, the verdict, the search results, the akm JSON. | Stored with the run, in `samples.jsonl`. |
+| **Scoring** | The checks turn each case's raw output, with the case's labels (expected outcomes, required and forbidden phrases, qrels), into a row, and the rows into metrics. Cheap, deterministic, no akm. | The **scorer**. |
+
+Each kind of change invalidates only what it changes:
+
+| Change | What it invalidates | What happens |
+|---|---|---|
+| The scorer, or the labels of a case (a scoring fix, a relabelled case) | No run. | Any stored run is **rescored** with the current scorer and labels (`scripts/rescore`). `scripts/compare` does it by itself when two runs were scored differently, and says so. |
+| Cases added, removed, or given another input | Those cases only. | A comparison uses the cases whose input is the same in every run, and names the ones it left out. If more than a fifth of the shared cases differ in input, it is refused as a difference of inputs, unless `inputs` is the treatment. |
+| The collector: the akm config the eval writes, the run procedure, engine settings such as the temperature, the sandbox, `lib/akm` | Earlier raw outputs: they are not comparable with later ones. | Explicit, versioned and gated. The collector has a version; a change to its files fails CI until the version is bumped with a line in `MEASUREMENT_CHANGELOG.md`; a comparison refuses two collector versions unless the collector is the declared treatment (`--treatment harness`). |
+| The harness version | Every eval at once. | A deliberate break (`scripts/measurement/run bump harness`). Harness version 3 is this foundation. |
+
+### The manifest
+
+Every `summary.json` of an eval on the manifest has a `manifest` object (`lib/manifest.ts` types and validates it, and every reader of it, `scripts/compare`, `scripts/rescore` and the replay tools, goes through that one validator):
+
+- `manifest_version`, `eval`, `corpus`, `collection`, `mode`: the scope. Runs of another eval, corpus, collection or mode (`consolidate --pool`) are never compared.
+- `harness_version`, from `MEASUREMENT.lock`.
+- `collector` and `scorer`: `{ version, sha256 }`, the version the lock records and the digest of the eval's declared files as they were when the run started.
+- `cases`: `{ id: { input_sha256, label_sha256 } }` for every case the run selected. `input_sha256` digests what the case presents to akm (reflect: the note, its path, the feedback, and the searches the run recorded for it). `label_sha256` digests what the scorer judges the case by.
+- `akm`: `{ version, bin, build, build_fingerprint }`.
+- `config`: `{ sha256, redacted }`: the akm config with secrets redacted and without the engine settings, which are in `engines`.
+- `settings`: `{ strategy, config_patch_sha256, timeout_ms, seed }`, what a run was set to do that is not in the akm config.
+- `engines`: `{ name: { model, endpoint, endpoint_id, temperature, enableThinking, timeoutMs } }` for every engine the config uses. `endpoint` is the host and `endpoint_id` a sha256 of `endpointIdentity` (scheme, host, port, path and the query with credentials removed). A path can name a deployment or carry a key, so no summary, comparison message or report carries one; two deployments on one host still have two ids. The validator refuses a manifest whose endpoint has a path.
+- `treatment_hints`: settings that change what a run measures and belong to its scope, such as `embedder`. Runs that differ in one are refused whatever the treatment.
+- `completion`: `{ selected, scored, errored }`, the case ids. A case counts only when it is scored on both sides.
+- `rescored_from`: set only on a result of `scripts/rescore`.
+
+A summary without a `manifest` is **legacy**: written before harness-v3. For an eval that declares a measurement it is compared only as exploratory, never silently.
+
+### The lock and the gate
+
+`MEASUREMENT.lock` records, for each eval on the manifest, the version, the digest and the list of files of its collector and of its scorer, and the `harness_version`. `scripts/measurement/run check` recomputes the digests and fails if one changed without the lock being updated, or if a version has no row in `MEASUREMENT_CHANGELOG.md`. `scripts/check` and CI run it. `bump` records a change:
+
+```
+scripts/measurement/run bump reflect scorer --reason "description-period: require that only the break changes (#59). Scores change."
+scripts/measurement/run bump reflect collector --reason "no score change: the akm config writes the same engine in another order"
+scripts/measurement/run list
+```
+
+It raises the version of that part by one, writes the digest and files, and adds the row. A pure refactor that keeps every score still changes the scorer digest: it must pass the golden tests, and be bumped with a reason that says "no score change". A relabelled case needs no bump: its `label_sha256` changes, and runs are rescored.
+
+### Rescore
+
+```
+scripts/rescore/run evals/reflect/results/2026-10-12-baseline
+```
+
+loads the eval's current scorer and the current cases, scores each stored case again from its raw output, and writes the result to a new folder beside the original (`2026-10-12-baseline-rescored`; `-rescored-r2` for the repeat `-r2`). The original is never modified. The new `summary.json` has the current scorer in its manifest, the original collector, and `rescored_from`. It refuses a run whose rows lack a field the scorer reads, and names the fields. A legacy run is rescored too, if it read the cases that are here now: its manifest is made from its summary, its collector is version 0 (identified by its `harness_sha256`), and a comparison with it is exploratory.
+
+### Compare
+
+`scripts/compare` reads the manifest. The collector and the harness version are the harness axis: different versions are refused unless `harness` is the treatment. Runs scored by different scorers, or against different labels, are scored again with the current scorer before they are compared; a run that cannot be (its rows lack the raw output) makes the comparison refused. Cases are paired by id and compared when their input is the same in every run. The report shows, for each side, the cases it scored out of the cases it selected, names the cases scored on one side only, and shows the number of cases beside each metric. A comparison that could use fewer than 80% of the cases both sides selected is exploratory. The build, config, model and engines are compared as before, read from the manifest. See `scripts/compare/README.md`.
+
+### To compare against a result from an older harness version
+
+- A summary without `manifest`, made before harness-v3, compares as exploratory: the numbers are computed and the report says it is a lead.
+- To bring it to today's scorer, rescore its folder (above) and compare the `-rescored` folder. Its collector is version 0, so a comparison with a run of collector version 1 is refused unless `harness` is the treatment, and then it is exploratory: nothing says what the unversioned code did.
+- A result from an older harness version with raw outputs but a different collector is a result of a different measurement. Run it again.
+- `reports/README.md` says how a published result stays comparable.
+
+### Put an eval on the manifest
+
+The contract is in the doc comments of `lib/manifest.ts`; `evals/reflect` is the example. For an eval `evals/<name>`:
+
+1. **Split the scorer from the collector.** `src/score.ts` has `makeRow(case, raw)` and `metrics(rows)`, pure and deterministic. `src/collect.ts` builds the sandbox and the akm config, runs the commands, and builds each row with `makeRow`. A file belongs to one part, so that a scorer digest does not change when only collector code changes, and the other way round. Re-export both from `lib.ts` so imports do not move.
+2. **Store the raw output.** Every field of the raw output that `makeRow` reads is stored in the case's row in `samples.jsonl`, under the name the scorer reads, and it is what akm and the model returned (an outcome, a proposal, a reason, a verdict, the search results), not a derived score. Reflect's raw output is `outcome`, `reason`, `proposal`, `served`, `seconds`, `error` and `timed_out`; its checks, `correct` and `changed` are scored from it. Where a row did not keep a field the scorer reads, the row now does.
+3. **Declare `MEASUREMENT`** in `src/measurement.ts`, a `Measurement` (`lib/manifest.ts`):
+   - `eval`, `collector` and `scorer`: the files, from the repository root, `lib/` files included. The collector lists the run code and `lib/akm`; the scorer lists `score.ts` and the `lib/` files its checks use.
+   - `loadCases(root, summary)`, `caseId(case)`, `input(case, context)` and `labels(case)`: the cases with their labels as they are now, and the two values that are digested per case. `input` is everything that changes what akm sees, `context` what the run adds for a case (reflect: its recorded searches); `labels` is everything the scorer reads of the case.
+   - the rescore adapter: `rawOf(row)` gives the raw output of a stored row, or the names of the fields it lacks; `score(case, raw)` is `makeRow`; `errored(row)` says a case has no verdict; `summarize(rows)` gives the summary fields that come from the rows (counts, `metrics`); `legacyProblem(root, summary)` (optional) says why a run from before the manifest cannot be scored against the cases here.
+4. **Write the manifest** in `run.ts`: `lockedParts(MEASUREMENT)` at the start of the run, which stops it when the lock has no entry, then `buildManifest` with `caseDigests(MEASUREMENT, cases, context)`, `completionOf` and the config, into `summary.json`. Hide the endpoint in the summary's `config`, and record `engine: engineSettings(config)`.
+5. **Golden tests** (`lib/golden.ts`): `evals/<name>/golden/` holds `cases.jsonl` (the labelled cases the outputs are for), `raw.jsonl` (`{case, note, raw}` per line: realistic raw outputs, from real runs where there are some, with the right answer and each way to get it wrong), `expected.jsonl` (the row the scorer must give for the line at the same position) and `scorer.json` (the scorer version they are for). `src/golden.test.ts` runs `goldenProblems`; a scorer change that alters a row fails it until `UPDATE_GOLDEN=1 bun test evals/<name>/src/golden.test.ts` writes the files again, which the scorer's version bump asks for.
+6. **Add the lock entry:** `scripts/measurement/run bump <name> collector --reason "first lock entry"` writes both parts at version 1 and their rows in the changelog.
+7. Add the eval's metrics to `EVALS` in `scripts/matrix/src/lib.ts` and its per-case reading to `scripts/compare/src/lib.ts`, if they are not there.
+
 ## Run a matrix
 
 `scripts/matrix/run` runs a baseline and a list of configurations of the evals, and says which configurations beat the baseline. It is for comparing akm settings, strategies or builds, and for checking a change against the last good run. It holds no configuration of its own: the matrix file, and the config patches it names, live wherever you keep them (a sweep folder under `private/`, for one).
@@ -213,11 +304,11 @@ Two runs differ along five axes, and a comparison names the ones it changes, its
 |---|---|---|
 | `build` | the akm | `akm_version`, `akm_build`, `akm_build_fingerprint`, `akm_bin` |
 | `config` | the akm config the eval wrote | `strategy`, `config_patch` (its hash), a digest of `config`, `timeout_ms` |
-| `model` | the model and its engine | `model`, and in `engine.engines` the model, endpoint (with its path), temperature, `enableThinking` and `timeoutMs` of every engine used |
+| `model` | the model and its engine | `model`, and in `engine.engines` the model, endpoint (its digest `endpoint_id`, and its host), temperature, `enableThinking` and `timeoutMs` of every engine used |
 | `inputs` | the cases | `assets_sha256`, and the private `seed` |
-| `harness` | this repository's code | `harness_sha256` when both runs have it, else a clean `git_commit` |
+| `harness` | this repository's code | `harness_sha256` when both runs have it, else a clean `git_commit`. For a comparison of runs that have a manifest (`scripts/compare`): the collector's version and digest and the harness version |
 
-The digest of `config` leaves out the engine settings, which belong to the model axis. A `git_commit` that ends in `-dirty`, is `unknown` or is missing does not identify the code. A difference on an axis outside the treatment makes the verdict "not comparable". A summary that does not record the evidence for an axis outside the treatment (none of the two sides has it, or one) makes it "exploratory", never a conclusion. The Harbor evals run in a container: for them the `config` axis is the job (`config`, without the datasets and attempts, the model, and the akm and plugin under test, which are the cases, the model and the build) with the AKM_* settings of the akm arm (`akm_env`), and the `engine` is the model and the identity of its endpoint; a summary without them leaves the axis unchecked, like any other eval's. The policy is `scripts/compare/src/policy.ts`, which `scripts/compare` and the matrix both apply.
+The digest of `config` leaves out the engine settings, which belong to the model axis. The scope is not an axis and no treatment changes it: the eval, the corpus, the collection, the mode (`consolidate --pool`) and the `embedder` of `consolidate` and `nightly`, since a run with `--embedder real` and one with `--embedder deterministic` pair notes in different spaces. Runs that differ in the scope are "not comparable". A `git_commit` that ends in `-dirty`, is `unknown` or is missing does not identify the code. A difference on an axis outside the treatment makes the verdict "not comparable". A summary that does not record the evidence for an axis outside the treatment (none of the two sides has it, or one) makes it "exploratory", never a conclusion. The Harbor evals run in a container: for them the `config` axis is the job (`config`, without the datasets and attempts, the model, and the akm and plugin under test, which are the cases, the model and the build) with the AKM_* settings of the akm arm (`akm_env`), and the `engine` is the model and the identity of its endpoint; a summary without them leaves the axis unchecked, like any other eval's. The policy is `scripts/compare/src/policy.ts`, which `scripts/compare` and the matrix both apply.
 
 A config row's treatment is `"treatment": "model"`, `"treatment": ["config", "build"]` and so on, from `build`, `config`, `model`, `inputs` and `harness`. A row that runs another `--akm` than its baseline has the build axis as well. A row that declares nothing and runs the same akm has the config axis. A model sweep therefore needs `"treatment": "model"`; the matrix does not guess it from `--model`.
 
@@ -277,13 +368,14 @@ A run that was killed with `kill -9`, or by a power cut, leaves the file behind:
 ## Check the repository
 
 ```
-scripts/check              # the three below, quickest first, and it stops at the first that fails
+scripts/check              # the four below, quickest first, and it stops at the first that fails
+scripts/check measurement  # MEASUREMENT.lock against the files of every eval's collector and scorer (scripts/measurement/run check)
 scripts/check typecheck    # bun install --frozen-lockfile and tsc in every src folder that has a tsconfig.json
 scripts/check python       # the bakeoff suite (verify and unittest) and the Harbor arm's tests, with uv
 scripts/check test         # bun test at the root
 ```
 
-`bun run check`, `bun run typecheck` and `bun test` do the same from the root `package.json`, which has no dependencies and no workspaces: each src folder keeps its own `package.json` and `bun.lock`, so the pins of `typescript` and `@types/bun` are repeated in every one of them: change them in all, and the `bun-version` of the two workflows with them. No test needs akm or Docker, since every test uses a fake akm. The check of the table in this README runs `evals/bakeoff/run --help`, which is Python and needs uv: `bun test` skips those three tests on a machine without uv, and where uv has no cache yet it fetches PyYAML, once, from the network. `scripts/check python` needs uv in any case. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request.
+`bun run check`, `bun run typecheck` and `bun test` do the same from the root `package.json`, which has no dependencies and no workspaces: each src folder keeps its own `package.json` and `bun.lock`, so the pins of `typescript` and `@types/bun` are repeated in every one of them: change them in all, and the `bun-version` of the two workflows with them. No test needs akm or Docker, since every test uses a fake akm. The check of the table in this README runs `evals/bakeoff/run --help`, which is Python and needs uv: `bun test` skips those three tests on a machine without uv, and where uv has no cache yet it fetches PyYAML, once, from the network. `scripts/check python` needs uv in any case. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request. The measurement check fails a change to the collector or the scorer of an eval that is not bumped in `MEASUREMENT.lock` with a line in `MEASUREMENT_CHANGELOG.md` (see "How results stay comparable"), so a change to `lib/akm` or to an eval's run code or checks needs a `scripts/measurement/run bump`.
 
 The fakes cannot see a change in the real akm. `scripts/smoke/run` runs each eval that drives akm once, on one case, with `--limit 1 --label smoke`, against a stub model, in two modes. The startup mode, the default, answers `{}` to every call and asserts only that the run ends and writes a `summary.json`. The point is not the scores: it is that the commands the evals give akm are still accepted. It cannot see the JSON akm prints after the model has answered, since the `{}` makes those cases error anyway; `retrieval`, which calls no model, is checked on its answers instead, and `scripts/smoke/run --strict` fails when its `search` or `curate` returns no ref. The contract mode, `scripts/smoke/run --contract`, answers each call with a reply that fits the schema akm sends, with canned replies where akm turns that down, and fails unless every eval reaches the outcome it counts as its work, such as a reflect proposal or a lesson queued for review. It then answers text that is not JSON and requires the outcome the eval has for a reply akm cannot read. Both modes skip what needs Docker (`agent-ab`, `terminal-bench`), what downloads a dataset (`longmemeval`, `skillret`) and `bakeoff`, which never runs akm. `.github/workflows/akm-smoke.yml` runs it every night, and on demand: the contract mode on the release of akm-cli pinned in `lib/harbor/harbor.ts` (a leg that must pass) and the startup mode with `--strict` on the latest release (advisory). A pull request that changes the evals or what they share runs the pinned contract leg. [`COMPATIBILITY.md`](COMPATIBILITY.md) says what has been run against which release.
 

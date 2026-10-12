@@ -15,7 +15,7 @@ import { EVAL_METRICS } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
 import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
 import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
-import { type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
+import { AXES, type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 const fx = (...parts: string[]): string => join(FIXTURES, ...parts);
@@ -24,7 +24,7 @@ const BUILD: Axis[] = ["build"];
 const pair = (name: string, options: CompareOptions = {}): PairReport => comparePair(loadRun(fx(name, "before")), loadRun(fx(name, "after")), { treatment: BUILD, ...options });
 const view = (r: PairReport, name = "") => r.views.find((v) => v.view === name)!;
 const ids = (flips: { id: string }[]): string[] => flips.map((f) => f.id);
-const metric = (r: PairReport, path: string, name = "") => view(r, name).metrics.find((m) => m.path === path)!;
+const metric = (r: PairReport, path: string, name = "") => [...view(r, name).metrics, ...view(r, name).info].find((m) => m.path === path)!;
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -938,6 +938,70 @@ describe("the identity of a Harbor summary (R01)", () => {
   });
 });
 
+describe("the embedder is part of the scope (#69)", () => {
+  const ALL = [...AXES] as Axis[];
+
+  test("a run with the real embedder and one with the deterministic embedder are refused whatever the treatment", () => {
+    const real = variant(fx("nightly", "before"), { embedder: "real" });
+    const deterministic = variant(fx("nightly", "after"), { embedder: "deterministic" });
+    for (const treatment of [BUILD, DEFAULT_TREATMENT, ALL]) {
+      expect(() => comparePair(loadRun(real), loadRun(deterministic), { treatment })).toThrow("the settings that change what a run measures (the embedder) differs: embedder real in A, embedder deterministic in B");
+    }
+    // the same embedder on both sides is no difference, and a run that records none against one that does is one
+    expect(comparePair(loadRun(real), loadRun(variant(fx("nightly", "after"), { embedder: "real" })), { treatment: BUILD }).exploratory).toEqual([]);
+    expect(() => comparePair(loadRun(real), loadRun(fx("nightly", "after")), { treatment: BUILD })).toThrow("embedder real in A, none in B");
+  });
+
+  test("the policy the matrix applies refuses it too, as a mismatch of the scope", () => {
+    const member = (side: string, embedder: string): Member => ({ side, name: side, identity: identityOf({ ...JSON.parse(readFileSync(fx("nightly", "before", "summary.json"), "utf8")), embedder }) });
+    const found = checkMembers([member("A", "real"), member("B", "deterministic")], ALL).mismatches;
+    expect(found).toEqual([{ axis: "scope", field: "hints", message: "the settings that change what a run measures (the embedder) differs: embedder real in A, embedder deterministic in B" }]);
+    expect(checkMembers([member("A", "real"), member("B", "real")], []).mismatches).toEqual([]);
+  });
+});
+
+describe("retrieval: the judged results (#71)", () => {
+  /** The retrieval fixture of a side with its rows changed, for the queries that have a ranking score. */
+  function changed(side: string, edit: (scores: Record<string, any>, column: string) => Record<string, any>): string {
+    const dir = variant(fx("retrieval", side), {});
+    writeFileSync(join(dir, "samples.jsonl"), rows("retrieval", side).map((r) => `${JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, (k === "search" || k === "curate") && v?.scores ? { ...v, scores: edit(v.scores, k) } : v])))}\n`).join(""));
+    return dir;
+  }
+  const condensed = (scores: Record<string, any>) => ({ ...scores, ndcg_10_condensed: Math.min(1, scores.ndcg_10 + 0.1) });
+
+  test("ndcg_10_condensed and judged_10 are reported beside ndcg_10, with the metrics the matrix judges and without a verdict of their own to judge by", () => {
+    const r = comparePair(loadRun(changed("before", condensed)), loadRun(changed("after", condensed)), { treatment: BUILD });
+    const search = view(r, "search");
+    expect([...search.metrics, ...search.info].map((m) => [m.path, m.role])).toEqual([["search.ndcg_10", "main"], ["search.ndcg_10_condensed", "info"], ["search.judged_10", "info"]]);
+    expect(search.metrics.length).toBe(1); // what the matrix judges is as it was
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.9, delta: 0 });
+    expect(metric(r, "search.ndcg_10_condensed", "search")?.a).toBeGreaterThan(metric(r, "search.ndcg_10", "search")?.a as number); // never below ndcg_10
+    expect(r.exploratory).toEqual([]);
+    const md = renderPair(r);
+    expect(md).toContain("| search.ndcg_10_condensed ↑ (not judged) |");
+    expect(md).toContain("| search.judged_10 ↑ (not judged) | 0.9 | 0.9 | 0 |");
+  });
+
+  test("a judged_10 that falls from A to B makes the comparison exploratory, whatever ndcg_10 says, and the note says to grade the results first", () => {
+    const fewerJudged = changed("after", (scores, column) => ({ ...condensed(scores), judged_10: column === "search" ? 0.6 : scores.judged_10 }));
+    const r = comparePair(loadRun(changed("before", condensed)), loadRun(fewerJudged), { treatment: BUILD });
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.6, delta: -0.3 });
+    expect(r.exploratory).toEqual(["judged_10 (search) fell from 0.9 to 0.6: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again"]);
+    expect(renderPair(r)).toContain("> **Exploratory.**");
+    // a fall within the tie is noise, and a rise is not a reason to doubt B
+    const slight = changed("after", (scores) => ({ ...condensed(scores), judged_10: 0.895 }));
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(slight), { treatment: BUILD }).exploratory).toEqual([]);
+    const more = changed("after", (scores) => ({ ...condensed(scores), judged_10: 1 }));
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(more), { treatment: BUILD }).exploratory).toEqual([]);
+  });
+
+  test("a run whose rows have neither shows them as missing, and does not guess", () => {
+    const r = pair("retrieval");
+    expect(metric(r, "search.ndcg_10_condensed", "search")).toMatchObject({ a: null, b: null, delta: null });
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9 });
+  });
+});
+
 describe("a release against a release", () => {
   const release = (dir: string, right: number, over: Record<string, unknown> = {}) => nightlyRun(join(tmp(), dir), right, { akm_version: "0.9.26", ...over });
 
@@ -1004,10 +1068,10 @@ describe("a release against a release", () => {
   });
 
   test("a plain two-folder comparison of one build is as it was: no flag, no banner, and the same numbers", () => {
-    const res = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), fx("reflect", "before"), variant(fx("reflect", "before"), { label: "again" })], { stdout: "pipe", stderr: "pipe" });
+    const res = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), fx("nightly", "before"), variant(fx("nightly", "before"), { label: "again" })], { stdout: "pipe", stderr: "pipe" });
     expect(res.exitCode).toBe(0);
     const out = new TextDecoder().decode(res.stdout);
-    expect(out).toContain("# Compare reflect (public): A and B");
+    expect(out).toContain("# Compare nightly (public): A and B");
     expect(out).not.toContain("Exploratory");
     expect(out).toContain("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs");
   });

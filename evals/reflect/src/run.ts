@@ -4,20 +4,22 @@
 //
 //   evals/reflect/run [--corpus public|private|all] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { Database } from "bun:sqlite";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { caseDigests, buildManifest, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
-import { type Case, type Metrics, type Row, CLASSES, STRATEGY, assetsSha256, atLeast, corpusSeed, generatedProblem, labelledQueries, makeRow, metrics, parseCases, pct, reflectConfig, reflectOutcome, refOf, selectCases, servedModel, timedOutMessage } from "./lib.ts";
+import { type CaseContext, NAME, STRATEGY, configFor, labelledQueries, refOf, runCase } from "./collect.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { type Metrics, type Row, CLASSES, assetsSha256, atLeast, corpusSeed, generatedProblem, parseCases, pct, selectCases, summarize } from "./lib.ts";
 
-const NAME = "reflect";
+export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
@@ -86,75 +88,15 @@ interface Summary {
   /** The model names that answered, as the responses give them, with how many cases each answered. */
   served: Record<string, number>;
   metrics: Metrics;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
 }
 
-interface Ctx {
-  baseUrl: string;
-  model: string;
-  hasKey: boolean;
+interface Ctx extends CaseContext {
   version: string;
   label: string;
   limit?: number;
-  overrides?: Overrides;
-  /** How long one akm command may run, in milliseconds. The default is runAkm's. */
-  timeoutMs?: number;
-  /** Searches to record for a note, by ref (see `labelledQueries`). Without it none are recorded. */
-  queries?: Map<string, string[]>;
-}
-
-/** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
-const configFor = (ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides">): Record<string, unknown> => patchedConfig(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
-
-/**
- * One case in a bundle of its own: the note, the negative feedback recorded, reflect run on that asset alone, and the
- * proposal read back from the queue. akm exits 0 whatever reflect did, so what reflect did comes from the result.
- */
-export async function runCase(c: Case, ctx: Pick<Ctx, "baseUrl" | "model" | "hasKey" | "overrides" | "timeoutMs" | "queries">): Promise<Row> {
-  const t0 = performance.now();
-  const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
-  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
-  try {
-    const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-    writeConfig(sandbox, configFor(ctx));
-    const file = join(sandbox.dir, "bundle", c.path);
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, c.source);
-    const ref = refOf(c.path);
-    const opts = { timeoutMs: ctx.timeoutMs };
-    await runAkmJson(sandbox, ["index"], opts);
-    await runAkmJson(sandbox, ["feedback", ref, "--negative", "--reason", c.feedback], opts);
-    recordSearches(sandbox.env.AKM_DATA_DIR as string, ref, ctx.queries?.get(ref) ?? []);
-    const improve = await runAkmJson(sandbox, ["improve", ref, "--strategy", overrides.strategy, "--json-to-stdout"], opts);
-    const { outcome, reason } = reflectOutcome(improve);
-    const served = servedModel(improve);
-    if (outcome !== "proposal") return makeRow(c, { outcome, reason: hide(reason), served, seconds: seconds() });
-    const { proposals } = await runAkmJson<{ proposals: { id: string; source: string }[] }>(sandbox, ["proposal", "list"], opts);
-    const mine = proposals.filter((p) => p.source === "reflect");
-    if (mine.length !== 1) throw new Error(`reflect made a proposal but the queue holds ${mine.length}`);
-    const shown = await runAkmJson<{ proposal: { payload?: { content?: unknown } } }>(sandbox, ["proposal", "show", mine[0]?.id ?? "", "--detail", "full"], opts);
-    const content = shown.proposal.payload?.content;
-    if (typeof content !== "string") throw new Error("the proposal has no content");
-    return makeRow(c, { outcome: "proposal", proposal: content, served, seconds: seconds() });
-  } catch (e) {
-    const message = hide((e as Error).message);
-    return makeRow(c, { outcome: "error", reason: message.slice(0, 300), seconds: seconds(), timedOut: timedOutMessage(message) });
-  } finally {
-    removeSandbox(sandbox);
-  }
-}
-
-/** The searches akm logs when a user finds a note: a usage event for the query and the note, which the retrieval check reads. */
-function recordSearches(dataDir: string, ref: string, queries: string[]): void {
-  if (queries.length === 0) return;
-  const db = new Database(join(dataDir, "state.db"));
-  try {
-    const insert = db.prepare("INSERT INTO usage_events (event_type, query, entry_ref, source) VALUES ('search', ?, ?, 'user')");
-    for (const q of queries) insert.run(q, `bundle//${ref}`);
-  } finally {
-    db.close();
-  }
 }
 
 const cell = (n: { correct: number; n: number } | undefined): string => (n ? `${n.correct}/${n.n}` : "-");
@@ -203,6 +145,7 @@ export async function runCorpus(
   },
 ): Promise<Summary> {
   const { assets, results: resultsParent } = folders;
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl"));
   const cases = selectCases(all, ctx.limit);
   const assetsDigest = assetsSha256(assets);
@@ -233,9 +176,23 @@ export async function runCorpus(
     }
   }
 
-  const errored = rows.filter((r) => r.outcome === "error").length;
   const abortedReason = `the first ${GIVE_UP_AFTER} cases got no outcome, so the run stopped. Last error: ${aborted}`;
   const config = configFor(ctx);
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const seed = corpusSeed(corpus, dirname(assets), folders.seed ?? join(ROOT, "private", "seed"));
+  const build = akmBuild();
+  const counts = summarize(rows);
+  const manifest = buildManifest({
+    measurement: MEASUREMENT,
+    parts,
+    corpus,
+    // what each case presented to akm includes the searches this run recorded for its note, so a run with --retrieval-queries is not the run without it (#37)
+    cases: caseDigests(MEASUREMENT, cases, (c) => ctx.queries?.get(refOf(c.path)) ?? []),
+    akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+    config,
+    settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.timeoutMs ?? null, seed },
+    completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
+  });
   const summary: Summary = {
     eval: NAME,
     corpus,
@@ -245,23 +202,24 @@ export async function runCorpus(
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
+    ...build,
     limit: ctx.limit ?? null,
-    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
-    config: redactConfig(config),
+    ...overrideSummary(overrides),
+    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host and the digest of its identity
     engine: engineSettings(config),
     assets_sha256: assetsDigest,
-    seed: corpusSeed(corpus, dirname(assets), folders.seed ?? join(ROOT, "private", "seed")),
+    seed,
     status: aborted ? "aborted" : "complete",
     aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
-    n_run: rows.length,
-    n_scored: rows.length - errored,
-    n_errored: errored,
-    timeouts: rows.filter((r) => r.timed_out).length,
+    n_run: counts.n_run,
+    n_scored: counts.n_scored,
+    n_errored: counts.n_errored,
+    timeouts: counts.timeouts,
     retrieval_queries: ctx.queries ? { cases: cases.filter((c) => (ctx.queries?.get(refOf(c.path))?.length ?? 0) > 0).length } : null,
-    served: rows.reduce<Record<string, number>>((n, r) => (r.served ? { ...n, [r.served]: (n[r.served] ?? 0) + 1 } : n), {}),
-    metrics: metrics(rows),
+    served: counts.served,
+    metrics: counts.metrics,
+    manifest,
     results_dir: dir,
   };
   // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
@@ -283,6 +241,11 @@ async function main(): Promise<void> {
   if (values.help) {
     console.log(USAGE);
     return;
+  }
+  try {
+    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
+  } catch (e) {
+    fail((e as Error).message);
   }
   const corpus = values.corpus ?? "public";
   if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);

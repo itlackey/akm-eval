@@ -7,8 +7,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { currentDigests, readManifest } from "../../../lib/manifest.ts";
+import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -20,9 +22,10 @@ Runs the defect filter of the akm checkout DIR on each labelled edit and counts 
   --reflect     the results folder of a reflect run, or its private folder: each proposal in samples.jsonl is an edit, good when
                 it passed every check and bad when not. Run reflect with evals/reflect/patches/defect-filter-off.json, or
                 the filter refuses edits before they are proposals and they are not in the results.
-                The source of an edit is the case's, read from the cases here now. So the summary.json of the run must hold the
-                assets_sha256 of the corpus as it is now and the harness_sha256 of this code, and every case id of the run must be
-                in the corpus. Otherwise the replay stops and says what differs.
+                The source of an edit is the case's, read from the cases here now. So the manifest of the run must hold the digest of
+                each case's input as it is now, and the digest of the scorer here (a run scored by other checks: scripts/rescore it
+                first); a run without a manifest must hold the assets_sha256 of the corpus as it is now and the harness_sha256 of this
+                code. Every case id of the run must be in the corpus. Otherwise the replay stops and says what differs.
   --rescore     replay the proposals of a --reflect run against the cases and code here now even though its summary.json records
                 other digests, records none, or has a case id that is gone. The report names the stored and the current digests
                 and the case ids left out.
@@ -91,6 +94,12 @@ export interface Inputs {
   differences: string[];
   /** The case ids of the run that the cases here now lack. The proposals of these are left out. */
   missing_cases: string[];
+  /**
+   * For a run with a manifest (harness-v3 and later), what was checked in place of the two digests above: the scorer that labelled the
+   * proposals good or bad, stored and now, and what the cases' digests were compared on: "input" (the note, the path and the feedback each
+   * case was given) or "labels" for a run that recorded searches, whose input digest includes them. Null for a run without one.
+   */
+  manifest: { scorer: { stored: string; current: string }; cases_compared_on: "input" | "labels" } | null;
 }
 
 export interface ReplayOptions {
@@ -98,37 +107,63 @@ export interface ReplayOptions {
   root?: string;
   /** The harness_sha256 of the code here now. The one harnessSha256 gives for this folder, but for tests. */
   harness?: string;
+  /** The digest of the scorer here now. The one MEASUREMENT gives, but for tests. */
+  scorer?: string;
   /** Replay a run that read other cases or ran other code, and report both. */
   rescore?: boolean;
 }
 
 /**
  * The proposals of a reflect run as edits: good when the case was correct. The note is the case's, by id, read from the cases here now,
- * so the run must have read the same ones. Its summary.json must hold the assets_sha256 of the corpus as it is now (the digest reflect's
- * run computes) and the harness_sha256 of this code, and each case id of the run must be in the corpus. Otherwise this throws and says what
- * differs. With `rescore` it replays anyway, leaves out the proposals of a case that is gone, and says both in `inputs`.
+ * so the run must have read the same ones.
+ *
+ * A run with a manifest is held to its case digests and its scorer: the input of each case it ran (the note, its path and the feedback; the
+ * labels instead for a run that recorded searches) must be the digest the manifest holds, and the scorer that labelled the proposals good
+ * or bad must be the one here now (a run scored by another is scored again by scripts/rescore, and its folder replayed). A run without a
+ * manifest must hold the assets_sha256 of the corpus as it is now (the digest reflect's run computes) and the harness_sha256 of this
+ * code. In both, each case id of the run must be in the corpus. Otherwise this throws and says what differs. With `rescore` it replays
+ * anyway, leaves out the proposals of a case that is gone, and says both in `inputs`.
  */
 export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): { edits: Edit[]; inputs: Inputs } {
   const root = options.root ?? ROOT;
-  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus?: unknown; assets_sha256?: unknown; harness_sha256?: unknown };
+  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   const corpus = summary.corpus;
   if (corpus !== "public" && corpus !== "private") throw new Error(`${join(resultsDir, "summary.json")} names the corpus ${JSON.stringify(corpus)}, not public or private`);
   const assets = corpus === "public" ? join(root, "evals", "reflect", "assets") : join(root, "private", "reflect", "assets");
   const where = relative(root, assets);
-  const sources = new Map(parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl")).map((c) => [c.id, c.source]));
+  const byId = new Map(parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl")).map((c) => [c.id, c]));
+  const reading = readManifest(summary);
+  if (reading.kind === "invalid") throw new Error(`${join(resultsDir, "summary.json")} has a manifest that is not sound: ${reading.problems.join("; ")}`);
 
   const stored = { assets: digestIn(summary.assets_sha256), harness: digestIn(summary.harness_sha256) };
   const current = { assets: assetsSha256(assets), harness: options.harness ?? harnessSha256(import.meta.dir) };
   const differences: string[] = [];
-  const compare = (field: string, was: string | null, now: string, what: string, here: string) => {
-    if (was === null) differences.push(`${field} is missing from summary.json (or is not a sha256 digest), so nothing says ${what}`);
-    else if (was !== now) differences.push(`${field} differs: the run recorded ${was}, ${here} gives ${now}`);
-  };
-  compare("assets_sha256", stored.assets, current.assets, "which cases the run read", `the cases in ${where}`);
-  compare("harness_sha256", stored.harness, current.harness, "which code made the run", "the code here");
-
   const rows = jsonl<{ id: string; outcome: string; correct: boolean | null; proposal?: string }>(join(resultsDir, "samples.jsonl"));
-  const missing = [...new Set(rows.map((r) => r.id).filter((id) => !sources.has(id)))];
+  let checked: Inputs["manifest"] = null;
+  if (reading.kind === "manifest") {
+    const { manifest } = reading;
+    const scorer = options.scorer ?? currentDigests(MEASUREMENT).scorer;
+    const on = summary.retrieval_queries == null ? "input" : "labels";
+    if (manifest.scorer.sha256 !== scorer) differences.push(`the scorer differs: the proposals were labelled good or bad by ${manifest.scorer.sha256}, the scorer here gives ${scorer}. Score the run again with scripts/rescore and replay the folder it writes`);
+    const moved = [...new Set(rows.map((r) => r.id))].filter((id) => {
+      const c = byId.get(id);
+      const was = manifest.cases[id];
+      if (c === undefined) return false; // a case that is gone is listed below
+      if (was === undefined) return true;
+      return on === "input" ? was.input_sha256 !== sha256Json(MEASUREMENT.input(c)) : was.label_sha256 !== sha256Json(MEASUREMENT.labels(c));
+    });
+    if (moved.length > 0) differences.push(`${moved.length === 1 ? "the case" : `${moved.length} cases`} ${moved.join(", ")} ${moved.length === 1 ? "has" : "have"} another ${on === "input" ? "input (note, path or feedback)" : "label"} than the manifest of the run holds`);
+    checked = { scorer: { stored: manifest.scorer.sha256, current: scorer }, cases_compared_on: on };
+  } else {
+    const compare = (field: string, was: string | null, now: string, what: string, here: string) => {
+      if (was === null) differences.push(`${field} is missing from summary.json (or is not a sha256 digest), so nothing says ${what}`);
+      else if (was !== now) differences.push(`${field} differs: the run recorded ${was}, ${here} gives ${now}`);
+    };
+    compare("assets_sha256", stored.assets, current.assets, "which cases the run read", `the cases in ${where}`);
+    compare("harness_sha256", stored.harness, current.harness, "which code made the run", "the code here");
+  }
+
+  const missing = [...new Set(rows.map((r) => r.id).filter((id) => !byId.has(id)))];
   if (!options.rescore && (differences.length > 0 || missing.length > 0)) {
     const lines = [...differences, ...(missing.length > 0 ? [`the run has ${missing.length === 1 ? "a case id" : "case ids"} that ${where}/cases.jsonl lacks: ${missing.join(", ")}`] : [])];
     throw new Error(`${resultsDir} cannot be replayed against the cases and code here now:\n  - ${lines.join("\n  - ")}\nThe source of each edit would not be the one the run was given. To score its proposals against what is here now on purpose, add --rescore.`);
@@ -136,7 +171,7 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
 
   const edits: Edit[] = [];
   for (const row of rows) {
-    const source = sources.get(row.id);
+    const source = byId.get(row.id)?.source;
     if (row.outcome !== "proposal" || row.proposal === undefined || source === undefined) continue;
     edits.push({ id: row.id, label: row.correct ? "good" : "bad", source, candidate: row.proposal });
   }
@@ -148,6 +183,7 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
     harness_sha256: { stored: stored.harness, current: current.harness },
     differences,
     missing_cases: missing,
+    manifest: checked,
   };
   return { edits, inputs };
 }
