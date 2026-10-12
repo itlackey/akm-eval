@@ -157,7 +157,7 @@ A night is one run of many items, so each row of `samples.jsonl` holds its own i
 
 ## Notes
 
-- The library holds only the planted notes. It does not hold `corpus/library`. akm plans reflect and distill for notes that have feedback and, in the proactive lane, for a few that have none, and the pair pass reads only memories, lessons and flat knowledge notes, so the 317 files of `corpus/library` would add index time and no model call. The notes that nothing should touch, and the check of every other path, cover what the background would.
+- The library holds only the planted notes. It does not hold `corpus/library`. akm plans reflect and distill for notes that have feedback and, in the proactive lane, for a few that have none, and the pair pass reads only memories, lessons and flat knowledge notes, so the 292 files of `corpus/library` would add index time and no model call. The notes that nothing should touch, and the check of every other path, cover what the background would.
 - All the items share one night, as they do in a real library. A pair judged in the same run as the others can be paired with a note of another item; the pairs are different made-up systems, so that is rare. The step 2 evals give each case a library of its own.
 - The pair judge's label of a pair is known only for a pair that was retired. `summary.json` holds the labels of the run.
 - A retirement archives the note under `.akm/` in the bundle, and nothing is deleted. The eval leaves akm's own folder out of its reading of the library.
