@@ -8,7 +8,7 @@ import { join, relative, resolve } from "node:path";
 import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
-import { endpointRecord, sha256File, sha256Text } from "../provenance.ts";
+import { credentialField, endpointRecord, sha256File, sha256Text } from "../provenance.ts";
 import { type ArmSummary, type Arm, type Report, type Trial, loadTrials, timedOut } from "./report.ts";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
@@ -311,7 +311,7 @@ export function parseAkmEnv(values: string[] | undefined): Record<string, string
     const key = v.slice(0, eq);
     if (!/^AKM_[A-Z0-9_]+$/.test(key)) fail(`--akm-env ${key}: only AKM_* settings go to akm`);
     if (FIXED_AKM_ENV.includes(key)) fail(`--akm-env ${key}: the arm fixes it. The five directories move together, and the plugin must run the akm installed in the container.`);
-    if (/(API_?KEY|_KEY$|KEYRING|TOKEN|SECRET|PASSWORD|BEARER|CREDENTIAL|AUTH)/.test(key)) fail(`--akm-env ${key}: it looks like a credential, and the job and the summary record every setting.`);
+    if (credentialField(key)) fail(`--akm-env ${key}: it looks like a credential, and the job and the summary record every setting.`);
     if (Object.hasOwn(out, key)) fail(`--akm-env ${key} is given twice`);
     out[key] = v.slice(eq + 1);
   }
