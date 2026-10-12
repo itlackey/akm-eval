@@ -9,7 +9,7 @@ import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import * as akm from "./akm.ts";
 import { BUILDER, withSemantic } from "./collect.ts";
-import { type Corpus, assetsDigest, publicCorpus } from "./dataset.ts";
+import { type Corpus, assetsDigest, privateCorpus, publicCorpus } from "./dataset.ts";
 import { type Split, fakeAkmScript, sandboxRunning, writeAssets } from "./fakes.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { CURATE_CHECK, curateSample } from "./sample.ts";
@@ -44,10 +44,10 @@ const TEST: Split = {
 const TRAIN: Split = { skills: [["s1", "train skill"]], queries: [["p1", "a request", ["s1"]]] };
 
 /** The tiny corpus, a fake akm for it, and a place for the results. */
-function setup(test: Split = TEST) {
+function setup(test: Split = TEST, train: Split = TRAIN) {
   const root = tmp();
   const assets = join(root, "assets");
-  writeAssets(assets, test, TRAIN);
+  writeAssets(assets, test, train);
   const script = fakeAkmScript(root);
   const cacheRoot = join(root, "index-cache");
   const sandboxes: string[] = [];
@@ -708,6 +708,30 @@ describe("rescore", () => {
     expect(() => rescoreRun(readStored(other), { root: repo(s) })).toThrow(/was made before the manifest, and cannot be scored again: it read other data files than the ones in benchmarks\/skillret\/assets now/);
     const thin = copy("thin", was.summary, was.rows.map(({ search: { ranked: _r, ...search }, ...row }) => ({ ...row, search })));
     expect(() => rescoreRun(readStored(thin), { root: repo(s) })).toThrow(/its rows lack the raw output the skillret scorer reads: search.ranked \(4 rows: q1, q2, q3, q4\)/);
+  });
+
+  test("a run on the custom corpus, a split of the data files, records no folder and is scored against the split drawn again from the summary", async () => {
+    // a train split that can give the test split's mix: ten skills, with a query for every one, every pair and every triple of them
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const combos = (n: number, from = 0): string[][] => (n === 0 ? [[]] : ids.slice(from).flatMap((id, i) => combos(n - 1, from + i + 1).map((rest) => [id, ...rest])));
+    const train: Split = { skills: ids.map((id) => [id, `train skill ${id}`]), queries: [1, 2, 3].flatMap((n) => combos(n).map((needs): [string, string, string[]] => [`p-${needs.join("-")}`, `a request for ${needs.join(" and ")} skill`, needs])) };
+    const s = setup(TEST, train);
+    const custom = privateCorpus(s.assets);
+    const { result } = await logged(() => runCorpus(custom, s.ctx({ label: "split", semantic: false }), { assets: s.assets, results: s.results }));
+    clearRunning(result.results_dir);
+    const was = stored(result.results_dir);
+    expect(was.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42", n_queries: 4 });
+    const root = repo(s);
+    // the split is drawn again from the data files and the sample the summary records, with no folder
+    expect(MEASUREMENT.loadCases(root, was.summary)).toEqual(custom.queries);
+    expect(MEASUREMENT.loadCases(root, { ...was.summary, sample: { ...was.summary.sample, limit: 2 } })).toEqual(privateCorpus(s.assets, 2).queries);
+    // scripts/rescore asks a custom run for the folder of its cases (corpus_folder, or --cases DIR): a split has none, so it is given the folder of the data files
+    const again = rescoreRun(readStored(result.results_dir), { root, cases: "benchmarks/skillret/assets" });
+    expect(again.changed).toEqual([]);
+    expect(again.dropped).toEqual([]);
+    expect(again.rows).toEqual(was.rows);
+    expect(again.summary.metrics).toEqual(was.summary.metrics);
+    expect(again.summary.manifest.rescored_from).toMatchObject({ dropped: [] });
   });
 
   test("the queries a stored run is scored against are drawn as the run drew them, with the limit it recorded, and nothing is fetched", async () => {
