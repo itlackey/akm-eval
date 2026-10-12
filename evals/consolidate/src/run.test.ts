@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { GENERATED, assetsDigest } from "./inputs.ts";
 import { type Case, type Embedder, INPUT_FILES, type Relation, sandboxOptions } from "./lib.ts";
 import { failureHint, runCorpus, writeNotes } from "./run.ts";
@@ -328,7 +328,7 @@ describe("runCorpus", () => {
     const { summary } = resultsOf(folders);
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, INPUT_FILES));
-    expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "consolidate" } });
     expect(summary.config.embedding).toBeUndefined();

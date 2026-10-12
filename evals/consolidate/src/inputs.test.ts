@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
-import { sha256Files } from "../../../lib/provenance.ts";
+import { endpointRecord, sha256Files } from "../../../lib/provenance.ts";
 import { GENERATED, assetsDigest, generateInto, privateAssetsProblem, privateSeed, readGenerated, readSeed, replaceDir, runInputs } from "./inputs.ts";
 
 const dirs: string[] = [];
@@ -222,7 +222,7 @@ describe("runInputs", () => {
     const inputs = runInputs(config, hide, { dir: assets, files: ["cases.jsonl"] }, "7");
     expect(inputs.assets_sha256).toBe(assetsDigest(assets, ["cases.jsonl"]));
     expect(inputs.seed).toBe("7");
-    expect(inputs.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(inputs.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(JSON.stringify(inputs)).not.toContain("sk-secret");
     expect((inputs.config as any).engines.consolidate).toMatchObject({ apiKey: "<redacted>", endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0 });
     expect((inputs.config as any).defaults).toEqual({ llmEngine: "consolidate" });

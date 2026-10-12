@@ -1,0 +1,25 @@
+{
+  "lock_version": 1,
+  "harness_version": 3,
+  "evals": {
+    "reflect": {
+      "collector": {
+        "version": 1,
+        "sha256": "8fcafb1380aae1fe8ecf0238001b08ee55f97e41d792ca1c38ddd8e6d77870c5",
+        "files": [
+          "evals/reflect/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "1395dfdb42d8543b3a97830ff4befa6d9c48f11d8de184c5322554ed6091c3aa",
+        "files": [
+          "evals/reflect/src/score.ts"
+        ]
+      }
+    }
+  }
+}

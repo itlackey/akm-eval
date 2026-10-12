@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
@@ -413,7 +413,7 @@ describe("runCorpus", () => {
     const { summary } = resultsOf(folders);
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, seed: null });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
-    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity

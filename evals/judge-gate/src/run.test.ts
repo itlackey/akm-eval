@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
+import { endpointId, endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, judgeConfig } from "./lib.ts";
 import { runCorpus } from "./run.ts";
@@ -246,7 +246,7 @@ describe("runCorpus", () => {
       hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
       expect(stored.config).toEqual(hidden);
       expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false, apiKey: "$MODEL_API_KEY" });
-      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: "http://localhost:9/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.assets_sha256).toBe(casesSha256(folders.assets));
       expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(stored).toMatchObject({ strategy: "default", config_patch: null, seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
@@ -270,7 +270,8 @@ describe("runCorpus", () => {
       for (const leak of ["SECRET-KEY", "hunter2", "user:"]) expect(text).not.toContain(leak);
       const stored = JSON.parse(text);
       expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>");
-      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443/v1/chat/completions?key=<redacted>"); // scheme, host, port and path, with /chat/completions before the query; the key is gone
+      expect(stored.engine.endpoint).toBe("https://secret-host.example:8443"); // the host and port: never the path
+      expect(stored.engine.endpoint_id).toBe(endpointId(completionsUrl("https://secret-host.example:8443/v1?key=another-key"))); // the digest of the identity, which the key is not part of
     });
 
     test("the digest changes with the cases, and the seed is the one the run was given", async () => {

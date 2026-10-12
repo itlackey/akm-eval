@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsSha256, distillConfig } from "./lib.ts";
 import { runCorpus } from "./run.ts";
 
@@ -244,7 +244,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(text);
     expect(stored.config.engines.model).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
     expect(stored.config.improve.strategies["distill-only"].engine).toBe("model");
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });

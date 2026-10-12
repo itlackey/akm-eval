@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildManifest, caseDigests, lockedParts } from "../../../lib/manifest.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -83,7 +85,7 @@ describe("reflectEdits", () => {
         { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
         { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
       ],
-      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [] },
+      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [], manifest: null },
     });
   });
 
@@ -125,7 +127,7 @@ describe("reflectEdits", () => {
     const rescored = reflectEdits(run, { ...same(root), rescore: true });
     expect(rescored.edits[0]).toEqual({ id: "a", label: "good", source: note("changed source"), candidate: note("a fixed") });
     expect(replay(rescored.edits, find).hits).toEqual([{ id: "a", label: "good", rule: "meta_commentary_added" }]);
-    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [] });
+    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [], manifest: null });
   });
 
   test("a run made by other code stops the replay with both digests, and is replayed with --rescore", () => {
@@ -186,6 +188,102 @@ describe("reflectEdits", () => {
     expect(() => reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root))).toThrow("assets_sha256 differs");
     expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or private');
     expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or private");
+  });
+});
+
+describe("reflectEdits with a manifest", () => {
+  const note = (d: string) => `---\ndescription: ${d}\n---\n`;
+  const PUBLIC = join("evals", "reflect", "assets");
+  const ROWS = [
+    { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
+    { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
+    { id: "c", outcome: "none", correct: false },
+  ];
+  const caseOf = (id: string, source: string, feedback = "f") => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source, feedback, defect: "d", correct: "c", allow: ["when_to_use"] });
+
+  /** A repository with the public cases a, b and c, and a way to write them again. */
+  function repo() {
+    const root = temp();
+    const assets = join(root, PUBLIC);
+    mkdirSync(assets, { recursive: true });
+    const write = (cases: object[]) => writeFileSync(join(assets, "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
+    const cases = [caseOf("a", note("a")), caseOf("b", note("b")), caseOf("c", note("c"))];
+    write(cases);
+    return { root, assets, cases, write };
+  }
+  /** A run of those cases as harness-v3 writes it: a summary with a manifest and no digest of the cases or the code, and its samples. */
+  function runOf(root: string, cases: object[], over: Record<string, unknown> = {}, manifestOver: Record<string, unknown> = {}): string {
+    const dir = join(root, "run");
+    mkdirSync(dir, { recursive: true });
+    const manifest = buildManifest({
+      measurement: MEASUREMENT,
+      parts: lockedParts(MEASUREMENT),
+      corpus: "public",
+      cases: caseDigests(MEASUREMENT, parseCases(cases.map((c) => JSON.stringify(c)).join("\n"))),
+      completion: { selected: ["a", "b", "c"], scored: ["a", "b", "c"], errored: [] },
+    });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "reflect", corpus: "public", manifest: { ...manifest, ...manifestOver }, ...over }));
+    writeFileSync(join(dir, "samples.jsonl"), `${ROWS.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    return dir;
+  }
+
+  test("replays a run whose cases and scorer are the ones here, with no digest of the cases or the code in its summary", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases);
+    const scorer = lockedParts(MEASUREMENT).scorer.sha256;
+    const { edits, inputs } = reflectEdits(run, { root });
+    expect(edits.map((e) => [e.id, e.label, e.source])).toEqual([["a", "good", note("a")], ["b", "bad", note("b")]]);
+    expect(inputs).toMatchObject({ mode: "stored", differences: [], missing_cases: [], manifest: { scorer: { stored: scorer, current: scorer }, cases_compared_on: "input" } });
+  });
+
+  test("another version of the eval's collector, or of the harness, does not stop it: a replay reads proposals, not what produced them", () => {
+    const { root, cases } = repo();
+    const parts = lockedParts(MEASUREMENT);
+    const run = runOf(root, cases, {}, { collector: { version: 9, sha256: "7".repeat(64) }, harness_version: 9 });
+    expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
+    expect(parts.collector.version).toBe(1);
+  });
+
+  test("a case whose note changed since the run stops the replay, and the replay with --rescore reads the new note and says so", () => {
+    const { root, cases, write } = repo();
+    const run = runOf(root, cases);
+    write([caseOf("a", note("changed source")), cases[1] as object, cases[2] as object]);
+    const said = "the case a has another input (note, path or feedback) than the manifest of the run holds";
+    expect(() => reflectEdits(run, { root })).toThrow(said);
+    const rescored = reflectEdits(run, { root, rescore: true });
+    expect(rescored.edits[0]?.source).toBe(note("changed source"));
+    expect(rescored.inputs).toMatchObject({ mode: "rescore", differences: [said] });
+  });
+
+  test("a run scored by another scorer than the one here stops the replay and is sent to scripts/rescore", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases, {}, { scorer: { version: 1, sha256: "5".repeat(64) } });
+    const now = lockedParts(MEASUREMENT).scorer.sha256;
+    expect(() => reflectEdits(run, { root })).toThrow(`the scorer differs: the proposals were labelled good or bad by ${"5".repeat(64)}, the scorer here gives ${now}. Score the run again with scripts/rescore`);
+    expect(reflectEdits(run, { root, rescore: true }).inputs.manifest).toEqual({ scorer: { stored: "5".repeat(64), current: now }, cases_compared_on: "input" });
+    expect(reflectEdits(run, { root, scorer: "5".repeat(64) }).inputs.differences).toEqual([]); // the scorer the run was labelled by, given
+  });
+
+  test("a run that recorded searches is held to its cases' labels, which the feedback is not part of", () => {
+    const { root, cases, write } = repo();
+    const run = runOf(root, cases, { retrieval_queries: { cases: 2 } });
+    write([caseOf("a", note("a"), "other feedback"), cases[1] as object, cases[2] as object]); // the feedback is an input, not a label
+    expect(reflectEdits(run, { root }).inputs).toMatchObject({ differences: [], manifest: { cases_compared_on: "labels" } });
+    write([caseOf("a", note("another note")), cases[1] as object, cases[2] as object]);
+    expect(() => reflectEdits(run, { root })).toThrow("the case a has another label than the manifest of the run holds");
+  });
+
+  test("a case id the manifest does not hold, a case that is gone, and a manifest that is not sound are named", () => {
+    const { root, cases } = repo();
+    const manifest = JSON.parse(readFileSync(join(runOf(root, cases), "summary.json"), "utf8")).manifest;
+    const { b: _b, ...fewer } = manifest.cases;
+    const without = runOf(root, cases, {}, { cases: fewer, completion: { selected: ["a", "c"], scored: ["a", "c"], errored: [] } });
+    expect(() => reflectEdits(without, { root })).toThrow("the case b has another input");
+    expect(() => reflectEdits(runOf(root, cases, {}, { manifest_version: 7 }), { root })).toThrow("has a manifest that is not sound: manifest_version is 7");
+    const gone = runOf(root, cases);
+    writeFileSync(join(root, PUBLIC, "cases.jsonl"), `${JSON.stringify(cases[0])}\n${JSON.stringify(cases[2])}\n`);
+    expect(() => reflectEdits(gone, { root })).toThrow(`the run has a case id that ${join(PUBLIC, "cases.jsonl")} lacks: b`);
+    expect(reflectEdits(gone, { root, rescore: true }).inputs.missing_cases).toEqual(["b"]);
   });
 });
 

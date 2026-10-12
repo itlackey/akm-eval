@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { credentialField, endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Text } from "./provenance.ts";
+import { canonical, credentialField, endpointDisplay, endpointHost, endpointId, endpointIdentity, endpointRecord, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -213,17 +213,18 @@ describe("redactConfig and the credentials a --config-patch can bring in", () =>
 });
 
 describe("engineSettings", () => {
-  const nulls = { model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null };
+  const nulls = { model: null, endpoint: null, endpoint_id: null, temperature: null, enableThinking: null, timeoutMs: null };
 
-  test("reads the engine that defaults.llmEngine names, with its endpoint's identity: the path stays, the credentials go", () => {
-    const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: "https://user:pw@gateway.example:8443/v1/chat/completions?key=abc", temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };
-    const settings = { model: "the-model", endpoint: "https://gateway.example:8443/v1/chat/completions?key=<redacted>", temperature: 0, enableThinking: false, timeoutMs: 600000 };
+  test("reads the engine that defaults.llmEngine names, with its endpoint's host and the digest of its identity: no path, no credentials (#65)", () => {
+    const url = "https://user:pw@gateway.example:8443/k-DUMMYSECRET0123/v1/chat/completions?key=abc";
+    const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: url, temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };
+    const settings = { model: "the-model", endpoint: "https://gateway.example:8443", endpoint_id: sha256Text("https://gateway.example:8443/k-DUMMYSECRET0123/v1/chat/completions?key=<redacted>"), temperature: 0, enableThinking: false, timeoutMs: 600000 };
     expect(engineSettings(config)).toEqual({ engine: "m", ...settings, engines: { m: settings } });
-    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc/);
+    expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc|DUMMYSECRET|k-DUMMY|\/v1/);
   });
 
   test("reads what engineConfig writes", () => {
-    const settings = { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: null, enableThinking: null, timeoutMs: 600000 };
+    const settings = { model: "the-model", endpoint: "http://localhost:8080", endpoint_id: sha256Text("http://localhost:8080/v1/chat/completions"), temperature: null, enableThinking: null, timeoutMs: 600000 };
     expect(engineSettings(engineConfig("http://localhost:8080/v1", "the-model", true))).toEqual({ engine: "model", ...settings, engines: { model: settings } });
   });
 
@@ -242,10 +243,12 @@ describe("engineSettings", () => {
     const s = engineSettings(config);
     expect(s.engine).toBe("m");
     expect(Object.keys(s.engines)).toEqual(["agent", "judge", "m", "worker"]);
-    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example/deployment-A/v1", temperature: 0.2, enableThinking: null, timeoutMs: null });
-    // another deployment path of the routed engine is another identity
+    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example", endpoint_id: sha256Text("https://worker.example/deployment-A/v1"), temperature: 0.2, enableThinking: null, timeoutMs: null });
+    // another deployment path of the routed engine is another identity, on the same host
     const moved = engineSettings({ ...config, engines: { ...config.engines, worker: { ...config.engines.worker, endpoint: "https://worker.example/deployment-B/v1" } } });
     expect(moved.engines.worker).not.toEqual(s.engines.worker);
+    expect(moved.engines.worker?.endpoint).toBe(s.engines.worker?.endpoint);
+    expect(moved.engines.worker?.endpoint_id).not.toBe(s.engines.worker?.endpoint_id);
     // the same engines in another order of keys are the same settings
     expect(JSON.stringify(engineSettings({ engines: Object.fromEntries(Object.entries(config.engines).reverse()), improve: config.improve, defaults: config.defaults }))).toBe(JSON.stringify(s));
   });
@@ -256,7 +259,7 @@ describe("engineSettings", () => {
     expect(engineSettings(null)).toEqual(none);
     expect(engineSettings({ defaults: {}, engines: { m: { model: "x" } } })).toEqual(none);
     expect(engineSettings({ defaults: { llmEngine: "gone" }, engines: {} })).toEqual({ ...none, engine: "gone" });
-    expect(engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { endpoint: "not a url" } } }).endpoint).toBeNull();
+    expect(engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { endpoint: "not a url" } } })).toMatchObject({ endpoint: null, endpoint_id: null });
     expect(engineSettings({ defaults: { llmEngine: "constructor" }, engines: {} })).toEqual({ ...none, engine: "constructor" });
   });
 });
@@ -272,6 +275,7 @@ describe("harnessSha256", () => {
     "lib/harbor/test_arm.py": "def test(): pass\n",
     "lib/a.test.ts": "test one\n",
     "lib/README.md": "the lib\n",
+    "lib/golden.ts": "export const golden = 1;\n",
     "evals/x/src/run.ts": "export const run = 1;\n",
     "evals/x/src/lib.ts": "export const score = 1;\n",
     "evals/x/src/helper.py": "VALUE = 1\n",
@@ -342,7 +346,7 @@ describe("harnessSha256", () => {
     expect(digest(dropped)).not.toBe(base);
   });
 
-  test("does not change with an edit to a test, a test double, a fixture, a dependency, a README or a file that is not code", () => {
+  test("does not change with an edit to a test, a test double, the golden-file check, a fixture, a dependency, a README or a file that is not code", () => {
     const base = digest(checkout());
     const changes: Record<string, string>[] = [
       { "evals/x/src/lib.test.ts": "test edited\n" },
@@ -353,6 +357,7 @@ describe("harnessSha256", () => {
       { "evals/x/src/package.json": '{"edited":true}\n' },
       { "evals/x/README.md": "the eval, edited\n" },
       { "lib/a.test.ts": "test edited\n" },
+      { "lib/golden.ts": "export const golden = 2;\n" },
       { "lib/harbor/test_arm.py": "def test(): return 1\n" },
       { "lib/README.md": "the lib, edited\n" },
       { "evals/y/src/run.ts": "export const other = 2;\n" },
@@ -405,5 +410,41 @@ describe("endpointIdentity", () => {
 
   test("is null for a value that is not a URL", () => {
     for (const v of [undefined, null, "", "  ", "not a url", 42]) expect(endpointIdentity(v)).toBeNull();
+  });
+});
+
+describe("endpointHost, endpointId and endpointRecord (#65)", () => {
+  test("the host has the scheme and port and never a path, a query or credentials", () => {
+    expect(endpointHost("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("https://gateway.example:8443");
+    expect(endpointHost("http://localhost:8080/v1/")).toBe("http://localhost:8080");
+    for (const v of [undefined, null, "", "not a url", 7]) expect([endpointHost(v), endpointId(v)]).toEqual([null, null]);
+  });
+
+  test("the id is the sha256 of the identity: another deployment path is another id, a change of key alone is not", () => {
+    const a = endpointId("https://gateway.example/deployment-A/v1");
+    expect(a).toBe(sha256Text("https://gateway.example/deployment-A/v1"));
+    expect(a).not.toBe(endpointId("https://gateway.example/deployment-B/v1"));
+    expect(endpointId("https://gateway.example/v1?api_key=one")).toBe(endpointId("https://u:p@gateway.example/v1/?api_key=two"));
+    expect(endpointRecord("https://gateway.example/deployment-A/v1")).toEqual({ endpoint: "https://gateway.example", endpoint_id: a });
+  });
+
+  test("a message names an endpoint by its host and the start of its id, not its path", () => {
+    const shown = endpointDisplay(endpointRecord("https://gateway.example/k-DUMMYSECRET0123/v1"));
+    expect(shown).toBe(`https://gateway.example (id ${endpointId("https://gateway.example/k-DUMMYSECRET0123/v1")?.slice(0, 12)})`);
+    expect(shown).not.toContain("DUMMY");
+    expect(endpointDisplay({ endpoint: null, endpoint_id: null })).toBe("unknown host");
+  });
+});
+
+describe("canonical and withoutEngineSettings", () => {
+  test("the same value gives the same text whatever the order of its keys, and the digest follows", () => {
+    expect(canonical({ b: 1, a: [{ d: 2, c: 3 }] })).toBe('{"a":[{"c":3,"d":2}],"b":1}');
+    expect(sha256Json({ b: 1, a: 2 })).toBe(sha256Json({ a: 2, b: 1 }));
+    expect(canonical(undefined)).toBe("null");
+  });
+
+  test("leaves out the settings of the model from every engine, and nothing else", () => {
+    const config = { semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", model: "x", endpoint: "https://h.example/v1", endpoint_id: "abc", temperature: 0, enableThinking: false, timeoutMs: 5, apiKey: "$K" } } };
+    expect(withoutEngineSettings(config)).toEqual({ semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", apiKey: "$K" } } });
   });
 });
