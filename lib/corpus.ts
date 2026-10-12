@@ -19,6 +19,9 @@
 // private: a folder of notes with no corpus.json is kept from models you did not mark, not trusted. Write a corpus.json with
 // "private": false to say otherwise.
 //
+// An eval whose cases are a split of a dataset it fetches (skillret's train split) has a custom corpus with no folder: `default: "split"`. It is
+// of kind "split", never private, takes no --cases, and is never read from a corpus.json.
+//
 // --corpus private and --corpus own work for one more release, and print a line that names the new form.
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -33,8 +36,8 @@ export const CONFIG_FILE = "corpus.json";
 /** The keys corpus.json may have. Any other is refused, so a typo such as "privat" cannot pass for a setting. */
 const KEYS = ["kind", "private", "seed", "generated"];
 
-/** Where a custom corpus came from: the public cases rewritten from a seed, or your own. */
-export type Kind = "rewrite" | "own";
+/** Where a custom corpus came from: the public cases rewritten from a seed, your own, or a split of the dataset the eval fetches (which has no folder). */
+export type Kind = "rewrite" | "own" | "split";
 
 export interface CorpusConfig {
   /** `public` for the committed cases, which have no corpus.json. */
@@ -176,7 +179,7 @@ export interface ResolveOptions {
   values: { corpus?: string; cases?: string };
   /** The eval's public assets, absolute. */
   publicFolder: string;
-  /** What `--corpus custom` reads without --cases, and what `all` adds to public: private/<eval>/assets (rewrite) or private/<eval>/own (own). */
+  /** What `--corpus custom` reads without --cases, and what `all` adds to public: private/<eval>/assets (rewrite), private/<eval>/own (own), or the eval's own split of its dataset, which is no folder (split). */
   default: Kind;
   /** The old --corpus values this eval had. Default: ALIASES. */
   aliases?: Record<string, Alias>;
@@ -221,6 +224,14 @@ export function resolveCorpora(o: ResolveOptions): ResolvedCorpus[] {
   if (choice === "public") {
     if (cases !== undefined) return fail("--cases is a custom corpus: use it alone, or with --corpus custom");
     return [publicCorpus];
+  }
+  if (o.default === "split") {
+    const split = (flag: string): ResolvedCorpus => ({ name: "custom", folder: "", config: defaultConfig("split"), configFile: null, flag });
+    if (cases !== undefined) return fail(`--cases needs a folder, and the custom corpus of ${o.eval} is a split of its dataset, which has none: use --corpus custom`);
+    if (choice === "custom" || choice === "all") return choice === "all" ? [publicCorpus, split("--corpus all")] : [split("--corpus custom")];
+    if (!alias) return fail(`--corpus must be public, custom or all, not "${choice}"`);
+    (o.warn ?? ((line: string) => console.error(line)))(`${o.eval}: --corpus ${choice} is now --corpus custom. The old value works for one more release.`);
+    return [split(`--corpus ${choice}`)];
   }
   if (choice === "custom" || choice === "all") {
     const found = cases === undefined ? custom(folderOf(o.default), o.default, `--corpus ${choice}`) : custom(resolve(root, cases), "own", `--cases ${cases}`);

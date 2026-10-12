@@ -53,6 +53,25 @@
         ]
       }
     },
+    "promotion": {
+      "collector": {
+        "version": 1,
+        "sha256": "fd84fc1fa73076c6f2c668a6bb5b2d3f3893000b818f3af382c1dfb4bbd5bbef",
+        "files": [
+          "evals/promotion/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "66d76aedd254fe43f6d72948d3813277ad6007039d8deedee18d261999a7a50d",
+        "files": [
+          "evals/promotion/src/score.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,
@@ -69,6 +88,28 @@
         "sha256": "1395dfdb42d8543b3a97830ff4befa6d9c48f11d8de184c5322554ed6091c3aa",
         "files": [
           "evals/reflect/src/score.ts"
+        ]
+      }
+    },
+    "skillret": {
+      "collector": {
+        "version": 1,
+        "sha256": "acd3032eaf8de01dfc4daaa7e290ab1c27d1392b2c6c337fbc59d0bc80950417",
+        "files": [
+          "benchmarks/skillret/src/akm.ts",
+          "benchmarks/skillret/src/collect.ts",
+          "benchmarks/skillret/src/sample.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "a6b0c5015a9cbd2a52471c0224c880c608b1b982bf6aa39abb6d263d72440322",
+        "files": [
+          "benchmarks/skillret/src/score.ts",
+          "lib/ir.ts"
         ]
       }
     },

@@ -23,3 +23,7 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | agent-ab | scorer | 1 | first lock entry | d440c7e333b9 |
 | 2026-10-12 | terminal-bench | collector | 1 | first lock entry | 6be5329b6e6a |
 | 2026-10-12 | terminal-bench | scorer | 1 | first lock entry | d440c7e333b9 |
+| 2026-10-12 | promotion | collector | 1 | first lock entry | fd84fc1fa730 |
+| 2026-10-12 | promotion | scorer | 1 | first lock entry | 66d76aedd254 |
+| 2026-10-12 | skillret | collector | 1 | first lock entry | acd3032eaf8d |
+| 2026-10-12 | skillret | scorer | 1 | first lock entry | a6b0c5015a9c |

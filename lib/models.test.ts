@@ -218,7 +218,10 @@ describe("every eval that reads a custom corpus", () => {
   // privacyError (lib/corpus.ts) checks the corpus's private flag; privateModelError (lib/models.ts) is the check it uses.
   const guarded = (source: string) => source.includes("privacyError(") || source.includes("privateModelError(");
   // The evals that read a custom corpus and send none of it to a model. Each says why.
-  const NOTHING_SENT = { "evals/retrieval": "scores akm's search of your notes with the qrels you labelled: no model sees a note (the labelling tool, label.ts, checks the flag)" } as Record<string, string>;
+  const NOTHING_SENT = {
+    "evals/retrieval": "scores akm's search of your notes with the qrels you labelled: no model sees a note (the labelling tool, label.ts, checks the flag)",
+    "benchmarks/skillret": "calls no model, and its custom corpus is a split of a public dataset, not private (corpus kind split)",
+  } as Record<string, string>;
 
   test("the scan finds the custom corpora, so it cannot pass by finding none", () => {
     const found = runFiles.filter((r) => readsCustom(readFileSync(r.file, "utf8"))).map((r) => r.name);

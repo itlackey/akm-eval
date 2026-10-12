@@ -1,0 +1,29 @@
+{"id":"good-01","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/network","reason":"","outcome":"accept"}
+{"id":"good-01","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/network","reason":"A new reference note on proxy and CA settings for enterprise networks. No other note in the bundle covers them.","outcome":"accept"}
+{"id":"good-01","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/network","reason":"The proposal ends in an empty fenced block, so it looks cut off.","outcome":"reject"}
+{"id":"good-01","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/network","reason":"needs-judgment: the judgment reply was not valid JSON","outcome":"defer"}
+{"id":"good-01","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/network","reason":"","outcome":"error","error":"LLM request failed: <MODEL_BASE_URL>/chat/completions refused"}
+{"id":"good-02","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/config","reason":"","outcome":"accept"}
+{"id":"good-02","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/config","reason":"","outcome":"defer"}
+{"id":"good-02","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-extensions/references/config","reason":"","outcome":"error","error":"LLM request timed out after 600000ms","timed_out":true}
+{"id":"good-03","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis","reason":"Log analysis steps for opencode that no other note has.","outcome":"accept"}
+{"id":"good-03","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis","reason":"Much of this is in the troubleshooting note already.","outcome":"reject"}
+{"id":"good-03","label":"good","category":"good","ref":"knowledge/skills/ai-skills/opencode-troubleshoot/references/log-analysis","reason":"","outcome":"error","error":"the drain did not list the proposal"}
+{"id":"duplicate-01","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/codex-notes","reason":"","outcome":"accept"}
+{"id":"duplicate-01","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/codex-notes","reason":"Duplicate of knowledge/skills/ai-skills/agent-cli-tools/references/codex: every claim is already there.","outcome":"reject"}
+{"id":"duplicate-01","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/codex-notes","reason":"needs-judgment","outcome":"defer"}
+{"id":"duplicate-02","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/claude-code-notes","reason":"Adds notes on running Claude Code non-interactively.","outcome":"accept"}
+{"id":"duplicate-02","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/claude-code-notes","reason":"","outcome":"reject"}
+{"id":"duplicate-02","label":"bad","category":"duplicate","ref":"knowledge/skills/ai-skills/agent-cli-tools/references/claude-code-notes","reason":"","outcome":"error","error":"failed"}
+{"id":"stale-01","label":"bad","category":"stale","ref":"knowledge/skills/print/pdf-layout-reviewer/CHANGELOG","reason":"","outcome":"accept"}
+{"id":"stale-01","label":"bad","category":"stale","ref":"knowledge/skills/print/pdf-layout-reviewer/CHANGELOG","reason":"The note says it was superseded on 2026-09-18 and replaced by print-quality-checklist.","outcome":"reject"}
+{"id":"stale-01","label":"bad","category":"stale","ref":"knowledge/skills/print/pdf-layout-reviewer/CHANGELOG","reason":"","outcome":"error","error":"The operation timed out.","timed_out":true}
+{"id":"stale-02","label":"bad","category":"stale","ref":"knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs","reason":"needs-judgment","outcome":"defer"}
+{"id":"stale-02","label":"bad","category":"stale","ref":"knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs","reason":"Deprecated: its frontmatter says beliefState: deprecated.","outcome":"reject"}
+{"id":"stale-02","label":"bad","category":"stale","ref":"knowledge/skills/ai-skills/opencode-extensions/references/plugins-docs","reason":"","outcome":"error","error":"Timeout of 60000ms exceeded","timed_out":true}
+{"id":"ephemeral-01","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","reason":"","outcome":"accept"}
+{"id":"ephemeral-01","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","reason":"A status snapshot pinned to commit 9f3c2ab. It will be out of date within days.","outcome":"reject"}
+{"id":"ephemeral-01","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/references/common-issues","reason":"","outcome":"error","error":"HTTP 429 Too Many Requests: rate limit reached"}
+{"id":"ephemeral-02","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/assets/report-template","reason":"A useful report template.","outcome":"accept"}
+{"id":"ephemeral-02","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/assets/report-template","reason":"Status snapshot: 14 of 20 items done, with a date and a branch.","outcome":"reject"}
+{"id":"ephemeral-02","label":"bad","category":"ephemeral","ref":"knowledge/skills/print/pdf-layout-reviewer/assets/report-template","reason":"","outcome":"error","error":"LLM request failed: <MODEL_BASE_URL>/chat/completions timed out","timed_out":true}

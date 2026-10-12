@@ -253,6 +253,34 @@ describe("resolveCorpora", () => {
     expect(messageOf(() => resolveIn({ cases: "  " }))).toBe("--cases needs a folder");
   });
 
+  test("an eval whose custom corpus is a split of its dataset (skillret) has one with no folder, never private, and takes no --cases", () => {
+    const { root, warnings } = setup();
+    const resolveSplit = (values: { corpus?: string; cases?: string }) => resolveCorpora({ eval: "skillret", values, publicFolder: PUBLIC, default: "split", aliases: { private: { folder: "", kind: "split" } }, root, warn: (line) => warnings.push(line) });
+    const split = { name: "custom", folder: "", config: { kind: "split", private: false }, configFile: null };
+    expect(resolveSplit({})).toEqual([{ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }]);
+    expect(resolveSplit({ corpus: "custom" })).toEqual([{ ...split, flag: "--corpus custom" }]);
+    expect(resolveSplit({ corpus: "all" })).toEqual([expect.objectContaining({ name: "public" }), { ...split, flag: "--corpus all" }]);
+    expect(warnings).toEqual([]);
+    expect(resolveSplit({ corpus: "private" })).toEqual([{ ...split, flag: "--corpus private" }]);
+    expect(warnings).toEqual(["skillret: --corpus private is now --corpus custom. The old value works for one more release."]);
+    expect(messageOf(() => resolveSplit({ cases: "notes" }))).toBe("--cases needs a folder, and the custom corpus of skillret is a split of its dataset, which has none: use --corpus custom");
+    expect(messageOf(() => resolveSplit({ corpus: "custom", cases: "notes" }))).toBe("--cases needs a folder, and the custom corpus of skillret is a split of its dataset, which has none: use --corpus custom");
+    expect(messageOf(() => resolveSplit({ corpus: "public", cases: "notes" }))).toBe("--cases is a custom corpus: use it alone, or with --corpus custom");
+    expect(messageOf(() => resolveSplit({ corpus: "own" }))).toBe('--corpus must be public, custom or all, not "own"');
+    expect(existsSync(join(root, "private"))).toBe(false); // nothing is looked for in a folder
+  });
+
+  test("the split is not private, so the guard lets any model through, and its summary record says split", () => {
+    const [, split] = resolveCorpora({ eval: "skillret", values: { corpus: "all" }, publicFolder: PUBLIC, default: "split", root: temp() }) as [unknown, ReturnType<typeof resolveCorpora>[number]];
+    expect(corpusRecord(split)).toEqual({ corpus: "custom", corpus_kind: "split", corpus_private: false });
+    expect(privacyError([split], { model: { baseUrl: "http://x/v1", name: "m", apiKey: "", private: false } })).toBeUndefined();
+    expect(defaultConfig("split")).toEqual({ kind: "split", private: false });
+  });
+
+  test("a corpus.json cannot say split: there is no folder for it", () => {
+    expect(messageOf(() => parseCorpusConfig({ kind: "split", private: false }, "c.json"))).toBe('c.json: kind must be "rewrite" or "own"');
+  });
+
   test("a corpus.json that is not sound ends the run with fail, and names the file", () => {
     const { root } = setup();
     const file = putJson(join(root, "notes", "corpus.json"), { kind: "own", private: true, privat: false });
