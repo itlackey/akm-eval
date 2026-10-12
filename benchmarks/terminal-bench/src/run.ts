@@ -35,7 +35,7 @@ import {
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, lockedParts, type Parts } from "../../../lib/manifest.ts";
+import { type Parts, type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
 import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -82,6 +82,8 @@ interface Summary {
   /** For a custom corpus, `rewrite` (the public library rewritten from a seed, by evals/retrieval) or `own`; `public` for the public one. */
   corpus_kind: string;
   corpus_private: boolean;
+  /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the library from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
+  corpus_folder: string | null;
   label: string;
   date: string;
   git_commit: string;
@@ -220,6 +222,7 @@ export function summarize(o: {
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(o.corpus),
+    corpus_folder: o.corpus.name === "custom" ? corpusFolderOf(o.corpus.folder) : null,
     label: o.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),

@@ -9,7 +9,7 @@
 // nothing of the case: it has no labels.
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { HARBOR_COLLECTOR, HARBOR_SCORER } from "../../../lib/harbor/measured.ts";
 import { sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "../../../lib/harbor/score.ts";
@@ -38,11 +38,14 @@ export function casesIn(assets: string, names: string[] = taskNames(join(assets,
   });
 }
 
-/** The folder of the corpus a summary was made from, from the checkout at `root`. */
+/**
+ * The folder of the corpus a summary was made from, from the checkout at `root`: a custom corpus is in its `corpus_folder`, which scripts/rescore
+ * sets from --cases DIR when the run could not record it. The folders of the earlier names (`private`, a rewrite in the usual place) are known.
+ */
 function assetsOf(root: string, summary: Record<string, any>): string {
   if (summary.corpus === "public") return join(root, "evals", NAME);
   if (summary.corpus === "private") return join(root, "private", NAME, "assets"); // a run from before the corpora were public and custom
-  if (typeof summary.corpus_folder === "string") return join(root, summary.corpus_folder);
+  if (typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
   throw new Error("the run read a custom corpus whose folder it did not record, because it is outside the repository");
 }
 

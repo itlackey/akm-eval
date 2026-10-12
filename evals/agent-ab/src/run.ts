@@ -33,7 +33,7 @@ import {
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, buildReport, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize } from "../../../lib/harbor/score.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
 import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -76,7 +76,7 @@ interface Summary {
   /** For a custom corpus, `rewrite` (the public tasks rewritten from a seed) or `own`; `public` for the public one. */
   corpus_kind: string;
   corpus_private: boolean;
-  /** The corpus folder from the repository root, for scripts/rescore. Null for a folder outside the repository, which is not written down. */
+  /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the cases from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -159,12 +159,6 @@ export const sideBySide = (a: Pick<Summary, "corpus" | "report">, b: Pick<Summar
 /** Where a corpus's runs go: results/ here, or private/agent-ab/results/. */
 const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The folder from the repository root, or null when it is outside the repository: its path is not written down. */
-const insideRepository = (folder: string): string | null => {
-  const rel = relative(ROOT, folder);
-  return rel === "" || rel.startsWith("..") || resolve(ROOT, rel) !== folder ? null : rel;
-};
-
 export async function runCorpus(
   c: ResolvedCorpus,
   ctx: { model: string; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
@@ -212,7 +206,7 @@ export async function runCorpus(
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(c),
-    corpus_folder: insideRepository(c.folder),
+    corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
@@ -251,7 +245,7 @@ export async function runCorpus(
 
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
-  const where = insideRepository(c.folder) ?? "the folder of --cases";
+  const where = corpusFolderOf(c.folder) ?? "the folder of --cases";
   // The rewritten tasks are used only when their generated.json says they are the rewrite of the public ones as they are now, unchanged since.
   if (c.config.kind === "rewrite") return privateAssetsProblem(c.folder, EVAL_DIR, where);
   if (c.name === "custom" && !(existsSync(join(c.folder, "tasks")) && existsSync(join(c.folder, "libraries")))) return `${where} must hold tasks/ and libraries/, laid out as the public ones are (see "Run your own set" in the README)`;

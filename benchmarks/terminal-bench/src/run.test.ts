@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
@@ -470,6 +470,7 @@ describe("runCorpus", () => {
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toMatchObject({ expected: 4, completed: 4, failed: 0, missing: 0, control: { expected: 2 }, akm: { expected: 2 } });
     expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1") });
+    expect(stored.corpus_folder).toBeNull(); // a public run has no folder to record
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -960,12 +961,60 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
       });
       return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
     };
-    const summary = (label: string, corpus: "public" | "custom" = "public") => {
-      const results = corpus === "public" ? join(root, "benchmarks", "terminal-bench", "results") : join(root, "private", "terminal-bench", "results"); // a custom corpus's results are not published
-      return JSON.parse(readFileSync(join(results, readdirSync(results).find((d) => d.endsWith(`-${label}`)) as string, "summary.json"), "utf8"));
+    /** The results folder of a run by its label. A custom corpus's results are not published. */
+    const folder = (label: string, corpus: "public" | "custom" = "public") => {
+      const results = corpus === "public" ? join(root, "benchmarks", "terminal-bench", "results") : join(root, "private", "terminal-bench", "results");
+      return join(results, readdirSync(results).find((d) => d.endsWith(`-${label}`)) as string);
     };
-    return { root, run, summary };
+    const summary = (label: string, corpus: "public" | "custom" = "public") => JSON.parse(readFileSync(join(folder(label, corpus), "summary.json"), "utf8"));
+    return { root, run, summary, folder };
   }
+
+  test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
+    const { root, run, summary, folder } = repo();
+    const ownLibrary = (to: string) => {
+      cpSync(join(root, "corpus", "library"), join(to, "library"), { recursive: true });
+      writeFileSync(join(to, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
+    };
+    // the public corpus has no folder to record
+    expect(run(["--limit", "2", "--label", "pub"]).code).toBe(0);
+    expect(summary("pub").corpus_folder).toBeNull();
+    expect(rescoreFolder(folder("pub"), { root }).result.changed).toEqual([]);
+
+    // a folder inside the repository: recorded, and rescore reads the library there
+    const mine = join(root, "notes", "mine");
+    ownLibrary(mine);
+    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
+    const stored = summary("in", "custom");
+    expect(stored).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes/mine" });
+    const inside = rescoreFolder(folder("in", "custom"), { root });
+    expect(inside.result.changed).toEqual([]);
+    const rescored = JSON.parse(readFileSync(join(inside.out, "summary.json"), "utf8"));
+    expect(rescored).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine", report: stored.report });
+    expect(rescored.manifest.cases).toEqual(stored.manifest.cases);
+    // the folder has moved: rescore says so and where to say it is
+    renameSync(mine, join(root, "notes", "moved"));
+    expect(() => rescoreFolder(folder("in", "custom"), { root })).toThrow("notes/mine, which is not a folder here");
+    const moved = rescoreFolder(folder("in", "custom"), { root, cases: "notes/moved" });
+    expect(moved.result.changed).toEqual([]);
+    expect(JSON.parse(readFileSync(join(moved.out, "summary.json"), "utf8")).corpus_folder).toBe("notes/moved");
+
+    // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
+    const outside = tmp();
+    ownLibrary(outside);
+    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
+    const away = summary("out", "custom");
+    expect(away).toMatchObject({ corpus: "custom", corpus_folder: null });
+    for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
+    expect(() => rescoreFolder(folder("out", "custom"), { root })).toThrow("outside the repository");
+    expect(() => rescoreFolder(folder("out", "custom"), { root })).toThrow("--cases DIR");
+    const given = rescoreFolder(folder("out", "custom"), { root, cases: outside });
+    expect(given.result.changed).toEqual([]);
+    const again = JSON.parse(readFileSync(join(given.out, "summary.json"), "utf8"));
+    expect(again.report).toEqual(away.report);
+    expect(again.corpus_folder).toBeNull(); // the folder it was given is outside too, and is not written down
+    expect(readFileSync(join(given.out, "summary.json"), "utf8")).not.toContain(outside);
+  }, 120_000);
 
   test("takes a library of your own with --cases, and keeps it from a model that models.json does not mark private unless its corpus.json says it holds nothing private", () => {
     const { root, run, summary } = repo();

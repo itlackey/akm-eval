@@ -31,7 +31,7 @@ A run that does not do everything it set out to do is **aborted**: Harbor exited
 Each run writes to `evals/agent-ab/results/<UTC date>-<label>/`, or to `private/agent-ab/results/` for a custom corpus:
 
 - `summary.json`: the report described below, the model, the pins, how many tasks and attempts ran, the corpus and the git commit. It also holds:
-  - `corpus` (`public` or `custom`), `corpus_kind` (`rewrite`, `own` or `public`), `corpus_private`, `corpus_folder` (the folder from the repository root, null for one outside it, whose path is not written down) and `seed` (for a rewritten corpus).
+  - `corpus` (`public` or `custom`), `corpus_kind` (`rewrite`, `own` or `public`), `corpus_private`, `corpus_folder` (the folder of a custom corpus from the repository root, which `scripts/rescore` reads the tasks from; null for the public corpus and for a folder outside the repository, whose path is not written down) and `seed` (for a rewritten corpus).
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of what each task presented to the agent (its folder and the library it seeds), the akm, the engine, the attempts, and which tasks were scored (both arms have a trial with a reward) and which were not. See "The collector, the scorer and the golden files".
   - `akm_version`, `akm_bin`, `akm_build`, `akm_env` and `akm_install`: which akm the akm arm ran, and what was installed. See "Which akm".
   - `status` and `aborted_reason`: `complete`, or `aborted` with the reason as a sentence (`Harbor exited 1; 1 of 6 expected trials have no result (control 0, akm 1)`). `complete` needs `harbor_exit` 0 and no `missing` cell; `aborted_reason` is null then.
@@ -57,7 +57,10 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 
 ```
 scripts/rescore/run evals/agent-ab/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
+scripts/rescore/run --cases ~/tasks/agent-ab private/agent-ab/results/<UTC date>-<label>      # a custom corpus outside the repository
 ```
+
+A run on a custom corpus is rescored against the tasks in its `corpus_folder`. A corpus outside the repository records none, and `--cases DIR` gives rescore its folder.
 
 A run from before the manifest has one line per trial and no manifest, and is not rescored.
 

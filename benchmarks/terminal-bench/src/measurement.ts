@@ -8,8 +8,9 @@
 // records for it, and the library the akm arm seeds for every task. The verifier runs inside the trial and its reward is raw output, so
 // the scorer reads nothing of the case: it has no labels.
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { HARBOR_COLLECTOR, HARBOR_SCORER } from "../../../lib/harbor/measured.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "../../../lib/harbor/score.ts";
 import type { Measurement } from "../../../lib/manifest.ts";
@@ -33,10 +34,15 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   collector: ["benchmarks/terminal-bench/src/collect.ts", ...HARBOR_COLLECTOR],
   // What turns the trials of a task into a row and the rows into the report. The tasks are digested per case.
   scorer: HARBOR_SCORER,
-  // The tasks of the pinned dataset, with the library the run recorded. The tasks are Harbor's and are not in this repository.
+  // The tasks of the pinned dataset, with the library the akm arm seeds. The tasks are Harbor's and are not in this repository; the library is
+  // the one in the run's corpus folder (corpus/ for the public corpus, `corpus_folder` for a custom one, which scripts/rescore sets from --cases
+  // DIR when the run could not record it), else the digest the run recorded.
   loadCases: (root, summary) => {
     const lock = JSON.parse(readFileSync(join(root, "benchmarks", NAME, "assets", "ASSETS.lock"), "utf8")) as Lock;
-    return Object.entries(lock.tasks).map(([id, digest]) => caseOf(id, digest, summary.library?.sha256));
+    const folder = summary.corpus === "public" ? join(root, "corpus") : typeof summary.corpus_folder === "string" ? resolve(root, summary.corpus_folder) : null;
+    const library = folder === null ? undefined : join(folder, "library");
+    const sha = library !== undefined && existsSync(library) ? sha256Dir(library) : summary.library?.sha256;
+    return Object.entries(lock.tasks).map(([id, digest]) => caseOf(id, digest, sha));
   },
   legacyProblem: () => "its samples.jsonl has one line per trial, and the manifest evals have one line per task with its trials",
   caseId: (c) => c.id,
