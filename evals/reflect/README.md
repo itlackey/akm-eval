@@ -10,30 +10,32 @@ The model under test is reflect's engine. The prompt, the patch and the proposal
 
 ```
 evals/reflect/run --corpus public
-evals/reflect/run --corpus private
+evals/reflect/run --corpus custom
+evals/reflect/run --cases ~/notes/reflect
 evals/reflect/run --corpus all
 ```
 
-- `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
+- `--corpus` picks the assets: `public`, `custom`, or `all`, which runs both and prints the two results side by side, never as one number. `custom` is a folder of cases with a `corpus.json`: the seeded rewrite in `private/reflect/assets` by default, or the folder `--cases DIR` names (`--cases` alone is `--corpus custom`). `--corpus private` still works for one release, with a warning: it is `--corpus custom`. See "Corpora" in the root README and "Run your own set" below.
 - `--limit N` runs the first N cases. The first ten hold each class once and the first five mix defects and controls. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
-- `--retrieval-queries` records the retrieval eval's labelled queries for each note (grade 2 or 3 in `evals/retrieval/assets/qrels.jsonl`, at most 5, best first; 48 of the 50 public cases have some) as searches that found it, so the retrieval check of akm's reflect has queries to grade. The searches are part of what each note is given, so the `input_sha256` of those notes in the manifest covers them: a run with the flag and a run without it, or two runs made with other `queries.jsonl` or `qrels.jsonl`, differ in the input of the notes whose searches differ, and `scripts/compare` leaves those out or refuses the pair (see "How results stay comparable" in the root README). See "Measure the gates of akm's reflect".
+- `--retrieval-queries` records the retrieval eval's labelled queries for each note (grade 2 or 3 in `evals/retrieval/assets/qrels.jsonl`, at most 5, best first; 46 of the 50 public cases have some) as searches that found it, so the retrieval check of akm's reflect has queries to grade. The queries are those of the public notes, matched to a corpus by public ref: a rewrite gets them for the same cases as the public corpus, with the words its own `private/reflect/map.json` renamed written in them, as in its notes, and the retrieval eval's private assets are not read. The run stops before anything runs, naming the file and saying to run `./generate-assets --only reflect`, when `map.json` or a file of the retrieval eval is missing. It does not apply to an own corpus. The searches are part of what each note is given, so the `input_sha256` of those notes in the manifest covers them: a run with the flag and a run without it, or two runs made with other `queries.jsonl` or `qrels.jsonl`, differ in the input of the notes whose searches differ, and `scripts/compare` leaves those out or refuses the pair (see "How results stay comparable" in the root README). See "Measure the gates of akm's reflect".
 - `--strategy NAME` runs the akm strategy NAME in place of `reflect-only`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The private run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing, and when `private/reflect/generated.json` is missing or was made from other public cases than the ones in this checkout: `generate` writes it beside the assets, with the `seed` and the `inputs_sha256` of the public `cases.jsonl` it read. Make the assets again after a change to the public cases, and once for assets made before `generated.json` existed: `./generate-assets --only reflect` with the same seed gives the same assets, unless `lib/rewrite` or the public cases.jsonl changed since.
+The default custom run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing, and when `private/reflect/generated.json` is missing or was made from other public cases than the ones in this checkout: `generate` writes it beside the assets, with the `seed`, the `inputs_sha256` of the public `cases.jsonl` it read, and the `generator_sha256`: a digest of `src/generate.ts` and of `lib/rewrite/rewrite.ts` and `lib/rewrite/lexicon.ts`, the code that made the assets. The run also stops, with the same instruction, when `generator_sha256` is not that of the code in this checkout, or is missing (assets of an older generate): a change to the generator or to the rewrite would otherwise leave old assets looking current. Make the assets again after a change to the public cases, to `generate.ts` or to `lib/rewrite`, and once for assets made before `generator_sha256` existed: `./generate-assets --only reflect` with the same seed gives the same assets, unless the rewrite or the public cases.jsonl changed since.
 
-Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
+Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many cases ran, were scored and errored, how many had retrieval queries recorded (`retrieval_queries`, null without `--retrieval-queries`), the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
   - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept) and the model's endpoint written as `<MODEL_BASE_URL>`.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `endpoint_id` (a sha256 of the endpoint's identity, which is what tells two deployments on one host apart), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engines, the strategy and the config patch, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
   - `assets_sha256`: the digest of the corpus's `cases.jsonl`, so two runs on the same cases have the same digest wherever the repository is. A change to a case changes it, and `--limit` does not.
-  - `seed`: for the private corpus, the seed its assets were made with (from `generated.json`); `null` for the public corpus.
+  - `corpus`: `public`, or `custom` for any other folder of cases. `corpus_kind` is `public`, `rewrite` (the public cases rewritten from a seed) or `own` (your own), and `corpus_private` says whether the corpus may go only to a model that `models.json` marks `"private": true`. `corpus_folder` is the folder of a custom corpus from the repository root, which `scripts/rescore` reads the cases from again; it is `null` for the public corpus, and for a folder outside the repository, whose name can say what is in it, and then `scripts/rescore` takes the folder with `--cases DIR`.
+  - `seed`: for a rewrite, the seed its assets were made with (its `corpus.json` holds the one in `generated.json`); `null` for every other corpus.
   - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
-  - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed. They are counted in `n_errored` too, and their rows have `timed_out: true`, so an akm that got slower shows as timeouts and not as unexplained errors.
+  - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed, or because the model call of akm's retrieval check timed out (see below). They are counted in `n_errored` too, and their rows have `timed_out: true`, so an akm or an endpoint that got slower shows as timeouts and not as unexplained errors.
 - `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and their new text, the proposal itself, the model name that answered, akm's reason when it made no proposal, and the time it took. The raw output of the case is `outcome`, `reason`, `proposal`, `served`, `seconds`, `error` and `timed_out`; the checks, `correct`, `changed` and `values` are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
 
 ## How a case runs
@@ -84,7 +86,7 @@ A proposal passes three gates before it is queued, and the eval runs with the fi
 | The quality judge | Refuses an edit whose score is not 4 or more on every criterion. Off in `reflect-only`. | `patches/judge-on.json` turns it on. judge-gate scores the judge on labelled edits. |
 | The retrieval check | After the judge passes an edit, grades the old and the new note on up to five of the queries that retrieved the note, and refuses the edit when the new one grades lower. It runs only when the note has queries in the usage log. | `patches/judge-on.json` with `--retrieval-queries`. Without the flag the notes have no queries, the check has nothing to grade, and the same run is the baseline. |
 
-`metrics.refused` counts the refused edits by what refused them: `filter`, `judge`, `retrieval` or `other`. A refused edit is never correct, so the gates cost `defects` and `controls` whatever they refuse, and the comparison that shows what a gate is worth is the one with it on and off, with `--repeat`, on the same model.
+`metrics.refused` counts the refused edits by what refused them: `filter`, `judge`, `retrieval` or `other`. A refused edit never reaches the note, so it is scored by the note as it ends up: as a note left alone, right for a control and a miss for a defect. A gate that refuses a bad edit of a control saves it, and one that refuses a fix of a defect costs it. The comparison that shows what a gate is worth is the one with it on and off, with `--repeat`, on the same model.
 
 ```
 evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --label judge
@@ -110,19 +112,24 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 
 - `src/collect.ts` is the **collector**: the sandbox, the akm config (`reflectConfig`), the commands, the searches it records, and how it reads akm's answer into `outcome`, `reason`, `proposal` and the rest. `lib/akm/akm.ts`, `lib/akm/overrides.ts` and `lib/cli.ts` are listed with it. A change to any of them changes what akm is asked or what is kept of its answer: bump the collector (`scripts/measurement/run bump reflect collector --reason "..."`), and earlier runs are no longer comparable with later ones.
 - `src/score.ts` is the **scorer**: the checks, `makeRow` and `metrics`. A change to it changes what the eval scores: bump the scorer, and update the golden files in the same change. No run is invalidated: `scripts/rescore` scores any stored run again, and `scripts/compare` does so before it compares two runs that were scored differently.
+- `src/queries.ts` reads the files that `--retrieval-queries` needs and gives `searchesFor` (in `src/collect.ts`) the queries of a rewrite written through its `map.json`. It is in neither part: what it records for a note shows in that case's `input_sha256`, which digests the searches.
 - `src/measurement.ts` declares both lists, the cases' `input` and `labels` that are digested per case, and how a stored row is read back into its raw output (`rawOf`). `src/lib.ts` re-exports the scorer and the collector, with how a defect is injected and the checks on the cases themselves.
-- `golden/` holds ten cases, one of each class, with 47 raw outputs for them (a realistic answer of a model: the right one, and each way to get it wrong), and the row the scorer must give for each. `src/golden.test.ts` fails when a scorer change alters one. `UPDATE_GOLDEN=1 bun test evals/reflect/src/golden.test.ts` writes the expected rows again, and the files say which scorer version they are for.
+- `golden/` holds ten cases, one of each class, with 59 raw outputs for them (a realistic answer of a model: the right one, and each way to get it wrong), and the row the scorer must give for each. `src/golden.test.ts` fails when a scorer change alters one. `UPDATE_GOLDEN=1 bun test evals/reflect/src/golden.test.ts` writes the expected rows again, and the files say which scorer version they are for.
 
 ```
 scripts/rescore/run evals/reflect/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
 ```
 
-A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches.
+A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
+
+## Run your own set
+
+`--cases DIR` runs reflect on notes of your own. `DIR` holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md` for its fields), and optionally a `corpus.json` (see "Corpora" in the root README). Without a `corpus.json` it is an own corpus and is private: the run refuses, before anything runs, a model that `models.json` does not mark `"private": true`, because the notes go to it. Put `{ "kind": "own", "private": false }` in `corpus.json` to say that nothing private is in it. The results go to `private/reflect/results/`. `--retrieval-queries` does not apply to it: the queries are those of the public notes.
 
 ## Assets
 
 - `assets/cases.jsonl`: 50 cases. 32 carry one injected defect of a kind akm names, in six classes. 18 are controls, in four. Each has the note, the feedback a user leaves and what a correct result is. The classes, the fields and how the cases were made are in `assets/README.md`. The cases carry a canary string: do not train on them.
-- `private/reflect/assets/cases.jsonl`: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It writes into a temporary folder and moves the result into place only when every check passes, so a generation that fails leaves the earlier assets, map and `generated.json` as they were. It is made by `generate` and never published.
+- `private/reflect/assets/cases.jsonl`, the default custom corpus: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It writes into a temporary folder and moves the result into place only when every check passes, so a generation that fails leaves the earlier assets, map and `generated.json` as they were. It is made by `generate` and never published.
 
 ## The checks
 
@@ -131,12 +138,12 @@ No judge model scores a case. Each check looks at the proposal and the note.
 | Check | Applies to | Passes when |
 |---|---|---|
 | `body_kept` | every case | The body is the note's body, byte for byte. The one heading akm adds for a missing title is allowed there. |
-| `defect_fixed` | defects | The defect is repaired and what the note said stays. A split or escaped-quote description keeps every word, because akm tells the model to repair only the break. A cut-off one keeps its names, numbers and paths, and a restatement in other words is fine. The rest of the per-class rules are in `assets/README.md`. |
+| `defect_fixed` | defects | The defect is repaired and what the note said stays. A split description keeps the same words in the same order, so that only the break changes: akm tells the model to repair only the break, and a rewrite that keeps the old words and adds others is not a repair. An escaped-quote one keeps every word. A cut-off one keeps its names, numbers and paths, and a restatement in other words is fine. The rest of the per-class rules are in `assets/README.md`. |
 | `no_extra_change` | every case | No field changes except the one the class allows. A change to any other field is churn. A `type:` line akm adds does not count. |
 | `no_invented` | every case | Each number, name with two capitals, path or dotted name in a new value is in the note, and the new values hold none of the case's forbidden terms. |
-| `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical. Leaving it alone passes. |
+| `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical, and does not offer the note for current work: wording such as current, recommended, today, latest, for new work or replaces fails, unless the clause takes the note back ("not for current work", "superseded by the current release"). Leaving it alone passes. |
 
-A case is correct when reflect gave a usable answer and every check that applies passes.
+A case is correct when reflect gave a usable answer and every check that applies passes, on the note as it ends up: a refused edit leaves the note as it was.
 
 ## Read the results
 
@@ -147,7 +154,7 @@ A case is correct when reflect gave a usable answer and every check that applies
 | `proposals` | How many proposals reflect made, and how many of them touched the body. |
 | `classes` | The same per class, with the `outcomes` and the `failed` checks. |
 
-`outcomes` splits each class by what reflect did: `proposal`, `none` (it proposed no change), `refused` (akm's own filter refused the revision because it held placeholder text, talk about the edit itself, or frontmatter copied into the body), `unusable` (the reply was not the JSON akm asked for, even after its repair turn) and `error`. A refused or an unusable answer is never correct: the model failed. A timeout, a provider error or an akm failure is `error` and is left out of the counts. `failed` counts, for each check, the cases that failed it.
+`outcomes` splits each class by what reflect did: `proposal`, `none` (it proposed no change), `refused` (a gate of akm refused the revision: its filter, for placeholder text, talk about the edit itself or frontmatter copied into the body, the quality judge, or the retrieval check), `unusable` (the reply was not the JSON akm asked for, even after its repair turn) and `error`. An unusable answer is never correct: the model failed. A refused edit is scored as the note left alone, so the gate that refused it is what made a control right or a defect missed. A timeout, a provider error or an akm failure is `error` and is left out of the counts. So is an edit that akm's retrieval check could not grade: akm 0.9.26 reports a timeout or a failure of the model call it makes there as a refusal ("retrieval check could not grade the old content (timeout)"), but nothing was judged, so the scorer reads it as an error, not as a refusal by the retrieval gate. Only `retrieval regression` is that gate refusing. `failed` counts, for each check, the cases that failed it.
 
 `touched_body` should be 0. With akm 0.9.26 the body changes only by the heading akm adds for a missing title, and that is not counted. A count above 0 means akm edited a body, and this guards against that.
 
@@ -155,7 +162,7 @@ For scale, run with akm 0.9.26 and a scripted model: one that never proposes a c
 
 The set is small. One defect case is 3.1 points of `defects` and one control is 5.6 points of `controls`. Read a change of a case or two as noise, and rerun before you trust a gap.
 
-A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
+A model may have seen the public cases in training. A much better public score than rewritten score points to that. Run the custom corpus on a local model, or on an API that does not train on your data.
 
 ## Notes
 

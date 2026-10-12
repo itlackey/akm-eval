@@ -74,8 +74,8 @@
     },
     "reflect": {
       "collector": {
-        "version": 2,
-        "sha256": "0cb87ac1f0333d85b8b2bb6b4a8b6a577ca09844fab2fc9c304546ca131697e3",
+        "version": 3,
+        "sha256": "48170ba5c2151414cf692200b78c88d7a74853470062b00509d633730aeab69c",
         "files": [
           "evals/reflect/src/collect.ts",
           "lib/akm/akm.ts",
@@ -84,8 +84,8 @@
         ]
       },
       "scorer": {
-        "version": 1,
-        "sha256": "1395dfdb42d8543b3a97830ff4befa6d9c48f11d8de184c5322554ed6091c3aa",
+        "version": 2,
+        "sha256": "3c8b75841346e25baf4df38f2c1e5f517f57d9d6032c6460f40b02184fb543fd",
         "files": [
           "evals/reflect/src/score.ts"
         ]

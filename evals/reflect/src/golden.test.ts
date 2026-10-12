@@ -7,7 +7,7 @@ import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
 import { CLASSES } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-// The golden files are in ../golden/: ten cases, one of each class, with 47 raw outputs for them. Each is a realistic answer of a model: the
+// The golden files are in ../golden/: ten cases, one of each class, with 59 raw outputs for them. Each is a realistic answer of a model: the
 // right one, and each way to get it wrong (no change, a rewrite of another field, an edit of the body, an invented number, a refusal, an
 // unusable reply, an error). cases.jsonl is a copy of ten cases of assets/cases.jsonl, so a change to the corpus does not move them. See lib/golden.ts.
 const GOLDEN = join(import.meta.dir, "..", "golden");
@@ -45,10 +45,23 @@ describe("the golden rows of the scorer", () => {
     expect(verdict("the model rewrites the description and the when_to_use")).toEqual([false, false, false, false]);
     expect(verdict("the model adds the term the feedback asks for")).toEqual([false]);
     expect(verdict("the model says the note records a past version")).toEqual([true]);
+    // a wrong edit that the scorer let through before #59: the meaning reversed or words added at the stray period, a historical note offered for current work
+    expect(verdict("the model repairs the break and reverses the meaning")).toEqual([false]);
+    expect(verdict("the model repairs the break and adds a clause")).toEqual([false]);
+    expect(verdict("the model joins the break with a comma and changes nothing else")).toEqual([true]);
+    expect(verdict("the model offers the note as the current way, naming a version it records")).toEqual([false]);
+    expect(verdict("the model says the note replaces the old approach")).toEqual([false]);
+    expect(verdict("the model names the versions and says the note is not for current work")).toEqual([true]);
+    expect(verdict("the model says the note is superseded")).toEqual([true]);
     expect(verdict("the model names the version the note records and nothing else")).toEqual([true]);
-    // a refused or an unusable answer is never correct, and an error has no verdict
-    expect(expected.filter((r) => r.outcome === "refused" || r.outcome === "unusable").map((r) => r.correct)).toEqual([false, false, false, false]);
-    expect(expected.filter((r) => r.outcome === "error").map((r) => r.correct)).toEqual([null, null]);
+    // an unusable answer is never correct, and an error has no verdict
+    expect(expected.filter((r) => r.outcome === "unusable").map((r) => r.correct)).toEqual([false, false]);
+    // a refused edit leaves the note as it was: a miss for a defect, right for a control (#57)
+    expect(expected.filter((r) => r.outcome === "refused").map((r) => [r.class, r.correct])).toEqual([["description-period", false], ["when-to-use-missing", false], ["retrieval-miss", true], ["unsupported-ask", true], ["historical", true]]);
+    // a retrieval check that could not grade is an error, not a refusal (#58): it has no verdict, and a timeout is one of the timeouts
+    const graded = expected.filter((_, i) => /could not grade/.test(raw[i].raw.reason));
+    expect(graded.map((r) => [r.class, r.outcome, r.correct, r.timed_out ?? false])).toEqual([["description-quote", "error", null, true], ["title-missing", "error", null, false]]);
+    expect(expected.filter((r) => r.outcome === "error").map((r) => r.correct)).toEqual([null, null, null, null]);
     // the body check is the one that fails when the body is edited, and only that one
     const edited = expected.find((_, i) => raw[i].note === "the model fixes the defect and edits the body");
     expect(Object.entries(edited.checks).filter(([, ok]) => ok === false).map(([name]) => name)).toEqual(["body_kept"]);
@@ -59,9 +72,9 @@ describe("the golden rows of the scorer", () => {
     const raw = lines("raw.jsonl");
     const rows = raw.map((line) => MEASUREMENT.score(cases.find((c) => c.id === line.case), (MEASUREMENT.rawOf({ id: line.case, ...line.raw }) as { raw: any }).raw));
     const summary = MEASUREMENT.summarize(rows);
-    expect(summary).toMatchObject({ n_run: 47, n_scored: 45, n_errored: 2, timeouts: 1, served: { "qwen3-27b": 45 } });
-    expect(summary.metrics.refused).toEqual({ filter: 1, judge: 1, retrieval: 0, other: 0 });
-    expect(summary.metrics.defects).toMatchObject({ correct: 6 });
+    expect(summary).toMatchObject({ n_run: 59, n_scored: 55, n_errored: 4, timeouts: 2, served: { "qwen3-27b": 55 } });
+    expect(summary.metrics.refused).toEqual({ filter: 2, judge: 2, retrieval: 1, other: 0 }); // the two checks that could not grade are not refusals
+    expect(summary.metrics.defects).toMatchObject({ correct: 7 }); // the six right answers and the stray period joined by a comma
   });
 });
 

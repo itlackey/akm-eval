@@ -164,6 +164,11 @@ function keeps(before: string, after: string): boolean {
   return wordsOf(before).every((w) => kept.has(w));
 }
 
+/** Do `before` and `after` hold the same words in the same order? A stray period is repaired by changing the break only: the marks may change, no word may. */
+function sameWords(before: string, after: string): boolean {
+  return wordsOf(before).join(" ") === wordsOf(after).join(" ");
+}
+
 /** A cut-off description without the hanging words and marks at its end, which are what a repair may drop. */
 function withoutTail(description: string): string {
   const words = collapse(description).replace(/[.,;:+…]+$/, "").split(" ");
@@ -206,6 +211,18 @@ function anchorForms(anchor: string): string[] {
 
 const HISTORICAL = /\b(historical|history|legacy|obsolete|outdated|out of date|deprecated|superseded|former|formerly|previous|previously|past|archived?|older|old|no longer|retired)\b/i;
 
+/** Wording that offers a note for current work: current, recommended, today, for new work, replaces. */
+const OFFERS_CURRENT = /\b(?:current|currently|recommended|today|latest|up[- ]to[- ]date|new (?:work|projects?)|replaces)\b/i;
+
+/** Wording that takes a note out of current work, in the clause where it stands: "not for current work", "superseded by the current release". */
+const WITHDRAWN = /\b(?:not|never|no longer|superseded|obsolete|deprecated|outdated)\b|n't\b/i;
+
+/**
+ * Does a `when_to_use` offer the note for current work? A clause that does, and does not withdraw the note in the same clause, does. Naming
+ * a version the note records, or a word such as "old", does not make an offer a historical note ("replaces the old agent CLI approach").
+ */
+const offersCurrentWork = (text: string): boolean => text.split(/[.;:!?\n]+/).some((clause) => OFFERS_CURRENT.test(clause) && !WITHDRAWN.test(clause));
+
 export type CheckName = "body_kept" | "defect_fixed" | "no_extra_change" | "no_invented" | "not_current";
 export type Checks = Partial<Record<CheckName, boolean>>;
 
@@ -243,7 +260,7 @@ function isFixed(c: Case, before: Note, after: Note, title: string | undefined):
   const ok = now !== undefined && descriptionProblem(now) === undefined;
   switch (c.class) {
     case "description-period":
-      return ok && !hasStrayPeriod(now) && keeps(was, now);
+      return ok && !hasStrayPeriod(now) && sameWords(was, now);
     case "description-quote":
       return ok && !hasEscapedQuote(now) && keeps(was, now);
     case "description-truncated":
@@ -284,7 +301,7 @@ export function score(c: Case, proposal: string | undefined): Scored {
   if (isDefect(c.class)) checks.defect_fixed = isFixed(c, before, after, title);
   if (c.class === "historical") {
     const w = values.when_to_use;
-    checks.not_current = w === undefined || HISTORICAL.test(w) || (c.anchors ?? []).some((a) => anchorForms(a).some((form) => w.includes(form)));
+    checks.not_current = w === undefined || (!offersCurrentWork(w) && (HISTORICAL.test(w) || (c.anchors ?? []).some((a) => anchorForms(a).some((form) => w.includes(form)))));
   }
   return { checks, changed, values };
 }
@@ -321,7 +338,7 @@ export interface Row {
   proposal?: string;
   seconds: number;
   error?: string;
-  /** The error was a timeout: akm ran past its timeout and was killed. Absent on every other row. */
+  /** The error was a timeout: akm ran past its timeout and was killed, or the model call of its retrieval check timed out. Absent on every other row. */
   timed_out?: true;
 }
 
@@ -345,13 +362,29 @@ export interface Raw {
   timedOut?: boolean;
 }
 
-/** A row for a case. An error has no verdict. A reply akm could not use, or an edit its own filter refused, is never correct. */
+/**
+ * Did akm's retrieval check fail to grade the edit, because the model call it makes timed out, failed or gave no grade? akm 0.9.26 reports
+ * that as a refusal ("retrieval check could not grade the old content (timeout)"), but nothing was judged: the edit was neither passed
+ * nor refused on its merits, and the case has no verdict, like any other call that failed.
+ */
+const couldNotGrade = (run: Raw): boolean => run.outcome === "refused" && /retrieval check could not grade/i.test(run.reason ?? "");
+
+/**
+ * A row for a case. An error has no verdict, and a retrieval check that could not grade is one. A reply akm could not use is never correct.
+ * An edit that a gate refused never reaches the note, which ends as it was, so it is scored as a note left alone: right for a control, a
+ * miss for a defect.
+ */
 export function makeRow(c: Case, run: Raw): Row {
+  const noGrade = couldNotGrade(run);
+  const outcome: Outcome = noGrade ? "error" : run.outcome;
   // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
-  const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
-  if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
+  const base = { id: c.id, class: c.class, outcome, reason: run.reason ?? "", ...(run.served && outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
+  if (outcome === "error") {
+    const timedOut = run.timedOut || (noGrade && /\(timeout\)/i.test(run.reason ?? ""));
+    return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(timedOut ? { timed_out: true as const } : {}) };
+  }
   const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
-  const correct = (run.outcome === "proposal" || run.outcome === "none") && Object.values(checks).every(Boolean);
+  const correct = run.outcome !== "unusable" && Object.values(checks).every(Boolean);
   return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };
 }
 

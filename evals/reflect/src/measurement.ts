@@ -5,11 +5,31 @@
 // digests of a run, and the scoring itself is in score.ts.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
+
+/** The kind of corpus that the names a run used before the corpora were renamed stand for. reflect never had an own corpus. */
+const LEGACY_KIND: Record<string, "rewrite"> = { private: "rewrite" };
+
+/**
+ * The folder of the cases a run read, in the repository at `root`. The public corpus is the eval's own assets. A custom corpus records
+ * `corpus_folder`, its folder from the repository root (lib/manifest.ts `corpusFolderOf`), and null when it was outside the repository: the
+ * name of such a folder can say what is in it, so a summary does not keep it. scripts/rescore hands loadCases a summary whose `corpus_folder`
+ * is the folder it was given with --cases DIR when the run did not record it. A run from before the corpora were renamed has the name of its
+ * kind: a rewrite (`private`) was read from private/reflect/assets, where generate puts it.
+ */
+export function casesFolder(root: string, summary: Record<string, any>): string {
+  if (summary.corpus === "public") return join(root, "evals", NAME, "assets");
+  if (summary.corpus === "custom") {
+    if (typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
+    throw new Error("the cases it read were in a folder that its summary does not record (outside this repository, a folder is left out). scripts/rescore takes that folder with --cases DIR");
+  }
+  if (Object.hasOwn(LEGACY_KIND, String(summary.corpus))) return join(root, "private", NAME, "assets"); // the folder of a rewrite
+  throw new Error(`it names the corpus ${JSON.stringify(summary.corpus)}, which is neither public nor custom`);
+}
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
@@ -19,11 +39,16 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   // What turns the raw output of a case into a row and the rows into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
   scorer: ["evals/reflect/src/score.ts"],
   loadCases: (root, summary) => {
-    const file = summary.corpus === "private" ? join(root, "private", NAME, "assets", "cases.jsonl") : join(root, "evals", NAME, "assets", "cases.jsonl");
+    const file = join(casesFolder(root, summary), "cases.jsonl");
     return parseCases(readFileSync(file, "utf8"), file);
   },
   legacyProblem: (root, summary) => {
-    const dir = summary.corpus === "private" ? join(root, "private", NAME, "assets") : join(root, "evals", NAME, "assets");
+    let dir: string;
+    try {
+      dir = casesFolder(root, summary);
+    } catch (e) {
+      return (e as Error).message;
+    }
     if (summary.retrieval_queries != null) return "it recorded searches for the notes (--retrieval-queries), which a row from before the manifest does not keep";
     if (!existsSync(join(dir, "cases.jsonl")) || summary.assets_sha256 !== assetsSha256(dir)) return `it read other cases than the ones in ${relative(root, dir)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
     return undefined;

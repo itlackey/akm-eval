@@ -10,7 +10,7 @@ import { parseArgs } from "node:util";
 import { currentDigests, readManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
-import { MEASUREMENT } from "./measurement.ts";
+import { MEASUREMENT, casesFolder } from "./measurement.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -19,7 +19,7 @@ const USAGE = `Usage: evals/reflect/defect-filter --akm-src DIR [--reflect RESUL
 Runs the defect filter of the akm checkout DIR on each labelled edit and counts what it refuses, by label.
 
   --akm-src     a checkout of akm: the filter is src/commands/improve/reflect-noise.ts there, called as akm calls it.
-  --reflect     the results folder of a reflect run, or its private folder: each proposal in samples.jsonl is an edit, good when
+  --reflect     the results folder of a reflect run, or of a custom corpus: each proposal in samples.jsonl is an edit, good when
                 it passed every check and bad when not. Run reflect with evals/reflect/patches/defect-filter-off.json, or
                 the filter refuses edits before they are proposals and they are not in the results.
                 The source of an edit is the case's, read from the cases here now. So the manifest of the run must hold the digest of
@@ -83,7 +83,7 @@ const digestIn = (value: unknown): string | null => (typeof value === "string" &
 export interface Inputs {
   /** "stored" when the run read the cases and ran the code that are here now. "rescore" when --rescore was given. */
   mode: "stored" | "rescore";
-  corpus: "public" | "private";
+  corpus: "public" | "custom" | "private";
   /** The folder of the cases the replay read, from the repository root. */
   assets: string;
   /** The assets_sha256 of the run (null when it has none) and the digest of that folder now, computed as the run computes it. */
@@ -128,8 +128,9 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
   const root = options.root ?? ROOT;
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   const corpus = summary.corpus;
-  if (corpus !== "public" && corpus !== "private") throw new Error(`${join(resultsDir, "summary.json")} names the corpus ${JSON.stringify(corpus)}, not public or private`);
-  const assets = corpus === "public" ? join(root, "evals", "reflect", "assets") : join(root, "private", "reflect", "assets");
+  // a run from before the corpus change called the seeded rewrite "private"
+  if (corpus !== "public" && corpus !== "custom" && corpus !== "private") throw new Error(`${join(resultsDir, "summary.json")} names the corpus ${JSON.stringify(corpus)}, not public or custom`);
+  const assets = casesFolder(root, summary);
   const where = relative(root, assets);
   const byId = new Map(parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl")).map((c) => [c.id, c]));
   const reading = readManifest(summary);

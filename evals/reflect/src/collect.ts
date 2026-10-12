@@ -89,6 +89,23 @@ export function labelledQueries(queries: string, qrels: string): Map<string, str
 }
 
 /**
+ * The searches to record for each case of a corpus, by the ref of the case's note. `labelled` holds the queries of the public notes, by their
+ * refs (see `labelledQueries`). A corpus that is a rewrite of the public one has its notes at other paths and under other names, so a case takes
+ * the queries of the public case with its id (the rewrite keeps ids), and `rewrite` writes each query as the rewrite wrote the note, so that the
+ * same words change in both. The public corpus keeps them as they are.
+ */
+export function searchesFor(cases: Case[], publicCases: Case[], labelled: Map<string, string[]>, rewrite: (query: string) => string = (query) => query): Map<string, string[]> {
+  const publicOf = new Map(publicCases.map((c) => [c.id, c]));
+  const found = new Map<string, string[]>();
+  for (const c of cases) {
+    const publicPath = publicOf.get(c.id)?.path;
+    const queries = publicPath === undefined ? undefined : labelled.get(refOf(publicPath));
+    if (queries && queries.length > 0) found.set(refOf(c.path), queries.map(rewrite));
+  }
+  return found;
+}
+
+/**
  * The model that answered reflect, as the response names it, from the usage report in the improve result. A gateway that
  * serves one name from several providers may answer with a different name each time.
  */
