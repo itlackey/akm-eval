@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { GENERATED, type Generated, type LoadedCase, assetsSha256, checkLesson, checkUpdate, generatorSha256, lessonFile, loadCases, memoryBody, mentions, stated } from "./lib.ts";
+import { GENERATED, type Generated, type LoadedCase, MAX_COPIED, assetsSha256, checkLesson, checkUpdate, generatorSha256, lessonFile, loadCases, memoryBody, mentions, stated } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -54,8 +54,8 @@ export function checkRewrite(before: LoadedCase[], after: LoadedCase[]): string[
       // An update case's example is the whole updated body, scored against the existing lesson's body.
       const passes = (c: LoadedCase) => {
         if (c.expect !== "update") return checkLesson(c, c[key] as string, c.memory).good;
-        const r = checkUpdate(c, c.existingBody ?? "", c[key] as string);
-        return r.dropped.length === 0 && r.missing.length === 0 && r.forbidden.length === 0 && r.contradicted.length === 0;
+        const r = checkUpdate(c, c.existingBody ?? "", c[key] as string, c.memory);
+        return r.dropped.length === 0 && r.missing.length === 0 && r.forbidden.length === 0 && r.contradicted.length === 0 && r.copied <= MAX_COPIED;
       };
       const was = passes(b);
       const now = passes(a);

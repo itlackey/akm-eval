@@ -7,7 +7,7 @@ import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
 import { CLASSES } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-// The golden files are in ../golden/: twelve of the public cases, with 52 raw outputs for them. Each is a realistic answer of distill on akm
+// The golden files are in ../golden/: twelve of the public cases, with 53 raw outputs for them. Each is a realistic answer of distill on akm
 // 0.9.26: the right one, and each way to get it wrong (a lesson that over-claims, turns the advice round or leaves a fact out, a lesson
 // where none is wanted, an update that drops a line or adds a claim, a judge that rejects, a skip, a timeout, an unreachable endpoint,
 // an empty answer). cases.jsonl is a copy of those cases with the memories they are measured against, so a change to the corpus does not
@@ -29,7 +29,7 @@ describe("the golden rows of the scorer", () => {
     expect(new Set(expected.map((r) => r.outcome))).toEqual(new Set(["lesson", "update", "skipped", "rejected", "invalid", "error"]));
     expect(new Set(expected.map((r) => r.verdict))).toEqual(new Set(["good", "bad", "missed", "right", "wrong", "error"]));
     const failedChecks = expected.flatMap((r) => Object.entries(r.checks ?? {}).filter(([, ok]) => ok === false).map(([name]) => name));
-    expect(new Set(failedChecks)).toEqual(new Set(["update_proposed", "existing_kept", "new_facts", "no_extra_claims", "no_new_lesson"]));
+    expect(new Set(failedChecks)).toEqual(new Set(["update_proposed", "existing_kept", "new_facts", "no_extra_claims", "not_copied", "no_new_lesson"]));
     expect(expected.some((r) => r.timed_out === true)).toBe(true);
     expect(raw.some((l) => l.note === "akm printed no distill action")).toBe(true);
     expect(raw.length).toBe(expected.length);
@@ -52,6 +52,18 @@ describe("the golden rows of the scorer", () => {
     expect(verdicts("the update drops a line of the existing lesson")).toEqual(["bad"]);
     expect(verdicts("the update adds nothing the memory knows")).toEqual(["bad"]);
     expect(verdicts("distill writes a new lesson in place of an update")).toEqual(["bad"]);
+    // the memory pasted back is not a lesson (#55): as the file, as its body under a description and a when_to_use, and appended to the old lesson
+    expect(verdicts("the memory pasted back as the lesson")).toEqual(["bad", "bad", "bad", "bad"]);
+    expect(verdicts("the memory's body as the lesson, under a description and a when_to_use")).toEqual(["bad"]);
+    expect(verdicts("the existing lesson with the memory appended")).toEqual(["bad", "bad", "bad"]);
+    const copies = expected.filter((_, i) => raw[i].note.includes("the memory pasted back") || raw[i].note.includes("the memory's body as the lesson"));
+    expect(copies.map((r) => r.copied)).toEqual([1, 1, 1, 1, 1]);
+    expect(copies.map((r) => [r.missing, r.forbidden, r.contradicted])).toEqual(copies.map(() => [[], [], []])); // it states the facts and claims nothing else: only the copy fails it
+    const appended = expected.filter((_, i) => raw[i].note === "the existing lesson with the memory appended");
+    for (const r of appended) expect(Object.entries(r.checks).filter(([, ok]) => ok === false).map(([name]) => name)).toEqual(["not_copied"]);
+    // a lesson that repeats less than three quarters of its memory still passes
+    const goods = expected.filter((_, i) => raw[i].note === "distill queues a lesson that states the facts and claims no more");
+    expect(Math.max(...goods.map((r) => r.copied))).toBeLessThan(0.5);
     // a lesson that is rejected, skipped or invalid is nothing queued: missed where a lesson was wanted, right where it was not
     expect(verdicts("distill finds nothing reusable in the memory")).toEqual(["missed"]);
     expect(verdicts("the lesson fails akm's validation")).toEqual(["missed"]);
@@ -77,9 +89,10 @@ describe("the golden rows of the scorer", () => {
     const raw = lines("raw.jsonl");
     const rows = raw.map((line) => MEASUREMENT.score(cases.find((c) => c.id === line.case), (MEASUREMENT.rawOf({ id: line.case, ...line.raw }) as { raw: any }).raw));
     const summary = MEASUREMENT.summarize(rows);
-    expect(summary).toMatchObject({ n_run: 52, n_scored: 49, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
-    expect(summary.metrics.lesson_updates).toMatchObject({ n: 13, right: 6, checks: { update_proposed: 11, existing_kept: 10, new_facts: 10, no_extra_claims: 8, no_new_lesson: 12 } });
-    expect(summary.metrics.good_lessons).toMatchObject({ n: 27, good: 13 });
+    expect(summary).toMatchObject({ n_run: 53, n_scored: 50, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
+    expect(summary.metrics.lesson_updates).toMatchObject({ n: 13, right: 3, checks: { update_proposed: 11, existing_kept: 10, new_facts: 10, no_extra_claims: 8, not_copied: 8, no_new_lesson: 12 } });
+    expect(summary.metrics.good_lessons).toMatchObject({ n: 28, good: 9 });
+    expect(summary.metrics.bad_by.copied).toBe(5);
   });
 });
 

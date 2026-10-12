@@ -18,6 +18,7 @@ const GOLDEN = join(ROOT, "evals", "distill", "golden");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const GOLDEN_RAW: { case: string; note: string; raw: Record<string, unknown> }[] = jsonl(join(GOLDEN, "raw.jsonl"));
 const CASES: LoadedCase[] = loadCases(PUBLIC).filter((c) => GOLDEN_RAW.some((l) => l.case === c.id));
+/** The scorer that scored a run before a fix: a version below the lock's. */
 const STALE = { version: 1, sha256: "c".repeat(64) };
 const CONFIG = distillConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
@@ -152,5 +153,40 @@ describe("rescoring a distill run", () => {
     expect(() => rescoreFolder(tmp())).toThrow(RescoreError);
     const custom = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
     expect(() => rescoreFolder(custom)).toThrow(/the cases .* was scored against cannot be read: .*--cases DIR/);
+  });
+});
+
+/** A row as scorer 1 stored it: with no share of the memory repeated, and no check of it on an update. */
+const asScorer1 = (row: Row): Record<string, any> => {
+  const { copied: _copied, ...rest } = row as Record<string, any>;
+  if (rest.checks) rest.checks = Object.fromEntries(Object.entries(rest.checks).filter(([k]) => k !== "not_copied"));
+  return rest;
+};
+
+describe("the memory pasted back (#55)", () => {
+  test("scorer 1 called it a good lesson and a right update; scripts/rescore scores the stored raw output bad", () => {
+    const dir = run({
+      raw: (c) => (c.id === "lesson-01" ? rawFor(c.id, "the memory pasted back as the lesson") : c.id === "upd-01" ? rawFor(c.id, "the existing lesson with the memory appended") : FIRST(c)),
+      manifest: (m) => ({ ...m, scorer: STALE }),
+      rows: (rows) => rows.map((r) => ({ ...asScorer1(r), ...(r.id === "lesson-01" ? { verdict: "good" } : r.id === "upd-01" ? { verdict: "right" } : {}) })),
+    });
+    const stored = rowsOf(dir);
+    expect(stored.find((r) => r.id === "lesson-01")).toMatchObject({ verdict: "good", missing: [], forbidden: [], contradicted: [] });
+    expect(stored.find((r) => r.id === "upd-01")).toMatchObject({ verdict: "right" });
+
+    const done = Bun.spawnSync(["bun", join(ROOT, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+    expect(done.exitCode).toBe(0);
+    const again = rowsOf(`${dir}-rescored`);
+    expect(again.find((r) => r.id === "lesson-01")).toMatchObject({ verdict: "bad", copied: 1, missing: [], forbidden: [], contradicted: [] });
+    expect(again.find((r) => r.id === "upd-01")).toMatchObject({ verdict: "bad", copied: 1, checks: { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, not_copied: false, no_new_lesson: true } });
+    // no other verdict moved
+    const others = (rows: any[]) => rows.filter((r) => !["lesson-01", "upd-01"].includes(r.id)).map((r) => [r.id, r.verdict]);
+    expect(others(again)).toEqual(others(stored));
+    // and the summary follows the rows
+    const metrics = (rows: any[]) => MEASUREMENT.summarize(rows).metrics;
+    expect(summaryOf(`${dir}-rescored`).metrics).toEqual(metrics(again));
+    expect(metrics(again).good_lessons.good).toBe(metrics(stored).good_lessons.good - 1);
+    expect(metrics(again).lesson_updates.right).toBe(metrics(stored).lesson_updates.right - 1);
+    expect(summaryOf(`${dir}-rescored`).manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
   });
 });

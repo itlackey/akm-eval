@@ -19,6 +19,9 @@ export type Expect = "lesson" | "none" | "update";
 /** A lesson longer than this many times its memory, in words, is too long. */
 export const MAX_RATIO = 1.5;
 
+/** A lesson that repeats more than this share of its memory word for word is a copy of the memory, not a lesson. */
+export const MAX_COPIED = 0.75;
+
 export interface Case {
   id: string;
   class: Class;
@@ -257,6 +260,27 @@ export const memoryBody = (memory: string): string => (FRONTMATTER.exec(memory)?
 
 const words = (s: string): number => s.split(/\s+/).filter(Boolean).length;
 
+/** A run of this many words that a text and a memory both have, in the same order, is repeated word for word. */
+const COPY_RUN = 5;
+
+/**
+ * How much of the memory a text repeats word for word: the share of the memory's words that sit in a run of five or more words which the
+ * text has too, in the same order. The memory pasted back repeats all of it (1), and a text that shares no run with it nothing (0). Case and
+ * punctuation do not count. It is the share of the memory, not of the text, so a lesson that pads a paste with a description still repeats all of it.
+ */
+export function copiedShare(text: string, memory: string): number {
+  const split = (s: string): string[] => normalize(s).split(" ").filter(Boolean);
+  const own = split(text);
+  const theirs = split(memory);
+  const runs = new Set<string>();
+  for (let i = 0; i + COPY_RUN <= own.length; i++) runs.add(own.slice(i, i + COPY_RUN).join(" "));
+  const repeated = new Array<boolean>(theirs.length).fill(false);
+  for (let i = 0; i + COPY_RUN <= theirs.length; i++) {
+    if (runs.has(theirs.slice(i, i + COPY_RUN).join(" "))) repeated.fill(true, i, i + COPY_RUN);
+  }
+  return theirs.length === 0 ? 0 : Number((repeated.filter(Boolean).length / theirs.length).toFixed(2));
+}
+
 export interface Check {
   /** The first phrase of each required fact the lesson does not state. */
   missing: string[];
@@ -266,24 +290,30 @@ export interface Check {
   contradicted: string[];
   /** The lesson's words over the memory's. */
   ratio: number;
+  /** The share of the memory's words that the lesson repeats word for word (see `copiedShare`). */
+  copied: number;
   good: boolean;
 }
 
 /** What a case checks a lesson with. `contradicts` is optional, as in a case. */
 type Checked = Pick<Case, "required" | "forbidden" | "contradicts">;
 
-/** Score a lesson against a case: every required fact stated, no forbidden claim, no contradiction of the memory, and not much longer than its memory. */
+/**
+ * Score a lesson against a case: every required fact stated, no forbidden claim, no contradiction of the memory, not much longer than its
+ * memory, and not a copy of it (more than three quarters of the memory repeated word for word).
+ */
 export function checkLesson(c: Checked, lesson: string, memory: string): Check {
   const missing = c.required.filter((fact) => !stated(lesson, fact)).map((fact) => fact[0]);
   const forbidden = claims(lesson, c.forbidden);
   const contradicted = claims(lesson, c.contradicts ?? [], true);
   const ratio = Number((words(lesson) / Math.max(1, words(memoryBody(memory)))).toFixed(2));
-  return { missing, forbidden, contradicted, ratio, good: missing.length === 0 && forbidden.length === 0 && contradicted.length === 0 && ratio <= MAX_RATIO };
+  const copied = copiedShare(lesson, memoryBody(memory));
+  return { missing, forbidden, contradicted, ratio, copied, good: missing.length === 0 && forbidden.length === 0 && contradicted.length === 0 && ratio <= MAX_RATIO && copied <= MAX_COPIED };
 }
 
 // ---- Scoring an update ------------------------------------------------------------------------------------------
 
-/** The five checks of a lesson-update case. `null` is a check that could not run because no update was proposed. */
+/** The six checks of a lesson-update case. `null` is a check that could not run because no update was proposed. */
 export interface UpdateChecks {
   /** One pending proposal sits on the existing lesson's ref, from distill, with the gate reason distill-update. */
   update_proposed: boolean;
@@ -293,11 +323,13 @@ export interface UpdateChecks {
   new_facts: boolean | null;
   /** The added lines make no forbidden claim and contradict nothing the memory shows. */
   no_extra_claims: boolean | null;
+  /** The added lines are the new facts, not the memory pasted in: they repeat no more than three quarters of its words word for word. */
+  not_copied: boolean | null;
   /** distill proposed no lesson of its own beside the update. */
   no_new_lesson: boolean;
 }
 
-const UPDATE_CHECKS = ["update_proposed", "existing_kept", "new_facts", "no_extra_claims", "no_new_lesson"] as const satisfies readonly (keyof UpdateChecks)[];
+const UPDATE_CHECKS = ["update_proposed", "existing_kept", "new_facts", "no_extra_claims", "not_copied", "no_new_lesson"] as const satisfies readonly (keyof UpdateChecks)[];
 
 /** A body's lines as akm compares them: one space between words, no case, no punctuation, and no empty lines. */
 const bodyLines = (body: string): string[] => body.split("\n").map(normalize).filter(Boolean);
@@ -309,11 +341,14 @@ export function diffBody(existing: string, updated: string): { dropped: string[]
   return { dropped: bodyLines(existing).filter((l) => !kept.has(l)), added: updated.split("\n").map((l) => l.trim()).filter((l) => normalize(l) !== "" && !had.has(normalize(l))) };
 }
 
-/** Score the body of an updated lesson against a lesson-update case: the lines it kept, the facts it added, the claims it made, and what it contradicts. */
-export function checkUpdate(c: Checked, existingBody: string, updatedBody: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[]; contradicted: string[] } {
+/**
+ * Score the body of an updated lesson against a lesson-update case and its memory: the lines it kept, the facts it added, the claims it made,
+ * what it contradicts, and how much of the memory the added lines repeat word for word.
+ */
+export function checkUpdate(c: Checked, existingBody: string, updatedBody: string, memory: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[]; contradicted: string[]; copied: number } {
   const { dropped, added } = diffBody(existingBody, updatedBody);
   const text = added.join("\n");
-  return { dropped, added, missing: c.required.filter((fact) => !stated(text, fact)).map((fact) => fact[0]), forbidden: claims(text, c.forbidden), contradicted: claims(text, c.contradicts ?? [], true) };
+  return { dropped, added, missing: c.required.filter((fact) => !stated(text, fact)).map((fact) => fact[0]), forbidden: claims(text, c.forbidden), contradicted: claims(text, c.contradicts ?? [], true), copied: copiedShare(text, memoryBody(memory)) };
 }
 
 /** The lesson's body, without its frontmatter. */
@@ -406,6 +441,8 @@ export interface Row {
   /** The contradicting phrases the lesson (or the added lines of an update) asserts: the ones that turn the memory's action round. */
   contradicted: string[];
   ratio: number | null;
+  /** The share of the memory's words that the lesson (or the added lines of an update) repeats word for word. Absent where the check did not run: a case that expects none, a lesson that was never proposed. */
+  copied?: number;
   /** The model names the endpoint reported for the case's calls, from akm's usage report. A gateway may serve one name with another model. */
   served: string[];
   /** The model calls akm made for the case, from its usage report. Null when the report is missing. */
@@ -484,14 +521,15 @@ const sameRef = (a: string, b: string): boolean => conceptId(a).replace(/\.md$/,
 function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "outcome" | "detail">): Row {
   const updates = run.proposals.filter((p) => p.update);
   const target = updates.find((p) => sameRef(p.ref, `lessons/${c.existing}`) && p.status === "pending");
-  const checks: UpdateChecks = { update_proposed: target !== undefined, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: run.proposals.every((p) => p.update) };
+  const checks: UpdateChecks = { update_proposed: target !== undefined, existing_kept: null, new_facts: null, no_extra_claims: null, not_copied: null, no_new_lesson: run.proposals.every((p) => p.update) };
   let extra: Partial<Row> = {};
   if (target) {
-    const r = checkUpdate(c, c.existingBody ?? "", bodyOf(target.content));
+    const r = checkUpdate(c, c.existingBody ?? "", bodyOf(target.content), c.memory);
     checks.existing_kept = r.dropped.length === 0;
     checks.new_facts = r.missing.length === 0;
     checks.no_extra_claims = r.forbidden.length === 0 && r.contradicted.length === 0;
-    extra = { missing: r.missing, forbidden: r.forbidden, contradicted: r.contradicted, added: r.added };
+    checks.not_copied = r.copied <= MAX_COPIED;
+    extra = { missing: r.missing, forbidden: r.forbidden, contradicted: r.contradicted, added: r.added, copied: r.copied };
   }
   const shown = target ?? updates[0] ?? run.proposals[0];
   const detail = [shown.gate ?? shown.status, shown.reason ?? ""].filter(Boolean).join(": ");
@@ -509,7 +547,7 @@ function scoreRun(c: LoadedCase, run: CaseRun): Row {
     const update = run.proposals.some((p) => p.update);
     const check = checkLesson(c, lesson, c.memory);
     const verdict: Verdict = c.expect === "none" ? "wrong" : update ? "missed" : check.good ? "good" : "bad";
-    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, contradicted: check.contradicted, ratio: check.ratio } : {};
+    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, contradicted: check.contradicted, ratio: check.ratio, copied: check.copied } : {};
     const action = distillAction(run.improve)?.result;
     const reason = proposal.reason ?? (action?.outcome === "review_needed" && typeof action.reason === "string" ? action.reason : "");
     const detail = [proposal.gate ?? proposal.status, reason].filter(Boolean).join(": ");
@@ -518,7 +556,7 @@ function scoreRun(c: LoadedCase, run: CaseRun): Row {
   const { outcome, detail } = distillOutcome(run.improve);
   if (outcome === "error") return errorRow(c, detail, run.seconds);
   // An update case with nothing queued: no update, and no new lesson either.
-  const checks = c.expect === "update" ? { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: true } : null;
+  const checks = c.expect === "update" ? { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, not_copied: null, no_new_lesson: true } : null;
   return { ...base, checks, scores: judgeScores(run.improve), rejected_lesson: rejectedLesson(run.improve), verdict: c.expect === "none" ? "right" : "missed", outcome, detail };
 }
 
@@ -546,7 +584,7 @@ export interface Metrics {
   /** What distill did, for the cases that expect a lesson, those that expect none and those that expect an update. */
   outcomes: Record<Expect, Record<Outcome, number>>;
   /** Why the lessons that were proposed for lesson cases were not good. A lesson can fail in more than one way. */
-  bad_by: { missing_fact: number; forbidden_claim: number; contradiction: number; too_long: number };
+  bad_by: { missing_fact: number; forbidden_claim: number; contradiction: number; too_long: number; copied: number };
 }
 
 /** The numbers the eval reports, over the cases that ran without an error. */
@@ -582,6 +620,7 @@ export function metrics(rows: Row[]): Metrics {
       forbidden_claim: bad.filter((r) => r.forbidden.length > 0).length,
       contradiction: bad.filter((r) => (r.contradicted ?? []).length > 0).length, // rows of a run before this check have no list
       too_long: bad.filter((r) => (r.ratio ?? 0) > MAX_RATIO).length,
+      copied: bad.filter((r) => (r.copied ?? 0) > MAX_COPIED).length, // rows of a run before this check have no share
     },
   };
 }

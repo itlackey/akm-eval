@@ -189,7 +189,7 @@ describe("runCorpus", () => {
     expect(summary.metrics.good_lessons).toEqual({ n: 3, good: 1, rate: 0.3333 });
     expect(summary.metrics.wrong_lessons).toEqual({ n: 4, wrong: 2, rate: 0.5 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
-    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, contradiction: 0, too_long: 0 });
+    expect(stored.metrics.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 1, contradiction: 0, too_long: 0, copied: 0 });
     expect(stored.results_dir).toBeUndefined();
   });
 
@@ -214,7 +214,7 @@ describe("runCorpus", () => {
     ]);
     expect(rows[0]).toMatchObject({ gate: "deferred/distill-update", status: "pending", added: ["The ceiling is 60 s."], checks: { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true } });
     expect(rows[1].checks).toMatchObject({ update_proposed: true, no_extra_claims: false });
-    expect(summary.metrics.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 2, no_extra_claims: 1, no_new_lesson: 3 } });
+    expect(summary.metrics.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 2, no_extra_claims: 1, not_copied: 2, no_new_lesson: 3 } });
     expect(summary.metrics.good_lessons).toEqual({ n: 0, good: 0, rate: null });
     expect(summary.metrics.wrong_lessons).toEqual({ n: 2, wrong: 1, rate: 0.5 });
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
