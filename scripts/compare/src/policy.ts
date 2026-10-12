@@ -89,10 +89,13 @@ export const configDigest = (config: unknown): string | null => (isObject(config
 /** What a summary says about how its run was made, as text: null is "none recorded". Field by field the policy compares these. */
 export interface Identity {
   eval: string | null;
+  /** `public` or `custom`. A summary from before the corpora were renamed (`private`, `own`) reads as the custom corpus of its kind. */
   corpus: string | null;
+  /** `public`, `rewrite` (the public cases rewritten from a seed) or `own` (your notes): the kind a custom corpus records, or the kind the old name of an older summary stood for. */
+  corpus_kind: string | null;
   collection: string | null;
   mode: string | null;
-  /** The run read private assets, so its seed is evidence it should record. */
+  /** The run read a rewrite of the public cases, so its seed is evidence it should record. */
   private: boolean;
   akm_version: string | null;
   akm_build: string | null;
@@ -119,9 +122,23 @@ export interface Identity {
   /** The scorer of the run, "version sha256", when it has a manifest. The scorer is not an axis: a run is scored again. */
   scorer: string | null;
   harness_version: string | null;
+  /** The `input_sha256` of each case of the run as JSON, when it has a manifest: what each case presents to akm. */
+  case_inputs: string | null;
 }
 
 const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : typeof x === "number" && Number.isFinite(x) ? String(x) : null);
+
+/**
+ * The corpus a summary names, as the policy compares it. A run reads `public` or `custom` (lib/corpus.ts), and a custom corpus records its
+ * kind, `rewrite` or `own`. A summary written before that says `private` (a rewrite), or `own` (distill's `own-feedback` too), and reads as the
+ * custom corpus of that kind, so an old run and a new one on the same corpus have the same scope.
+ */
+export function corpusOf(s: Row): { name: string | null; kind: string | null } {
+  const name = text(s.corpus);
+  if (name === "private") return { name: "custom", kind: "rewrite" };
+  if (name === "own" || name === "own-feedback") return { name: "custom", kind: "own" };
+  return { name, kind: text(s.corpus_kind) ?? (name === "public" ? "public" : null) };
+}
 
 /**
  * What a summary says about how its run was made. A summary with a manifest (lib/manifest.ts) is read from it: the akm, the config, the
@@ -138,12 +155,14 @@ export function identityOf(s: Row): Identity {
   const embedder = text(s.embedder);
   const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
   const part = (p: { version: number; sha256: string }): string => `${p.version} ${p.sha256}`;
+  const corpus = corpusOf(s);
   return {
     eval: text(s.eval),
-    corpus: text(s.corpus),
+    corpus: corpus.name,
+    corpus_kind: corpus.kind,
     collection: text(s.collection),
     mode: text(s.mode),
-    private: s.corpus === "private",
+    private: corpus.kind === "rewrite",
     akm_version: m && !harbor ? m.akm.version : akmVersionOf(s),
     akm_build: m && !harbor ? m.akm.build : text(s.akm_build),
     akm_build_fingerprint: m && !harbor ? m.akm.build_fingerprint : text(s.akm_build_fingerprint),
@@ -164,6 +183,7 @@ export function identityOf(s: Row): Identity {
     collector: m ? part(m.collector) : null,
     scorer: m ? part(m.scorer) : null,
     harness_version: m ? String(m.harness_version) : null,
+    case_inputs: m ? canonical(Object.fromEntries(Object.entries(m.cases).map(([id, c]) => [id, c.input_sha256]))) : null,
   };
 }
 
@@ -212,6 +232,7 @@ interface Field {
 const FIELDS: Field[] = [
   { name: "eval", axis: "scope", label: "the eval" },
   { name: "corpus", axis: "scope", label: "the corpus" },
+  { name: "corpus_kind", axis: "scope", label: "the kind of the custom corpus (a rewrite of the public cases from a seed, or your own)", values: corpusKinds },
   { name: "collection", axis: "scope", label: "the collection" },
   { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases)" },
   // Runs with --embedder real and --embedder deterministic pair notes in different spaces: whatever the treatment, they are not the same measurement (#69).
@@ -230,6 +251,12 @@ const FIELDS: Field[] = [
   { name: "seed", axis: "inputs", label: "the seed of the private assets", evidence: (i) => i.private },
   { name: "limit", axis: "inputs", label: "the --limit", within: true },
 ];
+
+/** The kind of each run's corpus, unless the runs read different corpora (public and custom): the corpus field says so, and the kind would say it a second time. */
+function corpusKinds(ms: Member[]): (string | null)[] {
+  const same = new Set(ms.map((m) => m.identity.corpus)).size === 1;
+  return ms.map((m) => (same ? m.identity.corpus_kind : null));
+}
 
 /** The harness axis is not one field: the digest of the eval's code, else the commit it ran from, which must be clean to identify it. */
 const HARNESS: Field = { name: "harness", axis: "harness", label: "the eval's code", evidence: () => true, values: harnessValues, gap: "is not identified" };
@@ -280,9 +307,15 @@ export interface CheckOptions {
   /**
    * Read the harness from the manifest: the collector's version and digest, and the harness version, when every run has a manifest. Another scorer
    * is no difference, since a run is scored again (scripts/rescore); and the cases are compared one by one by their digests, so
-   * `assets_sha256` is not compared. Off by default, which is how scripts/matrix uses the policy: the harness is then the digest of the eval's whole code.
+   * `assets_sha256` is not compared. Off by default: the harness is then the digest of the eval's whole code.
    */
   manifest?: boolean;
+  /**
+   * With `manifest`: compare the input of every case the runs share (their `input_sha256`), and name the cases that differ as a difference of
+   * the `inputs` axis. For a caller that takes its numbers from the summaries and so cannot leave a case out (scripts/matrix). scripts/compare
+   * leaves out the cases whose input differs, up to a share of them, and does not set it.
+   */
+  caseInputs?: boolean;
 }
 
 /**
@@ -343,7 +376,23 @@ export function checkMembers(members: Member[], treatment: Axis[], options: Chec
     if (all.groups.length > 1) out.mismatches.push({ axis: f.axis, field: f.name, message: `${f.label} differs: ${describe(all.groups)}` });
     if (all.missing.length > 0) out.gaps.push({ axis: f.axis, field: f.name, message: `${f.label} ${f.gap ?? "is not recorded"} in ${who(all.missing)}${f.name === "harness" && !byManifest ? " (no harness_sha256, and git_commit is missing or has changes that are not committed)" : ""}` });
   }
+  if (byManifest && options.caseInputs === true) {
+    const differ = casesWithOtherInputs(members);
+    if (differ.length > 0) {
+      const ids = differ.length <= 5 ? differ.join(", ") : `${differ.slice(0, 5).join(", ")} and ${differ.length - 5} more`;
+      const finding: Finding = { axis: "inputs", field: "case_inputs", message: `the cases were not given the same input in every run (input_sha256) for ${differ.length} case${differ.length === 1 ? "" : "s"}: ${ids}. A case with another input is another case` };
+      (treatment.includes("inputs") ? out.treated : out.mismatches).push(finding);
+    }
+  }
   return out;
+}
+
+/** The ids of the cases that every run has and that some run was given another input for, from the manifests. */
+function casesWithOtherInputs(members: Member[]): string[] {
+  const inputs = members.map((m) => JSON.parse(m.identity.case_inputs ?? "{}") as Record<string, string>);
+  return Object.keys(inputs[0] ?? {})
+    .filter((id) => inputs.every((x) => id in x) && new Set(inputs.map((x) => x[id])).size > 1)
+    .sort();
 }
 
 /** One summary line per finding. */

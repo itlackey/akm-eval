@@ -254,6 +254,119 @@ describe("the command", () => {
     expect(refused.err).toContain("is not a results folder");
     expect(refused.out).toContain("-rescored-2"); // the first was still done
     expect(cmd().code).toBe(2);
-    expect(cmd("--help").out).toContain("Usage: scripts/rescore/run RESULTS_DIR...");
+    expect(cmd("--help").out).toContain("Usage: scripts/rescore/run [--cases DIR] RESULTS_DIR...");
+  });
+});
+
+// ---- a custom corpus: where the cases of a run are (#47) ----------------------------------------------------------------------
+
+/**
+ * reflect does not read `corpus_folder` yet, so these tests use a checkout of their own with an eval called tiny, whose `loadCases` reads the cases
+ * of a custom run from `summary.corpus_folder` as the contract in lib/manifest.ts says. Its cases are `{id, q, want}`, a raw output is `answer`, and
+ * a row is right when the answer is what the case wants.
+ */
+const TINY = `export const MEASUREMENT = {
+  eval: "tiny",
+  collector: ["evals/tiny/src/collect.ts"],
+  scorer: ["evals/tiny/src/score.ts"],
+  loadCases: (root, summary) => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const dir = summary.corpus === "public" ? path.join(root, "evals", "tiny", "assets") : path.resolve(root, summary.corpus_folder);
+    return fs.readFileSync(path.join(dir, "cases.jsonl"), "utf8").split("\\n").filter(Boolean).map((l) => JSON.parse(l));
+  },
+  caseId: (c) => c.id,
+  input: (c) => ({ q: c.q }),
+  labels: (c) => ({ want: c.want }),
+  rawOf: (row) => (row.answer === undefined ? { missing: ["answer"] } : { raw: { answer: row.answer } }),
+  score: (c, raw) => ({ id: c.id, answer: raw.answer, ok: raw.answer === c.want }),
+  errored: () => false,
+  summarize: (rows) => ({ n_run: rows.length, n_errored: 0, metrics: { ok: { n: rows.length, rate: rows.filter((r) => r.ok).length / rows.length } } }),
+};
+`;
+
+describe("the cases of a run on a custom corpus", () => {
+  /** The checkout, with the public cases and the folder `notes` inside it, and a folder of the same cases wanting something else outside it. */
+  function checkout() {
+    const root = tmp();
+    const write = (file: string, text: string) => {
+      mkdirSync(join(file, ".."), { recursive: true });
+      writeFileSync(file, text);
+    };
+    write(join(root, "evals", "tiny", "src", "collect.ts"), "export const collect = 1;\n");
+    write(join(root, "evals", "tiny", "src", "score.ts"), "export const score = 1;\n");
+    write(join(root, "evals", "tiny", "src", "measurement.ts"), TINY);
+    const part = { version: 1, sha256: "a".repeat(64), files: [] };
+    write(join(root, "MEASUREMENT.lock"), JSON.stringify({ lock_version: 1, harness_version: 3, evals: { tiny: { collector: part, scorer: part } } }));
+    const cases = (want: string) => ["a", "b"].map((id) => JSON.stringify({ id, q: `q${id}`, want })).join("\n") + "\n";
+    write(join(root, "evals", "tiny", "assets", "cases.jsonl"), cases("public"));
+    write(join(root, "notes", "cases.jsonl"), cases("mine"));
+    const outside = tmp();
+    write(join(outside, "my notes", "cases.jsonl"), cases("elsewhere"));
+    return { root, outside: join(outside, "my notes") };
+  }
+
+  /** A stored run of tiny whose answers were "mine"; it is a legacy run (no manifest), which is the case that needs the folder most. */
+  function stored(summary: Record<string, unknown>) {
+    const dir = join(tmp(), "2026-10-12-notes");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", status: "complete", n_cases: 2, ...summary }));
+    writeFileSync(join(dir, "samples.jsonl"), ["a", "b"].map((id) => `${JSON.stringify({ id, answer: "mine" })}\n`).join(""));
+    return readStored(dir);
+  }
+  const rate = (r: { summary: Record<string, any> }) => r.summary.metrics.ok.rate;
+
+  test("are read from the corpus_folder the summary records, from the repository root", () => {
+    const { root } = checkout();
+    const result = rescoreRun(stored({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes" }), { root });
+    expect(rate(result)).toBe(1); // the folder's cases want "mine"
+    expect(result.summary.corpus_folder).toBe("notes");
+    expect(rate(rescoreRun(stored({ corpus: "public", corpus_folder: null }), { root }))).toBe(0); // the public cases want something else
+  });
+
+  test("a folder outside the repository is not recorded, and --cases names it: absolute, or from the root; the result records where it was read", () => {
+    const { root, outside } = checkout();
+    const run = () => stored({ corpus: "custom", corpus_kind: "own", corpus_folder: null });
+    expect(() => rescoreRun(run(), { root })).toThrow(/was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts\/rescore with --cases DIR/);
+    const absolute = rescoreRun(run(), { root, cases: outside });
+    expect(rate(absolute)).toBe(0); // the cases there want "elsewhere"
+    expect(absolute.summary.corpus_folder).toBeNull(); // outside the repository: not recorded
+    const inside = rescoreRun(run(), { root, cases: "notes" });
+    expect(rate(inside)).toBe(1);
+    expect(inside.summary.corpus_folder).toBe("notes");
+    expect(rate(rescoreRun(run(), { root, cases: join(root, "notes") }))).toBe(1); // an absolute folder inside the repository is recorded from the root
+    expect(rescoreRun(run(), { root, cases: join(root, "notes") }).summary.corpus_folder).toBe("notes");
+  });
+
+  test("--cases also names the cases of a run whose folder has moved, and of a run that predates corpus_folder", () => {
+    const { root } = checkout();
+    const moved = stored({ corpus: "custom", corpus_kind: "own", corpus_folder: "gone/notes" });
+    expect(() => rescoreRun(moved, { root })).toThrow("was made on the custom corpus in gone/notes, which is not a folder here. Put it back, or give scripts/rescore its place with --cases DIR");
+    expect(rate(rescoreRun(moved, { root, cases: "notes" }))).toBe(1);
+    expect(rescoreRun(moved, { root, cases: "notes" }).summary.corpus_folder).toBe("notes");
+    const before = stored({ corpus: "custom", corpus_kind: "own" }); // a custom run that did not record the field
+    expect(() => rescoreRun(before, { root })).toThrow(/was made on a custom corpus and does not record where, so the folder of its cases is not known here/);
+    expect(rate(rescoreRun(before, { root, cases: "notes" }))).toBe(1);
+    // a file is no folder
+    expect(() => rescoreRun(before, { root, cases: "notes/cases.jsonl" })).toThrow("which is not a folder here");
+  });
+
+  test("a run on the public corpus has no folder to name, and a run from before the corpora were renamed is read as it was", () => {
+    const { root } = checkout();
+    expect(() => rescoreRun(stored({ corpus: "public" }), { root, cases: "notes" })).toThrow('was made on the "public" corpus, and --cases names the folder of a custom one');
+    // `private` and `own` runs have their cases where the eval put them; --cases can name them too
+    for (const corpus of ["private", "own", "own-feedback"]) expect(rate(rescoreRun(stored({ corpus }), { root, cases: "notes" })), corpus).toBe(1);
+  });
+
+  test("the command passes --cases on, and refuses an empty one", () => {
+    const dir = run(); // a run of the golden cases on the public corpus
+    const cmd = (...args: string[]) => {
+      const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { stdout: "pipe", stderr: "pipe" });
+      return { code: done.exitCode, err: done.stderr.toString() };
+    };
+    const given = cmd("--cases", "private/reflect/assets", dir);
+    expect(given.code).toBe(2);
+    expect(given.err).toContain('was made on the "public" corpus, and --cases names the folder of a custom one');
+    expect(cmd("--cases", " ", dir)).toMatchObject({ code: 2, err: expect.stringContaining("--cases needs a folder") });
   });
 });
