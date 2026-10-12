@@ -7,7 +7,7 @@ import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
 import { CLASSES } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-// The golden files are in ../golden/: twelve of the public cases, with 53 raw outputs for them. Each is a realistic answer of distill on akm
+// The golden files are in ../golden/: twelve of the public cases, with 55 raw outputs for them. Each is a realistic answer of distill on akm
 // 0.9.26: the right one, and each way to get it wrong (a lesson that over-claims, turns the advice round or leaves a fact out, a lesson
 // where none is wanted, an update that drops a line or adds a claim, a judge that rejects, a skip, a timeout, an unreachable endpoint,
 // an empty answer). cases.jsonl is a copy of those cases with the memories they are measured against, so a change to the corpus does not
@@ -64,6 +64,17 @@ describe("the golden rows of the scorer", () => {
     // a lesson that repeats less than three quarters of its memory still passes
     const goods = expected.filter((_, i) => raw[i].note === "distill queues a lesson that states the facts and claims no more");
     expect(Math.max(...goods.map((r) => r.copied))).toBeLessThan(0.5);
+    // a doubt excuses a claim only when it governs it (#56): a hedge in another clause, or after the claim and about something else, does not
+    expect(verdicts("the lesson makes the claim and says the fix could save a rebuild")).toEqual(["bad"]);
+    expect(verdicts("the lesson makes the claim and puts a condition after it")).toEqual(["bad"]);
+    expect(verdicts("the lesson makes the claim after a permission that is not a doubt about it")).toEqual(["bad"]);
+    const hedged = expected.filter((_, i) => /^the lesson makes the claim (and says the fix could|and puts a condition|after a permission)/.test(raw[i].note));
+    expect(hedged.map((r) => r.forbidden)).toEqual([["works * all * layout"], ["works * all * layout"], ["works * all * layout"]]);
+    expect(hedged.map((r) => [r.missing, r.contradicted])).toEqual([[[], []], [[], []], [[], []]]); // the claim is all that is wrong with them
+    // and a doubt that governs it still does
+    expect(verdicts("the lesson doubts the claim it makes, in the same clause")).toEqual(["good"]);
+    expect(verdicts("the lesson says it may be that the fix works on all layouts")).toEqual(["good"]);
+    expect(verdicts("the lesson makes the claim and says in a clause of its own that it is unconfirmed")).toEqual(["good"]);
     // a lesson that is rejected, skipped or invalid is nothing queued: missed where a lesson was wanted, right where it was not
     expect(verdicts("distill finds nothing reusable in the memory")).toEqual(["missed"]);
     expect(verdicts("the lesson fails akm's validation")).toEqual(["missed"]);
@@ -89,9 +100,10 @@ describe("the golden rows of the scorer", () => {
     const raw = lines("raw.jsonl");
     const rows = raw.map((line) => MEASUREMENT.score(cases.find((c) => c.id === line.case), (MEASUREMENT.rawOf({ id: line.case, ...line.raw }) as { raw: any }).raw));
     const summary = MEASUREMENT.summarize(rows);
-    expect(summary).toMatchObject({ n_run: 53, n_scored: 50, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
+    expect(summary).toMatchObject({ n_run: 55, n_scored: 52, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
     expect(summary.metrics.lesson_updates).toMatchObject({ n: 13, right: 3, checks: { update_proposed: 11, existing_kept: 10, new_facts: 10, no_extra_claims: 8, not_copied: 8, no_new_lesson: 12 } });
-    expect(summary.metrics.good_lessons).toMatchObject({ n: 28, good: 9 });
+    expect(summary.metrics.good_lessons).toMatchObject({ n: 30, good: 8 });
+    expect(summary.metrics.bad_by.forbidden_claim).toBe(7);
     expect(summary.metrics.bad_by.copied).toBe(5);
   });
 });

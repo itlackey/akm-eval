@@ -114,8 +114,11 @@ export const mentions = (text: string, phrase: string): boolean => pattern(phras
 /** Words that deny what they govern: "not", "no", "doesn't". */
 const DENIES = /^(?:not|no|nor|isnt|arent|wasnt|werent|doesnt|dont|didnt|cant|cannot|wont|wouldnt|shouldnt|couldnt|hasnt|havent)$/;
 
-/** Words that doubt what they hold, or ask about it, and leave it unasserted too: "unconfirmed whether", "if", "might". */
+/** Words that doubt what comes after them, or ask about it, and leave it unasserted: "unconfirmed whether", "if", "might". They govern a claim only in its own clause (see `claims`). */
 const DOUBTS = /(?<![a-z0-9])(?:unconfirmed|unverified|untested|unknown|unclear|unproven|whether|if|might|may|could|possibly|possible|perhaps|maybe|guess|suspect|suspected|unlikely)(?![a-z0-9])/;
+
+/** Words that say a claim is not confirmed, and so may follow it, in a clause of their own: "the fix works on all layouts, which is unconfirmed". */
+const UNCONFIRMED = /(?<![a-z0-9])(?:unconfirmed|unverified|untested|unknown|unclear|unproven)(?![a-z0-9])/;
 
 /** Words that turn the action they govern round, in the clause they stand in: "never wait for", "avoid waiting for", "instead of waiting for". They are read for a contradiction, which is an action. */
 const PROHIBITS = /^(?:never|avoid|avoids|avoiding|avoided|without|stop|stops|stopped|stopping|skip|skips|skipped|skipping)$/;
@@ -181,8 +184,12 @@ const wordsOf = (s: string): string[] => s.split(" ").filter(Boolean);
 /**
  * The phrases of `groups` that `text` asserts: one that a sentence holds, with no denial or doubt just before or after
  * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is asserted.
- * A denial is a negation within six words before the phrase or three after, or a doubt; a negation that governs a verb that denies
+ * A denial is a negation within six words before the phrase or three after; a negation that governs a verb that denies
  * in turn is cancelled out (see `negatesClaim`), so "we do not hesitate to say it works on all layouts" still asserts it.
+ * A doubt excuses a claim only when it governs it: it stands before the claim in the claim's own clause, within six words ("it may be that
+ * the fix works on all layouts"), or it says the claim is unconfirmed and follows it ("the fix works on all layouts, which is unconfirmed").
+ * A doubt in another clause, or after the claim and about something else, does not: "the fix works on all layouts, which could save a
+ * rebuild", "the fix works on all layouts if you build with Paged.js" and "you may rely on this: the fix works on all layouts" are claims.
  * With `actions`, the phrases are actions, as in a case's `contradicts`, and the denial is bound to the action: a negation or a prohibition
  * (never, avoid, without, stop, skip, instead of, rather than) before the phrase in its own clause, with the same cancelling out.
  * "Wait for networkidle" is not asserted by "never wait for networkidle", and is asserted by "do not hesitate to wait for networkidle"
@@ -190,11 +197,8 @@ const wordsOf = (s: string): string[] => s.split(" ").filter(Boolean);
  */
 export function claims(text: string, groups: string[][], actions = false): string[] {
   const sentences = sentencesOf(text);
-  const around = (s: string, from: number, to: number): string => {
-    const before = wordsOf(s.slice(0, from)).slice(-WORDS_BEFORE);
-    const after = wordsOf(s.slice(to)).slice(0, WORDS_AFTER);
-    return [...before, ...after].join(" ");
-  };
+  const doubted = (sentence: Sentence, from: number, to: number): boolean =>
+    DOUBTS.test(wordsOf(clauseBefore(sentence, from)).slice(-WORDS_BEFORE).join(" ")) || UNCONFIRMED.test(wordsOf(sentence.s.slice(to)).slice(0, WORDS_AFTER).join(" "));
   const denied = (sentence: Sentence, from: number, to: number): boolean => {
     const before = wordsOf(actions ? clauseBefore(sentence, from) : sentence.s.slice(0, from));
     const after = wordsOf(sentence.s.slice(to));
@@ -207,7 +211,7 @@ export function claims(text: string, groups: string[][], actions = false): strin
       return sentences.some((sentence) =>
         [...occurrences(re, sentence.s)].some((m) => {
           const to = m.index + m[0].length;
-          return !DOUBTS.test(around(sentence.s, m.index, to)) && !denied(sentence, m.index, to);
+          return !doubted(sentence, m.index, to) && !denied(sentence, m.index, to);
         }),
       );
     });

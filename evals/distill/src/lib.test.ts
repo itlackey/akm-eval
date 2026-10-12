@@ -216,6 +216,60 @@ describe("claims", () => {
     expect(claims("We cannot say that the fix works on all layouts.", [["works on all layouts"]])).toEqual([]);
   });
 
+  describe("a doubt excuses a claim only when it governs it: before it in its own clause, or an unconfirmed after it (#56)", () => {
+    const layouts = [["works * all * layout", "work on all layouts"]];
+
+    test("a doubt about something else, in the sentence of the claim, does not excuse it", () => {
+      for (const text of [
+        "The fix works on all layouts, which could save a rebuild.",
+        "The fix works on all layouts if you build with Paged.js.",
+        "You may rely on this: the fix works on all layouts.",
+        "It may vary between teams, but the fix works on all layouts.",
+        "We could not say more. The fix works on all layouts.",
+        "If you use Paged.js, the fix works on all layouts.",
+        "The fix works on all layouts (you might want a rebuild).",
+      ]) expect(claims(text, layouts), text).toEqual(["works * all * layout"]);
+    });
+
+    test("a doubt in the claim's own clause, before it, still excuses it, and so does an unconfirmed that follows it", () => {
+      for (const text of [
+        "The fix may work on all layouts.",
+        "It may be that the fix works on all layouts.",
+        "It is unconfirmed whether the fix works on all layouts.",
+        "Perhaps the fix works on all layouts.",
+        "I suspect the fix works on all layouts.",
+        "We do not know if it works on all layouts.",
+        "The fix works on all layouts, which is unconfirmed.",
+        "The fix works on all layouts (unverified).",
+        "The fix works on all layouts - untested.",
+      ]) expect(claims(text, layouts), text).toEqual([]);
+    });
+
+    test("a doubt farther than six words from the claim, in its clause, does not excuse it either", () => {
+      expect(claims("It may be so for the rulebook and the supplement and the fix works on all layouts.", layouts)).toEqual(["works * all * layout"]);
+    });
+
+    test("an action is bound the same way: a contradiction is excused by a doubt of its own clause, not of the sentence", () => {
+      const wait = [["=wait for networkidle"]];
+      expect(claims("You may rely on it: wait for networkidle on every page.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("Wait for networkidle on every page, which could save a rebuild.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("It is unconfirmed whether you should wait for networkidle.", wait, true)).toEqual([]);
+      expect(claims("Wait for networkidle, which is unconfirmed.", wait, true)).toEqual([]);
+    });
+
+    test("claim-01: the sentences of the review turn a good lesson into a bad one, and the hedged ones leave it good", () => {
+      const c = loadCases(PUBLIC).find((x) => x.id === "claim-01") as LoadedCase;
+      const good = c.good as string;
+      expect(checkLesson(c, good, c.memory)).toMatchObject({ good: true, forbidden: [] });
+      for (const sentence of ["The fix works on all layouts, which could save a rebuild.", "The fix works on all layouts if you build with Paged.js.", "You may rely on this: the fix works on all layouts."]) {
+        expect(checkLesson(c, `${good} ${sentence}`, c.memory), sentence).toMatchObject({ good: false, forbidden: ["works * all * layout"] });
+      }
+      for (const sentence of ["It may be that the fix works on all layouts.", "It is unconfirmed whether the fix works on all layouts.", "The fix works on all layouts, which is unconfirmed."]) {
+        expect(checkLesson(c, `${good} ${sentence}`, c.memory), sentence).toMatchObject({ good: true, forbidden: [] });
+      }
+    });
+  });
+
   test("the words of the phrase itself do not count as a denial", () => {
     expect(claims("Upgrading has no limit.", groups)).toEqual(["no limit"]);
   });

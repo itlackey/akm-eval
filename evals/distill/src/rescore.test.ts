@@ -191,6 +191,41 @@ describe("the memory pasted back (#55)", () => {
   });
 });
 
+describe("a hedge elsewhere in the sentence (#56)", () => {
+  const NOTES = [
+    "the lesson makes the claim and says the fix could save a rebuild",
+    "the lesson makes the claim and puts a condition after it",
+    "the lesson makes the claim after a permission that is not a doubt about it",
+  ];
+
+  test.each(NOTES)("scorer 2 called it good: %s. scripts/rescore scores the stored raw output bad, and no other row moves", (note) => {
+    const dir = run({
+      raw: (c) => (c.id === "claim-01" ? rawFor(c.id, note) : FIRST(c)),
+      manifest: (m) => ({ ...m, scorer: STALE }),
+      rows: (rows) => rows.map((r) => (r.id === "claim-01" ? { ...r, verdict: "good", forbidden: [] } : r)), // the row scorer 2 stored: the hedge word excused the claim
+    });
+    const stored = rowsOf(dir);
+    expect(stored.find((r) => r.id === "claim-01")).toMatchObject({ verdict: "good", forbidden: [], missing: [], contradicted: [] });
+
+    const { out, result } = rescoreFolder(dir);
+    expect(result.changed).toEqual(["claim-01"]);
+    const again = rowsOf(out);
+    expect(again.find((r) => r.id === "claim-01")).toMatchObject({ verdict: "bad", forbidden: ["works * all * layout"], missing: [], contradicted: [] });
+    expect(again.filter((r) => r.id !== "claim-01")).toEqual(stored.filter((r) => r.id !== "claim-01"));
+    const metrics = (rows: any[]) => MEASUREMENT.summarize(rows).metrics;
+    expect(summaryOf(out).metrics).toEqual(metrics(again));
+    expect(metrics(again).good_lessons.good).toBe(metrics(stored).good_lessons.good - 1);
+    expect(metrics(again).bad_by.forbidden_claim).toBe(metrics(stored).bad_by.forbidden_claim + 1);
+  });
+
+  test("a hedge that governs the claim stays good when the run is scored again", () => {
+    const dir = run({ raw: (c) => (c.id === "claim-01" ? rawFor(c.id, "the lesson says it may be that the fix works on all layouts") : FIRST(c)) });
+    const { out, result } = rescoreFolder(dir);
+    expect(result.changed).toEqual([]);
+    expect(rowsOf(out).find((r) => r.id === "claim-01")).toMatchObject({ verdict: "good", forbidden: [] });
+  });
+});
+
 describe("a run on a custom corpus (#47)", () => {
   const OWN = join("private", "distill", "own", "assets");
   const OUTSIDE_FACT = "a fact that no lesson states";
