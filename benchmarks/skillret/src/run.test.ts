@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
+import { basename, join } from "node:path";
+import { akmVersion, commandLine, writeConfig } from "../../../lib/akm/akm.ts";
 import { UNVERSIONED, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
@@ -760,5 +760,69 @@ describe("the command line", () => {
     expect(run("--limit", "ten")).toMatchObject({ code: 2 });
     expect(run("--label", "a b")).toMatchObject({ code: 2, err: expect.stringContaining("--label may use letters") });
     expect(run("--flag")).toMatchObject({ code: 2, err: expect.stringContaining("Usage: benchmarks/skillret/run") });
+  });
+});
+
+describe("--repeat", () => {
+  /**
+   * The benchmark in a repository root of its own, as a checkout holds it: its code, lib/ and the lock of this checkout around the tiny dataset in assets/.
+   * run.ts reads its assets and writes its results beside itself, so a run of it touches nothing of this checkout. Its akm is the fake one.
+   */
+  function benchmark() {
+    const here = join(import.meta.dir, "..", "..", "..");
+    const root = tmp();
+    cpSync(join(here, "lib"), join(root, "lib"), { recursive: true, filter: (src) => basename(src) !== "node_modules" });
+    const code = join(root, "benchmarks", "skillret", "src");
+    mkdirSync(code, { recursive: true });
+    for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts") && !file.endsWith(".test.ts")) cpSync(join(import.meta.dir, file), join(code, file));
+    writeAssets(join(root, "benchmarks", "skillret", "assets"), TEST, TRAIN);
+    const script = fakeAkmScript(root);
+    const results = join(root, "benchmarks", "skillret", "results");
+    const run = (...args: string[]) => {
+      const r = Bun.spawnSync(["bun", join(code, "run.ts"), ...args], { env: { ...process.env, AKM_BIN: commandLine(["bun", script]) }, stdout: "pipe", stderr: "pipe" });
+      return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+    };
+    /** What the run left in results/, without the date the folders start with. */
+    const names = () => (existsSync(results) ? readdirSync(results).sort().map((n) => n.replace(/^\d{4}-\d{2}-\d{2}-/, "")) : []);
+    const read = (name: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${name}`)) as string, "summary.json"), "utf8"));
+    return { results, run, names, read, spread: (label: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${label}-repeat-summary.json`)) as string), "utf8")) };
+  }
+
+  test("--repeat 2 writes two runs, each a whole run, and the spread of their metrics beside them", () => {
+    const b = benchmark();
+    const r = b.run("--repeat", "2", "--limit", "3", "--label", "rep");
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["rep-r1", "rep-r2", "rep-repeat-summary.json"]);
+    const [one, two] = [b.read("rep-r1"), b.read("rep-r2")];
+    expect([one.label, one.status, two.label, two.status]).toEqual(["rep-r1", "complete", "rep-r2", "complete"]);
+    expect([readManifest(one).kind, readManifest(two).kind]).toEqual(["manifest", "manifest"]);
+    for (const dir of readdirSync(b.results).filter((n) => !n.endsWith(".json"))) expect(existsSync(join(b.results, dir, ".running")), dir).toBe(false);
+    expect(readdirSync(b.results).filter((n) => !n.endsWith(".json")).map((n) => readFileSync(join(b.results, n, "samples.jsonl"), "utf8").trim().split("\n").length)).toEqual([3, 3]);
+    // the spread is of the metrics of the runs: akm answers the same twice, so it has no width
+    const ndcg = one.metrics.search["NDCG@10"];
+    expect(ndcg).toBeGreaterThan(0);
+    expect(two.metrics.search["NDCG@10"]).toBe(ndcg);
+    const spread = b.spread("rep");
+    expect(spread).toMatchObject({ eval: "skillret", corpus: "public", label: "rep", repeat: 2, akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 }, timeouts: { search: { min: 0, max: 0, mean: 0 } }, metrics: { search: { "NDCG@10": { min: ndcg, max: ndcg } } } });
+    expect(spread.metrics.search["NDCG@10"].mean).toBeCloseTo(ndcg, 4);
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    expect("model" in spread).toBe(false); // no model is called
+  }, 120_000);
+
+  test("without --label the runs take the label of a single run, akm-<version>, and a run without --repeat is unchanged", () => {
+    const b = benchmark();
+    const r = b.run("--repeat", "2", "--limit", "3");
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["akm-0.9.99-test-r1", "akm-0.9.99-test-r2", "akm-0.9.99-test-repeat-summary.json"]);
+    const single = benchmark();
+    expect(single.run("--limit", "3", "--label", "once").code).toBe(0);
+    expect(single.names()).toEqual(["once"]);
+  }, 120_000);
+
+  test("--repeat must be a positive integer, and a refused value runs nothing", () => {
+    const b = benchmark();
+    for (const value of ["0", "1.5", "two"]) expect(b.run("--repeat", value, "--limit", "3")).toMatchObject({ code: 2, err: expect.stringContaining("--repeat must be a positive integer") });
+    expect(b.names()).toEqual([]);
+    expect(b.run("--help").out).toContain("--repeat  run each corpus N times");
   });
 });

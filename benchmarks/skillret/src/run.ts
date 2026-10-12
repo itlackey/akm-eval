@@ -5,17 +5,18 @@
 // to check that it returns search's ranking. The semantic search is akm's built-in embedder, a small model that runs in
 // the akm process, and a run with --limit leaves it out. See ../README.md.
 //
-//   benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--label NAME] [--akm COMMAND]
+//   benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
 
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { AKM_OPTIONS, SEMANTIC_MODEL, akmBuild, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, SEMANTIC_MODEL, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, renamed } from "../../../lib/corpus.ts";
 import { type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { buildManifest, caseDigests, completionOf, type RunManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, redactConfig, sha256Json } from "../../../lib/provenance.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
 import { type CollectContext, INDEX_STATE, NAME, collect, withSemantic } from "./collect.ts";
@@ -31,7 +32,10 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const HARNESS = harnessSha256(import.meta.dir);
 const labelOf = (sys: System): string => (modeOf(sys) === "semantic" ? "akm search, semantic" : "akm search");
 
-const USAGE = `Usage: benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--label NAME] [--akm COMMAND]
+/** The label of a run without --label. */
+const defaultLabel = (version: string): string => `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
+
+const USAGE = `Usage: benchmarks/skillret/run [--corpus public|custom|all] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND]
 
 Writes the skills of SkillRet into two sandboxes as akm assets, indexes them for keyword search and for semantic search,
 asks akm search of both for the first ${akm.DEPTH} skills of every query, and scores it with the benchmark's metrics: NDCG, Recall,
@@ -46,6 +50,8 @@ a skill changed or akm is not the same. Needs akm on PATH, or in AKM_BIN.
             no --cases. all runs both.
   --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N. Keyword
             search only: a run of a few queries is for checking a setup, and a semantic index takes a quarter of an hour to build.
+  --repeat  run each corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+            <UTC date>-<label>-repeat-summary.json beside them
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default label: akm-<version>.`;
 
@@ -207,7 +213,7 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
     corpus,
     ctx,
     (version) => {
-      started.label = ctx.label ?? `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
+      started.label = ctx.label ?? defaultLabel(version);
       started.dir = makeResultsDir(folders.results, started.label);
       started.samples = join(started.dir, "samples.jsonl");
       writeFileSync(started.samples, "");
@@ -274,9 +280,9 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
 }
 
 async function main(): Promise<void> {
-  let values: { akm?: string; corpus?: string; limit?: string; label?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; limit?: string; repeat?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: CORPUS_OPTIONS.corpus, limit: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: CORPUS_OPTIONS.corpus, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`skillret: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -295,15 +301,36 @@ async function main(): Promise<void> {
   const corpora = choice === "all" ? ["public", "custom"] : [choice];
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
 
+  // The runs of a repeat are named <label>-r1 to <label>-rN, so the label of a run without --label is known before the first of them: it is the one a single run takes.
+  let label = values.label;
+  if (repeat !== undefined && label === undefined) {
+    const probe = createSandbox(NAME);
+    try {
+      label = defaultLabel(await akmVersion(probe).catch((e: Error) => fail(e.message)));
+    } finally {
+      removeSandbox(probe);
+    }
+  }
   const summaries: Summary[] = [];
   for (const c of corpora) {
     const data = await loadCorpus(c === "public" ? "public" : "private", assets, limit);
     const results = c === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
-    summaries.push(await runCorpus(data, { label: values.label, limit, semantic: withSemantic(limit) }, { assets, results }));
+    const run = (runLabel: string | undefined) => runCorpus(data, { label: runLabel, limit, semantic: withSemantic(limit) }, { assets, results });
+    if (repeat === undefined) summaries.push(await run(label));
+    else {
+      // The repeat summary spreads n_errored. This summary counts the calls that failed for each line, and the repeat summary takes their sum.
+      const runs = await repeatRuns(repeat, label as string, async (runLabel) => {
+        const summary = await run(runLabel);
+        return { ...summary, n_errored: failedCalls(summary).errored };
+      });
+      summaries.push(...runs);
+    }
   }
-  if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+  if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
   // The summaries are written, and say so, before the run fails.
   const failure = failureOf(summaries);
   if (failure !== undefined) fail(failure, 1);
