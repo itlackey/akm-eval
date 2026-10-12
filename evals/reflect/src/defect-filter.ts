@@ -9,6 +9,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { currentDigests, readManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
+import { STRATEGY } from "./collect.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
 import { MEASUREMENT, casesFolder } from "./measurement.ts";
 
@@ -21,7 +22,8 @@ Runs the defect filter of the akm checkout DIR on each labelled edit and counts 
   --akm-src     a checkout of akm: the filter is src/commands/improve/reflect-noise.ts there, called as akm calls it.
   --reflect     the results folder of a reflect run, or of a custom corpus: each proposal in samples.jsonl is an edit, good when
                 it passed every check and bad when not. Run reflect with evals/reflect/patches/defect-filter-off.json, or
-                the filter refuses edits before they are proposals and they are not in the results.
+                the filter refuses edits before they are proposals and they are not in the results. A run whose recorded config
+                does not have the filter off (its defectFilter lists empty) is refused, with or without --rescore.
                 The source of an edit is the case's, read from the cases here now. So the manifest of the run must hold the digest of
                 each case's input as it is now, and the digest of the scorer here (a run scored by other checks: scripts/rescore it
                 first); a run without a manifest must hold the assets_sha256 of the corpus as it is now and the harness_sha256 of this
@@ -76,6 +78,24 @@ const jsonl = <T>(file: string): T[] => readFileSync(file, "utf8").split("\n").f
 
 const DIGEST = /^[0-9a-f]{64}$/;
 
+/** The lists of akm's defect filter. A run has the filter off when its config empties all three, as patches/defect-filter-off.json does. */
+const FILTER_LISTS = ["placeholders", "metaCommentary", "frontmatterKeys"];
+
+/**
+ * Why a run did not have the defect filter off, or null when it did. The filter refuses an edit before it is a proposal, so every proposal of
+ * a run with it on has passed it, and a replay of them reports 0 refused whatever the filter does. The setting is read from the config the
+ * run recorded, for the strategy it ran (a summary from before the strategy was recorded ran reflect-only).
+ */
+function filterOnProblem(dir: string, summary: Record<string, any>): string | null {
+  const strategy = typeof summary.strategy === "string" ? summary.strategy : STRATEGY;
+  const refused = (why: string) => `${dir} was not run with the defect filter off (${why}), so every proposal in it already passed the filter and a replay would report 0 refused. Run reflect again with --config-patch evals/reflect/patches/defect-filter-off.json and replay that folder.`;
+  const config = summary.config;
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return refused("its summary.json records no config, so nothing says the filter was off");
+  const filter = config.improve?.strategies?.[strategy]?.processes?.reflect?.defectFilter;
+  const on = FILTER_LISTS.filter((name) => !(Array.isArray(filter?.[name]) && filter[name].length === 0));
+  return on.length === 0 ? null : refused(`its recorded config does not empty ${on.join(", ")} for the strategy ${strategy}`);
+}
+
 /** A digest a summary.json holds, or null when it holds none or something that is not one. */
 const digestIn = (value: unknown): string | null => (typeof value === "string" && DIGEST.test(value) ? value : null);
 
@@ -122,11 +142,14 @@ export interface ReplayOptions {
  * or bad must be the one here now (a run scored by another is scored again by scripts/rescore, and its folder replayed). A run without a
  * manifest must hold the assets_sha256 of the corpus as it is now (the digest reflect's run computes) and the harness_sha256 of this
  * code. In both, each case id of the run must be in the corpus. Otherwise this throws and says what differs. With `rescore` it replays
- * anyway, leaves out the proposals of a case that is gone, and says both in `inputs`.
+ * anyway, leaves out the proposals of a case that is gone, and says both in `inputs`. A run that had the defect filter on is refused
+ * either way (see filterOnProblem).
  */
 export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): { edits: Edit[]; inputs: Inputs } {
   const root = options.root ?? ROOT;
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
+  const filterOn = filterOnProblem(resultsDir, summary);
+  if (filterOn !== null) throw new Error(filterOn); // not for --rescore to waive: it is about what the run means, not its digests
   const corpus = summary.corpus;
   // a run from before the corpus change called the seeded rewrite "private"
   if (corpus !== "public" && corpus !== "custom" && corpus !== "private") throw new Error(`${join(resultsDir, "summary.json")} names the corpus ${JSON.stringify(corpus)}, not public or custom`);

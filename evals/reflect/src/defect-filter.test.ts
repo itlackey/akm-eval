@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { buildManifest, caseDigests, lockedParts } from "../../../lib/manifest.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
+import { STRATEGY, reflectConfig } from "./collect.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -17,6 +19,13 @@ const temp = (): string => {
   dirs.push(d);
   return d;
 };
+
+/**
+ * The akm config a reflect run records in its summary: as a default run writes it (the defect filter on), and as a run with
+ * patches/defect-filter-off.json writes it, built the way the run builds it (reflectConfig, then the patch merged in).
+ */
+const ON = reflectConfig("http://localhost:8080/v1", "model", false);
+const OFF = patchedConfig(ON, { strategy: STRATEGY, configPatch: loadConfigPatch("evals/reflect/patches/defect-filter-off.json") });
 
 describe("replay", () => {
   // a stand-in for akm's filter: refuses a candidate that says "this revision", by the rule named for it
@@ -69,7 +78,7 @@ describe("reflectEdits", () => {
   function runOf(root: string, assets: string, over: Record<string, unknown> = {}, rows: object[] = ROWS): string {
     const run = join(root, "run");
     mkdirSync(run, { recursive: true });
-    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: RAN, ...over }));
+    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: RAN, ...over }));
     writeFileSync(join(run, "samples.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
     return run;
   }
@@ -205,6 +214,51 @@ describe("reflectEdits", () => {
     // a folder outside the repository is not recorded: the summary cannot say where the cases were
     expect(() => reflectEdits(runOf(root, mine, { ...recorded, corpus_folder: null }), same(root))).toThrow("a folder that its summary does not record");
   });
+
+  // The filter refuses an edit before it is a proposal. A run that had it on holds only edits that passed it, so a replay of it would
+  // report 0 refused whatever the filter does: a result that looks like "the filter is harmless" and says nothing (#73).
+  describe("a run that had the defect filter on", () => {
+    const FIX = "Run reflect again with --config-patch evals/reflect/patches/defect-filter-off.json and replay that folder.";
+    const said = (run: string, why: string) => `${run} was not run with the defect filter off (${why}), so every proposal in it already passed the filter and a replay would report 0 refused. ${FIX}`;
+    const ALL = "placeholders, metaCommentary, frontmatterKeys";
+
+    test("a default run is refused with a message that says how to run it, also with --rescore", () => {
+      const { root, assets } = repo();
+      const run = runOf(root, assets, { config: ON });
+      const why = said(run, `its recorded config does not empty ${ALL} for the strategy ${STRATEGY}`);
+      expect(() => reflectEdits(run, same(root))).toThrow(why);
+      expect(() => reflectEdits(run, { ...same(root), rescore: true })).toThrow(why); // --rescore is about digests, and cannot make a filtered run mean something
+      // the run with the patch merged in, built by the same code, is replayed
+      expect(reflectEdits(runOf(root, assets, { config: OFF }), same(root)).edits.map((e) => e.id)).toEqual(["a", "b"]);
+    });
+
+    test("a filter that is only partly off is refused, naming the lists that are not empty", () => {
+      const { root, assets } = repo();
+      const partly = (lists: Record<string, unknown>) => patchedConfig(ON, { strategy: STRATEGY, configPatch: { path: "x", sha256: "x", patch: { improve: { strategies: { [STRATEGY]: { processes: { reflect: { defectFilter: lists } } } } } } } });
+      const run = runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: [] }) });
+      expect(() => reflectEdits(run, same(root))).toThrow(said(run, `its recorded config does not empty frontmatterKeys for the strategy ${STRATEGY}`));
+      const some = runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: ["this revision"], frontmatterKeys: [] }) });
+      expect(() => reflectEdits(some, same(root))).toThrow(said(some, `its recorded config does not empty metaCommentary for the strategy ${STRATEGY}`));
+      expect(() => reflectEdits(runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: [], frontmatterKeys: "none" }) }), same(root))).toThrow("does not empty frontmatterKeys");
+    });
+
+    test("the setting is read for the strategy the run used, and a summary with no config says so", () => {
+      const { root, assets } = repo();
+      // --strategy mine, with a patch that makes it and turns its filter off: replayed. The filter turned off for reflect-only does not count for it.
+      const mine = patchedConfig(ON, { strategy: "mine", configPatch: { path: "x", sha256: "x", patch: { improve: { strategies: { mine: { processes: { reflect: { defectFilter: { placeholders: [], metaCommentary: [], frontmatterKeys: [] } } } } } } } } });
+      expect(reflectEdits(runOf(root, assets, { strategy: "mine", config: mine }), same(root)).edits).toHaveLength(2);
+      const run = runOf(root, assets, { strategy: "mine", config: OFF });
+      expect(() => reflectEdits(run, same(root))).toThrow(said(run, `its recorded config does not empty ${ALL} for the strategy mine`));
+      // a summary from before the strategy was recorded ran reflect-only
+      const { strategy: _s, ...older } = JSON.parse(readFileSync(join(runOf(root, assets), "summary.json"), "utf8"));
+      writeFileSync(join(root, "run", "summary.json"), JSON.stringify(older));
+      expect(reflectEdits(join(root, "run"), same(root)).edits).toHaveLength(2);
+      for (const config of [undefined, null, "no", []]) {
+        const bare = runOf(root, assets, { config });
+        expect(() => reflectEdits(bare, same(root)), JSON.stringify(config)).toThrow(said(bare, "its summary.json records no config, so nothing says the filter was off"));
+      }
+    });
+  });
 });
 
 describe("reflectEdits with a manifest", () => {
@@ -238,10 +292,17 @@ describe("reflectEdits with a manifest", () => {
       cases: caseDigests(MEASUREMENT, parseCases(cases.map((c) => JSON.stringify(c)).join("\n"))),
       completion: { selected: ["a", "b", "c"], scored: ["a", "b", "c"], errored: [] },
     });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "reflect", corpus: "public", manifest: { ...manifest, ...manifestOver }, ...over }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "reflect", corpus: "public", strategy: STRATEGY, config: OFF, manifest: { ...manifest, ...manifestOver }, ...over }));
     writeFileSync(join(dir, "samples.jsonl"), `${ROWS.map((r) => JSON.stringify(r)).join("\n")}\n`);
     return dir;
   }
+
+  test("a run with a manifest that had the defect filter on is refused too", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases, { config: ON });
+    expect(() => reflectEdits(run, { root })).toThrow("was not run with the defect filter off");
+    expect(() => reflectEdits(run, { root, rescore: true })).toThrow("was not run with the defect filter off");
+  });
 
   test("replays a run whose cases and scorer are the ones here, with no digest of the cases or the code in its summary", () => {
     const { root, cases } = repo();
@@ -318,7 +379,7 @@ describe("the command line", () => {
     const assets = join(SRC, "..", "assets");
     const [first, second] = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"));
     const results = temp();
-    const summary = { corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC) };
+    const summary = { corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC) };
     writeFileSync(join(results, "summary.json"), JSON.stringify(summary));
     const rows = [
       { id: first.id, outcome: "proposal", correct: true, proposal: first.source },
@@ -353,6 +414,18 @@ describe("the command line", () => {
     const { inputs } = JSON.parse(rescored.out)[`reflect ${results}`];
     expect(inputs).toMatchObject({ mode: "rescore", assets_sha256: { stored: was, current: summary.assets_sha256 }, harness_sha256: { stored: null, current: summary.harness_sha256 } });
     expect(inputs.differences).toHaveLength(2);
+  });
+
+  test("stops with exit 2 on a run that had the defect filter on, also with --rescore, and says how to run it", () => {
+    const { akm, results, tamper } = setup();
+    tamper({ config: ON });
+    for (const extra of [[], ["--rescore"]]) {
+      const refused = run(["--akm-src", akm, "--reflect", results, ...extra]);
+      expect(refused.code).toBe(2);
+      expect(refused.out).toBe("");
+      expect(refused.err).toContain(`${results} was not run with the defect filter off`);
+      expect(refused.err).toContain("would report 0 refused. Run reflect again with --config-patch evals/reflect/patches/defect-filter-off.json");
+    }
   });
 
   test("--rescore without a run to hold is refused", () => {
