@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, measurementPath, readManifest } from "../../../lib/manifest.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import type { Run } from "../../compare/src/lib.ts";
@@ -233,8 +233,6 @@ export function scopeKey(r: Row): string {
   const bits = [r.eval, `corpus=${corpusOf(r.eval, r.args)}`];
   for (const f of MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(f.slice(2));
   for (const f of VALUE_MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
-  const folder = customFolder(r.eval, r.args);
-  if (folder !== null && !hasFlag(r.args, "--cases")) bits.push(`folder=${folder}`); // the old values name other folders: distill's own is not its default custom corpus
   for (const f of ["--cases", "--limit"]) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
   return bits.join(" ");
 }
@@ -349,67 +347,27 @@ export const readJson = (file: string): any => {
 // ---- the corpus a row reads ----------------------------------------------------------------------------------------------
 
 /**
- * What `--corpus custom` reads for each eval without --cases, and the old `--corpus` values its runner still takes: the options the runner
- * gives resolveCorpora (lib/corpus.ts). The matrix does not run the runner, so it needs them to know the folder a row reads. An eval that
- * reads a corpus of another (terminal-bench takes the library of retrieval's rewrite) is resolved as that eval.
- */
-const CUSTOM: Record<string, { corpus: string; default: Kind; aliases: Record<string, Alias> }> = {
-  nightly: { corpus: "nightly", default: "rewrite", aliases: { private: ALIASES.private } },
-  consolidate: { corpus: "consolidate", default: "rewrite", aliases: { private: ALIASES.private } },
-  distill: { corpus: "distill", default: "rewrite", aliases: { private: ALIASES.private, own: { folder: "own/assets", kind: "own" }, "own-feedback": { folder: "own/assets-feedback", kind: "own" } } },
-  reflect: { corpus: "reflect", default: "rewrite", aliases: { private: ALIASES.private } },
-  promotion: { corpus: "promotion", default: "own", aliases: { own: ALIASES.own } },
-  "judge-gate": { corpus: "judge-gate", default: "rewrite", aliases: { private: ALIASES.private } },
-  extract: { corpus: "extract", default: "rewrite", aliases: { private: ALIASES.private } },
-  retrieval: { corpus: "retrieval", default: "rewrite", aliases: ALIASES },
-  "agent-ab": { corpus: "agent-ab", default: "rewrite", aliases: { private: ALIASES.private } },
-  "terminal-bench": { corpus: "retrieval", default: "rewrite", aliases: { private: ALIASES.private } },
-  bakeoff: { corpus: "bakeoff", default: "rewrite", aliases: { private: ALIASES.private } },
-  longmemeval: { corpus: "longmemeval", default: "rewrite", aliases: { private: ALIASES.private } },
-  skillret: { corpus: "skillret", default: "split", aliases: { private: { folder: "", kind: "split" } } }, // a split of the dataset: it has no folder
-};
-
-/** The old `--corpus` values, which name a custom corpus. */
-const OLD_VALUES = ["private", "own", "own-feedback"];
-
-/**
- * The corpus a row's flags name: `public`, `custom` or `all`. `--cases DIR` alone is a custom corpus, as for the evals, and so are the old
- * values `private`, `own` and `own-feedback` (lib/corpus.ts). Any other value is the runner's to refuse.
+ * The corpus a row's flags name: `public`, `custom` or `all`. `--cases DIR` alone is a custom corpus, as for the evals. Any other value is
+ * the runner's to refuse.
  */
 export function corpusOf(_evalName: string, args: string[]): string {
-  const corpus = flagValue(args, "--corpus");
-  if (corpus === undefined) return hasFlag(args, "--cases") ? "custom" : "public";
-  return OLD_VALUES.includes(corpus) ? "custom" : corpus;
+  return flagValue(args, "--corpus") ?? (hasFlag(args, "--cases") ? "custom" : "public");
 }
 
 /**
- * The custom corpus a row reads, as the runner resolves it from the repository root `root`: its folder (absolute), the corpus.json it has,
- * and its kind. Null when the row reads the public corpus only, the eval is not in the table, or the corpus is not one the runner would
- * accept (it refuses, and the matrix records that run as it ends).
+ * The custom corpus a row reads, as the runner resolves it from the repository root `root`: its folder (absolute) and whether it is the rewrite.
+ * Null when the row reads the public corpus only, the custom corpus has no folder (skillret's is a split of its dataset), or the runner would
+ * refuse the flags (it does, and the matrix records that run as it ends). terminal-bench reads the library of retrieval's rewrite, and
+ * promotion has no rewrite, so its custom corpus is `--cases DIR` only.
  */
 export function customCorpus(root: string, evalName: string, args: string[]): ResolvedCorpus | null {
-  const spec = CUSTOM[evalName];
-  if (!spec || corpusOf(evalName, args) === "public") return null;
+  if (corpusOf(evalName, args) === "public" || evalName === "skillret") return null;
   try {
-    const found = resolveCorpora({ eval: spec.corpus, values: { corpus: flagValue(args, "--corpus"), cases: flagValue(args, "--cases") }, publicFolder: join(root, runnerFolder(evalName), evalName), default: spec.default, aliases: spec.aliases, root, warn: () => {} });
+    const found = resolveCorpora({ eval: evalName === "terminal-bench" ? "retrieval" : evalName, values: { corpus: flagValue(args, "--corpus"), cases: flagValue(args, "--cases") }, publicFolder: join(root, runnerFolder(evalName), evalName), rewrite: evalName !== "promotion", root });
     return found.find((c) => c.name === "custom") ?? null;
   } catch {
     return null;
   }
-}
-
-/**
- * The folder of the custom corpus a row names, as text without a checkout: the `--cases` value, else the folder of the alias or the default, from the
- * repository root. Null for a row that reads the public corpus. This is what tells two custom corpora of one eval apart in `scopeKey`.
- */
-export function customFolder(evalName: string, args: string[]): string | null {
-  const spec = CUSTOM[evalName];
-  if (corpusOf(evalName, args) === "public" || spec?.default === "split") return null; // a split of a dataset (skillret's custom corpus) has no folder
-  const cases = flagValue(args, "--cases");
-  if (cases !== undefined) return cases;
-  const corpus = flagValue(args, "--corpus");
-  const alias = corpus !== undefined && spec !== undefined && Object.hasOwn(spec.aliases, corpus) ? spec.aliases[corpus] : undefined;
-  return `private/${spec?.corpus ?? evalName}/${alias?.folder ?? (spec?.default === "own" ? "own" : "assets")}`;
 }
 
 /** The folders an eval or a benchmark may write its results to for a corpus: results/ for the public one, and private/<eval>/ for a custom one (and the folders of own corpora before they moved there). */

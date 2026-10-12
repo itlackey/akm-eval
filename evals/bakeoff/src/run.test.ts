@@ -76,7 +76,7 @@ function setup(specs: Spec[], plan: object) {
   process.env.FAKE_PLAN = JSON.stringify(plan);
   process.env.FAKE_LOG = join(root, "calls.jsonl");
   process.env.MODEL_API_KEY = "model-secret";
-  const corpus: ResolvedCorpus = { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" };
+  const corpus: ResolvedCorpus = { name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" };
   const ctx = { baseUrl: "http://localhost:9/v1", model: "the-model", hasKey: true, version: "0.9.99-test", label: "t" };
   const calls = () => (existsSync(process.env.FAKE_LOG as string) ? readFileSync(process.env.FAKE_LOG as string, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
   return { corpus, ctx, calls, results: join(root, "results"), root };
@@ -98,7 +98,7 @@ describe("runCorpus", () => {
   test("runs the akm command of each process, scores what akm wrote, and records the raw output of every case", async () => {
     const { corpus, ctx, calls, results } = setup(SPECS, PLAN);
     const summary = await quiet(() => runCorpus(corpus, ctx, results));
-    expect(summary).toMatchObject({ eval: "bakeoff", corpus: "public", corpus_kind: "public", corpus_private: false, seed: null, model: "the-model", akm_version: "0.9.99-test", status: "complete", aborted_reason: null, n_cases: 5, n_run: 5, n_scored: 5, n_errored: 0, timeouts: 0 });
+    expect(summary).toMatchObject({ eval: "bakeoff", corpus: "public", seed: null, model: "the-model", akm_version: "0.9.99-test", status: "complete", aborted_reason: null, n_cases: 5, n_run: 5, n_scored: 5, n_errored: 0, timeouts: 0 });
     expect(summary.metrics.valid_output).toEqual({ n: 5, passed: 5, rate: 1 });
     expect(summary.metrics.case_pass).toEqual({ n: 5, passed: 5, rate: 1 });
     expect(Object.keys(summary.metrics.by_process)).toEqual(["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"]);

@@ -29,8 +29,8 @@ const tmp = () => {
 };
 
 /** The public corpus in a folder of assets, and the rewrite that generate made in one, as lib/corpus.ts resolves them. */
-const publicOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "public", folder: folders.assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
-const rewriteOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config: { kind: "rewrite", private: false }, configFile: null, flag: "--corpus custom" });
+const publicOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "public", folder: folders.assets, rewrite: false, seed: null, flag: "--corpus public" });
+const rewriteOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "custom", folder: folders.assets, rewrite: true, seed: null, flag: "--corpus custom" });
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -278,8 +278,8 @@ describe("runCorpus", () => {
       model: { model: "fake-model", endpoint: host, endpoint_id: endpointId(`${host}/v1`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
       judge: { model: "fake-judge", endpoint: host, endpoint_id: endpointId(`${host}/v1`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
     });
-    // the corpus is recorded by its name and kind, and the folder is not in the summary: the one of this test is in a temporary folder
-    expect(stored).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, mode: null });
+    // the corpus is recorded by its name, and the folder is not in the summary: the one of this test is in a temporary folder
+    expect(stored).toMatchObject({ corpus: "public", corpus_folder: null, mode: null });
     expect(JSON.stringify(stored)).not.toContain(root);
     // a run with no model is another mode and has no engines
     const only = await quiet(() => runCorpus(publicOf(folders), { label: "o", sampleSeed: 1 }, { akm, model: null, judge: null, version: "v" }, folders));
@@ -311,7 +311,7 @@ describe("runCorpus", () => {
     const mine = { assets, results: join(root, "private-results") };
     const priv = await quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1 }, retrieval, mine));
     expect(priv.seed).toBe("18446744073709551615");
-    expect(priv).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, manifest: { corpus: "custom", settings: { seed: "18446744073709551615" } } });
+    expect(priv).toMatchObject({ corpus: "custom", manifest: { corpus: "custom", settings: { seed: "18446744073709551615" } } });
     expect(priv.assets_sha256).toBe(digestIn(assets, ["rewrite.json", DATA_FILE]));
     expect(priv.assets_sha256).not.toBe(same.assets_sha256);
     expect(priv.dataset).toMatchObject({ tool: "lib/rewrite", file: DATA_FILE });
@@ -840,22 +840,30 @@ describe("the command", () => {
     return { code: run.exitCode, out: run.stdout.toString(), err: run.stderr.toString() };
   };
 
-  test("a corpus of your own is private, so a model that models.json does not mark private is refused before anything runs (the private flag, #47)", () => {
+  test("a folder of your own that has no questions file is refused before anything runs", () => {
     const notes = tmp();
     const run = command(["--cases", notes, "--limit", "1"]);
     expect(run.code).toBe(2);
-    expect(run.err).toContain(`longmemeval: --cases ${notes} sends your chats to synthetic-model, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private.`);
-    // with no model there is nothing to send, and the folder is checked for the file it needs
-    const retrieval = command(["--cases", notes, "--retrieval-only"]);
-    expect(retrieval.code).toBe(2);
-    expect(retrieval.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
+    expect(run.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
   });
 
-  test("--corpus private still works for one release as the custom rewrite, --corpus own is not a value of this benchmark, and --help names --cases", () => {
-    const refused = command(["--corpus", "own"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--corpus must be public, custom or all, not "own"');
-    expect(command(["--corpus", "private", "--retrieval-only", "--cases", tmp()]).err).toContain("--cases is a custom corpus: it does not go with --corpus private");
+  test("--cases asks before it sends the chats to the model and the judge: with no terminal and no -y it stops before anything runs, and -y goes on", () => {
+    const notes = tmp();
+    writeFileSync(join(notes, DATA_FILE), JSON.stringify(tinyDataset()));
+    const asked = command(["--cases", notes, "--limit", "1"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain(`longmemeval: add -y to send the cases in ${notes} to synthetic-model at http://127.0.0.1:9/v1 and synthetic-judge at http://127.0.0.1:9/v1 without asking`);
+    // --retrieval-only has no model and no judge, so there is nothing to ask about
+    expect(command(["--cases", notes, "--retrieval-only"]).err).not.toContain("add -y");
+    expect(command(["--cases", notes, "--limit", "1", "--yes"]).err).not.toContain("add -y");
+  });
+
+  test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const refused = command(["--corpus", old]);
+      expect(refused.code, old).toBe(2);
+      expect(refused.err, old).toContain(`longmemeval: --corpus ${old} was renamed in 0.2: use `);
+    }
     const help = command(["--help"]);
     expect(help.code).toBe(0);
     expect(help.out).toContain("--corpus public|custom|all");

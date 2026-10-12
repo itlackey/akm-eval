@@ -5,7 +5,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
-import { ALIASES, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
@@ -117,10 +117,10 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
 };
 
 /** The public corpus held in `root`, which holds cases.jsonl and library/. */
-const publicAt = (root: string): ResolvedCorpus => ({ name: "public", folder: root, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+const publicAt = (root: string): ResolvedCorpus => ({ name: "public", folder: root, rewrite: false, seed: null, flag: "--corpus public" });
 
 /** The custom corpus that `--cases DIR` names, resolved the way the command does it, in a repository root of its own. */
-const customAt = (dir: string, root: string): ResolvedCorpus => resolveCorpora({ eval: "promotion", values: { cases: dir }, publicFolder: join(root, "assets"), default: "own", aliases: { own: ALIASES.own }, root })[0] as ResolvedCorpus;
+const customAt = (dir: string, root: string): ResolvedCorpus => resolveCorpora({ eval: "promotion", values: { cases: dir }, publicFolder: join(root, "assets"), rewrite: false, root })[0] as ResolvedCorpus;
 
 /** runCorpus on the public corpus that `folders` describes: the folder of cases.jsonl and library/, and where the results go. */
 const runPublic = (ctx: Parameters<typeof runCorpus>[1], folders: { cases: string; results: string }) => runCorpus(publicAt(dirname(folders.cases)), ctx, folders.results);
@@ -188,15 +188,15 @@ describe("runCorpus", () => {
     expect(assetsSha256(c.folders.cases, c.folders.library)).not.toBe(assetsSha256(a.folders.cases, a.folders.library));
   });
 
-  test("a custom corpus of your own notes is private, records no seed and where the folder is, and the public cases record none either", async () => {
+  test("a custom corpus of your own notes records no seed and where the folder is, and the public cases record none either", async () => {
     const [pub, own] = [setup(cases.slice(0, 2)), setup(cases.slice(0, 2))]; // a sandbox for each run: the planted proposals have fixed ids
     const summary = await quiet(() => runPublic(pub.ctx, pub.folders));
-    expect(summary).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null });
+    expect(summary).toMatchObject({ corpus: "public", corpus_folder: null, seed: null });
     const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
     dirs.push(root);
     const dir = dirname(own.folders.cases);
     const custom = await quiet(() => runCorpus(customAt(dir, root), own.ctx, own.folders.results));
-    expect(custom).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    expect(custom).toMatchObject({ corpus: "custom", seed: null });
     expect(custom.corpus_folder).toBe(relative(REPO, dir).startsWith("..") ? null : relative(REPO, dir)); // the folder, from the repository root, when it is inside it
     expect(custom.manifest).toMatchObject({ corpus: "custom", settings: { seed: null } });
     expect(readFileSync(join(custom.results_dir, "summary.json"), "utf8")).not.toContain(dir); // the file does not name the folder
@@ -221,19 +221,6 @@ describe("runCorpus", () => {
     // what the fix is for: a run that recorded the seed file, as these did before, is refused against one that recorded another
     const was = (run: Run, seed: string): Run => ({ ...run, summary: { ...run.summary, seed, manifest: { ...run.summary.manifest, settings: { ...run.summary.manifest.settings, seed } } } });
     expect(() => comparePair(was(runs[0] as Run, "99"), was(runs[1] as Run, "123456789012345678"))).toThrow("the seed of the private assets differs");
-  });
-
-  test("a rewrite corpus records the seed its corpus.json holds", async () => {
-    const { ctx, folders } = setup(cases.slice(0, 2));
-    const dir = dirname(folders.cases);
-    const root = mkdtempSync(join(tmpdir(), "promotion-root-"));
-    dirs.push(root);
-    mkdirSync(join(dir, "assets"));
-    writeFileSync(join(dir, "assets", "generated.json"), JSON.stringify({ seed: "42" }));
-    writeFileSync(join(dir, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "42", generated: "assets/generated.json" }));
-    const summary = await quiet(() => runCorpus(customAt(dir, root), ctx, folders.results));
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "42" });
-    expect(summary.manifest.settings.seed).toBe("42");
   });
 
   test("a proposal whose model call timed out is an errored row marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
@@ -461,7 +448,7 @@ describe("rescore", () => {
     const root = tmp();
     const { summary } = await publicRun((folder) => customAt(folder, root)); // the committed cases and library, read as a custom corpus
     const dir = summary.results_dir;
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "evals/promotion/assets" });
+    expect(summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets" });
     expect(stored(dir).summary.corpus_folder).toBe("evals/promotion/assets"); // from the repository root, with /, never absolute
     const { out, result } = rescoreFolder(dir);
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
@@ -577,12 +564,12 @@ describe("the corpus on the command line", () => {
     expect(resultsOf(customAt("/some/notes", root))).toBe(join(REPO, "private", "promotion", "results"));
   });
 
-  test("a folder of notes is refused before it is read when the model is not marked private in models.json", async () => {
-    const { folders } = setup(cases);
-    const dir = dirname(folders.cases);
-    const refused = await cli(["--cases", dir], ENV);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain(`--cases ${dir} sends your notes to m, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private.`);
+  test("--corpus custom and --corpus all need --cases: promotion has no rewrite, and says so before anything runs", async () => {
+    for (const corpus of ["custom", "all"]) {
+      const done = await cli(["--corpus", corpus], ENV);
+      expect(done.code, corpus).toBe(2);
+      expect(done.err, corpus).toContain("promotion has no rewrite: its custom corpus is a folder of your own cases. Use --cases DIR");
+    }
   });
 
   test("--cases is a custom corpus, so it cannot be combined with the public one, and a folder without a set is named", async () => {
@@ -596,10 +583,12 @@ describe("the corpus on the command line", () => {
     expect(missing.err).toContain("the custom set is missing");
   });
 
-  test("--corpus own still works for one release, with the line that names the new form, and --corpus private is not a corpus of this eval", async () => {
-    const own = await cli(["--corpus", "own"], ENV);
-    expect(own.err).toContain("promotion: --corpus own is now --corpus custom. The old value works for one more release.");
-    expect((await cli(["--corpus", "private"], ENV)).err).toContain('--corpus must be public, custom or all, not "private"');
+  test("--corpus private, own and own-feedback were renamed: the run stops with the new form, which for promotion is --cases DIR", async () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const done = await cli(["--corpus", old], ENV);
+      expect(done.code, old).toBe(2);
+      expect(done.err, old).toContain(`promotion: --corpus ${old} was renamed in 0.2: use --cases DIR for a folder of your own`);
+    }
   });
 
   test("the help lists the corpora public, custom and all, and the flag --cases", async () => {

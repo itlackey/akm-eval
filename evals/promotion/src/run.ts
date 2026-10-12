@@ -9,7 +9,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
@@ -32,9 +32,8 @@ Plants labelled promotion proposals in akm's queue, runs \`akm proposal drain --
 MODEL_API_KEY and MODEL_NAME as the judge, and counts which proposals it accepts. Settings come from .env at the repository root.
 
 ${corpusUsage}
-            The folder of a custom corpus holds cases.jsonl and library/ (see "Run your own set" in evals/promotion/README.md); the default is
-            private/promotion/own/. A corpus without a corpus.json is your own notes: it runs only against a model marked "private": true
-            in models.json. Results of a custom corpus go to private/promotion/results/.
+            promotion has no rewrite: its custom corpus is --cases DIR only. The folder holds cases.jsonl and library/ (see "Run your own
+            set" in evals/promotion/README.md). Results of a custom corpus go to private/promotion/results/.
   --limit   run N proposals, one of each category in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -54,10 +53,8 @@ export const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? j
 
 interface Summary {
   eval: string;
-  /** `public` for the committed cases, `custom` for a folder of your own (corpus_kind says what it is). */
+  /** `public` for the committed cases, `custom` for a folder of your own. */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** A custom corpus: its folder from the repository root, or null when it is outside it (the path would name what is in it). Null for the public cases. Rescore reads the cases of a custom run from it. */
   corpus_folder: string | null;
   label: string;
@@ -149,7 +146,7 @@ export async function runCorpus(
   const aborted = counts.n_errored === rows.length ? `no proposal got a verdict. First error: ${rows[0]?.error}` : undefined;
   const config = JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8")) as Record<string, unknown>; // what akm was given: the patch is in it
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const seed = corpus.config.seed ?? null; // only a rewrite has one: your own notes were made by no seed, and private/seed is not theirs
+  const seed = corpus.seed;
   const build = akmBuild();
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -163,7 +160,7 @@ export async function runCorpus(
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -199,7 +196,7 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -215,7 +212,7 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "own", aliases: { own: ALIASES.own }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), rewrite: false, fail });
 
   useAkm(values, fail);
   const settings = useModel(values, fail);
@@ -225,8 +222,8 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     if (!existsSync(casesOf(c)) || !existsSync(join(libraryOf(c), "knowledge"))) fail(`the ${c.name} set is missing (${relative(ROOT, casesOf(c))} and ${relative(ROOT, libraryOf(c))}/knowledge/). See "Run your own set" in evals/promotion/README.md.`);
   }
-  const refusal = privacyError(corpora, { model: settings }, "notes");
-  if (refusal) fail(refusal);
+
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const summaries: Summary[] = [];
   for (const c of corpora) {

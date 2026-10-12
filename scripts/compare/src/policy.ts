@@ -89,14 +89,10 @@ export const configDigest = (config: unknown): string | null => (isObject(config
 /** What a summary says about how its run was made, as text: null is "none recorded". Field by field the policy compares these. */
 export interface Identity {
   eval: string | null;
-  /** `public` or `custom`. A summary from before the corpora were renamed (`private`, `own`) reads as the custom corpus of its kind. */
+  /** `public` or `custom`. A summary from before the corpora were renamed (`private`, `own`) reads as custom. */
   corpus: string | null;
-  /** `public`, `rewrite` (the public cases rewritten from a seed) or `own` (your notes): the kind a custom corpus records, or the kind the old name of an older summary stood for. */
-  corpus_kind: string | null;
   collection: string | null;
   mode: string | null;
-  /** The run read a rewrite of the public cases, so its seed is evidence it should record. */
-  private: boolean;
   akm_version: string | null;
   akm_build: string | null;
   /** What the akm checkout holds beyond its commit (a digest), null for a clean checkout or a release. */
@@ -126,16 +122,10 @@ export interface Identity {
 
 const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : typeof x === "number" && Number.isFinite(x) ? String(x) : null);
 
-/**
- * The corpus a summary names, as the policy compares it. A run reads `public` or `custom` (lib/corpus.ts), and a custom corpus records its
- * kind, `rewrite` or `own`. A summary written before that says `private` (a rewrite), or `own` (distill's `own-feedback` too), and reads as the
- * custom corpus of that kind, so an old run and a new one on the same corpus have the same scope.
- */
-export function corpusOf(s: Row): { name: string | null; kind: string | null } {
+/** The corpus a summary names, as the policy compares it: `public` or `custom`. A summary written before the corpora were renamed says `private`, `own` or `own-feedback`, and reads as `custom`. */
+export function corpusOf(s: Row): string | null {
   const name = text(s.corpus);
-  if (name === "private") return { name: "custom", kind: "rewrite" };
-  if (name === "own" || name === "own-feedback") return { name: "custom", kind: "own" };
-  return { name, kind: text(s.corpus_kind) ?? (name === "public" ? "public" : null) };
+  return name === "private" || name === "own" || name === "own-feedback" ? "custom" : name;
 }
 
 /**
@@ -152,14 +142,11 @@ export function identityOf(s: Row): Identity {
   const engine = harbor ? harborEngine(s) : m ? recorded(m.engines) : isObject(s.engine) && isObject(s.engine.engines) ? recorded(s.engine.engines) : null;
   const embedder = text(s.embedder);
   const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
-  const corpus = corpusOf(s);
   return {
     eval: text(s.eval),
-    corpus: corpus.name,
-    corpus_kind: corpus.kind,
+    corpus: corpusOf(s),
     collection: text(s.collection),
     mode: text(s.mode),
-    private: corpus.kind === "rewrite",
     akm_version: m && !harbor ? m.akm.version : akmVersionOf(s),
     akm_build: m && !harbor ? m.akm.build : text(s.akm_build),
     akm_build_fingerprint: m && !harbor ? m.akm.build_fingerprint : text(s.akm_build_fingerprint),
@@ -228,7 +215,6 @@ interface Field {
 const FIELDS: Field[] = [
   { name: "eval", axis: "scope", label: "the eval" },
   { name: "corpus", axis: "scope", label: "the corpus" },
-  { name: "corpus_kind", axis: "scope", label: "the kind of the custom corpus (a rewrite of the public cases from a seed, or your own)", values: corpusKinds },
   { name: "collection", axis: "scope", label: "the collection" },
   { name: "mode", axis: "scope", label: "the mode (consolidate --pool is another set of cases, and longmemeval --retrieval-only another measurement)" },
   // Runs with --embedder real and --embedder deterministic pair notes in different spaces: whatever the treatment, they are not the same measurement (#69).
@@ -244,15 +230,9 @@ const FIELDS: Field[] = [
   { name: "model", axis: "model", label: "the model" },
   { name: "engine", axis: "model", label: "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used)", evidence: () => true },
   { name: "assets_sha256", axis: "inputs", label: "the cases (assets_sha256)", evidence: () => true },
-  { name: "seed", axis: "inputs", label: "the seed of the private assets", evidence: (i) => i.private },
+  { name: "seed", axis: "inputs", label: "the seed of the private assets" },
   { name: "limit", axis: "inputs", label: "the --limit", within: true },
 ];
-
-/** The kind of each run's corpus, unless the runs read different corpora (public and custom): the corpus field says so, and the kind would say it a second time. */
-function corpusKinds(ms: Member[]): (string | null)[] {
-  const same = new Set(ms.map((m) => m.identity.corpus)).size === 1;
-  return ms.map((m) => (same ? m.identity.corpus_kind : null));
-}
 
 /** The harness axis is not one field: the digest of the eval's code, else the commit it ran from, which must be clean to identify it. */
 const HARNESS: Field = { name: "harness", axis: "harness", label: "the eval's code", evidence: () => true, values: harnessValues, gap: "is not identified" };

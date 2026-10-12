@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ALIASES, type Alias, type CorpusConfig, corpusRecord, defaultConfig, parseCorpusConfig, privacyError, readCorpusConfig, resolveCorpora, rewriteConfig, writeRewriteConfig } from "./corpus.ts";
-import { type ModelEntry, resolveModel } from "./models.ts";
+import { parseArgs } from "node:util";
+import { CORPUS_OPTIONS, type Recipient, confirmCases, renamed, resolveCorpora } from "./corpus.ts";
+import { Fatal } from "./cli.ts";
 
 const LIB = import.meta.dir;
 const REPO = resolve(LIB, "..");
@@ -24,7 +25,6 @@ const put = (file: string, text: string): string => {
   writeFileSync(file, text);
   return file;
 };
-const putJson = (file: string, value: unknown): string => put(file, `${JSON.stringify(value)}\n`);
 const messageOf = (fn: () => unknown): string => {
   try {
     fn();
@@ -34,175 +34,46 @@ const messageOf = (fn: () => unknown): string => {
   return "did not throw";
 };
 
-const SEED = "18446744073709551615";
-const REWRITE: CorpusConfig = { kind: "rewrite", private: false, seed: SEED, generated: "assets/generated.json" };
-
-describe("the corpus config", () => {
-  test("an own corpus and a rewrite are read as written", () => {
-    expect(parseCorpusConfig({ kind: "own", private: true }, "c.json")).toEqual({ kind: "own", private: true });
-    expect(parseCorpusConfig({ kind: "own", private: false }, "c.json")).toEqual({ kind: "own", private: false });
-    expect(parseCorpusConfig(REWRITE, "c.json")).toEqual(REWRITE);
-  });
-
-  test("anything that is not sound is refused with what is wrong, and an unknown key is one", () => {
-    const refusals: [unknown, string][] = [
-      [[], "c.json: must hold an object"],
-      [null, "c.json: must hold an object"],
-      [{ kind: "own", private: true, privat: true }, 'c.json: unknown key "privat". The keys of a corpus config are kind, private, seed, generated'],
-      [{ kind: "own", private: true, api_key: "k" }, 'c.json: unknown key "api_key". The keys of a corpus config are kind, private, seed, generated'],
-      [{ private: true }, 'c.json: kind must be "rewrite" or "own"'],
-      [{ kind: "public", private: false }, 'c.json: kind must be "rewrite" or "own"'],
-      [{ kind: "own" }, "c.json: private must be true or false"],
-      [{ kind: "own", private: "yes" }, "c.json: private must be true or false"],
-      [{ kind: "own", private: true, seed: "1" }, 'c.json: only a "rewrite" has a seed and a generated.json'],
-      [{ kind: "rewrite", private: false, generated: "generated.json" }, 'c.json: a "rewrite" needs seed, an integer from 0 to 18446744073709551615 written as text'],
-      [{ kind: "rewrite", private: false, seed: 42, generated: "generated.json" }, 'c.json: a "rewrite" needs seed, an integer from 0 to 18446744073709551615 written as text'],
-      [{ kind: "rewrite", private: false, seed: "18446744073709551616", generated: "generated.json" }, 'c.json: a "rewrite" needs seed, an integer from 0 to 18446744073709551615 written as text'],
-      [{ kind: "rewrite", private: false, seed: "-1", generated: "generated.json" }, 'c.json: a "rewrite" needs seed, an integer from 0 to 18446744073709551615 written as text'],
-      [{ kind: "rewrite", private: false, seed: "1" }, 'c.json: a "rewrite" needs generated, the path of its generated.json from this file, with no .. in it'],
-      [{ kind: "rewrite", private: false, seed: "1", generated: "../generated.json" }, 'c.json: a "rewrite" needs generated, the path of its generated.json from this file, with no .. in it'],
-      [{ kind: "rewrite", private: false, seed: "1", generated: "/etc/generated.json" }, 'c.json: a "rewrite" needs generated, the path of its generated.json from this file, with no .. in it'],
-      [{ kind: "rewrite", private: false, seed: "1", generated: "C:\\generated.json" }, 'c.json: a "rewrite" needs generated, the path of its generated.json from this file, with no .. in it'],
-    ];
-    for (const [json, message] of refusals) expect([JSON.stringify(json), messageOf(() => parseCorpusConfig(json, "c.json"))]).toEqual([JSON.stringify(json), message]);
-  });
-
-  test("the reader names a file that is not JSON, and a rewrite whose generated.json is missing or holds another seed", () => {
-    const dir = temp();
-    const bad = put(join(dir, "bad", "corpus.json"), "{ not json");
-    expect(messageOf(() => readCorpusConfig(bad)).startsWith(`${bad} is not JSON (`)).toBe(true);
-
-    const file = putJson(join(dir, "a", "corpus.json"), REWRITE);
-    expect(messageOf(() => readCorpusConfig(file))).toBe(`${file}: assets/generated.json is missing or holds no seed, so the rewrite it describes is not there. Make it again with ./generate-assets`);
-    putJson(join(dir, "a", "assets", "generated.json"), { seed: "7" });
-    expect(messageOf(() => readCorpusConfig(file))).toBe(`${file}: seed is ${SEED}, but assets/generated.json says 7, so the assets were made again since. Run ./generate-assets again`);
-    putJson(join(dir, "a", "assets", "generated.json"), { seed: SEED });
-    expect(readCorpusConfig(file)).toEqual(REWRITE);
-  });
-
-  test("a config that is missing is private for an own corpus and not for a rewrite", () => {
-    expect(defaultConfig("own")).toEqual({ kind: "own", private: true });
-    expect(defaultConfig("rewrite")).toEqual({ kind: "rewrite", private: false });
-  });
-});
-
-describe("the config of a rewrite generate made", () => {
-  test("is found where the eval's generate puts generated.json: in assets/ (retrieval, judge-gate, agent-ab) or beside it (the others)", () => {
-    const dir = temp();
-    expect(rewriteConfig(dir)).toBeUndefined();
-    putJson(join(dir, "generated.json"), { seed: "5" });
-    expect(rewriteConfig(dir)).toEqual({ kind: "rewrite", private: false, seed: "5", generated: "generated.json" });
-    putJson(join(dir, "assets", "generated.json"), { seed: "6" });
-    expect(rewriteConfig(dir)).toEqual({ kind: "rewrite", private: false, seed: "6", generated: "assets/generated.json" });
-  });
-
-  test("a generated.json with no seed, or a seed that is not a seed, is not one", () => {
-    const dir = temp();
-    putJson(join(dir, "generated.json"), {});
-    expect(rewriteConfig(dir)).toBeUndefined();
-    putJson(join(dir, "generated.json"), { seed: "forty-two" });
-    expect(rewriteConfig(dir)).toBeUndefined();
-    put(join(dir, "generated.json"), "not json");
-    expect(rewriteConfig(dir)).toBeUndefined();
-  });
-
-  test("writeRewriteConfig writes corpus.json beside the assets, replaces an old one, and leaves nothing else", () => {
-    const dir = temp();
-    putJson(join(dir, "assets", "generated.json"), { seed: SEED });
-    expect(writeRewriteConfig(dir)).toEqual(REWRITE);
-    expect(JSON.parse(readFileSync(join(dir, "corpus.json"), "utf8"))).toEqual(REWRITE);
-    expect(readdirSync(dir).sort()).toEqual(["assets", "corpus.json"]);
-    putJson(join(dir, "assets", "generated.json"), { seed: "9" });
-    expect(writeRewriteConfig(dir).seed).toBe("9");
-    expect(JSON.parse(readFileSync(join(dir, "corpus.json"), "utf8")).seed).toBe("9");
-    put(join(dir, "corpus.json"), "not json");
-    expect(writeRewriteConfig(dir).seed).toBe("9");
-    expect(readCorpusConfig(join(dir, "corpus.json"))).toEqual({ ...REWRITE, seed: "9" });
-  });
-
-  test("a corpus.json that says private: true stays private when the assets are made again", () => {
-    const dir = temp();
-    putJson(join(dir, "generated.json"), { seed: "3" });
-    putJson(join(dir, "corpus.json"), { kind: "rewrite", private: true, seed: "2", generated: "generated.json" });
-    expect(writeRewriteConfig(dir)).toEqual({ kind: "rewrite", private: true, seed: "3", generated: "generated.json" });
-  });
-
-  test("refuses a folder with no generated.json", () => {
-    const dir = temp();
-    expect(messageOf(() => writeRewriteConfig(dir))).toBe(`${dir} has no generated.json with a seed (assets/generated.json or generated.json), so there is no rewrite to describe`);
-    expect(existsSync(join(dir, "corpus.json"))).toBe(false);
-  });
-});
-
 describe("resolveCorpora", () => {
   const PUBLIC = "/checkout/evals/retrieval/assets";
-  /** A run of the eval `retrieval` in a temporary repository root. `warnings` collects the lines printed. */
+  /** A run of the eval `retrieval` in a temporary repository root. */
   const setup = () => {
     const root = temp();
-    const warnings: string[] = [];
-    const resolveIn = (values: { corpus?: string; cases?: string }, extra: { default?: "rewrite" | "own"; aliases?: Record<string, Alias>; eval?: string } = {}) =>
-      resolveCorpora({ eval: extra.eval ?? "retrieval", values, publicFolder: PUBLIC, default: extra.default ?? "rewrite", aliases: extra.aliases, root, warn: (line) => warnings.push(line) });
-    return { root, warnings, resolveIn };
+    const resolveIn = (values: { corpus?: string; cases?: string }, extra: { rewrite?: boolean; eval?: string } = {}) =>
+      resolveCorpora({ eval: extra.eval ?? "retrieval", values, publicFolder: PUBLIC, rewrite: extra.rewrite, root });
+    return { root, resolveIn };
   };
 
-  test("public is the default, and it is not private", () => {
-    const { root, warnings, resolveIn } = setup();
-    expect(resolveIn({})).toEqual([{ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }]);
+  test("public is the default, and nothing is looked for in private/", () => {
+    const { root, resolveIn } = setup();
+    expect(resolveIn({})).toEqual([{ name: "public", folder: PUBLIC, rewrite: false, seed: null, flag: "--corpus public" }]);
     expect(resolveIn({ corpus: "public" })).toEqual(resolveIn({}));
-    expect(warnings).toEqual([]);
     expect(existsSync(join(root, "private"))).toBe(false);
   });
 
-  test("custom reads the default of the eval: the rewrite at private/<eval>/assets, or own at private/<eval>/own", () => {
-    const { root, resolveIn } = setup();
-    const rewrite = resolveIn({ corpus: "custom" });
-    expect(rewrite).toEqual([{ name: "custom", folder: join(root, "private", "retrieval", "assets"), config: { kind: "rewrite", private: false }, configFile: null, flag: "--corpus custom" }]);
-    const own = resolveIn({ corpus: "custom" }, { default: "own" });
-    expect(own).toEqual([{ name: "custom", folder: join(root, "private", "retrieval", "own"), config: { kind: "own", private: true }, configFile: null, flag: "--corpus custom" }]);
-  });
-
-  test("the config of a rewrite is private/<eval>/corpus.json beside its assets, or else the seed in the generated.json found there", () => {
+  test("custom is the rewrite in private/<eval>/assets, with the seed of the generated.json beside or inside it", () => {
     const { root, resolveIn } = setup();
     const priv = join(root, "private", "retrieval");
-    putJson(join(priv, "assets", "generated.json"), { seed: "11" });
-    expect(resolveIn({ corpus: "custom" })[0].config).toEqual({ kind: "rewrite", private: false, seed: "11", generated: "assets/generated.json" });
-    expect(resolveIn({ corpus: "custom" })[0].configFile).toBeNull();
-    writeRewriteConfig(priv);
-    const [c] = resolveIn({ corpus: "custom" });
-    expect(c.config).toEqual({ kind: "rewrite", private: false, seed: "11", generated: "assets/generated.json" });
-    expect(c.configFile).toBe(join(priv, "corpus.json"));
+    const custom = { name: "custom", folder: join(priv, "assets"), rewrite: true, flag: "--corpus custom" };
+    expect(resolveIn({ corpus: "custom" })).toEqual([{ ...custom, seed: null }]);
+    put(join(priv, "generated.json"), '{"seed":"5"}');
+    expect(resolveIn({ corpus: "custom" })).toEqual([{ ...custom, seed: "5" }]);
+    put(join(priv, "assets", "generated.json"), '{"seed":"11"}');
+    expect(resolveIn({ corpus: "custom" })).toEqual([{ ...custom, seed: "11" }]);
+    put(join(priv, "assets", "generated.json"), '{"seed":"forty-two"}');
+    expect(resolveIn({ corpus: "custom" })[0].seed).toBe("5"); // a generated.json with no seed is not one
   });
 
-  test("--cases DIR alone is a custom corpus. DIR is from the repository root, and corpus.json is read from DIR", () => {
-    const { root, warnings, resolveIn } = setup();
-    expect(resolveIn({ cases: "notes" })).toEqual([{ name: "custom", folder: join(root, "notes"), config: { kind: "own", private: true }, configFile: null, flag: "--cases notes" }]);
-    putJson(join(root, "notes", "corpus.json"), { kind: "own", private: false });
-    expect(resolveIn({ cases: "notes" })).toEqual([{ name: "custom", folder: join(root, "notes"), config: { kind: "own", private: false }, configFile: join(root, "notes", "corpus.json"), flag: "--cases notes" }]);
+  test("--cases DIR alone is a custom corpus of your own, with no seed. DIR is from the repository root", () => {
+    const { root, resolveIn } = setup();
+    expect(resolveIn({ cases: "notes" })).toEqual([{ name: "custom", folder: join(root, "notes"), rewrite: false, seed: null, flag: "--cases notes" }]);
     expect(resolveIn({ corpus: "custom", cases: join(root, "notes") })[0].folder).toBe(join(root, "notes"));
-    expect(warnings).toEqual([]);
+    // a folder is a corpus of your own even when it is the one the rewrite is in
+    put(join(root, "private", "retrieval", "assets", "generated.json"), '{"seed":"11"}');
+    expect(resolveIn({ cases: "private/retrieval/assets" })[0]).toMatchObject({ rewrite: false, seed: null });
   });
 
-  test("a folder called assets takes the corpus.json beside it, and the one inside it wins", () => {
-    const { root, resolveIn } = setup();
-    putJson(join(root, "mine", "corpus.json"), { kind: "own", private: false });
-    expect(resolveIn({ cases: "mine/assets" })[0].config).toEqual({ kind: "own", private: false });
-    putJson(join(root, "mine", "assets", "corpus.json"), { kind: "own", private: true });
-    expect(resolveIn({ cases: "mine/assets" })[0].config).toEqual({ kind: "own", private: true });
-  });
-
-  test("no other folder takes a corpus.json from the one above it: own notes next to a rewrite stay private", () => {
-    const { root, resolveIn } = setup();
-    const priv = join(root, "private", "retrieval");
-    putJson(join(priv, "assets", "generated.json"), { seed: "11" });
-    writeRewriteConfig(priv);
-    expect(readCorpusConfig(join(priv, "corpus.json")).private).toBe(false);
-    const own = resolveIn({ corpus: "custom", cases: "private/retrieval/own" })[0];
-    expect(own.config).toEqual({ kind: "own", private: true });
-    expect(own.configFile).toBeNull();
-    expect(resolveIn({ cases: "private/retrieval/assets/library" })[0].config).toEqual({ kind: "own", private: true });
-  });
-
-  test("all is public and then the default custom corpus, or the folder of --cases", () => {
+  test("all is public and then the rewrite, or the folder of --cases", () => {
     const { root, resolveIn } = setup();
     expect(resolveIn({ corpus: "all" }).map((c) => [c.name, c.folder, c.flag])).toEqual([
       ["public", PUBLIC, "--corpus public"],
@@ -212,153 +83,55 @@ describe("resolveCorpora", () => {
       ["public", PUBLIC, "--corpus public"],
       ["custom", join(root, "notes"), "--cases notes"],
     ]);
-    expect(resolveIn({ corpus: "all" }, { default: "own" })[1].folder).toBe(join(root, "private", "retrieval", "own"));
   });
 
-  test("--corpus private and --corpus own still work, each with a line that names the new form", () => {
-    const { root, warnings, resolveIn } = setup();
-    const priv = resolveIn({ corpus: "private" });
-    expect(priv).toEqual([{ name: "custom", folder: join(root, "private", "retrieval", "assets"), config: { kind: "rewrite", private: false }, configFile: null, flag: "--corpus private" }]);
-    expect(warnings).toEqual(["retrieval: --corpus private is now --corpus custom. The old value works for one more release."]);
-    warnings.length = 0;
-    const own = resolveIn({ corpus: "own" });
-    expect(own).toEqual([{ name: "custom", folder: join(root, "private", "retrieval", "own"), config: { kind: "own", private: true }, configFile: null, flag: "--corpus own" }]);
-    expect(warnings).toEqual(["retrieval: --corpus own is now --corpus custom --cases private/retrieval/own. The old value works for one more release."]);
+  test("an eval with no rewrite (promotion) says so when --corpus custom or all has no --cases, and takes --cases", () => {
+    const { root, resolveIn } = setup();
+    const promotion = { eval: "promotion", rewrite: false };
+    const says = "promotion has no rewrite: its custom corpus is a folder of your own cases. Use --cases DIR";
+    expect(messageOf(() => resolveIn({ corpus: "custom" }, promotion))).toBe(says);
+    expect(messageOf(() => resolveIn({ corpus: "all" }, promotion))).toBe(says);
+    expect(resolveIn({ cases: "night" }, promotion)).toEqual([{ name: "custom", folder: join(root, "night"), rewrite: false, seed: null, flag: "--cases night" }]);
+    expect(resolveIn({}, promotion)[0].name).toBe("public");
   });
 
-  test("the new form of an alias is --corpus custom when the eval's default is that corpus, and its other aliases are named too", () => {
-    const { root, warnings, resolveIn } = setup();
-    resolveIn({ corpus: "own" }, { default: "own", eval: "promotion", aliases: { own: ALIASES.own } });
-    expect(warnings).toEqual(["promotion: --corpus own is now --corpus custom. The old value works for one more release."]);
-    warnings.length = 0;
-    const feedback = resolveIn({ corpus: "own-feedback" }, { eval: "distill", aliases: { ...ALIASES, "own-feedback": { folder: "own/assets-feedback", kind: "own" } } });
-    expect(warnings).toEqual(["distill: --corpus own-feedback is now --corpus custom --cases private/distill/own/assets-feedback. The old value works for one more release."]);
-    expect(feedback[0].folder).toBe(join(root, "private", "distill", "own", "assets-feedback"));
-  });
-
-  test("--corpus own --cases DIR, which promotion took, reads DIR as an own corpus. No other old value takes --cases", () => {
-    const { root, warnings, resolveIn } = setup();
-    const [c] = resolveIn({ corpus: "own", cases: "night" });
-    expect([c.name, c.folder, c.config, c.flag]).toEqual(["custom", join(root, "night"), { kind: "own", private: true }, "--corpus own --cases night"]);
-    expect(warnings).toEqual(["retrieval: --corpus own is now --corpus custom --cases night. The old value works for one more release."]);
-    expect(messageOf(() => resolveIn({ corpus: "private", cases: "night" }))).toBe("--cases is a custom corpus: it does not go with --corpus private. Use --corpus custom --cases DIR");
+  test("the old values --corpus private, own and own-feedback stop with the name of what replaces them, and nothing is looked for", () => {
+    const { root, resolveIn } = setup();
+    const own = "--corpus own was renamed in 0.2: use --cases DIR for a folder of your own";
+    expect(messageOf(() => resolveIn({ corpus: "private" }))).toBe("--corpus private was renamed in 0.2: use --corpus custom (the rewrite in private/<eval>/assets), or --cases DIR for a folder of your own");
+    expect(messageOf(() => resolveIn({ corpus: "own" }))).toBe(own);
+    expect(messageOf(() => resolveIn({ corpus: "own-feedback" }))).toBe("--corpus own-feedback was renamed in 0.2: use --cases DIR for a folder of your own");
+    expect(messageOf(() => resolveIn({ corpus: "own", cases: "night" }))).toBe(own);
+    // an eval with no rewrite does not offer one
+    expect(messageOf(() => resolveIn({ corpus: "private" }, { rewrite: false }))).toBe("--corpus private was renamed in 0.2: use --cases DIR for a folder of your own");
+    expect(renamed("private", "--corpus custom")).toBe("--corpus private was renamed in 0.2: use --corpus custom");
+    for (const value of ["public", "custom", "all", "bogus", undefined]) expect(renamed(value, "x")).toBeUndefined();
+    expect(existsSync(join(root, "private"))).toBe(false);
   });
 
   test("a value that is not a corpus, --cases with public, and an empty --cases are refused", () => {
     const { resolveIn } = setup();
     expect(messageOf(() => resolveIn({ corpus: "bogus" }))).toBe('--corpus must be public, custom or all, not "bogus"');
     expect(messageOf(() => resolveIn({ corpus: "constructor" }))).toBe('--corpus must be public, custom or all, not "constructor"');
-    expect(messageOf(() => resolveIn({ corpus: "private" }, { aliases: { own: ALIASES.own } }))).toBe('--corpus must be public, custom or all, not "private"');
     expect(messageOf(() => resolveIn({ corpus: "public", cases: "notes" }))).toBe("--cases is a custom corpus: use it alone, or with --corpus custom");
     expect(messageOf(() => resolveIn({ cases: "  " }))).toBe("--cases needs a folder");
   });
 
-  test("an eval whose custom corpus is a split of its dataset (skillret) has one with no folder, never private, and takes no --cases", () => {
-    const { root, warnings } = setup();
-    const resolveSplit = (values: { corpus?: string; cases?: string }) => resolveCorpora({ eval: "skillret", values, publicFolder: PUBLIC, default: "split", aliases: { private: { folder: "", kind: "split" } }, root, warn: (line) => warnings.push(line) });
-    const split = { name: "custom", folder: "", config: { kind: "split", private: false }, configFile: null };
-    expect(resolveSplit({})).toEqual([{ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }]);
-    expect(resolveSplit({ corpus: "custom" })).toEqual([{ ...split, flag: "--corpus custom" }]);
-    expect(resolveSplit({ corpus: "all" })).toEqual([expect.objectContaining({ name: "public" }), { ...split, flag: "--corpus all" }]);
-    expect(warnings).toEqual([]);
-    expect(resolveSplit({ corpus: "private" })).toEqual([{ ...split, flag: "--corpus private" }]);
-    expect(warnings).toEqual(["skillret: --corpus private is now --corpus custom. The old value works for one more release."]);
-    expect(messageOf(() => resolveSplit({ cases: "notes" }))).toBe("--cases needs a folder, and the custom corpus of skillret is a split of its dataset, which has none: use --corpus custom");
-    expect(messageOf(() => resolveSplit({ corpus: "custom", cases: "notes" }))).toBe("--cases needs a folder, and the custom corpus of skillret is a split of its dataset, which has none: use --corpus custom");
-    expect(messageOf(() => resolveSplit({ corpus: "public", cases: "notes" }))).toBe("--cases is a custom corpus: use it alone, or with --corpus custom");
-    expect(messageOf(() => resolveSplit({ corpus: "own" }))).toBe('--corpus must be public, custom or all, not "own"');
-    expect(existsSync(join(root, "private"))).toBe(false); // nothing is looked for in a folder
-  });
-
-  test("the split is not private, so the guard lets any model through, and its summary record says split", () => {
-    const [, split] = resolveCorpora({ eval: "skillret", values: { corpus: "all" }, publicFolder: PUBLIC, default: "split", root: temp() }) as [unknown, ReturnType<typeof resolveCorpora>[number]];
-    expect(corpusRecord(split)).toEqual({ corpus: "custom", corpus_kind: "split", corpus_private: false });
-    expect(privacyError([split], { model: { baseUrl: "http://x/v1", name: "m", apiKey: "", private: false } })).toBeUndefined();
-    expect(defaultConfig("split")).toEqual({ kind: "split", private: false });
-  });
-
-  test("a corpus.json cannot say split: there is no folder for it", () => {
-    expect(messageOf(() => parseCorpusConfig({ kind: "split", private: false }, "c.json"))).toBe('c.json: kind must be "rewrite" or "own"');
-  });
-
-  test("a corpus.json that is not sound ends the run with fail, and names the file", () => {
-    const { root } = setup();
-    const file = putJson(join(root, "notes", "corpus.json"), { kind: "own", private: true, privat: false });
+  test("fail ends the run with the message", () => {
     const stopped: string[] = [];
     const run = () =>
       resolveCorpora({
         eval: "retrieval",
-        values: { cases: "notes" },
+        values: { corpus: "own" },
         publicFolder: PUBLIC,
-        default: "rewrite",
-        root,
+        root: temp(),
         fail: (message) => {
           stopped.push(message);
           throw new Error("stopped");
         },
       });
     expect(messageOf(run)).toBe("stopped");
-    expect(stopped).toEqual([`${file}: unknown key "privat". The keys of a corpus config are kind, private, seed, generated`]);
-  });
-});
-
-describe("the privacy guard", () => {
-  const GATEWAY = "https://gateway.example/v1";
-  const ENV = { MODEL_BASE_URL: GATEWAY, MODEL_API_KEY: "gw-key", MODEL_NAME: "my-model" };
-  const entries: Record<string, ModelEntry> = { mine: { base_url: "http://localhost:8080/v1", private: true }, other: { base_url: "https://api.example.com/v1" } };
-  const model = (id: string, role: "model" | "judge" = "model") => resolveModel(role, id, ENV, entries);
-
-  const corpora = (config: CorpusConfig, configFile: string | null = null, flag = "--cases notes") => [
-    { name: "public" as const, folder: "/p", config: { kind: "public" as const, private: false }, configFile: null, flag: "--corpus public" },
-    { name: "custom" as const, folder: "/c", config, configFile, flag },
-  ];
-
-  test("a private corpus refuses a model that models.json does not mark private, and says why and what to do", () => {
-    expect(privacyError(corpora(defaultConfig("own")), { model: model("other") })).toBe(
-      '--cases notes sends your notes to other, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private. Mark the model in models.json if you run it or its provider does not keep or train on what it gets, or choose another with --model.',
-    );
-    expect(privacyError(corpora(defaultConfig("own")), { model: model("my-model") })).toContain('sends your notes to my-model, which is not marked "private": true in models.json.');
-    expect(privacyError(corpora(defaultConfig("own")), { model: model("mine") })).toBeUndefined();
-  });
-
-  test("it names the corpus.json that says private, and the noun the eval gives", () => {
-    expect(privacyError(corpora({ kind: "rewrite", private: true, seed: "1", generated: "generated.json" }, "/x/corpus.json", "--corpus custom"), { model: model("other") }, "memories")).toBe(
-      '--corpus custom sends your memories to other, which is not marked "private": true in models.json. The corpus is private: /x/corpus.json says "private": true. Mark the model in models.json if you run it or its provider does not keep or train on what it gets, or choose another with --model.',
-    );
-  });
-
-  test("a judge is refused too, even when the model is marked", () => {
-    expect(privacyError(corpora(defaultConfig("own")), { model: model("mine"), judge: model("other", "judge") })).toBe(
-      '--cases notes sends your notes to the judge other, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private. Mark the judge in models.json if you run it or its provider does not keep or train on what it gets, or choose another with --judge-model.',
-    );
-    expect(privacyError(corpora(defaultConfig("own")), { model: model("mine"), judge: model("mine", "judge") })).toBeUndefined();
-    expect(privacyError(corpora(defaultConfig("own")), { judge: model("other", "judge") })?.startsWith("--cases notes sends your notes to the judge other,")).toBe(true);
-  });
-
-  test("a corpus that is not private lets any model through: the public cases, a rewrite, and an own corpus whose corpus.json says private: false", () => {
-    const unmarked = { model: model("other"), judge: model("other", "judge") };
-    expect(privacyError(corpora({ kind: "public", private: false }).slice(0, 1), unmarked)).toBeUndefined();
-    expect(privacyError(corpora(defaultConfig("rewrite")), unmarked)).toBeUndefined();
-    expect(privacyError(corpora({ kind: "own", private: false }, "/x/corpus.json"), unmarked)).toBeUndefined();
-  });
-
-  test("--corpus all refuses the whole run when its custom corpus is private", () => {
-    expect(privacyError(corpora(defaultConfig("own"), null, "--corpus all"), { model: model("other") })?.startsWith("--corpus all sends your notes to other,")).toBe(true);
-  });
-
-  test("an old --corpus own is guarded as the custom corpus it is", () => {
-    const root = temp();
-    const resolved = resolveCorpora({ eval: "promotion", values: { corpus: "own" }, publicFolder: "/p", default: "own", aliases: { own: ALIASES.own }, root, warn: () => {} });
-    expect(privacyError(resolved, { model: model("other") })?.startsWith("--corpus own sends your notes to other,")).toBe(true);
-    expect(privacyError(resolved, { model: model("mine") })).toBeUndefined();
-  });
-});
-
-describe("what a summary records", () => {
-  test("the name, the kind and the private flag, and never the folder", () => {
-    const [pub, custom] = resolveCorpora({ eval: "e", values: { corpus: "all" }, publicFolder: "/p", default: "own", root: temp() });
-    expect(corpusRecord(pub)).toEqual({ corpus: "public", corpus_kind: "public", corpus_private: false });
-    expect(corpusRecord(custom)).toEqual({ corpus: "custom", corpus_kind: "own", corpus_private: true });
+    expect(stopped).toEqual(["--corpus own was renamed in 0.2: use --cases DIR for a folder of your own"]);
   });
 });
 
@@ -380,44 +153,183 @@ describe("./generate-assets", () => {
     return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
   };
   const NESTED = 'mkdir -p "$out/assets"\nprintf \'{"seed":"%s"}\\n\' "$seed" > "$out/assets/generated.json"';
-  const BESIDE = 'mkdir -p "$out/assets"\nprintf \'{"seed":"%s"}\\n\' "$seed" > "$out/generated.json"';
 
-  test("writes corpus.json beside the assets of each set it made, for generated.json in assets/ and beside it", () => {
+  test("makes each set and writes nothing else: no corpus.json, and what --corpus custom then reads is the set with its seed", () => {
     const { root, generate } = repo();
     generate("evals", "nested", NESTED);
-    generate("benchmarks", "beside", BESIDE);
+    generate("benchmarks", "beside", 'mkdir -p "$out/assets"\nprintf \'{"seed":"%s"}\\n\' "$seed" > "$out/generated.json"');
     const r = run(root, "--seed", "42");
     expect([r.code, r.err]).toEqual([0, ""]);
-    expect(JSON.parse(readFileSync(join(root, "private", "nested", "corpus.json"), "utf8"))).toEqual({ kind: "rewrite", private: false, seed: "42", generated: "assets/generated.json" });
-    expect(JSON.parse(readFileSync(join(root, "private", "beside", "corpus.json"), "utf8"))).toEqual({ kind: "rewrite", private: false, seed: "42", generated: "generated.json" });
-    // what the run then reads
-    expect(readCorpusConfig(join(root, "private", "nested", "corpus.json")).seed).toBe("42");
-    const [c] = resolveCorpora({ eval: "beside", values: { corpus: "custom" }, publicFolder: "/p", default: "rewrite", root });
-    expect([c.folder, c.configFile, c.config]).toEqual([join(root, "private", "beside", "assets"), join(root, "private", "beside", "corpus.json"), { kind: "rewrite", private: false, seed: "42", generated: "generated.json" }]);
+    expect(readdirSync(join(root, "private", "nested")).sort()).toEqual(["assets"]);
+    expect(readdirSync(join(root, "private", "beside")).sort()).toEqual(["assets", "generated.json"]);
+    for (const name of ["nested", "beside"]) {
+      const [c] = resolveCorpora({ eval: name, values: { corpus: "custom" }, publicFolder: "/p", root });
+      expect([c.folder, c.rewrite, c.seed]).toEqual([join(root, "private", name, "assets"), true, "42"]);
+    }
   });
 
-  test("a set made again with another seed gets the new seed, and a corpus.json marked private stays private", () => {
-    const { root, generate } = repo();
-    generate("evals", "nested", NESTED);
-    expect(run(root, "--seed", "1").code).toBe(0);
-    const file = join(root, "private", "nested", "corpus.json");
-    putJson(file, { ...JSON.parse(readFileSync(file, "utf8")), private: true });
-    expect(run(root, "--seed", "2").code).toBe(0);
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ kind: "rewrite", private: true, seed: "2", generated: "assets/generated.json" });
-    expect(readdirSync(join(root, "private", "nested")).sort()).toEqual(["assets", "corpus.json"]);
-  });
-
-  test("a generate that fails gets no corpus.json, and one that makes no generated.json fails the run", () => {
+  test("a generate that fails fails the run, and the others are made", () => {
     const { root, generate } = repo();
     generate("evals", "broken", "exit 1");
-    generate("evals", "nofile", 'mkdir -p "$out/assets"');
     generate("evals", "fine", NESTED);
     const r = run(root, "--seed", "42");
     expect(r.code).toBe(1);
-    expect(r.err).toContain(`generate-assets: ${join("evals", "nofile", "generate")} made the assets, but private/nofile/corpus.json could not be written for them\n`);
-    expect(r.err).toContain("generate-assets: failed: broken nofile\n");
-    expect(existsSync(join(root, "private", "broken", "corpus.json"))).toBe(false);
-    expect(existsSync(join(root, "private", "nofile", "corpus.json"))).toBe(false);
-    expect(existsSync(join(root, "private", "fine", "corpus.json"))).toBe(true);
+    expect(r.err).toContain("generate-assets: failed: broken\n");
+    expect(existsSync(join(root, "private", "fine", "assets", "generated.json"))).toBe(true);
+  });
+});
+
+describe("confirmCases", () => {
+  const GATEWAY = "https://gateway.example/v1";
+  const model: Recipient = { role: "model", name: "qwen3-8b", baseUrl: GATEWAY };
+  const judge: Recipient = { role: "judge", name: "qwen3-32b", baseUrl: GATEWAY };
+  /** A run in which `answer` is typed at a terminal: what it printed, what it asked, and how it ended. */
+  const ask = async (to: Recipient[], answer: string, values: { cases?: string; yes?: boolean } = { cases: "~/notes/distill" }) => {
+    const shown: string[] = [];
+    const asked: string[] = [];
+    let ended: { message: string; code: number } | undefined;
+    try {
+      await confirmCases(values, to, { tty: true, log: (line) => shown.push(line), ask: async (question) => (asked.push(question), answer) });
+    } catch (e) {
+      if (!(e instanceof Fatal)) throw e;
+      ended = { message: e.message, code: e.code };
+    }
+    return { shown, asked, ended };
+  };
+
+  test("names the folder, the model, the judge and the endpoint of each, and asks", async () => {
+    const done = await ask([model, judge], "");
+    expect(done.shown).toEqual(["The cases in ~/notes/distill will be sent to:", "  model  qwen3-8b at https://gateway.example/v1", "  judge  qwen3-32b at https://gateway.example/v1"]);
+    expect(done.asked).toEqual(["Continue? [Y/n] "]);
+    expect((await ask([model], "")).shown).toEqual(["The cases in ~/notes/distill will be sent to:", "  model  qwen3-8b at https://gateway.example/v1"]); // an eval without a judge shows no judge line
+    expect((await ask([judge], "")).shown[1]).toBe("  judge  qwen3-32b at https://gateway.example/v1"); // and retrieval label has only a judge
+  });
+
+  test("shows the endpoint as scheme://host[:port]/path, with no credentials and no query, and a model whose provider answers for itself without one", async () => {
+    const at = async (baseUrl: string | undefined) => (await ask([{ role: "model", name: "m", baseUrl }], "")).shown[1];
+    expect(await at("HTTPS://user:SYNTH-pass@Gateway.example:8443/deployment-A/v1/?api_key=SYNTH-key#frag")).toBe("  model  m at https://gateway.example:8443/deployment-A/v1");
+    expect(await at("http://localhost:8080")).toBe("  model  m at http://localhost:8080");
+    expect(await at(undefined)).toBe("  model  m at its provider's own endpoint");
+    expect(await at("not a url SYNTH-secret")).toBe("  model  m at an endpoint that is not a URL");
+  });
+
+  test("Enter, y and yes continue, in any case", async () => {
+    for (const answer of ["", "y", "Y", "yes", " Yes "]) expect((await ask([model], answer)).ended, JSON.stringify(answer)).toBeUndefined();
+  });
+
+  test("n and no stop with exit 1 and say nothing was sent, and so does any other answer", async () => {
+    for (const answer of ["n", "N", "no", "No", "maybe", "yep"]) expect((await ask([model], answer)).ended, JSON.stringify(answer)).toEqual({ message: "Stopped: nothing was sent.", code: 1 });
+  });
+
+  test("-y and --yes skip the question, whatever else holds", async () => {
+    const { values } = parseArgs({ args: ["--cases", "notes", "-y"], options: CORPUS_OPTIONS, strict: true });
+    expect(values).toEqual({ cases: "notes", yes: true });
+    expect(parseArgs({ args: ["--cases", "notes", "--yes"], options: CORPUS_OPTIONS, strict: true }).values).toEqual({ cases: "notes", yes: true });
+    const done = await ask([model, judge], "n", { cases: "notes", yes: true });
+    expect(done).toEqual({ shown: [], asked: [], ended: undefined });
+    // no terminal needed either
+    await confirmCases({ cases: "notes", yes: true }, [model], { tty: false });
+  });
+
+  test("with no terminal and no -y it stops, and says what to add", async () => {
+    const stop = async (to: Recipient[], values = { cases: "~/notes/distill" } as { cases?: string; yes?: boolean }) => {
+      const shown: string[] = [];
+      let ended: { message: string; code: number } | undefined;
+      try {
+        await confirmCases(values, to, { tty: false, log: (line) => shown.push(line), ask: async () => "y" });
+      } catch (e) {
+        if (!(e instanceof Fatal)) throw e;
+        ended = { message: e.message, code: e.code };
+      }
+      return { shown, ended };
+    };
+    expect(await stop([model])).toEqual({ shown: [], ended: { message: "add -y to send the cases in ~/notes/distill to qwen3-8b at https://gateway.example/v1 without asking", code: 2 } });
+    expect((await stop([model, judge])).ended?.message).toBe("add -y to send the cases in ~/notes/distill to qwen3-8b at https://gateway.example/v1 and qwen3-32b at https://gateway.example/v1 without asking");
+    expect((await stop([{ role: "model", name: "m", baseUrl: "https://u:SYNTH-pass@h.example/v1?key=SYNTH-key" }])).ended?.message).toBe("add -y to send the cases in ~/notes/distill to m at https://h.example/v1 without asking");
+  });
+
+  test("a public run and --corpus custom without --cases never ask, with or without a terminal", async () => {
+    for (const tty of [true, false]) {
+      for (const [corpus, cases] of [["public", undefined], ["custom", undefined], [undefined, undefined], ["all", undefined]] as const) {
+        const { values } = parseArgs({ args: [...(corpus ? ["--corpus", corpus] : []), ...(cases ? ["--cases", cases] : [])], options: CORPUS_OPTIONS, strict: true });
+        const asked: string[] = [];
+        await confirmCases(values, [model, judge], { tty, log: (line) => asked.push(line), ask: async (question) => (asked.push(question), "n") });
+        expect(asked, `${corpus} ${tty}`).toEqual([]);
+      }
+    }
+  });
+
+  test("a run that has no model or judge to send the cases to asks nothing (longmemeval --retrieval-only)", async () => {
+    await confirmCases({ cases: "notes" }, [], { tty: false });
+    expect((await ask([], "n")).ended).toBeUndefined();
+  });
+});
+
+describe("every eval and benchmark that takes --corpus", () => {
+  const runs = [
+    ...["evals", "benchmarks"].flatMap((group) =>
+      readdirSync(join(REPO, group))
+        .map((name) => join(REPO, group, name, "src", "run.ts"))
+        .filter((file) => existsSync(file)),
+    ),
+    join(REPO, "evals", "retrieval", "src", "label.ts"),
+  ];
+
+  test("the scan finds the runs, so it cannot pass by finding none", () => {
+    expect(runs.length).toBeGreaterThanOrEqual(14);
+  });
+
+  test("stops at --corpus private, own and own-feedback with the new form, before anything runs", async () => {
+    const cwd = temp(); // a folder with no .env in it
+    const env = { ...process.env, AKM_BIN: "/nonexistent/akm-for-this-test" };
+    const stop = async (file: string, old: string) => {
+      const proc = Bun.spawn(["bun", file, "--corpus", old], { cwd, env, stdout: "pipe", stderr: "pipe" });
+      const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+      return { file, old, code, err };
+    };
+    const tries = runs.flatMap((file) => ["private", "own", "own-feedback"].map((old) => [file, old] as const));
+    for (let i = 0; i < tries.length; i += 8) {
+      for (const done of await Promise.all(tries.slice(i, i + 8).map(([file, old]) => stop(file, old)))) {
+        expect([done.file, done.old, done.code]).toEqual([done.file, done.old, 2]);
+        expect(done.err, `${done.file} ${done.old}`).toContain(`--corpus ${done.old} was renamed in 0.2: use `);
+      }
+    }
+  }, 120_000);
+});
+
+describe("every run that sends --cases to a model asks first, once", () => {
+  const sourceOf = (file: string): string => readFileSync(file, "utf8");
+  const runs = [
+    ...["evals", "benchmarks"].flatMap((group) =>
+      readdirSync(join(REPO, group))
+        .map((name) => join(REPO, group, name, "src", "run.ts"))
+        .filter((file) => existsSync(file)),
+    ),
+    join(REPO, "evals", "retrieval", "src", "label.ts"),
+  ].map((file) => ({ file: file.slice(REPO.length + 1), source: sourceOf(file) }));
+  // The runs that take --cases and send it to no model.
+  const SENDS_NONE = ["evals/retrieval/src/run.ts"];
+  const takesCases = (source: string) => /\.\.\.CORPUS_OPTIONS/.test(source);
+
+  test("the scan finds the runs that take --cases", () => {
+    expect(runs.filter((r) => takesCases(r.source)).length).toBeGreaterThanOrEqual(13);
+    expect(runs.find((r) => r.file === "benchmarks/skillret/src/run.ts")?.source).not.toMatch(/confirmCases|\.\.\.CORPUS_OPTIONS/); // skillret takes no --cases
+  });
+
+  test("each calls confirmCases once, in main, before it makes a sandbox or asks akm for its version", () => {
+    const wrong: string[] = [];
+    for (const { file, source } of runs.filter((r) => takesCases(r.source))) {
+      const calls = source.split("confirmCases(").length - 1;
+      if (SENDS_NONE.includes(file)) {
+        if (calls !== 0) wrong.push(`${file}: sends nothing to a model but asks`);
+        continue;
+      }
+      const main = source.slice(Math.max(source.indexOf("async function main"), 0));
+      const asked = main.indexOf("confirmCases(");
+      const firstUse = Math.min(...["createSandbox(", "openSandbox(", "akmArm(", "akmVersion(", "labelCollection("].map((use) => (main.indexOf(use) < 0 ? Infinity : main.indexOf(use))));
+      if (calls !== 1) wrong.push(`${file}: calls confirmCases ${calls} times`);
+      else if (asked > firstUse) wrong.push(`${file}: asks after it has made a sandbox`);
+    }
+    expect(wrong).toEqual([]);
   });
 });

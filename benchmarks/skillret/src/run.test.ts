@@ -580,7 +580,7 @@ describe("the manifest of a run", () => {
     });
     expect(manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4"], scored: ["q1", "q2", "q3", "q4"], errored: [] });
     expect(manifest.config.redacted).toEqual({ keyword: summary.config.keyword, semantic: summary.config.semantic });
-    expect(summary).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null });
+    expect(summary).toMatchObject({ corpus: "public", corpus_folder: null, seed: null });
   });
 
   test("a query whose call failed is errored in the completion, and a skill that changed is another input for every query", async () => {
@@ -604,11 +604,11 @@ describe("the manifest of a run", () => {
     for (const [id, digest] of Object.entries<any>(limited.cases)) expect(digest).toEqual(full.cases[id]);
   });
 
-  test("the custom corpus is a split of the dataset: its summary says so, with its seed as text, and it holds nothing private", async () => {
+  test("the custom corpus is a split of the dataset: its summary records no folder, and its seed as text", async () => {
     const s = setup();
     const corpus: Corpus = { ...s.corpus, corpus: "private" };
     const { summary } = stored((await logged(() => runCorpus(corpus, s.ctx({ label: "c", semantic: false }), folders(s)))).result.results_dir);
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42" });
+    expect(summary).toMatchObject({ corpus: "custom", corpus_folder: null, seed: "42" });
     expect(summary.manifest).toMatchObject({ corpus: "custom", settings: { seed: "42" } });
     expect(manifestProblems(summary.manifest)).toEqual([]);
   });
@@ -679,7 +679,7 @@ describe("rescore", () => {
     const was = stored(result.results_dir);
     const dir = `${result.results_dir}-before`;
     mkdirSync(dir);
-    const { manifest: _m, corpus_kind: _k, corpus_private: _p, corpus_folder: _f, ...legacy } = was.summary;
+    const { manifest: _m, corpus_folder: _f, ...legacy } = was.summary;
     writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
     writeFileSync(join(dir, "samples.jsonl"), was.rows.map(({ search: { scores: _s, ...search }, ...row }) => `${JSON.stringify({ ...row, search })}\n`).join(""));
     const again = rescoreRun(readStored(dir), { root: repo(s) });
@@ -718,7 +718,7 @@ describe("rescore", () => {
     const { result } = await logged(() => runCorpus(custom, s.ctx({ label: "split", semantic: false }), { assets: s.assets, results: s.results }));
     clearRunning(result.results_dir);
     const was = stored(result.results_dir);
-    expect(was.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42", n_queries: 4 });
+    expect(was.summary).toMatchObject({ corpus: "custom", corpus_folder: null, seed: "42", n_queries: 4 });
     const root = repo(s);
     // the split is drawn again from the data files and the sample the summary records, with no folder
     expect(MEASUREMENT.loadCases(root, was.summary)).toEqual(custom.queries);

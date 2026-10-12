@@ -10,7 +10,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
@@ -53,15 +53,13 @@ ${akmUsage}
 
 Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
 
-/** What the summary of a run records of its corpus: public or custom, the kind, whether it is private, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
+/** What the summary of a run records of its corpus: public or custom, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
 interface CorpusFields {
   corpus: "public" | "custom";
-  corpus_kind: string;
-  corpus_private: boolean;
   corpus_folder: string | null;
 }
 
-export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ ...corpusRecord(c), corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null }) as CorpusFields;
+export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ corpus: c.name, corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null });
 
 interface Summary extends RunInputs, CorpusFields {
   eval: string;
@@ -184,7 +182,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const embedder = ctx.embedder ?? "deterministic";
   const config = effectiveConfig(ctx);
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const build = akmBuild();
   const summary: Summary = {
     eval: NAME,
@@ -232,7 +230,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -244,7 +242,7 @@ async function main(): Promise<void> {
     return;
   }
   const publicAssets = join(EVAL_DIR, "assets");
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
@@ -254,16 +252,15 @@ async function main(): Promise<void> {
 
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl") : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
+    const problem = c.rewrite ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl") : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
     if (problem) fail(problem);
   }
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const newSandbox = () => createSandbox(NAME, sandboxOptions(embedder)); // the config names the model key as $MODEL_API_KEY; the real embedder's model is kept in .cache/
   const probe = newSandbox();

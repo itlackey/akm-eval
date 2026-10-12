@@ -5,7 +5,7 @@
 //
 // `--model ID` (and `--judge-model ID`, for the two that grade with a model) is sent to the one endpoint in .env, a gateway:
 // ID is the gateway's model id, so a model needs no setting of its own. Without the flag the id is MODEL_NAME (JUDGE_MODEL), as before.
-// A model that is not behind the gateway, or that a run on a private corpus may use (`"private": true`, see lib/corpus.ts), needs a line in `models.json`, beside .env (see models.example.json):
+// A model that is not behind the gateway needs a line in `models.json`, beside .env (see models.example.json):
 //
 //   { "gpt-5.6-terra": { "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY" } }
 //
@@ -40,20 +40,16 @@ export interface ModelEntry {
   base_url: string;
   /** The name of the environment variable that holds the key (set it in .env). Leave it out for a server that needs none. Never put a key in models.json. */
   api_key_env?: string;
-  /** True when your private notes may be sent to this model: you run it, or its provider does not keep or train on what it gets. Left out, false: a run on a private corpus refuses the model. */
-  private?: boolean;
 }
 
 /** The keys a line of models.json may have. Any other is refused, so a typo such as "privat" cannot pass for a setting, and a key cannot sit in the file. */
-const LINE_KEYS = ["model", "base_url", "api_key_env", "private"];
+const LINE_KEYS = ["model", "base_url", "api_key_env"];
 
 export interface ModelSettings {
   /** The name sent to the endpoint. */
   name: string;
   baseUrl: string;
   apiKey: string;
-  /** The `private` flag of the model's line in models.json. A model with no line is not private. */
-  private: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -79,11 +75,11 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     if (typeof e !== "object" || e === null || typeof e.base_url !== "string" || !e.base_url.trim()) throw new Error(`models.json: "${id}" needs a base_url`);
     for (const key of Object.keys(e)) {
       if (LINE_KEYS.includes(key)) continue;
+      if (key === "private") throw new Error(`models.json: "${id}" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.`);
       const hint = key === "api_key" ? ": a key belongs in the environment. Set it in .env and name its variable in api_key_env" : "";
       throw new Error(`models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`);
     }
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
-    if (e.private !== undefined && typeof e.private !== "boolean") throw new Error(`models.json: "${id}": private must be true or false`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);
   }
   return json as Record<string, ModelEntry>;
@@ -104,24 +100,16 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
   if (entry) {
     const key = entry.api_key_env ? env[entry.api_key_env]?.trim() : "";
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
-    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", private: entry.private === true };
+    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "" };
   }
   // The judge falls back to the model's endpoint and key when it names none of its own: the explicit fallback, else MODEL_* in env.
   const judgeOwnsNone = role === "judge" && !env.JUDGE_BASE_URL?.trim();
   const fallbackUrl = fallback?.baseUrl.trim();
-  if (judgeOwnsNone && fallback && fallbackUrl) return { name: id, baseUrl: fallbackUrl, apiKey: fallback.apiKey.trim(), private: false };
+  if (judgeOwnsNone && fallback && fallbackUrl) return { name: id, baseUrl: fallbackUrl, apiKey: fallback.apiKey.trim() };
   const [urlName, keyName] = judgeOwnsNone ? (["MODEL_BASE_URL", "MODEL_API_KEY"] as const) : ([urlVar, keyVar] as const);
   const baseUrl = env[urlName]?.trim();
   if (!baseUrl) throw new Error(`${id} is sent to the gateway: set ${urlName} in .env (and ${keyName} if it needs a key). See .env.example.`);
-  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim(), private: false };
-}
-
-/**
- * The refusal for a run on a private corpus (`flag` names it, as the run was told) that would send your `what` (notes, memories) to a model
- * or a judge (`role`) whose models.json line is not `"private": true`, or undefined when it may. lib/corpus.ts decides which corpus is private.
- */
-export function privateModelError(m: ModelSettings, flag: string, what: string, role: "model" | "judge" = "model"): string | undefined {
-  return m.private ? undefined : `${flag} sends your ${what} to ${role === "judge" ? "the judge " : ""}${m.name}, which is not marked "private": true in models.json.`;
+  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim() };
 }
 
 /**

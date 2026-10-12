@@ -38,7 +38,7 @@ function stored(mode: "case" | "pool", lines: { case: string; raw: any }[], edit
   dirs.push(join(dir, ".."));
   mkdirSync(dir, { recursive: true });
   const written = edit(rows);
-  const summary = { eval: "consolidate", corpus: extra.corpus ?? "public", ...(extra.corpus === "custom" ? { corpus_kind: "own", corpus_private: true, corpus_folder: extra.corpus_folder ?? null } : {}), ...(mode === "pool" ? { mode: "pool" } : {}), label: "golden", status: "complete", aborted_reason: null, embedder: "deterministic", ...MEASUREMENT.summarize(rows), manifest };
+  const summary = { eval: "consolidate", corpus: extra.corpus ?? "public", ...(extra.corpus === "custom" ? { corpus_folder: extra.corpus_folder ?? null } : {}), ...(mode === "pool" ? { mode: "pool" } : {}), label: "golden", status: "complete", aborted_reason: null, embedder: "deterministic", ...MEASUREMENT.summarize(rows), manifest };
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   writeFileSync(join(dir, "samples.jsonl"), written.map((r) => `${JSON.stringify(r)}\n`).join(""));
   return { dir, rows: written };

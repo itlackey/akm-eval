@@ -17,7 +17,7 @@ A run on the public corpus is scored against the committed cases. A run on a cus
 which the summary records when the folder is inside the repository. A folder outside it is not recorded (its name can say what is in it), so
 give it with --cases DIR; DIR is from the repository root, as for the evals, or absolute. --cases applies to every folder given, and also
 names the cases of a custom run whose folder has moved. The rescored summary records the folder it was scored against. The custom corpus
-of benchmarks/skillret is a split of its dataset and has no folder (corpus_kind "split"): its queries are drawn from the dataset files
+of benchmarks/skillret is a split of its dataset and has no folder: its queries are drawn from the dataset files
 again, with no --cases, and a --cases given with it has no folder to apply to and is left unused.
 
 A run whose rows lack a field the scorer reads is refused, and the fields are named. So is a run of an eval that has no src/measurement.ts,

@@ -29,8 +29,8 @@ evals/bakeoff/run --corpus all
 evals/bakeoff/run --process schema-repair --repeat 3
 ```
 
-- `--corpus` picks the cases. `public` is the committed cases. `custom` is a folder of cases with a `corpus.json`: by default `private/bakeoff/assets`, the public cases rewritten from a seed. `all` runs both and prints the two results side by side, never as one number. `--corpus private` still works for one release, as `--corpus custom`. See "Corpora" in the root README.
-- `--cases DIR` runs the corpus in `DIR`, which holds a `cases.json` and the files it names (see "Assets"). It is `--corpus custom --cases DIR`. A folder with no `corpus.json` is taken for your own notes, which are private: a model that `models.json` does not mark `"private": true` is refused before anything runs.
+- `--corpus` picks the cases. `public` is the committed cases. `custom` is `private/bakeoff/assets`, the public cases rewritten from a seed, or the folder `--cases DIR` names. `all` runs both and prints the two results side by side, never as one number. See "Corpora" in the root README.
+- `--cases DIR` runs the corpus in `DIR`, which holds a `cases.json` and the files it names (see "Assets"). It is `--corpus custom --cases DIR`. It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README).
 - `--process NAME` runs one process only.
 - `--limit N` runs N cases, the first of each process in turn, so a short run covers every process.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
@@ -41,12 +41,12 @@ The custom run reads `private/bakeoff/assets/`. Make it first with `./generate-a
 
 Each run writes two files to `evals/bakeoff/results/<UTC date>-<label>/`, or to `private/bakeoff/results/` for a custom corpus:
 
-- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus (`corpus`, `corpus_kind`, `corpus_private`, and `corpus_folder` when it is inside the repository) and the git commit. It also says what the run was made of, and whether it finished:
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus (`corpus`, and `corpus_folder` when it is inside the repository) and the git commit. It also says what the run was made of, and whether it finished:
   - `config`: the akm config the eval wrote, with the value of every credential field replaced by `<redacted>` (`credentialField` in `lib/provenance.ts` decides by the name: `apiKey`, `api_key`, `token`, `secret`, `password`, `authorization` and the like) (a `$NAME` reference to an environment variable is kept) and the model's endpoint written as `<MODEL_BASE_URL>`.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `endpoint_id` (a sha256 of the endpoint's identity), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engine, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
   - `assets_sha256`: the digest of the corpus folder, `cases.json` and the files it names, by path from the folder, so two runs on the same cases have the same digest wherever the repository is.
-  - `seed`: for a rewrite, the seed its assets were made with (`corpus.json`); `null` for the public corpus and for your own.
+  - `seed`: for a rewrite, the seed its assets were made with (from `generated.json`); `null` for the public corpus and for your own.
   - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
   - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed.
 - `samples.jsonl`: one line per case, with the outcome, the checks and the raw output: the derived memory, the memory `akm remember` wrote, the repair proposal, the session asset, or the plan and the promotions. The raw output of a case is `outcome`, `reason`, `served`, `seconds`, `error`, `timed_out` and whichever of `derived`, `written`, `proposal`, `asset`, `planned`, `promoted` and `skipped` its process makes; the shape and the checks are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.

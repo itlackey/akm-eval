@@ -19,7 +19,7 @@ import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
-const PUBLIC = resolveCorpora({ eval: "agent-ab", values: {}, publicFolder: EVAL_DIR, default: "rewrite" })[0] as ResolvedCorpus;
+const PUBLIC = resolveCorpora({ eval: "agent-ab", values: {}, publicFolder: EVAL_DIR })[0] as ResolvedCorpus;
 
 /** The rows of a samples.jsonl: one per task, with all its trials, the control's and the akm arm's. */
 const rowsOf = (dir: string): any[] => readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -60,7 +60,7 @@ describe("sideBySide", () => {
   test("puts the two corpora in columns and pools nothing", () => {
     const pub = buildReport([trial("a", "control", 0), trial("a", "akm", 1), trial("b", "control", 0), trial("b", "akm", 1)]);
     const priv = buildReport([trial("c", "control", 0), trial("c", "akm", 0)]);
-    const lines = sideBySide({ corpus: "public", report: pub }, { corpus: "private", report: priv });
+    const lines = sideBySide({ corpus: "public", report: pub }, { corpus: "custom", report: priv });
     expect(lines[0]).toContain("side by side (not pooled)");
     expect(lines.join("\n")).toContain("public");
     expect(lines.find((l) => l.includes("difference"))).toContain("+1.000 [1.000, 1.000] over 2 tasks");
@@ -70,7 +70,7 @@ describe("sideBySide", () => {
 
   test("copes with a run that scored nothing", () => {
     const empty = buildReport([]);
-    expect(sideBySide({ corpus: "public", report: empty }, { corpus: "private", report: empty }).join("\n")).toContain("n/a");
+    expect(sideBySide({ corpus: "public", report: empty }, { corpus: "custom", report: empty }).join("\n")).toContain("n/a");
   });
 });
 
@@ -638,14 +638,14 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
 
     const ran = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
     expect(ran.code).toBe(0);
-    expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
+    expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
     expect(summary("p", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: "7" } });
 
-    // The old value works for one more release, says what it is now, and is the same corpus.
+    // The old value stops before anything runs.
     const old = run(["--corpus", "private", "--limit", "1", "--label", "old"]);
-    expect(old.code).toBe(0);
-    expect(old.err).toContain("agent-ab: --corpus private is now --corpus custom. The old value works for one more release.");
-    expect(summary("old", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", seed: "7" });
+    expect(old.code).toBe(2);
+    expect(old.err).toContain("agent-ab: --corpus private was renamed in 0.2: use --corpus custom (the rewrite in private/<eval>/assets), or --cases DIR for a folder of your own");
+    expect(readdirSync(join(root, "private", "agent-ab", "results")).some((d) => d.endsWith("-old"))).toBe(false); // it made no results folder
   }, 60_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the cases there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
@@ -653,7 +653,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const ownTasks = (to: string) => {
       cpSync(join(root, "evals", "agent-ab", "tasks"), join(to, "tasks"), { recursive: true });
       cpSync(join(root, "evals", "agent-ab", "libraries"), join(to, "libraries"), { recursive: true });
-      writeFileSync(join(to, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
     };
     // the public corpus has no folder to record
     expect(run(["--limit", "2", "--label", "pub"]).code).toBe(0);
@@ -663,8 +662,8 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the cases from it
     const mine = join(root, "notes", "mine");
     ownTasks(mine);
-    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
-    expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes/mine" });
+    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
     expect(inside.result.changed).toEqual([]);
     expect(inside.result.dropped).toEqual([]);
@@ -679,7 +678,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownTasks(outside);
-    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
     const stored = summary("out", "custom");
     expect(stored).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
@@ -693,28 +692,22 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(readFileSync(join(given.out, "summary.json"), "utf8")).not.toContain(outside);
   }, 120_000);
 
-  test("run --cases DIR runs a folder of your own tasks as a custom corpus, and keeps it from a model that models.json does not mark private unless its corpus.json says it holds nothing private", () => {
+  test("run --cases DIR runs a folder of your own tasks as a custom corpus, and refuses one without tasks/ and libraries/", () => {
     const { root, run, summary } = repo();
     const mine = join(root, "mine");
     cpSync(join(root, "evals", "agent-ab", "tasks"), join(mine, "tasks"), { recursive: true });
     cpSync(join(root, "evals", "agent-ab", "libraries"), join(mine, "libraries"), { recursive: true });
-    const refused = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--cases mine sends your tasks to openai/x, which is not marked "private": true in models.json.');
-    expect(refused.err).toContain("it has no corpus.json, and an own corpus without one is private");
-    expect(refused.out).not.toContain("tasks x 2 arms"); // nothing ran
-
-    // a model that models.json marks private may see it
-    writeFileSync(join(root, "models.json"), JSON.stringify({ mine: { base_url: "http://192.0.2.9:8080/v1", api_key_env: "MINE_KEY", private: true } }));
-    const ran = run(["--cases", "mine", "--model", "mine", "--limit", "1", "--label", "own"], { MINE_KEY: "k" });
+    // it asks before anything runs: with no terminal and no -y it stops, naming the model and the endpoint the agent will use
+    const asked = run(["--cases", "mine", "--limit", "1", "--label", "asked"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at its provider's own endpoint without asking");
+    const gateway = run(["--cases", "mine", "--limit", "1", "--label", "asked"], { MODEL_BASE_URL: "https://user:SYNTH-pass@gw.example.net:8443/deployment/v1?api_key=SYNTH-key" });
+    expect(gateway.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at https://gw.example.net:8443/deployment/v1 without asking");
+    expect(gateway.err + gateway.out).not.toContain("SYNTH");
+    expect(existsSync(join(root, "private", "agent-ab", "results"))).toBe(false); // nothing ran
+    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
     expect(ran.code, ran.err).toBe(0);
-    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "mine", seed: null, status: "complete" });
-    rmSync(join(root, "models.json"));
-
-    // a folder that says it holds nothing private may go to any model
-    writeFileSync(join(mine, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
-    expect(run(["--cases", "mine", "--limit", "1", "--label", "open"]).code).toBe(0);
-    expect(summary("open", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: false });
+    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "mine", seed: null, status: "complete" });
     rmSync(join(mine, "tasks"), { recursive: true });
     const empty = run(["--cases", "mine", "--limit", "1", "--label", "empty"]);
     expect(empty.code).toBe(2);

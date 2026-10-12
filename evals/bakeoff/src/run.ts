@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
@@ -49,8 +49,6 @@ Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 interface Summary {
   eval: string;
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, so scripts/rescore can read its cases. Null for the public corpus and for a folder outside the repository (then rescore takes --cases DIR). Never an absolute path. */
   corpus_folder: string | null;
   label: string;
@@ -75,7 +73,7 @@ interface Summary {
   engine: EngineSettings;
   /** The digest of the corpus folder: cases.json and the files the cases name, by path relative to it. */
   assets_sha256: string;
-  /** The seed of the corpus, when it is a rewrite of the public cases (corpus.json). Null for the public corpus and for your own. */
+  /** The seed of the corpus, when it is a rewrite of the public cases. Null for the public corpus and for your own. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -145,7 +143,7 @@ const resultsFolder = (corpus: ResolvedCorpus): string => (corpus.name === "publ
 export function corpusProblem(corpus: ResolvedCorpus): string | undefined {
   if (corpus.name === "public") return undefined;
   const where = corpusFolderOf(corpus.folder) ?? corpus.folder;
-  const again = corpus.config.kind === "rewrite" ? ". Make it with: ./generate-assets --only bakeoff" : "";
+  const again = corpus.rewrite ? ". Make it with: ./generate-assets --only bakeoff" : "";
   return existsSync(join(corpus.folder, "cases.json")) ? undefined : `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
 }
 
@@ -184,7 +182,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const config = configFor(ctx);
   const build = akmBuild();
   const counts = summarize(rows);
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const manifest = buildManifest({
     measurement: MEASUREMENT,
     corpus: corpus.name,
@@ -196,7 +194,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -233,7 +231,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; process?: string; limit?: string; repeat?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; process?: string; limit?: string; repeat?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, process: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, "config-patch": OVERRIDE_OPTIONS["config-patch"], ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -255,11 +253,9 @@ async function main(): Promise<void> {
   if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) fail(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
   const configPatch = parseOverrides({ "config-patch": values["config-patch"] }, "", fail).configPatch;
 
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   for (const c of corpora) {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
@@ -267,6 +263,7 @@ async function main(): Promise<void> {
   const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const probe = createSandbox(NAME);
   let version: string;

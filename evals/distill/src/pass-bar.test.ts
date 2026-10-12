@@ -283,7 +283,7 @@ describe("judgedLessons", () => {
       return where;
     };
     const own = at(join("private", "distill", "own", "assets"));
-    const recorded = runOf(root, own, { corpus: "custom", corpus_kind: "own", corpus_folder: "private/distill/own/assets" }, undefined, { ...manifestOf(own), corpus: "custom" });
+    const recorded = runOf(root, own, { corpus: "custom", corpus_folder: "private/distill/own/assets" }, undefined, { ...manifestOf(own), corpus: "custom" });
     expect(judgedLessons(recorded, { root }).inputs).toMatchObject({ corpus: "custom", assets: join("private", "distill", "own", "assets"), differences: [] });
     for (const [corpus, folder] of [["private", join("private", "distill", "assets")], ["own", join("private", "distill", "own", "assets")], ["own-feedback", join("private", "distill", "own", "assets-feedback")]] as const) {
       const where = at(folder);

@@ -17,26 +17,26 @@ evals/extract/run --cases ~/notes/extract
 evals/extract/run --corpus all
 ```
 
-- `--corpus` picks the assets: `public` (the default), `custom` or `all`, which runs both and prints the two results side by side, never as one number. `--cases DIR` names a custom corpus of your own and is `--corpus custom`. `--corpus private` still works for one more release, with a line that names the new form. See "Corpora" in the root README.
+- `--corpus` picks the assets: `public` (the default), `custom` or `all`, which runs both and prints the two results side by side, never as one number. `--cases DIR` names a custom corpus of your own and is `--corpus custom`. See "Corpora" in the root README.
 - `--limit N` runs N sessions, taken from each class in turn, in file order. The first three cover a fact, an empty session and a planted instruction, and the first five every class. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--strategy NAME` runs the akm strategy NAME in place of `extract-only`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256. The triage thresholds, the event cut and the budget of extract are settings of this kind.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The default custom corpus is `private/extract/assets/`, the public cases rewritten from a seed. Make it first with `./generate-assets --only extract`. The run stops with an error when it is missing, and the error says to make it. A corpus of your own notes is a folder with the same layout (see "Run your own set") and a `corpus.json`; with none, it is private, and the run refuses a model that `models.json` does not mark `"private": true` before it starts. See "The private flag" in the root README.
+The default custom corpus is `private/extract/assets/`, the public cases rewritten from a seed. Make it first with `./generate-assets --only extract`. The run stops with an error when it is missing, and the error says to make it. A corpus of your own notes is a folder with the same layout (see "Run your own set").
 
 A session takes about 15 seconds on a 27B model on a local GPU, 30 for the longest, and a whole run about six minutes. The sessions run one at a time.
 
 Each run writes two files to `evals/extract/results/<UTC date>-<label>/`, or to `private/extract/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many sessions ran, were scored and errored (`n_errored`, and `timeouts`, how many of those errors were an akm that did not answer in time), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of:
-  - `corpus`: `public` or `custom`, with `corpus_kind` (`rewrite` or `own`), `corpus_private` and `corpus_folder` (the folder of a custom corpus from the repository root, written with `/`; null when the folder is outside the repository and for the public corpus; `scripts/rescore` reads the cases of a custom run from it). It never records an absolute path.
+  - `corpus`: `public` or `custom`, with `corpus_folder` (the folder of a custom corpus from the repository root, written with `/`; null when the folder is outside the repository and for the public corpus; `scripts/rescore` reads the cases of a custom run from it). It never records an absolute path.
   - `strategy` and `config_patch` (path and SHA-256, or null): see `--strategy` and `--config-patch`.
   - `config`: the akm config the eval wrote for every session, with the patch merged in, as the file has it and with any key redacted. The model's key is a `$MODEL_API_KEY` reference and not a key, and the model's endpoint is written as `<MODEL_BASE_URL>` (its identity is in `engine`), so a summary can be shared. A URL that a config patch sets itself is recorded as the patch has it.
   - `engine`: the settings of the model under test in that config: `temperature`, `enableThinking`, `timeoutMs`, the engine's name, the model name, its `endpoint` (the host and port, never the path) and its `endpoint_id` (a sha256 of the endpoint's identity). The eval sets temperature 0 and thinking off, and a patch can change them, so this is where two runs are shown to have used the same settings.
   - `assets_sha256`: one SHA-256 over `cases.json` and every session file of the corpus, named by their place in `assets/`. It covers every case, whatever `--limit` picked, so a change to a case or a session changes it. Compare results only between runs with the same digest.
-  - `seed`: for a rewrite, the seed that made it, as written (a 64-bit integer), from its `corpus.json`. Null for the public corpus and for a corpus of your own.
+  - `seed`: for a rewrite, the seed that made it, as written (a 64-bit integer), from its `generated.json`. Null for the public corpus and for a corpus of your own.
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engines, the strategy and the config patch, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
 - `samples.jsonl`: one line per session, with its class, what extract did, whether it was correct, the memories it saved with their text, type, confidence and `similarity`, the facts they missed, the planted claims they made (`forbidden`), the planted phrases they hold only behind a negation over a verb the rule does not list (`ambiguous`), the model's reason when it saved nothing, and the time. A session that errored because akm did not answer in time has `timed_out: true`. The raw output of the session is `outcome`, `detail`, `saved` (the ref, type, confidence and text of each memory), `seconds`, `error` and `timed_out`; the rest of the row is scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
 
@@ -48,7 +48,7 @@ The eval is in two parts (see "How results stay comparable" in the root README).
 
 ## Run your own set
 
-`--cases DIR` runs a folder in the layout of `assets/`: a `cases.json` and a session for each case at `sessions/<project>/<id>.jsonl`, as in "Assets", and a `corpus.json` (`{ "kind": "own", "private": true }`). The fields of a case are in `assets/README.md`. The run records `corpus_folder` when DIR is inside the repository, which is how `scripts/rescore` finds the cases again. For a folder outside it the run records null, and `scripts/rescore` is given the folder with `--cases DIR`.
+`--cases DIR` runs a folder in the layout of `assets/`: a `cases.json` and a session for each case at `sessions/<project>/<id>.jsonl`, as in "Assets". It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README). The fields of a case are in `assets/README.md`. The run records `corpus_folder` when DIR is inside the repository, which is how `scripts/rescore` finds the cases again. For a folder outside it the run records null, and `scripts/rescore` is given the folder with `--cases DIR`.
 
 ## How extract is run
 

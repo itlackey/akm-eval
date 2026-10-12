@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
   type AkmArm,
@@ -27,7 +27,6 @@ import {
   pinsOf,
   positive,
   preflight,
-  privacyModel,
   releaseArm,
   statusOf,
 } from "../../../lib/harbor/harbor.ts";
@@ -74,8 +73,6 @@ interface Summary {
   /** `public` or `custom`. */
   corpus: string;
   /** For a custom corpus, `rewrite` (the public tasks rewritten from a seed) or `own`; `public` for the public one. */
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the cases from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
   corpus_folder: string | null;
   label: string;
@@ -196,14 +193,14 @@ export async function runCorpus(
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
     engines: { opencode: { model: ctx.model, ...endpointOf(ctx.env), temperature: null, enableThinking: null, timeoutMs: null } },
-    settings: { seed: c.config.seed ?? null },
+    settings: { seed: c.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     treatment_hints: { attempts },
     completion: casesCompletion(MEASUREMENT, tasks, rows),
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(c),
+    corpus: c.name,
     corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -213,7 +210,7 @@ export async function runCorpus(
     ...akmFields,
     pins: pinsOf(arm),
     limit: ctx.limit ?? null,
-    seed: c.config.seed ?? null,
+    seed: c.seed,
     n_tasks: tasks.length,
     attempts,
     harbor_exit: got.exit,
@@ -244,13 +241,13 @@ export async function runCorpus(
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = corpusFolderOf(c.folder) ?? "the folder of --cases";
-  if (c.config.kind === "rewrite") return privateAssetsProblem(c.folder, where);
+  if (c.rewrite) return privateAssetsProblem(c.folder, where);
   if (c.name === "custom" && !(existsSync(join(c.folder, "tasks")) && existsSync(join(c.folder, "libraries")))) return `${where} must hold tasks/ and libraries/, laid out as the public ones are (see "Run your own set" in the README)`;
   return undefined;
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -265,7 +262,7 @@ async function main(): Promise<void> {
   } catch (e) {
     fail((e as Error).message);
   }
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: EVAL_DIR, default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: EVAL_DIR, fail });
   const limit = positive("--limit", values.limit);
   const repeat = positive("--repeat", values.repeat);
   const akmEnv = parseAkmEnv(values["akm-env"]);
@@ -274,9 +271,10 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env } = preflight(values, (run) => privacyError(corpora, { model: privacyModel(run) }, "tasks"));
+  const { model, env } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-")); // where a checkout is packed. Each run keeps a copy of the tarballs
   try {

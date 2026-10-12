@@ -36,7 +36,6 @@ import {
   parseAkmEnv,
   pinsOf,
   positive,
-  privacyModel,
   relativePaths,
   releaseArm,
   sha256Dir,
@@ -88,7 +87,7 @@ describe("modelSettings", () => {
   });
 
   test("sends a model that has a line in models.json to that line's endpoint, with that line's key, and not to the gateway", () => {
-    const lines = { "my-cloud-model": { model: "gpt-5.6-terra", base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY", private: true } };
+    const lines = { "my-cloud-model": { model: "gpt-5.6-terra", base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
     const host = { MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "gateway-key", MODEL_NAME: "other", CLOUD_KEY: "cloud-secret", JUDGE_API_KEY: "judge" };
     const r = modelSettings("my-cloud-model", host, lines);
     expect(r.model).toBe("openai/gpt-5.6-terra");
@@ -195,14 +194,14 @@ describe("modelSettings", () => {
     expect(modelSettings(undefined, { ...gateway, MODEL_NAME: "Qwen/Qwen2.5-7B" }, none).model).toBe("openai/Qwen/Qwen2.5-7B");
     // The model of a models.json line, which may have a slash in the name the endpoint expects, goes to opencode the same way.
     const lines = { alias: { model: "groq/llama-4", base_url: "https://api.example.com/v1", api_key_env: "K" }, plain: { base_url: "https://api.example.com/v1", api_key_env: "K" } };
-    expect(modelSettings("alias", { K: "k" }, lines)).toEqual({ model: "openai/groq/llama-4", env: { OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.example.com/v1" }, private: false });
+    expect(modelSettings("alias", { K: "k" }, lines)).toEqual({ model: "openai/groq/llama-4", env: { OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.example.com/v1" } });
     expect(modelSettings("plain", { K: "k" }, lines).model).toBe("openai/plain");
   });
 
   test("finds the models.json line for --model openai/<line>, as for <line> (#73)", () => {
     const lines = { "my-cloud-model": { model: "gpt-5.6-terra", base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
     const host = { MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "gateway-key", CLOUD_KEY: "cloud-secret" };
-    const want = { model: "openai/gpt-5.6-terra", env: { OPENAI_API_KEY: "cloud-secret", OPENAI_BASE_URL: "https://api.example.com/v1" }, private: false };
+    const want = { model: "openai/gpt-5.6-terra", env: { OPENAI_API_KEY: "cloud-secret", OPENAI_BASE_URL: "https://api.example.com/v1" } };
     expect(modelSettings("my-cloud-model", host, lines)).toEqual(want);
     expect(modelSettings("openai/my-cloud-model", host, lines)).toEqual(want);
     expect(modelSettings(undefined, { ...host, MODEL_NAME: "openai/my-cloud-model" }, lines)).toEqual(want);
@@ -230,22 +229,10 @@ describe("modelSettings", () => {
 
   test("a keyless local server is run as the READMEs say: any non-empty MODEL_API_KEY, and an address a container can reach", () => {
     const server = { MODEL_NAME: "my-local-model", MODEL_BASE_URL: "http://192.168.1.20:8080/v1" };
-    expect(modelSettings(undefined, { ...server, MODEL_API_KEY: "unused" }, none)).toEqual({ model: "openai/my-local-model", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" }, private: false });
+    expect(modelSettings(undefined, { ...server, MODEL_API_KEY: "unused" }, none)).toEqual({ model: "openai/my-local-model", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" } });
     expect(() => modelSettings(undefined, server, none)).toThrow("no model key"); // the rule is not relaxed for a server that wants none
     expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "" }, none)).toThrow("no model key");
     expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "unused", MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("the container itself");
-  });
-
-  test("says whether the model's line in models.json is marked private, and a model with no line is not (lib/corpus.ts turns a private corpus away from the rest)", () => {
-    const lines = { mine: { base_url: "https://api.example.com/v1", api_key_env: "K", private: true }, theirs: { base_url: "https://api.example.com/v1", api_key_env: "K" } };
-    const host = { K: "k", MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "g", OPENAI_API_KEY: "o" };
-    expect(modelSettings("mine", host, lines).private).toBe(true);
-    expect(modelSettings("openai/mine", host, lines).private).toBe(true);
-    expect(modelSettings("theirs", host, lines).private).toBe(false);
-    expect(modelSettings("on-the-gateway", host, lines).private).toBe(false);
-    expect(modelSettings("gpt-6", { OPENAI_API_KEY: "o" }, {}).private).toBe(false); // an openai model with no gateway
-    expect(modelSettings("anthropic/claude-x", {}, {}).private).toBe(false); // another provider's model, left to Harbor
-    expect(privacyModel({ model: "openai/mine", private: true })).toEqual({ name: "openai/mine", baseUrl: "", apiKey: "", private: true });
   });
 });
 
@@ -676,7 +663,7 @@ describe("loadRunTrials", () => {
     expect(lines.find((l) => l.startsWith("  control"))).toContain(", 1 timed out");
     expect(lines.find((l) => l.startsWith("  akm"))).toContain(", 2 timed out");
     expect(lines.find((l) => l.startsWith("  akm"))).not.toContain("AgentSetupTimeoutError"); // a time-out is not also listed among the other exceptions
-    expect(sideBySide("t", { corpus: "public", report }, { corpus: "private", report }).find((l) => l.includes("timed out"))).toContain("1 control trials, 2 akm trials");
+    expect(sideBySide("t", { corpus: "public", report }, { corpus: "custom", report }).find((l) => l.includes("timed out"))).toContain("1 control trials, 2 akm trials");
     // Trials read straight from a Harbor folder carry no timed_out, and say it by their exceptions: the same two.
     const raw = loadTrials(job);
     expect(buildReport(raw).akm.timeouts).toBe(2);

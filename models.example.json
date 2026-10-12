@@ -1,4 +1,4 @@
 {
   "my-cloud-model": { "base_url": "https://api.example.com/v1", "api_key_env": "EXAMPLE_API_KEY" },
-  "my-local-model": { "base_url": "http://localhost:8101/v1", "private": true }
+  "my-local-model": { "base_url": "http://localhost:8101/v1" }
 }

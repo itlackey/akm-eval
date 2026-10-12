@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
@@ -34,8 +34,7 @@ Runs akm's distill on the memory of each case, with the model in MODEL_BASE_URL,
 as akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.
 
 ${corpusUsage}
-            The default custom corpus is the rewrite in private/distill/assets, made by ./generate-assets. Your own labelled memories are
-            a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.
+            Your own labelled memories are a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.
   --limit   run N cases, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -50,10 +49,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom`. */
   corpus: string;
-  /** For a custom corpus, `rewrite` (the public cases rewritten from a seed) or `own` (your notes). `public` for the public one. */
-  corpus_kind: string;
-  /** True when the corpus may go only to a model that models.json marks `"private": true`. */
-  corpus_private: boolean;
   /** For a custom corpus, its folder from the repository root, or null when it is outside it; null for the public corpus. scripts/rescore reads the cases from here (--cases DIR when it is null). */
   corpus_folder: string | null;
   label: string;
@@ -79,7 +74,7 @@ interface Summary {
   engine: EngineSettings;
   /** One digest over the corpus's cases.json and bundle files, named relative to the corpus folder. */
   assets_sha256: string;
-  /** The seed of a rewrite (corpus.json or generated.json). Null for the public corpus and for your own notes, which no seed made. */
+  /** The seed of a rewrite, from its generated.json. Null for the public corpus and for your own notes, which no seed made. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -171,7 +166,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
   const abortedReason = `${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const build = akmBuild();
-  const seed = corpus.config.seed ?? null; // a rewrite has one, your own notes do not: no seed made them
+  const seed = corpus.seed; // a rewrite has one, your own notes do not: no seed made them
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -184,7 +179,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null, // the cases of a public run are where the repository has them
     label: ctx.label,
     date: new Date().toISOString(),
@@ -220,7 +215,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -240,23 +235,20 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  // --corpus own and own-feedback are the old names of two custom corpora of your own memories, which work for one more release.
-  const aliases = { private: ALIASES.private, own: { folder: join("own", "assets"), kind: "own" as const }, "own-feedback": { folder: join("own", "assets-feedback"), kind: "own" as const } };
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
 
   for (const c of corpora) {
     if (c.name === "public") continue;
     if (!existsSync(join(c.folder, "cases.json"))) {
-      fail(`${c.flag} has no cases.json in ${corpusFolderOf(c.folder) ?? c.folder}.${c.config.kind === "rewrite" ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
+      fail(`${c.flag} has no cases.json in ${corpusFolderOf(c.folder) ?? c.folder}.${c.rewrite ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
     }
   }
   useAkm(values, fail);
   const settings = useModel(values, fail);
   const { baseUrl, name: model, hasKey } = settings;
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const probe = createSandbox(NAME);
   let version: string;

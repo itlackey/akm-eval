@@ -21,7 +21,7 @@ const BENCH_DIR = join(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
 const lock = readLock();
 // The corpora of a run, as the command line resolves them: the library is the retrieval eval's, so its custom corpus is retrieval's.
-const corpora = (values: { corpus?: string; cases?: string } = {}): ResolvedCorpus[] => resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), default: "rewrite" });
+const corpora = (values: { corpus?: string; cases?: string } = {}): ResolvedCorpus[] => resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus") });
 const PUBLIC = corpora()[0] as ResolvedCorpus;
 const PRIVATE = corpora({ corpus: "custom" })[0] as ResolvedCorpus;
 const CANARY = ["terminal-bench", "canary"].join("-"); // written so this file does not hold it
@@ -821,8 +821,8 @@ describe("otherDigests", () => {
 describe("sideBySide", () => {
   test("is the shared table under this benchmark's name", () => {
     const empty = buildReport([]);
-    const lines = sideBySide({ corpus: "public", report: empty }, { corpus: "private", report: empty });
-    expect(lines[0]).toBe("terminal-bench: public and private side by side (not pooled)");
+    const lines = sideBySide({ corpus: "public", report: empty }, { corpus: "custom", report: empty });
+    expect(lines[0]).toBe("terminal-bench: public and custom side by side (not pooled)");
   });
 });
 
@@ -974,7 +974,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const { root, run, summary, folder } = repo();
     const ownLibrary = (to: string) => {
       cpSync(join(root, "corpus", "library"), join(to, "library"), { recursive: true });
-      writeFileSync(join(to, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
     };
     // the public corpus has no folder to record
     expect(run(["--limit", "2", "--label", "pub"]).code).toBe(0);
@@ -984,9 +983,9 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the library there
     const mine = join(root, "notes", "mine");
     ownLibrary(mine);
-    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
     const stored = summary("in", "custom");
-    expect(stored).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes/mine" });
+    expect(stored).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
     expect(inside.result.changed).toEqual([]);
     const rescored = JSON.parse(readFileSync(join(inside.out, "summary.json"), "utf8"));
@@ -1002,7 +1001,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownLibrary(outside);
-    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
     const away = summary("out", "custom");
     expect(away).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
@@ -1016,43 +1015,31 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(readFileSync(join(given.out, "summary.json"), "utf8")).not.toContain(outside);
   }, 120_000);
 
-  test("takes a library of your own with --cases, and keeps it from a model that models.json does not mark private unless its corpus.json says it holds nothing private", () => {
+  test("takes a library of your own with --cases, and refuses a folder without a library", () => {
     const { root, run, summary } = repo();
     const mine = join(root, "mine");
     cpSync(join(root, "corpus", "library"), join(mine, "library"), { recursive: true });
-    const refused = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--cases mine sends your library to openai/x, which is not marked "private": true in models.json.');
-    expect(refused.err).toContain("it has no corpus.json, and an own corpus without one is private");
-    expect(refused.out).not.toContain("tasks x 2 arms"); // nothing ran
-
-    // a model that models.json marks private may see it
-    writeFileSync(join(root, "models.json"), JSON.stringify({ mine: { base_url: "http://192.0.2.9:8080/v1", api_key_env: "MINE_KEY", private: true } }));
-    const ran = run(["--cases", "mine", "--model", "mine", "--limit", "1", "--label", "own"], { MINE_KEY: "k" });
+    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
     expect(ran.code, ran.err).toBe(0);
-    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null, library: { path: "mine/library" }, status: "complete" });
+    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", seed: null, library: { path: "mine/library" }, status: "complete" });
     expect(summary("own", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: null } });
-    rmSync(join(root, "models.json"));
-
-    // a folder that says it holds nothing private may go to any model
-    writeFileSync(join(mine, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
-    expect(run(["--cases", "mine", "--limit", "1", "--label", "open"]).code).toBe(0);
-    expect(summary("open", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: false });
     rmSync(join(mine, "library"), { recursive: true });
     const empty = run(["--cases", "mine", "--limit", "1", "--label", "empty"]);
     expect(empty.code).toBe(2);
     expect(empty.err).toContain("the custom library is missing (mine/library)");
   }, 60_000);
 
-  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, private is the old name of it, and a value that is neither is refused", () => {
+  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, private, own and own-feedback were renamed, and a value that is none of them is refused", () => {
     const { run } = repo();
     const missing = run(["--corpus", "custom"]);
     expect(missing.code).toBe(2);
     expect(missing.err).toContain("the custom library is missing (private/retrieval/assets/library). Make it with: ./generate-assets --only retrieval");
-    const old = run(["--corpus", "private"]);
-    expect(old.code).toBe(2);
-    expect(old.err).toContain("terminal-bench: --corpus private is now --corpus custom. The old value works for one more release.");
-    expect(old.err).toContain("the custom library is missing (private/retrieval/assets/library)");
+    for (const old of ["private", "own", "own-feedback"]) {
+      const renamed = run(["--corpus", old]);
+      expect(renamed.code, old).toBe(2);
+      expect(renamed.err, old).toContain(`terminal-bench: --corpus ${old} was renamed in 0.2: use `);
+      expect(renamed.err, old).not.toContain("library is missing");
+    }
     const bad = run(["--corpus", "elsewhere"]);
     expect(bad.code).toBe(2);
     expect(bad.err).toContain('--corpus must be public, custom or all, not "elsewhere"');

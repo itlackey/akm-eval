@@ -91,7 +91,7 @@ describe("generate", () => {
 });
 
 /** The custom corpus of a rewrite at `out`, as lib/corpus.ts resolves it. */
-const corpusOf = (out: string): ResolvedCorpus => ({ name: "custom", folder: join(out, "assets"), config: { kind: "rewrite", private: false, seed: "42", generated: GENERATED }, configFile: join(out, "corpus.json"), flag: "--corpus custom" });
+const corpusOf = (out: string): ResolvedCorpus => ({ name: "custom", folder: join(out, "assets"), rewrite: true, seed: "42", flag: "--corpus custom" });
 
 describe("corpusProblem", () => {
   test("a rewrite just made passes, and one with no assets is told how to make them", () => {
@@ -102,9 +102,9 @@ describe("corpusProblem", () => {
 
   test("a corpus of your own needs only its cases.json, and the public corpus nothing", () => {
     const own = temp();
-    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" })).toContain("the --cases mine corpus has no cases.json in ");
+    expect(corpusProblem({ name: "custom", folder: own, rewrite: false, seed: null, flag: "--cases mine" })).toContain("the --cases mine corpus has no cases.json in ");
     cpSync(PUBLIC, own, { recursive: true });
-    expect(corpusProblem({ name: "custom", folder: own, config: { kind: "own", private: true }, configFile: null, flag: "--cases mine" })).toBeUndefined();
-    expect(corpusProblem({ name: "public", folder: PUBLIC, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" })).toBeUndefined();
+    expect(corpusProblem({ name: "custom", folder: own, rewrite: false, seed: null, flag: "--cases mine" })).toBeUndefined();
+    expect(corpusProblem({ name: "public", folder: PUBLIC, rewrite: false, seed: null, flag: "--corpus public" })).toBeUndefined();
   });
 });
