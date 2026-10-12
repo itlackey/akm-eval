@@ -7,13 +7,14 @@
 // defect and the correct result, so a name changes the same way in all of them. Each rewritten case must still
 // hold the defect it names, and only that one, or the script stops and says which case lost it.
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
-// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed and the digest of the
-// public cases, and `run --corpus private` refuses assets without it or with a digest that is no longer the public one.
+// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed, the digest of the public cases and
+// the digest of this file and of lib/rewrite (generator_sha256), and `run --corpus custom` refuses assets without it, with a digest that is
+// no longer the public one, or made by a generator that has changed since.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Case, GENERATED, type Generated, assetsSha256, caseProblems, parseCases } from "./lib.ts";
+import { type Case, GENERATED, type Generated, assetsSha256, caseProblems, generatorSha256, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -120,7 +121,7 @@ function main(): void {
     } else {
       mkdirSync(join(staged, "assets"), { recursive: true });
       writeFileSync(join(staged, "assets", "cases.jsonl"), `${rewritten.map((c) => JSON.stringify(c)).join("\n")}\n`);
-      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")) };
+      const generated: Generated = { seed: values.seed, inputs_sha256: assetsSha256(join(EVAL_DIR, "assets")), generator_sha256: generatorSha256() };
       writeFileSync(join(staged, GENERATED), `${JSON.stringify(generated, null, 2)}\n`);
       install(staged, out);
       console.log(`reflect: ${rewritten.length} cases written to ${join(values.out, "assets", "cases.jsonl")}`);
