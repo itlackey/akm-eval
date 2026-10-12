@@ -13,7 +13,7 @@ The model under test is the judge of the tier. The prompt, the tier and the queu
 Each run makes a temporary folder with its own akm config and bundle, and:
 
 ```
-copies the library's knowledge notes into the bundle, without the note each proposal would write
+copies library/knowledge of the corpus into the bundle, without the note each proposal would write
 writes each proposal's note as the memory its promotion names: memories/<name>
 akm index --full                                          # with akm's embedding model, bge-small-en-v1.5
 (writes each proposal into the pending queue, as a promotion of consolidate)
@@ -37,7 +37,7 @@ evals/promotion/run --cases ~/notes/night-2026-10-07
 evals/promotion/run --corpus public --repeat 4
 ```
 
-- `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on `corpus/library`. `custom` is a folder of your own set with a `corpus.json`, `private/promotion/own/` unless `--cases` names another: see "Run your own set" and "Corpora" in the root README. `all` runs `public` and the default custom corpus and prints the two results side by side, never as one number. `--corpus own` works for one more release, as `--corpus custom`, with a line that says so.
+- `--corpus` picks the proposals. `public` is `assets/cases.jsonl` on the 30 notes of `assets/library/knowledge`, which `src/build.ts` makes from `corpus/library`. `custom` is a folder of your own set with a `corpus.json`, `private/promotion/own/` unless `--cases` names another: see "Run your own set" and "Corpora" in the root README. `all` runs `public` and the default custom corpus and prints the two results side by side, never as one number. `--corpus own` works for one more release, as `--corpus custom`, with a line that says so.
 - `--cases DIR` runs the custom corpus in DIR instead of `private/promotion/own/`: DIR holds `cases.jsonl` and `library/`, in the format of "Run your own set". Use it for a set built for one question, such as the promotions of one night. Without a `corpus.json` in DIR it is your own notes and is private: it runs only against a model whose line in `models.json` says `"private": true`, and the refusal names `--cases`. Its results go to `private/promotion/results/` and report the corpus as `custom`. A relative DIR is from the repository root. It cannot be combined with `--corpus public`.
 - `--limit N` runs N proposals, taking one of each category in turn: good, duplicate, stale, ephemeral. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. Each run plants its own sandbox. See "Repeat a run" in the root README.
@@ -50,7 +50,7 @@ A private custom corpus sends your notes to the model, so it runs only against a
 Each run writes two files to `evals/promotion/results/<UTC date>-<label>/`, or to `private/promotion/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many proposals ran and errored, the seconds the drain took, the model calls akm made (how many, how many failed, and the model names the endpoint reported; `null` when akm's events table cannot be read, with the reason on stderr), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
-  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept). The endpoint of the model is written as `<MODEL_BASE_URL>`; `engine` and `manifest` hold its host and a digest of its identity.
+  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with the value of every credential field replaced by `<redacted>` (`credentialField` in `lib/provenance.ts` decides by the name: `apiKey`, `api_key`, `token`, `secret`, `password`, `authorization` and the like) (a `$NAME` reference to an environment variable is kept). The endpoint of the model is written as `<MODEL_BASE_URL>`; `engine` and `manifest` hold its host and a digest of its identity.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (its host and port only) and `endpoint_id` (a sha256 of the endpoint's identity), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `assets_sha256`: one digest over `cases.jsonl` and every file of the library's `knowledge/` folder, which is copied into the bundle, each named relative to its folder (`cases.jsonl`, `library/knowledge/...`), so two runs on the same proposals and notes have the same digest wherever the repository is. A change to a proposal or a note changes it, and `--limit` does not.
   - `corpus`, `corpus_kind`, `corpus_private` and `corpus_folder`: `public` or `custom`; for a custom corpus `own` (your notes) or `rewrite`; whether it is private; and, for a custom corpus, its folder from the repository root, or `null` when the folder is outside it (the path of a folder outside it can name what is in it, so it is not recorded) and for the public cases. `scripts/rescore` reads the cases of a custom run from `corpus_folder`, and takes `--cases DIR` for a run that has none.
@@ -104,10 +104,11 @@ So a new akm build can break this eval without a word in its changelog. The test
 
 ## Assets
 
-- `assets/cases.jsonl`: 20 proposals made from the knowledge notes of `corpus/library`: 6 good, 6 duplicate, 4 stale and 4 ephemeral. The fields and how they were made are in `assets/README.md`. They carry a canary string: do not train on them.
+- `assets/cases.jsonl`: 20 proposals that `src/build.ts` makes from the knowledge notes of `corpus/library`: 6 good, 6 duplicate, 4 stale and 4 ephemeral. The fields and how they were made are in `assets/README.md`. They carry a canary string: do not train on them.
+- `assets/library/knowledge/`: the 30 notes the proposals are judged among, also made by `src/build.ts`.
 - `private/promotion/own/`: your own set, if you have one. See below.
 
-The proposals are in `cases.jsonl`, and the notes they may repeat are the library's: a run copies `corpus/library/knowledge` into the bundle and takes out each note that a proposal would write.
+The proposals are in `cases.jsonl`, and the notes they may repeat are in `assets/library/knowledge/`: a public run copies that folder into the bundle and takes out each note that a proposal would write. It does not read `corpus/library/knowledge`, which holds 5 files.
 
 ## Run your own set
 
