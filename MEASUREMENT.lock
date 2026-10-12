@@ -2,6 +2,26 @@
   "lock_version": 1,
   "harness_version": 3,
   "evals": {
+    "extract": {
+      "collector": {
+        "version": 1,
+        "sha256": "24ae1173ca2b3090e27e3d91b3081d66db956031ace6397b159f48db00ead633",
+        "files": [
+          "evals/extract/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "8d7b7b291a810f57983b2c4d49012143f67f6e5e94fac96ccfeb77d49083003e",
+        "files": [
+          "evals/extract/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,
