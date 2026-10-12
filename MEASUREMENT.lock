@@ -23,8 +23,8 @@
     },
     "retrieval": {
       "collector": {
-        "version": 1,
-        "sha256": "65c76d1b9cb254c4f59427c2f3dbba691fd2084bd11fef5723a8c122dda8590a",
+        "version": 2,
+        "sha256": "545140dcd503384e1e308fbbe84fd74d099a014c7914abd50dd6cdd72e9530d8",
         "files": [
           "evals/retrieval/src/akm.ts",
           "evals/retrieval/src/collect.ts",

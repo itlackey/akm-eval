@@ -16,3 +16,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | reflect | collector | 2 | wave 1 merge: lib/akm credential allowlist, completionsUrl, relative AKM_BIN paths; hideEndpoint (no score change; harness-v3 not yet released) | 0cb87ac1f033 |
 | 2026-10-12 | retrieval | collector | 1 | first lock entry | 65c76d1b9cb2 |
 | 2026-10-12 | retrieval | scorer | 1 | first lock entry | 0429da784b92 |
+| 2026-10-12 | retrieval | collector | 2 | the kept semantic index is keyed on src/akm.ts, which lays a library out (cachedIndex builder, part of #73); kept indexes are built once more; no score change | 545140dcd503 |
