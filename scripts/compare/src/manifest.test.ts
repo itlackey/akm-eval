@@ -12,7 +12,7 @@ import { type RunManifest, buildManifest, caseDigests, completionOf, HARNESS_VER
 import { type Case, type Raw, type Row, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
-import { CompareError, MIN_SHARE, compareRepeats, comparePair, loadRun, renderPair, renderRepeats } from "./lib.ts";
+import { CompareError, compareRepeats, comparePair, loadRun, renderPair, renderRepeats } from "./lib.ts";
 import { type Member, checkMembers, identityOf } from "./policy.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -204,26 +204,27 @@ describe("two runs with a manifest", () => {
     const r = compare(a, b);
     expect(r.inputs_differ).toEqual(moved);
     expect(r.views[0]?.n_paired).toBe(8);
-    expect(r.exploratory).toEqual([]); // 8 of the 10 cases both selected is the least a comparison may use
+    expect(r.exploratory).toEqual([]);
     const md = renderPair(r);
     expect(md).toContain(`> Left out. 2 cases were not given the same input in every run, so they are not compared: \`${moved[0]}\`, \`${moved[1]}\`.`);
     expect(md).toContain("Every number below is over the 8 scored in both.");
     expect(md).toContain("2 more cases are left out because their input differs.");
   });
 
-  test("more than a fifth of the cases given another input is a difference of inputs: refused unless inputs are the treatment, and then every case is compared", () => {
-    const moved = ids.slice(0, 3);
+  test("cases given another input are left out however many they are, and with the inputs as the treatment every case is compared", () => {
+    const moved = ids.slice(0, 7);
     const a = run({ label: "a", raw: GOOD });
     const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, cases: Object.fromEntries(Object.entries(m.cases).map(([id, d]) => [id, moved.includes(id) ? { ...d, input_sha256: "f".repeat(64) } : d])) }) });
-    expect(() => compare(a, b)).toThrow(`the cases were not given the same input in every run for 3 of the 10 cases they share (${moved.map((id) => `\`${id}\``).join(", ")}), and ${MIN_SHARE * 100}% must match.`);
-    expect(() => compare(a, b)).toThrow("--treatment inputs");
+    const left = compare(a, b);
+    expect(left.inputs_differ).toEqual(moved);
+    expect([left.views[0]?.n_paired, left.exploratory]).toEqual([3, []]);
     const r = compare(a, b, { treatment: ["config", "model", "inputs"] });
     expect(r.inputs_differ).toEqual([]);
     expect(r.views[0]?.n_paired).toBe(10);
-    expect(r.treated.join(" ")).toContain("3 cases were given another input in some run (the inputs are the treatment)");
+    expect(r.treated.join(" ")).toContain("7 cases were given another input in some run (the inputs are the treatment)");
   });
 
-  test("--retrieval-queries is part of a run's identity: a run with the searches and a run without them are refused, and compare with the inputs as the treatment (#37)", () => {
+  test("--retrieval-queries is part of a run's identity: a run with the searches and a run without them compare only the notes with no searches, and all of them with the inputs as the treatment (#37)", () => {
     const every = jsonl(join(ROOT, "evals", "reflect", "assets", "cases.jsonl")) as Case[];
     const searches = labelledQueries(readFileSync(join(ROOT, "evals", "retrieval", "assets", "queries.jsonl"), "utf8"), readFileSync(join(ROOT, "evals", "retrieval", "assets", "qrels.jsonl"), "utf8"));
     const refOf = (c: Case) => c.path.replace(/\.md$/, "").replace(/\/SKILL$/, "");
@@ -231,8 +232,9 @@ describe("two runs with a manifest", () => {
     const without = run({ label: "without", cases: every, raw: noop });
     const withQueries = run({ label: "with", cases: every, raw: noop, searches: (c) => searches.get(refOf(c)) ?? [], summary: { retrieval_queries: { cases: 46 } } });
     expect(every.filter((c) => (searches.get(refOf(c))?.length ?? 0) > 0).length).toBeGreaterThan(40);
-    expect(() => compare(without, withQueries)).toThrow(/cases were not given the same input in every run for \d+ of the 50 cases they share/);
-    expect(() => compare(without, withQueries)).toThrow("--treatment inputs");
+    const left = compare(without, withQueries);
+    expect(left.inputs_differ.length).toBeGreaterThan(40);
+    expect(left.views[0]?.n_paired).toBe(50 - left.inputs_differ.length);
     const r = compare(without, withQueries, { treatment: ["config", "model", "inputs"] });
     expect(r.views[0]?.n_paired).toBe(50);
     expect(r.treated.join(" ")).toMatch(/\d+ cases were given another input in some run/);
@@ -252,17 +254,16 @@ describe("two runs with a manifest", () => {
     const cov = r.views[0]?.coverage;
     expect(cov).toMatchObject({ selected_a: 10, scored_a: 8, scored_b: 8, errored_a: easy, errored_b: hard, scored_only_a: hard, scored_only_b: easy });
     expect(r.views[0]?.n_paired).toBe(6); // only the cases both scored decide it
-    expect(r.exploratory.join(" ")).toContain("only 6 of the 10 cases both runs selected could be compared (60%, and the least is 80%): 2 errored in A, 2 errored in B");
+    expect(r.exploratory).toEqual([]);
     const md = renderPair(r);
     expect(md).toContain(`Scored: A 8 of 10 cases, B 8 of 10 (errored: A ${easy.map((id) => `\`${id}\``).join(", ")}; B ${hard.map((id) => `\`${id}\``).join(", ")}).`);
     expect(md).toContain(`Scored on one side only, and so left out: in A ${hard.map((id) => `\`${id}\``).join(", ")}; in B ${easy.map((id) => `\`${id}\``).join(", ")}.`);
-    expect(md).toContain("> **Exploratory.**");
   });
 
-  test("an error on one case is a case less on one side: the others are compared, with the share they make", () => {
+  test("an error on one case is a case less on one side: the others are compared", () => {
     const r = compare(run({ label: "a", raw: GOOD }), run({ label: "b", raw: (c) => (c.id === ids[1] ? ERROR : BAD(c)) }));
     expect(r.views[0]?.coverage).toMatchObject({ scored_a: 10, scored_b: 9, errored_b: [ids[1]], scored_only_a: [ids[1]], scored_only_b: [] });
-    expect(r.exploratory).toEqual([]); // 9 of 10
+    expect(r.exploratory).toEqual([]);
     expect(renderPair(r)).toContain(`Scored: A 10 of 10 cases, B 9 of 10 (errored: A none; B \`${ids[1]}\`).`);
   });
 });

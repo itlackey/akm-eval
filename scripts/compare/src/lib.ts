@@ -494,21 +494,14 @@ export function exploratoryOf(sides: ReadonlyArray<readonly [string, Run[]]>, po
 }
 
 /**
- * Why a comparison is exploratory for what its tables cover and measure:
- *  - fewer than MIN_SHARE of the cases both sides selected could be compared, because runs errored on them, gave them no verdict, or (`inputsLeftOut`)
- *    were not given the same input: the verdict is over a part of the eval that may not be the part that moved (#41);
- *  - retrieval's `judged_10` fell from A to B by more than the tie: B surfaces results nobody graded for these queries, and `ndcg_10` counts them
- *    as not relevant, so B reads as worse by the bias of the qrels and not by what it ranks. The results have to be graded before the comparison means anything (#71).
+ * Why a comparison is exploratory for what its tables measure: retrieval's `judged_10` fell from A to B by more than the tie. B surfaces results
+ * nobody graded for these queries, and `ndcg_10` counts them as not relevant, so B reads as worse by the bias of the qrels and not by what it
+ * ranks. The results have to be graded before the comparison means anything (#71).
  */
-function coverageReasons(views: ViewReport[], inputsLeftOut: number, tie: number): string[] {
+function ungradedReasons(views: ViewReport[], tie: number): string[] {
   const out: string[] = [];
   for (const v of views) {
     const name = v.view ? ` (${v.view})` : "";
-    const considered = v.coverage.in_both + inputsLeftOut;
-    if (considered > 0 && v.n_paired < MIN_SHARE * considered - EPS) {
-      const lost = [v.coverage.errored_a.length > 0 ? `${v.coverage.errored_a.length} errored in A` : "", v.coverage.errored_b.length > 0 ? `${v.coverage.errored_b.length} errored in B` : "", inputsLeftOut > 0 ? `${inputsLeftOut} were given another input` : ""].filter(Boolean);
-      out.push(`only ${v.n_paired} of the ${considered} cases${name} both runs selected could be compared (${Math.round((100 * v.n_paired) / considered)}%, and the least is ${MIN_SHARE * 100}%)${lost.length > 0 ? `: ${lost.join(", ")}` : ""}`);
-    }
     for (const m of v.info) {
       if (m.path.endsWith(".judged_10") && m.delta !== null && m.delta < -tie) out.push(`judged_10${name} fell from ${fmt(m.a)} to ${fmt(m.b)}: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again`);
     }
@@ -883,13 +876,6 @@ export interface CompareOptions extends Partial<Options> {
 
 // ---- the manifest: the scorer, the cases' inputs ---------------------------------------------------------------------------
 
-/**
- * The least share of the cases both sides selected that a comparison must be able to use. Below it the comparison is exploratory when the
- * cases were lost to errors or to no verdict, and it is refused as a difference of inputs when they were lost because the cases were not
- * given the same input in every run. 80%, because one case in five is more than the noise between two runs of one configuration moves.
- */
-export const MIN_SHARE = 0.8;
-
 const manifestOf = (run: Run): RunManifest => run.summary.manifest;
 
 /** What `align` hands back: the runs as they are compared, and what was done to them. */
@@ -910,15 +896,14 @@ interface Aligned {
  *  - every run is scored again with the current scorer and labels (scripts/rescore), as the matrix does. When one cannot be (its rows
  *    lack the raw output, or its cases are in a folder outside the repository), the runs are compared as they were scored, and the report
  *    says so.
- *  - the input of a case differs among the runs: the case is left out, and named. When the inputs of more than 1 - MIN_SHARE of the shared
- *    cases differ, the comparison is refused as a difference of inputs, unless `inputs` is the treatment, which keeps them all.
+ *  - the input of a case differs among the runs: the case is left out, and named, unless `inputs` is the treatment, which keeps them all.
  */
 function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
   const out: Aligned = { sides: named.map(([, runs]) => runs), rescored: [], inputsDiffer: [], treated: [], warnings: [] };
   const label = (side: string, runs: Run[], run: Run): string => (runs.length === 1 && side.length === 1 ? side : `${side}'s run ${nameOf(run)}`);
   const entries = named.flatMap(([side, runs]) => [...runs].sort(byDir).map((run) => ({ side, runs, run })));
   const sharedIds = (runs: Run[]): string[] => Object.keys(manifestOf(runs[0] as Run).cases).filter((id) => runs.every((r) => manifestOf(r).cases[id] !== undefined));
-  const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r).cases[id]?.[field])).size;
+  const distinct = (runs: Run[], id: string): number => new Set(runs.map((r) => manifestOf(r).cases[id]?.input_sha256)).size;
   // every run is scored again with the current scorer and labels, so a scorer fix or a relabelled case applies to stored runs
   const { RescoreError, rescoreRun } = rescorer();
   const again = new Map<Run, Run>();
@@ -942,10 +927,9 @@ function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
   const runs = entries.map((e) => (scoredAgain ? (again.get(e.run) as Run) : e.run));
 
   const shared = sharedIds(runs);
-  const differ = shared.filter((id) => distinct(runs, id, "input_sha256") > 1);
+  const differ = shared.filter((id) => distinct(runs, id) > 1);
   if (differ.length > 0 && treatment.includes("inputs")) out.treated.push(`${plural(differ.length, "case")} ${differ.length === 1 ? "was" : "were"} given another input in some run (the inputs are the treatment): ${listIds(differ)}`);
   else if (differ.length > 0) {
-    if (differ.length > (1 - MIN_SHARE) * shared.length + EPS) fail(`these runs cannot be compared case by case: the cases were not given the same input in every run for ${differ.length} of the ${shared.length} cases they share (${listIds(differ)}), and ${MIN_SHARE * 100}% must match. A case with another input is another case. If the inputs are what you are measuring, name the axis with --treatment inputs.`);
     out.inputsDiffer = differ;
     const dropped = new Set(differ);
     out.sides = out.sides.map((side) => side.map((r) => ({ ...r, rows: r.rows.filter((row) => !dropped.has(String(row.id))) })));
@@ -1036,7 +1020,7 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
     differences: diff,
     rescored: aligned.rescored,
     inputs_differ: aligned.inputsDiffer,
-    exploratory: [...exploratoryOf([["A", ra], ["B", rb]], policy), ...coverageReasons(views, aligned.inputsDiffer.length, opts.tie)],
+    exploratory: [...exploratoryOf([["A", ra], ["B", rb]], policy), ...ungradedReasons(views, opts.tie)],
     options: opts,
     warnings,
     views,

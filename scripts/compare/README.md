@@ -53,7 +53,7 @@ A summary written by akm-eval 0.2 or later has a `manifest` (`lib/manifest.ts`; 
 
 - **The collector.** Its version and digest, with the harness version, are the harness axis. Two collector versions are refused unless `harness` is the treatment, because the raw outputs of an earlier collector are not comparable with a later one's. `assets_sha256` and `harness_sha256` are not compared: the cases are compared one by one, and the collector is the part of the code that matters. `scripts/matrix` applies the same policy, but cannot leave a case out of the numbers of a summary, so a case with another input there is a difference of inputs (see "Run a matrix" in the root README).
 - **The scorer and the labels.** They are not an axis. When the runs have different scorers, or a case has different labels in them, or they were scored by a scorer or against labels other than the ones this checkout has now (a scorer fix, a case relabelled since), each run is scored again with the current scorer and the current labels (`scripts/rescore`; the folders are not changed), the report says which runs were, and its table shows `scored again from`. A run whose rows lack the raw output the scorer reads cannot be, and the comparison is refused with the fields named. The matrix does the same.
-- **The inputs of each case.** A case is compared when its `input_sha256` is the same in every run of both sides. A case with another input is left out of every table, named in the report (`inputs_differ`), and a line says so. If more than a fifth of the cases the runs share differ (`MIN_SHARE`: 80% must match), the comparison is refused as a difference of inputs, unless `inputs` is the treatment, which compares every case and lists the number that differ under the treatment. This is what makes `reflect --retrieval-queries` part of a run's identity (#37): the searches it records are part of the input of the notes they are for.
+- **The inputs of each case.** A case is compared when its `input_sha256` is the same in every run of both sides. A case with another input is left out of every table, named in the report (`inputs_differ`), and a line says so, however many there are. With `inputs` as the treatment every case is compared, and the number that differ is listed under the treatment. This is what makes `reflect --retrieval-queries` part of a run's identity (#37): the searches it records are part of the input of the notes they are for.
 - **Labels, scorer and cases after a change.** Nothing needs re-running for a scorer fix or a relabelled case: `scripts/compare/run A B` scores the runs again, and a case with another input is left out and named. After a collector change the runs from before it are refused unless `--treatment harness`. The root README ("After a change") has one example command for each.
 
 ### Coverage: what each side scored
@@ -64,7 +64,7 @@ Each table says how many cases each side scored of the cases it selected, and na
 Scored: A 8 of 10 cases, B 8 of 10 (errored: A `x`, `y`; B `p`, `q`). Every number below is over the 6 scored in both. Scored on one side only, and so left out: in A `p`, `q`; in B `x`, `y`.
 ```
 
-The verdict is taken on the cases both sides scored, so a side that errored on two hard cases and scored two the other side errored on is compared on the rest, with the four named. Each metric shows its denominator, `6 of 10` in the `cases` column: the paired cases the metric is over, of the paired cases (a rate's pool is its class of cases, such as the defect cases). When fewer than 80% of the cases both sides selected could be compared, because runs errored, gave no verdict or were given another input, the report is exploratory and says how many were lost, and why. In the JSON, `coverage` of each view has `selected_a`, `scored_a`, `errored_a`, `scored_only_a` and the same for B, and `in_both`.
+The verdict is taken on the cases both sides scored, so a side that errored on two hard cases and scored two the other side errored on is compared on the rest, with the four named. Each metric shows its denominator, `6 of 10` in the `cases` column: the paired cases the metric is over, of the paired cases (a rate's pool is its class of cases, such as the defect cases). In the JSON, `coverage` of each view has `selected_a`, `scored_a`, `errored_a`, `scored_only_a` and the same for B, and `in_both`.
 
 ### Retrieval: the judged results
 
@@ -123,7 +123,7 @@ The runs must be repeats of one configuration, the same in every axis of the pol
 Two runs are compared only when they ran the same cases, so it refuses, naming each reason:
 
 - a different eval, corpus, retrieval collection, mode (`consolidate --pool` is another set of cases from the per-pair run) or embedder;
-- a difference on any axis that is not the treatment (above): another akm version, build or command unless the build is the treatment, another strategy, config patch or akm config unless the config is, another model or engine setting unless the model is, another private `seed` unless the inputs are, other code unless the harness is (another collector version, and the cases whose inputs differ when more than a fifth do), among the repeats of one side as well as between the sides;
+- a difference on any axis that is not the treatment (above): another akm version, build or command unless the build is the treatment, another strategy, config patch or akm config unless the config is, another model or engine setting unless the model is, another private `seed` unless the inputs are, other code unless the harness is (another collector version), among the repeats of one side as well as between the sides;
 - a run without a manifest (made before akm-eval 0.2), before anything else;
 - runs that were scored differently and cannot be scored again, for want of the raw output in their rows;
 - a manifest that is not sound (the validator names what is wrong);
@@ -132,7 +132,7 @@ Two runs are compared only when they ran the same cases, so it refuses, naming e
 - a `consolidate --pool` run that errored, which has no result;
 - an eval it has no per-case reading for (one that is not in `EVAL_METRICS`).
 
-It does not refuse, and it labels the report **exploratory**, a run that was cut short or is not complete, and a run whose summary lacks the evidence for an axis outside the treatment, fewer than 80% of the cases usable, and a retrieval `judged_10` that fell. It warns when A and B have the same settings (it then shows the noise between two runs), when the runs have different cases (a different `--limit`), when few cases are in both, and for a retrieval column only one run has.
+It does not refuse, and it labels the report **exploratory**, a run that was cut short or is not complete, and a run whose summary lacks the evidence for an axis outside the treatment, and a retrieval `judged_10` that fell. It warns when A and B have the same settings (it then shows the noise between two runs), when the runs have different cases (a different `--limit`), when few cases are in both, and for a retrieval column only one run has.
 
 ## The JSON
 
