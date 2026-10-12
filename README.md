@@ -64,7 +64,7 @@ lib/closure.ts       the files a measured part covers: the ones an eval lists an
 lib/golden.ts        the golden tests of a scorer: raw outputs with the rows the scorer must give
 lib/results.ts       the results folder of a run and its .running marker
 lib/repeat.ts        --repeat
-lib/harbor/          the akm arm, the job and the report of the evals that run opencode in Harbor with and without akm
+lib/harbor/          the akm arm, the job, the reading of Harbor's folders (trials.ts) and the scorer and report (score.ts, report.ts) of the evals that run opencode in Harbor with and without akm
 lib/rewrite/         the seeded rewrite the generate scripts share
 scripts/check        the typecheck of every src folder, the Python suites and bun test, as CI runs them
 scripts/smoke/       runs each eval that drives akm once, on one case, against a stub model; --contract also checks that each reaches its outcome
