@@ -4,8 +4,8 @@
   "evals": {
     "longmemeval": {
       "collector": {
-        "version": 1,
-        "sha256": "2b4bb0d1d092a24dd2fa96e2f493fb687c0b2795f11882110f1a4b739a976258",
+        "version": 2,
+        "sha256": "8124063c63ccd808bf2966a0e71cbd28790039ec2f0025b669e5fed9be52a196",
         "files": [
           "benchmarks/longmemeval/src/akm.ts",
           "benchmarks/longmemeval/src/collect.ts",
