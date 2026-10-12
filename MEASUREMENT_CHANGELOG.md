@@ -1,8 +1,13 @@
 # Measurement changelog
 
-Each eval's version is set by hand in its `src/measurement.ts`. Change it when you change what the eval asks akm; runs are compared by
-it, and runs of two versions are not compared unless the version is the treatment. A scorer fix or a relabelled case needs no new version:
-`scripts/compare` and the matrix score every stored run again with the current scorer. Write a line here when a version changes.
+Each eval's `version` is set by hand in its `src/measurement.ts`, as `MAJOR.MINOR`. Change it when you change what the eval asks akm: the
+cases it sends, the akm config it writes, the commands it runs, the engine settings. Runs of two versions are not compared unless the version
+is the treatment (`--treatment harness`). A scorer fix or a relabelled case needs no new version: `scripts/compare` and the matrix score
+every stored run again with the current scorer. Add a line here when a version changes, under the release it ships in.
+
+## 0.3
+
+No eval changed version: every eval is at 0.2, and runs made with akm-eval 0.2 compare with runs made with 0.3.
 
 ## 0.2 (2026-10-12)
 

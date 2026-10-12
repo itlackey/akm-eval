@@ -1,4 +1,4 @@
-// scripts/rescore on reflect, the first eval on the manifest: the runs are built from the raw outputs in fixtures/ of evals/reflect/golden, scored with the
+// scripts/rescore on reflect, the first eval on the manifest: the runs are built from the raw outputs in evals/reflect/fixtures, scored with the
 // eval's own scorer, and written as results folders. A stale run is the same run with rows another scorer gave and the manifest of that scorer.
 
 import { afterEach, describe, expect, test } from "bun:test";

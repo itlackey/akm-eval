@@ -1,6 +1,6 @@
 // The run manifest: what a run was made of, written into every summary.json as `manifest`, and the declaration (`Measurement`)
 // through which each eval says how a stored case is scored again. compare, the matrix and scripts/rescore read a manifest through
-// readManifest. See README.md, "How results stay comparable".
+// readManifest. See README.md, "Compare two runs".
 //
 // Runs are compared by the eval's `version` (in its src/measurement.ts), changed by hand when what the eval asks akm changes. A scorer
 // fix or a relabelled case needs no new version: every run stores each case's raw output, and scripts/rescore scores it again.

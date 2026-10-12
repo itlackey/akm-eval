@@ -1,7 +1,7 @@
-// What the agent-ab eval declares about its own measurement: which files collect, which files score, and how a stored task is scored again.
-// lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the agent-ab eval declares about its own measurement: its version, and how a stored task is scored again.
+// lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is lib/harbor/score.ts, which agent-ab shares with benchmarks/terminal-bench.
 //
 // A case is a task. What it presents to the agent is its folder (the instruction, the starting workspace, the verifier that gives the

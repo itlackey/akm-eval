@@ -1,7 +1,7 @@
-// What the terminal-bench benchmark declares about its own measurement: which files collect, which files score, and how a stored task is
-// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the terminal-bench benchmark declares about its own measurement: its version, and how a stored task is
+// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is lib/harbor/score.ts, which terminal-bench shares with evals/agent-ab.
 //
 // A case is a task of the pinned dataset. What it presents to the agent is the task, which Harbor fetches by the digest ASSETS.lock

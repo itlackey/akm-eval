@@ -1,6 +1,6 @@
 // The logic of scripts/rescore, without the command line: scoring a stored run again with the current scorer and the current labels, from
 // the raw output each case's row holds. It never modifies the folder it reads; scripts/compare uses `rescoreRun` to bring two runs to one
-// scorer before it compares them. See the README's "How results stay comparable".
+// scorer before it compares them. See the README's "Compare two runs".
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";

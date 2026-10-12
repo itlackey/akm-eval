@@ -1,5 +1,5 @@
-// compare over runs that carry a manifest (harness-v3): reflect is the eval that writes one, so these tests build reflect runs from the golden
-// raw outputs of evals/reflect/golden, score them with the eval's own scorer, and write them as results folders with a manifest. The policy
+// compare over runs that carry a manifest (harness-v3): reflect is the eval that writes one, so these tests build reflect runs from the stored
+// raw outputs in evals/reflect/fixtures, score them with the eval's own scorer, and write them as results folders with a manifest. The policy
 // they exercise: the collector (a difference is refused unless it is the treatment), the scorer and the labels (a difference is scored
 // again), the inputs of each case (a case with another input is left out), the coverage of each side (#41), and runs with no manifest.
 
