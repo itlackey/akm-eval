@@ -1,135 +1,162 @@
 # bakeoff
 
-**Being rebuilt (#46).** This eval is moving from a frozen copy of akm's prompts to akm itself, and keeps only the jobs no other eval measures. The inventory, with what measures each retired job now, is in [`reports/retired-evals.md`](../../reports/retired-evals.md#bakeoffs-frozen-prompt-jobs). Five jobs and 15 of the 120 cases stay: memory inference (4), `remember --enrich` (4), schema repair of a lesson (4), the summary of a session (1) and consolidate's promotion pass (2). The text below describes the Python eval until the rebuild replaces it.
+Does the model make what akm asks of it, in the model-backed jobs of akm that no other eval measures?
 
-Which model runs akm's model-backed jobs best: valid output, correct facts, real quotes, speed?
+akm hands work to a model in many places. `evals/reflect`, `evals/distill`, `evals/extract`, `evals/consolidate`, `evals/judge-gate`, `evals/promotion` and `evals/nightly` each measure one job or a night of them. Five jobs are left that none of them scores. This eval runs those five with akm's own commands, in a sandbox, with the model under test as the engine, and scores what akm wrote.
 
-akm hands work to a model: it consolidates memories, distils lessons, judges and triages proposals, and more. This eval gives a model work of that kind and scores the reply. It measures a model on a frozen snapshot of akm-style prompts, not akm. It never runs akm, so it cannot register a change to akm, such as a better prompt, parser, schema or repair turn: tuning any of those does not move its numbers. To measure akm, use the evals that run it (`evals/consolidate`, `evals/distill`, `evals/reflect`, `evals/extract`, `evals/judge-gate`, `evals/nightly` and `evals/promotion`). Use this one to compare models on the same fixed work.
+The prompts, the parsers, the schemas and the repair turns are akm's: the eval drives the installed akm CLI, so a better prompt in a release moves its numbers. It replaces a Python bakeoff that scored a model on a frozen copy of akm's prompts (`0.9.15-style`), never ran akm, and so could not register a change to it. The jobs that other evals measure, and the ones akm no longer asks a model for, were retired with it: `reports/retired-evals.md` ("Bakeoff's frozen-prompt jobs") lists each one and what measures it now. Nothing of the old results carries over.
 
-There are 120 cases across 13 jobs. 88 run by default. The other 32 are legacy cases: jobs akm no longer asks a model for (see "Legacy cases"). Each reply is scored by deterministic checks. There is no judge model, and akm does not need to be installed.
+It needs akm 0.9.26 or later (on `PATH`, or named in `AKM_BIN`) and records the akm version it used. Compare results only between runs with the same akm version.
 
-Results are per model, so one run can compare several.
+## The five processes
 
-## The prompts
+| Process | Cases | The command | What akm writes, and the eval reads |
+|---|---:|---|---|
+| `memory-inference` | 4 | `akm improve --strategy bakeoff-memory-inference`, with only memory inference on | `memories/<name>.derived.md`: a title, a description, tags, search hints and a content of 2 or 3 sentences |
+| `remember-enrich` | 4 | `akm remember --enrich --name <name>`, the text of the memory on stdin | `memories/<name>.md` with the tags, the description and the date the model gave |
+| `schema-repair` | 4 | `akm improve <lesson> --strategy bakeoff-schema-repair`, with only validation on | a pending proposal of source `schema-repair`: the lesson with a `description` and a `when_to_use` |
+| `session-summary` | 1 | `akm proposal extract --type claude --session-id <id> --strategy bakeoff-session-summary` | `sessions/claude/<id>.md`: the summary as its description, and a `## Key topics` list |
+| `consolidate-promote` | 2 | `akm improve --strategy bakeoff-consolidate-promote`, with only consolidate on | the promotions in the plan of consolidate's promotion pass, in `consolidation.planned` |
 
-Every prompt is written out in `src/bakeoff.py` (`build_messages`). They were taken from akm and have not followed it since. `PROMPTS_VERSION` in that file names the akm they come from, and every `summary.json` carries it. It is `0.9.15-style`: nothing in this repository records the release the prompts were copied from, and the copies of akm's architecture pages that the cases read (`assets/public-akm/`) are nearly all 0.9.15's. The proposal-judging cases that compare an old page with a newer one also read 0.9.0, 0.9.2 and 0.9.8. A request is a bare chat completion with no JSON schema and no repair turn, which akm's own pipeline sends. Redoing the prompts for a later akm means changing `PROMPTS_VERSION` with them. Results with different prompt versions do not compare.
+Each case runs in a sandbox of its own: a temporary folder with its own akm config and bundle, so the eval never reads or writes your bundle. akm runs with `semanticSearchMode: off`, so consolidate's pair pass finds no pairs, calls no model, and its retirements (measured by `evals/consolidate`) do not show.
 
 ## Run
 
 ```
 evals/bakeoff/run --corpus public
-evals/bakeoff/run --corpus private
+evals/bakeoff/run --corpus custom
 evals/bakeoff/run --corpus all
-evals/bakeoff/run --model my-model --model my-other-model --repeat 3
+evals/bakeoff/run --process schema-repair --repeat 3
 ```
 
-- `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
-- `--limit N` runs N cases: the first case of each job in turn, so a short run covers many jobs. It never picks a legacy case unless `--include-legacy` is given.
-- `--tier compact|deep` runs one tier. See the table below.
-- `--model ID` runs a model the way every eval does: ID is a line of `models.json` (its URL, its key in the environment variable it names, its `model` name), and any other ID is a model of the gateway in `.env`. Repeat it to compare models. Without it the model is `MODEL_NAME`. A line's `"private": true` is recorded in `summary.json` and nothing more: bakeoff reads none of your notes, so it never refuses a model for it.
-- `--models FILE` compares several models and sets request options for each: `temperature`, `max_tokens`, `seed`, `extra_body`, `timeout` and `retries`. An entry names its model by `id`, as `--model` does, or by `model` and `base_url`. See `models.example.yaml`. It is not used together with `--model`.
-- `--repeat N` runs the corpus N times, each a whole run into its own folder, `<UTC date>-<label>-r1` to `-rN`, with the usual `summary.json`. Beside them it writes `<UTC date>-<label>-repeat-summary.json`: the `metrics` of each model with every number replaced by its `min`, `max` and `mean` over the runs, and the same three for `n_errored` and `seconds` (the wall time of each run). For a run of one model they are also at the top, as `lib/repeat.ts` writes them for the other evals. With `--corpus all` each corpus has its own repeat summary and the side-by-side table is not printed. A `seed` in a model's options makes the runs alike on an endpoint that honours it, so leave the seed out when you want their spread.
-- `--include-legacy` also runs the legacy cases. See "Legacy cases".
-- `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name, or the names of the models joined with `-` for several `--model`, or the models file name.
+- `--corpus` picks the cases. `public` is the committed cases. `custom` is a folder of cases with a `corpus.json`: by default `private/bakeoff/assets`, the public cases rewritten from a seed. `all` runs both and prints the two results side by side, never as one number. `--corpus private` still works for one release, as `--corpus custom`. See "Corpora" in the root README.
+- `--cases DIR` runs the corpus in `DIR`, which holds a `cases.json` and the files it names (see "Assets"). It is `--corpus custom --cases DIR`. A folder with no `corpus.json` is taken for your own notes, which are private: a model that `models.json` does not mark `"private": true` is refused before anything runs.
+- `--process NAME` runs one process only.
+- `--limit N` runs N cases, the first of each process in turn, so a short run covers every process.
+- `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
+- `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256. There is no `--strategy`: each process has its own, and the patch can change them.
+- `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The private run reads `private/bakeoff/assets/`. Make it first with `./generate-assets --only bakeoff`. The run stops with an error when it is missing, or when `private/bakeoff/generated.json` is missing or was written for other public assets than the ones in this checkout: make it again then.
+The custom run reads `private/bakeoff/assets/`. Make it first with `./generate-assets --only bakeoff`. The run stops with an error when it is missing, and when `private/bakeoff/generated.json` is missing, is not in the current format, or does not match what is here now: the public assets it was made from, the code of the generator (`generate.ts`, `inputs.ts`, `lib/rewrite` and its lexicon) or the files as generate wrote them. The error says to make them again.
 
-Each run writes two files to `evals/bakeoff/results/<UTC date>-<label>/`, or to `private/bakeoff/results/` for the private corpus:
+Each run writes two files to `evals/bakeoff/results/<UTC date>-<label>/`, or to `private/bakeoff/results/` for a custom corpus:
 
-- `summary.json`: for each model, the metrics, how many cases ran, were scored and errored, the model name and the name the endpoint reports, and its `settings`: what shaped its requests (the endpoint without credentials, the name of the environment variable that held the key, `private`, `temperature`, `max_tokens`, `seed`, `extra_body`, `timeout` and `retries`). The key is never written. In `extra_body` a value under `apiKey`, `api_key`, `token` or `secret` (in any case) is replaced by `<redacted>`, the rule of `lib/provenance.ts`, so keep any credential under another name out of it. For the run: the corpus, the label, the `git_commit`, `prompts_version`, `include_legacy` and `legacy_cases`, `grounded` (what the grounded cases are checked for, see below), `cases_sha256` and `assets_sha256` (digests of `cases.json` and of every file of the assets), `models_file` (the path and `sha256` of the `--models` file, null without one), `seed` (for the private corpus, the seed its assets were made from; null for the public one), the `limit`, the `tier` and the counts: `n_cases` (the size of the suite), `n_selected` (how many of them this run selected, after `--limit`, `--tier` and the legacy rule), and `n_run`, `n_scored` and `n_errored` (summed over the models). Two runs are alike only when these agree.
-- `samples.jsonl`: one line per model and case, with every check and its result, the time, the token counts and the model's raw reply.
+- `summary.json`: the metrics, how many cases ran, were scored and errored, the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus (`corpus`, `corpus_kind`, `corpus_private`, and `corpus_folder` when it is inside the repository) and the git commit. It also says what the run was made of, and whether it finished:
+  - `config`: the akm config the eval wrote, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept) and the model's endpoint written as `<MODEL_BASE_URL>`.
+  - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `endpoint_id` (a sha256 of the endpoint's identity), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
+  - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engine, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
+  - `assets_sha256`: the digest of the corpus folder, `cases.json` and the files it names, by path from the folder, so two runs on the same cases have the same digest wherever the repository is.
+  - `seed`: for a rewrite, the seed its assets were made with (`corpus.json`); `null` for the public corpus and for your own.
+  - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
+  - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed.
+- `samples.jsonl`: one line per case, with the outcome, the checks and the raw output: the derived memory, the memory `akm remember` wrote, the repair proposal, the session asset, or the plan and the promotions. The raw output of a case is `outcome`, `reason`, `served`, `seconds`, `error`, `timed_out` and whichever of `derived`, `written`, `proposal`, `asset`, `planned` and `promoted` its process makes; the shape and the checks are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
 
-It needs [uv](https://docs.astral.sh/uv/). The first run installs PyYAML.
+## How a case runs
+
+The commands, in order, with `--format json` added to each:
+
+```
+memory-inference:     akm index
+                      akm improve --strategy bakeoff-memory-inference --no-sync --require-engines --json-to-stdout
+remember-enrich:      akm remember --enrich --name <name>                       (stdin: the memory without its frontmatter)
+schema-repair:        akm index
+                      akm improve lessons/<name> --strategy bakeoff-schema-repair --no-sync --require-engines --json-to-stdout
+                      akm proposal list --status pending --detail full
+session-summary:      akm proposal extract --type claude --location <projects> --session-id <id> --strategy bakeoff-session-summary
+consolidate-promote:  akm index
+                      akm improve --strategy bakeoff-consolidate-promote --no-sync --require-engines --json-to-stdout
+                      akm proposal list --status pending --detail full
+```
+
+The strategies are written into the config of the sandbox. Each runs the one process and turns the others off. Memory inference writes a derived memory and rewrites the frontmatter of its parent, which akm keeps behind `experimental.improveAutonomy`, so the config sets it. Session indexing is on, and `minSessionDuration` is 0. Consolidate's `minPoolSize` is 0, so a pool of 7 or 35 memories is considered.
+
+akm exits 0 whatever the model did, so what happened comes from what akm wrote and from its own counts:
+
+- **`output`**: akm made the thing the process makes. It is scored.
+- **`unusable`**: akm ran and could not use the reply: it wrote no derived memory, no session asset, no repair, or it skipped a chunk of the pool. It is never correct, and it counts against the model.
+- **`error`**: the case did not run to the end: a model call failed, akm crashed or ran past its timeout, or the endpoint was down (`--require-engines` stops an improve run at once). An error has no verdict and is left out of the counts. A timeout has `timed_out: true`.
+
+Two things akm does not say. When a session summary fails, akm writes no asset and prints nothing, so the row says only that no asset was written. When `akm remember --enrich` fails it writes the memory without enrichment and warns on stderr: the eval reads the warning, an unusable reply from a failed call.
 
 ## What it needs from a model
 
-Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME` in `.env`, for any OpenAI-compatible chat endpoint. `JUDGE_*` is not used. For several models, or for options per model, use `--model` or a models file instead.
+Set `MODEL_BASE_URL`, `MODEL_API_KEY` (empty for a local server) and `MODEL_NAME` in `.env`, for any OpenAI-compatible chat endpoint, or name the model with `--model` (a line of `models.json`, or a model of the gateway). `JUDGE_*` is not used.
 
-- Every case asks for one JSON value or one markdown file, and the checks need it as asked. A `<think>` block, a code fence and prose around the JSON are cut away before scoring. The JSON is the longest value that runs from an opening bracket to the last closing bracket of its kind. The reader tries each opening bracket, so a stray `{`, or a short array in the prose before the JSON ("see [1]"), does not lose it. With two objects in a reply the later one is scored; with an object and an array, the longer. A reply cut off by the token limit can leave an inner object or array that reads as JSON; it still fails on its shape. A closing fence is cut only when an opening one was, so a reply that ends in a code block of its own keeps it. What must be right is the JSON itself: its keys, types and ranges. Broken JSON loses, and so does prose with a closing bracket in it after the JSON.
-- An answer that sits in the reasoning is scored. When a reply has no `content` and its `reasoning_content` holds a `{`, the text from the first `{` to the last `}` of the reasoning is scored as the answer, and the row says so (`content_fallback: true` in `samples.jsonl`). A model that thinks and then answers properly is scored on its answer. One that only thinks aloud is scored on the JSON in its thoughts, which may be a draft. Read the rows with `content_fallback` apart.
-- The compact tier has prompts up to about 1.2k tokens. The deep tier goes up to about 40k, so give the server a context of 48k or more, or run `--tier compact`.
-- A reply is limited to 6000 tokens. A model that thinks first needs thinking turned off in the server, or an `extra_body` in the models file that does it. Thinking text is cut from a reply before it is scored.
-- Requests use temperature 0. A busy endpoint or a dropped connection is retried up to five times. A request that times out, after 900 seconds, is not. `extra_body` is merged into every request, but it cannot set `model`, `messages` or `stream`: the run refuses a models file that tries.
+- It must follow an instruction to return one JSON object. akm asks for a JSON schema reply where it has one, falls back to a plain request when the endpoint refuses that, and repairs some replies itself.
+- A case is a few thousand tokens, and the largest, a pool of 35 memories, is three chunks of 12, so 16k of context is safe.
+- The eval sets temperature 0 and `enableThinking: false` on the engine, and `summary.json` records both under `engine`. akm's own default is a temperature of 0.3. `--config-patch` can change either.
+- Cloud endpoints that reject unknown request fields may refuse the thinking switches akm sends. Run those through a local gateway, or expect errors in `samples.jsonl`.
+- A full run is 15 cases, one at a time, and takes a few minutes on a 27B model on a local GPU.
 
-To serve a model locally with llama.cpp:
+## The collector, the scorer and the golden files
+
+The eval is on the run manifest (see "How results stay comparable" in the root README). Its files are split by what a change to them does:
+
+- `src/collect.ts` is the **collector**: the sandbox, the akm config (`bakeoffConfig`) and its strategies, the commands, and how it reads what akm wrote. `lib/akm/akm.ts`, `lib/akm/overrides.ts` and `lib/cli.ts` are listed with it. A change to any of them changes what akm is asked or what is kept of its answer: bump the collector (`scripts/measurement/run bump bakeoff collector --reason "..."`), and earlier runs are no longer comparable with later ones.
+- `src/score.ts` is the **scorer**: the checks, `makeRow` and `metrics`. A change to it changes what the eval scores: bump the scorer, and update the golden files in the same change. No run is invalidated: `scripts/rescore` scores any stored run again.
+- `src/measurement.ts` declares both lists, the cases' `input` and `labels` that are digested per case, and how a stored row is read back into its raw output (`rawOf`). `src/inputs.ts` reads and checks a corpus and holds the digests of `generated.json`; `src/lib.ts` re-exports the three.
+- `golden/` holds 8 cases, one or two of each process, with 46 raw outputs for them, and the row the scorer must give for each. The files akm wrote (a derived memory, an enriched memory, a repair proposal, a session asset) and the promotions are those of akm 0.9.26, run against a scripted model that answered each way a model can: the right answer, a fact or the date dropped, a date invented, the wrong shape, a trigger that is not concrete, a promotion too many, a reply in prose. The errors and the timeout are written by hand, since a dead endpoint stops akm before the case. `src/golden.test.ts` fails when a scorer change alters one row. `UPDATE_GOLDEN=1 bun test evals/bakeoff/src/golden.test.ts` writes the expected rows again, and the files say which scorer version they are for.
 
 ```
-llama-server -m ./Qwen3-27B-Q4_K_M.gguf --alias qwen3-27b --port 8080 -c 49152 -np 1 -ngl 99 --jinja
+scripts/rescore/run evals/bakeoff/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
 ```
 
-and in `.env`:
-
-```
-MODEL_BASE_URL=http://localhost:8080/v1
-MODEL_API_KEY=
-MODEL_NAME=qwen3-27b
-```
+`src/real.test.ts` runs every case of the public corpus through the real akm, against a model that answers as a script says: right, in prose and not at all. It runs only with `AKM_EVAL_REAL_AKM=1`, and with `AKM_BIN` naming the akm. The other tests use a fake akm (`src/fakes.ts`).
 
 ## Assets
 
-`assets/cases.json` holds the 120 cases: the files each one reads, what a correct reply holds, its tier and its track. The 141 files beside it are the library the cases draw on: memories, lessons, knowledge, skills, commands, agents, workflows, sessions, 49 anonymised documents from an earlier model bake-off, and copies of akm's own architecture pages. They describe a fictional system or are scrubbed.
+`assets/cases.json` holds the 15 cases: for each, its `id`, its `process`, the `files` it reads and what it `expected`. The files beside it are the library the cases draw on, all fictional: 37 memories, 4 lessons that lack a `description` and a `when_to_use`, and one Claude Code session (`sessions/<project>/<id>.jsonl`, the place and the name akm reads a session from). The cases are those of the Python bakeoff that still apply, with the ids they had.
 
-| Tier | Track | Cases | What it asks |
-|---|---|---:|---|
-| compact | focused | 52 | Four cases for each of the 13 jobs, over one small fictional system. The facts are precise, so the checks can be exact. |
-| deep | legacy | 39 | The original bake-off's 24 consolidation and distillation items, and 15 more: long-document graph extraction, grounded revision, proposal judging and multi-document synthesis. |
-| deep | production | 29 | akm's request shapes as of the prompt snapshot: pools of 20 to 35 memories, review-band judgments, ordered and chunked graph batches, complex session extraction, metadata enhancement and schema repair for six asset types. |
+| Process | Case | Expects |
+|---|---|---|
+| `memory-inference` | 4 memories (`infer-*`) | `required` terms the derived memory must keep, a `date` it must keep, or `forbidden` terms it must not invent |
+| `remember-enrich` | 4 memories (`enrich-*`) | the `observed_at` the memory writes, or null for one that writes none, and `keywords` the metadata must cover |
+| `schema-repair` | 4 lessons (`repair-*`) | `keywords`, any of which the new fields must hold, and `trigger` terms, any of which the new `when_to_use` must hold |
+| `session-summary` | `prod-session-summary` | `required` terms of the summary, `topics` of the key topics list, and `forbidden` terms |
+| `consolidate-promote` | `consolidate-memory-pool` (7 memories), `prod-consolidate-full-pool` (35) | the `promote` refs, the `protected` refs, and `strict`: nothing else may be promoted |
 
-The `legacy` track is the original bake-off's cases. It is not the legacy cases below, which are picked by job from every track.
+Four things changed from the Python cases. The memory-inference and remember-enrich prompts are akm's, so a case no longer fixes them. `prod-session-summary` was a markdown transcript and is now the Claude Code session file akm reads. The two pool cases lost their merge, delete and contradict expectations, which akm no longer plans (its pair pass decides those, and `evals/consolidate` measures it), and `prod-consolidate-full-pool` lost `strict` and its queued memories: the labels that made 28 of its 35 memories "already queued" rested on a queue akm builds from its own promotions. The cases that fell away are in `reports/retired-evals.md`.
 
-The jobs are memory consolidation, distillation, memory inference, graph extraction, metadata enhancement, lesson and proposal quality judging, memory contradiction detection, session extraction and summaries, reflect proposals, `remember` enrichment, schema repair and proposal triage.
+`private/bakeoff/assets/` is the same corpus with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. The files are rewritten first and `cases.json` after, with one mapping, so a name changes the same way in a file, in a file name and in what a correct result must hold. It is made by `generate` and never published. `generate` then checks that every term a case expects (`required`, `forbidden`, `keywords`, `topics`, `trigger`, `date`, `observed_at`) is still in its files, or still out of them, the way it was in the public assets, and that every ref it expects is the ref of one of its files. The assets were already scrubbed, so the rewrite changes few names. It mostly changes numbers, versions and dates. It writes into a work folder in `private/bakeoff/` and moves the result into place only when the checks pass, so a generation that fails leaves the earlier assets as they were. Beside the assets it writes `generated.json`: the `seed`, the `inputs_sha256` of the public assets, the `generator_sha256` of the generator's code, and the `outputs_sha256` of the assets as written.
 
-`private/bakeoff/assets/` is the same suite with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. The files are rewritten first and `cases.json` after, with one mapping, so a name changes the same way in a file, in a file name and in what a correct reply must hold. It is made by `generate` and never published. `generate` then checks that every term a case expects is still in its files, or still out of them, the way it was in the public assets. The terms are `required`, `forbidden`, `keywords`, `topics`, `ordered`, `preserve`, `trigger` and `reason_terms`, a graph case's `entities`, `relations` and `forbidden_entities`, and `date`, `observed_at` and `append`. It also checks that every ref a case expects (`merge`, `delete`, `promote`, `contradict`, `protected` and `queued`, and a triage case's `ref`) is the ref of one of the case's files, so a file the rewrite renamed is renamed in the case too. The assets were already scrubbed, so the rewrite changes few names. It mostly changes tool names, numbers, versions and dates. The numbers in `cases.json` itself, such as `max_ratio`, are thresholds and stay as they are: only its strings are rewritten. `generate` writes into a work folder in `private/bakeoff/` and moves the result into place only when the check passes, so a generation that fails leaves the earlier assets as they were. Beside them it writes `generated.json`, with the seed and `inputs_sha256`, the digest of the public assets.
+## The checks
 
-## Legacy cases
+No judge model scores a case. Each check looks at the file or the plan akm made. A case is correct when its output has the right shape and every check holds.
 
-akm no longer asks a model for some of what the suite asks. Those cases are the legacy cases, 32 of the 120. `run` skips them unless you pass `--include-legacy`, and `verify` does not require them: it asks for coverage of the other 88 only, and checks that the legacy cases it finds still build their prompts and score a known good reply. Numbers from earlier runs do not compare with a run now. The default set is smaller, and the scorers changed (see "How the checks read a reply"). `--include-legacy` brings back the old set of cases, not the old scores. With the flag the headline numbers include the legacy cases, as they did, and each model's `legacy_jobs` in `summary.json` holds the same counts for them alone, so you can read them apart. Every sample row says whether its case is legacy.
+| Process | The shape | The checks |
+|---|---|---|
+| `memory-inference` | a title, a description and a content that are not empty; 3 to 8 tags; 3 to 6 search hints (akm keeps at most 8 and 6, and needs one) | `retains <term>` for each required term, found in the title, the description, the tags, the hints or the content; `retains explicit date`; `does not invent <term>` |
+| `remember-enrich` | 1 to 5 tags, all lower case, and a description. akm writes a description from the first sentences of the memory when the model gives none, so a missing one is not a failure of shape | `preserves explicit date` for a memory that writes one; `does not invent an observation date` for one that does not (no date, null and empty are the same); `metadata covers <keyword>` in the tags, the description and the date |
+| `schema-repair` | a `description` of 20 characters or more and a `when_to_use` of 15 or more | `generated fields are grounded in the body`: the two fields hold one of the keywords; `trigger is concrete`: the `when_to_use` holds one of the trigger terms. A reply with a description only is refused by akm and is `unusable` |
+| `session-summary` | a summary (the description) of 80 characters or more, and topics and tags that are not empty strings | `summary retains <term>`; `topics include <term>`, in the key topics list only; `summary omits <term>` |
+| `consolidate-promote` | akm accepted a plan | `promotes <ref>`; `leaves protected <ref> untouched`; `no extra or missing promotions` for a strict case; `promotes only memories of the pool` |
 
-| Job | Cases | Why it is legacy |
-|---|---:|---|
-| `graph_extraction` | 11 (4 focused, 4 deep of the legacy track, 3 production) | akm 0.9.17 removed the entity graph (`reports/retired-evals.md`), so akm no longer asks a model for one. |
-| `metadata_enhance` | 8 (4 focused, 4 production) | `reports/retired-evals.md` records that graph extraction and metadata enrichment were removed in akm 0.9.17 (2026-09-29), so akm no longer asks a model for it. That page is this repository's own note: it was not checked against akm's changelog. |
-| `reflect_proposal` | 13 (4 focused, 4 deep of the legacy track, 5 production) | Since 0.9.25-alpha.3 reflect edits only the frontmatter and keeps the body byte for byte. All 13 cases ask for a "complete improved markdown body". |
+A term is found with case and spacing ignored. A term of one word that ends in `y` also finds `ies`, `ied` and `ying`, so an inflection costs nothing.
 
-A case is legacy by its job, decided in `legacy_reason` in `src/bakeoff.py`, and not by a field of `cases.json`. The private assets made earlier need no regenerating for it. A case that asks for what akm 0.9.26 does differently is not legacy for that alone. The 22 consolidation cases ask for merge, delete, promote and contradict operations, where 0.9.26's consolidate asks a pair judge for one of six labels (`duplicate`, `subsumed`, `supersedes`, `contradicts`, `overlap` or `unrelated`) and the claims each note holds alone (`evals/consolidate/README.md`). They stay in the default run, as the snapshot's task.
+The promotion check reads the model's plan, `consolidation.planned`, and not the queue. akm drops some promotions before it queues them: it did not queue a hot memory that the model chose to promote, nor a note it found a reason against. Reading the queue would hide the model's choice. The queue is stored in the row as `promoted`.
 
 ## Read the results
 
 | Metric | Meaning |
 |---|---|
-| `valid_output` | Replies with the right shape: the right JSON keys, types and ranges, or the right file layout. |
-| `case_pass` | Cases where the shape is right and every check holds. |
-| `checks` | For each case, the share of its checks that held, averaged over the cases. A reply of the wrong shape earns none, so saying nothing earns nothing. This is the partial credit: how many facts, orderings and limits were right. |
-| `real_quotes` | Of the 27 grounded cases, those whose every quoted passage is an exact span of the source it cites. |
-| `median_seconds` | The median time for one case, retries included. It depends on the server as well as the model. |
+| `valid_output` | Cases whose output has the right shape, of the cases that ran to the end. |
+| `case_pass` | Cases whose shape is right and whose every check holds. |
+| `checks` | For each case, the share of its checks that held, averaged over the cases. A case of the wrong shape earns none, so saying nothing earns nothing. |
+| `median_seconds` | The median time for one case. It depends on the server as well as the model. |
+| `by_process` | `n`, `valid_output`, `passed` and `checks` for each process, its `outcomes` (`output`, `unusable`, `error`) and `failed`, the cases that failed each check. |
 
-Only replies that came back are scored. A request that failed after its retries is `errored`, and says so in `samples.jsonl`. It does not count against the model.
+A case that errored is left out of every count. One case moves `case_pass` by 6.7 points, and the processes have 1 to 4 cases each, so read a gap of a case or two as noise, compare by `checks` before you trust a small difference, and rerun with `--repeat`. `session-summary` has one case and tells you little by itself.
 
-`by_track` and `by_process` give the same counts for each track and each job. Read the tracks apart: compact is breadth, deep is size and realism. A model can ace one and fail the other, and one number across both hides it. One case moves `case_pass` by about a point, or two in the compact tier, so compare models by `checks` and by track before you trust a small gap.
+`served` counts the model names that answered, from the usage report of the improve run, so you can see when a gateway split a run. It is empty for `remember-enrich` and `session-summary`, whose commands report none.
 
-`observed_models` is the name the endpoint says answered. A gateway may route one name to another model, so check it before you trust a comparison.
+A model may have seen the public cases in training. A much better public score than custom score points to that. Run the custom corpus on a local model, or on an API that does not train on your data.
 
-A model may have seen the public files in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
+## Notes
 
-How the checks read a reply:
-
-- The 27 grounded cases (the original bake-off's consolidation and distillation items, and three synthesis cases) check the shape, that every quote is an exact span of its source, the length, and which refs are cited. They also check the content: each lists `required` terms in `cases.json`, the identifiers, paths, numbers and decisions its sources hold, and the deliverable must keep them. A reply of the right shape with real quotes and the wrong content fails. The terms are literal, so a model that restates an identifier loses a check. A grounded case with no terms is graded on format and grounding only, and `grounded.scope` in `summary.json` says so. All the public cases have terms. Private assets made before the terms were added have none until you run `./generate-assets --only bakeoff` again.
-- Frontmatter is read as YAML, so a block list or a folded description is read as written. Where the block is not YAML, its `key: value` lines are read as they stand.
-- A graph case (legacy) scores a relation's direction and matches whole entity names: "Worker Service" is not "Candidate Worker Service Image", and a relation from B to A is not one from A to B.
-- In `remember_enrich` an `observed_at` that is absent, null or empty means no date. A date the memory does not write fails.
-
-## Check the suite
-
-```
-uv run --project evals/bakeoff/src --frozen python evals/bakeoff/src/bakeoff.py verify
-uv run --project evals/bakeoff/src --frozen python -m unittest discover -s evals/bakeoff/src
-```
-
-`verify` runs offline. It checks the suite's coverage and files, runs every scorer on a known good reply and on replies that should fail, checks that every grounded case has terms and that a deliverable with the wrong content fails, and checks the request retries. These two commands are not part of `bun test`.
-
-## Where it came from
-
-The cases, the files and the scorers are from [akm-model-eval](https://github.com/itlackey/akm-model-eval). The harness is the same code with the cases moved out to `assets/cases.json`, any OpenAI-compatible endpoint, and results per model. What measured the server and not the model is gone: the three context-limit cases, and the token-rate figures.
+- What akm does changes with akm. Compare results only between runs with the same akm version. The processes are all `Evolving` or `Experimental` in akm's stability policy: the memory-inference pass is behind `experimental.improveAutonomy`, and `improve.strategies.*.processes.*` is an experimental config.
+- A session is summarised after extract's own call. If that call fails or its reply is unusable, akm skips the session and writes no summary, so `session-summary` depends on the model for two replies. The extraction's output is not scored here: `evals/extract` does that.
+- akm's error messages name the endpoint it called. The eval writes `<MODEL_BASE_URL>` in its place, so `samples.jsonl` can be shared.
+- The old `models.yaml` file, `--models`, `--tier`, `--include-legacy` and the Python code are gone. A run compares models by running the eval once for each (`--model`), and `scripts/matrix` and `scripts/compare` compare the results.
 
 ## Licence
 
