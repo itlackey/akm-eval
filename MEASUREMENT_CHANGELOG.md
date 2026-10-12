@@ -18,3 +18,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | longmemeval | scorer | 1 | first lock entry | ba3b3ecaf208 |
 | 2026-10-12 | longmemeval | collector | 2 | #62: the judge is sent the answer without the reader's reasoning (think blocks removed, a block cut off by the token limit runs to the end), and is not asked about an empty answer. Scores change for a reader that thinks or returns nothing | 8124063c63cc |
 | 2026-10-12 | longmemeval | scorer | 2 | #62: an empty answer is scored wrong whatever the stored verdict says, and the summary counts the answers cut off at the token limit and the empty ones, with a note. Scores change for a run in which the judge said yes to an empty answer | 7a80b0bc611b |
+| 2026-10-12 | longmemeval | collector | 3 | #73: chat requests go to the chat-completions URL of a base URL that has a query (the path comes before the query), through completionsUrl. No score change | d87913946f1d |
