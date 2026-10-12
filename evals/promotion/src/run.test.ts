@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Database } from "bun:sqlite";
 import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
-import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
-import { type Case, assetsSha256, promotionConfig } from "./lib.ts";
-import { callStats, foldersFor, plant, runCorpus } from "./run.ts";
+import { digestTree } from "../../../lib/akm/index-cache.ts";
+import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { clearRunning } from "../../../lib/results.ts";
+import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
+import { type Case, assetsSha256, bundleSha256, callStats, digestOf, parseCases, plant, promotionConfig } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { foldersFor, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -42,7 +47,7 @@ if (args[0] === "index") {
   process.exit(0);
 }
 const db = new Database(dbPath);
-const pending = () => db.query("SELECT id, content FROM proposals WHERE status = 'pending' AND stash_dir = ?").all(process.env.AKM_BUNDLE_DIR);
+const pending = () => db.query("SELECT id, ref, content FROM proposals WHERE status = 'pending' AND stash_dir = ?").all(process.env.AKM_BUNDLE_DIR);
 if (args[0] === "proposal" && args[1] === "list" && args[args.indexOf("--status") + 1] === "pending") { out({ totalCount: pending().length, proposals: [] }); process.exit(0); }
 if (args[0] === "proposal" && args[1] === "list" && args[args.indexOf("--status") + 1] === "rejected") {
   out({ proposals: JSON.parse(readFileSync(join(data, "rejected.json"), "utf8")) });
@@ -55,7 +60,8 @@ if (args[0] === "proposal" && args[1] === "drain") {
   const result = { ok: true, staged: [], rejected: [], deferred: [], failed: [] };
   const rejected = [];
   for (const p of pending()) {
-    const word = p.content.split("\\n\\n").pop().split(/\\s/)[0];
+    // FAKE_VERDICTS names the verdict of a ref, for the public cases, whose text carries none
+    const word = JSON.parse(process.env.FAKE_VERDICTS ?? "{}")[p.ref.split("//")[1]] ?? p.content.split("\\n\\n").pop().split(/\\s/)[0];
     const usage = (outcome) => { if (!process.env.FAKE_NO_EVENTS) db.run("INSERT INTO events (event_type, ts, metadata_json) VALUES ('llm_usage', ?, ?)", [new Date().toISOString(), JSON.stringify({ outcome, model: "served-model" })]); };
     if (word === "ACCEPT") { result.staged.push(p.id); usage("success"); }
     else if (word === "REJECT") { result.rejected.push(p.id); rejected.push({ id: p.id, review: { reason: "a duplicate of a note" } }); usage("success"); }
@@ -294,6 +300,131 @@ describe("runCorpus", () => {
     const { ctx, sandbox, folders } = setup(cases);
     sandbox.env.AKM_BUNDLE_DIR = join(sandbox.dir, "elsewhere"); // the fake lists the proposals of the folder it is told
     await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("pending proposals");
+  });
+});
+
+/** The manifest a run wrote into its summary.json, and the rows into its samples.jsonl. */
+const stored = (dir: string) => ({
+  summary: JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")),
+  rows: readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)),
+});
+
+describe("the manifest of a run", () => {
+  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+    const { ctx, folders } = setup(cases);
+    const { summary } = stored((await quiet(() => runCorpus("public", ctx, folders))).results_dir);
+    const { manifest } = summary;
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(readManifest(summary).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "promotion", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.settings).toEqual({ strategy: "promotion", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(Object.keys(manifest.cases)).toEqual(cases.map((c) => c.id));
+    const bundle = bundleSha256(folders.library, cases);
+    expect(manifest.cases["g-accept"]).toEqual({
+      input_sha256: sha256Json({ ref: "knowledge/g-accept", content: cases[0]?.content, bundle }),
+      label_sha256: sha256Json({ label: "good", category: "good", ref: "knowledge/g-accept" }),
+    });
+    expect(manifest.completion).toEqual({ selected: cases.map((c) => c.id), scored: cases.filter((c) => c.id !== "e-crash").map((c) => c.id), errored: ["e-crash"] });
+  });
+
+  test("holds the config without the engine's settings and without the endpoint, and the engine settings by name", async () => {
+    const { ctx, folders } = setup(cases);
+    const { summary } = stored((await quiet(() => runCorpus("public", ctx, folders))).results_dir);
+    expect(summary.manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(summary.config)));
+    expect(JSON.stringify(summary.manifest.config.redacted)).not.toContain("localhost");
+    expect(summary.manifest.engines).toEqual(summary.engine.engines);
+    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", endpoint_id: sha256Text("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(JSON.stringify(summary)).not.toContain("localhost:1/v1"); // the summary's config names the endpoint as <MODEL_BASE_URL>
+    expect(summary.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
+  });
+
+  test("a case's input follows the notes of the bundle it was planted among: another library, or a run of fewer cases, is another input", async () => {
+    const digests = async (more: Partial<Parameters<typeof runCorpus>[1]>, edit?: (library: string) => void) => {
+      const { ctx, folders } = setup(cases);
+      edit?.(folders.library);
+      return stored((await quiet(() => runCorpus("public", { ...ctx, ...more }, folders))).results_dir).summary.manifest.cases;
+    };
+    const base = await digests({});
+    expect(await digests({})).toEqual(base);
+    const changed = await digests({}, (library) => writeFileSync(join(library, "knowledge", "kept.md"), "a note that changed\n"));
+    expect(changed["g-accept"].input_sha256).not.toBe(base["g-accept"].input_sha256);
+    expect(changed["g-accept"].label_sha256).toBe(base["g-accept"].label_sha256);
+    const limited = await digests({ limit: 4 });
+    expect(Object.keys(limited)).toEqual(["g-accept", "d-accept", "s-accept", "e-crash"]);
+    expect(limited["g-accept"].input_sha256).not.toBe(base["g-accept"].input_sha256); // the notes of the cases that were not run stay in the bundle
+  });
+
+  test("the digest of the bundle is that of the notes plant leaves in the sandbox", async () => {
+    const { sandbox, folders } = setup(cases);
+    const some = cases.slice(0, 3);
+    await quiet(() => plant(sandbox, some, folders.library));
+    const left = digestTree(join(sandbox.dir, "bundle", "knowledge"));
+    expect(Object.keys(left).sort()).toEqual(["d-reject.md", "e-crash.md", "e-reject.md", "kept.md", "s-accept.md", "d-accept.md"].sort());
+    expect(bundleSha256(folders.library, some)).toBe(digestOf(Object.keys(left).map((f): [string, string] => [`knowledge/${f}`, join(sandbox.dir, "bundle", "knowledge", f)])));
+  });
+});
+
+describe("rescore", () => {
+  /** The real public cases and library, run against the fake akm with a verdict for each of their refs, and the results folder cleared for rescore. */
+  async function publicRun() {
+    const real = foldersFor("public");
+    const publicCases = parseCases(readFileSync(real.cases, "utf8"));
+    const words = ["ACCEPT", "REJECT", "DEFER", "SLOW", "ACCEPT", "CRASH"];
+    process.env.FAKE_VERDICTS = JSON.stringify(Object.fromEntries(publicCases.map((c, i) => [c.ref, words[i % words.length]])));
+    try {
+      const { ctx, folders } = setup([make("x", "good", "ACCEPT")]);
+      const summary = await quiet(() => runCorpus("public", ctx, { ...real, results: folders.results }));
+      clearRunning(summary.results_dir);
+      return { summary, publicCases };
+    } finally {
+      delete process.env.FAKE_VERDICTS;
+    }
+  }
+
+  test("scores a run of the public cases again from the raw outputs its samples.jsonl holds, to the rows and metrics it wrote", async () => {
+    const { summary } = await publicRun();
+    expect(summary).toMatchObject({ n_cases: 20, n_run: 20, n_errored: 6, timeouts: 3 });
+    const { out, result } = rescoreFolder(summary.results_dir);
+    expect(out).toBe(`${summary.results_dir}-rescored`);
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    const was = stored(summary.results_dir);
+    const now = stored(out);
+    expect(now.rows).toEqual(was.rows);
+    expect(now.summary.metrics).toEqual(was.summary.metrics);
+    expect(now.summary).toMatchObject({ n_run: 20, n_errored: 6, timeouts: 3 });
+    expect(manifestProblems(now.summary.manifest)).toEqual([]);
+    expect(now.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+    expect(now.summary.manifest.collector).toEqual(was.summary.manifest.collector);
+    expect(now.summary.manifest.rescored_from).toMatchObject({ results: basename(summary.results_dir), scorer: was.summary.manifest.scorer, dropped: [] });
+  });
+
+  test("a run from before the manifest scores again too, when it read the cases that are here now, and is refused when it did not", async () => {
+    const { summary } = await publicRun();
+    let n = 0;
+    const legacy = (change: (s: Record<string, any>) => void): string => {
+      const dir = `${summary.results_dir}-legacy-${++n}`;
+      cpSync(summary.results_dir, dir, { recursive: true });
+      const s = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+      delete s.manifest;
+      change(s);
+      writeFileSync(join(dir, "summary.json"), JSON.stringify(s));
+      return dir;
+    };
+    const { result } = rescoreFolder(legacy(() => {}));
+    expect(result).toMatchObject({ legacy: true, changed: [] });
+    expect(() => rescoreFolder(legacy((s) => (s.assets_sha256 = "0".repeat(64))))).toThrow(/was made before the manifest, and cannot be scored again: it read other cases than the ones in evals\/promotion\/assets now/);
+  });
+
+  test("a run whose rows lack the outcome the scorer reads is refused, with the field named", async () => {
+    const { summary } = await publicRun();
+    const rows = stored(summary.results_dir).rows;
+    const dir = `${summary.results_dir}-thin`;
+    cpSync(summary.results_dir, dir, { recursive: true });
+    const { outcome: _outcome, ...first } = rows[0];
+    writeFileSync(join(dir, "samples.jsonl"), [first, ...rows.slice(1)].map((r) => `${JSON.stringify(r)}\n`).join(""));
+    expect(() => rescoreFolder(dir)).toThrow(/its rows lack the raw output the promotion scorer reads: outcome \(1 row: good-01\)/);
   });
 });
 

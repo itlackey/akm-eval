@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
 import { Database } from "bun:sqlite";
-import { type Case, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, metrics, parseCases, promotionConfig, proposalRow, readSeed, rowsFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
+import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, corpusSeed, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, readSeed, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const LIBRARY = BUNDLE_DIR; // the notes a run holds in its bundle, as build.ts makes them from corpus/library
 
 const make = (id: string, category: Case["category"], extra: Partial<Case> = {}): Case => ({ id, label: category === "good" ? "good" : "bad", category, ref: `knowledge/${id}`, content: `---\ndescription: ${id}\n---\n\nbody of ${id}\n`, ...extra });
+
+/** The rows a drain gives the cases: what the collector reads from it (`rawFromDrain`), scored as the scorer does (`makeRow`). */
+const rowsFromDrain = (cases: Case[], drained: Drained, reasons: Map<string, string>, failures: Map<string, string>): Row[] => rawFromDrain(cases, drained, reasons, failures).map((raw, i) => makeRow(cases[i] as Case, raw));
 
 describe("parseCases", () => {
   test("reads JSONL, and refuses a bad label, category, ref or repeated id", () => {

@@ -4,26 +4,27 @@
 //
 //   evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { Database } from "bun:sqlite";
-import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
-import { BAD, type Case, type Drained, EVENT_COLUMNS, type Metrics, PROPOSAL_COLUMNS, type Row, STRATEGY, assetsSha256, corpusSeed, dispatchFailures, metrics, parseCases, pct, promotionConfig, memoryOf, proposalRow, rowsFromDrain, schemaProblem, selectCases } from "./lib.ts";
+import { type Calls, NAME, STRATEGY, callStats, collect, openSandbox } from "./collect.ts";
+import { assetsSha256, bundleSha256, corpusSeed, parseCases, selectCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { BAD, type Metrics, pct, summarize } from "./score.ts";
 
-const NAME = "promotion";
+
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const HARNESS = harnessSha256(import.meta.dir);
-const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
-const STEP_TIMEOUT_MS = 30 * 60_000;
 
 const USAGE = `Usage: evals/promotion/run [--corpus public|own|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
@@ -95,71 +96,11 @@ interface Summary {
   /** Of the errored proposals, how many failed because the model call timed out, by the text akm gave. */
   timeouts: number;
   seconds: number;
-  calls: { n: number; failures: number; served: Record<string, number> } | null;
+  calls: Calls | null;
   metrics: Metrics;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
-}
-
-/**
- * Makes the bundle the proposals are judged against and queues them. The bundle is the library's knowledge/ folder without the
- * notes the cases would write: a proposal creates its note, and the notes already there are what it may duplicate. Each case
- * is queued as a pending promotion of consolidate, in akm's own table, since no command queues a proposal without a model.
- * A promotion names the memory it was made from, and a judge that is shown the nearest notes finds them from that memory's
- * vector, so each case's note is also written as that memory, `memories/<name>`, before the bundle is indexed with embeddings.
- */
-export async function plant(sandbox: Sandbox, cases: Case[], libraryDir: string): Promise<void> {
-  const bundle = join(sandbox.dir, "bundle");
-  cpSync(join(libraryDir, "knowledge"), join(bundle, "knowledge"), { recursive: true });
-  for (const c of cases) rmSync(join(bundle, `${c.ref}.md`), { force: true });
-  mkdirSync(join(bundle, "memories"), { recursive: true });
-  for (const c of cases) writeFileSync(join(bundle, memoryOf(c)), c.content);
-  const indexed = await runAkmJson<{ totalEntries?: number; verification?: { embeddingCount?: number; message?: string } }>(sandbox, ["index", "--full"], { timeoutMs: STEP_TIMEOUT_MS }); // makes state.db and indexes the notes
-  if (typeof indexed.totalEntries !== "number" || indexed.verification?.embeddingCount !== indexed.totalEntries) fail(`akm embedded ${indexed.verification?.embeddingCount ?? "no"} of ${indexed.totalEntries ?? "an unknown number of"} assets: ${indexed.verification?.message}. Its embedding model may not have downloaded: see .cache/models.`, 1);
-  const stash = realpathSync(bundle);
-  const now = new Date().toISOString();
-  const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"));
-  try {
-    // akm's tables are its own: a build that lays them out differently is named here, and not found in a SQL error.
-    const problem = schemaProblem(db, "proposals", PROPOSAL_COLUMNS);
-    if (problem) fail(`${problem}. The eval writes its proposals into that table, so it needs a build of akm that lays it out as akm 0.9.26 does. See "Depends on akm's private schema" in evals/promotion/README.md.`, 1);
-    const insert = db.prepare(`INSERT INTO proposals (${PROPOSAL_COLUMNS.join(", ")}) VALUES (${PROPOSAL_COLUMNS.map(() => "?").join(", ")})`);
-    for (const c of cases) insert.run(...proposalRow(c, stash, now));
-  } finally {
-    db.close();
-  }
-  const queued = await runAkmJson<{ totalCount?: number }>(sandbox, ["proposal", "list", "--status", "pending"], { timeoutMs: STEP_TIMEOUT_MS });
-  if (queued.totalCount !== cases.length) fail(`akm lists ${queued.totalCount ?? "no"} pending proposals, and ${cases.length} were queued. This akm may keep its proposals another way.`, 1);
-}
-
-/**
- * The model calls the drain made, from akm's usage events: how many, how many failed, and the model names the endpoint reported.
- * Null, with the reason on stderr, when the events cannot be read: the calls are a side measure, and the run goes on without them.
- */
-export function callStats(sandbox: Sandbox): Summary["calls"] {
-  const none = (reason: string): null => {
-    console.error(`promotion: no model call counts in the summary: ${reason}`);
-    return null;
-  };
-  try {
-    const db = new Database(join(sandbox.env.AKM_DATA_DIR, "state.db"), { readonly: true });
-    try {
-      const problem = schemaProblem(db, "events", EVENT_COLUMNS);
-      if (problem) return none(problem);
-      const rows = db.query("SELECT metadata_json FROM events WHERE event_type = 'llm_usage'").all() as { metadata_json: string }[];
-      const served: Record<string, number> = {};
-      let failures = 0;
-      for (const r of rows) {
-        const m = JSON.parse(r.metadata_json) as { outcome?: string; model?: string };
-        if (m.outcome !== "success") failures++;
-        if (m.model) served[m.model] = (served[m.model] ?? 0) + 1;
-      }
-      return { n: rows.length, failures, served };
-    } finally {
-      db.close();
-    }
-  } catch (e) {
-    return none((e as Error).message);
-  }
 }
 
 function printSummary(s: Summary): void {
@@ -199,40 +140,32 @@ export async function runCorpus(
   ctx: { sandbox: Sandbox; version: string; model: string; baseUrl: string; label: string; limit?: number; overrides?: Overrides },
   folders: Folders = foldersFor(corpus),
 ): Promise<Summary> {
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = parseCases(readFileSync(folders.cases, "utf8"), folders.cases);
   const cases = selectCases(all, ctx.limit);
   const assetsDigest = assetsSha256(folders.cases, folders.library);
   const dir = makeResultsDir(folders.results, ctx.label);
   console.log(`${NAME} (${corpus}): ${cases.length} of ${all.length} proposals`);
 
-  const t0 = performance.now();
-  await plant(ctx.sandbox, cases, folders.library);
-  console.log("  planted; the judge reads them one at a time");
-  const args = ["proposal", "drain", "--judgment", "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--yes"];
-  const drain = await runAkm(ctx.sandbox, [...args, "--format", "json"], { timeoutMs: DRAIN_TIMEOUT_MS });
-  if (drain.code !== 0) fail(hideEndpoint(failureMessage("akm proposal drain", drain.code, drain.stderr), ctx.baseUrl), 1);
-  let drained: Drained;
-  try {
-    drained = JSON.parse(drain.stdout) as Drained;
-  } catch {
-    return fail("akm proposal drain printed no JSON result", 1);
-  }
-  const rejected = await runAkmJson<{ proposals?: { id: string; review?: { reason?: string } }[] }>(ctx.sandbox, ["proposal", "list", "--status", "rejected", "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS });
-  const reasons = new Map((rejected.proposals ?? []).map((p) => [p.id, p.review?.reason ?? ""]));
-  // An accepted or deferred proposal stays pending, with the judge's reason in its gate decision (and, for a defer, akm's own reason: a reply it could not read, or a failed call).
-  const pending = await runAkmJson<{ proposals?: { id: string; gateDecision?: { reason?: string; judgeReason?: string } }[] }>(ctx.sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS });
-  for (const p of pending.proposals ?? []) {
-    const why = p.gateDecision?.judgeReason || p.gateDecision?.reason;
-    if (why) reasons.set(p.id, why);
-  }
-  const seconds = Number(((performance.now() - t0) / 1000).toFixed(1));
-
-  // akm names the endpoint in some of its errors, and rows get shared, so no row carries it.
-  const rows = JSON.parse(hideEndpoint(JSON.stringify(rowsFromDrain(cases, drained, reasons, dispatchFailures(drain.stderr))), ctx.baseUrl)) as Row[];
+  const { rows, seconds } = await collect(ctx.sandbox, cases, folders.library, ctx);
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
-  const errored = rows.filter((r) => r.outcome === "error").length;
-  const aborted = errored === rows.length ? `no proposal got a verdict. First error: ${rows[0]?.error}` : undefined;
+  const counts = summarize(rows);
+  const aborted = counts.n_errored === rows.length ? `no proposal got a verdict. First error: ${rows[0]?.error}` : undefined;
   const config = JSON.parse(readFileSync(join(ctx.sandbox.dir, "config", "config.json"), "utf8")) as Record<string, unknown>; // what akm was given: the patch is in it
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const seed = corpusSeed(corpus, folders.seed ?? join(ROOT, "private", "seed"));
+  const build = akmBuild();
+  const manifest = buildManifest({
+    measurement: MEASUREMENT,
+    parts,
+    corpus,
+    // what each case presented to akm includes the notes of the bundle it was planted among
+    cases: caseDigests(MEASUREMENT, cases, () => bundleSha256(folders.library, cases)),
+    akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+    config,
+    settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: null, seed },
+    completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
+  });
   const summary: Summary = {
     eval: NAME,
     corpus,
@@ -242,22 +175,23 @@ export async function runCorpus(
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
+    ...build,
     limit: ctx.limit ?? null,
-    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
-    config: redactConfig(config),
+    ...overrideSummary(overrides),
+    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host and the digest of its identity
     engine: engineSettings(config),
     assets_sha256: assetsDigest,
-    seed: corpusSeed(corpus, folders.seed ?? join(ROOT, "private", "seed")),
+    seed,
     status: aborted ? "aborted" : "complete",
     aborted_reason: aborted ?? null,
     n_cases: all.length,
-    n_run: rows.length,
-    n_errored: errored,
-    timeouts: rows.filter((r) => r.timed_out).length,
+    n_run: counts.n_run,
+    n_errored: counts.n_errored,
+    timeouts: counts.timeouts,
     seconds,
     calls: callStats(ctx.sandbox),
-    metrics: metrics(rows),
+    metrics: counts.metrics,
+    manifest,
     results_dir: dir,
   };
   // The summary is written before the run fails, and says so: a reader of the folder must not take it for a whole run.
@@ -306,9 +240,8 @@ async function main(): Promise<void> {
   const summaries: Summary[] = [];
   for (const c of corpora) {
     const runs = await repeatRuns(repeat, label, async (runLabel) => {
-      const sandbox = createSandbox(NAME, { keepModelKey: true, semantic: true }); // the config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/
+      const sandbox = openSandbox({ baseUrl, model, hasKey, overrides });
       try {
-        writeConfig(sandbox, patchedConfig(promotionConfig(baseUrl, model, hasKey), overrides));
         const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
         return await runCorpus(c, { sandbox, version, model, baseUrl, label: runLabel, limit, overrides }, foldersFor(c, casesDir));
       } catch (e) {
