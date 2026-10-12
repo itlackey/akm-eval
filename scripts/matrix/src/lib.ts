@@ -2,8 +2,19 @@
 // makes, how a result is found, and the verdict. The report is in decision.ts. See ../../../README.md ("Run a matrix").
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { type RunManifest, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { spreadOf } from "../../../lib/repeat.ts";
+import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
+
+/**
+ * scripts/rescore, loaded when a decision needs a result scored again and not before, as scripts/compare does: a matrix whose results were
+ * all scored by one scorer, or made before the manifest, does not need it.
+ */
+const rescorer = (): typeof import("../../rescore/src/lib.ts") => createRequire(import.meta.url)("../../rescore/src/lib.ts");
 
 export type Dir = "up" | "down";
 export interface MetricSpec {
@@ -201,6 +212,8 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
 export function scopeKey(r: Row): string {
   const bits = [r.eval, `corpus=${corpusOf(r.eval, r.args)}`];
   if (hasFlag(r.args, "--pool")) bits.push("pool");
+  const folder = customFolder(r.eval, r.args);
+  if (folder !== null && !hasFlag(r.args, "--cases")) bits.push(`folder=${folder}`); // the old values name other folders: distill's own is not its default custom corpus
   for (const f of ["--cases", "--limit"]) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
   return bits.join(" ");
 }
@@ -312,10 +325,70 @@ export const readJson = (file: string): any => {
   }
 };
 
-/** The corpus a row's flags name: `--corpus`, else the public one, but for promotion's `--cases DIR`, which is the own corpus from another folder. */
-export const corpusOf = (evalName: string, args: string[]): string => flagValue(args, "--corpus") ?? (evalName === "promotion" && hasFlag(args, "--cases") ? "own" : "public");
+// ---- the corpus a row reads ----------------------------------------------------------------------------------------------
 
-/** The folders an eval or a benchmark may write its results to for a corpus. */
+/**
+ * What `--corpus custom` reads for each eval without --cases, and the old `--corpus` values its runner still takes: the options the runner
+ * gives resolveCorpora (lib/corpus.ts). The matrix does not run the runner, so it needs them to know the folder a row reads. An eval that
+ * reads a corpus of another (terminal-bench takes the library of retrieval's rewrite) is resolved as that eval.
+ */
+const CUSTOM: Record<string, { corpus: string; default: Kind; aliases: Record<string, Alias> }> = {
+  nightly: { corpus: "nightly", default: "rewrite", aliases: { private: ALIASES.private } },
+  consolidate: { corpus: "consolidate", default: "rewrite", aliases: { private: ALIASES.private } },
+  distill: { corpus: "distill", default: "rewrite", aliases: { private: ALIASES.private, own: { folder: "own/assets", kind: "own" }, "own-feedback": { folder: "own/assets-feedback", kind: "own" } } },
+  reflect: { corpus: "reflect", default: "rewrite", aliases: { private: ALIASES.private } },
+  promotion: { corpus: "promotion", default: "own", aliases: { own: ALIASES.own } },
+  "judge-gate": { corpus: "judge-gate", default: "rewrite", aliases: { private: ALIASES.private } },
+  extract: { corpus: "extract", default: "rewrite", aliases: { private: ALIASES.private } },
+  retrieval: { corpus: "retrieval", default: "rewrite", aliases: ALIASES },
+  "agent-ab": { corpus: "agent-ab", default: "rewrite", aliases: { private: ALIASES.private } },
+  "terminal-bench": { corpus: "retrieval", default: "rewrite", aliases: { private: ALIASES.private } },
+};
+
+/** The old `--corpus` values, which name a custom corpus. */
+const OLD_VALUES = ["private", "own", "own-feedback"];
+
+/**
+ * The corpus a row's flags name: `public`, `custom` or `all`. `--cases DIR` alone is a custom corpus, as for the evals, and so are the old
+ * values `private`, `own` and `own-feedback` (lib/corpus.ts). Any other value is the runner's to refuse.
+ */
+export function corpusOf(_evalName: string, args: string[]): string {
+  const corpus = flagValue(args, "--corpus");
+  if (corpus === undefined) return hasFlag(args, "--cases") ? "custom" : "public";
+  return OLD_VALUES.includes(corpus) ? "custom" : corpus;
+}
+
+/**
+ * The custom corpus a row reads, as the runner resolves it from the repository root `root`: its folder (absolute), the corpus.json it has,
+ * and its kind. Null when the row reads the public corpus only, the eval is not in the table, or the corpus is not one the runner would
+ * accept (it refuses, and the matrix records that run as it ends).
+ */
+export function customCorpus(root: string, evalName: string, args: string[]): ResolvedCorpus | null {
+  const spec = CUSTOM[evalName];
+  if (!spec || corpusOf(evalName, args) === "public") return null;
+  try {
+    const found = resolveCorpora({ eval: spec.corpus, values: { corpus: flagValue(args, "--corpus"), cases: flagValue(args, "--cases") }, publicFolder: join(root, runnerFolder(evalName), evalName), default: spec.default, aliases: spec.aliases, root, warn: () => {} });
+    return found.find((c) => c.name === "custom") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The folder of the custom corpus a row names, as text without a checkout: the `--cases` value, else the folder of the alias or the default, from the
+ * repository root. Null for a row that reads the public corpus. This is what tells two custom corpora of one eval apart in `scopeKey`.
+ */
+export function customFolder(evalName: string, args: string[]): string | null {
+  const spec = CUSTOM[evalName];
+  if (corpusOf(evalName, args) === "public") return null;
+  const cases = flagValue(args, "--cases");
+  if (cases !== undefined) return cases;
+  const corpus = flagValue(args, "--corpus");
+  const alias = corpus !== undefined && spec !== undefined && Object.hasOwn(spec.aliases, corpus) ? spec.aliases[corpus] : undefined;
+  return `private/${spec?.corpus ?? evalName}/${alias?.folder ?? (spec?.default === "own" ? "own" : "assets")}`;
+}
+
+/** The folders an eval or a benchmark may write its results to for a corpus: results/ for the public one, and private/<eval>/ for a custom one (and the folders of own corpora before they moved there). */
 export function resultsParents(root: string, evalName: string, args: string[]): string[] {
   const corpus = corpusOf(evalName, args);
   if (corpus === "public") return [join(root, runnerFolder(evalName), evalName, "results")];
@@ -376,6 +449,8 @@ export interface Spread {
 export interface RunFacts {
   name: string;
   identity: Identity;
+  /** The run's manifest, read through the one validator (lib/manifest.ts), or null for a run before the manifest. */
+  manifest?: RunManifest | null;
 }
 
 export interface Measured {
@@ -404,6 +479,8 @@ export interface Measured {
   dirs?: string[];
   /** Every run behind the numbers, not the first alone: the policy checks each of them (see ../../compare/src/policy.ts). */
   runs: RunFacts[];
+  /** The runs scored again with the current scorer, as scripts/compare reads them, when the sides had been scored by different scorers (see `scoredAlike`). */
+  rescored?: Run[];
 }
 
 const at = (x: unknown, path: string): unknown => path.split(".").reduce<unknown>((o, k) => (isObject(o) ? o[k] : undefined), x);
@@ -436,7 +513,7 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
   if (!isObject(top)) return "is not complete: its summary cannot be read";
   if (ref.kind === "run") {
     const inc = incompleteOf(top);
-    return inc ? incompleteClause(inc) : null;
+    return inc ? incompleteClause(inc) : unsound(top, "its");
   }
   const dirs = runDirs(file, top, "repeat");
   const listed = num(top.repeat);
@@ -447,20 +524,49 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
     if (!isObject(s)) return `is not complete: run r${i + 1} has no readable summary.json`;
     const inc = incompleteOf(s);
     if (inc) return incompleteClause(inc, `run r${i + 1}: `);
+    const bad = unsound(s, `run r${i + 1}'s`);
+    if (bad) return bad;
   }
   return null;
 }
 
-/** `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was not complete is no result. */
+/** Why a summary's manifest is no manifest, as a clause to follow "the run", or null for a sound one and for a run before the manifest. A run whose manifest the validator refuses has an identity nobody can read. */
+function unsound(summary: unknown, whose: string): string | null {
+  const reading = readManifest(isObject(summary) ? summary : {});
+  return reading.kind === "invalid" ? `is not usable: ${whose} manifest is not sound: ${reading.problems.join("; ")}` : null;
+}
+
+/**
+ * `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was not complete is no result.
+ * What the runs say of how they were made (the akm, the seed, the collector and the scorer) is read from the manifest, through lib/manifest.ts, where
+ * a run has one; a run from before it is read from the fields every summary has.
+ */
 export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, repeat: number | null): Measured | null {
   const file = join(root, ref.file);
   const s = readJson(file);
   if (!s || incompleteReason(root, ref) !== null) return null;
   const dirs = runDirs(file, s, ref.kind);
   const summaries = ref.kind === "run" ? [s] : dirs.map((d) => readJson(join(d, "summary.json")));
-  const runs: RunFacts[] = summaries.map((x, i) => ({ name: basename(dirs[i]), identity: identityOf(isObject(x) ? x : {}) }));
+  const runs: RunFacts[] = summaries.map((x, i) => {
+    const summary = isObject(x) ? x : {};
+    const reading = readManifest(summary);
+    return { name: basename(dirs[i]), identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
+  });
   const first = summaries.find(isObject) as Record<string, any> | undefined;
-  const common = { scope: ref.scope, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, akm_build_fingerprint: s.akm_build_fingerprint ?? first?.akm_build_fingerprint ?? null, metrics: s.metrics, dirs, runs, assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null, seed: typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null };
+  // a Harbor run's akm is the release it installed, which its summary records beside the manifest's
+  const m = first === undefined || HARBOR.includes(String(first.eval)) ? null : runs[summaries.indexOf(first)].manifest ?? null;
+  const common = {
+    scope: ref.scope,
+    model: s.model ?? null,
+    akm_build: m ? m.akm.build : s.akm_build ?? null,
+    akm_version: m ? m.akm.version : s.akm_version ?? null,
+    akm_build_fingerprint: m ? m.akm.build_fingerprint : s.akm_build_fingerprint ?? first?.akm_build_fingerprint ?? null,
+    metrics: s.metrics,
+    dirs,
+    runs,
+    assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null,
+    seed: m ? m.settings.seed : typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null,
+  };
   if (ref.kind === "run") {
     return { ...common, n: 1, n_errored: num(s.n_errored), failed: num(at(s, "completion.failed")), calls: callsOf(s), seconds: wallSeconds, repeated: false };
   }
@@ -532,7 +638,80 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
     ...base.runs.map((r) => ({ side: "the baseline", name: r.name, identity: r.identity })),
     ...cfg.runs.map((r) => ({ side: "the config", name: r.name, identity: r.identity })),
   ];
-  return checkMembers(members, axes);
+  // The numbers of a result come from its summary, so a case whose input differs cannot be left out as scripts/compare leaves it out: it is a difference of inputs.
+  return checkMembers(members, axes, { manifest: true, caseInputs: true });
+}
+
+// ---- results from different scorers, and runs from before the manifest -----------------------------------------------------
+
+/**
+ * Brings the results of the two sides to one scorer, the way scripts/compare does (README, "How results stay comparable"). When the runs behind
+ * them were scored by different scorers, or a case they share has other labels in some run, every run of both sides is scored again in memory
+ * with the scorer and labels this repository has now (scripts/rescore), and the numbers are those of the new rows. Nothing is written. A run
+ * that cannot be scored again, for want of the raw output its scorer reads, refuses the pair, with the reason. Results with no manifest are
+ * left as they are: the decision calls them exploratory (`manifestReasons`).
+ */
+export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; again: string | null } | { refusal: string } {
+  const runs = [...base.runs, ...cfg.runs];
+  const manifests = runs.map((r) => r.manifest);
+  if (manifests.length === 0 || manifests.some((m) => !m) || !base.dirs?.length || !cfg.dirs?.length) return { base, cfg, again: null };
+  const all = manifests as RunManifest[];
+  const scorers = [...new Set(all.map((m) => m.scorer.sha256))];
+  const shared = Object.keys(all[0].cases).filter((id) => all.every((m) => m.cases[id] !== undefined));
+  const relabelled = shared.some((id) => new Set(all.map((m) => m.cases[id].label_sha256)).size > 1);
+  if (scorers.length === 1 && !relabelled) return { base, cfg, again: null };
+  const again = scorers.length > 1 ? `the runs were scored by different scorers (${[...new Set(all.map((m) => `v${m.scorer.version} ${m.scorer.sha256.slice(0, 12)}`))].join(", ")})` : "the runs were scored against different labels";
+  const { RescoreError, readStored, rescoreRun } = rescorer();
+  const score = (side: string, m: Measured): Measured => {
+    const done = (m.dirs ?? []).map((dir) => {
+      const shown = isAbsolute(dir) && relative(root, dir).startsWith("..") ? dir : relative(root, dir);
+      try {
+        const stored = readStored(dir);
+        const result = rescoreRun({ ...stored, dir: shown });
+        return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run };
+      } catch (e) {
+        if (e instanceof RescoreError) throw new RescoreError(`${again}, so both are scored again with the current scorer before they are compared, and ${side} cannot be: ${e.message}`);
+        throw e;
+      }
+    });
+    const summaries = done.map((d) => d.summary);
+    const rescored = summaries.map((summary) => {
+      const reading = readManifest(summary);
+      return { identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
+    });
+    const runs = m.runs.map((r, i) => ({ ...r, ...rescored[i] }));
+    const numbers = m.repeated
+      ? { metrics: spreadOf(summaries.map((x) => x.metrics)), n_errored: mean(summaries.map((x) => num(x.n_errored))), calls: mean(summaries.map(callsOf)) }
+      : { metrics: summaries[0].metrics, n_errored: num(summaries[0].n_errored), calls: callsOf(summaries[0]) };
+    return { ...m, ...numbers, runs, rescored: done.map((d) => d.run) };
+  };
+  try {
+    return { base: score("the baseline", base), cfg: score("the config", cfg), again };
+  } catch (e) {
+    if (e instanceof RescoreError) return { refusal: e.message };
+    throw e;
+  }
+}
+
+/**
+ * Why a result is no conclusion for want of a manifest, for an eval that declares a measurement (so can have one): a run written before
+ * harness-v3 has no manifest, so its collector, its scorer and the inputs of its cases are not verified; a run that scripts/rescore made from
+ * one has a collector no one versioned. Empty for an eval that declares none yet, whose runs are compared by the earlier rules.
+ */
+export function manifestReasons(root: string, evalName: string, base: Measured, cfg: Measured): string[] {
+  if (measurementPath(evalName, root) === null) return [];
+  const sides = [["the baseline", base], ["the config", cfg]] as const;
+  const who = (pick: (r: RunFacts) => boolean): string[] =>
+    sides.flatMap(([side, m]) => {
+      const some = m.runs.filter(pick);
+      return some.length === 0 ? [] : [some.length === m.runs.length ? side : `${side}'s run${some.length === 1 ? "" : "s"} ${some.map((r) => r.name).join(" and ")}`];
+    });
+  const out: string[] = [];
+  const legacy = who((r) => !r.manifest);
+  if (legacy.length > 0) out.push(`${legacy.join(" and ")} ${legacy.length > 1 || legacy[0].includes("'s runs ") ? "have" : "has"} no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified`);
+  const unversioned = who((r) => r.manifest?.collector.version === 0);
+  if (unversioned.length > 0) out.push(`${unversioned.join(" and ")} ${unversioned.length > 1 || unversioned[0].includes("'s runs ") ? "were" : "was"} collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned`);
+  return out;
 }
 
 /**
@@ -670,14 +849,20 @@ export function selectForConfirm(root: string, m: Matrix, state: State, opts: { 
     const axes = treatmentAxes(m, config, base);
     const notes: string[] = [];
     const moved = c.flatMap((cm) => {
-      const bm = b.find((x) => x.scope === cm.scope);
-      if (!bm) return [];
-      const why = incomparable(bm, cm, axes, config.eval);
+      const bm0 = b.find((x) => x.scope === cm.scope);
+      if (!bm0) return [];
+      const same = scoredAlike(root, bm0, cm);
+      if ("refusal" in same) {
+        notes.push(same.refusal);
+        return [];
+      }
+      const bm = same.base;
+      const why = incomparable(bm, same.cfg, axes, config.eval);
       if (why) {
         notes.push(why);
         return [];
       }
-      return screenDiffers(config.eval, bm, cm, opts.minDelta);
+      return screenDiffers(config.eval, bm, same.cfg, opts.minDelta);
     });
     if (moved.length) selected.push({ config, reason: `screen differs: ${[...new Set(moved)].join(", ")}` });
     else if (notes.length) skipped.push({ config, reason: `screen not comparable: ${[...new Set(notes)].join("; ")}` });
