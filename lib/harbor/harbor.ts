@@ -9,7 +9,7 @@ import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { endpointIdentity, sha256File, sha256Text } from "../provenance.ts";
-import { type ArmSummary, type Arm, type Report, type Trial, loadTrials } from "./report.ts";
+import { type ArmSummary, type Arm, type Report, type Trial, loadTrials, timedOut } from "./report.ts";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
 export const PINS = { akm_cli: "0.9.26", akm_plugin: "0.9.26202610051302", opencode: "1.18.34", harbor: "0.24.0" } as const;
@@ -68,11 +68,11 @@ const PROVIDER_VARS: Record<string, RegExp> = {
 
 const providerVars = (provider: string): RegExp => PROVIDER_VARS[provider] ?? new RegExp(`^${provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_`);
 
-const endpointHost = (url: string): string => {
+const hostnameOf = (url: string): string | null => {
   try {
-    return new URL(url).host;
+    return new URL(url).hostname;
   } catch {
-    return url;
+    return null;
   }
 };
 
@@ -80,10 +80,12 @@ const endpointHost = (url: string): string => {
  * The model of a run and the environment Harbor runs in, from the flag, `host` (the process environment) and models.json. This is the
  * rule of every eval: `flag` or MODEL_NAME names the model, and a name that is a line of models.json goes to that line's endpoint
  * with the key in its api_key_env, any other name to the gateway in MODEL_BASE_URL with MODEL_API_KEY. Here the result is mapped to
- * what opencode's openai provider reads, OPENAI_BASE_URL and OPENAI_API_KEY. So an endpoint can only serve an openai model (a name
- * without a provider is one), and a base URL given for another provider's model is refused, since it would be dropped.
+ * what opencode's openai provider reads, OPENAI_BASE_URL and OPENAI_API_KEY. So an endpoint serves an openai model: opencode is given
+ * `openai/<id>`, with the id as the endpoint names it, a "/" in it included (`Qwen/Qwen2.5-7B`), unless the id already starts with
+ * `openai/`. A `--model openai/<line>` finds the models.json line `<line>`.
  * OPENAI_BASE_URL and OPENAI_API_KEY, which this took before models.json, still stand in for an empty MODEL_BASE_URL and an empty
- * MODEL_API_KEY, in any combination of the two.
+ * MODEL_API_KEY. The key stands in only for the URL it goes with (OPENAI_BASE_URL) or for api.openai.com: it is OpenAI's key, and
+ * a gateway of another host is sent none (so the run stops, for want of a key, as the other evals do).
  *
  * With no line and no MODEL_BASE_URL (or OPENAI_BASE_URL), an openai model goes to openai with the key
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
@@ -99,21 +101,24 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
   } catch (e) {
     return fail((e as Error).message);
   }
-  // The gateway, when either URL names one: the older name of each setting fills in for the MODEL_* one that is empty.
-  const gateway = host.MODEL_BASE_URL?.trim() || host.OPENAI_BASE_URL?.trim();
-  const named = gateway ? { ...host, MODEL_BASE_URL: gateway, MODEL_API_KEY: host.MODEL_API_KEY?.trim() || host.OPENAI_API_KEY } : host;
+  // The gateway, when either URL names one: the older name of each setting fills in for the MODEL_* one that is empty. The older key
+  // goes only with its own URL or to api.openai.com, never to another host.
+  const openaiUrl = host.OPENAI_BASE_URL?.trim();
+  const gateway = host.MODEL_BASE_URL?.trim() || openaiUrl;
+  const openaiKeyFits = gateway !== undefined && (gateway === openaiUrl || hostnameOf(gateway) === "api.openai.com");
+  const named = gateway ? { ...host, MODEL_BASE_URL: gateway, MODEL_API_KEY: host.MODEL_API_KEY?.trim() || (openaiKeyFits ? host.OPENAI_API_KEY : undefined) } : host;
   const env = hostEnv(host);
 
-  if (Object.hasOwn(lines, id) || named.MODEL_BASE_URL?.trim()) {
+  // A line of models.json, by the id as given or, for `openai/<line>`, by <line>.
+  const line = [id, id.startsWith("openai/") ? id.slice("openai/".length) : id].find((name) => Object.hasOwn(lines, name));
+  if (line !== undefined || named.MODEL_BASE_URL?.trim()) {
     let m: ModelSettings;
     try {
-      m = resolveModel("model", id, named, lines);
+      m = resolveModel("model", line ?? id, named, lines);
     } catch (e) {
       return fail((e as Error).message);
     }
-    const model = modelName(m.name);
-    const provider = model.split("/")[0];
-    if (provider !== "openai") fail(`${model} is sent to ${endpointHost(m.baseUrl)}, but Harbor passes a base URL on only to an openai model, as OPENAI_BASE_URL. Name an openai model (a name without a provider is one), or leave out MODEL_BASE_URL and the models.json line to use ${provider}'s own endpoint and key.`);
+    const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
     if (!m.apiKey) fail(`no model key for ${model}: set MODEL_API_KEY (or the models.json line's api_key_env) in .env. Every trial would fail at the model call, after its setup.`);
     return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl } };
@@ -161,6 +166,18 @@ export function releaseArm(version: string = PINS.akm_cli): AkmArm {
 }
 
 export const pinsOf = (arm: AkmArm): Pins => ({ ...PINS, akm_cli: arm.cli.version, akm_plugin: arm.plugin.version });
+
+/** The lockfiles committed for the releases of akm-cli and the plugin, one folder per release, named <package>-<version>. akm_opencode.py installs from them with `npm ci`. evals/agent-ab/README.md ("Dependencies") says how one is made. */
+export const LOCKS_DIR = join(import.meta.dir, "locks");
+
+/** The folder of the lockfile committed for this release of `pkg`, or null when there is none. */
+export const lockFolder = (pkg: "akm-cli" | "akm-opencode", version: string): string | null => {
+  const folder = join(LOCKS_DIR, `${pkg}-${version}`);
+  return existsSync(join(folder, "package-lock.json")) ? folder : null;
+};
+
+/** What to say of a run whose akm-cli has no lockfile: a checkout, or a release other than the pinned one. */
+const UNLOCKED = "Its dependencies are not locked: each container resolves them when it installs, and akm_install records a digest of the tree each one got. A run whose containers got different trees is aborted.";
 
 /** The value of `--akm`: an npm release (akm-cli@x.y.z) or the folder of a checkout. */
 export type AkmSource = { kind: "release"; version: string } | { kind: "checkout"; path: string };
@@ -258,8 +275,8 @@ export function packAkm(checkout: string, into: string, pack: Pack = npmPack): {
   const pluginDir = findPlugin(checkout);
   const plugin = pluginDir ? { version: String(readJson(join(pluginDir, "package.json")).version), tarball: pack(pluginDir, into) } : { version: PINS.akm_plugin, tarball: null };
   const arm: AkmArm = { bin: withHome(resolve(checkout)), build: checkoutBuild(checkout), build_fingerprint: dirtyFingerprint(checkout), cli: { version: pkg.version, tarball: cli }, plugin, packages: into };
-  const note = pluginDir ? null : `the checkout holds no plugin (no package.json named akm-opencode), so the akm arm keeps the pinned plugin ${PINS.akm_plugin}. It carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`;
-  return { arm, note };
+  const noPlugin = `the checkout holds no plugin (no package.json named akm-opencode), so the akm arm keeps the pinned plugin ${PINS.akm_plugin}. It carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`;
+  return { arm, note: pluginDir ? `the akm arm installs the checkout from its tarballs. ${UNLOCKED}` : `${noPlugin} ${UNLOCKED}` };
 }
 
 /** The arm for `--akm`: a release is a name, a checkout is packed into `into`. Returns the arm and a note to print when something about it needs saying. */
@@ -267,7 +284,9 @@ export function akmArm(value: string | undefined, into: string, pack?: Pack): { 
   const source = parseAkm(value);
   if (source.kind === "checkout") return packAkm(source.path, into, pack);
   const arm = releaseArm(source.version);
-  return { arm, note: source.version === PINS.akm_cli ? null : `the akm arm installs akm-cli ${source.version} from the npm registry, with the pinned plugin ${PINS.akm_plugin}. The plugin carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.` };
+  if (source.version === PINS.akm_cli) return { arm, note: null };
+  const other = `the akm arm installs akm-cli ${source.version} from the npm registry, with the pinned plugin ${PINS.akm_plugin}. The plugin carries its own akm-cli ${PINS.akm_cli}: only the akm it shells out to is the one under test.`;
+  return { arm, note: lockFolder("akm-cli", source.version) ? other : `${other} ${UNLOCKED}` };
 }
 
 /** Copies the tarballs of `arm` into `<dir>/akm-packages`, kept with the run, and returns that folder, or null for a release. */
@@ -377,10 +396,23 @@ export function relativePaths(value: unknown, roots: string[]): unknown {
   return value;
 }
 
-/** What a summary keeps of the job: the datasets and the agents with their options, the attempts and the concurrency, with paths relative to the run's folder or the repository's. */
+/**
+ * What a summary keeps of the job: the datasets and the agents with their options, the attempts and the concurrency, with paths relative to
+ * the run's folder or the repository's. The akm arm's `library_assets` is left out: it is the count the akm on this machine made of the
+ * library (or 1, when that akm is not the one the arm installs), so the host's akm would change the config that runs are compared by.
+ * job.json keeps it, as Harbor was given it, and the summary keeps the count as `library.assets`.
+ */
 export function jobRecord(cfg: Record<string, unknown>, dir: string, root: string): Record<string, unknown> {
   const { job_name: _name, jobs_dir: _dir, ...rest } = cfg;
-  return relativePaths(rest, [dir, root]) as Record<string, unknown>;
+  const job = relativePaths(rest, [dir, root]) as { agents?: { kwargs?: Record<string, unknown> }[] } & Record<string, unknown>;
+  if (Array.isArray(job.agents)) {
+    job.agents = job.agents.map((agent) => {
+      if (!agent.kwargs) return agent;
+      const { library_assets: _assets, ...kwargs } = agent.kwargs;
+      return { ...agent, kwargs };
+    });
+  }
+  return job;
 }
 
 /** One digest over every file under `dir`, by relative path and content, so another machine gets the same one. `except` names files, by path from `dir`, that the digest leaves out. */
@@ -420,13 +452,11 @@ export async function runHarbor(configFile: string, logFile: string, env: Record
 
 /** A trial as the run writes it to samples.jsonl: report.ts's, with whether it hit a time limit, and why the plugin was not live when it was not. */
 export interface RunTrial extends Trial {
-  /** The agent or its setup ran out of time (AgentTimeoutError, AgentSetupTimeoutError). Counted apart from the other errors, so a slower akm shows as one. */
+  /** The agent or its setup ran out of time (AgentTimeoutError, AgentSetupTimeoutError), whatever else the trial is later called. Counted apart from the other errors, so a slower akm shows as one. report.ts counts the timeouts of its tables from this. */
   timed_out: boolean;
   /** The plugin was not shown to be live in this trial, and why. Left out otherwise. */
   plugin_problem?: string;
 }
-
-const TIMEOUTS = new Set(["AgentTimeoutError", "AgentSetupTimeoutError"]);
 
 /** The exception of a trial whose plugin was not live. akm_opencode.py raises it. */
 export const PLUGIN_ERROR = "AkmPluginNotLoadedError";
@@ -441,6 +471,10 @@ export interface Observed {
   assets_indexed: number[];
   /** The AKM_* settings the arm ran with (the arm's, then the job's), from the first akm trial that recorded them. */
   env: Record<string, string> | null;
+  /** The digest of the dependency tree each akm trial installed (`dependency_tree_sha256` of akm_install.json: akm-cli's and the plugin's `npm ls --all --json`), without repeats. More than one means the containers did not install the same code. */
+  dependency_trees?: string[];
+  /** The sha256 of the lockfile each install came from, or null for an install that came from none (a checkout, or a release with no lockfile), from the first akm trial that recorded them. */
+  lockfiles?: { akm_cli: string | null; plugin: string | null } | null;
 }
 
 const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
@@ -453,10 +487,10 @@ const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
  * AkmPluginNotLoadedError as its exception and no reward, whatever else it hit first, as one whose exception that was already does.
  */
 export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: Observed } {
-  const observed: Observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
+  const observed: Observed & { dependency_trees: string[] } = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null };
   if (!existsSync(jobDir)) return { trials: [], observed }; // Harbor never made the job: every cell of the grid is missing
   const trials = loadTrials(jobDir).map((t): RunTrial => {
-    const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUTS.has(t.error) };
+    const row: RunTrial = { ...t, timed_out: timedOut(t) };
     if (t.arm !== "akm") return row;
     const agent = join(jobDir, t.trial, "agent");
     const status = readJson(join(agent, "akm_plugin_status.json"));
@@ -471,15 +505,18 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
       if (typeof install.plugin_akm_cli === "string") observed.plugin_akm_cli.push(install.plugin_akm_cli);
       if (typeof install.assets_indexed === "number") observed.assets_indexed.push(install.assets_indexed);
       if (observed.env === null && typeof install.env === "object" && install.env !== null) observed.env = install.env;
+      if (typeof install.dependency_tree_sha256 === "string") observed.dependency_trees.push(install.dependency_tree_sha256);
+      const locks = install.lockfiles;
+      if (observed.lockfiles === null && typeof locks === "object" && locks !== null) observed.lockfiles = { akm_cli: locks.akm_cli ?? null, plugin: locks.plugin ?? null };
     }
     return row;
   });
-  return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed) } };
+  return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed), dependency_trees: distinct(observed.dependency_trees) } };
 }
 
-/** Trials that hit a time limit, by arm. */
-export function timeoutsOf(trials: RunTrial[]): { control: number; akm: number } {
-  const count = (arm: Arm) => trials.filter((t) => t.arm === arm && t.timed_out).length;
+/** Trials that hit a time limit, by arm: the count that report.ts makes of its tables (`timedOut`). */
+export function timeoutsOf(trials: Trial[]): { control: number; akm: number } {
+  const count = (arm: Arm) => trials.filter((t) => t.arm === arm && timedOut(t)).length;
   return { control: count("control"), akm: count("akm") };
 }
 
@@ -559,13 +596,15 @@ export function completionOf(trials: Trial[], tasks: string[], attempts: number)
 
 /**
  * Whether the run finished: `complete` only when Harbor exited 0 and every cell of the grid has a trial, a trial that errored or timed
- * out included (those are counted, not missing). Anything else is `aborted`, and the reason says what was not done. `jobWritten` is false
- * when Harbor left no job folder at all.
+ * out included (those are counted, not missing), and the akm arm's containers all installed the same dependency tree. Anything else is
+ * `aborted`, and the reason says what was not done. `jobWritten` is false when Harbor left no job folder at all.
  */
-export function statusOf(exit: number, completion: Completion, jobWritten = true): { status: "complete" | "aborted"; aborted_reason: string | null } {
+export function statusOf(exit: number, completion: Completion, jobWritten = true, observed?: Pick<Observed, "dependency_trees">): { status: "complete" | "aborted"; aborted_reason: string | null } {
   const reasons: string[] = [];
   if (exit !== 0) reasons.push(`Harbor exited ${exit}`);
   if (!jobWritten) reasons.push("Harbor wrote no job");
+  const trees = observed?.dependency_trees?.length ?? 0;
+  if (trees > 1) reasons.push(`the akm arm's containers installed ${trees} different dependency trees (akm_install.observed.dependency_trees), so its trials did not all run the same code`);
   if (completion.missing > 0) reasons.push(`${completion.missing} of ${completion.expected} expected trials have no result (control ${completion.control.missing}, akm ${completion.akm.missing})`);
   if (completion.unexpected > 0) reasons.push(`${completion.unexpected} trials fall outside the grid of tasks, arms and attempts the job asked for`);
   return reasons.length === 0 ? { status: "complete", aborted_reason: null } : { status: "aborted", aborted_reason: reasons.join("; ") };
@@ -588,19 +627,38 @@ export function assetsSha256(o: { library: string | null; dataset: Record<string
   return sha256Text(JSON.stringify(sorted({ library: o.library, dataset: o.dataset, attempts: o.attempts })));
 }
 
-/** The summary keys about the akm under test, which both evals write: akm_version, akm_bin, akm_build and akm_build_fingerprint as in the other evals, and what was installed. */
+/**
+ * akm_build_fingerprint of a Harbor eval: what the akm under test holds beyond its version, as the other evals record it. That is the digest
+ * of the checkout's uncommitted changes (null for a clean checkout and a release), and here also the digest of the dependency tree the
+ * containers installed (when one is known), since two runs of one version with other dependencies ran other code.
+ */
+export function buildFingerprint(changes: string | null, tree: string | null): string | null {
+  return tree === null ? changes : sha256Text(JSON.stringify({ changes, dependency_tree_sha256: tree }));
+}
+
+/**
+ * The summary keys about the akm under test, which both evals write: akm_version, akm_bin, akm_build and akm_build_fingerprint as in the other
+ * evals, and what was installed. `akm_install.dependency_tree_sha256` is the one tree every akm container installed (null when none recorded
+ * one, or they differ, which statusOf aborts the run for), and `locked` says whether both installs came from a committed lockfile. When it is
+ * false the dependencies were resolved when the containers installed, and only the digest tells two runs apart.
+ */
 export function akmSummary(arm: AkmArm, akmEnv: Record<string, string>, packages: { file: string; sha256: string }[], observed: Observed) {
+  const trees = observed.dependency_trees ?? [];
+  const tree = trees.length === 1 ? trees[0] : null;
+  const lockfiles = observed.lockfiles ?? null;
   return {
     akm_version: arm.cli.version,
     akm_bin: arm.bin,
     akm_build: arm.build,
-    akm_build_fingerprint: arm.build_fingerprint ?? null,
+    akm_build_fingerprint: buildFingerprint(arm.build_fingerprint ?? null, tree),
     akm_env: akmEnv,
     akm_install: {
       from: arm.cli.tarball ? "checkout" : "release",
       plugin_from: arm.plugin.tarball ? "checkout" : "release",
       plugin_version: arm.plugin.version,
       packages,
+      dependency_tree_sha256: tree,
+      locked: lockfiles !== null && lockfiles.akm_cli !== null && lockfiles.plugin !== null,
       observed,
     },
   };

@@ -287,7 +287,7 @@ export function summarize(o: {
   const attempts = o.attempts ?? DEFAULT_ATTEMPTS;
   const report = buildReport(trials);
   const completion = completionOf(trials, o.tasks, attempts);
-  const { status, aborted_reason } = statusOf(o.exit, completion, existsSync(jobDir));
+  const { status, aborted_reason } = statusOf(o.exit, completion, existsSync(jobDir), observed);
   const dataset = { registry: o.lock.registry, ref: o.lock.ref, tasks: Object.fromEntries(o.tasks.map((t) => [t, o.lock.tasks[t] ?? null])) };
   const summary: Summary = {
     eval: NAME,

@@ -4,7 +4,7 @@
 //
 //   evals/agent-ab/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -103,9 +103,9 @@ interface Summary {
   aborted_reason: string | null;
   /** The grid the job asked for, tasks x arms x attempts, and what became of each cell: overall and per arm. */
   completion: Completion;
-  /** A digest of every file of the libraries folder the akm arm seeds from. */
+  /** A digest of every file of the libraries folder the akm arm seeds from: the run's copy of it, digested before Harbor started. */
   libraries_sha256: string;
-  /** A digest of the folder of each task the run used. */
+  /** A digest of the folder of each task the run used: the run's copy of it, digested before Harbor started. */
   tasks_sha256: Record<string, string>;
   /** One digest over the libraries digest, the digest of each selected task and the attempts: the cases the run scored. */
   assets_sha256: string;
@@ -167,12 +167,18 @@ export async function runCorpus(
   results = resultsOf(corpus),
 ): Promise<Summary> {
   const assets = corpus === "public" ? EVAL_DIR : join(ROOT, "private", NAME, "assets");
-  const tasksDir = join(assets, "tasks");
-  const librariesDir = join(assets, "libraries");
-  const all = taskNames(tasksDir);
+  const all = taskNames(join(assets, "tasks"));
   const tasks = selectTasks(all, ctx.limit);
   const attempts = ctx.limit === undefined ? ATTEMPTS : 1;
   const dir = makeResultsDir(results, ctx.label);
+  // Harbor reads the run's own copy of the tasks and the libraries, which is digested before it starts: an edit to the live folders while
+  // the run goes is neither what the trials used nor what the summary records.
+  const tasksDir = join(dir, "tasks");
+  const librariesDir = join(dir, "libraries");
+  for (const t of tasks) cpSync(join(assets, "tasks", t), join(tasksDir, t), { recursive: true });
+  cpSync(join(assets, "libraries"), librariesDir, { recursive: true });
+  const taskDigests = Object.fromEntries(tasks.map((t) => [t, sha256Dir(join(tasksDir, t))]));
+  const librariesSha = sha256Dir(librariesDir);
   const jobsDir = join(dir, "jobs");
   const jobName = `${NAME}-${corpus}`;
   const arm = ctx.arm ?? releaseArm();
@@ -188,10 +194,8 @@ export async function runCorpus(
   const { trials, observed } = loadRunTrials(jobDir); // none when Harbor made no job: every cell is then missing, and the run is aborted
   const report = buildReport(trials);
   const completion = completionOf(trials, tasks, attempts);
-  const { status, aborted_reason } = statusOf(exit, completion, existsSync(jobDir));
+  const { status, aborted_reason } = statusOf(exit, completion, existsSync(jobDir), observed);
   const job = jobRecord(cfg, dir, ROOT);
-  const taskDigests = Object.fromEntries(tasks.map((t) => [t, sha256Dir(join(tasksDir, t))]));
-  const librariesSha = sha256Dir(librariesDir);
   const summary: Summary = {
     eval: NAME,
     corpus,

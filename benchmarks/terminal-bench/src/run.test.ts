@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
-import { type AkmArm, PINS, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { type AkmArm, PINS, buildFingerprint, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -524,7 +525,8 @@ describe("runCorpus", () => {
     expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, library_assets: 1 });
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored.library).toMatchObject({ assets: want, measured_with: { akm_version: "0.9.99-test" } }); // the count is still recorded
-    expect(stored.job.agents[1].kwargs.library_assets).toBe(1);
+    expect(stored.job.agents[1].kwargs).not.toHaveProperty("library_assets"); // Harbor was given it (job.json above), the summary's config does not hold it
+    expect(stored.config.agents[1].kwargs).not.toHaveProperty("library_assets");
     expect(said).toHaveLength(1);
     expect(said[0]).toContain(`the ${want} assets of the library were counted with akm 0.9.99-test, and the akm arm installs akm ${PINS.akm_cli}`);
     expect(said[0]).toContain("akm_install.observed.assets_indexed");
@@ -553,6 +555,36 @@ describe("runCorpus", () => {
     const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env }, join(root, "results")));
     expect(readJson(join(s.results_dir, "job.json")).agents[1].kwargs.library_assets).toBe(1);
     expect(readJson(join(s.results_dir, "summary.json")).library).toMatchObject({ assets: null, measured_with: null });
+  });
+
+  test("the host's akm does not change the config that runs are compared by: library_assets is 1, or the host's count, and the config digest is the same (#73)", async () => {
+    fakeAkm(true); // counts with 0.9.99-test
+    const { root, env } = fakeUv();
+    const results = join(root, "results");
+    // The first run installs the pinned akm-cli, which is not the akm that counted: library_assets is 1. The second installs the one that counted: the count.
+    const other = await quiet(() => runCorpus("public", { model: "openai/x", label: "a", limit: 1, env }, results));
+    const same = await quiet(() => runCorpus("public", { model: "openai/x", label: "b", limit: 1, env, arm: releaseArm("0.9.99-test") }, results));
+    const assets = (dir: string) => readJson(join(dir, "job.json")).agents[1].kwargs.library_assets;
+    expect([assets(other.results_dir), assets(same.results_dir)]).toEqual([1, fakeCount(libraryOf("public"))]);
+    const [a, b] = [other, same].map((r) => readJson(join(r.results_dir, "summary.json")));
+    const digest = identityOf(a).config;
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(identityOf(b).config).toBe(digest);
+  });
+
+  test("records the digest of the dependency tree the akm containers installed, in akm_install and in the build identity, and aborts a run whose containers differ (#68)", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+    const tree = "ee".repeat(32);
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(stored.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: true });
+    expect(stored.akm_install.observed).toMatchObject({ dependency_trees: [tree], lockfiles: { akm_cli: "a".repeat(64), plugin: "b".repeat(64) } });
+    expect(stored.akm_build_fingerprint).toBe(buildFingerprint(null, tree));
+    expect(identityOf(stored).akm_build_fingerprint).toBe(stored.akm_build_fingerprint); // what the comparison reads
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_TREES: "differ" } }, join(root, "results")))).rejects.toThrow("the akm arm's containers installed 2 different dependency trees");
+    const [run] = readdirSync(join(root, "results")).filter((n) => n.endsWith("-d"));
+    expect(readJson(join(root, "results", run, "summary.json"))).toMatchObject({ status: "aborted", akm_install: { dependency_tree_sha256: null } });
   });
 
   test("runs each task as many times as --attempts says, and records it", async () => {
@@ -603,12 +635,17 @@ describe("runCorpus", () => {
     const { root, env } = fakeUv();
     const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TIMEOUTS: "1" } }, join(root, "results")));
     expect(timeouts.timeouts).toEqual({ control: 1, akm: 1 });
+    // The slow install is a time-out of the setup, and counts in the report's tables, the summary and its metrics alike (#73).
+    expect([timeouts.report.control.timeouts, timeouts.report.akm.timeouts]).toEqual([1, 1]);
+    expect([timeouts.metrics.control.timeouts, timeouts.metrics.akm.timeouts]).toEqual([1, 1]);
     expect(timeouts.n_errored).toBe(1); // the slow install got no reward. The control's time-out was still verified
     const rows = readFileSync(join(timeouts.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.filter((r) => r.timed_out)).toHaveLength(2);
     const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 1, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
     expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
     expect(dead.timeouts.akm).toBe(1);
+    expect(dead.report.akm.timeouts).toBe(1); // the one trial that timed out and then failed the plugin check
+    expect(dead.metrics.akm.timeouts).toBe(1);
   });
 
   test("with --repeat, runs the benchmark into <label>-r1 to -rN and writes the spread of its metrics beside them", async () => {
@@ -756,11 +793,16 @@ describe("the command line", () => {
     }
   });
 
-  test("sends --model through models.json and the gateway as every eval does, and refuses a base URL for a model of another provider", () => {
-    const gateway = { MODEL_BASE_URL: "https://gateway.example.com/v1", MODEL_API_KEY: "k" };
-    const done = run(["--model", "anthropic/claude-sonnet-4-5"], gateway);
-    expect(done.code).toBe(2);
-    expect(done.err).toContain("anthropic/claude-sonnet-4-5 is sent to gateway.example.com, but Harbor passes a base URL on only to an openai model");
+  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash, and OpenAI's key is not sent to a gateway", () => {
+    // Past the model's name and URL, to the check that a container can reach the server: the id is the gateway's, as opencode's openai provider takes it.
+    const local = run(["--model", "Qwen/Qwen2.5-7B"], { MODEL_BASE_URL: "http://localhost:8080/v1", MODEL_API_KEY: "k" });
+    expect(local.code).toBe(2);
+    expect(local.err).toContain("the endpoint of openai/Qwen/Qwen2.5-7B, http://localhost:8080/v1, would be the container itself");
+    expect(local.err).not.toContain("is sent to");
+    const gateway = run(["--model", "gpt-6"], { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: "sk-real-openai-key" });
+    expect(gateway.code).toBe(2);
+    expect(gateway.err).toContain("no model key for openai/gpt-6");
+    expect(gateway.err + gateway.out).not.toContain("sk-real-openai-key");
     const none = run([], {});
     expect(none.code).toBe(2);
     expect(none.err).toContain("name the model");

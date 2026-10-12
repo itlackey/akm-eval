@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { type AkmArm, PINS, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { basename, dirname, join } from "node:path";
+import { type AkmArm, PINS, buildFingerprint, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -170,16 +170,20 @@ describe("runCorpus", () => {
     const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env }, join(root, "results")));
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ eval: "agent-ab", corpus: "public", model: "openai/x", limit: 3, n_tasks: 3, attempts: 1, harbor_exit: 0 });
-    expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_build_fingerprint: null, akm_env: {} });
+    expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_env: {} });
+    expect(stored.akm_build_fingerprint).toBe(buildFingerprint(null, "ee".repeat(32))); // no uncommitted changes; the dependency tree the containers installed
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
     expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
     expect(stored.pins).toEqual(PINS);
-    // The task list, the options of both agents and the concurrency, from job.json, with no folder of this machine.
-    expect(stored.job.datasets).toEqual([{ path: "evals/agent-ab/tasks", task_names: selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3) }]);
+    // The task list, the options of both agents and the concurrency, from job.json, with no folder of this machine. Harbor reads the run's own copy of the tasks and the libraries.
+    expect(stored.job.datasets).toEqual([{ path: "tasks", task_names: selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3) }]);
     expect(stored.job).toMatchObject({ n_attempts: 1, n_concurrent_trials: 4 });
     expect(stored.job.agents[0]).toMatchObject({ name: "opencode", override_setup_timeout_sec: 2700, kwargs: { opencode_config: { autoupdate: false } } });
-    expect(stored.job.agents[1]).toMatchObject({ import_path: "akm_opencode:AkmOpenCode", override_setup_timeout_sec: 2700, kwargs: { akm_cli_version: PINS.akm_cli, libraries_dir: "evals/agent-ab/libraries" } });
+    expect(stored.job.agents[1]).toMatchObject({ import_path: "akm_opencode:AkmOpenCode", override_setup_timeout_sec: 2700, kwargs: { akm_cli_version: PINS.akm_cli, libraries_dir: "libraries" } });
     expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries")));
+    expect(stored.libraries_sha256).toBe(sha256Dir(join(s.results_dir, "libraries")));
+    expect(readJson(join(s.results_dir, "job.json")).datasets[0].path).toBe(join(s.results_dir, "tasks"));
+    expect(readdirSync(join(s.results_dir, "tasks")).sort()).toEqual([...selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3)].sort()); // the tasks the run selected, and no others
     expect(stored.akm_install.observed).toMatchObject({ akm_version: ["0.9.99-test"], plugin_akm_cli: ["0.9.26"], assets_indexed: [7], env: { AKM_CURATE_TIMEOUT: "15" } });
     expect(JSON.stringify(stored.job)).not.toContain(root);
     expect(s.report.control).toMatchObject({ trials: 3, passed: 0 });
@@ -256,10 +260,32 @@ describe("runCorpus", () => {
     expect(kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", packages_dir: join(s.results_dir, "akm-packages"), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(readFileSync(join(s.results_dir, "akm-packages", "akm-opencode-0.9.27.tgz"), "utf8")).toBe("a plugin");
     const stored = readJson(join(s.results_dir, "summary.json"));
-    expect(stored).toMatchObject({ akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc-dirty", akm_build_fingerprint: "e".repeat(64), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(stored).toMatchObject({ akm_version: "0.9.27", akm_bin: "~/code/akm", akm_build: "v0.9.27-3-gabc-dirty", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+    expect(stored.akm_build_fingerprint).toBe(buildFingerprint("e".repeat(64), "ee".repeat(32))); // the checkout's changes and the dependency tree both
     expect(stored.pins).toEqual({ ...PINS, akm_cli: "0.9.27", akm_plugin: "0.9.27" });
     expect(stored.akm_install).toMatchObject({ from: "checkout", plugin_from: "checkout", plugin_version: "0.9.27", packages: [{ file: "akm-cli-0.9.27.tgz" }, { file: "akm-opencode-0.9.27.tgz" }] });
     expect(stored.job.agents[1].kwargs).toMatchObject({ packages_dir: "akm-packages", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
+  });
+
+  test("records the digest of the dependency tree the akm containers installed, in akm_install and in the build identity, and the lockfiles they came from (#68)", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    const tree = "ee".repeat(32);
+    expect(stored.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: true });
+    expect(stored.akm_install.observed).toMatchObject({ dependency_trees: [tree], lockfiles: { akm_cli: "a".repeat(64), plugin: "b".repeat(64) } });
+    expect(stored.akm_build_fingerprint).toBe(buildFingerprint(null, tree)); // the build identity the comparison reads holds it
+    expect(stored.status).toBe("complete");
+  });
+
+  test("aborts a run whose akm containers installed different dependency trees, and says how many", async () => {
+    const { root, env } = fakeUv();
+    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TREES: "differ" } }, join(root, "results")))).rejects.toThrow("the akm arm's containers installed 2 different dependency trees");
+    const [run] = readdirSync(join(root, "results"));
+    const stored = readJson(join(root, "results", run, "summary.json"));
+    expect(stored).toMatchObject({ status: "aborted", akm_build_fingerprint: null });
+    expect(stored.akm_install.dependency_tree_sha256).toBeNull();
+    expect(stored.akm_install.observed.dependency_trees).toHaveLength(2);
   });
 
   test("starts Harbor with the model's variables and what Harbor needs, and not the judge's key or the rest of the host's", async () => {
@@ -277,12 +303,15 @@ describe("runCorpus", () => {
     const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TIMEOUTS: "1" } }, join(root, "results")));
     expect(timeouts.timeouts).toEqual({ control: 0, akm: 1 });
     expect(timeouts.metrics.akm.timeouts).toBe(1);
+    expect([timeouts.report.control.timeouts, timeouts.report.akm.timeouts]).toEqual([0, 1]); // the report's tables count the same trials
     const rows = readFileSync(join(timeouts.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(rows.filter((r) => r.timed_out).map((r) => r.arm)).toEqual(["akm"]);
     const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
     expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
     expect(dead.n_errored).toBe(1);
     expect(dead.timeouts.akm).toBe(1);
+    expect(dead.report.akm.timeouts).toBe(1); // the trial that timed out and then failed the plugin check is one timeout in both places
+    expect(dead.metrics.akm.timeouts).toBe(1);
   });
 
   test("with --repeat, runs the eval into <label>-r1 to -rN and writes the spread of its metrics beside them", async () => {
@@ -343,11 +372,16 @@ describe("the command line", () => {
     }
   });
 
-  test("sends --model through models.json and the gateway as every eval does, and refuses a base URL for a model of another provider", () => {
-    const gateway = { MODEL_BASE_URL: "https://gateway.example.com/v1", MODEL_API_KEY: "k" };
-    const done = run(["--model", "anthropic/claude-sonnet-4-5"], gateway);
-    expect(done.code).toBe(2);
-    expect(done.err).toContain("anthropic/claude-sonnet-4-5 is sent to gateway.example.com, but Harbor passes a base URL on only to an openai model");
+  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash, and OpenAI's key is not sent to a gateway", () => {
+    // Past the model's name and URL, to the check that a container can reach the server: the id is the gateway's, as opencode's openai provider takes it.
+    const local = run(["--model", "Qwen/Qwen2.5-7B"], { MODEL_BASE_URL: "http://localhost:8080/v1", MODEL_API_KEY: "k" });
+    expect(local.code).toBe(2);
+    expect(local.err).toContain("the endpoint of openai/Qwen/Qwen2.5-7B, http://localhost:8080/v1, would be the container itself");
+    expect(local.err).not.toContain("is sent to");
+    const gateway = run(["--model", "gpt-6"], { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: "sk-real-openai-key" });
+    expect(gateway.code).toBe(2);
+    expect(gateway.err).toContain("no model key for openai/gpt-6");
+    expect(gateway.err + gateway.out).not.toContain("sk-real-openai-key");
     const none = run([], {});
     expect(none.code).toBe(2);
     expect(none.err).toContain("name the model");
@@ -436,6 +470,36 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(go("--limit", "4").assets).toBe(base.assets);
   }, 60_000);
 
+  test("an edit to a task or a library while Harbor runs changes neither what the trials were given nor the digests the summary records (#67)", () => {
+    const { root, run, summary } = repo();
+    const eval_ = join(root, "evals", "agent-ab");
+    const [skill, instruction] = [join(eval_, "libraries", "drillbit", "skills", "drillbit", "SKILL.md"), join(eval_, "tasks", "drillbit--scale", "instruction.md")];
+    const [libraries, tasks] = [sha256Dir(join(eval_, "libraries")), Object.fromEntries(readdirSync(join(eval_, "tasks")).map((t) => [t, sha256Dir(join(eval_, "tasks", t))]))];
+    const done = run(["--limit", "4", "--label", "edited"], { UV_FAKE_EDIT: JSON.stringify([skill, instruction]) });
+    expect(done.code, done.err).toBe(0);
+    // The fake Harbor edited the live files, as a person would.
+    expect(readFileSync(skill, "utf8")).toContain("Edited while Harbor was running.");
+    expect(readFileSync(instruction, "utf8")).toContain("Edited while Harbor was running.");
+    expect(sha256Dir(join(eval_, "libraries"))).not.toBe(libraries);
+    const s = summary("edited");
+    // What the summary records is what the run started with.
+    expect(s.libraries_sha256).toBe(libraries);
+    expect(s.tasks_sha256).toEqual(tasks);
+    // What Harbor was given is the run's copy of it, and that copy is unchanged and has those digests.
+    const dir = join(eval_, "results", readdirSync(join(eval_, "results")).find((d) => d.endsWith("-edited")) as string);
+    const job = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
+    expect(job.datasets[0].path).toBe(join(dir, "tasks"));
+    expect(job.agents[1].kwargs.libraries_dir).toBe(join(dir, "libraries"));
+    expect(sha256Dir(join(dir, "libraries"))).toBe(libraries);
+    for (const [name, digest] of Object.entries(tasks)) expect(sha256Dir(join(dir, "tasks", name)), name).toBe(digest);
+    expect(readFileSync(join(dir, "libraries", "drillbit", "skills", "drillbit", "SKILL.md"), "utf8")).not.toContain("Edited while Harbor was running.");
+    // The same run on files that were not edited records the same cases.
+    writeFileSync(skill, readFileSync(skill, "utf8").replace("\nEdited while Harbor was running.\n", ""));
+    writeFileSync(instruction, readFileSync(instruction, "utf8").replace("\nEdited while Harbor was running.\n", ""));
+    expect(run(["--limit", "4", "--label", "plain"]).code).toBe(0);
+    expect(summary("plain").assets_sha256).toBe(s.assets_sha256);
+  }, 60_000);
+
   test("run --corpus private refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
     const { root, run, summary } = repo();
     const out = join(root, "private", "agent-ab");
@@ -475,4 +539,23 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(ran.code).toBe(0);
     expect(summary("p", "private")).toMatchObject({ corpus: "private", status: "complete", completion: { expected: 2, completed: 2 } });
   }, 60_000);
+});
+
+describe("the test doubles", () => {
+  test("sandboxRepo leaves the repository it returns in the temporary folder, and no fixture beside it (#36)", () => {
+    // Its own temporary folder, so the folders of other tests cannot be counted by mistake.
+    const base = tmp();
+    const was = process.env.TMPDIR;
+    process.env.TMPDIR = base;
+    let root = "";
+    try {
+      root = sandboxRepo();
+    } finally {
+      if (was === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = was;
+    }
+    expect(dirname(root)).toBe(base);
+    expect(readdirSync(base)).toEqual([basename(root)]);
+    expect(existsSync(join(root, "evals", "agent-ab", "tasks", "drillbit--scale", "task.toml"))).toBe(true); // the fixture was copied before it was removed
+  });
 });

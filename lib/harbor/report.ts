@@ -33,6 +33,8 @@ export interface Trial {
   agentSeconds?: number | null;
   /** The digest of the task the trial ran, as Harbor recorded it for a task fetched from a registry. Null for a task in a folder. */
   digest?: string | null;
+  /** The agent, or its setup, ran out of time. The run sets it before it relabels a trial, so a trial that timed out and then failed the plugin check still counts as a timeout. Left out in a trial read straight from Harbor's folder, which says it by its exception. */
+  timed_out?: boolean;
 }
 
 export interface Estimate {
@@ -72,7 +74,7 @@ export interface ArmSummary {
   pass_rate: Estimate | null;
   /** Trials by exception type, scored or not. A trial that timed out and was still verified is in here and in `scored`. */
   exceptions: Record<string, number>;
-  /** Trials whose agent ran out of time. */
+  /** Trials whose agent, or its setup, ran out of time (`timedOut`). */
   timeouts: number;
   /** The mean per scored trial, over those that have the figure: minutes in all, minutes of the agent's own run, and dollars. An errored trial stopped in the setup and says nothing of what a run takes. */
   per_trial: { minutes: number | null; agent_minutes: number | null; cost_usd: number | null };
@@ -352,11 +354,12 @@ export function loadTrials(jobDir: string): Trial[] {
   return trials;
 }
 
-/** The exception Harbor records when the agent runs out of time. */
-const TIMEOUT = "AgentTimeoutError";
+/** The exceptions Harbor records when the agent, or the setup before it, runs out of time. */
+const TIMEOUTS = new Set(["AgentTimeoutError", "AgentSetupTimeoutError"]);
 
 const scored = (t: Trial): t is Trial & { reward: number } => t.reward !== null;
-const timedOut = (t: Trial): boolean => t.error === TIMEOUT;
+/** Whether a trial ran out of time. This is the one count of timeouts: the tables, the printed line, the summary's `timeouts` and its metrics all use it. */
+export const timedOut = (t: Trial): boolean => t.timed_out ?? (t.error !== null && TIMEOUTS.has(t.error));
 const called = (t: Trial): boolean => t.akm !== null && Object.keys(t.akm).length > 0;
 
 /** The scored rewards of the given trials, by task. */
@@ -481,7 +484,7 @@ const ci = (e: Estimate | Delta | null, signed = false): string =>
 /** The report as the lines run.ts prints. */
 export function formatReport(r: Report): string[] {
   const row = (name: string, a: ArmSummary) => {
-    const why = Object.entries(a.exceptions).filter(([k]) => k !== TIMEOUT).map(([k, v]) => `${k} ${v}`).join(", ");
+    const why = Object.entries(a.exceptions).filter(([k]) => !TIMEOUTS.has(k)).map(([k, v]) => `${k} ${v}`).join(", ");
     return `  ${name.padEnd(8)} ${String(a.trials).padStart(3)} trials, ${a.scored} scored, ${a.errored} errored${why ? ` (exceptions: ${why})` : ""}, ${a.timeouts} timed out   pass rate ${ci(a.pass_rate)}`;
   };
   const e = r.engagement;
