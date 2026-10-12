@@ -16,3 +16,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | reflect | collector | 2 | wave 1 merge: lib/akm credential allowlist, completionsUrl, relative AKM_BIN paths; hideEndpoint (no score change; harness-v3 not yet released) | 0cb87ac1f033 |
 | 2026-10-12 | distill | collector | 1 | first lock entry | 963b9787f3a6 |
 | 2026-10-12 | distill | scorer | 1 | first lock entry | 2c1f25d96846 |
+| 2026-10-12 | distill | scorer | 2 | distill #55: a lesson that repeats more than three quarters of its memory word for word is bad (copied), and an update gets the same check on its added lines (not_copied, a sixth check). Scores change: the memory pasted back as the lesson, and the old lesson with the memory appended, no longer score good | ad61c176591e |
