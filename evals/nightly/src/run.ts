@@ -3,46 +3,46 @@
 // feedback, `akm improve` with the default strategy, then `akm proposal drain`, as the lab's nightly does. It checks every
 // item, what changed outside the items, the lessons accepted and the model calls that failed. See ../README.md.
 //
-//   evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type Sandbox, akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { Fatal, fail, failureMessage, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type RunInputs, assetsDigest, privateAssetsProblem, privateSeed, runInputs } from "../../consolidate/src/inputs.ts";
-import { EMBEDDER_OPTIONS, type Embedder, embedderEnv, embedderUsage, parseEmbedder, sandboxOptions, timeoutMessage } from "../../consolidate/src/lib.ts";
+import { type RunInputs, assetsDigest, generatorSha256, privateAssetsProblem, runInputs } from "../../consolidate/src/inputs.ts";
+import { EMBEDDER_OPTIONS, embedderUsage, parseEmbedder } from "../../consolidate/src/lib.ts";
+import { type Embedder, sandboxOptions } from "../../consolidate/src/sandbox.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
-import { type CallRow, type Feedback, type Item, KINDS, type Metrics, type Night, type Row, callStats, loadNight, metrics, nightFiles, nightlyConfig, noteAges, outsideChanges, parseProposals, pct, readLibrary, scoreItem, selectItems } from "./lib.ts";
+import { type CallRow, type CollectContext, NAME, STRATEGY, callStats, effectiveConfig, haveNight, rawOfNight } from "./collect.ts";
+import { KINDS } from "./items.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { GENERATOR_CODE, loadNight, nightFiles, planted, selectItems } from "./night.ts";
+import { type Metrics, type Row, makeRow, summarize } from "./score.ts";
+import { pct } from "./lib.ts";
 
-const NAME = "nightly";
-const STRATEGY = "default"; // the strategy akm ships, and the one the lab runs
 export const MIN_AKM = "0.9.26"; // the first release with the pair judge's claim lists, exact fixes and lessons that wait for review
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const HARNESS = harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => join(ROOT, "evals", name, "src")) });
-const STEP_TIMEOUT_MS = 5 * 60_000; // an akm command that calls no model
-const REAL_INDEX_TIMEOUT_MS = 30 * 60_000; // the real embedder loads its model to index, and the first run downloads it (133 MB)
-const IMPROVE_BUDGET_MS = 45 * 60_000; // akm's own wall-clock budget for the improve run: it skips what it has not reached
-const IMPROVE_TIMEOUT_MS = IMPROVE_BUDGET_MS + 10 * 60_000; // and this ends akm if it does not stop
-const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
-const DAY_MS = 86_400_000;
 
-const USAGE = `Usage: evals/nightly/run [--corpus public|private|all] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs one night of akm improve, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its engine, on a library
 of planted items, then drains the proposals as the nightly does, and checks the result. Settings come from .env at the
 repository root.
 
-  --corpus  public (default) reads assets/. private reads private/nightly/assets/, made by
-            ./generate-assets; the run stops if they are missing or were made from other public assets than the ones in assets/.
-            all runs both and prints the two results side by side.
+${corpusUsage}
+            The default custom corpus is private/nightly/assets, made by ./generate-assets; the run stops if it is missing or was made
+            from other public assets, or by another generator, than the ones in this checkout.
   --limit   plant only N items, taking the first of each kind in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -54,11 +54,18 @@ ${akmUsage}
 
 Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
 
-type Corpus = "public" | "private";
+/** What the summary of a run records of its corpus: public or custom, the kind, whether it is private, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
+interface CorpusFields {
+  corpus: "public" | "custom";
+  corpus_kind: string;
+  corpus_private: boolean;
+  corpus_folder: string | null;
+}
 
-interface Summary extends RunInputs {
+export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ ...corpusRecord(c), corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null }) as CorpusFields;
+
+interface Summary extends RunInputs, CorpusFields {
   eval: string;
-  corpus: Corpus;
   label: string;
   date: string;
   /** A night that fails writes no summary, so this is "complete". It is here so every eval's summary says whether the run was cut short. */
@@ -99,113 +106,9 @@ interface Summary extends RunInputs {
   /** The improve run's model calls by process and the model name the endpoint reported. A gateway may serve one name from several providers. */
   calls_by: CallRow[];
   metrics: Metrics;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
-}
-
-/** Puts the items' files in the sandbox's bundle. The notes of a pair carry the file times akm reads as their dates. */
-export function plant(sandbox: Sandbox, items: Item[], files: Map<string, string>): void {
-  const now = Date.now();
-  for (const item of items) {
-    for (const path of item.files) {
-      const file = join(sandbox.dir, "bundle", path);
-      mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, files.get(path) as string);
-      if (item.kind === "pair") {
-        const when = new Date(now - noteAges(item.older)[path === item.a ? "a" : "b"] * DAY_MS);
-        utimesSync(file, when, when);
-      }
-    }
-  }
-}
-
-/** The arguments of `akm feedback`. A fix carries its exact edits and its source. */
-export function feedbackArgs(f: Feedback): string[] {
-  const args = ["feedback", f.ref, `--${f.signal}`, "--reason", f.reason];
-  if (f.fix) {
-    const fix = f.fix;
-    fix.replace.forEach((old, i) => args.push(`--replace=${old}`, `--with=${fix.with[i]}`));
-    args.push(`--source=${fix.source}`);
-  }
-  return args;
-}
-
-type Context = {
-  newSandbox: () => Sandbox;
-  baseUrl: string;
-  model: string;
-  hasKey: boolean;
-  version: string;
-  label: string;
-  limit?: number;
-  overrides?: Overrides;
-  /** How akm embeds the notes. The sandbox newSandbox makes has to match it: see sandboxOptions. Default: deterministic. */
-  embedder?: Embedder;
-  /** The time limit of the improve run, in milliseconds, in place of the eval's own: for tests. */
-  improveTimeoutMs?: number;
-};
-
-const embedderOf = (ctx: { embedder?: Embedder }): Embedder => ctx.embedder ?? "deterministic";
-
-/** The akm config a night writes: the eval's own, with the config patch merged into it. summary.json records it. */
-const effectiveConfig = (ctx: Context): Record<string, any> => patchedConfig(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, embedderOf(ctx)), ctx.overrides ?? defaultOverrides(STRATEGY));
-
-const seconds = (ms: number): number => Number((ms / 1000).toFixed(1));
-
-/** The night: a sandbox with the planted library, indexed, the feedback recorded, improve run, the proposals drained and read back. */
-async function haveNight(items: Item[], files: Map<string, string>, ctx: Context) {
-  const sandbox = ctx.newSandbox();
-  try {
-    return await runNight(sandbox, items, files, ctx);
-  } catch (e) {
-    if (e instanceof Fatal) throw e;
-    return fail(hideEndpoint((e as Error).message, ctx.baseUrl), 1); // a failed akm command: its message, not a stack
-  } finally {
-    removeSandbox(sandbox);
-  }
-}
-
-async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, string>, ctx: Context) {
-  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const improveTimeoutMs = ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS;
-  writeConfig(sandbox, effectiveConfig(ctx));
-  Object.assign(sandbox.env, embedderEnv(embedderOf(ctx)));
-  plant(sandbox, items, files);
-  const bundle = join(sandbox.dir, "bundle");
-  const before = readLibrary(bundle);
-  const step = async <T>(name: string, f: () => Promise<T>): Promise<[T, number]> => {
-    const t0 = performance.now();
-    const value = await f();
-    console.log(`  ${name} ${seconds(performance.now() - t0)}s`);
-    return [value, seconds(performance.now() - t0)];
-  };
-
-  const [, index] = await step("index", () => runAkmJson(sandbox, ["index", "--full"], { timeoutMs: embedderOf(ctx) === "real" ? REAL_INDEX_TIMEOUT_MS : STEP_TIMEOUT_MS }));
-  const [, feedback] = await step("feedback", async () => {
-    for (const item of items) for (const f of item.feedback) await runAkmJson(sandbox, feedbackArgs(f), { timeoutMs: STEP_TIMEOUT_MS });
-  });
-  const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
-  const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
-  if (improved.timedOut) fail(timeoutMessage("improve", improveTimeoutMs), 1); // it was killed in the middle of the night: there is no result to score
-  if (improved.code !== 0) fail(hideEndpoint(failureMessage(`akm ${improveArgs[0]}`, improved.code, improved.stderr), ctx.baseUrl), 1);
-  let improve: unknown;
-  try {
-    improve = JSON.parse(improved.stdout);
-  } catch {
-    fail("akm improve printed no JSON result", 1);
-  }
-  type Drained = { promoted?: unknown[]; rejected?: unknown[]; deferred?: unknown[]; failed?: unknown[] };
-  const [drained, drain] = await step("drain", () => runAkmJson<Drained>(sandbox, ["proposal", "drain", "--promote", "--strategy", overrides.strategy, "--yes"], { timeoutMs: STEP_TIMEOUT_MS }));
-  const listed = [];
-  for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS })) });
-  const count = (x: unknown[] | undefined) => (Array.isArray(x) ? x.length : 0);
-  return {
-    before,
-    after: readLibrary(bundle),
-    improve,
-    proposals: parseProposals(listed),
-    drain: { promoted: count(drained.promoted), rejected: count(drained.rejected), deferred: count(drained.deferred), failed: count(drained.failed) },
-    seconds: { index, feedback, improve: improveSeconds, drain },
-  };
 }
 
 const cell = (n: number, of: number, x: number | null) => `${n}/${of}  ${pct(x)}`;
@@ -254,38 +157,40 @@ function printSideBySide(a: Summary, b: Summary): void {
     }),
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => (r[i] as string).length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
+  console.log(`\n${NAME}: public and custom side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0] as number)}  ${r[1].padEnd(w[1] as number)}  ${r[2].padEnd(w[2] as number)}`);
 }
 
-export async function runCorpus(
-  corpus: Corpus,
-  ctx: Context,
-  folders = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
-  },
-): Promise<Summary> {
-  const night: Night = loadNight(folders.assets);
+/** What a run needs besides the collector's: the akm version, the label of its results folder and the limit of items. */
+type RunContext = CollectContext & { version: string; label: string; limit?: number };
+
+export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, resultsParent = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results")): Promise<Summary> {
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
+  const night = loadNight(corpus.folder);
   const items = selectItems(night.items, ctx.limit);
-  console.log(`${NAME} (${corpus}): ${items.length} of ${night.items.length} items, one night, one model call at a time`);
+  console.log(`${NAME} (${corpus.name}): ${items.length} of ${night.items.length} items, one night, one model call at a time`);
   const t0 = performance.now();
   const done = await haveNight(items, night.files, ctx);
-  const total = seconds(performance.now() - t0);
+  const total = Number(((performance.now() - t0) / 1000).toFixed(1));
 
-  const outcome = { before: done.before, after: done.after, proposals: done.proposals, improve: done.improve };
-  // akm names the endpoint in some of its errors, and rows get shared, so no row carries it.
-  const rows = items.map((item) => JSON.parse(hideEndpoint(JSON.stringify(scoreItem(item, outcome)), ctx.baseUrl)) as Row);
-  const outside = outsideChanges(done.before, done.after, items);
+  // akm names the endpoint in some of its errors, and rows get shared, so no row carries it (rawOfNight writes <MODEL_BASE_URL> in its place).
+  const raws = rawOfNight(items, done, ctx.baseUrl);
+  const rows = items.map((item, i) => makeRow(item, raws[i] as never));
+  const counts = summarize(rows);
   const calls = callStats(done.improve);
   const result = done.improve as { ok?: boolean; skippedProcesses?: { process?: string }[]; consolidation?: { pairPass?: { pairsJudged?: number; failedJudgments?: number; labelCounts?: Record<string, number> } } };
   const pairPass = result.consolidation?.pairPass;
 
-  const dir = makeResultsDir(folders.results, ctx.label);
+  const dir = makeResultsDir(resultsParent, ctx.label);
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const embedder = ctx.embedder ?? "deterministic";
+  const config = effectiveConfig(ctx);
+  const seed = corpus.config.seed ?? null;
+  const build = akmBuild();
   const summary: Summary = {
     eval: NAME,
-    corpus,
+    ...corpusFields(corpus),
     label: ctx.label,
     date: new Date().toISOString(),
     status: "complete",
@@ -294,22 +199,33 @@ export async function runCorpus(
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
-    embedder: embedderOf(ctx),
+    ...build,
+    embedder,
     limit: ctx.limit ?? null,
-    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
-    ...runInputs(effectiveConfig(ctx), (text) => hideEndpoint(text, ctx.baseUrl), { dir: folders.assets, files: nightFiles(folders.assets) }, corpus === "private" ? privateSeed(folders.assets) : null),
+    ...overrideSummary(overrides),
+    ...runInputs(config, (text) => hideEndpoint(text, ctx.baseUrl), { dir: corpus.folder, files: nightFiles(corpus.folder) }, seed),
     n_items: night.items.length,
     n_planted: items.length,
-    n_errored: rows.filter((r) => r.error).length,
+    n_errored: counts.n_errored,
     seconds: { ...done.seconds, total },
     improve_ok: result.ok !== false,
     skipped_processes: (result.skippedProcesses ?? []).map((p) => String(p.process)),
     drain: done.drain,
-    outside_changed: outside,
+    outside_changed: counts.outside_changed,
     pair_pass: pairPass ? { pairs_judged: Number(pairPass.pairsJudged ?? 0), failed_judgments: Number(pairPass.failedJudgments ?? 0), labels: Object.fromEntries(Object.entries(pairPass.labelCounts ?? {}).filter(([, n]) => n > 0)) } : null,
     calls_by: calls.by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
-    metrics: metrics(rows, outside, done.proposals, calls, done.improve),
+    metrics: counts.metrics,
+    manifest: buildManifest({
+      measurement: MEASUREMENT,
+      parts,
+      corpus: corpus.name,
+      cases: caseDigests(MEASUREMENT, planted(items, night.files)),
+      akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+      config,
+      settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: null, seed },
+      treatment_hints: { embedder },
+      completion: completionOf(MEASUREMENT, items.map((i) => i.id), rows),
+    }),
     results_dir: dir,
   };
   const { results_dir: _dir, ...stored } = summary;
@@ -319,9 +235,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`${NAME}: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -330,23 +246,25 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  const publicAssets = join(EVAL_DIR, "assets");
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, default: "rewrite", aliases: { private: ALIASES.private }, fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const embedder = parseEmbedder(values.embedder, fail);
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
 
-  const publicAssets = join(EVAL_DIR, "assets");
+  useAkm(values, fail);
+  const settings = useModel(values, fail);
+  const refusal = privacyError(corpora, { model: settings }, "memories");
+  if (refusal) fail(refusal);
+  const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
-    const problem = c === "private" ? privateAssetsProblem(NAME, join(ROOT, "private", NAME), "items.jsonl", () => assetsDigest(publicAssets, nightFiles(publicAssets))) : null;
+    if (c.name === "public") continue;
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl", () => assetsDigest(publicAssets, nightFiles(publicAssets)), () => generatorSha256(GENERATOR_CODE)) : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
     if (problem) fail(problem);
   }
-  useAkm(values, fail);
-  const { baseUrl, name: model, hasKey } = useModel(values, fail);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 

@@ -6,7 +6,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
 import { NAME } from "./collect.ts";
-import { CLASSES, type Case, type LoadedCase, expectOf, memoryBody } from "./score.ts";
+import { CLASSES, type Case, type LoadedCase, expectOf, lessonFile, memoryBody } from "./score.ts";
 
 export * from "./score.ts";
 export * from "./collect.ts";
@@ -74,12 +74,6 @@ export function selectCases(cases: LoadedCase[], limit?: number): LoadedCase[] {
   }
   return cases.filter((c) => picked.has(c));
 }
-
-/** The file distill writes a memory's lesson to, in the bundle. A lesson already there makes distill skip the memory. */
-export const lessonFile = (c: Pick<LoadedCase, "name">): string => {
-  const clean = `memory-${c.name}`.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return `lessons/${clean}-lesson.md`;
-};
 
 // ---- Where the cases are -----------------------------------------------------------------------------------------
 

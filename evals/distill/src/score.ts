@@ -262,6 +262,12 @@ export function lessonText(content: string): string {
 /** The body of a memory file, without its frontmatter. */
 export const memoryBody = (memory: string): string => (FRONTMATTER.exec(memory)?.[2] ?? memory).trim();
 
+/** The file distill writes a memory's lesson to, in the bundle. A lesson already there makes distill skip the memory. */
+export const lessonFile = (c: Pick<LoadedCase, "name">): string => {
+  const clean = `memory-${c.name}`.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `lessons/${clean}-lesson.md`;
+};
+
 const words = (s: string): number => s.split(/\s+/).filter(Boolean).length;
 
 /** A run of this many words that a text and a memory both have, in the same order, is repeated word for word. */

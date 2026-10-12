@@ -50,3 +50,9 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | retrieval | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 3ec3a06b3212 |
 | 2026-10-12 | skillret | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | f7998935e63f |
 | 2026-10-12 | terminal-bench | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | f76ab669f4e8 |
+| 2026-10-12 | consolidate | collector | 1 | first lock entry | 0f59751f560e |
+| 2026-10-12 | consolidate | scorer | 1 | first lock entry | 3e604024d2b9 |
+| 2026-10-12 | nightly | collector | 1 | first lock entry; the scorer requires a silent item's reflect proposal to be pending, not rejected or reverted (#73) | 3b6779881a41 |
+| 2026-10-12 | nightly | scorer | 1 | first lock entry; the scorer requires a silent item's reflect proposal to be pending, not rejected or reverted (#73) | 9549d5fdd0f4 |
+| 2026-10-12 | distill | scorer | 2 | no score change: lessonFile moves from lib.ts into score.ts, so the nightly eval can import distill's checks of a lesson from the scorer instead of a copy | 619613d50814 |
+| 2026-10-12 | nightly | scorer | 2 | the distill items are scored by distill's own checks (evals/distill/src/score.ts) instead of a copy of them from before #55 and #56, and the reflect items by reflect's scorer after #57, #58 and #59. Scores change: lessons that copy their memory or hedge only part of a claim fail, and the reflect fixes apply to reflect items | 45ac7eeccd4c |

@@ -7,11 +7,14 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { parseCases as parsePairs } from "../../consolidate/src/lib.ts";
+import { parseCases as parsePairs } from "../../consolidate/src/cases.ts";
 import { loadCases as loadDistill } from "../../distill/src/lib.ts";
 import { libraryFileOf } from "../../reflect/src/build.ts";
 import { cleanProblems, parseCases as parseReflect } from "../../reflect/src/lib.ts";
-import { type Feedback, type Item, type Night, type Relation, listFiles, nightProblems, refOf } from "./lib.ts";
+import type { Feedback, Item, Relation } from "./items.ts";
+import { refOf } from "./items.ts";
+import { listFiles } from "./library.ts";
+import { type Night, nightProblems } from "./night.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const EVALS = resolve(EVAL_DIR, "..");

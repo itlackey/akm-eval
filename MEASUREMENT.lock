@@ -49,6 +49,28 @@
         ]
       }
     },
+    "consolidate": {
+      "collector": {
+        "version": 1,
+        "sha256": "0f59751f560ed5f4f473b28839993e374d68630d007173a5571b92e14ab73522",
+        "files": [
+          "evals/consolidate/src/collect.ts",
+          "evals/consolidate/src/sandbox.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "3e604024d2b94cc8892ec279b17e1ab39fd77065ff8deeff5fb56230018c161e",
+        "files": [
+          "evals/consolidate/src/cases.ts",
+          "evals/consolidate/src/pool-score.ts",
+          "evals/consolidate/src/score.ts"
+        ]
+      }
+    },
     "distill": {
       "collector": {
         "version": 2,
@@ -61,8 +83,8 @@
         ]
       },
       "scorer": {
-        "version": 1,
-        "sha256": "1ce5a0f58952718121dd421c88c7744ad0c89e68d6895832cdacc3649eecf4c2",
+        "version": 2,
+        "sha256": "619613d50814f5f5b07a998b0e0d1e97a8b858140a9f758ce65b125b5f519e16",
         "files": [
           "evals/distill/src/score.ts",
           "lib/negation.ts"
@@ -128,6 +150,32 @@
           "benchmarks/longmemeval/src/metrics.ts",
           "benchmarks/longmemeval/src/score.ts",
           "lib/ir.ts"
+        ]
+      }
+    },
+    "nightly": {
+      "collector": {
+        "version": 1,
+        "sha256": "3b6779881a415d258452a2f776c05e7f61b6069b0aaf99230b9a98c3b0aed007",
+        "files": [
+          "evals/consolidate/src/sandbox.ts",
+          "evals/nightly/src/collect.ts",
+          "evals/nightly/src/library.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 2,
+        "sha256": "45ac7eeccd4cf2808c20a8e579d0564cba1527c9950e9e278f6214a899fa2afa",
+        "files": [
+          "evals/consolidate/src/cases.ts",
+          "evals/distill/src/score.ts",
+          "evals/nightly/src/items.ts",
+          "evals/nightly/src/score.ts",
+          "evals/reflect/src/score.ts",
+          "lib/negation.ts"
         ]
       }
     },

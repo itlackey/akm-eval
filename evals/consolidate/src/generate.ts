@@ -9,14 +9,14 @@
 // checks that each deciding claim is still in the note it belongs to, and in no other.
 //
 // It works in a temporary folder, private/consolidate/.new, and moves assets/ and map.json into place only when the checks have
-// passed, with generated.json (the seed and the digest of the public cases) beside them. A failed run leaves the previous private
-// cases, map and generated.json as they were. `run --corpus private` stops when generated.json is missing or does not match the public cases.
+// passed, with generated.json (the seed, the digest of the public cases and the digest of this generator) beside them. A failed run leaves the previous private
+// cases, map and generated.json as they were. `run` on the custom corpus stops when generated.json is missing, or does not match the public cases or this generator.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { assetsDigest, generateInto } from "./inputs.ts";
-import { type Case, INPUT_FILES, claimProblems, parseCases } from "./lib.ts";
+import { type Case, INPUT_FILES, claimProblems, parseCases } from "./cases.ts";
+import { GENERATOR_CODE, assetsDigest, generateInto, generatorSha256 } from "./inputs.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -86,7 +86,7 @@ function main(): number {
   let written = 0;
   let summary = "";
   // Everything is made in a temporary folder and moved into place when it has passed the checks, so a failure leaves the previous private set as it was.
-  const problems = generateInto(out, seed, assetsDigest(publicAssets, INPUT_FILES), (stage) => {
+  const problems = generateInto(out, seed, assetsDigest(publicAssets, INPUT_FILES), generatorSha256(GENERATOR_CODE), (stage) => {
     const work = join(stage.dir, "work");
     explode(cases, join(work, "corpus"), join(work, "labels"));
     rewrite(["--seed", seed, "--map", stage.map, join(work, "corpus"), join(work, "corpus-out")]);

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,10 +14,23 @@ import { summarize } from "../../../evals/retrieval/src/lib.ts";
 import { EVAL_METRICS } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
 import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
+import * as manifestModule from "../../../lib/manifest.ts";
 import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { AXES, type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
+
+// An eval that declares a measurement is compared by the manifest, and a run from before it is legacy: compared as before, and the report is
+// exploratory. The fixtures of these evals are such runs, written to test the earlier rules, which are for an eval that declares no measurement.
+// So that they keep testing those rules, the evals below are read as undeclared in this file. The path of a legacy run of an eval that does
+// declare one is tested with reflect, in manifest.test.ts.
+const FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT = ["consolidate", "nightly"];
+let undeclared: ReturnType<typeof spyOn> | undefined;
+beforeAll(() => {
+  const real = manifestModule.loadMeasurement;
+  undeclared = spyOn(manifestModule, "loadMeasurement").mockImplementation(((name: string, root?: string) => (FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT.includes(name) ? null : real(name, root))) as never);
+});
+afterAll(() => undeclared?.mockRestore());
 const fx = (...parts: string[]): string => join(FIXTURES, ...parts);
 /** The fixtures are a run before and a run after a change to the akm build, so their treatment is the build. */
 const BUILD: Axis[] = ["build"];
@@ -1114,7 +1127,8 @@ describe("a release against a release", () => {
     expect(res.exitCode).toBe(0);
     const out = new TextDecoder().decode(res.stdout);
     expect(out).toContain("# Compare nightly (public): A and B");
-    expect(out).not.toContain("Exploratory");
+    // no banner for any reason of the comparison. These runs are from before the manifest, and nightly declares a measurement now, so the one banner is that they have none.
+    expect(out.split("\n").filter((line) => line.includes("Exploratory")).every((line) => line.includes("have no manifest (written before harness-v3)"))).toBe(true);
     expect(out).toContain("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs");
   });
 });

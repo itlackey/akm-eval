@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
 import { endpointRecord, sha256Files } from "../../../lib/provenance.ts";
-import { GENERATED, assetsDigest, generateInto, privateAssetsProblem, privateSeed, readGenerated, readSeed, replaceDir, runInputs } from "./inputs.ts";
+import { GENERATED, assetsDigest, generateInto, privateAssetsProblem, readGenerated, replaceDir, runInputs } from "./inputs.ts";
 
 const dirs: string[] = [];
 const temp = () => {
@@ -57,39 +57,28 @@ describe("assetsDigest", () => {
   });
 });
 
-describe("readGenerated, readSeed, privateSeed", () => {
-  test("readGenerated reads a seed and a digest, and is null for a missing, broken or incomplete marker", () => {
+describe("readGenerated", () => {
+  test("reads a seed and the digests, and is null for a missing, broken or incomplete marker", () => {
     const dir = temp();
     expect(readGenerated(dir)).toBeNull();
-    writeFileSync(join(dir, GENERATED), JSON.stringify({ seed: "42", inputs_sha256: "abc" }));
-    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: "abc" });
+    writeFileSync(join(dir, GENERATED), JSON.stringify({ seed: "42", inputs_sha256: "abc", generator_sha256: "def" }));
+    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: "abc", generator_sha256: "def" });
     for (const bad of ["{", "[]", "null", JSON.stringify({ seed: 42, inputs_sha256: "abc" }), JSON.stringify({ seed: "42" })]) {
       writeFileSync(join(dir, GENERATED), bad);
       expect(readGenerated(dir)).toBeNull();
     }
   });
 
-  test("readSeed is the text of a seed file without its newline, and null when there is none or it is empty", () => {
-    const dir = put(temp(), { seed: "18446744073709551615\n", empty: " \n" });
-    expect(readSeed(join(dir, "seed"))).toBe("18446744073709551615");
-    expect(readSeed(join(dir, "empty"))).toBeNull();
-    expect(readSeed(join(dir, "none"))).toBeNull();
-  });
-
-  test("privateSeed is the seed the assets were made from, else private/seed, else null", () => {
-    const priv = temp();
-    const assets = join(priv, "consolidate", "assets");
-    mkdirSync(assets, { recursive: true });
-    expect(privateSeed(assets)).toBeNull();
-    writeFileSync(join(priv, "seed"), "7\n");
-    expect(privateSeed(assets)).toBe("7");
-    writeFileSync(join(priv, "consolidate", GENERATED), JSON.stringify({ seed: "99", inputs_sha256: "x" })); // generate-assets --seed 99 leaves private/seed alone
-    expect(privateSeed(assets)).toBe("99");
+  test("a marker made before the generator was digested reads with an empty generator digest, which no generator has", () => {
+    const dir = temp();
+    writeFileSync(join(dir, GENERATED), JSON.stringify({ seed: "42", inputs_sha256: "abc" }));
+    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: "abc", generator_sha256: "" });
   });
 });
 
 describe("privateAssetsProblem", () => {
   const inputs = () => "digest-of-the-public-cases";
+  const generator = () => "digest-of-the-generator";
   const setup = (generated?: object) => {
     const dir = put(temp(), { "assets/cases.jsonl": "x\n" });
     if (generated) writeFileSync(join(dir, GENERATED), JSON.stringify(generated));
@@ -97,29 +86,38 @@ describe("privateAssetsProblem", () => {
   };
 
   test("says the assets are missing when the file the run reads is not there", () => {
-    expect(privateAssetsProblem("consolidate", temp(), "cases.jsonl", inputs)).toBe("the private assets are missing (private/consolidate/assets/cases.jsonl). Make them with: ./generate-assets --only consolidate");
+    expect(privateAssetsProblem("consolidate", temp(), "cases.jsonl", inputs, generator)).toBe("the private assets are missing (private/consolidate/assets/cases.jsonl). Make them with: ./generate-assets --only consolidate");
   });
 
   test("refuses assets without a generated.json, and says to rerun generate", () => {
-    const problem = privateAssetsProblem("consolidate", setup(), "cases.jsonl", inputs);
+    const problem = privateAssetsProblem("consolidate", setup(), "cases.jsonl", inputs, generator);
     expect(problem).toContain("private/consolidate/generated.json is missing");
     expect(problem).toContain("rerun ./generate-assets --only consolidate");
-    expect(privateAssetsProblem("nightly", setup(), "cases.jsonl", inputs)).toContain("rerun ./generate-assets --only nightly");
+    expect(privateAssetsProblem("nightly", setup(), "cases.jsonl", inputs, generator)).toContain("rerun ./generate-assets --only nightly");
   });
 
   test("refuses a generated.json that is not a seed and a digest", () => {
-    expect(privateAssetsProblem("consolidate", setup({ seed: 1 }), "cases.jsonl", inputs)).toContain("generated.json is missing");
+    expect(privateAssetsProblem("consolidate", setup({ seed: 1 }), "cases.jsonl", inputs, generator)).toContain("generated.json is missing");
   });
 
   test("refuses assets made from other public inputs than the ones now, and says to rerun generate", () => {
-    const problem = privateAssetsProblem("consolidate", setup({ seed: "1", inputs_sha256: "an-older-digest" }), "cases.jsonl", inputs);
+    const problem = privateAssetsProblem("consolidate", setup({ seed: "1", inputs_sha256: "an-older-digest" }), "cases.jsonl", inputs, generator);
     expect(problem).toContain("made from other public assets");
     expect(problem).toContain("inputs_sha256");
     expect(problem).toContain("rerun ./generate-assets --only consolidate");
   });
 
-  test("lets a run go ahead when the digest is the one of the public inputs now", () => {
-    expect(privateAssetsProblem("consolidate", setup({ seed: "1", inputs_sha256: inputs() }), "cases.jsonl", inputs)).toBeNull();
+  test("refuses assets made by another generator than the one now, or by one that was not digested, and says to rerun generate", () => {
+    for (const made of [{ seed: "1", inputs_sha256: inputs(), generator_sha256: "an-older-generator" }, { seed: "1", inputs_sha256: inputs(), generator_sha256: "0".repeat(64) }, { seed: "1", inputs_sha256: inputs() }]) {
+      const problem = privateAssetsProblem("consolidate", setup(made), "cases.jsonl", inputs, generator);
+      expect(problem).toContain("made by a generator that has changed since");
+      expect(problem).toContain("generator_sha256");
+      expect(problem).toContain("rerun ./generate-assets --only consolidate");
+    }
+  });
+
+  test("lets a run go ahead when the digests are the ones of the public inputs and of the generator now", () => {
+    expect(privateAssetsProblem("consolidate", setup({ seed: "1", inputs_sha256: inputs(), generator_sha256: generator() }), "cases.jsonl", inputs, generator)).toBeNull();
   });
 });
 
@@ -152,60 +150,60 @@ describe("generateInto", () => {
 
   test("moves the assets and the map into place, writes generated.json last, and leaves no temporary folder", () => {
     const out = join(temp(), "private", "consolidate"); // the folder does not exist yet
-    expect(generateInto(out, "42", "digest-1", writeSet("first"))).toEqual([]);
+    expect(generateInto(out, "42", "digest-1", "gen-42", writeSet("first"))).toEqual([]);
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
     expect(read(out, "assets/cases.jsonl")).toBe("first");
     expect(read(out, "map.json")).toBe("first-map");
-    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: "digest-1" });
+    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: "digest-1", generator_sha256: "gen-42" });
   });
 
   test("a new set replaces the old assets, map and marker, and drops files of the old assets", () => {
     const out = join(temp(), "c");
-    generateInto(out, "1", "digest-1", (stage) => (put(stage.assets, { "cases.jsonl": "first", "old-only.txt": "x" }), writeFileSync(stage.map, "m1"), []));
-    generateInto(out, "2", "digest-2", writeSet("second"));
+    generateInto(out, "1", "digest-1", "gen-1", (stage) => (put(stage.assets, { "cases.jsonl": "first", "old-only.txt": "x" }), writeFileSync(stage.map, "m1"), []));
+    generateInto(out, "2", "digest-2", "gen-2", writeSet("second"));
     expect(readdirSync(join(out, "assets"))).toEqual(["cases.jsonl"]);
     expect(read(out, "assets/cases.jsonl")).toBe("second");
-    expect(readGenerated(out)).toEqual({ seed: "2", inputs_sha256: "digest-2" });
+    expect(readGenerated(out)).toEqual({ seed: "2", inputs_sha256: "digest-2", generator_sha256: "gen-2" });
   });
 
   test("when the checks find problems it returns them and leaves the previous set as it was", () => {
     const out = join(temp(), "c");
-    generateInto(out, "1", "digest-1", writeSet("first"));
-    const problems = generateInto(out, "2", "digest-2", (stage) => {
+    generateInto(out, "1", "digest-1", "gen-1", writeSet("first"));
+    const problems = generateInto(out, "2", "digest-2", "gen-2", (stage) => {
       writeSet("second")(stage);
       return ["a claim is gone"];
     });
     expect(problems).toEqual(["a claim is gone"]);
     expect(read(out, "assets/cases.jsonl")).toBe("first");
     expect(read(out, "map.json")).toBe("first-map");
-    expect(readGenerated(out)).toEqual({ seed: "1", inputs_sha256: "digest-1" });
+    expect(readGenerated(out)).toEqual({ seed: "1", inputs_sha256: "digest-1", generator_sha256: "gen-1" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
   test("when making the set throws it removes the temporary folder and leaves the previous set as it was", () => {
     const out = join(temp(), "c");
-    generateInto(out, "1", "digest-1", writeSet("first"));
+    generateInto(out, "1", "digest-1", "gen-1", writeSet("first"));
     expect(() =>
-      generateInto(out, "2", "digest-2", (stage) => {
+      generateInto(out, "2", "digest-2", "gen-2", (stage) => {
         writeSet("second")(stage);
         throw new Error("lib/rewrite failed");
       }),
     ).toThrow("lib/rewrite failed");
     expect(read(out, "assets/cases.jsonl")).toBe("first");
-    expect(readGenerated(out)).toEqual({ seed: "1", inputs_sha256: "digest-1" });
+    expect(readGenerated(out)).toEqual({ seed: "1", inputs_sha256: "digest-1", generator_sha256: "gen-1" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
   test("a first run that fails leaves no assets, no map and no marker, which a private run refuses", () => {
     const out = join(temp(), "c");
-    expect(generateInto(out, "1", "digest-1", () => ["broken"])).toEqual(["broken"]);
+    expect(generateInto(out, "1", "digest-1", "gen-1", () => ["broken"])).toEqual(["broken"]);
     expect(readdirSync(out)).toEqual([]);
-    expect(privateAssetsProblem("consolidate", out, "cases.jsonl", () => "digest-1")).toContain("assets are missing");
+    expect(privateAssetsProblem("consolidate", out, "cases.jsonl", () => "digest-1", () => "gen-1")).toContain("assets are missing");
   });
 
   test("a stale temporary folder from a run that died is cleared first", () => {
     const out = put(temp(), { ".new/assets/stale.txt": "x", ".new/map.json": "stale" });
-    generateInto(out, "1", "digest-1", writeSet("first"));
+    generateInto(out, "1", "digest-1", "gen-1", writeSet("first"));
     expect(existsSync(join(out, ".new"))).toBe(false);
     expect(readdirSync(join(out, "assets"))).toEqual(["cases.jsonl"]);
   });
