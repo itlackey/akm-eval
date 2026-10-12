@@ -727,7 +727,7 @@ export interface Metrics {
   bad_by: { missing_fact: number; forbidden_claim: number; contradiction: number; too_long: number; copied: number };
 }
 
-/** The numbers the eval reports, over the cases that ran without an error. A row stored by version 1 of the scorer has no `ambiguous`. */
+/** The numbers the eval reports, over the cases that ran without an error. A row stored before #45 has no `ambiguous`. */
 export function metrics(rows: Row[]): Metrics {
   const scored = rows.filter((r) => r.verdict !== "error");
   const count = (rs: Row[], v: Verdict) => rs.filter((r) => r.verdict === v).length;

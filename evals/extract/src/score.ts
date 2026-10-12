@@ -699,7 +699,7 @@ export interface Metrics {
 
 const count = (rows: Row[]): Count => ({ n: rows.length, correct: rows.filter((r) => r.correct).length, rate: ratio(rows.filter((r) => r.correct).length, rows.length) });
 
-/** The numbers the eval reports, over the cases that ran without an error. A row stored by version 1 of the scorer has no `ambiguous`. */
+/** The numbers the eval reports, over the cases that ran without an error. A row stored before #45 has no `ambiguous`. */
 export function metrics(rows: Row[]): Metrics {
   const scored = rows.filter((r) => r.outcome !== "error");
   const of = (...classes: Class[]) => scored.filter((r) => classes.includes(r.class));
