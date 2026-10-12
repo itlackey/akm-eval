@@ -84,8 +84,12 @@ export interface Generated {
   rewrite: string;
 }
 
-/** The code that decides what generate makes of the public inputs, by its path from the repository root: the rewrite, its lexicon of tool names, and generate itself, which says which tools keep their names. */
-export const REWRITE_CODE = [join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts")];
+/**
+ * The code that decides what generate makes of the public inputs, by its path from the repository root: the rewrite and its lexicon of tool
+ * names (every file of lib/rewrite that runs), generate itself, which says which tools keep their names, and this file, whose `filesUnder`
+ * lists the library files generate reads them from. Not the sandbox code that only checks the result.
+ */
+export const REWRITE_CODE = [join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts"), join("evals", "retrieval", "src", "inputs.ts")];
 
 /** One digest over REWRITE_CODE in this repository. It is the rewrite that runs, so it never depends on the root of the inputs. A change to the rewrite, the lexicon or the pins changes it. */
 export const rewriteSha256 = (): string => inFolder(ROOT, () => sha256Files(REWRITE_CODE));

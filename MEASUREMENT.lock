@@ -91,6 +91,28 @@
         ]
       }
     },
+    "retrieval": {
+      "collector": {
+        "version": 1,
+        "sha256": "545140dcd503384e1e308fbbe84fd74d099a014c7914abd50dd6cdd72e9530d8",
+        "files": [
+          "evals/retrieval/src/akm.ts",
+          "evals/retrieval/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "0429da784b9256b1a887a221151926d0895ef703ccf9babbb3c58d252dc3c957",
+        "files": [
+          "evals/retrieval/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
+    },
     "skillret": {
       "collector": {
         "version": 1,

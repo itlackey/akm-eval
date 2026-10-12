@@ -27,3 +27,5 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | promotion | scorer | 1 | first lock entry | 66d76aedd254 |
 | 2026-10-12 | skillret | collector | 1 | first lock entry | acd3032eaf8d |
 | 2026-10-12 | skillret | scorer | 1 | first lock entry | a6b0c5015a9c |
+| 2026-10-12 | retrieval | collector | 1 | first lock entry | 545140dcd503 |
+| 2026-10-12 | retrieval | scorer | 1 | first lock entry | 0429da784b92 |
