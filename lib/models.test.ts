@@ -53,6 +53,12 @@ describe("resolveModel", () => {
     expect(privateModelError(resolveModel("model", "my-model", ENV, entries), "--corpus own", "notes")).toContain('"private": true');
   });
 
+  test("the same check refuses a judge that is not marked, and says it is the judge", () => {
+    const entries: Record<string, ModelEntry> = { mine: { base_url: "http://localhost:8080/v1", private: true }, other: { base_url: "https://api.example.com/v1" } };
+    expect(privateModelError(resolveModel("judge", "mine", ENV, entries), "--cases notes", "notes", "judge")).toBeUndefined();
+    expect(privateModelError(resolveModel("judge", "other", ENV, entries), "--cases notes", "notes", "judge")).toBe('--cases notes sends your notes to the judge other, which is not marked "private": true in models.json.');
+  });
+
   test("an id such as constructor is not a line of models.json", () => {
     expect(resolveModel("model", "constructor", ENV, NONE).private).toBe(false);
   });
@@ -199,31 +205,38 @@ describe("every eval and benchmark takes its model and akm the same way", () => 
   });
 });
 
-describe("every eval that reads your own notes", () => {
-  const EVALS = join(import.meta.dir, "..", "evals");
-  const runFiles = readdirSync(EVALS).map((name) => ({ name, file: join(EVALS, name, "src", "run.ts") })).filter((r) => existsSync(r.file));
-  // An own-style corpus is one a run.ts names by a string of "own" ("own", "own-feedback"), as its corpus or as the private/<eval>/own folder it reads.
-  const readsOwn = (source: string) => /["'`]own(-[a-z-]+)?["'`]/.test(source);
-  // The evals that read an own corpus and send none of it to a model. Each says why.
-  const NOTHING_SENT = { retrieval: "scores akm's search of your notes with the qrels you labelled: no model sees a note (the labelling tool, label.ts, checks the flag)" } as Record<string, string>;
+describe("every eval that reads a custom corpus", () => {
+  const ROOT = join(import.meta.dir, "..");
+  const runFiles = ["evals", "benchmarks"].flatMap((group) =>
+    readdirSync(join(ROOT, group))
+      .map((name) => ({ name: `${group}/${name}`, file: join(ROOT, group, name, "src", "run.ts") }))
+      .filter((r) => existsSync(r.file)),
+  );
+  // A run.ts reads a custom corpus when it asks lib/corpus.ts for one, or, until it does, when it names an own corpus by a string of "own"
+  // ("own", "own-feedback"), as its corpus or as the private/<eval>/own folder it reads.
+  const readsCustom = (source: string) => /["'`]own(-[a-z-]+)?["'`]/.test(source) || source.includes("resolveCorpora(");
+  // privacyError (lib/corpus.ts) checks the corpus's private flag; privateModelError (lib/models.ts) is the check it uses.
+  const guarded = (source: string) => source.includes("privacyError(") || source.includes("privateModelError(");
+  // The evals that read a custom corpus and send none of it to a model. Each says why.
+  const NOTHING_SENT = { "evals/retrieval": "scores akm's search of your notes with the qrels you labelled: no model sees a note (the labelling tool, label.ts, checks the flag)" } as Record<string, string>;
 
-  test("the scan finds the own corpora, so it cannot pass by finding none", () => {
-    const found = runFiles.filter((r) => readsOwn(readFileSync(r.file, "utf8"))).map((r) => r.name);
-    for (const name of ["promotion", "distill", "retrieval"]) expect(found).toContain(name);
+  test("the scan finds the custom corpora, so it cannot pass by finding none", () => {
+    const found = runFiles.filter((r) => readsCustom(readFileSync(r.file, "utf8"))).map((r) => r.name);
+    for (const name of ["evals/promotion", "evals/distill", "evals/retrieval"]) expect(found).toContain(name);
   });
 
-  test("each calls privateModelError, unless it sends none to a model", () => {
+  test("each calls privacyError or privateModelError, unless it sends none to a model", () => {
     const unchecked = runFiles.filter((r) => {
       const source = readFileSync(r.file, "utf8");
-      return readsOwn(source) && !(r.name in NOTHING_SENT) && !source.includes("privateModelError(");
+      return readsCustom(source) && !(r.name in NOTHING_SENT) && !guarded(source);
     });
-    expect(unchecked.map((r) => `${r.name}: reads an own corpus but never calls privateModelError (lib/models.ts)`)).toEqual([]);
+    expect(unchecked.map((r) => `${r.name}: reads a custom corpus but never calls privacyError (lib/corpus.ts)`)).toEqual([]);
   });
 
-  test("an exemption is kept only while its eval still reads an own corpus and still sends none to a model", () => {
+  test("an exemption is kept only while its eval still reads a custom corpus and still sends none to a model", () => {
     for (const name of Object.keys(NOTHING_SENT)) {
-      const source = readFileSync(join(EVALS, name, "src", "run.ts"), "utf8");
-      expect([name, readsOwn(source) && !source.includes("privateModelError(")]).toEqual([name, true]);
+      const source = readFileSync(join(ROOT, name, "src", "run.ts"), "utf8");
+      expect([name, readsCustom(source) && !guarded(source)]).toEqual([name, true]);
     }
   });
 });

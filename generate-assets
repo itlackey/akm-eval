@@ -5,6 +5,8 @@
 #
 # For each evals/<name>/generate and benchmarks/<name>/generate that exists, runs
 #   <script> --seed <seed> --out private/<name>
+# and, when it succeeds, writes private/<name>/corpus.json, the corpus config of the rewrite (see lib/corpus.ts): kind "rewrite", not
+# private, the seed, and the path of the generated.json the script wrote (private/<name>/assets/generated.json or private/<name>/generated.json).
 set -euo pipefail
 
 die() {
@@ -23,6 +25,9 @@ Makes the private assets of every eval and benchmark in private/<name>.
 
 The first run creates private/ and private/seed, a random 64-bit integer.
 private/ is gitignored. It is never published, so never commit it or upload it.
+
+Each set made also gets private/<name>/corpus.json, which says it is a rewrite of the public cases and is not private. A corpus.json
+that already says "private": true keeps saying it. See "Corpora" in README.md.
 EOF
 }
 
@@ -123,6 +128,8 @@ if [ "${#names[@]}" -eq 0 ]; then
   exit 0
 fi
 
+command -v bun > /dev/null || die "bun is needed. See https://bun.sh"
+
 made=()
 failed=()
 for i in "${!names[@]}"; do
@@ -134,7 +141,12 @@ for i in "${!names[@]}"; do
     echo "generate-assets: $script is not executable" >&2
     failed+=("$name")
   elif "$script" --seed "$seed" --out "private/$name"; then
-    made+=("$name")
+    if bun lib/corpus.ts rewrite "private/$name"; then
+      made+=("$name")
+    else
+      echo "generate-assets: $script made the assets, but private/$name/corpus.json could not be written for them" >&2
+      failed+=("$name")
+    fi
   else
     echo "generate-assets: $script failed" >&2
     failed+=("$name")
