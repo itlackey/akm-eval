@@ -204,6 +204,23 @@ describe("makeJudge", () => {
     expect(seen[0].body.response_format.json_schema.schema.required).toEqual(["grade", "reason"]);
   });
 
+  test("puts /chat/completions on the path of an endpoint that has a query, before the query, and not twice", async () => {
+    const seen: string[] = [];
+    server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url);
+        seen.push(url.pathname + url.search);
+        return reply("{}");
+      },
+    });
+    const base = `http://127.0.0.1:${server.port}`;
+    await makeJudge(`${base}/openai/deployments/d/v1?api-version=2024-10-21`, "", "m")(messages);
+    await makeJudge(`${base}/v1/chat/completions?api-version=2024-10-21`, "", "m")(messages);
+    await makeJudge(`${base}/v1/?api-version=2024-10-21`, "", "m")(messages);
+    expect(seen).toEqual(["/openai/deployments/d/v1/chat/completions?api-version=2024-10-21", "/v1/chat/completions?api-version=2024-10-21", "/v1/chat/completions?api-version=2024-10-21"]);
+  });
+
   test("sends no key header when there is no key", async () => {
     let auth: string | null = "unset";
     server = Bun.serve({

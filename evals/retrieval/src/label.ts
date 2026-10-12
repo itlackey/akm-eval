@@ -11,7 +11,7 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
 import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
@@ -75,8 +75,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * When the server says to wait (429 with Retry-After), every request of this judge waits, not only the one refused.
  */
 export function makeJudge(baseUrl: string, apiKey: string, model: string, timeoutMs = 120_000, backoffMs = 2000, onWait: (ms: number, why: string) => void = () => {}): Judge {
-  const base = baseUrl.replace(/\/+$/, "");
-  const url = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  const url = completionsUrl(baseUrl);
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) };
   let pausedUntil = 0;
 
