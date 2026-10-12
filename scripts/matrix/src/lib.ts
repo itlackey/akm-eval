@@ -2,8 +2,19 @@
 // makes, how a result is found, and the verdict. The report is in decision.ts. See ../../../README.md ("Run a matrix").
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, lockedParts, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { spreadOf } from "../../../lib/repeat.ts";
+import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
+
+/**
+ * scripts/rescore, loaded when a decision needs a result scored again and not before, as scripts/compare does: a matrix whose results were
+ * all scored by one scorer, or made before the manifest, does not need it.
+ */
+const rescorer = (): typeof import("../../rescore/src/lib.ts") => createRequire(import.meta.url)("../../rescore/src/lib.ts");
 
 export type Dir = "up" | "down";
 export interface MetricSpec {
@@ -29,6 +40,14 @@ export interface EvalSpec {
   harm: MetricSpec[];
   /** The completeness policy: the error counts that must not rise against the baseline. */
   completeness: { errors: ErrorCount[] };
+  /** Metrics the decision shows beside the judged ones and never judges: key paths in the summary's `metrics`. */
+  context?: string[];
+  /**
+   * The share of an eval's results that someone graded, as key paths. The judged metric counts a result nobody graded as not relevant, so a
+   * config that returns more of them reads worse for it. When this share falls against the baseline, the verdict is exploratory until
+   * those results are labelled.
+   */
+  graded?: string[];
 }
 
 /**
@@ -39,6 +58,10 @@ export interface EvalSpec {
  */
 const harbor = (): EvalSpec => ({ main: [main("delta.value")], harm: [harm("akm.errored"), harm("engagement.control_calls")], completeness: { errors: ["n_errored", "completion.failed"] } });
 const spec = (m: MetricSpec[], h: MetricSpec[]): EvalSpec => ({ main: m, harm: h, completeness: { errors: ["n_errored"] } });
+/** The columns of the retrieval eval's summary: akm's search and curate, keyword and semantic. */
+const RETRIEVAL = ["search", "curate", "semantic_search", "semantic_curate"];
+/** The lines of skillret's summary: akm's search on the keyword index and on the semantic one. */
+const SKILLRET = ["search", "semantic_search"];
 
 /**
  * The metrics each eval is judged on, with its completeness policy. Every path was read from a real summary.json (and repeat-summary.json,
@@ -52,17 +75,27 @@ export const EVALS: Record<string, EvalSpec> = {
   reflect: spec([main("defects.rate")], [harm("controls.rate", "up"), harm("proposals.touched_body")]),
   promotion: spec([main("precision.value"), main("recall.value")], [harm("bad_accepted.value")]),
   "judge-gate": spec([main("precision.value"), main("good.rate")], [harm("bad_harmful.rate"), harm("bad_churn.rate")]),
-  extract: spec([main("insights.rate")], [harm("routine.rate", "up"), harm("planted.saved_instruction")]),
-  retrieval: spec([main("search.ndcg_10"), main("curate.ndcg_10"), main("semantic_search.ndcg_10"), main("semantic_curate.ndcg_10")], []),
+  // planted.ambiguous counts the planted sessions whose memory holds the planted phrase behind a negation the scorer cannot read, and asserts none. It is a count to look at, not judged.
+  extract: { ...spec([main("insights.rate")], [harm("routine.rate", "up"), harm("planted.saved_instruction")]), context: ["planted.ambiguous"] },
+  retrieval: { ...spec(RETRIEVAL.map((c) => main(`${c}.ndcg_10`)), []), context: RETRIEVAL.flatMap((c) => [`${c}.ndcg_10_condensed`, `${c}.judged_10`]), graded: RETRIEVAL.map((c) => `${c}.judged_10`) },
   "agent-ab": harbor(),
   "terminal-bench": harbor(),
+  // bakeoff scores what akm wrote for each case against checks: the cases that pass, and the share of checks that hold. It names no harm.
+  bakeoff: { ...spec([main("case_pass.rate"), main("checks.rate")], []), context: ["valid_output.rate"] },
+  // longmemeval answers a question twice, with the whole history and with akm's five sessions. What akm changes is the second answer and the sessions it
+  // returns; the first is the control, and the difference between the two follows from both. A retrieval-only run has the retrieval metrics alone.
+  longmemeval: { ...spec([main("accuracy.with_akm.rate"), main("retrieval.hit_rate"), main("retrieval.recall")], []), context: ["accuracy.without_akm.rate", "accuracy.difference.value", "retrieval.mrr", "retrieval.ndcg"] },
+  // skillret ranks the skills of a library for a request, on the keyword index and, in a run without --limit, the semantic one. NDCG@10 is the headline.
+  skillret: { ...spec(SKILLRET.map((line) => main(`${line}.NDCG@10`)), []), context: SKILLRET.flatMap((line) => ["Recall@10", "Completeness@10", "MAP@10"].map((metric) => `${line}.${metric}`)) },
 };
 
 /** Every metric of each eval, the main ones first. */
 export const EVAL_METRICS: Record<string, MetricSpec[]> = Object.fromEntries(Object.entries(EVALS).map(([name, e]) => [name, [...e.main, ...e.harm]]));
 
 /** What a row's `eval` names that lives in benchmarks/<name>/run and not in evals/<name>/run. */
-const BENCHMARKS = ["terminal-bench"];
+const BENCHMARKS = ["terminal-bench", "longmemeval", "skillret"];
+/** The evals that call no model, so the file's top-level "model" is not given to them: their runner has no --model. */
+const NO_MODEL = ["retrieval", "skillret"];
 /** The evals that run in Harbor. Their --akm is an npm release or a checkout's folder, not a command (see lib/harbor/harbor.ts). */
 export { HARBOR };
 
@@ -73,6 +106,8 @@ export const runnerPath = (root: string, name: string): string => join(root, run
 
 export const NAME_RE = /^[A-Za-z0-9._-]+$/;
 const EPS = 1e-9;
+/** The fewest repeats a side may have for a verdict to be a conclusion. With two, the range of a side is two draws, which a change cannot be told from. */
+export const MIN_REPEATS = 3;
 
 // ---- the matrix file ----------------------------------------------------------------------------------------------------
 
@@ -173,7 +208,7 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
   } else if (lim !== undefined && lim !== null) throw new Error("screen.limit must be a number or an object by eval");
 
   const repeats = json.repeats === undefined ? 3 : json.repeats;
-  if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < 2) throw new Error("repeats must be an integer of 2 or more");
+  if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < MIN_REPEATS) throw new Error(`repeats must be an integer of ${MIN_REPEATS} or more: a verdict needs that many runs of each side`);
   const p = prefix ?? (typeof json.prefix === "string" ? json.prefix : basename(file, extname(file)));
   if (!NAME_RE.test(p)) throw new Error("prefix must use letters, digits, dot, dash and underscore");
   for (const k of ["model", "akm"] as const) if (json[k] !== undefined && (typeof json[k] !== "string" || !(json[k] as string).trim())) throw new Error(`${k} must be a non-empty string`);
@@ -183,12 +218,23 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
 }
 
 /**
+ * The flags that make a run another measurement, whatever the corpus: consolidate's `--pool` (another set of cases), longmemeval's `--retrieval-only` (no
+ * model, no answers: its summary has `mode: "retrieval-only"`), bakeoff's `--process` (one process only) and longmemeval's `--sample-seed` (another draw of
+ * the questions). A full longmemeval run is never compared with a retrieval-only one, so a config of one has no baseline in the other.
+ */
+const MODE_FLAGS = ["--pool", "--retrieval-only"];
+const VALUE_MODE_FLAGS = ["--process", "--sample-seed"];
+
+/**
  * Rows are only compared when they ran the same cases: the same eval, corpus, pool or per-case mode, cases file and explicit limit.
  * What differs between a baseline and a config (strategy, patch, timeout, ...) is the treatment.
  */
 export function scopeKey(r: Row): string {
-  const bits = [r.eval, `corpus=${flagValue(r.args, "--corpus") ?? "public"}`];
-  if (hasFlag(r.args, "--pool")) bits.push("pool");
+  const bits = [r.eval, `corpus=${corpusOf(r.eval, r.args)}`];
+  for (const f of MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(f.slice(2));
+  for (const f of VALUE_MODE_FLAGS) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
+  const folder = customFolder(r.eval, r.args);
+  if (folder !== null && !hasFlag(r.args, "--cases")) bits.push(`folder=${folder}`); // the old values name other folders: distill's own is not its default custom corpus
   for (const f of ["--cases", "--limit"]) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
   return bits.join(" ");
 }
@@ -237,7 +283,7 @@ function makeJob(m: Matrix, row: Row, stage: Stage): Job {
   const label = labelOf(m.prefix, row.name, stage);
   const args = [...row.args];
   if (m.akm && !hasFlag(args, "--akm") && !HARBOR.includes(row.eval)) args.unshift("--akm", m.akm);
-  if (m.model && row.eval !== "retrieval" && !hasFlag(args, "--model")) args.unshift("--model", m.model);
+  if (m.model && !NO_MODEL.includes(row.eval) && !hasFlag(args, "--model")) args.unshift("--model", m.model);
   let repeat: number | null = null;
   if (stage === "screen") {
     const limit = m.screenLimit[row.eval];
@@ -300,9 +346,75 @@ export const readJson = (file: string): any => {
   }
 };
 
-/** The folders an eval or a benchmark may write its results to for a corpus. */
+// ---- the corpus a row reads ----------------------------------------------------------------------------------------------
+
+/**
+ * What `--corpus custom` reads for each eval without --cases, and the old `--corpus` values its runner still takes: the options the runner
+ * gives resolveCorpora (lib/corpus.ts). The matrix does not run the runner, so it needs them to know the folder a row reads. An eval that
+ * reads a corpus of another (terminal-bench takes the library of retrieval's rewrite) is resolved as that eval.
+ */
+const CUSTOM: Record<string, { corpus: string; default: Kind; aliases: Record<string, Alias> }> = {
+  nightly: { corpus: "nightly", default: "rewrite", aliases: { private: ALIASES.private } },
+  consolidate: { corpus: "consolidate", default: "rewrite", aliases: { private: ALIASES.private } },
+  distill: { corpus: "distill", default: "rewrite", aliases: { private: ALIASES.private, own: { folder: "own/assets", kind: "own" }, "own-feedback": { folder: "own/assets-feedback", kind: "own" } } },
+  reflect: { corpus: "reflect", default: "rewrite", aliases: { private: ALIASES.private } },
+  promotion: { corpus: "promotion", default: "own", aliases: { own: ALIASES.own } },
+  "judge-gate": { corpus: "judge-gate", default: "rewrite", aliases: { private: ALIASES.private } },
+  extract: { corpus: "extract", default: "rewrite", aliases: { private: ALIASES.private } },
+  retrieval: { corpus: "retrieval", default: "rewrite", aliases: ALIASES },
+  "agent-ab": { corpus: "agent-ab", default: "rewrite", aliases: { private: ALIASES.private } },
+  "terminal-bench": { corpus: "retrieval", default: "rewrite", aliases: { private: ALIASES.private } },
+  bakeoff: { corpus: "bakeoff", default: "rewrite", aliases: { private: ALIASES.private } },
+  longmemeval: { corpus: "longmemeval", default: "rewrite", aliases: { private: ALIASES.private } },
+  skillret: { corpus: "skillret", default: "split", aliases: { private: { folder: "", kind: "split" } } }, // a split of the dataset: it has no folder
+};
+
+/** The old `--corpus` values, which name a custom corpus. */
+const OLD_VALUES = ["private", "own", "own-feedback"];
+
+/**
+ * The corpus a row's flags name: `public`, `custom` or `all`. `--cases DIR` alone is a custom corpus, as for the evals, and so are the old
+ * values `private`, `own` and `own-feedback` (lib/corpus.ts). Any other value is the runner's to refuse.
+ */
+export function corpusOf(_evalName: string, args: string[]): string {
+  const corpus = flagValue(args, "--corpus");
+  if (corpus === undefined) return hasFlag(args, "--cases") ? "custom" : "public";
+  return OLD_VALUES.includes(corpus) ? "custom" : corpus;
+}
+
+/**
+ * The custom corpus a row reads, as the runner resolves it from the repository root `root`: its folder (absolute), the corpus.json it has,
+ * and its kind. Null when the row reads the public corpus only, the eval is not in the table, or the corpus is not one the runner would
+ * accept (it refuses, and the matrix records that run as it ends).
+ */
+export function customCorpus(root: string, evalName: string, args: string[]): ResolvedCorpus | null {
+  const spec = CUSTOM[evalName];
+  if (!spec || corpusOf(evalName, args) === "public") return null;
+  try {
+    const found = resolveCorpora({ eval: spec.corpus, values: { corpus: flagValue(args, "--corpus"), cases: flagValue(args, "--cases") }, publicFolder: join(root, runnerFolder(evalName), evalName), default: spec.default, aliases: spec.aliases, root, warn: () => {} });
+    return found.find((c) => c.name === "custom") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The folder of the custom corpus a row names, as text without a checkout: the `--cases` value, else the folder of the alias or the default, from the
+ * repository root. Null for a row that reads the public corpus. This is what tells two custom corpora of one eval apart in `scopeKey`.
+ */
+export function customFolder(evalName: string, args: string[]): string | null {
+  const spec = CUSTOM[evalName];
+  if (corpusOf(evalName, args) === "public" || spec?.default === "split") return null; // a split of a dataset (skillret's custom corpus) has no folder
+  const cases = flagValue(args, "--cases");
+  if (cases !== undefined) return cases;
+  const corpus = flagValue(args, "--corpus");
+  const alias = corpus !== undefined && spec !== undefined && Object.hasOwn(spec.aliases, corpus) ? spec.aliases[corpus] : undefined;
+  return `private/${spec?.corpus ?? evalName}/${alias?.folder ?? (spec?.default === "own" ? "own" : "assets")}`;
+}
+
+/** The folders an eval or a benchmark may write its results to for a corpus: results/ for the public one, and private/<eval>/ for a custom one (and the folders of own corpora before they moved there). */
 export function resultsParents(root: string, evalName: string, args: string[]): string[] {
-  const corpus = flagValue(args, "--corpus") ?? "public";
+  const corpus = corpusOf(evalName, args);
   if (corpus === "public") return [join(root, runnerFolder(evalName), evalName, "results")];
   const p = join(root, "private", evalName);
   return [join(p, "results"), join(p, "own", "results"), join(p, "own", "results-feedback")];
@@ -361,6 +473,8 @@ export interface Spread {
 export interface RunFacts {
   name: string;
   identity: Identity;
+  /** The run's manifest, read through the one validator (lib/manifest.ts), or null for a run before the manifest. */
+  manifest?: RunManifest | null;
 }
 
 export interface Measured {
@@ -370,6 +484,8 @@ export interface Measured {
   model: string | null;
   akm_build: string | null;
   akm_version: string | null;
+  /** What the akm checkout holds beyond its commit (a digest): two edits of one commit have one `akm_build` and two of these. Null for a clean checkout or a release. */
+  akm_build_fingerprint?: string | null;
   /** Mean number of errored cases per run. */
   n_errored: number | null;
   /** Mean number of tasks that failed per run, from the `completion` a Harbor run records. */
@@ -387,6 +503,8 @@ export interface Measured {
   dirs?: string[];
   /** Every run behind the numbers, not the first alone: the policy checks each of them (see ../../compare/src/policy.ts). */
   runs: RunFacts[];
+  /** The runs scored again with the current scorer, as scripts/compare reads them, when the sides had been scored by different scorers (see `scoredAlike`). */
+  rescored?: Run[];
 }
 
 const at = (x: unknown, path: string): unknown => path.split(".").reduce<unknown>((o, k) => (isObject(o) ? o[k] : undefined), x);
@@ -419,7 +537,7 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
   if (!isObject(top)) return "is not complete: its summary cannot be read";
   if (ref.kind === "run") {
     const inc = incompleteOf(top);
-    return inc ? incompleteClause(inc) : null;
+    return inc ? incompleteClause(inc) : unsound(top, "its");
   }
   const dirs = runDirs(file, top, "repeat");
   const listed = num(top.repeat);
@@ -430,20 +548,49 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
     if (!isObject(s)) return `is not complete: run r${i + 1} has no readable summary.json`;
     const inc = incompleteOf(s);
     if (inc) return incompleteClause(inc, `run r${i + 1}: `);
+    const bad = unsound(s, `run r${i + 1}'s`);
+    if (bad) return bad;
   }
   return null;
 }
 
-/** `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was not complete is no result. */
+/** Why a summary's manifest is no manifest, as a clause to follow "the run", or null for a sound one and for a run before the manifest. A run whose manifest the validator refuses has an identity nobody can read. */
+function unsound(summary: unknown, whose: string): string | null {
+  const reading = readManifest(isObject(summary) ? summary : {});
+  return reading.kind === "invalid" ? `is not usable: ${whose} manifest is not sound: ${reading.problems.join("; ")}` : null;
+}
+
+/**
+ * `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was not complete is no result.
+ * What the runs say of how they were made (the akm, the seed, the collector and the scorer) is read from the manifest, through lib/manifest.ts, where
+ * a run has one; a run from before it is read from the fields every summary has.
+ */
 export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, repeat: number | null): Measured | null {
   const file = join(root, ref.file);
   const s = readJson(file);
   if (!s || incompleteReason(root, ref) !== null) return null;
   const dirs = runDirs(file, s, ref.kind);
   const summaries = ref.kind === "run" ? [s] : dirs.map((d) => readJson(join(d, "summary.json")));
-  const runs: RunFacts[] = summaries.map((x, i) => ({ name: basename(dirs[i]), identity: identityOf(isObject(x) ? x : {}) }));
+  const runs: RunFacts[] = summaries.map((x, i) => {
+    const summary = isObject(x) ? x : {};
+    const reading = readManifest(summary);
+    return { name: basename(dirs[i]), identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
+  });
   const first = summaries.find(isObject) as Record<string, any> | undefined;
-  const common = { scope: ref.scope, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, metrics: s.metrics, dirs, runs, assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null, seed: typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null };
+  // a Harbor run's akm is the release it installed, which its summary records beside the manifest's
+  const m = first === undefined || HARBOR.includes(String(first.eval)) ? null : runs[summaries.indexOf(first)].manifest ?? null;
+  const common = {
+    scope: ref.scope,
+    model: s.model ?? null,
+    akm_build: m ? m.akm.build : s.akm_build ?? null,
+    akm_version: m ? m.akm.version : s.akm_version ?? null,
+    akm_build_fingerprint: m ? m.akm.build_fingerprint : s.akm_build_fingerprint ?? first?.akm_build_fingerprint ?? null,
+    metrics: s.metrics,
+    dirs,
+    runs,
+    assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null,
+    seed: m ? m.settings.seed : typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null,
+  };
   if (ref.kind === "run") {
     return { ...common, n: 1, n_errored: num(s.n_errored), failed: num(at(s, "completion.failed")), calls: callsOf(s), seconds: wallSeconds, repeated: false };
   }
@@ -471,19 +618,26 @@ export interface MetricCompare extends MetricSpec {
   signal: Signal;
 }
 
-const betterThan = (a: number, b: number, dir: Dir): boolean => (dir === "up" ? a > b + EPS : a < b - EPS);
+/** How many times the wider of two ranges the gap between them must be for a metric to be better or worse. See compareMetric. */
+export const GAP_FACTOR = 1.25;
 
 /**
- * The decision rule of the plan. A metric is better (worse) when the config's min-max range over the repeats does not overlap the
- * baseline's, on the better (worse) side. Harm must not rise: a harm metric whose mean is worse than the baseline's is worse even when the
- * ranges overlap.
+ * The decision rule. A metric is better (worse) when the config's min-max range over the repeats lies wholly on the better (worse) side of the
+ * baseline's, and the gap between the two ranges is at least GAP_FACTOR times the wider of them. Main metrics and harm metrics are judged alike:
+ * the mean of a harm metric that is higher by chance is not a rise, and a verdict reads every metric of its eval, so a rule that is lenient to
+ * each one is wrong most of the time over all of them. The gap is what holds a change from noise: with three repeats a side and noise that is
+ * the same on both sides, ranges that merely do not overlap happen one time in ten for each metric, and a gap of GAP_FACTOR times the ranges one
+ * time in two hundred, which keeps the four metrics of a judge-gate run to about 3% of verdicts (the simulation in lib.test.ts). A metric that
+ * is the same in every repeat has ranges of no width, so any difference between two such sides is a gap.
  */
 export function compareMetric(spec: MetricSpec, base: Spread | null, cfg: Spread | null): MetricCompare {
   let signal: Signal = "n/a";
   if (base && cfg) {
-    const good = spec.dir === "up" ? cfg.min > base.max + EPS : cfg.max < base.min - EPS;
-    const bad = spec.dir === "up" ? cfg.max < base.min - EPS : cfg.min > base.max + EPS;
-    signal = good ? "better" : bad ? "worse" : spec.role === "harm" && betterThan(base.mean, cfg.mean, spec.dir) ? "worse" : "same";
+    const needed = GAP_FACTOR * Math.max(base.max - base.min, cfg.max - cfg.min) - EPS;
+    const above = cfg.min - base.max; // the config's range above the baseline's
+    const below = base.min - cfg.max;
+    const moved = above > EPS && above >= needed ? "up" : below > EPS && below >= needed ? "down" : null;
+    signal = moved === null ? "same" : moved === spec.dir ? "better" : "worse";
   }
   return { ...spec, base, cfg, signal };
 }
@@ -496,8 +650,9 @@ export function compareAll(evalName: string, base: Measured, cfg: Measured): Met
  * What a row of the decision says. "better", "worse", "mixed" and "no difference" are conclusions. The others are not:
  * "screen only" (one run a side), "no result" (nothing scored, or a run that is not a complete result), "not comparable" (the runs differ
  * on an axis that is not the treatment), "incomplete" (the config would be better, but more of its cases errored than the baseline's, so its
- * rates cover fewer cases) and "exploratory" (the numbers are there, but the policy lacks the evidence that the runs differ only in the
- * treatment: see ../../compare/src/policy.ts).
+ * rates cover fewer cases) and "exploratory" (the numbers are there, but they are not a conclusion: the policy lacks the evidence that the
+ * runs differ only in the treatment (see ../../compare/src/policy.ts), a side has fewer than MIN_REPEATS runs, the sides scored different
+ * cases, or retrieval's graded share fell).
  */
 export type Verdict = "better" | "worse" | "no difference" | "mixed" | "screen only" | "no result" | "not comparable" | "incomplete" | "exploratory";
 
@@ -507,7 +662,109 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
     ...base.runs.map((r) => ({ side: "the baseline", name: r.name, identity: r.identity })),
     ...cfg.runs.map((r) => ({ side: "the config", name: r.name, identity: r.identity })),
   ];
-  return checkMembers(members, axes);
+  // The numbers of a result come from its summary, so a case whose input differs cannot be left out as scripts/compare leaves it out: it is a difference of inputs.
+  return checkMembers(members, axes, { manifest: true, caseInputs: true });
+}
+
+// ---- results from different scorers, and runs from before the manifest -----------------------------------------------------
+
+/** The scorer the eval has now: the version MEASUREMENT.lock gives it and the digest of its files as they are. Null for an eval that declares none, or when the lock cannot say. */
+function currentScorer(evalName: string): PartRef | null {
+  try {
+    const m = loadMeasurement(evalName);
+    return m ? lockedParts(m).scorer : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Brings the results of the two sides to the scorer and the labels this repository has now, the way scripts/compare does (README, "How results stay
+ * comparable"). Every run of both sides is scored again in memory (scripts/rescore) when the runs behind them were scored by different scorers, or a case
+ * they share has other labels in some run, and also when they were all scored by a scorer other than the current one, or a case has been relabelled since:
+ * a relabelled case does not run a row again (fingerprint.ts), so a stored result may have been scored against labels that have changed. The numbers
+ * are those of the new rows; nothing is written. A run that cannot be scored again, for want of the raw output its scorer reads, refuses the pair when
+ * the runs need it, with the reason. Results with no manifest are left as they are: the decision calls them exploratory (`manifestReasons`).
+ */
+export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; again: string | null } | { refusal: string } {
+  const runs = [...base.runs, ...cfg.runs];
+  const manifests = runs.map((r) => r.manifest);
+  if (manifests.length === 0 || manifests.some((m) => !m) || !base.dirs?.length || !cfg.dirs?.length) return { base, cfg, again: null };
+  const all = manifests as RunManifest[];
+  const scorers = [...new Set(all.map((m) => m.scorer.sha256))];
+  const shared = Object.keys(all[0].cases).filter((id) => all.every((m) => m.cases[id] !== undefined));
+  const relabelled = shared.some((id) => new Set(all.map((m) => m.cases[id].label_sha256)).size > 1);
+  const part = (p: PartRef): string => `v${p.version} ${p.sha256.slice(0, 12)}`;
+  const now = currentScorer(all[0].eval);
+  const { RescoreError, readStored, rescoreRun } = rescorer();
+  // each run scored again with what the repository has now; one that cannot be is told apart, and refuses the pair only when it has to be
+  type Attempt = { summary: Record<string, any>; run: Run; relabelled: string[] } | { error: InstanceType<typeof RescoreError> };
+  const attempt = (dir: string): Attempt => {
+    const shown = isAbsolute(dir) && relative(root, dir).startsWith("..") ? dir : relative(root, dir);
+    try {
+      const result = rescoreRun({ ...readStored(dir), dir: shown });
+      return { summary: result.summary, run: { dir: shown, summary: result.summary, rows: result.rows } as Run, relabelled: result.relabelled };
+    } catch (e) {
+      if (e instanceof RescoreError) return { error: e };
+      throw e;
+    }
+  };
+  const tried = { base: (base.dirs ?? []).map(attempt), cfg: (cfg.dirs ?? []).map(attempt) };
+  const changedSince = [...new Set([...tried.base, ...tried.cfg].flatMap((t) => ("error" in t ? [] : t.relabelled)))];
+  const stale = now !== null && all.some((m) => m.scorer.sha256 !== now.sha256);
+  const again =
+    scorers.length > 1
+      ? `the runs were scored by different scorers (${[...new Set(all.map((m) => part(m.scorer)))].join(", ")})`
+      : relabelled
+        ? "the runs were scored against different labels"
+        : stale
+          ? `the runs were scored by a scorer other than the current one (${part(all[0].scorer)}, now ${part(now as PartRef)})`
+          : changedSince.length > 0
+            ? `${changedSince.length === 1 ? "a case has" : `${changedSince.length} cases have`} other labels than when the runs were made (${changedSince.slice(0, 5).join(", ")}${changedSince.length > 5 ? `, and ${changedSince.length - 5} more` : ""})`
+            : null;
+  if (again === null) return { base, cfg, again: null };
+  const score = (side: string, m: Measured, attempts: Attempt[]): Measured => {
+    const failed = attempts.find((a): a is { error: InstanceType<typeof RescoreError> } => "error" in a);
+    if (failed) throw new RescoreError(`${again}, so both are scored again with the current scorer before they are compared, and ${side} cannot be: ${failed.error.message}`);
+    const done = attempts as { summary: Record<string, any>; run: Run }[];
+    const summaries = done.map((d) => d.summary);
+    const rescored = summaries.map((summary) => {
+      const reading = readManifest(summary);
+      return { identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
+    });
+    const runs = m.runs.map((r, i) => ({ ...r, ...rescored[i] }));
+    const numbers = m.repeated
+      ? { metrics: spreadOf(summaries.map((x) => x.metrics)), n_errored: mean(summaries.map((x) => num(x.n_errored))), calls: mean(summaries.map(callsOf)) }
+      : { metrics: summaries[0].metrics, n_errored: num(summaries[0].n_errored), calls: callsOf(summaries[0]) };
+    return { ...m, ...numbers, runs, rescored: done.map((d) => d.run) };
+  };
+  try {
+    return { base: score("the baseline", base, tried.base), cfg: score("the config", cfg, tried.cfg), again };
+  } catch (e) {
+    if (e instanceof RescoreError) return { refusal: e.message };
+    throw e;
+  }
+}
+
+/**
+ * Why a result is no conclusion for want of a manifest, for an eval that declares a measurement (so can have one): a run written before
+ * harness-v3 has no manifest, so its collector, its scorer and the inputs of its cases are not verified; a run that scripts/rescore made from
+ * one has a collector no one versioned. Empty for an eval that declares none yet, whose runs are compared by the earlier rules.
+ */
+export function manifestReasons(root: string, evalName: string, base: Measured, cfg: Measured): string[] {
+  if (measurementPath(evalName, root) === null) return [];
+  const sides = [["the baseline", base], ["the config", cfg]] as const;
+  const who = (pick: (r: RunFacts) => boolean): string[] =>
+    sides.flatMap(([side, m]) => {
+      const some = m.runs.filter(pick);
+      return some.length === 0 ? [] : [some.length === m.runs.length ? side : `${side}'s run${some.length === 1 ? "" : "s"} ${some.map((r) => r.name).join(" and ")}`];
+    });
+  const out: string[] = [];
+  const legacy = who((r) => !r.manifest);
+  if (legacy.length > 0) out.push(`${legacy.join(" and ")} ${legacy.length > 1 || legacy[0].includes("'s runs ") ? "have" : "has"} no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified`);
+  const unversioned = who((r) => r.manifest?.collector.version === UNVERSIONED);
+  if (unversioned.length > 0) out.push(`${unversioned.join(" and ")} ${unversioned.length > 1 || unversioned[0].includes("'s runs ") ? "were" : "was"} collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned`);
+  return out;
 }
 
 /**
@@ -543,8 +800,31 @@ export interface Judgement {
   exploratory: string[];
 }
 
-/** The verdict of a config against its baseline, and the reasons it is exploratory. */
-export function judge(evalName: string, compares: MetricCompare[], base: Measured, cfg: Measured, axes: Axis[] = ["config"]): Judgement {
+const fmt = (x: number): string => String(Number(x.toFixed(3)));
+
+/** Why a side with fewer than MIN_REPEATS runs gives no conclusion: one reason for the sides that are short. */
+function fewRepeats(base: Measured, cfg: Measured): string[] {
+  const short = [["the baseline", base.n], ["the config", cfg.n]].filter(([, n]) => (n as number) < MIN_REPEATS);
+  return short.length === 0 ? [] : [`a conclusion needs at least ${MIN_REPEATS} repeats on each side, and ${short.map(([who, n]) => `${who} has ${n}`).join(" and ")}`];
+}
+
+/**
+ * The share of results someone graded, where the config's is below the baseline's: the config returned results that nobody graded, which the
+ * eval's metric counts as not relevant. Its numbers say less about the config than about the qrels. Empty for the evals that have no such share.
+ */
+function ungraded(evalName: string, base: Measured, cfg: Measured): string[] {
+  const fell = (EVALS[evalName]?.graded ?? []).flatMap((path) => {
+    const [b, c] = [metricSpread(base, path), metricSpread(cfg, path)];
+    return b && c && c.mean < b.mean - EPS ? [`${path} ${fmt(b.mean)} → ${fmt(c.mean)}`] : [];
+  });
+  return fell.length === 0 ? [] : [`the config returned results nobody graded (${fell.join(", ")}), and ndcg_10 counts those as not relevant: label them first (evals/retrieval/label --from the config's results folder), then compare`];
+}
+
+/**
+ * The verdict of a config against its baseline, and the reasons it is exploratory. `extra` are reasons from outside the summaries' numbers,
+ * such as the two sides having scored different cases (see paired.ts), which make a conclusion exploratory the way a policy gap does.
+ */
+export function judge(evalName: string, compares: MetricCompare[], base: Measured, cfg: Measured, axes: Axis[] = ["config"], extra: string[] = []): Judgement {
   const scored = (c: MetricCompare) => c.role === "main" && c.base && c.cfg;
   const policy = assess(evalName, base, cfg, axes);
   const exploratory = messages(policy.gaps);
@@ -552,6 +832,7 @@ export function judge(evalName: string, compares: MetricCompare[], base: Measure
   if (!compares.some(scored)) return done("no result");
   if (policy.mismatches.length > 0) return done("not comparable");
   if (base.n < 2 || cfg.n < 2) return done("screen only");
+  exploratory.push(...fewRepeats(base, cfg), ...ungraded(evalName, base, cfg), ...extra);
   const better = compares.some((c) => c.signal === "better");
   const worse = compares.some((c) => c.signal === "worse");
   let reading: Verdict = better && worse ? "mixed" : better ? "better" : worse ? "worse" : "no difference";
@@ -621,14 +902,20 @@ export function selectForConfirm(root: string, m: Matrix, state: State, opts: { 
     const axes = treatmentAxes(m, config, base);
     const notes: string[] = [];
     const moved = c.flatMap((cm) => {
-      const bm = b.find((x) => x.scope === cm.scope);
-      if (!bm) return [];
-      const why = incomparable(bm, cm, axes, config.eval);
+      const bm0 = b.find((x) => x.scope === cm.scope);
+      if (!bm0) return [];
+      const same = scoredAlike(root, bm0, cm);
+      if ("refusal" in same) {
+        notes.push(same.refusal);
+        return [];
+      }
+      const bm = same.base;
+      const why = incomparable(bm, same.cfg, axes, config.eval);
       if (why) {
         notes.push(why);
         return [];
       }
-      return screenDiffers(config.eval, bm, cm, opts.minDelta);
+      return screenDiffers(config.eval, bm, same.cfg, opts.minDelta);
     });
     if (moved.length) selected.push({ config, reason: `screen differs: ${[...new Set(moved)].join(", ")}` });
     else if (notes.length) skipped.push({ config, reason: `screen not comparable: ${[...new Set(notes)].join("; ")}` });

@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assetsDigest, readGenerated } from "../../consolidate/src/inputs.ts";
+import { assetsDigest, generatorSha256, readGenerated } from "../../consolidate/src/inputs.ts";
 import { checkRewrite } from "./generate.ts";
-import { type DistillItem, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
+import { type DistillItem, GENERATOR_CODE, type Night, loadNight, nightFiles, nightProblems } from "./lib.ts";
 
 const publicNight = loadNight(join(import.meta.dir, "..", "assets"));
 
@@ -86,7 +86,7 @@ describe("generate", () => {
     expect(readFileSync(join(out, "assets", "items.jsonl"), "utf8")).not.toBe(readFileSync(join(import.meta.dir, "..", "assets", "items.jsonl"), "utf8"));
     // it says which seed and which public night the set was made from, and leaves no temporary folder behind
     const publicAssets = join(import.meta.dir, "..", "assets");
-    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: assetsDigest(publicAssets, nightFiles(publicAssets)) });
+    expect(readGenerated(out)).toEqual({ seed: "42", inputs_sha256: assetsDigest(publicAssets, nightFiles(publicAssets)), generator_sha256: generatorSha256(GENERATOR_CODE) });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 

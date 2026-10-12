@@ -3,11 +3,19 @@
 // repeats of one run, and the reports. What two runs may differ in is the policy of policy.ts. See ../README.md.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { type ManifestReading, UNVERSIONED, loadMeasurement, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { EVALS, EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
 import { AXES, type Axis, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "./policy.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
+
+/**
+ * scripts/rescore, loaded when a comparison needs a run scored again and not before, so that what imports this file (scripts/matrix) does not need it.
+ * Only a comparison of runs that carry a manifest and were scored differently gets here.
+ */
+const rescorer = (): typeof import("../../rescore/src/lib.ts") => createRequire(import.meta.url)("../../rescore/src/lib.ts");
 const EPS = 1e-9;
 
 /** A refusal or a bad input, with a message for the person at the command line. */
@@ -38,10 +46,15 @@ export interface Unit {
   row: Row;
 }
 
-/** A metric of EVAL_METRICS, computed from the units that have a verdict, the way the eval's own `metrics()` computes it. */
+/**
+ * A metric of EVAL_METRICS, computed from the units that have a verdict, the way the eval's own `metrics()` computes it. `of.n`, when it has
+ * one, counts the units the metric is over (the denominator of a rate), so a report can show it beside the metric.
+ */
 export interface Metric {
   path: string;
-  of: (units: Unit[]) => number | null;
+  of: ((units: Unit[]) => number | null) & { n?: (units: Unit[]) => number };
+  /** For a metric reported beside the judged ones: it has no better or worse direction, it is a count to look at (extract's planted.ambiguous). */
+  undirected?: true;
 }
 
 /** The cases of a run as one table. Most evals have one; retrieval has one for each of akm's commands and indexes (search, curate, ...). */
@@ -51,19 +64,27 @@ export interface View {
   binary: boolean;
   /** The eval has a per-case harm. */
   hasHarm: boolean;
+  /** What a score that is not a verdict is called, for the cases of several runs: `ndcg` (the default), or `difference` for a Harbor task. */
+  score?: string;
   units: Unit[];
   metrics: Metric[];
+  /** Metrics the matrix does not judge, reported beside them without a verdict of their own: retrieval's ndcg over the judged results alone and the share judged, extract's planted.ambiguous. */
+  extra?: Metric[];
 }
 
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : n / of);
 const verdict = (right: boolean): number => (right ? 1 : 0);
-/** The share of the units whose row passes `hit`, among those whose row passes `of`. */
-const share = (hit: (r: Row) => boolean, of: (r: Row) => boolean = () => true) => (units: Unit[]): number | null => {
-  const pool = units.filter((u) => of(u.row));
-  return ratio(pool.filter((u) => hit(u.row)).length, pool.length);
-};
-/** How many of the units' rows pass `hit`. */
-const tally = (hit: (r: Row) => boolean) => (units: Unit[]): number => units.filter((u) => hit(u.row)).length;
+/** The share of the units whose row passes `hit`, among those whose row passes `of`. Its `n` is how many pass `of`. */
+const share = (hit: (r: Row) => boolean, of: (r: Row) => boolean = () => true) =>
+  Object.assign(
+    (units: Unit[]): number | null => {
+      const pool = units.filter((u) => of(u.row));
+      return ratio(pool.filter((u) => hit(u.row)).length, pool.length);
+    },
+    { n: (units: Unit[]): number => units.filter((u) => of(u.row)).length },
+  );
+/** How many of the units' rows pass `hit`. Its `n` is how many units there are. */
+const tally = (hit: (r: Row) => boolean) => Object.assign((units: Unit[]): number => units.filter((u) => hit(u.row)).length, { n: (units: Unit[]): number => units.length });
 
 function unit(r: Row, score: number | null, state: string, group: unknown, harm = false): Unit {
   return { id: r.id, score, state, group: String(group ?? ""), harm, row: r };
@@ -75,7 +96,7 @@ export const EXTRACT_INSIGHT_CLASSES = ["insight", "preference", "buried"];
 
 type Adapter = (rows: Row[], summary: Row) => View[];
 
-const oneView = (units: Unit[], metrics: Metric[], hasHarm = true): View[] => [{ name: "", binary: true, hasHarm, units, metrics }];
+const oneView = (units: Unit[], metrics: Metric[], hasHarm = true, extra: Metric[] = []): View[] => [{ name: "", binary: true, hasHarm, units, metrics, extra }];
 
 const nightly: Adapter = (rows) =>
   oneView(
@@ -173,6 +194,7 @@ const judgeGate: Adapter = (rows) => {
 
 const extract: Adapter = (rows) => {
   const saidPlanted = (r: Row) => r.class === "planted" && Array.isArray(r.forbidden) && r.forbidden.length > 0;
+  const ambiguousPlanted = (r: Row) => r.class === "planted" && !saidPlanted(r) && Array.isArray(r.ambiguous) && r.ambiguous.length > 0;
   return oneView(
     rows.map((r) => (r.outcome === "error" || r.correct === null ? unit(r, null, "error", r.class) : unit(r, verdict(r.correct === true), `${r.outcome}${r.correct === true ? "" : ", wrong"}`, r.class, (r.class === "routine" && r.correct === false) || saidPlanted(r)))),
     [
@@ -180,6 +202,9 @@ const extract: Adapter = (rows) => {
       { path: "routine.rate", of: share((r) => r.correct === true, (r) => r.class === "routine") },
       { path: "planted.saved_instruction", of: tally(saidPlanted) },
     ],
+    true,
+    // planted sessions whose memory holds the planted phrase behind a negation the scorer cannot read, and no claim: not saved, not safe either. Read them.
+    [{ path: "planted.ambiguous", of: tally(ambiguousPlanted), undirected: true }],
   );
 };
 
@@ -193,12 +218,98 @@ const retrieval: Adapter = (rows) =>
       return unit(r, ndcg, ndcg === null ? "no score" : `ndcg ${ndcg.toFixed(3)}`, r.kind);
     });
     const mean = (us: Unit[]): number | null => (us.length === 0 ? null : us.reduce((s, u) => s + (u.score as number), 0) / us.length);
-    return { name: col, binary: false, hasHarm: false, units, metrics: [{ path: `${col}.ndcg_10`, of: mean }] };
+    // ndcg_10 counts a result nobody graded as not relevant, so a ranker that surfaces ungraded assets reads as worse (#71). These two bound that bias:
+    // the same ndcg over the graded results alone, and the share of the first 10 results that someone graded.
+    const meanOf = (field: "ndcg_10_condensed" | "judged_10") => (us: Unit[]): number | null => {
+      const xs = us.flatMap((u) => (num(u.row[col]?.scores?.[field]) === null ? [] : [num(u.row[col].scores[field]) as number]));
+      return xs.length === 0 ? null : xs.reduce((sum, x) => sum + x, 0) / xs.length;
+    };
+    return { name: col, binary: false, hasHarm: false, units, metrics: [{ path: `${col}.ndcg_10`, of: Object.assign(mean, { n: (us: Unit[]) => us.length }) }], extra: [{ path: `${col}.ndcg_10_condensed`, of: meanOf("ndcg_10_condensed") }, { path: `${col}.judged_10`, of: meanOf("judged_10") }] };
+  });
+
+const average = (xs: number[]): number | null => (xs.length === 0 ? null : xs.reduce((s, x) => s + x, 0) / xs.length);
+
+/**
+ * agent-ab and terminal-bench: a row is a task with every trial of it, both arms and every attempt (lib/harbor/score.ts). The task's score is the akm
+ * arm's mean reward minus the control's, over the trials the verifier gave a reward. That is the task's term in the paired difference, and `delta.value`
+ * is the mean of those terms (lib/harbor/report.ts). A task without a rewarded trial in each arm has no verdict. The harm metrics count trials and not
+ * tasks (akm trials that never got a reward, control trials that called akm), some of them in tasks with no verdict, so they are shown from the summaries.
+ */
+const harbor: Adapter = (rows) => {
+  const rewards = (r: Row, arm: "akm" | "control"): number[] => (Array.isArray(r.trials) ? r.trials : []).filter((t: Row) => t.arm === arm && num(t.reward) !== null).map((t: Row) => t.reward);
+  const difference = (r: Row): number | null => {
+    const [akm, control] = [average(rewards(r, "akm")), average(rewards(r, "control"))];
+    return akm === null || control === null ? null : akm - control;
+  };
+  const passed = (t: Row | undefined): string => (isObject(t) ? `${t.passed}/${t.scored}` : "–");
+  const units = rows.map((r) => {
+    const d = difference(r);
+    return d === null ? unit(r, null, "error", "") : unit(r, d, `control ${passed(r.control)}, akm ${passed(r.akm)}`, "");
+  });
+  return [{ name: "", binary: false, hasHarm: false, score: "difference", units, metrics: [{ path: "delta.value", of: Object.assign((us: Unit[]) => average(us.map((u) => u.score as number)), { n: (us: Unit[]) => us.length }) }], extra: [] }];
+};
+
+/** bakeoff: a row is a case of one of its processes. Right when the output has the shape and every check holds; `checks.rate` is the mean share of a case's checks that held. */
+const bakeoff: Adapter = (rows) => {
+  const checksHeld = (r: Row): number => {
+    const checks = Object.values(isObject(r.checks) ? r.checks : {});
+    return r.structure === true && checks.length > 0 ? checks.filter(Boolean).length / checks.length : 0;
+  };
+  const units = rows.map((r) => (r.outcome === "error" ? unit(r, null, "error", r.process) : unit(r, verdict(r.correct === true), `${r.outcome}${r.correct === true ? "" : ", wrong"}`, r.process)));
+  return oneView(
+    units,
+    [
+      { path: "case_pass.rate", of: share((r) => r.correct === true) },
+      { path: "checks.rate", of: Object.assign((us: Unit[]) => average(us.map((u) => checksHeld(u.row))), { n: (us: Unit[]) => us.length }) },
+    ],
+    false,
+    [{ path: "valid_output.rate", of: share((r) => r.structure === true) }],
+  );
+};
+
+/**
+ * longmemeval: a row is a question. `with_akm` is whether the judge marked the answer given with akm's five sessions correct, over the questions that arm
+ * answered; `retrieval` is the sessions akm returned, scored by its ndcg, over the questions with an answer in the history (the abstention questions are left
+ * out of the means, as in the benchmark). A retrieval-only run has no answers and so only the second table.
+ */
+const longmemeval: Adapter = (rows) => {
+  const views: View[] = [];
+  const arm = (r: Row, name: "with_akm" | "without_akm"): Row | null => (isObject(r[name]) && r[name].ok === true ? r[name] : null);
+  if (rows.some((r) => isObject(r.with_akm))) {
+    const units = rows.filter((r) => isObject(r.with_akm)).map((r) => (arm(r, "with_akm") === null ? unit(r, null, "error", r.question_type) : unit(r, verdict(arm(r, "with_akm")?.correct === true), arm(r, "with_akm")?.correct === true ? "right" : "wrong", r.question_type)));
+    const rate = share((r) => arm(r, "with_akm")?.correct === true, (r) => arm(r, "with_akm") !== null);
+    // with akm minus without it, over the questions both arms answered
+    const both = (us: Unit[]): Unit[] => us.filter((u) => arm(u.row, "with_akm") !== null && arm(u.row, "without_akm") !== null);
+    const difference = Object.assign((us: Unit[]) => average(both(us).map((u) => Number(arm(u.row, "with_akm")?.correct === true) - Number(arm(u.row, "without_akm")?.correct === true))), { n: (us: Unit[]) => both(us).length });
+    views.push({ name: "with_akm", binary: true, hasHarm: false, units, metrics: [{ path: "accuracy.with_akm.rate", of: rate }], extra: [{ path: "accuracy.difference.value", of: difference }] });
+  }
+  if (rows.some((r) => isObject(r.retrieval))) {
+    const searched = rows.filter((r) => isObject(r.retrieval) && r.abstention !== true);
+    const units = searched.map((r) => unit(r, num(r.retrieval.ndcg), `ndcg ${num(r.retrieval.ndcg)?.toFixed(3) ?? "–"}`, r.question_type));
+    const mean = (field: string) => Object.assign((us: Unit[]) => average(us.flatMap((u) => (num(u.row.retrieval?.[field]) === null ? [] : [num(u.row.retrieval[field]) as number]))), { n: (us: Unit[]) => us.length });
+    const hit = Object.assign((us: Unit[]) => average(us.map((u) => Number(u.row.retrieval?.hit === true))), { n: (us: Unit[]) => us.length });
+    views.push({ name: "retrieval", binary: false, hasHarm: false, units, metrics: [{ path: "retrieval.hit_rate", of: hit }, { path: "retrieval.recall", of: mean("recall") }], extra: [{ path: "retrieval.mrr", of: mean("mrr") }, { path: "retrieval.ndcg", of: mean("ndcg") }] });
+  }
+  return views;
+};
+
+const SKILLRET_LINES = ["search", "semantic_search"];
+
+/** skillret: a row is a query, asked of the keyword index and, in a run without --limit, the semantic one. Its score is the NDCG@10 of the ranking akm returned; a call that failed has none. */
+const skillret: Adapter = (rows) =>
+  SKILLRET_LINES.filter((line) => rows.some((r) => isObject(r[line]))).map((line) => {
+    const at = (r: Row, name: string): number | null => num(r[line]?.scores?.[name]);
+    const units = rows.map((r) => {
+      const ndcg = at(r, "NDCG@10");
+      return unit(r, ndcg, ndcg === null ? "no score" : `ndcg ${ndcg.toFixed(3)}`, Array.isArray(r.relevant) ? `${r.relevant.length} needed` : "");
+    });
+    const mean = (name: string) => Object.assign((us: Unit[]) => average(us.flatMap((u) => (at(u.row, name) === null ? [] : [at(u.row, name) as number]))), { n: (us: Unit[]) => us.length });
+    return { name: line, binary: false, hasHarm: false, units, metrics: [{ path: `${line}.NDCG@10`, of: mean("NDCG@10") }], extra: ["Recall@10", "Completeness@10", "MAP@10"].map((name) => ({ path: `${line}.${name}`, of: mean(name) })) };
   });
 
 /** The eval names compare can read, with how a summary picks the reading (consolidate --pool is another set of rows). */
-const ADAPTERS: Record<string, Adapter> = { nightly, consolidate, "consolidate-pool": consolidatePool, distill, reflect, promotion, "judge-gate": judgeGate, extract, retrieval };
-export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval"];
+const ADAPTERS: Record<string, Adapter> = { nightly, consolidate, "consolidate-pool": consolidatePool, distill, reflect, promotion, "judge-gate": judgeGate, extract, retrieval, "agent-ab": harbor, "terminal-bench": harbor, bakeoff, longmemeval, skillret };
+export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret"];
 
 // ---- reading a results folder ---------------------------------------------------------------------------------------------
 
@@ -251,6 +362,8 @@ export function loadRun(path: string): Run {
     return fail(`${name}/summary.json is not valid JSON`);
   }
   if (!isObject(summary) || typeof summary.eval !== "string") return fail(`${name}/summary.json is not an eval summary (it has no "eval")`);
+  const reading = readManifest(summary);
+  if (reading.kind === "invalid") return fail(`${name}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
   const samples = join(dir, "samples.jsonl");
   if (!existsSync(samples)) return fail(`${name} has no samples.jsonl`);
   return { dir: name, summary, rows: readRows(samples) };
@@ -292,12 +405,19 @@ export interface RunInfo {
   status: string | null;
   n_cases: number;
   n_errored: number | null;
+  /** The collector and the scorer the run was made and scored with, "v<version> <digest>", for a run with a manifest. */
+  collector: string | null;
+  scorer: string | null;
+  /** The run is a result of scripts/rescore, scored again from this folder. */
+  rescored_from: string | null;
 }
 
 const str = (x: unknown): string | null => (typeof x === "string" ? x : null);
 
 export function infoOf(run: Run): RunInfo {
   const s = run.summary;
+  const reading = readManifest(s);
+  const m = reading.kind === "manifest" ? reading.manifest : null;
   return {
     dir: run.dir,
     label: str(s.label),
@@ -317,6 +437,9 @@ export function infoOf(run: Run): RunInfo {
     status: str(s.status),
     n_cases: run.rows.length,
     n_errored: num(s.n_errored),
+    collector: m ? `v${m.collector.version} ${m.collector.sha256.slice(0, 12)}` : null,
+    scorer: m ? `v${m.scorer.version} ${m.scorer.sha256.slice(0, 12)}` : null,
+    rescored_from: m?.rescored_from?.results ?? null,
   };
 }
 
@@ -339,7 +462,7 @@ const byDir = (x: Run, y: Run): number => (x.dir < y.dir ? -1 : x.dir > y.dir ? 
  */
 export function policyOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREATMENT): PolicyResult {
   const members = (side: string, runs: Run[]) => [...runs].sort(byDir).map((r) => ({ side, name: nameOf(r), identity: identityOf(r.summary) }));
-  return checkMembers([...members("A", a), ...members("B", b)], treatment);
+  return checkMembers([...members("A", a), ...members("B", b)], treatment, { manifest: true });
 }
 
 /**
@@ -378,6 +501,29 @@ export function exploratoryOf(sides: ReadonlyArray<readonly [string, Run[]]>, po
     }
   }
   return [...out, ...messages(policy.gaps)];
+}
+
+/**
+ * Why a comparison is exploratory for what its tables cover and measure:
+ *  - fewer than MIN_SHARE of the cases both sides selected could be compared, because runs errored on them, gave them no verdict, or (`inputsLeftOut`)
+ *    were not given the same input: the verdict is over a part of the eval that may not be the part that moved (#41);
+ *  - retrieval's `judged_10` fell from A to B by more than the tie: B surfaces results nobody graded for these queries, and `ndcg_10` counts them
+ *    as not relevant, so B reads as worse by the bias of the qrels and not by what it ranks. The results have to be graded before the comparison means anything (#71).
+ */
+function coverageReasons(views: ViewReport[], inputsLeftOut: number, tie: number): string[] {
+  const out: string[] = [];
+  for (const v of views) {
+    const name = v.view ? ` (${v.view})` : "";
+    const considered = v.coverage.in_both + inputsLeftOut;
+    if (considered > 0 && v.n_paired < MIN_SHARE * considered - EPS) {
+      const lost = [v.coverage.errored_a.length > 0 ? `${v.coverage.errored_a.length} errored in A` : "", v.coverage.errored_b.length > 0 ? `${v.coverage.errored_b.length} errored in B` : "", inputsLeftOut > 0 ? `${inputsLeftOut} were given another input` : ""].filter(Boolean);
+      out.push(`only ${v.n_paired} of the ${considered} cases${name} both runs selected could be compared (${Math.round((100 * v.n_paired) / considered)}%, and the least is ${MIN_SHARE * 100}%)${lost.length > 0 ? `: ${lost.join(", ")}` : ""}`);
+    }
+    for (const m of v.info) {
+      if (m.path.endsWith(".judged_10") && m.delta !== null && m.delta < -tie) out.push(`judged_10${name} fell from ${fmt(m.a)} to ${fmt(m.b)}: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again`);
+    }
+  }
+  return out;
 }
 
 // ---- statistics -----------------------------------------------------------------------------------------------------------
@@ -508,10 +654,15 @@ export interface Flip {
   delta: number;
 }
 
+/** A metric the matrix does not judge, reported beside the ones it does (retrieval's ndcg over the judged results and the share judged, extract's planted.ambiguous). Its direction is null for a count to look at. */
+export type InfoReport = Omit<MetricReport, "role" | "dir"> & { role: "info"; dir: Dir | null };
+
 export interface MetricReport {
   path: string;
   role: MetricSpec["role"];
   dir: Dir;
+  /** How many of the paired cases the metric is over: the denominator of a rate. Null where the metric is not over cases (a ratio of retirements). */
+  n: number | null;
   a: number | null;
   b: number | null;
   delta: number | null;
@@ -528,12 +679,33 @@ export interface GroupReport {
   worse: number;
 }
 
+/**
+ * Which cases each side scored, so that a rate is read with its denominator (#41). A case is scored on a side when at least one of its runs gave it
+ * a verdict. The verdict of the comparison is taken on the cases both sides scored, and the cases scored on one side only are named.
+ */
+export interface Coverage {
+  /** The cases the side has in this table, and how many of them got a verdict. */
+  selected_a: number;
+  selected_b: number;
+  scored_a: number;
+  scored_b: number;
+  /** The cases of the side with no verdict in any of its runs (an error). */
+  errored_a: string[];
+  errored_b: string[];
+  /** The cases both sides have in this table; the paired cases are those of them that both sides scored. */
+  in_both: number;
+  /** Scored on this side and not on the other: the other side errored on the case, or did not run it. */
+  scored_only_a: string[];
+  scored_only_b: string[];
+}
+
 export interface ViewReport {
   /** "" for the eval's one table, else the column (retrieval). */
   view: string;
   binary: boolean;
   n_a: number;
   n_b: number;
+  coverage: Coverage;
   /** Cases both sides gave a verdict, in at least one run each. Everything below is over these. */
   n_paired: number;
   only_a: string[];
@@ -545,7 +717,10 @@ export interface ViewReport {
   sign_test: { better: number; worse: number; p: number | null };
   harm: { appeared: Flip[]; cleared: Flip[] } | null;
   by_group: GroupReport[];
+  /** The metrics the matrix judges (EVAL_METRICS). */
   metrics: MetricReport[];
+  /** Metrics reported beside them that the matrix does not judge: retrieval's ndcg_10_condensed and judged_10 (#71). Empty for the other evals. */
+  info: InfoReport[];
 }
 
 export interface PairReport {
@@ -565,6 +740,10 @@ export interface PairReport {
   treated: string[];
   /** The settings that differ: what B changed. */
   differences: { field: string; a: unknown; b: unknown }[];
+  /** The folders of the runs that were scored again with the current scorer before they were compared, because the runs had been scored differently. Empty when they had not. */
+  rescored: string[];
+  /** Case ids left out because the cases were not given the same input in every run (their input_sha256 differs). Empty when the inputs are the treatment. */
+  inputs_differ: string[];
   /** Why this comparison is no conclusion: a run did not complete, or the summaries lack the evidence that the axes outside the treatment match. Empty when it may be used for one. */
   exploratory: string[];
   options: Options;
@@ -610,12 +789,13 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
   if (paired.length === 0) fail(`the two runs have no case in common that both gave a verdict${va[0].name ? ` (${va[0].name})` : ""}: A has ${idsA.size} cases, B has ${idsB.size}, ${both.length} are in both`);
 
   const binary = va[0].binary;
+  const scoreWord = va[0].score ?? "ndcg";
   const unitOf = (maps: Map<string, Unit>[], id: string): Unit => maps.find((m) => m.has(id))!.get(id)!;
   /** What a side did with a case: the run's own words, or for several runs how often it was right. */
   const stateOf = (maps: Map<string, Unit>[], id: string): string => {
     const xs = scores(maps, id);
     if (maps.length === 1) return unitOf(maps, id).state;
-    return binary ? `${xs.filter((x) => x === 1).length}/${xs.length} right` : `ndcg ${meanOf(xs).toFixed(3)} (mean of ${xs.length})`;
+    return binary ? `${xs.filter((x) => x === 1).length}/${xs.length} right` : `${scoreWord} ${meanOf(xs).toFixed(3)} (mean of ${xs.length})`;
   };
   const harmOf = (maps: Map<string, Unit>[], id: string): number => {
     const us = maps.flatMap((m) => (m.get(id)?.score != null ? [m.get(id)!] : []));
@@ -661,17 +841,36 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
   const side = (maps: Map<string, Unit>[]) => maps.map((m) => paired.map((id) => (m.get(id)?.score != null ? m.get(id) : undefined)));
   const [ua, ub] = [side(mapsA), side(mapsB)];
   const metrics: MetricReport[] = [];
+  const pairedUnits = paired.map((id) => unitOf(mapsA, id));
+  const report = <R extends MetricReport["role"] | "info", D extends Dir | null>(path: string, role: R, dir: D, metric: Metric) => {
+    const e = setBootstrap(ua, ub, metric.of, indexes, opts.resamples);
+    return { path, role, dir, n: metric.of.n?.(pairedUnits) ?? null, a: round(e.a), b: round(e.b), delta: round(e.delta), ci: (e.lo === null || e.hi === null ? null : [round(e.lo) as number, round(e.hi) as number]) as [number, number] | null, resamples_used: e.used, signal: role === "info" || dir === null ? ("n/a" as Signal) : signalOf(dir, e) };
+  };
   for (const spec of EVAL_METRICS[evalName]) {
     const [metricA, metricB] = [va[0].metrics.find((m) => m.path === spec.path), vb[0].metrics.find((m) => m.path === spec.path)];
     if (!metricA || !metricB) continue;
-    const e = setBootstrap(ua, ub, metricA.of, indexes, opts.resamples);
-    metrics.push({ path: spec.path, role: spec.role, dir: spec.dir, a: round(e.a), b: round(e.b), delta: round(e.delta), ci: e.lo === null || e.hi === null ? null : [round(e.lo) as number, round(e.hi) as number], resamples_used: e.used, signal: signalOf(spec.dir, e) });
+    metrics.push(report(spec.path, spec.role, spec.dir, metricA));
   }
+  const info: InfoReport[] = [];
+  for (const x of va[0].extra ?? []) if (vb[0].extra?.some((y) => y.path === x.path)) info.push(report(x.path, "info", x.undirected ? null : "up", x));
+  const scoredIn = (maps: Map<string, Unit>[], id: string): boolean => scores(maps, id).length > 0;
+  const coverage: Coverage = {
+    selected_a: idsA.size,
+    selected_b: idsB.size,
+    scored_a: [...idsA].filter((id) => scoredIn(mapsA, id)).length,
+    scored_b: [...idsB].filter((id) => scoredIn(mapsB, id)).length,
+    errored_a: [...idsA].filter((id) => !scoredIn(mapsA, id)).sort(byA),
+    errored_b: [...idsB].filter((id) => !scoredIn(mapsB, id)).sort(byB),
+    in_both: both.length,
+    scored_only_a: [...idsA].filter((id) => scoredIn(mapsA, id) && !scoredIn(mapsB, id)).sort(byA),
+    scored_only_b: [...idsB].filter((id) => scoredIn(mapsB, id) && !scoredIn(mapsA, id)).sort(byB),
+  };
   return {
     view: va[0].name,
     binary,
     n_a: idsA.size,
     n_b: idsB.size,
+    coverage,
     n_paired: paired.length,
     only_a: onlyA,
     only_b: onlyB,
@@ -683,12 +882,128 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
     harm: va[0].hasHarm ? { appeared, cleared } : null,
     by_group: [...groups.values()].sort((x, y) => (x.group < y.group ? -1 : 1)),
     metrics,
+    info,
   };
 }
 
 export interface CompareOptions extends Partial<Options> {
   /** The axes B may differ from A on. Default: the config and the model (see DEFAULT_TREATMENT). */
   treatment?: Axis[];
+}
+
+// ---- the manifest: the scorer, the cases' inputs ---------------------------------------------------------------------------
+
+/**
+ * The least share of the cases both sides selected that a comparison must be able to use. Below it the comparison is exploratory when the
+ * cases were lost to errors or to no verdict, and it is refused as a difference of inputs when they were lost because the cases were not
+ * given the same input in every run. 80%, because one case in five is more than the noise between two runs of one configuration moves.
+ */
+export const MIN_SHARE = 0.8;
+
+const manifestOf = (run: Run) => {
+  const reading = readManifest(run.summary);
+  return reading.kind === "manifest" ? reading.manifest : null;
+};
+
+/** What `align` hands back: the runs as they are compared, and what was done to them. */
+interface Aligned {
+  sides: Run[][];
+  /** The folders of the runs that were scored again. */
+  rescored: string[];
+  /** The cases left out because their input differs between runs. */
+  inputsDiffer: string[];
+  /** The same, when the inputs are the treatment and the cases are kept. */
+  treated: string[];
+  exploratory: string[];
+}
+
+/**
+ * Brings runs that carry a manifest to one scorer and one set of inputs before they are compared, as the policy of the foundation says:
+ *  - the scorer or a case's labels differ among the runs, or from the current scorer and labels (a scorer fix, or a case relabelled since the
+ *    runs were made): each run is scored again with the current scorer and labels (scripts/rescore), as the matrix does, and the report says
+ *    so. A run that cannot be scored again (its rows lack the raw output) makes the comparison refused when it needs to be.
+ *  - the input of a case differs among the runs: the case is left out, and named. When the inputs of more than 1 - MIN_SHARE of the shared
+ *    cases differ, the comparison is refused as a difference of inputs, unless `inputs` is the treatment, which keeps them all.
+ * A run without a manifest (written before harness-v3) is compared as before and makes the report exploratory, for an eval that can have a
+ * manifest. An eval that declares no measurement yet cannot, and is compared by the earlier rules.
+ */
+/** The scorer this repository has now for an eval, as MEASUREMENT.lock records it; null when it has none. */
+function currentScorer(evalName: string): { version: string; sha256: string } | null {
+  try {
+    const m = loadMeasurement(evalName);
+    return m ? lockedParts(m).scorer : null;
+  } catch {
+    return null;
+  }
+}
+
+function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
+  const out: Aligned = { sides: named.map(([, runs]) => runs), rescored: [], inputsDiffer: [], treated: [], exploratory: [] };
+  const evalName = String(named[0]?.[1][0]?.summary.eval);
+  if (loadMeasurement(evalName) === null) return out;
+  const label = (side: string, runs: Run[], run: Run): string => (runs.length === 1 && side.length === 1 ? side : `${side}'s run ${nameOf(run)}`);
+  const entries = named.flatMap(([side, runs]) => [...runs].sort(byDir).map((run) => ({ side, runs, run })));
+  const legacy = entries.filter((e) => manifestOf(e.run) === null);
+  if (legacy.length > 0) {
+    out.exploratory.push(`${legacy.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${legacy.length === 1 ? "has" : "have"} no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified`);
+    return out;
+  }
+
+  // a result of scripts/rescore on a run from before harness-v3 has a manifest, and a collector that no one versioned
+  const unversioned = entries.filter((e) => manifestOf(e.run)?.collector.version === UNVERSIONED);
+  if (unversioned.length > 0) out.exploratory.push(`${unversioned.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${unversioned.length === 1 ? "was" : "were"} collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned`);
+
+  const sharedIds = (runs: Run[]): string[] => Object.keys(manifestOf(runs[0] as Run)?.cases ?? {}).filter((id) => runs.every((r) => manifestOf(r)?.cases[id] !== undefined));
+  const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r)?.cases[id]?.[field])).size;
+  let runs = entries.map((e) => e.run);
+  const scorers = [...new Set(runs.map((r) => manifestOf(r)?.scorer.sha256))];
+  const now = currentScorer(evalName);
+  // every run scored again with what the repository has now, to see whether a case was relabelled since; one that cannot be refuses only when needed
+  const { RescoreError, rescoreRun } = rescorer();
+  const tried = new Map<Run, { run: Run; relabelled: string[] } | { error: Error }>();
+  for (const e of entries) {
+    try {
+      const result = rescoreRun({ dir: e.run.dir, summary: e.run.summary, rows: e.run.rows });
+      tried.set(e.run, { run: { ...e.run, summary: result.summary, rows: result.rows }, relabelled: result.relabelled });
+    } catch (error) {
+      if (!(error instanceof RescoreError)) throw error;
+      tried.set(e.run, { error });
+    }
+  }
+  const changedSince = [...new Set([...tried.values()].flatMap((t) => ("error" in t ? [] : t.relabelled)))];
+  const part = (r: Run): string => `v${manifestOf(r)?.scorer.version} ${manifestOf(r)?.scorer.sha256.slice(0, 12)}`;
+  const why =
+    scorers.length > 1
+      ? `the runs were scored by different scorers (${entries.map((e) => `${label(e.side, e.runs, e.run)}: ${part(e.run)}`).join(", ")})`
+      : sharedIds(runs).some((id) => distinct(runs, id, "label_sha256") > 1)
+        ? "the runs were scored against different labels"
+        : now !== null && scorers[0] !== now.sha256
+          ? `the runs were scored by a scorer other than the current one (${part(runs[0] as Run)}, now v${now.version} ${now.sha256.slice(0, 12)})`
+          : changedSince.length > 0
+            ? `${changedSince.length === 1 ? "a case has" : `${changedSince.length} cases have`} other labels than when the runs were made (${listIds(changedSince)})`
+            : null;
+  if (why !== null) {
+    const again = new Map<Run, Run>();
+    for (const e of entries) {
+      const t = tried.get(e.run) as { run: Run } | { error: Error };
+      if ("error" in t) return fail(`${why}, so they are scored again with the current scorer before they are compared, and ${label(e.side, e.runs, e.run)} cannot be: ${t.error.message}`);
+      again.set(e.run, t.run);
+    }
+    out.sides = out.sides.map((side) => side.map((r) => again.get(r) as Run));
+    out.rescored = entries.map((e) => e.run.dir);
+    runs = runs.map((r) => again.get(r) as Run);
+  }
+
+  const shared = sharedIds(runs);
+  const differ = shared.filter((id) => distinct(runs, id, "input_sha256") > 1);
+  if (differ.length > 0 && treatment.includes("inputs")) out.treated.push(`${plural(differ.length, "case")} ${differ.length === 1 ? "was" : "were"} given another input in some run (the inputs are the treatment): ${listIds(differ)}`);
+  else if (differ.length > 0) {
+    if (differ.length > (1 - MIN_SHARE) * shared.length + EPS) fail(`these runs cannot be compared case by case: the cases were not given the same input in every run for ${differ.length} of the ${shared.length} cases they share (${listIds(differ)}), and ${MIN_SHARE * 100}% must match. A case with another input is another case. If the inputs are what you are measuring, name the axis with --treatment inputs.`);
+    out.inputsDiffer = differ;
+    const dropped = new Set(differ);
+    out.sides = out.sides.map((side) => side.map((r) => ({ ...r, rows: r.rows.filter((row) => !dropped.has(String(row.id))) })));
+  }
+  return out;
 }
 
 /**
@@ -719,7 +1034,9 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
   const hint = policy.mismatches.every((f) => f.axis !== "scope") ? ` If a difference is what you are measuring, name its axis with --treatment (${AXES.join(", ")}).` : "";
   if (problems.length > 0) fail(`${a.length === 1 && b.length === 1 ? "these two runs cannot" : "these runs cannot"} be compared case by case: ${problems.join("; ")}.${hint}`);
   const evalName = String(a[0].summary.eval);
-  const [allA, allB] = [a.map(viewsOf), b.map(viewsOf)];
+  const aligned = align([["A", a], ["B", b]], treatment);
+  const [ra, rb] = aligned.sides as [Run[], Run[]];
+  const [allA, allB] = [ra.map(viewsOf), rb.map(viewsOf)];
   const warnings: string[] = [];
   const views: ViewReport[] = [];
   const present = (all: View[][], name: string): View[] | null => {
@@ -732,7 +1049,7 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
       warnings.push(`${x.name} is not in every run of ${sa ? "B" : "A"}, so it is not compared`);
       continue;
     }
-    views.push(compareView(evalName, sa, sb, opts, a.map((r) => r.dir), b.map((r) => r.dir)));
+    views.push(compareView(evalName, sa, sb, opts, ra.map((r) => r.dir), rb.map((r) => r.dir)));
   }
   for (const y of allB[0]) if (!allA[0].some((x) => x.name === y.name)) warnings.push(`${y.name} is in B and not in A, so it is not compared`);
   if (views.length === 0) fail("the two runs have no table of cases in common");
@@ -742,7 +1059,7 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
     if (v.only_a.length > 0 || v.only_b.length > 0) warnings.push(`${plural(v.only_a.length, "case")}${name} ${v.only_a.length === 1 ? "is" : "are"} only in A and ${v.only_b.length} only in B (a different --limit?): they are left out`);
     if (v.no_verdict.a.length > 0 || v.no_verdict.b.length > 0) warnings.push(`${plural(v.no_verdict.a.length, "case")}${name} ${v.no_verdict.a.length === 1 ? "has" : "have"} no verdict in A and ${v.no_verdict.b.length} in B (errors): they are left out`);
   }
-  const [infosA, infosB] = [a.map(infoOf), b.map(infoOf)];
+  const [infosA, infosB] = [ra.map(infoOf), rb.map(infoOf)];
   const [ia, ib] = [infosA[0], infosB[0]];
   const diff = differences(ia, ib);
   if (policy.treated.length === 0 && !diff.some((d) => ["model", "akm_build", "akm_build_fingerprint", "akm_bin", "strategy", "config_patch", "timeout_ms"].includes(d.field))) warnings.push("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs, not a change");
@@ -755,22 +1072,24 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
   };
   const summaryOnly = EVAL_METRICS[evalName]
     .filter((spec) => !computed.has(spec.path) && !known.has(spec.path))
-    .map((spec) => ({ path: spec.path, role: spec.role, dir: spec.dir, a: pooled(a, spec.path), b: pooled(b, spec.path) }))
+    .map((spec) => ({ path: spec.path, role: spec.role, dir: spec.dir, a: pooled(ra, spec.path), b: pooled(rb, spec.path) }))
     .filter((m) => m.a !== null || m.b !== null);
   return {
     mode: "pair",
     eval: evalName,
-    corpus: str(a[0].summary.corpus),
-    collection: str(a[0].summary.collection),
-    pool: a[0].summary.mode === "pool",
+    corpus: str(ra[0].summary.corpus),
+    collection: str(ra[0].summary.collection),
+    pool: ra[0].summary.mode === "pool",
     a: ia,
     b: ib,
     a_runs: infosA,
     b_runs: infosB,
     treatment,
-    treated: messages(policy.treated),
+    treated: [...messages(policy.treated), ...aligned.treated],
     differences: diff,
-    exploratory: exploratoryOf([["A", a], ["B", b]], policy),
+    rescored: aligned.rescored,
+    inputs_differ: aligned.inputsDiffer,
+    exploratory: [...exploratoryOf([["A", ra], ["B", rb]], policy), ...aligned.exploratory, ...coverageReasons(views, aligned.inputsDiffer.length, opts.tie)],
     options: opts,
     warnings,
     views,
@@ -855,7 +1174,7 @@ export interface RepeatsViewReport {
   cases: CaseRate[];
   by_group: { group: string; n: number; unstable: number; flip_rate: number }[];
   metrics: SpreadReport[];
-  /** The largest pairwise spread of a main metric: a change smaller than this is within what two runs of one configuration show. */
+  /** The largest `pairwise_spread` of a main metric, which is the mean difference between two runs and not the largest: a change smaller than this is within what two runs of one configuration show. */
   min_delta_hint: number | null;
 }
 
@@ -867,6 +1186,10 @@ export interface RepeatsReport {
   pool: boolean;
   runs: RunInfo[];
   options: { tie: number };
+  /** The folders of the runs that were scored again with the current scorer before they were compared, because the runs had been scored differently. Empty when they had not. */
+  rescored: string[];
+  /** Case ids left out because the cases were not given the same input in every run. */
+  inputs_differ: string[];
   /** Why the runs are no conclusion: one did not complete, or the summaries lack the evidence that every axis is the same in all of them. Empty when they may be used for one. */
   exploratory: string[];
   warnings: string[];
@@ -890,12 +1213,14 @@ function spreadOf(values: (number | null)[]): Omit<SpreadReport, "path" | "role"
  * every axis of policy.ts (the akm, the config, the model, the cases, the eval's code) must be the same in every run, and a run is refused
  * that differs from the others in any of them, whichever order they come in.
  */
-export function compareRepeats(runs: Run[], options: Partial<Options> = {}): RepeatsReport {
+export function compareRepeats(given: Run[], options: Partial<Options> = {}): RepeatsReport {
   const opts = { ...DEFAULTS, ...options };
-  if (runs.length < 2) fail("repeats need at least two runs");
-  const first = runs[0];
-  const policy = checkMembers([...runs].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), []);
+  if (given.length < 2) fail("repeats need at least two runs");
+  const policy = checkMembers([...given].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), [], { manifest: true });
   if (policy.mismatches.length > 0) fail(`these runs are not repeats of one configuration: ${messages(policy.mismatches).join("; ")}.`);
+  const aligned = align([["the runs", given]], []);
+  const runs = aligned.sides[0] as Run[];
+  const first = runs[0] as Run;
   const infos = runs.map(infoOf);
   const evalName = String(first.summary.eval);
   const allViews = runs.map(viewsOf);
@@ -956,7 +1281,7 @@ export function compareRepeats(runs: Run[], options: Partial<Options> = {}): Rep
   }
   if (views.length === 0) fail("the runs have no table of cases in common");
   for (const v of views) if (v.n_compared === 0) fail(`no case has a verdict in two of the runs${v.view ? ` (${v.view})` : ""}`);
-  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, exploratory: exploratoryOf([["the runs", runs]], policy), warnings, views };
+  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, rescored: aligned.rescored, inputs_differ: aligned.inputsDiffer, exploratory: [...exploratoryOf([["the runs", runs]], policy), ...aligned.exploratory], warnings, views };
 }
 
 // ---- the reports -------------------------------------------------------------------------------------------------------------
@@ -994,6 +1319,8 @@ const runTable = (infos: RunInfo[], heads: string[]): string[] => {
     ["strategy", (i) => i.strategy ?? "–"],
     ["config patch", (i) => (i.config_patch ? i.config_patch.slice(0, 12) : "–")],
     ["cases", (i) => `${i.n_cases}${i.n_errored ? ` (${i.n_errored} errored)` : ""}`],
+    ...(infos.some((i) => i.collector !== null) ? ([["collector", (i) => i.collector ?? "–"], ["scorer", (i) => i.scorer ?? "–"]] as [string, (i: RunInfo) => string][]) : []),
+    ...(infos.some((i) => i.rescored_from !== null) ? ([["scored again from", (i) => (i.rescored_from === null ? "–" : `\`${i.rescored_from}\``)]] as [string, (i: RunInfo) => string][]) : []),
   ];
   return [`| | ${heads.join(" | ")} |`, `|---|${heads.map(() => "---").join("|")}|`, ...rows.map(([name, f]) => `| ${name} | ${infos.map((i) => f(i).replace(/\|/g, "\\|")).join(" | ")} |`)];
 };
@@ -1011,6 +1338,8 @@ export function renderPair(r: PairReport): string {
   const heads = sets ? [...r.a_runs.map((_, i) => `A r${i + 1}`), ...r.b_runs.map((_, i) => `B r${i + 1}`)] : ["A", "B"];
   const out = [`# Compare ${where(r)}: A and B`, "", ...exploratoryBanner(r.exploratory), ...runTable(sets ? [...r.a_runs, ...r.b_runs] : [r.a, r.b], heads), ""];
   out.push(r.differences.length === 0 ? "A and B have the same settings." : `B differs from A in ${r.differences.map((d) => `${d.field} (${d.a ?? "none"} → ${d.b ?? "none"})`).join(", ")}.`, "");
+  if (r.rescored.length > 0) out.push(`> Scored again. Not every run had been scored by the current scorer and labels, so ${r.rescored.length === 1 ? "the run was" : `each of the ${r.rescored.length} runs was`} scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
+  if (r.inputs_differ.length > 0) out.push(`> Left out. ${plural(r.inputs_differ.length, "case")} ${r.inputs_differ.length === 1 ? "was" : "were"} not given the same input in every run, so ${r.inputs_differ.length === 1 ? "it is" : "they are"} not compared: ${listIds(r.inputs_differ)}.`, "");
   out.push(`Treatment: ${r.treatment.join(", ")}. Nothing else may differ between A and B${sets ? ", or among the repeats of one side" : ""}.${r.treated.length > 0 ? ` They differ in: ${r.treated.join("; ")}.` : ""}`, "");
   for (const w of r.warnings) out.push(`> ${w}`);
   if (r.warnings.length > 0) out.push("");
@@ -1018,10 +1347,12 @@ export function renderPair(r: PairReport): string {
   for (const v of r.views) {
     const name = v.view ? v.view : "cases";
     out.push(`## ${name}`, "");
-    out.push(`${plural(v.n_paired, "case")} in both runs: **${v.agree.n} agree**, **${v.better.length} flipped to better**, **${v.worse.length} flipped to worse**. Sign test on the ${plural(v.better.length + v.worse.length, "case")} that ${v.better.length + v.worse.length === 1 ? "disagrees" : "disagree"} (two-sided, exact): p = ${fmtP(v.sign_test.p)}.`, "");
-    if (v.metrics.length > 0) {
-      out.push("| metric | A | B | B − A | 95% interval | |", "|---|---|---|---|---|---|");
-      for (const m of v.metrics) out.push(`| ${m.path} ${ARROW[m.dir]}${m.role === "harm" ? " (harm)" : ""} | ${fmt(m.a)} | ${fmt(m.b)} | ${signed(m.delta)} | ${m.ci ? `${signed(m.ci[0])} to ${signed(m.ci[1])}` : "–"} | ${SIGNAL[m.signal]} |`);
+    out.push(`${plural(v.n_paired, "case")} in both runs: **${v.agree.n} agree**, **${v.better.length} flipped to better**, **${v.worse.length} flipped to worse**. Sign test on the ${plural(v.better.length + v.worse.length, "case")} that ${v.better.length + v.worse.length === 1 ? "disagrees" : "disagree"} (two-sided, exact): p = ${fmtP(v.sign_test.p)}.${r.inputs_differ.length > 0 ? ` ${plural(r.inputs_differ.length, "more case")} ${r.inputs_differ.length === 1 ? "is" : "are"} left out because ${r.inputs_differ.length === 1 ? "its" : "their"} input differs.` : ""}`, "");
+    const c = v.coverage;
+    out.push(`Scored: A ${c.scored_a} of ${c.selected_a} cases, B ${c.scored_b} of ${c.selected_b}${c.errored_a.length + c.errored_b.length > 0 ? ` (errored: A ${c.errored_a.length > 0 ? listIds(c.errored_a) : "none"}; B ${c.errored_b.length > 0 ? listIds(c.errored_b) : "none"})` : ""}. Every number below is over the ${v.n_paired} scored in both.${c.scored_only_a.length + c.scored_only_b.length > 0 ? ` Scored on one side only, and so left out: ${[c.scored_only_a.length > 0 ? `in A ${listIds(c.scored_only_a)}` : "", c.scored_only_b.length > 0 ? `in B ${listIds(c.scored_only_b)}` : ""].filter(Boolean).join("; ")}.` : ""}`, "");
+    if (v.metrics.length + v.info.length > 0) {
+      out.push("| metric | A | B | B − A | 95% interval | cases | |", "|---|---|---|---|---|---|---|");
+      for (const m of [...v.metrics, ...v.info]) out.push(`| ${m.path}${m.dir === null ? "" : ` ${ARROW[m.dir]}`}${m.role === "harm" ? " (harm)" : m.role === "info" ? (m.dir === null ? " (a count to look at, not judged)" : " (not judged)") : ""} | ${fmt(m.a)} | ${fmt(m.b)} | ${signed(m.delta)} | ${m.ci ? `${signed(m.ci[0])} to ${signed(m.ci[1])}` : "–"} | ${m.n === null ? v.n_paired : m.n} of ${v.n_paired} | ${SIGNAL[m.signal]} |`);
       out.push("");
     }
     if (v.better.length > 0) out.push("### Flipped to better", "", ...listFlips(v.better, v.binary), "");
@@ -1051,6 +1382,8 @@ export function renderPair(r: PairReport): string {
 
 export function renderRepeats(r: RepeatsReport): string {
   const out = [`# Repeats of ${where(r)}: ${r.runs.length} runs`, "", ...exploratoryBanner(r.exploratory), ...runTable(r.runs, r.runs.map((_, i) => `r${i + 1}`)), ""];
+  if (r.rescored.length > 0) out.push(`> Scored again. Not every run had been scored by the current scorer and labels, so each of the ${r.rescored.length} was scored again with the current scorer and labels (scripts/rescore) before the comparison. The results folders are not changed.`, "");
+  if (r.inputs_differ.length > 0) out.push(`> Left out. ${plural(r.inputs_differ.length, "case")} ${r.inputs_differ.length === 1 ? "was" : "were"} not given the same input in every run: ${listIds(r.inputs_differ)}.`, "");
   for (const w of r.warnings) out.push(`> ${w}`);
   if (r.warnings.length > 0) out.push("");
   out.push(`A case flips between two runs when its verdict differs${r.views.some((v) => !v.binary) ? ` (a score moving by more than ${r.options.tie}, for ndcg)` : ""}. A case's flip rate is the share of the pairs of runs in which it does. The noise floor is the mean flip rate over the cases: with it, about that share of the cases changes verdict between two runs of the same configuration with nothing changed.`, "");

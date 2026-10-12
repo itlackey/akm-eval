@@ -1,15 +1,15 @@
-// Pure helpers for the retrieval eval: the queries and the judgments, the pool, the judge's prompt, scoring.
+// Helpers for the retrieval eval that are neither its scorer nor its collector: the queries and the judgments, the pool, the judge's prompt.
 // run.ts, label.ts and generate.ts use them.
+//
+// The scorer is score.ts and the collector is collect.ts (see measurement.ts). This file re-exports the scorer, and akm.ts's `Asset` and
+// `foldRefs`, so the eval and its tests import from one place. DEPTH, from the scorer, is also how deep each system goes into the label pool.
 
-import { type Retrieval, mean, retrievalMetrics } from "../../../lib/ir.ts";
 import { sha256Text } from "../../../lib/provenance.ts";
+import type { Asset } from "./akm.ts";
+import { type Case, isTask } from "./score.ts";
 
-export const NON_TASK_KINDS = ["chitchat", "notification", "log", "status", "nontask"];
-
-/** The grade from which an asset counts as relevant: 2 is "relevant and clearly useful". */
-export const RELEVANT = 2;
-/** How many results the eval asks of search and of curate, and how deep each system goes into the label pool. */
-export const DEPTH = 10;
+export * from "./score.ts";
+export { type Asset, foldRefs } from "./akm.ts";
 
 export interface Query {
   id: string;
@@ -36,8 +36,6 @@ export interface Qrel {
   /** assetSha256 of what the judge read of the asset. A pair whose asset has another digest now is graded again. */
   asset_sha256?: string;
 }
-
-export const isTask = (q: Query): boolean => !NON_TASK_KINDS.includes(q.kind);
 
 function parseLines<T>(text: string, where: string, check: (row: Record<string, unknown>) => string | null): T[] {
   const rows: T[] = [];
@@ -130,6 +128,13 @@ export function gradesByQuery(qrels: Qrel[]): Map<string, Record<string, number>
   return by;
 }
 
+/** The cases of a set: each query with the grades of its qrels rows (a pair graded again keeps its last grade) and the assets its rows ban. */
+export function casesOf(queries: Query[], qrels: Qrel[]): Case[] {
+  const grades = gradesByQuery(qrels);
+  const banned = bannedByQuery(qrels);
+  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [] }));
+}
+
 /**
  * The queries a run uses. Without a limit, all of them. With one, N queries in the same task and non-task
  * proportion as the whole set, each kind taken in file order. The file is shuffled, so a prefix mixes the kinds.
@@ -142,20 +147,6 @@ export function selectQueries(queries: Query[], limit?: number): Query[] {
   const restQuota = Math.min(rest.length, limit - taskQuota);
   const picked = new Set([...task.slice(0, taskQuota), ...rest.slice(0, restQuota)]);
   return queries.filter((q) => picked.has(q));
-}
-
-/** akm names a section of an asset as `ref#section`. The eval scores assets, so the sections fold into one, at the first place. */
-export function foldRefs(refs: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const full of refs) {
-    const ref = full.split("#")[0].trim();
-    if (ref && !seen.has(ref)) {
-      seen.add(ref);
-      out.push(ref);
-    }
-  }
-  return out;
 }
 
 /** The union of the top `depth` of each ranked list, each ref once, in the order first seen. */
@@ -192,15 +183,6 @@ export const GRADE_SCHEMA = {
   required: ["grade", "reason"],
   additionalProperties: false,
 };
-
-export interface Asset {
-  ref: string;
-  type: string;
-  name: string;
-  description: string;
-  /** The file, relative to the library, or absolute where akm names it so (a bundle that is indexed in place). */
-  path: string;
-}
 
 /** The text of an asset as the judge reads it: the body without its front matter. */
 export function stripFrontmatter(text: string): string {
@@ -267,104 +249,6 @@ export function parseGrade(reply: string): { grade: number; reason: string } | n
     return { grade, reason: String(v.reason ?? "").replace(/\s+/g, " ").trim() };
   }
   return null;
-}
-
-// Scoring.
-
-export interface Scored {
-  ndcg_10: number;
-  /**
-   * nDCG@10 of the judged results alone: the results nobody graded for this query are taken out of the list and the rest move up,
-   * against the same ideal order. Unjudged results count as not relevant in ndcg_10, so a ranker that surfaces assets nobody graded
-   * is penalised for it there. This is the other bound: it is never lower than ndcg_10, and the two meet when judged_10 is 1.
-   */
-  ndcg_10_condensed: number;
-  p_5: number;
-  success_5: boolean;
-  mrr: number;
-  recall_10: number;
-  /** The share of the results among the first 10 that someone graded for this query. null when there are no results. */
-  judged_10: number | null;
-  /** A banned asset is among the first 10 and ranks above a relevant one, the last of them: a relevant asset that is not among the first 10 ranks below every result. null when the query bans none. */
-  banned_above: boolean | null;
-  /** A banned asset is among the first 10 and ranks above the first relevant asset. A relevant asset that is missing does not count here unless every one is. null when the query bans none. */
-  banned_above_first: boolean | null;
-}
-
-/**
- * One query's results against its grades. Only the first 10 results count. A relevant asset that is not among the first
- * 10 ranks below every result, so any banned asset that is returned ranks above it.
- */
-export function scoreQuery(grades: Record<string, number>, refs: string[], banned: string[] = []): Scored {
-  const at10: Retrieval = retrievalMetrics(grades, refs, 10, RELEVANT);
-  const at5: Retrieval = retrievalMetrics(grades, refs, 5, RELEVANT);
-  const top = refs.slice(0, 10);
-  const judgedRefs = top.filter((r) => Object.hasOwn(grades, r));
-  const condensed: Retrieval = retrievalMetrics(grades, judgedRefs, 10, RELEVANT);
-  const rank = (ref: string): number => {
-    const i = top.indexOf(ref);
-    return i < 0 ? Number.POSITIVE_INFINITY : i;
-  };
-  const relevant = Object.keys(grades).filter((r) => grades[r] >= RELEVANT);
-  const bannedRank = Math.min(...banned.map(rank));
-  const bannedAbove = banned.length === 0 ? null : bannedRank < Math.max(...relevant.map(rank));
-  const bannedAboveFirst = banned.length === 0 ? null : relevant.length > 0 && bannedRank < Math.min(...relevant.map(rank));
-  return {
-    ndcg_10: at10.ndcg,
-    ndcg_10_condensed: condensed.ndcg,
-    p_5: at5.precision,
-    success_5: at5.hit,
-    mrr: at10.mrr,
-    recall_10: at10.recall,
-    judged_10: top.length === 0 ? null : judgedRefs.length / top.length,
-    banned_above: bannedAbove,
-    banned_above_first: bannedAboveFirst,
-  };
-}
-
-export interface SystemMetrics {
-  n: number;
-  ndcg_10: number | null;
-  /** The mean of Scored.ndcg_10_condensed: nDCG@10 over the judged results only, next to ndcg_10 to bound the bias of unjudged results. */
-  ndcg_10_condensed: number | null;
-  p_5: number | null;
-  success_5: number | null;
-  mrr: number | null;
-  recall_10: number | null;
-  /** The mean share of judged results, over the queries that returned any. */
-  judged_10: number | null;
-  /** The share of the queries that ban an asset where one ranks above a relevant asset, the last of them. Lower is better. null when no query bans one. */
-  banned_above: number | null;
-  /** The same share for a banned asset that ranks above the first relevant asset: it leaves out the queries where only a missing relevant asset puts one above. */
-  banned_above_first: number | null;
-}
-
-export function summarize(rows: Scored[]): SystemMetrics {
-  const share = (f: (r: Scored) => boolean | null): number | null => mean(rows.flatMap((r) => (f(r) === null ? [] : [f(r) ? 1 : 0])));
-  return {
-    n: rows.length,
-    ndcg_10: mean(rows.map((r) => r.ndcg_10)),
-    ndcg_10_condensed: mean(rows.map((r) => r.ndcg_10_condensed)),
-    p_5: mean(rows.map((r) => r.p_5)),
-    success_5: mean(rows.map((r) => (r.success_5 ? 1 : 0))),
-    mrr: mean(rows.map((r) => r.mrr)),
-    recall_10: mean(rows.map((r) => r.recall_10)),
-    judged_10: mean(rows.flatMap((r) => (r.judged_10 === null ? [] : [r.judged_10]))),
-    banned_above: share((r) => r.banned_above),
-    banned_above_first: share((r) => r.banned_above_first),
-  };
-}
-
-export interface Abstention {
-  n: number;
-  /** How many of the n got no result at all. */
-  abstained: number;
-  rate: number | null;
-}
-
-export function abstention(returned: number[]): Abstention {
-  const abstained = returned.filter((n) => n === 0).length;
-  return { n: returned.length, abstained, rate: returned.length === 0 ? null : Number((abstained / returned.length).toFixed(4)) };
 }
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);

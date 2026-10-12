@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { KS, METRICS, scoreQuery, summarize } from "./score.ts";
+import { KS, METRICS, meanScores, scoreQuery } from "./score.ts";
 
 const filler = (n: number, from = 0): string[] => Array.from({ length: n }, (_, i) => `x${from + i}`);
 
@@ -45,13 +45,13 @@ describe("scoreQuery matches SkillRet's own scoring", () => {
   });
 });
 
-describe("summarize", () => {
+describe("meanScores", () => {
   test("is the mean over every query, one that got nothing included", () => {
-    const got = asList(summarize(CASES.map(([, relevant, ranked]) => scoreQuery(relevant, ranked))));
+    const got = asList(meanScores(CASES.map(([, relevant, ranked]) => scoreQuery(relevant, ranked))));
     MEANS.forEach((x, i) => expect(got[i]).toBeCloseTo(x, 4));
   });
 
   test("is empty for no queries", () => {
-    expect(summarize([])).toEqual({});
+    expect(meanScores([])).toEqual({});
   });
 });

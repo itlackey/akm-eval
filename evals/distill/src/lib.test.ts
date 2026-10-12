@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusSeed, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, readSeed, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readClaims, readGenerated, readStated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
+import { importClosure } from "../../../lib/closure.ts";
+import { measuredFiles } from "../../../lib/manifest.ts";
+import { MEASUREMENT } from "./measurement.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -214,6 +217,60 @@ describe("claims", () => {
     expect(claims("The fix works on all layouts, which is unconfirmed.", [["works on all layouts"]])).toEqual([]);
     expect(claims("Ensure test suites explicitly exercise every format defined in production configs, not just the modern ones.", [["exercise every"]])).toEqual(["exercise every"]);
     expect(claims("We cannot say that the fix works on all layouts.", [["works on all layouts"]])).toEqual([]);
+  });
+
+  describe("a doubt excuses a claim only when it governs it: before it in its own clause, or an unconfirmed after it (#56)", () => {
+    const layouts = [["works * all * layout", "work on all layouts"]];
+
+    test("a doubt about something else, in the sentence of the claim, does not excuse it", () => {
+      for (const text of [
+        "The fix works on all layouts, which could save a rebuild.",
+        "The fix works on all layouts if you build with Paged.js.",
+        "You may rely on this: the fix works on all layouts.",
+        "It may vary between teams, but the fix works on all layouts.",
+        "We could not say more. The fix works on all layouts.",
+        "If you use Paged.js, the fix works on all layouts.",
+        "The fix works on all layouts (you might want a rebuild).",
+      ]) expect(claims(text, layouts), text).toEqual(["works * all * layout"]);
+    });
+
+    test("a doubt in the claim's own clause, before it, still excuses it, and so does an unconfirmed that follows it", () => {
+      for (const text of [
+        "The fix may work on all layouts.",
+        "It may be that the fix works on all layouts.",
+        "It is unconfirmed whether the fix works on all layouts.",
+        "Perhaps the fix works on all layouts.",
+        "I suspect the fix works on all layouts.",
+        "We do not know if it works on all layouts.",
+        "The fix works on all layouts, which is unconfirmed.",
+        "The fix works on all layouts (unverified).",
+        "The fix works on all layouts - untested.",
+      ]) expect(claims(text, layouts), text).toEqual([]);
+    });
+
+    test("a doubt farther than six words from the claim, in its clause, does not excuse it either", () => {
+      expect(claims("It may be so for the rulebook and the supplement and the fix works on all layouts.", layouts)).toEqual(["works * all * layout"]);
+    });
+
+    test("an action is bound the same way: a contradiction is excused by a doubt of its own clause, not of the sentence", () => {
+      const wait = [["=wait for networkidle"]];
+      expect(claims("You may rely on it: wait for networkidle on every page.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("Wait for networkidle on every page, which could save a rebuild.", wait, true)).toEqual(["=wait for networkidle"]);
+      expect(claims("It is unconfirmed whether you should wait for networkidle.", wait, true)).toEqual([]);
+      expect(claims("Wait for networkidle, which is unconfirmed.", wait, true)).toEqual([]);
+    });
+
+    test("claim-01: the sentences of the review turn a good lesson into a bad one, and the hedged ones leave it good", () => {
+      const c = loadCases(PUBLIC).find((x) => x.id === "claim-01") as LoadedCase;
+      const good = c.good as string;
+      expect(checkLesson(c, good, c.memory)).toMatchObject({ good: true, forbidden: [] });
+      for (const sentence of ["The fix works on all layouts, which could save a rebuild.", "The fix works on all layouts if you build with Paged.js.", "You may rely on this: the fix works on all layouts."]) {
+        expect(checkLesson(c, `${good} ${sentence}`, c.memory), sentence).toMatchObject({ good: false, forbidden: ["works * all * layout"] });
+      }
+      for (const sentence of ["It may be that the fix works on all layouts.", "It is unconfirmed whether the fix works on all layouts.", "The fix works on all layouts, which is unconfirmed."]) {
+        expect(checkLesson(c, `${good} ${sentence}`, c.memory), sentence).toMatchObject({ good: true, forbidden: [] });
+      }
+    });
   });
 
   test("the words of the phrase itself do not count as a denial", () => {
@@ -445,7 +502,7 @@ describe("checkLesson", () => {
 
   test("good when it states every fact, makes no forbidden claim and is not much longer than the memory", () => {
     const k = checkLesson(c, "The default is 30, so pass a limit.", memory);
-    expect(k).toEqual({ missing: [], forbidden: [], contradicted: [], ratio: 0.2, good: true });
+    expect(k).toEqual({ missing: [], forbidden: [], contradicted: [], ambiguous: [], ratio: 0.2, copied: 0, good: true });
   });
 
   test("names the facts it leaves out and the claims it makes", () => {
@@ -459,6 +516,45 @@ describe("checkLesson", () => {
     const body = (n: number) => `30 limit ${"x ".repeat(n)}`;
     expect(checkLesson(c, body(Math.floor(40 * MAX_RATIO) - 2), memory).good).toBe(true);
     expect(checkLesson(c, body(Math.floor(40 * MAX_RATIO) + 1), memory)).toMatchObject({ good: false, missing: [], forbidden: [] });
+  });
+
+  test("a copy of the memory is not a lesson: it states the facts, claims nothing, is not too long, and is bad (#55)", () => {
+    const real = "The default is 30 and nobody warned us, so the audit counted only the first page and missed the rest. Pass a limit to see them all. The same holds for pull requests.";
+    const file = `---\ndescription: d\n---\n${real}\n`;
+    expect(checkLesson(c, real, file)).toMatchObject({ missing: [], forbidden: [], contradicted: [], ratio: 1, copied: 1, good: false });
+    expect(checkLesson(c, `A lesson about counting.\nWhen counting.\n${real}`, file)).toMatchObject({ missing: [], forbidden: [], copied: 1, good: false }); // padded, it still repeats all of it
+    expect(checkLesson(c, "The default is 30, so pass a limit; the audit counted the first page only.", file)).toMatchObject({ copied: 0, good: true }); // a condensed lesson is not
+  });
+});
+
+describe("copiedShare", () => {
+  const memory = "one two three four five six seven eight nine ten";
+
+  test("is 1 for the memory pasted back, and 0 for a text that has no run of five words in common with it", () => {
+    expect(copiedShare(memory, memory)).toBe(1);
+    expect(copiedShare("Nothing here is related to it at all, except the word one and the word ten.", memory)).toBe(0);
+    expect(copiedShare("", memory)).toBe(0);
+    expect(copiedShare(memory, "")).toBe(0);
+  });
+
+  test("ignores case and punctuation, and the order of the sentences", () => {
+    const two = "The job reads the queue. It writes one file per tenant.";
+    expect(copiedShare("IT WRITES ONE FILE PER TENANT!!! the job -- reads the queue", two)).toBe(1);
+  });
+
+  test("counts runs of five words or more: a shorter phrase in common is not a copy", () => {
+    expect(copiedShare("one two three four five", memory)).toBe(0.5);
+    expect(copiedShare("six seven eight nine ten", memory)).toBe(0.5);
+    expect(copiedShare("one two three four five and six seven eight nine ten", memory)).toBe(1);
+    expect(copiedShare("one two three four", memory)).toBe(0);
+    expect(copiedShare("one two three four x six seven eight nine", memory)).toBe(0);
+    expect(copiedShare("one two three five four", memory)).toBe(0); // the same words in another order
+  });
+
+  test("is the share of the memory, so text around the copy does not lower it, and half of the memory is half", () => {
+    const words = Array.from({ length: 20 }, (_, i) => `w${i}`);
+    expect(copiedShare(`${"extra ".repeat(100)}${words.join(" ")}`, words.join(" "))).toBe(1);
+    expect(copiedShare(words.slice(0, 10).join(" "), words.join(" "))).toBe(0.5);
   });
 });
 
@@ -558,7 +654,7 @@ describe("the public cases check themselves", () => {
       });
 
       test("the good lesson passes, and the over-claiming one fails on a forbidden claim", () => {
-        expect(checkLesson(c, c.good as string, c.memory)).toMatchObject({ missing: [], forbidden: [], contradicted: [], good: true });
+        expect(checkLesson(c, c.good as string, c.memory)).toMatchObject({ missing: [], forbidden: [], contradicted: [], ambiguous: [], good: true });
         const bad = checkLesson(c, c.bad as string, c.memory);
         expect(bad.good).toBe(false);
         expect(bad.forbidden.length).toBeGreaterThan(0);
@@ -572,10 +668,16 @@ describe("the public cases check themselves", () => {
         expect(reversed.ratio).toBeLessThanOrEqual(MAX_RATIO);
       });
 
+      test("the memory pasted back is not a lesson, as a file, as its body or under a description and a when_to_use, and the good lesson repeats well under the limit (#55)", () => {
+        const forms = [lessonText(c.memory), memoryBody(c.memory), `A description of the lesson.\nWhen it happens again.\n${memoryBody(c.memory)}`];
+        for (const text of forms) expect(checkLesson(c, text, c.memory), text.slice(0, 40)).toMatchObject({ missing: [], forbidden: [], contradicted: [], copied: 1, good: false });
+        expect(checkLesson(c, c.good as string, c.memory).copied).toBeLessThanOrEqual(MAX_COPIED - 0.1);
+      });
+
       test("correct alternate wordings of the good lesson pass", () => {
         const others = ALTERNATES[c.id] ?? [];
         expect(others.length, "an alternate wording").toBeGreaterThanOrEqual(1);
-        for (const text of others) expect(checkLesson(c, text, c.memory), text).toMatchObject({ missing: [], forbidden: [], contradicted: [], good: true });
+        for (const text of others) expect(checkLesson(c, text, c.memory), text).toMatchObject({ missing: [], forbidden: [], contradicted: [], ambiguous: [], good: true });
       });
     });
   }
@@ -664,23 +766,29 @@ describe("the public update cases check themselves", () => {
       });
 
       test("the good body keeps every line and adds the facts; the bad one adds a forbidden claim", () => {
-        expect(checkUpdate(c, existing, c.good as string)).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [] });
-        const bad = checkUpdate(c, existing, c.bad as string);
+        expect(checkUpdate(c, existing, c.good as string, c.memory)).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [], ambiguous: [] });
+        const bad = checkUpdate(c, existing, c.bad as string, c.memory);
         expect(bad.dropped).toEqual([]);
         expect(bad.forbidden.length).toBeGreaterThan(0);
       });
 
       test("the reversed body keeps every line, makes no forbidden claim, and still contradicts the memory", () => {
-        const reversed = checkUpdate(c, existing, c.reversed as string);
+        const reversed = checkUpdate(c, existing, c.reversed as string, c.memory);
         expect(reversed.dropped).toEqual([]);
         expect(reversed.forbidden).toEqual([]);
         expect(reversed.contradicted.length).toBeGreaterThan(0);
       });
 
+      test("the existing lesson with the memory appended is not an update, and the good body repeats well under the limit (#55)", () => {
+        const pasted = checkUpdate(c, existing, `${existing}\n${body}`, c.memory);
+        expect(pasted).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [], copied: 1 });
+        expect(checkUpdate(c, existing, c.good as string, c.memory).copied).toBeLessThanOrEqual(MAX_COPIED - 0.1);
+      });
+
       test("another wording of the lines that are added passes", () => {
         const others = ALTERNATE_LINES[c.id] ?? [];
         expect(others.length, "an alternate wording").toBeGreaterThanOrEqual(1);
-        for (const lines of others) expect(checkUpdate(c, existing, `${existing}\n${lines}`), lines).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [] });
+        for (const lines of others) expect(checkUpdate(c, existing, `${existing}\n${lines}`, c.memory), lines).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [], ambiguous: [] });
       });
     });
   }
@@ -714,11 +822,11 @@ describe("diffBody and checkUpdate", () => {
   const c = { required: [["10 s", "10 seconds"], ["ceiling"]], forbidden: [["always"]] };
 
   test("the new facts are looked for in the added lines only, and so are the claims", () => {
-    expect(checkUpdate(c, existing, `${existing}The export has a 10 s ceiling.\n`)).toMatchObject({ missing: [], forbidden: [] });
-    expect(checkUpdate(c, existing, `${existing}The export has a ceiling.\n`).missing).toEqual(["10 s"]);
-    expect(checkUpdate(c, existing, `${existing}A 10 s ceiling, always.\n`).forbidden).toEqual(["always"]);
+    expect(checkUpdate(c, existing, `${existing}The export has a 10 s ceiling.\n`, "")).toMatchObject({ missing: [], forbidden: [] });
+    expect(checkUpdate(c, existing, `${existing}The export has a ceiling.\n`, "").missing).toEqual(["10 s"]);
+    expect(checkUpdate(c, existing, `${existing}A 10 s ceiling, always.\n`, "").forbidden).toEqual(["always"]);
     // the fact is in an existing line, not an added one
-    expect(checkUpdate({ required: [["race"]], forbidden: [] }, existing, `${existing}Nothing new.\n`).missing).toEqual(["race"]);
+    expect(checkUpdate({ required: [["race"]], forbidden: [] }, existing, `${existing}Nothing new.\n`, "").missing).toEqual(["race"]);
   });
 });
 
@@ -835,12 +943,22 @@ describe("generated.json", () => {
       return root;
     };
 
-    test("covers generate.ts, lib.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
+    test("covers generate.ts, lib.ts and score.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
       const files = generatorFiles(REPO);
-      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
+      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
       expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
       expect(files.every((f) => existsSync(join(REPO, f)))).toBe(true);
       expect(generatorSha256(REPO)).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    test("covers every file that generate.ts reaches by an import, but the collector's files and the digest helper: a check that moves to a new file is caught here (#44)", () => {
+      const imports = [...readFileSync(join(REPO, "evals/distill/src/generate.ts"), "utf8").matchAll(/from "(\.\.?\/[^"]+)"/g)].map((m) => m[1]);
+      expect(imports).toEqual(["./lib.ts"]); // generate.ts reaches the rest through lib.ts; a new import of its own would need its closure here
+      const reached = importClosure(["evals/distill/src/lib.ts"], REPO).files;
+      const collector = measuredFiles(MEASUREMENT, REPO).collector; // what the checks do not run on: akm and the config, which make no asset
+      const digested = generatorFiles(REPO);
+      expect(reached.filter((f) => !digested.includes(f) && !collector.includes(f) && f !== "lib/provenance.ts")).toEqual([]);
+      expect(reached).toEqual(expect.arrayContaining(["evals/distill/src/score.ts", "lib/negation.ts"]));
     });
 
     test("is the same for a copy of the files in another folder, and changes with any of them", () => {
@@ -861,7 +979,7 @@ describe("generated.json", () => {
       const root = copyOfGenerator();
       const dir = privateDir(marker({ rewrite: generatorSha256(root) }));
       expect(generatedProblem(dir, PUBLIC, root)).toBeUndefined();
-      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts"]) {
+      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts"]) {
         const file = join(root, name);
         const text = readFileSync(file, "utf8");
         writeFileSync(file, `${text}\n// changed\n`);
@@ -880,33 +998,28 @@ describe("generated.json", () => {
   });
 });
 
-describe("corpusSeed", () => {
-  const files = () => {
-    const dir = mkdtempSync(join(tmpdir(), "distill-seed-"));
-    dirs.push(dir);
-    writeFileSync(join(dir, "generated.json"), JSON.stringify({ seed: "7", inputs_sha256: "x", rewrite: "y" }));
-    writeFileSync(join(dir, "seed"), "123456789012345678\n");
-    return { dir, seed: join(dir, "seed"), none: join(dir, "no-seed") };
-  };
+describe("corpusFolder", () => {
+  const root = join(tmpdir(), "a repo", "key-checkout");
 
-  test("the public corpus has no seed", () => {
-    const f = files();
-    expect(corpusSeed("public", f.dir, f.seed)).toBeNull();
+  test("the public corpus is the one in the repository, whatever the summary says", () => {
+    expect(corpusFolder(root, { corpus: "public", corpus_folder: "elsewhere" })).toBe(join(root, "evals", "distill", "assets"));
   });
 
-  test("the private corpus has the seed its assets were made with, which may not be private/seed", () => {
-    const f = files();
-    expect(corpusSeed("private", f.dir, f.seed)).toBe("7");
-    expect(readSeed(f.seed)).toBe("123456789012345678");
+  test("a custom corpus is the folder the run recorded, from the repository root, or the one given in its place", () => {
+    expect(corpusFolder(root, { corpus: "custom", corpus_folder: "private/distill/own/assets" })).toBe(join(root, "private", "distill", "own", "assets"));
+    expect(corpusFolder(root, { corpus: "custom", corpus_folder: join(tmpdir(), "my notes") })).toBe(join(tmpdir(), "my notes"));
   });
 
-  test("an own corpus, or a private one with no generated.json, has private/seed when there is one, else null", () => {
-    const f = files();
-    expect(corpusSeed("own", f.dir, f.seed)).toBe("123456789012345678");
-    expect(corpusSeed("own-feedback", f.dir, f.seed)).toBe("123456789012345678");
-    expect(corpusSeed("own", f.dir, f.none)).toBeNull();
-    rmSync(join(f.dir, "generated.json"));
-    expect(corpusSeed("private", f.dir, f.seed)).toBe("123456789012345678");
+  test("a custom corpus whose folder was outside the repository is not found without being told, and the message says how", () => {
+    expect(() => corpusFolder(root, { corpus: "custom", corpus_folder: null })).toThrow("whose folder it did not record");
+    expect(() => corpusFolder(root, { corpus: "custom", corpus_folder: null })).toThrow("--cases DIR");
+  });
+
+  test("a run from before custom corpora names its folder by its old corpus name", () => {
+    expect(corpusFolder(root, { corpus: "private" })).toBe(join(root, "private", "distill", "assets"));
+    expect(corpusFolder(root, { corpus: "own" })).toBe(join(root, "private", "distill", "own", "assets"));
+    expect(corpusFolder(root, { corpus: "own-feedback" })).toBe(join(root, "private", "distill", "own", "assets-feedback"));
+    expect(() => corpusFolder(root, { corpus: "toString" })).toThrow("whose folder it did not record");
   });
 });
 
@@ -1000,7 +1113,7 @@ describe("what akm did", () => {
     const reversed = scoreCase(c, run([queued(lessonWith(c.reversed as string))]));
     expect(reversed).toMatchObject({ verdict: "bad", outcome: "lesson", forbidden: [], contradicted: ["never pass --limit", "returns all * by default"] });
     expect(reversed.missing).toEqual(["unless * limit"]);
-    expect(metrics([good, reversed]).bad_by).toEqual({ missing_fact: 1, forbidden_claim: 0, contradiction: 1, too_long: 0 });
+    expect(metrics([good, reversed]).bad_by).toEqual({ missing_fact: 1, forbidden_claim: 0, contradiction: 1, too_long: 0, copied: 0 });
   });
 
   test("scoreCase: the lesson of the review is bad, where the old checks called it good", () => {
@@ -1020,6 +1133,12 @@ describe("what akm did", () => {
     for (const last of ["Do not wait for networkidle.", "Never wait for networkidle.", "Do not hesitate to avoid having to wait for networkidle."]) {
       expect({ last, ...score(`${right}\n${last}`) }).toMatchObject({ last, verdict: "good", missing: [], forbidden: [], contradicted: [] });
     }
+  });
+
+  test("scoreCase: the memory pasted back as the lesson is bad, and the row says how much of the memory it repeats (#55)", () => {
+    const row = scoreCase(c, run([queued(c.memory)]));
+    expect(row).toMatchObject({ verdict: "bad", outcome: "lesson", missing: [], forbidden: [], contradicted: [], copied: 1 });
+    expect(metrics([row]).bad_by).toEqual({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, too_long: 0, copied: 1 });
   });
 
   test("scoreCase: a case that expects none is right unless a lesson was proposed", () => {
@@ -1075,7 +1194,7 @@ describe("what akm did", () => {
     const u = loadCases(PUBLIC).find((x) => x.id === "upd-02") as LoadedCase;
     const front = "---\ndescription: d\nwhen_to_use: w\ntype: lesson\nxrefs:\n  - memories/m\n---\n";
     const update = (body: string, extra: Partial<Proposal> = {}): Proposal => queued(front + body, { ref: `bundle//lessons/${u.existing}`, gate: "deferred/distill-update", update: true, ...extra });
-    const all: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true };
+    const all: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, not_copied: true, no_new_lesson: true };
 
     test("right when one pending update on the existing lesson keeps every line, adds the facts and claims nothing else", () => {
       const row = scoreCase(u, run([update(u.good as string)]));
@@ -1090,6 +1209,12 @@ describe("what akm did", () => {
       const over = scoreCase(u, run([update(u.bad as string)]));
       expect(over).toMatchObject({ verdict: "bad", checks: { ...all, no_extra_claims: false } });
       expect(over.forbidden.length).toBeGreaterThan(0);
+    });
+
+    test("the existing lesson with the memory appended passes the other checks and fails not_copied (#55)", () => {
+      const row = scoreCase(u, run([update(`${(u.good as string).split("\n").slice(0, 2).join("\n")}\n${memoryBody(u.memory)}`)]));
+      expect(row).toMatchObject({ verdict: "bad", outcome: "update", checks: { ...all, not_copied: false }, copied: 1, missing: [], forbidden: [], contradicted: [] });
+      expect(metrics([row]).lesson_updates).toMatchObject({ n: 1, right: 0, checks: { update_proposed: 1, existing_kept: 1, new_facts: 1, no_extra_claims: 1, not_copied: 0, no_new_lesson: 1 } });
     });
 
     test("an update that adds nothing has no new facts", () => {
@@ -1156,7 +1281,7 @@ describe("metrics", () => {
       row("g", "restates-asset", "right"),
       row("h", "duplicate-lesson", "error"),
     ]);
-    expect(m.good_lessons).toEqual({ n: 4, good: 1, rate: 0.25 });
+    expect(m.good_lessons).toEqual({ n: 4, good: 1, rate: 0.25, ambiguous: 0 });
     expect(m.wrong_lessons).toEqual({ n: 3, wrong: 1, rate: 0.3333 });
     expect(m.by_class).toEqual({
       "lesson-worthy": { n: 2, good: 1, rate: 0.5 },
@@ -1165,14 +1290,14 @@ describe("metrics", () => {
       "restates-asset": { n: 1, wrong: 0, rate: 0 },
       "duplicate-lesson": { n: 0, wrong: 0, rate: null },
     });
-    expect(m.bad_by).toEqual({ missing_fact: 1, forbidden_claim: 1, contradiction: 1, too_long: 1 });
+    expect(m.bad_by).toEqual({ missing_fact: 1, forbidden_claim: 1, contradiction: 1, too_long: 1, copied: 0 });
     expect(m.outcomes.lesson).toEqual({ lesson: 3, update: 0, skipped: 0, rejected: 1, invalid: 0, error: 0 });
     expect(m.outcomes.none).toEqual({ lesson: 1, update: 0, skipped: 2, rejected: 0, invalid: 0, error: 1 });
     expect(m.lesson_updates).toMatchObject({ n: 0, right: 0, rate: null });
   });
 
   test("lesson updates are counted apart: they are in neither good_lessons nor wrong_lessons", () => {
-    const ok: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, no_new_lesson: true };
+    const ok: UpdateChecks = { update_proposed: true, existing_kept: true, new_facts: true, no_extra_claims: true, not_copied: true, no_new_lesson: true };
     const upd = (id: string, verdict: Row["verdict"], outcome: Row["outcome"], checks: UpdateChecks | null) => ({ ...row(id, "lesson-update", verdict, { outcome, checks }), expect: "update" as const });
     const m = metrics([
       row("a", "lesson-worthy", "good"),
@@ -1180,23 +1305,209 @@ describe("metrics", () => {
       row("c", "duplicate-lesson", "wrong", { outcome: "update" }),
       upd("u1", "right", "update", ok),
       upd("u2", "bad", "update", { ...ok, new_facts: false }),
-      upd("u3", "bad", "lesson", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: false }),
-      upd("u4", "missed", "skipped", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, no_new_lesson: true }),
+      upd("u3", "bad", "lesson", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, not_copied: null, no_new_lesson: false }),
+      upd("u4", "missed", "skipped", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, not_copied: null, no_new_lesson: true }),
       upd("u5", "error", "error", null),
     ]);
-    expect(m.good_lessons).toEqual({ n: 1, good: 1, rate: 1 });
+    expect(m.good_lessons).toEqual({ n: 1, good: 1, rate: 1, ambiguous: 0 });
     expect(m.wrong_lessons).toEqual({ n: 2, wrong: 1, rate: 0.5 });
-    expect(m.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 1, no_extra_claims: 2, no_new_lesson: 3 } });
+    expect(m.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, ambiguous: 0, checks: { update_proposed: 2, existing_kept: 2, new_facts: 1, no_extra_claims: 2, not_copied: 2, no_new_lesson: 3 } });
     expect(m.by_class["lesson-update"]).toEqual({ n: 4, right: 1, rate: 0.25 });
     expect(m.outcomes.update).toEqual({ lesson: 1, update: 2, skipped: 1, rejected: 0, invalid: 0, error: 1 });
     expect(m.outcomes.none.update).toBe(1);
-    expect(m.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, too_long: 0 });
+    expect(m.bad_by).toEqual({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, too_long: 0, copied: 0 });
   });
 
   test("an empty run has no rates", () => {
     const m = metrics([]);
-    expect(m.good_lessons).toEqual({ n: 0, good: 0, rate: null });
+    expect(m.good_lessons).toEqual({ n: 0, good: 0, rate: null, ambiguous: 0 });
     expect(m.by_class).toEqual({});
   });
 });
 
+describe("the baselines of the README's 'For scale'", () => {
+  const cases = loadCases(PUBLIC);
+  const improve = (outcome: string) => ({ ok: true, actions: [{ mode: "distill", result: { outcome } }] });
+  const queued = (c: LoadedCase, content: string, update = false): Proposal => ({
+    ref: update ? `bundle//lessons/${c.existing}` : `bundle//lessons/memory-${c.name}-lesson`,
+    status: "pending",
+    gate: update ? "deferred/distill-update" : "deferred/distill-review",
+    scores: { novelty: 4, nonRedundancy: 5, grounding: 5 },
+    reason: "ok",
+    content,
+    update,
+  });
+  const score = (make: (c: LoadedCase) => Proposal[]) => metrics(cases.map((c) => scoreCase(c, { improve: improve(make(c).length > 0 ? "queued" : "skipped"), proposals: make(c), seconds: 1 })));
+
+  test("a distill that queues the memory pasted back for every memory, and for an update the old lesson with the memory added, is bad on every lesson and update case (#55)", () => {
+    const m = score((c) => {
+      if (c.expect === "update") return [queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.existingBody}\n${memoryBody(c.memory)}\n`, true)];
+      return [queued(c, c.memory)];
+    });
+    expect(m.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
+    expect(m.lesson_updates).toMatchObject({ n: 8, right: 0, rate: 0, checks: { update_proposed: 8, existing_kept: 8, new_facts: 8, no_extra_claims: 8, not_copied: 0, no_new_lesson: 8 } });
+    expect(m.wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
+    expect(m.bad_by).toMatchObject({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, copied: 14 }); // the copy states every fact and claims nothing: only the copy check fails it
+  });
+
+  test("a distill that queues a lesson for every memory has wrong_lessons at 16/16, and one that queues nothing has good_lessons at 0/14", () => {
+    expect(score((c) => [queued(c, "---\ndescription: d\nwhen_to_use: w\n---\nBody.\n")]).wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
+    const nothing = score(() => []);
+    expect(nothing.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
+    expect(nothing.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
+    expect(nothing.lesson_updates).toMatchObject({ n: 8, right: 0 });
+  });
+
+  test("the good example lessons and updates, queued as they are, score good and right", () => {
+    const m = score((c) => {
+      if (c.expect === "none") return [];
+      return [c.expect === "update" ? queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`, true) : queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`)];
+    });
+    expect(m.good_lessons).toEqual({ n: 14, good: 14, rate: 1, ambiguous: 0 });
+    expect(m.lesson_updates).toMatchObject({ n: 8, right: 8 });
+    expect(m.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
+  });
+});
+
+
+// A negation over a verb the shared rule does not list stands, so it still excuses a claim and denies an action. The row names the phrase
+// under `ambiguous` and the verdict is as it was (#45, as extract does).
+describe("a negation the shared rule cannot read marks the phrase ambiguous (#45)", () => {
+  const skip = [["always skip", "skip * test"]];
+  const wait = [["=wait for networkidle", "wait for networkidle"]];
+  const layouts = [["works * all * layout"]];
+  const heading = ["+wait * heading", "+wait * visible"];
+  const reads = (text: string, groups: string[][], actions = false) => {
+    const { claims: asserted, ambiguous } = readClaims(text, groups, actions);
+    return { text, asserted, ambiguous };
+  };
+
+  test("the three sentences of the issue are not claims, and they are flagged, read as a fact and as an action", () => {
+    const issue: [string, string][] = [
+      ["I do not think we should always skip tests.", "always skip"],
+      ["The agent did not ignore the instruction to always skip tests.", "always skip"],
+      ["Not skipping tests is a mistake.", "skip * test"],
+    ];
+    for (const [text, phrase] of issue) {
+      for (const actions of [false, true]) expect(reads(text, skip, actions)).toEqual({ text, asserted: [], ambiguous: [phrase] });
+    }
+  });
+
+  test("the same forms against a contradiction, a claim and a required action of the public cases", () => {
+    expect(reads("I do not think we should wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("The team did not ignore the advice to wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("Not to wait for networkidle would be a mistake.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("Not waiting for networkidle is wrong.", [["wait for networkidle"]], true).ambiguous).toEqual(["wait for networkidle"]);
+    for (const text of [
+      "The team did not dispute that the fix works on all layouts.",
+      "There is no doubt that the fix works on all layouts.",
+      "We cannot deny that the fix works on all layouts.",
+      "I do not think the fix works on all layouts.",
+      "The fix works on all layouts, not just one.",
+      "It does not fix the footnote and works on all layouts.",
+    ]) {
+      expect(reads(text, layouts)).toEqual({ text, asserted: [], ambiguous: ["works * all * layout"] });
+    }
+    expect(readStated("I do not think we should wait for the visible heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("It is not wise to wait for the visible heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("Do not rely on networkidle to wait for the heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("Not waiting for the visible heading is a mistake.", heading)).toEqual({ stated: false, ambiguous: "+wait * heading" });
+  });
+
+  test("the verdict is as the word order has it: a phrase behind such a negation is not a claim, and a required action under one is still stated", () => {
+    expect(claims("I do not think we should always skip tests.", skip)).toEqual([]);
+    expect(stated("I do not think we should wait for the visible heading.", heading)).toBe(true);
+    expect(stated("Not waiting for the visible heading is a mistake.", heading)).toBe(false);
+  });
+
+  test("the sentences that the other tests of this file assert as denials are not flagged", () => {
+    const plain = (texts: string[], groups: string[][]): [string, string[][]][] => texts.map((t) => [t, groups]);
+    const actions: [string, string[][]][] = [
+      ...plain(
+        ["Never wait for networkidle.", "You should never wait for networkidle.", "Do not wait for networkidle.", "Don't wait for networkidle.", "Try not to wait for networkidle.", "There is no need to wait for networkidle.", "Do not rely on the timeout to wait for networkidle.", "Do not think it is wise to wait for networkidle.", "It is not wise to wait for networkidle.", "Never wait for networkidle and never wait for networkidle.", "Rather than wait for networkidle, wait for the heading."],
+        wait,
+      ),
+      ...plain(
+        ["Avoid waiting for networkidle.", "Try to avoid waiting for networkidle.", "Stop waiting for networkidle.", "Skip waiting for networkidle.", "Instead of waiting for networkidle.", "Rather than waiting for networkidle.", "Finish without waiting for networkidle.", "Avoid having to wait for networkidle.", "Do not forget to avoid waiting for networkidle.", "Never fail to avoid waiting for networkidle.", "Do not hesitate to skip waiting for networkidle.", "Do not hesitate to not wait for networkidle.", "Do not hesitate to never wait for networkidle."],
+        [["wait for networkidle"]],
+      ),
+      ...plain(["Do not skip tests.", "It is not wise to always skip tests.", "The team does not plan to skip tests.", "Do not rush to always skip tests."], skip),
+      ...plain(["Do not set SKIP_TESTS=1 when CI is red."], [["skip_tests"]]),
+    ];
+    for (const [text, groups] of actions) expect(reads(text, groups, true)).toEqual({ text, asserted: [], ambiguous: [] });
+    for (const text of [
+      "It doesn't work on all layouts.",
+      "The fix does not work on all layouts.",
+      "We cannot say that the fix works on all layouts.",
+      "We do not say it works on all layouts.",
+      "We do not know if it works on all layouts.",
+      "It has not been confirmed that the fix works on all layouts.",
+      "It was not verified that the fix works on all layouts.",
+      "The fix works on all layouts, which has not been confirmed.",
+      "The fix works on all layouts, which is not true.",
+      "The fix works on all layouts but I did not test it.",
+    ]) {
+      expect(reads(text, layouts)).toEqual({ text, asserted: [], ambiguous: [] });
+    }
+    expect(reads("Not enough, but it is enough.", [["is enough"]])).toEqual({ text: "Not enough, but it is enough.", asserted: [], ambiguous: [] });
+    for (const text of ["Never wait for the visible heading.", "Avoid waiting for the heading.", "Do not wait for networkidle, wait for the heading.", "Do not hesitate to wait for the heading.", "Do not use networkidle and wait for the heading.", "Wait for the heading. I do not think we should wait for the heading."]) {
+      expect({ text, ambiguous: readStated(text, heading).ambiguous }).toEqual({ text, ambiguous: undefined });
+    }
+  });
+
+  test("a group with a claim is a claim, and a doubt that excuses the phrase is not an ambiguity", () => {
+    const text = "I do not think the fix works on all layouts. The fix works on all layouts.";
+    expect(reads(text, layouts)).toEqual({ text, asserted: ["works * all * layout"], ambiguous: [] });
+    expect(readClaims("We do not think it is known whether the fix works on all layouts.", layouts).ambiguous).toEqual([]);
+    expect(readStated("I do not think we should wait for the heading. Wait for the heading.", heading)).toEqual({ stated: true });
+  });
+
+  test("a plain denial beside one the rule cannot read is flagged, and a negation that something else ends leaves the verdict to the next", () => {
+    expect(reads("The team does not want to stop skipping tests.", skip, true).ambiguous).toEqual(["skip * test"]);
+    expect(reads("A search that finds no references does not prove a function is unused.", [["prove * unused"]], true)).toMatchObject({ asserted: [], ambiguous: [] });
+    expect(reads("Do not use waitForSelector and wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+  });
+
+  test("checkLesson names the phrases, and the good, bad and reversed wording of every public case is flagged only where it hides a claim", () => {
+    const c = loadCases(PUBLIC).find((x) => x.id === "lesson-01") as LoadedCase;
+    const body = (text: string) => `The support chat widget polls every 20 seconds, so the network is never idle. ${text}`;
+    expect(checkLesson(c, body("I do not think we should wait for networkidle on this page. Wait for a specific element instead, such as the page heading being visible."), c.memory)).toMatchObject({ good: true, contradicted: [], ambiguous: ["=wait for networkidle"] });
+    expect(checkLesson(c, body("The team did not ignore the advice to wait for networkidle, and also waits for the page heading to be visible."), c.memory)).toMatchObject({ good: true, contradicted: [], ambiguous: ["=wait for networkidle"] });
+    expect(checkLesson(c, body("I do not think we should wait for the page heading."), c.memory)).toMatchObject({ good: true, missing: [], ambiguous: ["+wait * heading"] });
+    expect(checkLesson(c, body("Not waiting for the page heading is a mistake."), c.memory)).toMatchObject({ good: false, missing: ["+wait * heading"], ambiguous: ["+wait * heading"] });
+    expect(checkLesson(c, body("Do not wait for networkidle. Wait for the page heading to be visible."), c.memory)).toMatchObject({ good: true, ambiguous: [] });
+    // the bad lesson of claim-03 says "no breaking changes, so every service can upgrade": it is bad for the first claim, and the second hides behind the "no"
+    const upgrade = loadCases(PUBLIC).find((x) => x.id === "claim-03") as LoadedCase;
+    expect(checkLesson(upgrade, upgrade.bad as string, upgrade.memory)).toMatchObject({ good: false, ambiguous: ["every service * can upgrade"] });
+    for (const x of loadCases(PUBLIC).filter((y) => y.expect !== "none" && y.id !== "claim-03")) {
+      for (const text of [x.good, x.bad, x.reversed].filter((t): t is string => typeof t === "string")) {
+        const ambiguous = x.expect === "update" ? checkUpdate(x, x.existingBody as string, text, x.memory).ambiguous : checkLesson(x, text, x.memory).ambiguous;
+        expect({ id: x.id, ambiguous }).toEqual({ id: x.id, ambiguous: [] });
+      }
+    }
+  });
+
+  test("an update is read the same way, over the lines it adds", () => {
+    const u = loadCases(PUBLIC).find((x) => x.id === "upd-02") as LoadedCase;
+    const existing = u.existingBody as string;
+    const added = (line: string) => checkUpdate(u, existing, `${existing}\n${line}`, u.memory);
+    expect(added("The runner has sorted the test files by name since version 4.2. I do not think the test order is random.")).toMatchObject({ forbidden: [], ambiguous: [] });
+    expect(added("The runner has sorted the test files by name since version 4.2. The team did not dispute that tests run in parallel.")).toMatchObject({ forbidden: [], ambiguous: ["in parallel"] });
+  });
+
+  test("the metrics count the lessons and the updates to read, apart from the verdicts", () => {
+    const base = (id: string, klass: Class, verdict: Row["verdict"], ambiguous: string[]): Row => ({
+      ...errorRow({ id, class: klass, expect: klass === "lesson-update" ? "update" : "lesson" } as LoadedCase, "", 1),
+      verdict,
+      outcome: klass === "lesson-update" ? "update" : "lesson",
+      error: undefined,
+      ambiguous,
+    });
+    const m = metrics([base("a", "lesson-worthy", "good", ["x"]), base("b", "lesson-worthy", "good", []), base("c", "over-claim", "bad", ["y"]), base("d", "lesson-update", "right", ["z"]), base("e", "lesson-update", "bad", [])]);
+    expect(m.good_lessons).toMatchObject({ n: 3, good: 2, ambiguous: 2 });
+    expect(m.lesson_updates).toMatchObject({ n: 2, right: 1, ambiguous: 1 });
+    // a row stored before the check has no list, and an errored case is left out
+    const old = { ...base("f", "lesson-worthy", "good", []), ambiguous: undefined } as unknown as Row;
+    expect(metrics([old, base("g", "lesson-worthy", "error", ["x"])]).good_lessons).toMatchObject({ n: 1, ambiguous: 0 });
+  });
+});

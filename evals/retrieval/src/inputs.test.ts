@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { rewriteConfig, writeRewriteConfig, resolveCorpora } from "../../../lib/corpus.ts";
 import { sha256Files } from "../../../lib/provenance.ts";
 import { type AssetsDigests, REWRITE_CODE, assetsDigests, assetsSha256, filesUnder, inFolder, manifestSha256, publicInputs, publicInputsSha256, readGenerated, readSeed, rewriteSha256, staleAssets } from "./inputs.ts";
 
@@ -141,12 +142,70 @@ describe("readSeed", () => {
 });
 
 describe("rewriteSha256", () => {
-  test("is one digest over the rewrite, its lexicon and generate, read from this repository", () => {
+  test("is one digest over the rewrite, its lexicon, generate and the file that lists what generate reads, read from this repository", () => {
     const root = resolve(import.meta.dir, "..", "..", "..");
-    expect(REWRITE_CODE).toEqual([join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts")]);
+    expect(REWRITE_CODE).toEqual([join("lib", "rewrite", "rewrite.ts"), join("lib", "rewrite", "lexicon.ts"), join("evals", "retrieval", "src", "generate.ts"), join("evals", "retrieval", "src", "inputs.ts")]);
     expect(rewriteSha256()).toMatch(/^[0-9a-f]{64}$/);
     expect(rewriteSha256()).toBe(inFolder(root, () => sha256Files(REWRITE_CODE)));
     expect(rewriteSha256()).toBe(rewriteSha256()); // the working folder is put back
+  });
+});
+
+describe("what the digest of the generator covers (#44)", () => {
+  const root = resolve(import.meta.dir, "..", "..", "..");
+
+  /** The files a source file imports by a relative path, from the repository root with forward slashes. (lib/closure.ts cannot read a file that starts with a #! line, which both of these do.) */
+  const importsOf = (file: string): string[] =>
+    new Bun.Transpiler({ loader: "ts" })
+      .scanImports(readFileSync(join(root, file), "utf8").replace(/^#!.*\n/, ""))
+      .map((i) => i.path)
+      .filter((p) => p.startsWith("."))
+      .map((p) => join(dirname(file), p));
+
+  test("every file of lib/rewrite that runs, and every file the rewrite imports, is in it", () => {
+    const code = readdirSync(join(root, "lib", "rewrite")).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => join("lib", "rewrite", f)).sort();
+    expect(code).toEqual([join("lib", "rewrite", "lexicon.ts"), join("lib", "rewrite", "rewrite.ts")]); // a new file here must be added to REWRITE_CODE and to this list
+    for (const file of code) expect(REWRITE_CODE).toContain(file);
+    // generate runs lib/rewrite/rewrite.ts as a command: what that imports is covered as well
+    expect(importsOf(join("lib", "rewrite", "rewrite.ts"))).toEqual([join("lib", "rewrite", "lexicon.ts")]);
+    expect(importsOf(join("lib", "rewrite", "lexicon.ts"))).toEqual([]);
+  });
+
+  test("generate.ts is in it, and what it imports besides the rewrite and inputs.ts only checks the result or reads the public files", () => {
+    expect(REWRITE_CODE).toContain(join("evals", "retrieval", "src", "generate.ts"));
+    const outside = importsOf(join("evals", "retrieval", "src", "generate.ts")).filter((f) => !REWRITE_CODE.includes(f)).sort();
+    // akm.ts and lib/akm index the made library in a sandbox to check it, and lib.ts parses the public queries and qrels. A new import is a decision: does it change what generate writes?
+    expect(outside).toEqual([join("evals", "retrieval", "src", "akm.ts"), join("evals", "retrieval", "src", "lib.ts"), join("lib", "akm", "akm.ts")]);
+  });
+
+  test("a change to any of the four files changes the digest", () => {
+    const copy = tmp();
+    for (const file of REWRITE_CODE) put(copy, { [file]: `// ${file}\n` });
+    const digest = () => inFolder(copy, () => sha256Files(REWRITE_CODE));
+    const before = digest();
+    for (const file of REWRITE_CODE) {
+      put(copy, { [file]: `// ${file}\n// edited\n` });
+      expect(digest()).not.toBe(before);
+      put(copy, { [file]: `// ${file}\n` });
+      expect(digest()).toBe(before);
+    }
+  });
+
+  test("assets whose stored digest is zeroed are refused, and freshly made ones pass, with the corpus.json that ./generate-assets writes beside them", () => {
+    const repo = tmp();
+    put(repo, REPO);
+    const dir = join(repo, "private", "retrieval");
+    const assets = join(dir, "assets");
+    put(assets, { "generated.json": JSON.stringify({ seed: "7", inputs_sha256: publicInputsSha256(repo), rewrite: rewriteSha256() }) });
+    writeRewriteConfig(dir);
+    const [custom] = resolveCorpora({ eval: "retrieval", values: { corpus: "custom" }, publicFolder: join(repo, "evals", "retrieval", "assets"), default: "rewrite", root: repo });
+    expect(custom).toMatchObject({ name: "custom", folder: assets, config: { kind: "rewrite", private: false, seed: "7" } });
+    expect(rewriteConfig(dir)).toEqual({ kind: "rewrite", private: false, seed: "7", generated: "assets/generated.json" });
+    expect(staleAssets(custom.folder, repo, "private/retrieval/assets")).toBeUndefined();
+    put(assets, { "generated.json": JSON.stringify({ seed: "7", inputs_sha256: publicInputsSha256(repo), rewrite: "0".repeat(64) }) });
+    expect(staleAssets(custom.folder, repo, "private/retrieval/assets")).toBe(
+      "the private assets in private/retrieval/assets/ were made by a rewrite that has changed since: lib/rewrite, its lexicon or the tools that generate pins. Make them again with: ./generate-assets --only retrieval",
+    );
   });
 });
 

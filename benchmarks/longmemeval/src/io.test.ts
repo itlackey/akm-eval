@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { akmVersion, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import { Akm, PROJECTION_LIMIT, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import { fakeAkmScript, sandboxRunning } from "./fakes.ts";
-import { TEMPERATURE, chat, chatUrl, endpointHost } from "./llm.ts";
+import { TEMPERATURE, chat } from "./llm.ts";
 
 const dirs: string[] = [];
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -80,9 +80,19 @@ describe("chat", () => {
     expect(calls).toBe(1);
   });
 
-  test("accepts a full chat-completions URL", () => {
-    expect(chatUrl("http://h/v1")).toBe("http://h/v1/chat/completions");
-    expect(chatUrl("http://h/v1/chat/completions/")).toBe("http://h/v1/chat/completions");
+  test("calls the chat-completions URL of a base URL: /chat/completions goes before any query, and is not added twice (#73)", async () => {
+    const seen: string[] = [];
+    server = Bun.serve({ port: 0, fetch: (req) => (seen.push(new URL(req.url).pathname + new URL(req.url).search), reply("ok")) });
+    const at = (rest: string) => ({ baseUrl: `http://127.0.0.1:${server?.port}${rest}`, apiKey: "", model: "m" });
+    for (const rest of ["/v1", "/v1/", "/v1/chat/completions/", "/openai/deployments/d1?api-version=2024-10-21", "/openai/deployments/d1/?api-version=2024-10-21", "/openai/deployments/d1/chat/completions?api-version=2024-10-21"]) await chat(at(rest), "p");
+    expect(seen).toEqual([
+      "/v1/chat/completions",
+      "/v1/chat/completions",
+      "/v1/chat/completions",
+      "/openai/deployments/d1/chat/completions?api-version=2024-10-21",
+      "/openai/deployments/d1/chat/completions?api-version=2024-10-21",
+      "/openai/deployments/d1/chat/completions?api-version=2024-10-21",
+    ]);
   });
 
   test("sends the temperature it records, unless asked for another", async () => {
@@ -93,14 +103,6 @@ describe("chat", () => {
     await chat(endpoint, "p", { temperature: 0.7 });
     expect(TEMPERATURE).toBe(0);
     expect(bodies.map((b) => b.temperature)).toEqual([TEMPERATURE, 0.7]);
-  });
-
-  test("names an endpoint by its host, with no path, query or credentials", () => {
-    expect(endpointHost("https://api.openai.com/v1")).toBe("api.openai.com");
-    expect(endpointHost("http://localhost:8080/v1/chat/completions?key=1")).toBe("localhost:8080");
-    expect(endpointHost("https://user:secret@gateway.example:8443/v1")).toBe("gateway.example:8443");
-    expect(endpointHost("not a url")).toBeNull();
-    expect(endpointHost("")).toBeNull();
   });
 });
 

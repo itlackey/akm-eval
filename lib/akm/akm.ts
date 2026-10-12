@@ -17,25 +17,28 @@
 // part is taken as it is, a double-quoted part keeps its whitespace and takes \" \\ \$ and \` as the character after the backslash,
 // and outside quotes a backslash makes the next character part of the word. Nothing is evaluated: no $VARIABLE, no `command`, no
 // glob. A word that starts with ~/ starts at your home folder, quoted or not, unless a backslash comes before its ~. So
-// bun "/tmp/checkout with spaces/cli.ts" is two words, and so is bun ~/code/akm/src/cli.ts.
+// bun "/tmp/checkout with spaces/cli.ts" is two words, and so is bun ~/code/akm/src/cli.ts. akm runs in the sandbox's folder, so a
+// relative path is made absolute against the folder the eval was started in (see absoluteWords): bun ./src/cli.ts works from a checkout.
 //
-// What akm runs with: its own folders, and the environment of the caller without anything that looks like a credential: no
-// variable whose name contains KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH, in any case (OPENAI_API_KEY, GROQ_KEY, HF_TOKEN,
-// SSH_AUTH_SOCK). The exceptions are the variables that the akm config of the sandbox names as $NAME (or ${NAME}): writeConfig reads
-// the config it writes and gives akm those and no others, so a config with two engines gets the key of each, and a key that the
-// config does not name never reaches akm. { keepModelKey: true } gives akm MODEL_API_KEY whatever the config says.
+// What akm runs with: its own folders, and from the environment of the caller only what a process needs to start and to reach the
+// network: PATH, HOME, the locale, the proxy and certificate settings, the author for a commit, and the like (see ALLOWED_ENV).
+// Everything else stays behind, a credential or not, whatever its name (MYSQL_PWD, GH_PAT, DATABASE_URL, SESSION_COOKIE), so a secret
+// that no name pattern thought of never reaches akm. The exceptions are the variables that the akm config of the sandbox names as
+// $NAME (or ${NAME}): writeConfig reads the config it writes and gives akm those and no others, so a config with two engines gets the
+// key of each, and a key that the config does not name never reaches akm. { keepModelKey: true } gives akm MODEL_API_KEY whatever the
+// config says.
 
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export interface Sandbox {
   dir: string; // the temp folder, and the working folder of every akm run
   cmd: string[]; // the akm command: the words of AKM_BIN, or `akm`
   env: Record<string, string>; // the environment akm runs in
-  keep?: string[]; // the credential variables the caller gave akm whatever the config says: MODEL_API_KEY for keepModelKey
-  referenced?: string[]; // the credential variables the config in this sandbox names as $NAME, which env holds. writeConfig sets it
+  keep?: string[]; // the variables the caller gave akm whatever the config says: MODEL_API_KEY for keepModelKey
+  referenced?: string[]; // the variables the config in this sandbox names as $NAME that ALLOWED_ENV does not list, which env holds. writeConfig sets it
 }
 
 export interface AkmResult {
@@ -52,6 +55,8 @@ const FOLDERS = ["bundle", "config", "data", "cache", "state", "xdg-config", "xd
 const DEFAULT_TIMEOUT_MS = 15 * 60_000; // a command that calls a model can take minutes
 
 // Keyword search only and no registries: akm needs no model download and never goes to the network.
+// `configVersion` here and the provider kind of the engine in engineConfig are pinned on purpose, not taken from the akm under test: a
+// pinned config is what lets a run on one akm release compare with a run on another (#52). A --config-patch can set another.
 const plainConfig = () => ({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
 
 /** The model of akm's built-in embedder, bge-small-en-v1.5, which runs in the akm process: no model service. It is akm 0.9.26's default. */
@@ -74,24 +79,32 @@ export const INDEX_CACHE = join(CACHE, "akm-index");
 // within embedding.queryTimeoutMs, 3 seconds unless set: 2 calls of 96 did at eight at once on a busy machine. So the wait is long.
 export const semanticConfig = () => ({ ...plainConfig(), semanticSearchMode: "auto", embedding: { localModel: SEMANTIC_MODEL, queryTimeoutMs: 10 * 60_000 } });
 
-/** Names that contain one of those words and hold none: git reads the author of a commit from them. */
-const NOT_CREDENTIALS = new Set(["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE"]);
+/**
+ * The variables of the caller that akm may read, by name: what a process needs to start (PATH, HOME, the locale, the temp folder, the
+ * version managers whose shims find node or bun), to reach the network (the proxy and certificate settings, a Hugging Face mirror) and
+ * to commit (the author). It lists what akm needs, not what to hide, so a kind of secret nobody has named yet is kept out as well.
+ */
+const ALLOWED_ENV = [
+  /^(PATH|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|TERM|COLORTERM|NO_COLOR|FORCE_COLOR|CI|TZ|TMPDIR|TMP|TEMP)$/,
+  /^(LC|XDG)_/,
+  /^(SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|NODE_EXTRA_CA_CERTS)$/,
+  /^(https?|all|no)_proxy$/i,
+  /^GIT_(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)$/,
+  /^HF_(HOME|ENDPOINT|HUB_OFFLINE)$/,
+  /^FAKE_/, // the settings of the fake akm that the tests run in its place
+  /^(NODE_OPTIONS|NODE_PATH|BUN_INSTALL|NVM_DIR|VOLTA_HOME|ASDF_DATA_DIR|MISE_DATA_DIR|FNM_DIR)$/,
+];
 
-/** Does a variable look like it holds a credential, going by its name: it contains KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH, in any case. */
-const looksLikeCredential = (name: string): boolean => /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH/i.test(name) && !NOT_CREDENTIALS.has(name);
+const allowed = (name: string): boolean => ALLOWED_ENV.some((re) => re.test(name));
 
 /**
- * The environment akm runs in: its own folders under `dir`, none of the caller's AKM_ settings, and no variable that looks
- * like a credential (see looksLikeCredential), except those in `keep`. The ones the config names are added by writeConfig.
- * A semantic sandbox keeps the embedder's model in MODEL_CACHE.
+ * The environment akm runs in: its own folders under `dir`, the variables of the caller that ALLOWED_ENV lists (none of its AKM_
+ * settings among them), and those in `keep`. The ones the config names are added by writeConfig. A semantic sandbox keeps the
+ * embedder's model in MODEL_CACHE.
  */
 function sandboxEnv(dir: string, keep: string[], semantic: boolean): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (v === undefined || k.startsWith("AKM_")) continue;
-    if (looksLikeCredential(k) && !keep.includes(k)) continue;
-    env[k] = v;
-  }
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && (allowed(k) || keep.includes(k))) env[k] = v;
   return {
     ...env,
     AKM_BUNDLE_DIR: join(dir, "bundle"),
@@ -163,12 +176,25 @@ const quoteWord = (word: string): string => (/^[A-Za-z0-9_@%+=:,./~-]+$/.test(wo
 /** The words of a command as one line that parseCommand reads back to the same words: AKM_BIN for a script at a path with a space in it. */
 export const commandLine = (words: string[]): string => words.map(quoteWord).join(" ");
 
-/** The akm command: the words of AKM_BIN (see parseCommand), or `akm`. */
+/**
+ * The words with each relative path made absolute against the caller's folder, since akm runs in the sandbox's folder, where a relative
+ * path no longer resolves. A first word with a / in it is a path, as a shell reads it. A later word is one only if it has a / and a file
+ * or folder of that name is in the caller's folder, so `npx @scope/akm-cli` and `bun run` stay as they are. A word that starts with - is a flag.
+ */
+function absoluteWords(words: string[]): string[] {
+  return words.map((word, i) => {
+    if (!word.includes("/") || word.startsWith("-") || isAbsolute(word)) return word;
+    const path = resolve(word);
+    return i === 0 || existsSync(path) ? path : word;
+  });
+}
+
+/** The akm command: the words of AKM_BIN (see parseCommand, and absoluteWords for a relative path), or `akm`. */
 function akmCommand(): string[] {
   const bin = process.env.AKM_BIN?.trim();
   if (!bin) return ["akm"];
   try {
-    const words = parseCommand(bin);
+    const words = absoluteWords(parseCommand(bin));
     return words.length > 0 ? words : ["akm"];
   } catch (e) {
     throw new Error(`AKM_BIN is not a command: ${(e as Error).message}`);
@@ -181,8 +207,9 @@ export const akmUsage = `  --akm           the command that runs akm, such as "b
 
 /**
  * Runs this process's akm as `--akm` says, which wins over AKM_BIN. It is read as AKM_BIN is (see parseCommand): a path with spaces
- * is quoted, and a leading ~/ in a word is your home folder. AKM_BIN is set to the command as it was read, with the home folder
- * written out and each word quoted if it needs it. `fail` ends the run with a message.
+ * is quoted, a leading ~/ in a word is your home folder, and a relative path is taken from the folder you are in (see absoluteWords).
+ * AKM_BIN is set to the command as it was read, with the home folder and the paths written out and each word quoted if it needs it.
+ * `fail` ends the run with a message.
  */
 export function useAkm(values: { akm?: string }, fail: (message: string) => never, env: Record<string, string | undefined> = process.env): void {
   if (values.akm === undefined) return;
@@ -194,12 +221,12 @@ export function useAkm(values: { akm?: string }, fail: (message: string) => neve
     fail(`--akm is not a command: ${(e as Error).message}`);
   }
   if (words.length === 0) fail("--akm needs the command that runs akm");
-  env.AKM_BIN = commandLine(words);
+  env.AKM_BIN = commandLine(absoluteWords(words));
 }
 
 /**
  * Makes a sandbox in the folder `dir`, which it makes if need be: akm's own folders and config in it, unless the folder has a config already. akm is `AKM_BIN`, a command
- * line such as `bun /path/to/akm/src/cli.ts` (see parseCommand), or `akm`. akm gets none of the caller's credentials (see the top of this file), and
+ * line such as `bun /path/to/akm/src/cli.ts` (see parseCommand), or `akm`. akm gets only the variables the top of this file lists, and
  * MODEL_API_KEY only if the config names it as $MODEL_API_KEY, as engineConfig does, or `keepModelKey` is set. The config starts plain, keyword search
  * only: replace it with writeConfig. With `semantic`, it starts as keyword search fused with the vectors of akm's built-in
  * embedder, whose model is kept in the repository's .cache/ and downloaded once. akm answers such a query with
@@ -223,7 +250,13 @@ export function sandboxIn(dir: string, opts: { keepModelKey?: boolean; semantic?
 
 /** A sandbox in a new temp folder, akm-eval-<name>-<random>, for removeSandbox to remove. See sandboxIn. */
 export function createSandbox(name: string, opts: { keepModelKey?: boolean; semantic?: boolean } = {}): Sandbox {
-  return sandboxIn(mkdtempSync(join(tmpdir(), `akm-eval-${name}-`)), opts);
+  const dir = mkdtempSync(join(tmpdir(), `akm-eval-${name}-`));
+  try {
+    return sandboxIn(dir, opts);
+  } catch (e) {
+    rmSync(dir, { recursive: true, force: true }); // an AKM_BIN that is not a command ends here, and the folder would stay
+    throw e;
+  }
 }
 
 export function removeSandbox(sandbox: Sandbox): void {
@@ -243,12 +276,12 @@ function referencedVariables(config: unknown): string[] {
 }
 
 /**
- * Gives akm the credential variables that this config names as $NAME, from this process's environment, and takes back those that an
- * earlier config named and this one does not (unless the caller asked to keep them). A variable that does not look like a credential
- * is in the environment already, and a name akm sets itself (AKM_) is never the caller's.
+ * Gives akm the variables that this config names as $NAME, from this process's environment, and takes back those that an earlier
+ * config named and this one does not (unless the caller asked to keep them). A variable that ALLOWED_ENV lists is in the environment
+ * already, and a name akm sets itself (AKM_) is never the caller's.
  */
 function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
-  const named = referencedVariables(config).filter((name) => looksLikeCredential(name) && !name.startsWith("AKM_"));
+  const named = referencedVariables(config).filter((name) => !allowed(name) && !name.startsWith("AKM_"));
   for (const name of sandbox.referenced ?? []) if (!named.includes(name) && !(sandbox.keep ?? []).includes(name)) delete sandbox.env[name];
   for (const name of named) {
     const value = process.env[name];
@@ -257,7 +290,7 @@ function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
   sandbox.referenced = named;
 }
 
-/** Writes akm's config file in the sandbox, in place of the one there, and gives akm the credential variables that the config names as $NAME, and no others. */
+/** Writes akm's config file in the sandbox, in place of the one there, and gives akm the variables that the config names as $NAME, and no others. */
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
   giveReferencedVariables(sandbox, config);
@@ -342,7 +375,9 @@ export function agentDetailArgs(sandbox: Sandbox): Promise<string[]> {
 /**
  * Which akm ran, for summary.json, next to akm_version: `akm_bin` is the AKM_BIN command (or `akm`) with the home folder
  * written as `~`, and `akm_build` is `git describe --always --dirty` of the git checkout that command runs from, or null
- * when it does not run from one (an installed release). The words are tried from the last: the script identifies the build, and the
+ * when it does not run from one (an installed release). A repository counts only if it is akm's: its top folder holds the package
+ * akm-cli, or git tracks the script (see inAkmCheckout). A release that npm installed under nvm, asdf or Homebrew sits inside that tool's
+ * repository, and the tool's commit is not the build. The words are tried from the last: the script identifies the build, and the
  * runtime before it (`bun`) must never be the one reported, even when it sits inside a repository. Two builds of one version, such as a PR branch and the release it
  * branched from, differ here and not in akm_version. `akm_build_fingerprint` tells two edits of one commit apart, which `-dirty` does
  * not: it is a sha256 over the changes to the tracked files and the content of the files that are not tracked and not ignored (see
@@ -384,6 +419,20 @@ export function dirtyFingerprint(dir: string): string | null {
   return hash.digest("hex");
 }
 
+/**
+ * Is `dir` in a checkout of akm, going by its git repository: the top folder holds the package akm-cli, or `file`, the script, is tracked
+ * in it. A release installed with npm -g sits in a repository too when nvm or Homebrew keeps its folder in one, and it is neither.
+ */
+function inAkmCheckout(dir: string, file: string | null): boolean {
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "ignore" });
+  const top = git("rev-parse", "--show-toplevel");
+  if (top.exitCode !== 0) return false;
+  try {
+    if (JSON.parse(readFileSync(join(top.stdout.toString().trim(), "package.json"), "utf8")).name === "akm-cli") return true;
+  } catch {} // no package.json, or one that is not JSON: not akm's
+  return file !== null && git("ls-files", "--error-unmatch", "--", file).exitCode === 0;
+}
+
 /** The akm this process runs, as AkmBuild says: the fields to spread into a summary. */
 export function akmBuild(): AkmBuild {
   const cmd = akmCommand();
@@ -393,11 +442,20 @@ export function akmBuild(): AkmBuild {
     const path = word.includes("/") ? word : Bun.which(word);
     if (!path || !existsSync(path)) continue;
     const real = realpathSync(path);
-    const dir = statSync(real).isDirectory() ? real : dirname(real);
+    const folder = statSync(real).isDirectory();
+    const dir = folder ? real : dirname(real);
+    if (!inAkmCheckout(dir, folder ? null : real)) continue;
     const git = Bun.spawnSync(["git", "-C", dir, "describe", "--always", "--dirty"], { stdout: "pipe", stderr: "ignore" });
     if (git.exitCode === 0) return { akm_bin, akm_build: git.stdout.toString().trim(), akm_build_fingerprint: dirtyFingerprint(dir) };
   }
   return { akm_bin, akm_build: null, akm_build_fingerprint: null };
+}
+
+/** The chat-completions URL of a base URL: /chat/completions goes on the path, before any query or fragment, and is not added twice. */
+export function completionsUrl(baseUrl: string): string {
+  const [, path, rest] = /^([^?#]*)([^]*)$/.exec(baseUrl) as RegExpExecArray;
+  const base = path.replace(/\/+$/, "");
+  return `${base.endsWith("/chat/completions") ? base : `${base}/chat/completions`}${rest}`;
 }
 
 /**
@@ -406,8 +464,7 @@ export function akmBuild(): AkmBuild {
  * its routing to the returned object. `name` is the engine's name in the config, and what akm reports for it.
  */
 export function engineConfig(baseUrl: string, model: string, hasKey: boolean, name = "model"): Record<string, any> {
-  const base = baseUrl.replace(/\/+$/, "");
-  const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+  const endpoint = completionsUrl(baseUrl);
   return {
     ...plainConfig(),
     engines: { [name]: { kind: "llm", provider: "openai", endpoint, model, ...(hasKey ? { apiKey: "$MODEL_API_KEY" } : {}), timeoutMs: 600_000 } },

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { CONTRACTS, type Canned, type Contract, MALFORMED_ANSWER, answerFrom, describeCanned, malformed, matches, runContract, verify } from "./contract.ts";
-import { AKM_0_9_26_REQUESTS, type Fixture } from "./fixtures.ts";
+import { CONTRACTS, type Canned, type Contract, MALFORMED_ANSWER, answerFrom, describeCanned, malformed, matches, replyOf, runContract, verify } from "./contract.ts";
+import { AKM_0_9_26_REQUESTS, AKM_0_9_31_REQUESTS, type Fixture } from "./fixtures.ts";
 import { ENTRIES, EMPTY_ANSWER, type ChatRequest, type Stub, startStub, stubEnv } from "./lib.ts";
 import { type Schema, check, valueFor } from "./schema.ts";
 
@@ -26,10 +26,13 @@ function requestOf(f: Fixture): ChatRequest {
   };
 }
 
-/** The fixtures an eval's run triggers. The nightly eval runs the consolidate pair pass, and its model calls are those of consolidate. */
-const fixturesOf = (dir: string): Fixture[] => AKM_0_9_26_REQUESTS.filter((f) => f.eval === basename(dir) || (dir === "evals/nightly" && f.eval === "consolidate"));
+/** The requests of each release that the contract is written against. */
+const RELEASES: Record<string, Fixture[]> = { "0.9.26": AKM_0_9_26_REQUESTS, "0.9.31": AKM_0_9_31_REQUESTS };
 
-const fixture = (name: string): Fixture => AKM_0_9_26_REQUESTS.find((f) => f.name === name) as Fixture;
+/** The fixtures an eval's run triggers. The nightly eval runs the consolidate pair pass, and its model calls are those of consolidate. */
+const fixturesOf = (dir: string, release = AKM_0_9_26_REQUESTS): Fixture[] => release.filter((f) => f.eval === basename(dir) || (dir === "evals/nightly" && f.eval === "consolidate"));
+
+const fixture = (name: string, release = AKM_0_9_26_REQUESTS): Fixture => release.find((f) => f.name === name) as Fixture;
 
 describe("matches", () => {
   const req = requestOf(fixture("distill judge"));
@@ -46,6 +49,16 @@ describe("matches", () => {
     expect(matches({ prompt: "proposed revision", reply: 1 }, req)).toBe(false);
     expect(matches({ keys: ["scores", "reason"], prompt: "proposed lesson asset", reply: 1 }, req)).toBe(true);
     expect(matches({ keys: ["scores", "reason"], prompt: "proposed revision", reply: 1 }, req)).toBe(false);
+  });
+
+  test("by at least the required keys of the schema, which is how one reply fits two releases of akm", () => {
+    const lesson = requestOf(fixture("distill lesson"));
+    const newer = requestOf(fixture("distill lesson", AKM_0_9_31_REQUESTS));
+    expect(matches({ has: ["description", "when_to_use", "body"], reply: 1 }, lesson)).toBe(true);
+    expect(matches({ has: ["description", "when_to_use", "body"], reply: 1 }, newer)).toBe(true);
+    expect(matches({ keys: ["description", "when_to_use", "body"], reply: 1 }, newer)).toBe(false); // exactly these: the newer schema requires six
+    expect(matches({ has: ["description", "decision"], reply: 1 }, lesson)).toBe(false);
+    expect(matches({ has: ["scores"], prompt: "proposed revision", reply: 1 }, req)).toBe(false);
   });
 
   test("a reply with neither matches nothing, and a request with no schema has no keys", () => {
@@ -95,58 +108,90 @@ describe("answerFrom", () => {
     expect(describeCanned({ keys: ["a"], prompt: "p", reply: 1 })).toBe('a schema that requires a and a prompt with "p"');
   });
 
+  test("a reply that is a function gets the schema of the request, and its result is the reply", () => {
+    const answer = answerFrom([{ has: ["scores"], reply: (schema: Schema | undefined) => ({ criteria: Object.keys(schema?.properties ?? {}), text: "canned" }) }]);
+    expect(JSON.parse(answer(requestOf(fixture("judge"))))).toEqual({ criteria: ["scores", "reason"], text: "canned" });
+    expect(replyOf({ has: ["scores"], reply: (schema: Schema | undefined) => (schema ? "plain text" : "none") }, requestOf(fixture("judge")))).toBe("plain text");
+    expect(describeCanned({ has: ["description", "body"], prompt: "p", reply: 1 })).toBe('a schema that requires at least description, body and a prompt with "p"');
+  });
+
   test("malformed answers text that is not JSON, to everything", () => {
     for (const f of AKM_0_9_26_REQUESTS) expect(malformed(requestOf(f))).toBe(MALFORMED_ANSWER);
     expect(() => JSON.parse(MALFORMED_ANSWER)).toThrow();
   });
 });
 
-describe("the canned replies, against the requests akm 0.9.26 sends", () => {
+describe("the canned replies, against the requests akm 0.9.26 and 0.9.31 send", () => {
   const contracts = Object.entries(CONTRACTS);
 
-  test("every request an eval makes gets a reply that is JSON and, when the request sends a schema, fits it", () => {
-    for (const [dir, contract] of contracts) {
-      const answer = answerFrom(contract.canned);
-      for (const f of fixturesOf(dir)) {
-        const reply = JSON.parse(answer(requestOf(f)));
-        if (f.schema) expect({ dir, request: f.name, problems: check(f.schema, reply) }).toEqual({ dir, request: f.name, problems: [] });
+  test("every request an eval makes gets a reply that is JSON and, when the request sends a schema, fits it, in each release", () => {
+    for (const [release, requests] of Object.entries(RELEASES)) {
+      for (const [dir, contract] of contracts) {
+        const answer = answerFrom(contract.canned);
+        for (const f of fixturesOf(dir, requests)) {
+          const reply = JSON.parse(answer(requestOf(f)));
+          if (f.schema) expect({ release, dir, request: f.name, problems: check(f.schema, reply) }).toEqual({ release, dir, request: f.name, problems: [] });
+        }
       }
     }
   });
 
-  test("a canned reply is for a request the evals make, and differs from the value that fits the schema: the table holds only what akm needs said", () => {
-    for (const [dir, contract] of contracts) {
-      for (const c of contract.canned) {
-        const hit = fixturesOf(dir).filter((f) => matches(c, requestOf(f)));
-        expect({ dir, canned: JSON.stringify(c).slice(0, 60), requests: hit.length > 0 }).toEqual({ dir, canned: JSON.stringify(c).slice(0, 60), requests: true });
-        for (const f of hit) if (f.schema) expect({ dir, request: f.name, same: JSON.stringify(c.reply) === JSON.stringify(valueFor(f.schema)) }).toEqual({ dir, request: f.name, same: false });
+  test("a canned reply is for a request the evals make in each release, and differs from the value that fits the schema: the table holds only what akm needs said", () => {
+    for (const [release, requests] of Object.entries(RELEASES)) {
+      for (const [dir, contract] of contracts) {
+        for (const c of contract.canned) {
+          const hit = fixturesOf(dir, requests).filter((f) => matches(c, requestOf(f)));
+          expect({ release, dir, canned: describeCanned(c), requests: hit.length > 0 }).toEqual({ release, dir, canned: describeCanned(c), requests: true });
+          for (const f of hit) if (f.schema) expect({ release, dir, request: f.name, same: replyOf(c, requestOf(f)) === JSON.stringify(valueFor(f.schema)) }).toEqual({ release, dir, request: f.name, same: false });
+        }
       }
     }
+  });
+
+  test("the requests of 0.9.31 are those of 0.9.26 but for the lesson, the judge's criterion, the extract and the promotion plan that its fixtures give", () => {
+    const changed = AKM_0_9_31_REQUESTS.filter((f, i) => JSON.stringify(f) !== JSON.stringify(AKM_0_9_26_REQUESTS[i])).map((f) => f.name);
+    expect(AKM_0_9_31_REQUESTS.map((f) => f.name)).toEqual(AKM_0_9_26_REQUESTS.map((f) => f.name));
+    expect(changed).toEqual(["distill lesson", "distill judge", "promotion plan", "extract"]);
   });
 
   test("the evals whose rows reach the outcome on the value that fits the schema have no table", () => {
     expect(contracts.filter(([, c]) => c.canned.length === 0).map(([dir]) => dir)).toEqual(["evals/retrieval", "evals/judge-gate", "evals/reflect", "evals/extract"]);
   });
 
-  test("the lesson that distill's writer is asked for is longer than akm's minimum, which the schema's is not", () => {
-    const f = fixture("distill lesson");
-    const schemaValue = valueFor(f.schema as Schema) as { description: string; when_to_use: string };
-    // akm 0.9.26 queues a lesson whose description has under 20 characters or whose when_to_use has under 15 as invalid: "description is too short (10 chars; need >=20)".
-    expect(schemaValue.description.length).toBeLessThan(20);
-    expect(schemaValue.when_to_use.length).toBeLessThan(15);
-    const lesson = JSON.parse(answerFrom((CONTRACTS["evals/distill"] as Contract).canned)(requestOf(f))) as { description: string; when_to_use: string; body: string };
-    expect(lesson.description.length).toBeGreaterThanOrEqual(20);
-    expect(lesson.description.length).toBeLessThanOrEqual(400);
-    expect(lesson.when_to_use.length).toBeGreaterThanOrEqual(15);
-    expect(lesson.description).toMatch(/^[A-Z][^`*#|]*\.$/); // a sentence: no leading When or If, no markdown, no trailing colon or comma
-    expect(lesson.description).not.toMatch(/^(When|If) /);
-    expect(lesson.body.length).toBeGreaterThan(0);
+  test("the lesson that distill's writer is asked for is longer than akm's minimum, which the schema's is not, in each release", () => {
+    for (const [release, requests] of Object.entries(RELEASES)) {
+      const f = fixture("distill lesson", requests);
+      const schemaValue = valueFor(f.schema as Schema) as { description: string; when_to_use: string };
+      // akm queues a lesson whose description has under 20 characters or whose when_to_use has under 15 as invalid: "description is too short (10 chars; need >=20)".
+      expect(schemaValue.description.length, release).toBeLessThan(20);
+      expect(schemaValue.when_to_use.length, release).toBeLessThan(15);
+      const lesson = JSON.parse(answerFrom((CONTRACTS["evals/distill"] as Contract).canned)(requestOf(f))) as { description: string; when_to_use: string; body: string };
+      expect(lesson.description.length).toBeGreaterThanOrEqual(20);
+      expect(lesson.description.length).toBeLessThanOrEqual(400);
+      expect(lesson.when_to_use.length).toBeGreaterThanOrEqual(15);
+      expect(lesson.description).toMatch(/^[A-Z][^`*#|]*\.$/); // a sentence: no leading When or If, no markdown, no trailing colon or comma
+      expect(lesson.description).not.toMatch(/^(When|If) /);
+      expect(lesson.body.length).toBeGreaterThan(0);
+    }
   });
 
-  test("the judge of a distilled lesson scores it 5, where the schema's value would score 1 and have the lesson rejected", () => {
-    const f = fixture("distill judge");
-    expect((valueFor(f.schema as Schema) as { scores: Record<string, number> }).scores).toEqual({ novelty: 1, nonRedundancy: 1, grounding: 1 });
-    expect((JSON.parse(answerFrom((CONTRACTS["evals/distill"] as Contract).canned)(requestOf(f))) as { scores: Record<string, number> }).scores).toEqual({ novelty: 5, nonRedundancy: 5, grounding: 5 });
+  test("the lesson of 0.9.31 has the keys that 0.9.26 does not ask for, as the value that fits gives them: decision is lesson, so akm writes the lesson and does not skip it", () => {
+    const older = JSON.parse(answerFrom((CONTRACTS["evals/distill"] as Contract).canned)(requestOf(fixture("distill lesson")))) as Record<string, unknown>;
+    const newer = JSON.parse(answerFrom((CONTRACTS["evals/distill"] as Contract).canned)(requestOf(fixture("distill lesson", AKM_0_9_31_REQUESTS)))) as Record<string, unknown>;
+    expect(Object.keys(older).sort()).toEqual(["body", "description", "when_to_use"]);
+    expect(Object.keys(newer).sort()).toEqual(["body", "decision", "description", "reason", "tags", "when_to_use"]);
+    expect(newer.decision).toBe("lesson");
+    expect({ ...newer, reason: undefined, decision: undefined, tags: undefined }).toEqual({ ...older, reason: undefined, decision: undefined, tags: undefined });
+  });
+
+  test("the judge of a distilled lesson scores it 5 on every criterion its schema names, where the schema's value would score 1 and have the lesson rejected", () => {
+    const answer = answerFrom((CONTRACTS["evals/distill"] as Contract).canned);
+    for (const [criteria, requests] of [[["novelty", "nonRedundancy", "grounding"], AKM_0_9_26_REQUESTS], [["reusable", "nonRedundancy", "grounding"], AKM_0_9_31_REQUESTS]] as const) {
+      const f = fixture("distill judge", requests);
+      expect(Object.keys(((f.schema as Schema).properties?.scores as Schema).properties ?? {})).toEqual([...criteria]);
+      expect((valueFor(f.schema as Schema) as { scores: Record<string, number> }).scores).toEqual(Object.fromEntries(criteria.map((k) => [k, 1])));
+      expect((JSON.parse(answer(requestOf(f))) as { scores: Record<string, number> }).scores).toEqual(Object.fromEntries(criteria.map((k) => [k, 5])));
+    }
   });
 
   test("the pair judge answers a duplicate with no claim of its own, and the second look finds nothing missing", () => {
@@ -411,6 +456,24 @@ describe("runContract", () => {
     expect(await runContract({ dir: "evals/fake", skip: "needs Docker" }, contract, opts)).toEqual({ dir: "evals/fake", status: "skipped", note: "needs Docker", legs: [] });
     expect(stub.calls()).toBe(0);
   });
+});
+
+/**
+ * The akm in AKM_BIN, only when AKM_EVAL_REAL_AKM=1 asks for it: an akm that happens to be on PATH is never picked up by itself, so the default
+ * suite stays fake-only whatever is installed. The distill contract is the one that depends on the release: the schema of the lesson and the
+ * criteria of the judge differ from 0.9.26 to 0.9.31, and one canned reply has to fit both. `scripts/smoke/run --contract` runs them all.
+ */
+const REAL_AKM = process.env.AKM_EVAL_REAL_AKM === "1";
+
+describe.skipIf(!REAL_AKM)("the distill contract against the akm in AKM_BIN (AKM_EVAL_REAL_AKM=1)", () => {
+  test("a lesson that fits the schema of this release is queued for review, and a reply that is no JSON is invalid", async () => {
+    const stub = startedStub();
+    const root = resolve(import.meta.dir, "..", "..", "..");
+    const out = await runContract({ dir: "evals/distill" }, CONTRACTS["evals/distill"], { root, env: stubEnv(process.env, stub.url), akm: process.env.AKM_BIN?.trim() || "akm", timeoutMs: 300_000, stub });
+    for (const leg of out.legs) for (const f of leg.run.folders) rmSync(join(root, f), { recursive: true, force: true });
+    expect(out.legs.map((l) => [l.kind, l.problems])).toEqual([["success", []], ["failure", []]]);
+    expect(out.status).toBe("ok");
+  }, 360_000);
 });
 
 describe(".github/workflows/akm-smoke.yml", () => {

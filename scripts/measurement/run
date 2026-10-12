@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Checks MEASUREMENT.lock against the files of every eval's measurement, and bumps a part of an eval when it changes. See the README's "How results stay comparable".
+#
+#   scripts/measurement/run check
+#   scripts/measurement/run list
+#   scripts/measurement/run bump EVAL collector|scorer --reason TEXT
+#   scripts/measurement/run bump harness --reason TEXT
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+command -v bun > /dev/null || { echo "measurement: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/run.ts" "$@"

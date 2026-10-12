@@ -220,6 +220,39 @@ describe("the public cases", () => {
   });
 });
 
+describe("the seven borderline cases (#43)", () => {
+  const SEVEN = [
+    "1200fa15-434c-419a-8833-8065cd9f9b29",
+    "1ae76bf3-2a2c-4f13-bd5d-5a3a7b8284ba",
+    "3af2fb08-6546-455c-9a7b-84ba09cd3511",
+    "53df3ec1-7010-4206-8f1c-568ee8ceeda5",
+    "7901df92-9057-46fd-9691-9de17cbc12d4",
+    "b7ef274a-23fa-4f5f-add8-89aafaff2b9f",
+    "f762b81a-8ec1-458e-832c-fbe8b8ab8dfc",
+  ];
+  const readme = readFileSync(join(ASSETS, "README.md"), "utf8");
+  const record = readFileSync(join(ASSETS, ADJUDICATION), "utf8");
+
+  test("stay good: the maintainer decided that on the criterion of evidence, so no label moved and the version is 2", () => {
+    const cases = publicCases();
+    expect(readAdjudication(record).borderline.map((b) => b.id).sort()).toEqual(SEVEN);
+    expect(SEVEN.map((id) => cases.find((c) => c.id === id)?.label)).toEqual(SEVEN.map(() => "good"));
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(11);
+    expect(rubricVersion(ASSETS)).toBe(2);
+  });
+
+  test("the rubric says the sentence about uncertain cases is history, and neither page leaves the criterion open", () => {
+    for (const text of [readme, record]) {
+      expect(text).not.toContain("Which criterion holds is the maintainer's decision");
+      expect(text).toContain("2026-10-12");
+    }
+    const flat = (text: string) => text.replace(/\s+/g, " ");
+    expect(flat(readme)).not.toContain("Uncertain cases were labelled bad");
+    expect(flat(readme)).toContain("it is not a rule of this rubric");
+    expect(flat(record)).toContain("That was their practice and not a rule of the rubric");
+  });
+});
+
 describe("the command", () => {
   const run = (...args: string[]) => {
     const done = Bun.spawnSync(["bun", join(import.meta.dir, "audit.ts"), ...args], { stdout: "pipe", stderr: "pipe" });

@@ -7,11 +7,14 @@
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { parseCases as parsePairs } from "../../consolidate/src/lib.ts";
+import { parseCases as parsePairs } from "../../consolidate/src/cases.ts";
 import { loadCases as loadDistill } from "../../distill/src/lib.ts";
 import { libraryFileOf } from "../../reflect/src/build.ts";
 import { cleanProblems, parseCases as parseReflect } from "../../reflect/src/lib.ts";
-import { type Feedback, type Item, type Night, type Relation, listFiles, nightProblems, refOf } from "./lib.ts";
+import type { Feedback, Item, Relation } from "./items.ts";
+import { refOf } from "./items.ts";
+import { listFiles } from "./library.ts";
+import { type Night, nightProblems } from "./night.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const EVALS = resolve(EVAL_DIR, "..");
@@ -99,7 +102,7 @@ export function buildNight(): Night {
   if (clean.split(FIX.right).length !== 2) throw new Error(`${FIX.path} must hold ${FIX.right} once`);
   add(FIX.path, clean.replace(FIX.right, () => FIX.wrong));
   const fix: Feedback = { ref: refOf(FIX.path), signal: "negative", reason: FIX.reason, fix: { replace: [FIX.wrong], with: [FIX.right], source: FIX.source } };
-  items.push({ id: "exact-fix-01", kind: "fix", note: "The exact fix is queued as a proposal for a person to accept. The night does not apply it, and changes nothing else in the note.", files: [FIX.path], feedback: [fix], path: FIX.path });
+  items.push({ id: "exact-fix-01", kind: "fix", note: "The note ends the night with the exact fix and nothing else changed: the fix applied at once, or waiting as a proposal for a person to accept.", files: [FIX.path], feedback: [fix], path: FIX.path });
 
   const untouched = [
     ...pick(distill, UNTOUCHED_MEMORIES, "distill").map((c) => ({ path: `memories/${c.name}.md`, text: c.memory })),

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SEMANTIC_MODEL, createSandbox, removeSandbox, semanticConfig } from "../../../lib/akm/akm.ts";
 import { assemble, explode } from "./generate.ts";
-import { assetsDigest, readGenerated } from "./inputs.ts";
+import { GENERATOR_CODE, assetsDigest, generatorSha256, readGenerated } from "./inputs.ts";
 import { type Case, EMBEDDER_ENV, INPUT_FILES, RELATIONS, type Relation, type Row, claimProblems, consolidateConfig, embedderEnv, errorRow, isTimeout, metrics, noteAges, parseCases, parseEmbedder, rowFromRun, sandboxOptions, selectCases, timeoutMessage, withEmbedder } from "./lib.ts";
 
 const note = (name: string, text = `---\ndescription: ${name}\n---\n# ${name}\n\nA claim.\n`) => ({ name, text });
@@ -407,7 +407,7 @@ describe("generate", () => {
       expect(unrelated.filter((x) => x > 0.94)).toHaveLength(5);
       expect(unrelated.filter((x) => x < 0.6)).toHaveLength(5);
       // it says which seed and which public cases the set was made from, and leaves no temporary folder behind
-      expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsDigest(join(import.meta.dir, "..", "assets"), INPUT_FILES) });
+      expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsDigest(join(import.meta.dir, "..", "assets"), INPUT_FILES), generator_sha256: generatorSha256(GENERATOR_CODE) });
       expect(readdirSync(dir).sort()).toEqual(["assets", "generated.json", "map.json"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

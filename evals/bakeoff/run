@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the bakeoff eval. See README.md.
 #
-#   evals/bakeoff/run [--corpus public|private|all] [--limit N] [--tier compact|deep] [--label NAME] [--model ID]... [--models FILE] [--repeat N] [--include-legacy]
+#   evals/bakeoff/run [--corpus public|custom|all] [--cases DIR] [--process NAME] [--limit N] [--repeat N] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
@@ -10,5 +10,5 @@ cd "$root"
 # Settings come from .env at the repository root: KEY=value lines. A variable that is already set wins. See lib/env.sh.
 source lib/env.sh
 
-command -v uv > /dev/null || { echo "bakeoff: uv is needed. See https://docs.astral.sh/uv/" >&2; exit 2; }
-exec uv run --project "$here/src" --frozen python "$here/src/bakeoff.py" run "$@"
+command -v bun > /dev/null || { echo "bakeoff: bun is needed. See https://bun.sh" >&2; exit 2; }
+exec bun "$here/src/run.ts" "$@"

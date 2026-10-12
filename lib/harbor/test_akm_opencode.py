@@ -11,8 +11,10 @@ import asyncio
 import json
 import os
 import stat
+import hashlib
 import subprocess
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 from harbor.agents.installed.opencode import OpenCode
@@ -57,8 +59,9 @@ def test_the_arm_has_its_own_name_and_says_which_plugin(tmp_path):
 
 
 def test_the_plugin_is_the_only_thing_added_to_the_config(tmp_path):
+    # Installed here from its lockfile and named as the folder it is in, so opencode does not resolve its dependencies itself.
     agent = make(tmp_path)
-    assert agent._opencode_config == {**CONFIG, "plugin": ["akm-opencode@0.9.26202610051302"]}
+    assert agent._opencode_config == {**CONFIG, "plugin": [f"file://{m.PLUGIN_DIR}"]}
     assert CONFIG == {"$schema": "https://opencode.ai/config.json", "autoupdate": False}
 
 
@@ -99,11 +102,11 @@ def test_every_command_gets_the_akm_settings_and_the_callers_env_wins(tmp_path):
 
 def test_the_shell_commands_are_valid_bash(tmp_path):
     agent = make(tmp_path)
-    for command in (agent._install_akm_command(), agent._seed_command(), agent._warm_command(), agent._check_command()):
+    for command in (agent._install_akm_command(), agent._install_plugin_command(), agent._trees_command(), agent._seed_command(), agent._warm_command(), agent._check_command()):
         done = subprocess.run(["bash", "-n", "-c", command], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
     tarballs = checkout(tmp_path)
-    for command in (tarballs._install_akm_command(), tarballs._install_plugin_command(), tarballs._check_command()):
+    for command in (tarballs._install_akm_command(), tarballs._install_plugin_command(), tarballs._trees_command(), tarballs._check_command()):
         done = subprocess.run(["bash", "-n", "-c", command], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
 
@@ -118,7 +121,7 @@ def test_the_seed_checks_one_asset_per_file_unless_told_how_many_the_library_has
 
 def test_the_warm_up_boots_opencode_with_the_plugin_in_the_config(tmp_path):
     command = make(tmp_path)._warm_command()
-    assert '"akm-opencode@0.9.26202610051302"' in command
+    assert f'"file://{m.PLUGIN_DIR}"' in command
     assert "--model=openai/gpt-6-luna" in command
 
 
@@ -171,12 +174,15 @@ def test_a_trial_with_a_live_plugin_is_scored(tmp_path):
 # -- an akm that is not an npm release, and what is recorded of the install ------------------------------------------
 
 
-def test_a_release_is_installed_by_name_and_a_checkout_from_its_tarball(tmp_path):
-    assert make(tmp_path)._install_akm_command().endswith("npm i -g akm-cli@0.9.26 && akm --version")
-    assert make(tmp_path, akm_cli_version="0.9.27")._install_akm_command().endswith("npm i -g akm-cli@0.9.27 && akm --version")
-    command = checkout(tmp_path)._install_akm_command()
-    assert command.endswith("npm i -g /opt/akm/packages/akm-cli-0.9.27.tgz && akm --version")
-    assert "akm-cli@" not in command
+def test_a_release_with_a_lockfile_is_installed_from_it_and_one_without_by_name_and_a_checkout_from_its_tarball(tmp_path):
+    command = make(tmp_path)._install_akm_command()  # the pinned release has a lockfile
+    assert command.endswith(f"npm ci --prefix {m.CLI_PREFIX} --no-audit --no-fund && {m.CLI_BIN} --version")
+    assert "akm-cli@" not in command and "npm i -g" not in command  # a global install would ignore the lockfile
+    unlocked = make(tmp_path, akm_cli_version="0.9.27")._install_akm_command()  # no lockfile is committed for it
+    assert unlocked.endswith(f"npm install --prefix {m.CLI_PREFIX} --no-audit --no-fund akm-cli@0.9.27 && {m.CLI_BIN} --version")
+    tarball = checkout(tmp_path)._install_akm_command()
+    assert tarball.endswith(f"npm install --prefix {m.CLI_PREFIX} --no-audit --no-fund /opt/akm/packages/akm-cli-0.9.27.tgz && {m.CLI_BIN} --version")
+    assert "akm-cli@" not in tarball
 
 
 def test_a_plugin_tarball_is_installed_under_a_prefix_and_named_by_its_folder(tmp_path):
@@ -188,7 +194,28 @@ def test_a_plugin_tarball_is_installed_under_a_prefix_and_named_by_its_folder(tm
     assert command.index("akm-opencode-0.9.27.tgz") < command.index("akm-cli-0.9.27.tgz")  # both, so the plugin's akm-cli is the one under test
     assert command.endswith(f"test -d {m.PLUGIN_DIR}")
     only_akm = make(tmp_path, akm_cli_version="0.9.27", packages_dir="/p", akm_package="akm-cli-0.9.27.tgz")
-    assert only_akm._opencode_config["plugin"] == ["akm-opencode@0.9.26202610051302"]  # a checkout without the plugin keeps the pinned one
+    assert only_akm._opencode_config["plugin"] == [f"file://{m.PLUGIN_DIR}"]
+    assert only_akm.version().endswith("+akm-opencode@0.9.26202610051302")  # a checkout without the plugin keeps the pinned one
+    assert "npm ci --prefix /opt/akm/plugin" in only_akm._install_plugin_command()  # from its lockfile, with the akm-cli the plugin is pinned to
+
+
+def test_the_pinned_plugin_is_installed_from_its_lockfile_without_install_scripts(tmp_path):
+    command = make(tmp_path)._install_plugin_command()
+    assert command.endswith(f"npm ci --prefix {m.PLUGIN_PREFIX} --ignore-scripts --no-audit --no-fund && test -d {m.PLUGIN_DIR}")
+    assert "/opt/akm/packages" not in command
+    other = make(tmp_path, akm_plugin_version="0.9.27")  # a plugin release with no lockfile is installed by name
+    assert other._install_plugin_command().endswith(f"npm install --prefix {m.PLUGIN_PREFIX} --no-audit --no-fund akm-opencode@0.9.27 && test -d {m.PLUGIN_DIR}")
+
+
+def test_the_lockfiles_are_those_committed_for_the_pinned_releases(tmp_path):
+    assert m.lock_folder("akm-cli", "0.9.26") == m.LOCKS / "akm-cli-0.9.26"
+    assert m.lock_folder("akm-opencode", "0.9.26202610051302") == m.LOCKS / "akm-opencode-0.9.26202610051302"
+    assert m.lock_folder("akm-cli", "0.9.27") is None
+    for folder in (m.LOCKS / "akm-cli-0.9.26", m.LOCKS / "akm-opencode-0.9.26202610051302"):
+        assert (folder / "package.json").is_file() and (folder / "package-lock.json").is_file()
+    agent = make(tmp_path)
+    assert agent._akm_lock == m.LOCKS / "akm-cli-0.9.26" and agent._plugin_lock == m.LOCKS / "akm-opencode-0.9.26202610051302"
+    assert checkout(tmp_path)._akm_lock is None and checkout(tmp_path)._plugin_lock is None  # a tarball replaces the release, and has no lockfile
 
 
 def test_akm_env_is_added_to_every_command_and_the_callers_env_still_wins(tmp_path):
@@ -234,14 +261,19 @@ def run_check(tmp_path, agent, akm_prints, carried, warm_log):
     for tool in ("akm", "node"):
         (bin_dir / tool).chmod(0o755)
     home = tmp_path / "home"
-    package = home / ".cache" / "opencode" / "x" / "node_modules" / "akm-cli"
-    package.mkdir(parents=True)
-    (package / "package.json").write_text(json.dumps({"version": carried}))
+    # The akm-cli the plugin carries is under the prefix the plugin is installed in. The opencode cache has another one, which this arm must not read.
+    prefix = tmp_path / "plugin"
+    for folder, version in ((prefix / "node_modules" / "akm-cli", carried), (home / ".cache" / "opencode" / "x" / "node_modules" / "akm-cli", "0.9.99")):
+        folder.mkdir(parents=True)
+        (folder / "package.json").write_text(json.dumps({"version": version}))
     log = tmp_path / "warm" / "opencode" / "log"
     log.mkdir(parents=True)
     (log / "a.log").write_text(warm_log)
     env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    return subprocess.run(["bash", "-c", agent._check_command()], capture_output=True, text=True, env=env)
+    with mock.patch.object(m, "PLUGIN_PREFIX", str(prefix)):
+        command = agent._check_command()
+    assert str(prefix) in command and ".cache/opencode" not in command
+    return subprocess.run(["bash", "-c", command], capture_output=True, text=True, env=env)
 
 
 def test_the_check_records_what_was_installed_and_does_not_compare_it_with_a_version(tmp_path, monkeypatch):
@@ -266,18 +298,12 @@ def test_the_check_still_stops_for_a_plugin_that_did_not_load_or_an_akm_with_no_
         assert done.returncode == 1 and said in done.stderr, done.stderr
 
 
-def test_the_check_finds_the_akm_cli_a_plugin_tarball_carries_under_its_prefix(tmp_path, monkeypatch):
-    prefix = tmp_path / "plugin"
-    monkeypatch.setattr(m, "PLUGIN_PREFIX", str(prefix))
-    monkeypatch.setattr(m, "WARM_DATA", str(tmp_path / "warm"))
-    package = prefix / "node_modules" / "akm-opencode" / "node_modules" / "akm-cli"
-    package.mkdir(parents=True)
-    (package / "package.json").write_text(json.dumps({"version": "0.9.27"}))
-    agent = checkout(tmp_path / "logs")
-    assert str(prefix) in agent._check_command() and ".cache/opencode" not in agent._check_command()
-    done = run_check(tmp_path, agent, "0.9.27", "0.9.99", f"{m.PLUGIN_ACTIVE}\n")  # the opencode cache has another one, which this arm must not read
-    assert done.returncode == 0, done.stderr
-    assert "plugin_akm_cli=0.9.27" in done.stdout
+def test_the_check_finds_the_akm_cli_the_plugin_carries_under_its_prefix_for_a_lockfile_and_a_tarball(tmp_path, monkeypatch):
+    for name, agent in (("release", make(tmp_path / "logs")), ("checkout", checkout(tmp_path / "logs"))):
+        monkeypatch.setattr(m, "WARM_DATA", str(tmp_path / name / "warm"))
+        done = run_check(tmp_path / name, agent, "0.9.27", "0.9.27", f"{m.PLUGIN_ACTIVE}\n")
+        assert done.returncode == 0, done.stderr
+        assert "plugin_akm_cli=0.9.27" in done.stdout and "0.9.99" not in done.stdout
 
 
 def test_the_seed_prints_how_many_assets_are_indexed(tmp_path):
@@ -285,9 +311,53 @@ def test_the_seed_prints_how_many_assets_are_indexed(tmp_path):
 
 
 def test_the_install_record_reads_what_the_setup_printed():
-    seen = m.install_record("noise\nAKM-SETUP assets=259\n", "akm setup ok\nAKM-SETUP akm=0.9.27 plugin_akm_cli=0.9.26\n", {"AKM_A": "1"})
-    assert seen == {"akm_version": "0.9.27", "plugin_akm_cli": "0.9.26", "assets_indexed": 259, "env": {"AKM_A": "1"}}
-    assert m.install_record("", "", {}) == {"akm_version": None, "plugin_akm_cli": None, "assets_indexed": None, "env": {}}
+    cli, plugin = "a" * 64, "b" * 64
+    trees = f"noise\nAKM-SETUP tree_akm_cli={cli} tree_plugin={plugin}\n"
+    seen = m.install_record("noise\nAKM-SETUP assets=259\n", "akm setup ok\nAKM-SETUP akm=0.9.27 plugin_akm_cli=0.9.26\n", {"AKM_A": "1"}, trees, {"akm_cli": "c" * 64, "plugin": None})
+    assert seen == {
+        "akm_version": "0.9.27",
+        "plugin_akm_cli": "0.9.26",
+        "assets_indexed": 259,
+        "env": {"AKM_A": "1"},
+        "lockfiles": {"akm_cli": "c" * 64, "plugin": None},
+        "dependency_trees": {"akm_cli": cli, "plugin": plugin},
+        "dependency_tree_sha256": m.tree_sha256({"akm_cli": cli, "plugin": plugin}),
+    }
+    empty = m.install_record("", "", {})
+    assert empty == {"akm_version": None, "plugin_akm_cli": None, "assets_indexed": None, "env": {}, "lockfiles": {"akm_cli": None, "plugin": None}, "dependency_trees": None, "dependency_tree_sha256": None}
+
+
+def test_the_digest_of_the_trees_depends_on_both_trees_and_on_nothing_else():
+    one = m.tree_sha256({"akm_cli": "a" * 64, "plugin": "b" * 64})
+    assert one == m.tree_sha256({"plugin": "b" * 64, "akm_cli": "a" * 64})
+    assert one != m.tree_sha256({"akm_cli": "a" * 64, "plugin": "c" * 64})
+    assert one != m.tree_sha256({"akm_cli": "c" * 64, "plugin": "b" * 64})
+
+
+def run_trees(tmp_path, npm_prints):
+    """Runs the command that digests the installed trees, with an npm that prints what it is told for each prefix, and exits 1 as npm ls does for a tree with a problem."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    cases = "".join(f"  {prefix}) printf '%s' '{text}'; exit 1;;\n" for prefix, text in npm_prints.items())
+    (bin_dir / "npm").write_text('#!/bin/bash\nprefix="${@: -1}"\ncase "$prefix" in\n' + cases + "esac\n")
+    (bin_dir / "npm").chmod(0o755)
+    env = {**os.environ, "HOME": str(tmp_path / "home"), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    return subprocess.run(["bash", "-c", make(tmp_path / "logs")._trees_command()], capture_output=True, text=True, env=env)
+
+
+def test_the_trees_command_digests_what_npm_ls_prints_for_each_prefix_even_when_npm_exits_1(tmp_path):
+    def sha(text):
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    cli, plugin = '{"name":"akm-eval-akm-cli"}', '{"name":"akm-eval-akm-opencode"}'
+    done = run_trees(tmp_path / "a", {m.CLI_PREFIX: cli, m.PLUGIN_PREFIX: plugin})
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == f"AKM-SETUP tree_akm_cli={sha(cli)} tree_plugin={sha(plugin)}"
+    # Another tree under either prefix is another digest, and an install that printed nothing stops the setup.
+    other = run_trees(tmp_path / "b", {m.CLI_PREFIX: cli, m.PLUGIN_PREFIX: '{"name":"other"}'})
+    assert other.stdout.strip() != done.stdout.strip() and other.stdout.startswith(f"AKM-SETUP tree_akm_cli={sha(cli)} ")
+    none = run_trees(tmp_path / "c", {m.CLI_PREFIX: cli, m.PLUGIN_PREFIX: ""})
+    assert none.returncode == 1 and "npm ls printed nothing" in none.stderr
 
 
 class ScriptedEnvironment(FakeEnvironment):
@@ -308,10 +378,12 @@ class ScriptedEnvironment(FakeEnvironment):
         self.calls.append({"command": f"UPLOAD {source_dir} {target_dir}", "env": None})
 
 
+CLI_TREE, PLUGIN_TREE = "1" * 64, "2" * 64
 REPLIES = [
     ("readlink", "/usr/lib/node/bin/akm\n"),
     ("akm bundle create", "AKM-SETUP assets=259\n"),
     ('echo "akm setup ok"', "akm setup ok\nAKM-SETUP akm=0.9.27 plugin_akm_cli=0.9.26\n"),
+    ("tree_akm_cli", f"AKM-SETUP tree_akm_cli={CLI_TREE} tree_plugin={PLUGIN_TREE}\n"),
 ]
 
 
@@ -334,12 +406,17 @@ def test_a_checkout_is_uploaded_and_installed_before_the_library_and_the_install
     def at(text):
         return next(i for i, c in enumerate(commands) if text in c)
 
-    assert env.uploads == [("/packages", m.PACKAGES), ("/libraries", m.LIBRARIES)]
-    assert at("UPLOAD /packages") < at("npm i -g /opt/akm/packages/akm-cli-0.9.27.tgz") < at("npm install --prefix") < at(f"rm -rf {m.PACKAGES}") < at("UPLOAD /libraries")
+    assert env.uploads == [("/packages", m.PACKAGES), ("/libraries", m.LIBRARIES)]  # a checkout has no lockfile to upload
+    assert at("UPLOAD /packages") < at(f"npm install --prefix {m.CLI_PREFIX} --no-audit --no-fund /opt/akm/packages/akm-cli-0.9.27.tgz") < at(f"npm install --prefix {m.PLUGIN_PREFIX}")
+    assert at(f"npm install --prefix {m.PLUGIN_PREFIX}") < at("npm ls") < at(f"rm -rf {m.PACKAGES}") < at("UPLOAD /libraries")  # the tree is read while the tarballs are still there
     assert at("UPLOAD /libraries") < at("akm bundle create") < at("opencode --model")
     record = json.loads((tmp_path / m.INSTALL_FILE).read_text())
     assert record["akm_version"] == "0.9.27" and record["plugin_akm_cli"] == "0.9.26" and record["assets_indexed"] == 259
     assert record["env"]["AKM_CURATE_TIMEOUT"] == "30" and record["env"]["AKM_BUNDLE_DIR"] == m.BUNDLE
+    # No lockfile, and the record says so; the digest of what npm installed is there all the same.
+    assert record["lockfiles"] == {"akm_cli": None, "plugin": None}
+    assert record["dependency_trees"] == {"akm_cli": CLI_TREE, "plugin": PLUGIN_TREE}
+    assert record["dependency_tree_sha256"] == m.tree_sha256({"akm_cli": CLI_TREE, "plugin": PLUGIN_TREE})
     # The same record goes into the trial's context, so Harbor keeps it in the trial's result.
     write_log(tmp_path, m.PLUGIN_ACTIVE)
     context = AgentContext()
@@ -347,13 +424,42 @@ def test_a_checkout_is_uploaded_and_installed_before_the_library_and_the_install
     assert context.metadata == {"akm": record}
 
 
-def test_a_release_install_uploads_no_packages(tmp_path, monkeypatch):
+def test_a_release_install_uploads_its_lockfiles_not_packages_and_installs_from_them(tmp_path, monkeypatch):
     no_opencode_install(monkeypatch)
     env = ScriptedEnvironment(REPLIES)
     asyncio.run(make(tmp_path).install(env))
-    assert env.uploads == [("/libraries", m.LIBRARIES)]
-    assert any("npm i -g akm-cli@0.9.26" in c["command"] for c in env.calls)
-    assert not any("npm install --prefix" in c["command"] for c in env.calls)
+    cli, plugin = m.LOCKS / "akm-cli-0.9.26", m.LOCKS / "akm-opencode-0.9.26202610051302"
+    assert env.uploads == [(str(cli), m.CLI_PREFIX), (str(plugin), m.PLUGIN_PREFIX), ("/libraries", m.LIBRARIES)]
+    commands = [c["command"] for c in env.calls]
+    assert any(f"npm ci --prefix {m.CLI_PREFIX}" in c for c in commands) and any(f"npm ci --prefix {m.PLUGIN_PREFIX}" in c for c in commands)
+    assert not any("npm install" in c or "npm i -g" in c for c in commands)  # nothing is resolved in the container
+    # The lockfile is the committed one, and the record names it by its digest, with the digest of what npm installed from it.
+    record = json.loads((tmp_path / m.INSTALL_FILE).read_text())
+    assert record["lockfiles"] == {"akm_cli": hashlib.sha256((cli / "package-lock.json").read_bytes()).hexdigest(), "plugin": hashlib.sha256((plugin / "package-lock.json").read_bytes()).hexdigest()}
+    assert record["dependency_trees"] == {"akm_cli": CLI_TREE, "plugin": PLUGIN_TREE}
+
+
+def test_a_release_without_a_lockfile_is_installed_by_name_and_the_record_says_it_has_none(tmp_path, monkeypatch):
+    no_opencode_install(monkeypatch)
+    env = ScriptedEnvironment(REPLIES)
+    asyncio.run(make(tmp_path, akm_cli_version="0.9.27").install(env))
+    assert env.uploads == [(str(m.LOCKS / "akm-opencode-0.9.26202610051302"), m.PLUGIN_PREFIX), ("/libraries", m.LIBRARIES)]  # the pinned plugin still has its own
+    assert any(f"npm install --prefix {m.CLI_PREFIX} --no-audit --no-fund akm-cli@0.9.27" in c["command"] for c in env.calls)
+    record = json.loads((tmp_path / m.INSTALL_FILE).read_text())
+    assert record["lockfiles"]["akm_cli"] is None and record["lockfiles"]["plugin"] is not None
+    assert record["dependency_tree_sha256"] is not None
+
+
+def test_two_trials_of_a_run_install_the_same_dependency_tree(tmp_path, monkeypatch):
+    """Every trial runs the same commands from the same committed files, so what npm installs does not depend on when the container started."""
+    no_opencode_install(monkeypatch)
+    runs = []
+    for name in ("one", "two"):
+        env = ScriptedEnvironment(REPLIES)
+        asyncio.run(make(tmp_path / name).install(env))
+        runs.append(([c["command"] for c in env.calls], env.uploads, json.loads((tmp_path / name / m.INSTALL_FILE).read_text())))
+    assert runs[0] == runs[1]
+    assert runs[0][2]["dependency_tree_sha256"] is not None
 
 
 # -- the verdict on the plugin, kept where a masking exception cannot hide it -------------------------------------------

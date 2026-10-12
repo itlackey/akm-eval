@@ -4,12 +4,22 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { GENERATED, assetsDigest } from "../../consolidate/src/inputs.ts";
+import type { ResolvedCorpus } from "../../../lib/corpus.ts";
+import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { clearRunning } from "../../../lib/results.ts";
+import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
+import { assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
-import { type Item, applyFix, loadNight, nightFiles, nightlyConfig, refOf } from "./lib.ts";
-import { feedbackArgs, plant, runCorpus } from "./run.ts";
+import { type Item, applyFix, feedbackArgs, loadNight, nightFiles, nightlyConfig, plant, refOf } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { corpusFields, runCorpus } from "./run.ts";
+
+const ROOT = join(import.meta.dir, "..", "..", "..");
+
+/** The public corpus, with its items in `folder`. */
+const publicCorpus = (folder: string): ResolvedCorpus => ({ name: "public", folder, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
 
 const night = loadNight(join(import.meta.dir, "..", "assets"));
 const dirs: string[] = [];
@@ -223,7 +233,7 @@ describe("feedbackArgs", () => {
 describe("runCorpus", () => {
   test("runs the night as the nightly does: index, the feedback, improve with the default strategy, then the drain, then the proposals", async () => {
     const { ctx, folders, commands } = setup(IDS, good());
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     const log = commands();
     expect(log[0]).toBe("index --full --format json");
     expect(log.filter((l) => l.startsWith("feedback ")).map((l) => l.split(" ")[1])).toEqual([refOf(period.path), "agents/playwright/playwright-explorer", "memories/playwright-networkidle-chat-widget", refOf(fix.path)]);
@@ -241,7 +251,7 @@ describe("runCorpus", () => {
     const { ctx, folders, root, commands } = setup(IDS, { ...good(), strategy: "lab-night" });
     writeFileSync(join(root, "patch.json"), JSON.stringify({ semanticSearchMode: "auto", improve: { strategies: { "lab-night": { engine: "nightly", processes: { reflect: { enabled: false } } } } }, registries: ["x"] }));
     const configPatch = loadConfigPatch("patch.json", root);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "lab-night", configPatch } }, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, overrides: { strategy: "lab-night", configPatch } }, folders.results));
     const log = commands();
     expect(log.find((l) => l.startsWith("improve "))).toContain("--strategy lab-night ");
     expect(log.find((l) => l.startsWith("proposal drain"))).toBe("proposal drain --promote --strategy lab-night --yes --format json");
@@ -253,28 +263,28 @@ describe("runCorpus", () => {
 
   test("without the flags it runs the default strategy and the eval's own config, and records the strategy and no patch", async () => {
     const { ctx, folders, root } = setup(IDS, good());
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     expect(summary).toMatchObject({ strategy: "default", config_patch: null });
     expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
     const same = setup(IDS, good());
-    await quiet(() => runCorpus("public", { ...same.ctx, overrides: defaultOverrides("default") }, same.folders));
+    await quiet(() => runCorpus(publicCorpus(same.folders.assets), { ...same.ctx, overrides: defaultOverrides("default") }, same.folders.results));
     expect(JSON.parse(readFileSync(`${join(same.root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
   });
 
   test("counts the items akm reports an error for as n_errored, 0 for a night without one", async () => {
     const clean = setup(IDS, good());
-    expect((await quiet(() => runCorpus("public", clean.ctx, clean.folders))).n_errored).toBe(0);
+    expect((await quiet(() => runCorpus(publicCorpus(clean.folders.assets), clean.ctx, clean.folders.results))).n_errored).toBe(0);
     const failing = good();
     (failing.improve as { actions: unknown[] }).actions.unshift({ ref: "agents/playwright/playwright-explorer", mode: "reflect-failed", result: { reason: "provider_error", error: "HTTP 500" } });
     const { ctx, folders } = setup(IDS, failing);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     expect(summary.n_errored).toBe(1);
     expect(resultsOf(folders).rows.filter((r) => r.error).map((r) => r.id)).toEqual(["retrieval-miss-01"]);
   });
 
   test("repeatRuns runs the night N times into <label>-r1 to -rN and writes the spread of its metrics and n_errored", async () => {
     const { ctx, folders } = setup(IDS, good());
-    const runs = await quiet(() => repeatRuns(2, "t", (label) => runCorpus("public", { ...ctx, label }, folders)));
+    const runs = await quiet(() => repeatRuns(2, "t", (label) => runCorpus(publicCorpus(folders.assets), { ...ctx, label }, folders.results)));
     expect(runs).toHaveLength(2);
     const files = readdirSync(folders.results).sort();
     const day = new Date().toISOString().slice(0, 10);
@@ -286,7 +296,7 @@ describe("runCorpus", () => {
 
   test("scores a good night: every item right, no harm, no failed call, and the timing, the drain and the pair pass in the summary", async () => {
     const { ctx, folders } = setup(IDS, good());
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     const { dir, rows, summary } = resultsOf(folders);
     expect(dir).toMatch(/\d{4}-\d{2}-\d{2}-t$/);
     expect(summary.results_dir).toBeUndefined();
@@ -310,7 +320,7 @@ describe("runCorpus", () => {
     const queued = (reversed.proposals as { id: string; payload: { content: string } }[]).find((p) => p.id === "p4") as { payload: { content: string } };
     queued.payload.content = "---\ndescription: A page with a polling widget.\nwhen_to_use: A Playwright test hangs on a wait.\n---\nThe support chat widget polls every 20 seconds. Wait for networkidle on pages with a polling widget; never wait for the visible heading.\n";
     const { ctx, folders } = setup(IDS, reversed);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     const row = resultsOf(folders).rows.find((r) => r.id === "lesson-01");
     expect(row).toMatchObject({ ok: false, harm: false, checks: { lesson_queued: true, lesson_good: false }, detail: { forbidden: [], contradicted: ["=wait for networkidle", "never wait for * heading"] } });
     expect(summary.metrics.failed).toEqual({ lesson_good: 1 });
@@ -324,7 +334,7 @@ describe("runCorpus", () => {
     guard.apply.push({ path: "knowledge/stray.md", write: "a note nobody planted" }, { path: night.items.find((i) => i.id === "untouched-01")?.files[0] as string, write: "changed" }, { path: dup.b, remove: true });
     (bad.improve as { usageReport: { byProcessEngineModel: { failures: number }[] } }).usageReport.byProcessEngineModel[2]!.failures = 2;
     const { ctx, folders } = setup(IDS, bad);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     expect(summary.metrics.harm).toEqual({ items: 3, outside_changed: 1, lessons_accepted: 1 }); // the pair lost both notes, the lesson was accepted, the note changed
     expect(summary.outside_changed).toEqual(["knowledge/stray.md"]);
     expect(summary.metrics.calls).toEqual({ n: 9, failures: 2 });
@@ -335,7 +345,7 @@ describe("runCorpus", () => {
     const leaky = good();
     (leaky.improve as { actions: unknown[] }).actions.unshift({ ref: "agents/playwright/playwright-explorer", mode: "reflect-failed", result: { reason: "provider_error", error: "request to http://localhost:1/v1/chat/completions failed" } });
     const { ctx, folders } = setup(IDS, leaky);
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     const text = readFileSync(join(resultsOf(folders).dir, "samples.jsonl"), "utf8");
     expect(text).not.toContain("localhost:1");
     expect(text).toContain("request to <MODEL_BASE_URL>/chat/completions failed");
@@ -343,7 +353,7 @@ describe("runCorpus", () => {
 
   test("plants only the items of a limit, taking the first of each kind in turn", async () => {
     const { ctx, folders, commands } = setup(IDS, good());
-    const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 3 }, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, limit: 3 }, folders.results));
     expect(summary).toMatchObject({ limit: 3, n_items: 6, n_planted: 3 });
     expect(resultsOf(folders).rows.map((r) => r.id)).toEqual(["duplicate-01", "description-period-01", "lesson-01"]);
     expect(commands().filter((l) => l.startsWith("feedback ")).map((l) => l.split(" ")[1])).toEqual([refOf(period.path), "memories/playwright-networkidle-chat-widget"]);
@@ -351,35 +361,35 @@ describe("runCorpus", () => {
 
   test("ends with akm's own message when improve fails, with the endpoint hidden, and leaves nothing behind", async () => {
     const { ctx, folders, made } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused");
+    await expect(quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results))).rejects.toThrow("akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused");
     expectAllRemoved(made);
   });
 
   test("ends with akm's message when a step before improve fails, and says when akm reports the run as not ok", async () => {
     const { ctx, folders } = setup(IDS, { indexFails: "no index" });
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow('akm index failed (exit 70): {"ok":false,"error":"no index"}');
+    await expect(quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results))).rejects.toThrow('akm index failed (exit 70): {"ok":false,"error":"no index"}');
     const notOk = good();
     (notOk.improve as { ok: boolean }).ok = false;
     const second = setup(IDS, notOk);
-    expect((await quiet(() => runCorpus("public", second.ctx, second.folders))).improve_ok).toBe(false);
+    expect((await quiet(() => runCorpus(publicCorpus(second.folders.assets), second.ctx, second.folders.results))).improve_ok).toBe(false);
   });
 
   test("removes every sandbox it makes", async () => {
     const { ctx, folders, made } = setup(IDS, good());
-    await quiet(() => runCorpus("public", ctx, folders));
+    await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     expectAllRemoved(made);
   });
 
   test("gives akm what it needs: semantic search and the deterministic embedder (the fake refuses to index without them)", async () => {
     const { ctx, folders } = setup(IDS, good());
-    await expect(quiet(() => runCorpus("public", ctx, folders))).resolves.toBeDefined();
+    await expect(quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results))).resolves.toBeDefined();
   });
 
   test("with the real embedder it sets akm's model in the config and no switch for the hash one, in a semantic sandbox, and records it", async () => {
     process.env.FAKE_EMBEDDER = "real"; // the fake refuses to index without the model's folder, the model in the config, and with the switch on
     try {
       const { ctx, folders, root } = setup(IDS, good(), "real");
-      const summary = await quiet(() => runCorpus("public", ctx, folders));
+      const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
       expect(resultsOf(folders).summary.embedder).toBe("real");
       expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
@@ -393,7 +403,7 @@ describe("runCorpus", () => {
     process.env.FAKE_EMBEDDER = "real";
     try {
       const { ctx, folders } = setup(IDS, good(), "deterministic"); // a plain sandbox: no model folder
-      await expect(quiet(() => runCorpus("public", { ...ctx, embedder: "real" }, folders))).rejects.toThrow("the real embedder is not set up");
+      await expect(quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, embedder: "real" }, folders.results))).rejects.toThrow("the real embedder is not set up");
     } finally {
       delete process.env.FAKE_EMBEDDER;
     }
@@ -401,7 +411,7 @@ describe("runCorpus", () => {
 
   test("the default is the deterministic embedder: the summary says so and the config has no embedding model", async () => {
     const { ctx, folders } = setup(IDS, good());
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     expect(summary).toMatchObject({ embedder: "deterministic" });
     expect(summary.config.embedding).toBeUndefined();
     expect(resultsOf(folders).summary.embedder).toBe("deterministic");
@@ -409,11 +419,11 @@ describe("runCorpus", () => {
 
   test("records the config it wrote with the secrets and the endpoint left out, the engine's settings, the digest of the night, no seed for the public night, and a complete run", async () => {
     const { ctx, folders } = setup(IDS, good());
-    await quiet(() => runCorpus("public", { ...ctx, hasKey: true }, folders));
+    await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, hasKey: true }, folders.results));
     const { summary } = resultsOf(folders);
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, seed: null });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
-    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", endpoint: "http://localhost:1/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
@@ -429,8 +439,8 @@ describe("runCorpus", () => {
     const [x, y] = [setup(IDS, good()), setup(IDS, good())];
     writeFileSync(join(y.folders.assets, "library", dup.a), `${textOf(dup.a)}\nAn added line.\n`);
     const overrides = { strategy: "default", configPatch: { path: "p.json", sha256: "abc", patch: { engines: { nightly: { temperature: 0.3 } } } } };
-    await quiet(() => runCorpus("public", { ...x.ctx, overrides }, x.folders));
-    await quiet(() => runCorpus("public", y.ctx, y.folders));
+    await quiet(() => runCorpus(publicCorpus(x.folders.assets), { ...x.ctx, overrides }, x.folders.results));
+    await quiet(() => runCorpus(publicCorpus(y.folders.assets), y.ctx, y.folders.results));
     const [a, b] = [resultsOf(x.folders).summary, resultsOf(y.folders).summary];
     expect(a.assets_sha256).not.toBe(b.assets_sha256);
     expect(a.engine.temperature).toBe(0.3);
@@ -438,26 +448,84 @@ describe("runCorpus", () => {
     expect(b.engine.temperature).toBe(0);
   });
 
-  test("a private run records the seed its assets were made from: generated.json beside them, else private/seed", async () => {
-    const { ctx, folders, root } = setup(IDS, good());
-    const priv = join(root, "private");
-    const assets = join(priv, "nightly", "assets");
-    mkdirSync(dirname(assets), { recursive: true });
-    cpSync(folders.assets, assets, { recursive: true });
-    const private_ = { assets, results: join(priv, "nightly", "results") };
-    expect(await quiet(() => runCorpus("private", ctx, private_))).toMatchObject({ corpus: "private", seed: null });
-    writeFileSync(join(priv, "seed"), "12345\n");
-    expect(await quiet(() => runCorpus("private", { ...ctx, label: "t2" }, private_))).toMatchObject({ seed: "12345" });
-    writeFileSync(join(priv, "nightly", GENERATED), JSON.stringify({ seed: "777", inputs_sha256: "x" }));
-    const last = await quiet(() => runCorpus("private", { ...ctx, label: "t3" }, private_));
-    expect(last.seed).toBe("777");
-    expect(JSON.parse(readFileSync(join(last.results_dir, "summary.json"), "utf8")).seed).toBe("777");
-    expect(last.assets_sha256).toBe(assetsDigest(assets, nightFiles(assets)));
+  test("a custom run records its kind, whether it is private and, for a rewrite, the seed in its corpus config; the public run has no seed", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const custom = (config: ResolvedCorpus["config"]): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config, configFile: null, flag: "--corpus custom" });
+    const publicRun = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
+    expect(publicRun).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
+    const rewrite = await quiet(() => runCorpus(custom({ kind: "rewrite", private: false, seed: "777", generated: "generated.json" }), { ...ctx, label: "t2" }, folders.results));
+    expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "777" });
+    expect(rewrite.manifest).toMatchObject({ corpus: "custom", settings: { seed: "777" } });
+    expect(JSON.parse(readFileSync(join(rewrite.results_dir, "summary.json"), "utf8")).seed).toBe("777");
+    const own = await quiet(() => runCorpus(custom({ kind: "own", private: true }), { ...ctx, label: "t3" }, folders.results));
+    expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    expect(own.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
+  });
+
+  test("writes a sound manifest: the parts it ran with, the digests of its items, the embedder as a treatment hint, and which items were scored", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, hasKey: true }, folders.results));
+    const stored = resultsOf(folders).summary;
+    expect(manifestProblems(stored.manifest)).toEqual([]);
+    expect(readManifest(stored).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    const m = summary.manifest;
+    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: { embedder: "deterministic" } });
+    expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(Object.keys(m.cases)).toEqual(IDS);
+    expect(m.completion.selected).toEqual(IDS);
+    expect(m.completion.scored.length + m.completion.errored.length).toBe(IDS.length);
+    expect(m.engines.nightly).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false });
+    expect(JSON.stringify(m)).not.toContain("localhost:1/");
+    // the input digest follows the text of the item's files
+    expect(m.cases["duplicate-01"].input_sha256).not.toBe(m.cases["lesson-01"].input_sha256);
+    const texts = Object.fromEntries(dup.files.map((p) => [p, textOf(p)]));
+    expect(JSON.stringify(MEASUREMENT.input({ ...dup, texts: { ...texts, [dup.a]: "other" } } as never))).not.toBe(JSON.stringify(MEASUREMENT.input({ ...dup, texts } as never)));
+  });
+
+  test("the embedder is a treatment hint of the manifest, and so is the real one", async () => {
+    process.env.FAKE_EMBEDDER = "real";
+    try {
+      const { ctx, folders } = setup(IDS, good(), "real");
+      const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
+      expect(summary.manifest.treatment_hints).toEqual({ embedder: "real" });
+    } finally {
+      delete process.env.FAKE_EMBEDDER;
+    }
+  });
+
+  test("each row holds its item's files, proposals and actions and the whole night's part, so scripts/rescore scores the night again without akm", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
+    const { dir, rows } = resultsOf(folders);
+    const row = (id: string) => rows.find((r) => r.id === id);
+    expect(Object.keys(row("duplicate-01").before).sort()).toEqual([dup.a, dup.b].sort());
+    expect(Object.keys(row("duplicate-01").after)).toEqual([dup.b]); // the drain retired the note a
+    expect(row("duplicate-01").proposals.map((p: any) => p.source)).toEqual(["consolidate-pair"]);
+    expect(row("description-period-01").actions.map((a: any) => a.mode)).toEqual(["reflect"]);
+    expect(row("lesson-01").proposals.map((p: any) => p.source)).toEqual(["distill"]);
+    // every row holds the same part of the night
+    expect(new Set(rows.map((r) => JSON.stringify(r.night))).size).toBe(1);
+    expect(rows[0].night).toMatchObject({ outside: [], calls: { calls: 9, failures: 0 }, lane: null });
+    expect(rows[0].night.proposals.map((p: any) => p.source)).toContain("consolidate");
+    clearRunning(dir); // the run ended in this process, which is where the marker is removed
+    const { out, result } = rescoreFolder(dir);
+    expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+    expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
+    expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics).toEqual(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).metrics);
+  });
+
+  test("records the folder of a custom corpus only when it is inside the repository, and never an absolute path", () => {
+    const folder = (name: string): ResolvedCorpus => ({ name: "custom", folder: name, config: { kind: "own", private: true }, configFile: null, flag: "--cases x" });
+    expect(corpusFields(folder(join(ROOT, "private", "nightly", "assets"))).corpus_folder).toBe("private/nightly/assets");
+    expect(corpusFields(folder(join(tmpdir(), "my notes"))).corpus_folder).toBeNull();
+    // the public corpus is the committed night: there is no folder to record
+    expect(corpusFields(publicCorpus(join(ROOT, "evals", "nightly", "assets")))).toEqual({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null });
   });
 
   test("an improve run the eval kills for running too long ends the night with a message that says so, and leaves nothing behind", async () => {
     const { ctx, folders, made } = setup(IDS, { ...good(), improveSleeps: true });
-    await expect(quiet(() => runCorpus("public", { ...ctx, improveTimeoutMs: 1500 }, folders))).rejects.toThrow("akm improve timed out after 1.5s");
+    await expect(quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, improveTimeoutMs: 1500 }, folders.results))).rejects.toThrow("akm improve timed out after 1.5s");
     expectAllRemoved(made);
   });
 });
@@ -478,7 +546,7 @@ describe("the command", () => {
     expect(run(["--corpus", "public"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
     expect(run(["--limit", "0"], model)).toMatchObject({ code: 2 });
     expect(run(["--limit", "0"], model).err).toContain("--limit must be a positive integer");
-    expect(run(["--corpus", "some"], model).err).toContain('--corpus must be public, private or all, not "some"');
+    expect(run(["--corpus", "some"], model).err).toContain('--corpus must be public, custom or all, not "some"');
     expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
     expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
     expect(run(["--repeat", "0"], model).err).toContain("--repeat must be a positive integer");
@@ -514,6 +582,38 @@ describe("the command", () => {
   test("takes --embedder real or deterministic, and goes on to the akm check", () => {
     expect(run(["--embedder", "real"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
     expect(run(["--embedder", "deterministic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+  });
+
+  test("lists the corpora public and custom, and --cases", () => {
+    const help = run(["--help"]).out;
+    expect(help).toContain("[--corpus public|custom|all] [--cases DIR]");
+    expect(help).toMatch(/--cases +the folder of a custom corpus/);
+  });
+
+  test("takes --corpus private as the old name of the custom corpus and prints the new form", () => {
+    expect(run(["--corpus", "private"], model).err).toContain("nightly: --corpus private is now --corpus custom. The old value works for one more release.");
+  });
+
+  test("a custom folder of your own is a private corpus: a model that models.json does not mark private is refused before anything runs", () => {
+    const notes = mkdtempSync(join(tmpdir(), "nightly notes-"));
+    dirs.push(notes);
+    cpSync(join(import.meta.dir, "..", "assets"), notes, { recursive: true });
+    const done = run(["--cases", notes], model);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain(`--cases ${notes} sends your memories to the-model, which is not marked "private": true in models.json.`);
+    expect(done.err).toContain("The corpus is private: it has no corpus.json, and an own corpus without one is private.");
+    expect(done.err).not.toContain("could not run"); // it never got as far as akm
+  });
+
+  test("a custom folder says what is missing from it, and one that says it is not private goes on to the akm check", () => {
+    const empty = mkdtempSync(join(tmpdir(), "nightly-notes-"));
+    dirs.push(empty);
+    writeFileSync(join(empty, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
+    const missing = run(["--cases", empty], model);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toContain(`${join(empty, "items.jsonl")} is missing`);
+    cpSync(join(import.meta.dir, "..", "assets"), empty, { recursive: true });
+    expect(run(["--cases", empty], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
   test("refuses an akm older than the one it is written for", () => {

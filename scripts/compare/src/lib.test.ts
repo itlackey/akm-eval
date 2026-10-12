@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,20 +11,33 @@ import { metrics as nightlyMetrics } from "../../../evals/nightly/src/lib.ts";
 import { metrics as promotionMetrics } from "../../../evals/promotion/src/lib.ts";
 import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/lib.ts";
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
-import { EVAL_METRICS } from "../../matrix/src/lib.ts";
+import { EVAL_METRICS, GAP_FACTOR } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
 import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
+import * as manifestModule from "../../../lib/manifest.ts";
 import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
-import { type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
+import { AXES, type Axis, type Member, checkMembers, configDigest, identityOf, incompleteOf, parseAxes } from "./policy.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
+
+// An eval that declares a measurement is compared by the manifest, and a run from before it is legacy: compared as before, and the report is
+// exploratory. The fixtures of these evals are such runs, written to test the earlier rules, which are for an eval that declares no measurement.
+// So that they keep testing those rules, the evals below are read as undeclared in this file. The path of a legacy run of an eval that does
+// declare one is tested with reflect, in manifest.test.ts.
+const FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT = ["consolidate", "nightly"];
+let undeclared: ReturnType<typeof spyOn> | undefined;
+beforeAll(() => {
+  const real = manifestModule.loadMeasurement;
+  undeclared = spyOn(manifestModule, "loadMeasurement").mockImplementation(((name: string, root?: string) => (FIXTURES_OF_EVALS_WITHOUT_A_MEASUREMENT.includes(name) ? null : real(name, root))) as never);
+});
+afterAll(() => undeclared?.mockRestore());
 const fx = (...parts: string[]): string => join(FIXTURES, ...parts);
 /** The fixtures are a run before and a run after a change to the akm build, so their treatment is the build. */
 const BUILD: Axis[] = ["build"];
 const pair = (name: string, options: CompareOptions = {}): PairReport => comparePair(loadRun(fx(name, "before")), loadRun(fx(name, "after")), { treatment: BUILD, ...options });
 const view = (r: PairReport, name = "") => r.views.find((v) => v.view === name)!;
 const ids = (flips: { id: string }[]): string[] => flips.map((f) => f.id);
-const metric = (r: PairReport, path: string, name = "") => view(r, name).metrics.find((m) => m.path === path)!;
+const metric = (r: PairReport, path: string, name = "") => [...view(r, name).metrics, ...view(r, name).info].find((m) => m.path === path)!;
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -195,9 +208,7 @@ describe("the per-case reading of each eval agrees with the eval's own metrics",
   });
 
   test("every eval in EVAL_METRICS is one compare reads, and every metric is per case or reported from the summaries", () => {
-    // The Harbor evals are in EVAL_METRICS for the matrix. Their rows are trials of two arms, which compare has no reading for.
-    const harbor = ["agent-ab", "terminal-bench"];
-    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).filter((name) => !harbor.includes(name)).sort());
+    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).sort());
   });
 });
 
@@ -396,7 +407,38 @@ describe("refusals", () => {
   });
 
   test("two different corpora", () => {
-    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "private" }))).toContain("the corpus differs: public in A, private in B");
+    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "rewrite" }))).toContain("the corpus differs: public in A, custom in B");
+    // the old name of a rewrite reads as the custom corpus it stands for, so the public corpus differs from it the same way
+    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "private" }))).toContain("the corpus differs: public in A, custom in B");
+  });
+
+  test("two custom corpora of another kind are refused, and a summary from before the corpora were renamed is the custom corpus of its kind (#47)", () => {
+    const rewrite = variant(fx("nightly", "before"), { corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: 7 });
+    const own = variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "own", corpus_private: true });
+    expect(message(rewrite, own, BUILD)).toContain("the kind of the custom corpus (a rewrite of the public cases from a seed, or your own) differs: rewrite in A, own in B");
+    // `private` was the rewrite and `own` your notes: an old run is comparable with a new one of the same corpus
+    expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }), BUILD)).toBe("");
+    expect(message(own, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toBe("");
+    expect(message(own, variant(fx("nightly", "after"), { corpus: "own-feedback" }), BUILD)).toBe("");
+    expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toContain("the kind of the custom corpus");
+    // a public run and a custom one differ in the corpus, said once
+    const m = message(fx("nightly", "before"), rewrite, BUILD);
+    expect(m).toContain("the corpus differs: public in A, custom in B");
+    expect(m).not.toContain("the kind of the custom corpus");
+  });
+
+  test("the seed is evidence for a rewrite, whatever the corpus is called, and not for your own notes", () => {
+    const identity = (s: Record<string, unknown>) => identityOf({ ...IDENTITY, ...s });
+    expect(identity({ corpus: "custom", corpus_kind: "rewrite" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
+    expect(identity({ corpus: "private" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
+    expect(identity({ corpus: "custom", corpus_kind: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "own-feedback" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
+    expect(identity({ corpus: "public" })).toMatchObject({ corpus: "public", corpus_kind: "public", private: false });
+    expect(identity({ corpus: "public", corpus_kind: undefined })).toMatchObject({ corpus_kind: "public" });
+    const gaps = (a: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", a)], []).gaps.map((f) => f.message);
+    expect(gaps({ corpus: "custom", corpus_kind: "rewrite" })).toEqual(["the seed of the private assets is not recorded in A and B"]);
+    expect(gaps({ corpus: "custom", corpus_kind: "own" })).toEqual([]);
   });
 
   test("two different akm versions", () => {
@@ -409,7 +451,7 @@ describe("refusals", () => {
   });
 
   test("consolidate with and without --pool", () => {
-    expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases) differs: none in A, pool in B");
+    expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases, and longmemeval --retrieval-only another measurement) differs: none in A, pool in B");
   });
 
   test("a different hash of the cases is a refusal unless the inputs are the treatment, and a missing one makes the report exploratory", () => {
@@ -441,8 +483,8 @@ describe("refusals", () => {
   });
 
   test("an eval compare has no reading for", () => {
-    const a = writeRun(join(tmp(), "a"), { eval: "agent-ab", corpus: "public", akm_version: "1" }, [{ id: "t1" }]);
-    expect(() => comparePair(loadRun(a), loadRun(writeRun(join(tmp(), "b"), { eval: "agent-ab", corpus: "public", akm_version: "1" }, [{ id: "t1" }])))).toThrow(/agent-ab, which compare has no per-case reading for. It reads nightly, consolidate, distill/);
+    const a = writeRun(join(tmp(), "a"), { eval: "widget", corpus: "public", akm_version: "1" }, [{ id: "t1" }]);
+    expect(() => comparePair(loadRun(a), loadRun(writeRun(join(tmp(), "b"), { eval: "widget", corpus: "public", akm_version: "1" }, [{ id: "t1" }])))).toThrow(/widget, which compare has no per-case reading for. It reads nightly, consolidate, distill/);
   });
 
   test("the same folder twice, and runs with no case in common", () => {
@@ -761,7 +803,7 @@ describe("the comparison policy", () => {
     const [A, B] = ["a".repeat(64), "b".repeat(64)];
     const dirty = (fingerprint: string | null) => ({ akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
     const refused = (a: Record<string, unknown>, b: Record<string, unknown>, treatment: Axis[] = []) => found(checkMembers([member("A", "a", a), member("B", "b", b)], treatment));
-    const label = "the uncommitted changes of the akm build (akm_build_fingerprint)";
+    const label = "the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint)";
     expect(identityOf({ ...IDENTITY, ...dirty(A) }).akm_build_fingerprint).toBe(A);
     expect(identityOf(IDENTITY).akm_build_fingerprint).toBeNull();
     expect(refused({}, {})).toEqual([]); // two clean builds, or two releases, or summaries from before the fingerprint
@@ -869,7 +911,7 @@ function harborSummary(over: { arm?: AkmArm; akmEnv?: Record<string, string>; ba
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: tasks }], arm, packagesDir: arm.packages ?? undefined, akmEnv });
   const job = jobRecord(cfg, "/run", "/repo");
   const observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
-  return { eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", model, ...akmSummary(arm, akmEnv, [], observed), assets_sha256: "a".repeat(64), engine: { model, endpoint: endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job };
+  return { eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", model, ...akmSummary(arm, akmEnv, [], observed), assets_sha256: "a".repeat(64), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job };
 }
 const checkoutArm = (over: Partial<AkmArm> = {}): AkmArm => ({ bin: "~/akm", build: "v0.9.27-3-gabc1234", build_fingerprint: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/run/akm-packages", ...over });
 
@@ -891,6 +933,15 @@ describe("the identity of a Harbor summary (R01)", () => {
       expect(policy([base], [other], ["build", axis as Axis]).mismatches).toEqual([]); // declared, the difference is the treatment
       expect(policy([base], [other], ["build", axis as Axis]).treated).toHaveLength(1);
     }
+  });
+
+  test("a summary written before library_assets was left out of the job still compares with one written after", () => {
+    const base = harborSummary();
+    const older = structuredClone(base);
+    older.config.agents = older.config.agents.map((agent: Record<string, any>) => ({ ...agent, kwargs: { ...(agent.kwargs ?? {}), library_assets: 259 } }));
+    expect(JSON.stringify(older.config)).toContain('"library_assets":259');
+    expect(policy([base], [older], ["build"])).toMatchObject({ mismatches: [], gaps: [], treated: [] });
+    expect(found(policy([base], [harborSummary({ akmEnv: { AKM_CURATE_TIMEOUT: "30" } })], ["build"]))).toHaveLength(1); // the digest still tells a real setting apart
   });
 
   test("a build treatment is not refused for what the build changes: the akm and plugin versions, the tarballs, the folders", () => {
@@ -938,6 +989,72 @@ describe("the identity of a Harbor summary (R01)", () => {
   });
 });
 
+describe("the embedder is part of the scope (#69)", () => {
+  const ALL = [...AXES] as Axis[];
+
+  test("a run with the real embedder and one with the deterministic embedder are refused whatever the treatment", () => {
+    const real = variant(fx("nightly", "before"), { embedder: "real" });
+    const deterministic = variant(fx("nightly", "after"), { embedder: "deterministic" });
+    for (const treatment of [BUILD, DEFAULT_TREATMENT, ALL]) {
+      expect(() => comparePair(loadRun(real), loadRun(deterministic), { treatment })).toThrow("the settings that change what a run measures (the embedder) differs: embedder real in A, embedder deterministic in B");
+    }
+    // the same embedder on both sides is no difference, and a run that records none against one that does is one
+    expect(comparePair(loadRun(real), loadRun(variant(fx("nightly", "after"), { embedder: "real" })), { treatment: BUILD }).exploratory).toEqual([]);
+    expect(() => comparePair(loadRun(real), loadRun(fx("nightly", "after")), { treatment: BUILD })).toThrow("embedder real in A, none in B");
+  });
+
+  test("the policy the matrix applies refuses it too, as a mismatch of the scope", () => {
+    const member = (side: string, embedder: string): Member => ({ side, name: side, identity: identityOf({ ...JSON.parse(readFileSync(fx("nightly", "before", "summary.json"), "utf8")), embedder }) });
+    const found = checkMembers([member("A", "real"), member("B", "deterministic")], ALL).mismatches;
+    expect(found).toEqual([{ axis: "scope", field: "hints", message: "the settings that change what a run measures (the embedder) differs: embedder real in A, embedder deterministic in B" }]);
+    expect(checkMembers([member("A", "real"), member("B", "real")], []).mismatches).toEqual([]);
+  });
+});
+
+describe("retrieval: the judged results (#71)", () => {
+  /** The retrieval fixture of a side with its rows changed, for the queries that have a ranking score. */
+  function changed(side: string, edit: (scores: Record<string, any>, column: string) => Record<string, any>): string {
+    const dir = variant(fx("retrieval", side), {});
+    writeFileSync(join(dir, "samples.jsonl"), rows("retrieval", side).map((r) => `${JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, (k === "search" || k === "curate") && v?.scores ? { ...v, scores: edit(v.scores, k) } : v])))}\n`).join(""));
+    return dir;
+  }
+  const condensed = (scores: Record<string, any>) => ({ ...scores, ndcg_10_condensed: Math.min(1, scores.ndcg_10 + 0.1) });
+  // retrieval is on the manifest now, and these fixtures were written before it: the only note a pair of them gets besides the judged results'
+  const LEGACY = "A and B have no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified";
+
+  test("ndcg_10_condensed and judged_10 are reported beside ndcg_10, with the metrics the matrix judges and without a verdict of their own to judge by", () => {
+    const r = comparePair(loadRun(changed("before", condensed)), loadRun(changed("after", condensed)), { treatment: BUILD });
+    const search = view(r, "search");
+    expect([...search.metrics, ...search.info].map((m) => [m.path, m.role])).toEqual([["search.ndcg_10", "main"], ["search.ndcg_10_condensed", "info"], ["search.judged_10", "info"]]);
+    expect(search.metrics.length).toBe(1); // what the matrix judges is as it was
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.9, delta: 0 });
+    expect(metric(r, "search.ndcg_10_condensed", "search")?.a).toBeGreaterThan(metric(r, "search.ndcg_10", "search")?.a as number); // never below ndcg_10
+    expect(r.exploratory).toEqual([LEGACY]);
+    const md = renderPair(r);
+    expect(md).toContain("| search.ndcg_10_condensed ↑ (not judged) |");
+    expect(md).toContain("| search.judged_10 ↑ (not judged) | 0.9 | 0.9 | 0 |");
+  });
+
+  test("a judged_10 that falls from A to B makes the comparison exploratory, whatever ndcg_10 says, and the note says to grade the results first", () => {
+    const fewerJudged = changed("after", (scores, column) => ({ ...condensed(scores), judged_10: column === "search" ? 0.6 : scores.judged_10 }));
+    const r = comparePair(loadRun(changed("before", condensed)), loadRun(fewerJudged), { treatment: BUILD });
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.6, delta: -0.3 });
+    expect(r.exploratory).toEqual([LEGACY, "judged_10 (search) fell from 0.9 to 0.6: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again"]);
+    expect(renderPair(r)).toContain("> **Exploratory.**");
+    // a fall within the tie is noise, and a rise is not a reason to doubt B
+    const slight = changed("after", (scores) => ({ ...condensed(scores), judged_10: 0.895 }));
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(slight), { treatment: BUILD }).exploratory).toEqual([LEGACY]);
+    const more = changed("after", (scores) => ({ ...condensed(scores), judged_10: 1 }));
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(more), { treatment: BUILD }).exploratory).toEqual([LEGACY]);
+  });
+
+  test("a run whose rows have neither shows them as missing, and does not guess", () => {
+    const r = pair("retrieval");
+    expect(metric(r, "search.ndcg_10_condensed", "search")).toMatchObject({ a: null, b: null, delta: null });
+    expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9 });
+  });
+});
+
 describe("a release against a release", () => {
   const release = (dir: string, right: number, over: Record<string, unknown> = {}) => nightlyRun(join(tmp(), dir), right, { akm_version: "0.9.26", ...over });
 
@@ -969,11 +1086,11 @@ describe("a release against a release", () => {
   test("two edits of one akm commit are two builds: refused, unless the build is the treatment", () => {
     const edited = (dir: string, right: number, fingerprint: string | null) => release(dir, right, { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
     const [a, b] = [edited("a", 8, "a".repeat(64)), edited("b", 13, "b".repeat(64))];
-    const refusal = /the uncommitted changes of the akm build \(akm_build_fingerprint\) differs: aaaaaaaaaaaa in A, bbbbbbbbbbbb in B\. If a difference is what you are measuring, name its axis with --treatment/;
+    const refusal = /the uncommitted changes and installed dependencies of the akm build \(akm_build_fingerprint\) differs: aaaaaaaaaaaa in A, bbbbbbbbbbbb in B\. If a difference is what you are measuring, name its axis with --treatment/;
     expect(() => comparePair(loadRun(a), loadRun(b))).toThrow(refusal);
     expect(() => comparePair(loadRun(a), loadRun(edited("c", 13, null)))).toThrow(/differs: aaaaaaaaaaaa in A, none in B/);
     const r = comparePair(loadRun(a), loadRun(b), { treatment: ["build"] });
-    expect(r.treated).toEqual([`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
+    expect(r.treated).toEqual([`the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
     expect(r.exploratory).toEqual([]);
     // the report shows what tells the two builds apart, and does not call them the same akm
     expect(differences(infoOf(loadRun(a)), infoOf(loadRun(b))).map((d) => d.field)).toEqual(["akm_build_fingerprint"]);
@@ -1004,11 +1121,12 @@ describe("a release against a release", () => {
   });
 
   test("a plain two-folder comparison of one build is as it was: no flag, no banner, and the same numbers", () => {
-    const res = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), fx("reflect", "before"), variant(fx("reflect", "before"), { label: "again" })], { stdout: "pipe", stderr: "pipe" });
+    const res = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), fx("nightly", "before"), variant(fx("nightly", "before"), { label: "again" })], { stdout: "pipe", stderr: "pipe" });
     expect(res.exitCode).toBe(0);
     const out = new TextDecoder().decode(res.stdout);
-    expect(out).toContain("# Compare reflect (public): A and B");
-    expect(out).not.toContain("Exploratory");
+    expect(out).toContain("# Compare nightly (public): A and B");
+    // no banner for any reason of the comparison. These runs are from before the manifest, and nightly declares a measurement now, so the one banner is that they have none.
+    expect(out.split("\n").filter((line) => line.includes("Exploratory")).every((line) => line.includes("have no manifest (written before harness-v3)"))).toBe(true);
     expect(out).toContain("A and B have the same model, akm, strategy and config patch, so this shows the noise between two runs");
   });
 });
@@ -1072,7 +1190,7 @@ describe("two sets of repeats", () => {
     // the third repeat of A was made from other edits of the same akm commit: the same, with or without a build treatment
     const edited = (dirs: string[]): string[] => dirs.map((d, i) => nightlyRun(join(tmp(), `edit-r${i + 1}`), A[i], { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: (i === 2 ? "b" : "a").repeat(64) }));
     for (const [treatment, other] of [[["config"], bDirs], [["build"], releases]] as [Axis[], string[]][]) {
-      expect(refuse(edited(aDirs), other, treatment)).toThrow(/the uncommitted changes of the akm build \(akm_build_fingerprint\) differs/);
+      expect(refuse(edited(aDirs), other, treatment)).toThrow(/the uncommitted changes and installed dependencies of the akm build \(akm_build_fingerprint\) differs/);
     }
     expect(refuse(edited(aDirs), edited(aDirs), ["build"])).toThrow(/differs among the repeats of A/);
     // and a release against a release works when all of them agree
@@ -1143,5 +1261,78 @@ describe("the command with a treatment", () => {
       expect(res.exitCode).toBe(2);
       expect(text(res.stderr)).toContain("compare:");
     }
+  });
+});
+
+// ---- what the --help of compare says, and what its README says of the noise floor (#73, #74) -----------------------------------------------------
+
+describe("--help (#74)", () => {
+  const help = (): string => Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
+
+  test("names every flag it takes and every eval it reads, and the scores --tie applies to", () => {
+    const out = help();
+    for (const flag of ["--treatment", "--repeats", "--against", "--collection", "--json", "--md", "--seed", "--resamples", "--tie"]) expect(out, flag).toContain(flag);
+    for (const name of SUPPORTED) expect(out, name).toContain(name);
+    expect(out).toContain("(retrieval's ndcg, skillret's, a Harbor task's difference)");
+    expect(out).not.toContain("--tie X           retrieval:");
+    // the flags it does not take are refused
+    expect(Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--force"], { stdout: "pipe", stderr: "pipe" }).exitCode).toBe(2);
+  });
+});
+
+describe("the noise floor is for two single runs (#73)", () => {
+  /** The chance that a case with probability p of being right, scored by its mean over k runs on each of two sides of one configuration, comes out different. */
+  const flips = (p: number, k: number): number => {
+    const pmf = Array.from({ length: k + 1 }, (_, j) => (choose(k, j) * p ** j * (1 - p) ** (k - j)));
+    return 1 - pmf.reduce((sum, x) => sum + x * x, 0);
+  };
+  const choose = (n: number, r: number): number => (r === 0 ? 1 : (choose(n, r - 1) * (n - r + 1)) / r);
+
+  test("with 3 repeats a side, nothing changed flips about 1.4 to 2.3 times as many cases as between two runs, as the README says", () => {
+    expect(flips(0.5, 1)).toBeCloseTo(0.5, 10); // expected_flips counts 2p(1-p) of such a case
+    expect(flips(0.5, 3) / flips(0.5, 1)).toBeCloseTo(1.375, 3);
+    expect(flips(0.1, 3) / flips(0.1, 1)).toBeCloseTo(2.27, 2);
+    // the rarer the flip, the larger the factor, and it never reaches 3 for 3 repeats
+    expect(flips(0.01, 3) / flips(0.01, 1)).toBeGreaterThan(flips(0.1, 3) / flips(0.1, 1));
+    expect(flips(0.001, 3) / flips(0.001, 1)).toBeLessThan(3);
+    const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+    expect(readme).not.toContain("A comparison of A and B with about that many flips is no change.");
+    expect(readme).toContain("A comparison of two single runs with about that many flips is no change.");
+    expect(readme).toContain("about 1.4 times `expected_flips` cases");
+    expect(readme).toContain("about 2.3 times");
+    const root = readFileSync(join(import.meta.dir, "..", "..", "..", "README.md"), "utf8");
+    expect(root).not.toContain("A change that flips about that many cases is no change.");
+    expect(root).toContain("about 1.4 to 2.3 times as many");
+  });
+
+  test("min_delta_hint is the largest mean pairwise difference of the main metrics, as the README and the report say, and not the largest difference", () => {
+    const r = compareRepeats(["noise-r1", "noise-r2", "noise-r3"].map((n) => loadRun(fx("nightly", n))));
+    const rate = r.views[0]?.metrics.find((m) => m.path === "items.rate");
+    const [lo, hi] = [Math.min(...(rate?.values as number[])), Math.max(...(rate?.values as number[]))];
+    expect(rate?.pairwise_spread as number).toBeLessThan(hi - lo); // with three runs the mean of the three pairs is under the largest difference
+    expect(r.views[0]?.min_delta_hint).toBe(rate?.pairwise_spread ?? null);
+    const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+    expect(readme).toContain("which is the mean difference between two runs and not the largest difference between two of them");
+  });
+});
+
+describe("what the README says of the policy and of the matrix's rule (#74)", () => {
+  const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+
+  test("the rule of the matrix is a range that does not overlap and a gap, and not the first alone", () => {
+    const intro = readme.split("\n").slice(0, 6).join("\n");
+    expect(intro).toContain(`with a gap of at least ${GAP_FACTOR} times the wider of the two ranges`);
+    expect(intro).toContain("lies wholly on one side of the baseline's");
+    expect(intro).not.toMatch(/does not overlap/);
+  });
+
+  test("policy.ts imports lib/, as the README says, and nothing else of this repository", () => {
+    const source = readFileSync(join(import.meta.dir, "policy.ts"), "utf8");
+    const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1] as string);
+    expect(imports.length).toBeGreaterThan(0);
+    for (const specifier of imports) expect(specifier.startsWith("node:") || specifier.startsWith("../../../lib/"), specifier).toBe(true);
+    expect(imports).toContain("../../../lib/provenance.ts");
+    expect(readme).not.toContain("no imports of its own");
+    expect(readme).toContain("which imports only `lib/`");
   });
 });

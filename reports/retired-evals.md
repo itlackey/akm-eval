@@ -1,6 +1,6 @@
 # Retired evals
 
-Twelve older evals and experiments were retired instead of moved into this repository. This page gives each one a short summary: what it asked, what it found, why it ended, and what here covers the question now.
+Twelve older evals and experiments were retired instead of moved into this repository, and one eval here, bakeoff, gave up most of its jobs when it was rebuilt to drive akm. This page gives each one a short summary: what it asked, what it found, why it ended, and what here covers the question now.
 
 The numbers are the ones the runs recorded, with the date of the run. They describe akm and the models of that day, not akm today. No run was repeated for this page, except the fragment contract (once, on akm 0.9.26). A figure that the saved reports did not state, such as the evolve tallies or the per-question AUCs, was worked out again from the saved files. A result that rests on private notes or queries is given as counts and scores only.
 
@@ -19,7 +19,8 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 | [Decision judges](#decision-judges) | AUC 0.59 for a 2B decision model, near chance | `evals/judge-gate`, for generative judges |
 | [Skill-pack evals](#skill-pack-evals) | 48 activation cases, 0 missed, 0 false; the runtime check never ran | Nothing |
 | [Performance](#performance) | Speed depends on card, build and context depth: decode was 79% faster at 114k tokens between two llama.cpp builds | Nothing |
-| [Routing](#routing) | No improve process could move to a smaller model; the 35B won the blind review 8 to 0 | `evals/bakeoff` and the process evals |
+| [Routing](#routing) | No improve process could move to a smaller model; the 35B won the blind review 8 to 0 | The process evals and `evals/bakeoff` |
+| [Bakeoff's frozen-prompt jobs](#bakeoffs-frozen-prompt-jobs) | 105 of 120 cases, in 11 of 13 jobs, scored a model on a copy of akm's prompts (0.9.15-style); 15 cases in 5 jobs stay, now run through akm | `evals/reflect`, `evals/distill`, `evals/extract`, `evals/consolidate`, `evals/judge-gate`, `evals/promotion`; `evals/bakeoff` for the rest |
 
 ## tau-bench
 
@@ -113,7 +114,7 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 - **Found, July.** Median end-to-end speed on 80-token replies: a 9B model 39 tokens/s on one GPU and about 60 on two; a 27B model 24 on two; a 35B mixture-of-experts model 14 on one and 60 to 70 on two.
 - **Found, September.** 27B at 4-bit: between two llama.cpp builds that differ mainly by one upstream attention change, decode speed rose 7.5% at 4.6k tokens of context, 44% at 36.6k, 65% at 73k and 79% at 114k. Prefill did not change. That is not an isolated test of the change, and the first check missed the gain because the eval items were 1k to 3k tokens long. ik_llama.cpp matched mainline llama.cpp on one mixture-of-experts model for one stream (18.5 against 19.0 tokens/s) and was slower over four streams (10.3 against 17.1).
 - **Retired because.** It is not an akm eval. The numbers are bound to one machine and one build, the July sweeps were superseded by the September bake-off, and each trial reached its conclusion. Speed also says little about quality: one request default, the repeat penalty, moved distill grounding by more than 20 points between two servers with identical weights.
-- **Now.** Nothing, on purpose. `evals/bakeoff` scores quality and records `median_seconds`, which depends on the server, and it dropped the token-rate figures. Reopen if a job needs a latency budget.
+- **Now.** Nothing, on purpose. `evals/bakeoff` records `median_seconds` for its five jobs, which depends on the server, and no token rates. Reopen if a job needs a latency budget.
 
 ## Routing
 
@@ -124,7 +125,40 @@ The old harness of this repository stays under the tag `legacy-2026-10`. The cod
 - **Other processes.** Consolidate: the 9B proposed 13 promotions against 57, with 2 malformed refs. Triage: 1 of 31 pending proposals reaches the judge, so there was nothing to move. The reflect and distill judges could not be routed.
 - **Also found.** The same harness compared two graph output formats on 30 files. Compact triples cut completion tokens by 36% (22,817 to 14,533) and wall time by 35%, with 0 failures, and a blind review of 12 documents was about even (5 documents won against 4).
 - **Retired because.** Graph extraction and metadata enrichment were removed in akm 0.9.17 (2026-09-29), so the graph harnesses target deleted code, and the triage harness imports a drain policy that 0.9.17 deleted. The lesson that outlives it: grounding and agreement scores are not a safe test for swapping a model, and a blind pairwise review is.
-- **Now.** `evals/bakeoff` measures which model runs each akm job best, and the process evals (`evals/judge-gate`, `evals/consolidate`, `evals/reflect`, `evals/distill`, `evals/extract`) each run against the endpoint you want to try. Nothing here compares two engines blind on the same documents. Reopen if a process with free-text output, as graph extraction was, is routed again.
+- **Now.** The process evals (`evals/judge-gate`, `evals/consolidate`, `evals/reflect`, `evals/distill`, `evals/extract`) and `evals/bakeoff`, for the five jobs no other eval measures, each run akm with its own prompts against the endpoint you want to try. Nothing here compares two engines blind on the same documents. Reopen if a process with free-text output, as graph extraction was, is routed again.
+
+## Bakeoff's frozen-prompt jobs
+
+- **Asked.** Which model runs the work akm hands a model best? 120 cases in 13 jobs, each a chat request built from a copy of akm's prompts (`PROMPTS_VERSION` "0.9.15-style"), scored on the reply. akm was never run, so a better prompt, parser, schema or repair turn in akm did not move its numbers, and the copy drifted from akm with every release.
+- **Decided.** Issue #46, by the maintainer: drive akm through `lib/akm`, so the prompts are those of the release under test, and retire the jobs that another eval already measures through akm. What no other eval measures stays, as `evals/bakeoff`, and its results become end-to-end akm results.
+- **How the jobs were sorted.** Each job and case class was checked against akm-cli 0.9.26 (its source, its prompts in `dist/assets/prompts/` and its CHANGELOG, read on 2026-10-12): does akm still ask a model for it, which command does, and does another eval score what that command produces? A job stays only when akm asks a model for it, a command reaches it, and no other eval scores it. The check against the evals was made in their READMEs and sources.
+- **Retired because.** Another eval measures the job through akm, or akm no longer asks a model for it. The table gives the reason for each case class and what measures it now.
+
+| Job (cases) | Case class (cases) | akm 0.9.26 | Measured now by | Decision |
+|---|---|---|---|---|
+| `memory_consolidation` (22) | `plan` (1), `production_plan` (3): promote, protect, queued | The consolidate prompt asks for `promote` only (`consolidate-system.md`). It marks a hot memory, and a memory already queued, in the chunk it shows the model; it knows the second from its own queue | Nothing: `evals/consolidate` reads the retire proposals of the pair pass and ignores the promotions, `evals/nightly` does not count them, `evals/promotion` starts from labelled promotions | **Stays** as `consolidate-promote`, 2 cases: `consolidate-memory-pool`, `prod-consolidate-full-pool`. `prod-consolidate-noop-pool` and `prod-consolidate-hot-and-queued` go: their labels rest on 28 and 18 memories being already queued, which akm knows from the promotions it queued itself, and no command queues one without running consolidate, so without it they are not labels |
+| | `duplicates` (1), `superseded` (1), `conflict` (1): merge, delete, contradict | The plan prompt dropped `merge`, `delete` and `contradict` in 0.9.17. The pair judge decides duplicates, supersession and contradiction | `evals/consolidate`: 60 pairs, 10 for each of `duplicate`, `subsumed`, `supersedes`, `contradicts`, `overlap`, `unrelated` | Retired |
+| | `grounded_consolidate` (15): one merged document with verbatim quotes | No job. akm never merges documents | Nothing | Retired |
+| `distill` (19) | `lesson` (2), `production_lesson` (2) | Distill writes a lesson from a memory, judges it and queues it | `evals/distill`: 38 memories, with akm's own judge | Retired |
+| | `knowledge` (2), `production_knowledge` (1) | Distill writes a knowledge note only when it promotes a reinforced memory; no command asks for one from a document | Nothing | Retired |
+| | `grounded_distill` (12): a long document, compressed with verbatim quotes | No job | Nothing | Retired |
+| `memory_inference` (4) | `derived-memory` (4) | `akm improve` runs it as a maintenance pass when `experimental.improveAutonomy` is on, and writes `memories/<name>.derived.md` | Nothing | **Stays**, 4 cases |
+| `remember_enrich` (4) | `enrichment` (4) | `akm remember --enrich` asks for tags, a description and a date | Nothing | **Stays**, 4 cases |
+| `schema_repair` (10) | `lesson` (4): a lesson without `description` and `when_to_use` | `akm improve <lesson>` repairs a lesson that has no `description`, and queues the result from source `schema-repair` | Nothing | **Stays**, 4 cases |
+| | `production_schema` (6): knowledge, skill, command, agent, workflow, fact without a `description` | Validation fails only a lesson without a `description`, so the repair prompt is never sent for these types | Nothing | Retired |
+| `session_extraction` (7) | `session_summary` (1) | `akm proposal extract` summarises the session into `sessions/<harness>/<id>.md` when `indexSessions` is on | Nothing: `evals/extract` sets `indexSessions: false` | **Stays** as `session-summary`, 1 case |
+| | `signal` (3), `empty` (1), `production_session` (1), `production_session_empty` (1) | Extract reads a session and queues memories, lessons and knowledge | `evals/extract`: 20 sessions, insights, preferences, routine and planted | Retired |
+| `reflect_proposal` (13) | `revision` (4), `deep_reflect` (4), `production_reflect` (5): rewrite the body | Since 0.9.25-alpha.3 reflect edits the frontmatter only and keeps the body byte for byte | `evals/reflect`: 50 notes | Retired |
+| `lesson_quality_gate` (5) | `pass` (2), `reject` (2), `deep_quality` (1) | Distill's own judge scores novelty, non-redundancy and grounding | `evals/distill`, end to end: a lesson the judge refuses counts as none | Retired |
+| `proposal_quality_gate` (9) | `pass` (2), `reject` (2), `deep_quality` (5) | `akm improve judge` | `evals/judge-gate`: 106 labelled reflect proposals | Retired |
+| `memory_contradiction_detection` (4) | `contradiction`, `compatible`, `compatible-history`, `compatible-duplicate` (1 each) | The pair judge labels a pair `contradicts`, `overlap`, `supersedes` or `duplicate` | `evals/consolidate`: its `contradicts` class and the other relations | Retired |
+| `proposal_triage` (4) | `triage` (4): accept, reject, defer an update to a note | The drain's judgment tier (`drain.js`) | `evals/promotion`: the same tier, on promotions | Retired. Promotion labels promotions, which are new notes; an update to an existing note is not a class there, so the four cases leave nothing measuring it |
+| `graph_extraction` (11) | `graph` (4), `deep_graph` (4), `graph_batch` (2), `graph_chunked` (1) | Removed in 0.9.17 (CHANGELOG, "Removed") | Nothing, and nothing can | Retired |
+| `metadata_enhance` (8) | `metadata` (4), `production_metadata` (4) | Removed in 0.9.17 (CHANGELOG, "Removed"; `index.metadataEnhance` is a retired key) | Nothing, and nothing can | Retired |
+
+- **What stays.** Five jobs and 15 cases: `memory-inference` (4), `remember-enrich` (4), `schema-repair` (4), `session-summary` (1) and `consolidate-promote` (2). Each runs one akm command in a sandbox, and the scorer reads what akm wrote: a file, or a proposal in the queue.
+- **Gaps this leaves.** Nothing measures the drain's judgment tier on an update to an existing note (`proposal_triage`), a consolidate promotion pass over memories that are already queued, or a summary of more than one session. They are not rebuilt here because the labels do not carry over; reopen if one of them matters. Two model-backed jobs of akm 0.9.26 never had a case in bakeoff: `akm proposal new` and the completion audit of a workflow step.
+- **Now.** The numbers of the retired jobs are gone with them. The frozen-prompt results were never comparable with a run of akm, and no earlier bakeoff result is carried over.
 
 ## Licence
 

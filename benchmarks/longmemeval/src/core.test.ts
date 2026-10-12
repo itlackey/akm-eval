@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { DATA_FILE, QUESTION_TYPES, type Question, ensureDataset, parseQuestions, sampleQuestions } from "./dataset.ts";
 import { retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { pairedDifference, rate } from "./metrics.ts";
-import { isDecidable, isYes, judgePrompt, readerPrompt, renderSession } from "./prompts.ts";
+import { judgePrompt, readerPrompt, renderSession, stripReasoning } from "./prompts.ts";
+import { isDecidable, isYes } from "./score.ts";
 
 const make = (id: string, type: string, extra: Partial<Question> = {}): Question => ({
   question_id: id,
@@ -146,6 +147,28 @@ describe("pairedDifference", () => {
     expect(pairedDifference(Array(3).fill({ without: true, with: true }))).toMatchObject({ n: 3, value: 0, ci95: null, both_correct: 3 });
     expect(pairedDifference([])).toMatchObject({ n: 0, value: null, ci95: null });
     expect(rate(0, 0).rate).toBeNull();
+  });
+});
+
+describe("stripReasoning", () => {
+  test("removes the reasoning of a thinking model and leaves the answer (#62)", () => {
+    expect(stripReasoning("<think>The key is maybe RED7, or 3.</think>BLUE42")).toBe("BLUE42");
+    expect(stripReasoning("<think>\nline one\n\nline two\n</think>\n\nThe answer is BLUE42.\n")).toBe("The answer is BLUE42.");
+    expect(stripReasoning("<THINK>x</THINK>Answer")).toBe("Answer");
+    expect(stripReasoning("<thinking>a</thinking> one <reasoning>b</reasoning>two <thought>c</thought>")).toBe("one two");
+  });
+
+  test("a block cut off by the token limit runs to the end, and a closing tag with no opening one ends reasoning that began in the prompt", () => {
+    expect(stripReasoning("<think>The key might be BLUE42, or 3, or RED7. Let me check")).toBe("");
+    expect(stripReasoning("Sure. <think>unfinished")).toBe("Sure.");
+    expect(stripReasoning("Let me think. BLUE42? No...\n</think>\nThe answer is 3.")).toBe("The answer is 3.");
+    expect(stripReasoning("<think>done</think>The answer is 3.</think>")).toBe("");
+  });
+
+  test("an answer with no reasoning is only trimmed", () => {
+    expect(stripReasoning("  3 cats \n")).toBe("3 cats");
+    expect(stripReasoning("")).toBe("");
+    expect(stripReasoning("I do not know <b>much</b> about it.")).toBe("I do not know <b>much</b> about it.");
   });
 });
 

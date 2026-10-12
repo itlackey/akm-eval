@@ -1,0 +1,293 @@
+{
+  "lock_version": 1,
+  "harness_version": 3,
+  "evals": {
+    "agent-ab": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "2c8cddfe2257dbacaeecd3b076d816ba210d5afaa7ef841c64cc0a7e6ebc5a8a",
+        "files": [
+          "evals/agent-ab/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/cli.ts",
+          "lib/harbor/akm_opencode.py",
+          "lib/harbor/harbor.ts",
+          "lib/harbor/locks/akm-cli-0.9.26/package-lock.json",
+          "lib/harbor/locks/akm-cli-0.9.26/package.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package-lock.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package.json",
+          "lib/harbor/trials.ts",
+          "lib/models.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "d440c7e333b9d79e140496974940f121a01949d49ac09204c9d572cf4cfad792",
+        "files": [
+          "lib/harbor/report.ts",
+          "lib/harbor/score.ts"
+        ]
+      }
+    },
+    "bakeoff": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "b95da4e2ca887441dc8d419f825f99b76523bd1f036d900f8068d2bb7f552e5d",
+        "files": [
+          "evals/bakeoff/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "2ca17e24721eed998a53a5b816027ace18ca7dca76dc18275a99f804d23d444f",
+        "files": [
+          "evals/bakeoff/src/score.ts"
+        ]
+      }
+    },
+    "consolidate": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "0f59751f560ed5f4f473b28839993e374d68630d007173a5571b92e14ab73522",
+        "files": [
+          "evals/consolidate/src/collect.ts",
+          "evals/consolidate/src/sandbox.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "3e604024d2b94cc8892ec279b17e1ab39fd77065ff8deeff5fb56230018c161e",
+        "files": [
+          "evals/consolidate/src/cases.ts",
+          "evals/consolidate/src/pool-score.ts",
+          "evals/consolidate/src/score.ts"
+        ]
+      }
+    },
+    "distill": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "c610a71c3e3cc73412a2dfb45dae5a2023e71cb3b09c36592126319922ccdb6b",
+        "files": [
+          "evals/distill/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "e51aca32c46dcad1576f836a30cad8f78157d082d42b45d6a675d88337e5dfc6",
+        "files": [
+          "evals/distill/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
+    "extract": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "714cbadd73a8b6ad8c8da9782307dee5d96e89476c6687265ed7af16a86a3c4e",
+        "files": [
+          "evals/extract/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "84172d25a167d4ebfe6080247738afc8aac5f063daffcd2a31e8b02276e7d5cd",
+        "files": [
+          "evals/extract/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
+    "judge-gate": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "0ef7d870a29890331add7a1f365a5add94bd5530bfe1d2918beccd77e76759de",
+        "files": [
+          "evals/judge-gate/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "e2d745fa97c253183522609716b9f6512e12851f0157f26d84c967460e300df8",
+        "files": [
+          "evals/judge-gate/src/score.ts"
+        ]
+      }
+    },
+    "longmemeval": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "24ee168a48815ec9645157959aa3c0e82b7c89ca3a2a940eb70e52783f07fd43",
+        "files": [
+          "benchmarks/longmemeval/src/akm.ts",
+          "benchmarks/longmemeval/src/collect.ts",
+          "benchmarks/longmemeval/src/llm.ts",
+          "benchmarks/longmemeval/src/prompts.ts",
+          "lib/akm/akm.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "7a80b0bc611b6a1bab2b73184ae5cbd79a2f2127b385bc94420f3cb4c39b313c",
+        "files": [
+          "benchmarks/longmemeval/src/metrics.ts",
+          "benchmarks/longmemeval/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
+    },
+    "nightly": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "3b6779881a415d258452a2f776c05e7f61b6069b0aaf99230b9a98c3b0aed007",
+        "files": [
+          "evals/consolidate/src/sandbox.ts",
+          "evals/nightly/src/collect.ts",
+          "evals/nightly/src/library.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "20d4c81368bc8f87d55335c7bc7ebc206a81912115c90de9a4804bd25031c7f6",
+        "files": [
+          "evals/consolidate/src/cases.ts",
+          "evals/distill/src/score.ts",
+          "evals/nightly/src/items.ts",
+          "evals/nightly/src/score.ts",
+          "evals/reflect/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
+    "promotion": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "1c7b3bfdbde627542353554982e9bb0a4b915fd3a5419053a102fd13b3895e51",
+        "files": [
+          "evals/promotion/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "66d76aedd254fe43f6d72948d3813277ad6007039d8deedee18d261999a7a50d",
+        "files": [
+          "evals/promotion/src/score.ts"
+        ]
+      }
+    },
+    "reflect": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "7c37dcb317cb51b1f960c73b7137599fece46ff0c10b68a70eb5eae42e9f4a74",
+        "files": [
+          "evals/reflect/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "3c8b75841346e25baf4df38f2c1e5f517f57d9d6032c6460f40b02184fb543fd",
+        "files": [
+          "evals/reflect/src/score.ts"
+        ]
+      }
+    },
+    "retrieval": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "3ec3a06b32125e095bed8ca83fdbba85e62c83413eb9a0b67564136dfbb73fb0",
+        "files": [
+          "evals/retrieval/src/akm.ts",
+          "evals/retrieval/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "0429da784b9256b1a887a221151926d0895ef703ccf9babbb3c58d252dc3c957",
+        "files": [
+          "evals/retrieval/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
+    },
+    "skillret": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "f7998935e63f33e41fe84f1e9d539427d1a0436eba71b9adfd4becfca1709c38",
+        "files": [
+          "benchmarks/skillret/src/akm.ts",
+          "benchmarks/skillret/src/collect.ts",
+          "benchmarks/skillret/src/sample.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/index-cache.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "a6b0c5015a9cbd2a52471c0224c880c608b1b982bf6aa39abb6d263d72440322",
+        "files": [
+          "benchmarks/skillret/src/score.ts",
+          "lib/ir.ts"
+        ]
+      }
+    },
+    "terminal-bench": {
+      "collector": {
+        "version": "0.2",
+        "sha256": "f76ab669f4e82c87d84fd43e6fd351db8dba02eeafb3226a1971a09b41ffdf1a",
+        "files": [
+          "benchmarks/terminal-bench/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/cli.ts",
+          "lib/harbor/akm_opencode.py",
+          "lib/harbor/harbor.ts",
+          "lib/harbor/locks/akm-cli-0.9.26/package-lock.json",
+          "lib/harbor/locks/akm-cli-0.9.26/package.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package-lock.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package.json",
+          "lib/harbor/trials.ts",
+          "lib/models.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": "0.2",
+        "sha256": "d440c7e333b9d79e140496974940f121a01949d49ac09204c9d572cf4cfad792",
+        "files": [
+          "lib/harbor/report.ts",
+          "lib/harbor/score.ts"
+        ]
+      }
+    }
+  }
+}

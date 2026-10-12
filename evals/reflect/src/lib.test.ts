@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { refOfFile } from "../../retrieval/src/library.ts";
 import { buildCases, libraryFileOf } from "./build.ts";
 import {
   CLASSES,
+  GENERATOR_CODE,
   type Case,
   type CaseClass,
   type Defect,
@@ -16,10 +17,10 @@ import {
   atLeast,
   caseProblems,
   cleanProblems,
-  corpusSeed,
   digestOf,
   fixOf,
   generatedProblem,
+  generatorSha256,
   hasCopiedFrontmatter,
   inject,
   labelledQueries,
@@ -27,19 +28,23 @@ import {
   metrics,
   parseCases,
   readGenerated,
-  readSeed,
   reflectConfig,
   reflectOutcome,
   refOf,
   refusalOf,
   score,
+  searchesFor,
   selectCases,
   servedModel,
   splitFrontmatter,
+  summarize,
   timedOutMessage,
 } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
+const REPO = join(EVAL_DIR, "..", "..");
+/** The public cases, for the tests that take an edit from the cases themselves. */
+const PUBLIC: Case[] = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"));
 const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library");
 const cleanups: string[] = [];
 afterEach(() => {
@@ -276,6 +281,28 @@ describe("score", () => {
     expect(score(c, c.source).checks.defect_fixed).toBe(false); // still split
   });
 
+  test("a stray period is repaired by changing the break only: a rewrite of the description is not a fix, whatever words it keeps (#59)", () => {
+    const c = PUBLIC.find((x) => x.id === "description-period-01") as Case;
+    const was = (c.source.match(/^description:(.*(?:\n[ \t].*)*)/m)?.[1] ?? "").replace(/\s+/g, " ").trim();
+    const withDescription = (d: string) => c.source.replace(/^description:.*(?:\n[ \t].*)*/m, `description: ${d}`);
+    const fixed = (d: string) => score(c, withDescription(d)).checks.defect_fixed;
+    const joined = was.replace(". ", " ");
+    expect(fixed(joined)).toBe(true); // the period dropped
+    expect(fixed(was.replace(". ", ", "))).toBe(true); // the period turned into a comma
+    expect(fixed(was)).toBe(false); // still split
+    expect(fixed(`Do not ${joined.charAt(0).toLowerCase()}${joined.slice(1)}`)).toBe(false); // reverses the meaning
+    expect(fixed(`${joined.replace(/\.$/, "")} for every repository in the organisation.`)).toBe(false); // adds words
+    expect(fixed(joined.replace("read-only ", ""))).toBe(false); // drops one
+    expect(fixed(joined.replace("repository baseline, architecture review", "architecture review, repository baseline"))).toBe(false); // reorders
+  });
+
+  test("the repair that each public description-period case asks for is a fix", () => {
+    for (const c of PUBLIC.filter((x) => x.class === "description-period")) {
+      const repaired = c.source.replace(/^(description:.*)\.\n[ \t]+/m, "$1 ");
+      expect(score(c, repaired).checks, c.id).toMatchObject({ defect_fixed: true, body_kept: true, no_extra_change: true });
+    }
+  });
+
   test("a description with its escaped quotes still in it is not fixed", () => {
     const c = defect("description-quote");
     expect(score(c, c.source.replace(/\\"/g, "")).checks.defect_fixed).toBe(true);
@@ -401,6 +428,42 @@ describe("score", () => {
       expect(when("Use when a signing key is about to expire in the current service.").no_extra_change).toBe(true);
     });
 
+    test("historical: a when_to_use that offers the note for current work is wrong, naming a version it records or a word such as old does not save it (#59)", () => {
+      const c = PUBLIC.find((x) => x.id === "historical-05") as Case;
+      const when = (w: string) => score(c, c.source.replace(/^when_to_use:.*$/m, `when_to_use: ${w}`)).checks;
+      for (const offer of [
+        "Use as the current, recommended way to call GPT-4 class models today, for any new work.",
+        "Use for GPT-4 era delegation; it replaces the old agent CLI approach.",
+        "Use to call GPT-3.5 models, the latest and up to date way.",
+        "Use when starting new work on GPT-4 class models.",
+        "Historical, but currently the best way to call GPT-4.",
+      ]) {
+        expect(when(offer).not_current, offer).toBe(false);
+        expect(when(offer).no_extra_change, offer).toBe(true); // the only thing wrong is the offer
+      }
+      // naming what the note records, or saying it is historical, with no offer, still passes, and so does an offer the same clause withdraws
+      for (const kept of [
+        "Use to check what GPT-3.5 and GPT-4 did.",
+        "Historical reference for GPT-3.5 and GPT-4; not for current work.",
+        "Superseded by newer models; kept as a record of the GPT-3.5 generation.",
+        "Use only to look up how this worked in GPT-3.5; it is historical and no longer current.",
+        "The old way to call GPT-4; don't use it today.",
+      ]) {
+        expect(when(kept).not_current, kept).toBe(true);
+      }
+      expect(score(c, undefined).checks.not_current).toBe(true);
+    });
+
+    test("historical: what the public cases call a correct result still passes: no change, or a when_to_use that names what the note records or says it is historical", () => {
+      for (const c of PUBLIC.filter((x) => x.class === "historical")) {
+        const when = (w: string) => score(c, c.source.replace(/^when_to_use:.*$/m, `when_to_use: ${w}`)).checks;
+        expect(score(c, undefined).checks.not_current, c.id).toBe(true);
+        expect(when(`Use to look up what ${(c.anchors ?? []).join(" and ")} did.`), c.id).toMatchObject({ not_current: true, no_invented: true });
+        expect(when("Historical reference only; superseded by newer releases.").not_current, c.id).toBe(true);
+        expect(when(`Use as the current guide to ${(c.anchors ?? [])[0]} today.`).not_current, c.id).toBe(false);
+      }
+    });
+
     test("historical: no other field may change", () => {
       const c = mk("historical", NOTE, { anchors: ["2026-01-02"] });
       expect(score(c, NOTE.replace(/^description:.*$/m, "description: This is a historical note about rotating signing keys.")).checks.no_extra_change).toBe(false);
@@ -430,9 +493,44 @@ describe("makeRow", () => {
     expect(makeRow(c, { outcome: "refused", seconds: 1 }).proposal).toBeUndefined();
   });
 
-  test("a reply akm could not use, or an edit its own filter refused, is never correct", () => {
+  test("a reply akm could not use is never correct", () => {
     expect(makeRow(c, { outcome: "unusable", reason: "parse_error", seconds: 1 })).toMatchObject({ correct: false, outcome: "unusable" });
-    expect(makeRow(c, { outcome: "refused", reason: "quality_rejected", seconds: 1 })).toMatchObject({ correct: false });
+  });
+
+  test("an edit a gate refused leaves the note as it was, and is scored as a note left alone: right for a control, a miss for a defect (#57)", () => {
+    const refused = { outcome: "refused", reason: "quality_rejected: Reflect proposal refused before the judge: placeholder_added", seconds: 1 } as const;
+    expect(makeRow(c, refused)).toMatchObject({ outcome: "refused", correct: true, changed: [], checks: { body_kept: true, no_extra_change: true, no_invented: true } });
+    const fix = mk("when-to-use-missing", inject("when-to-use-missing", NOTE) as string);
+    expect(makeRow(fix, refused)).toMatchObject({ outcome: "refused", correct: false, checks: { defect_fixed: false } });
+    // the same for each of the gates that refuse
+    for (const reason of ['quality_rejected: Reflect proposal quality gate rejected: score=3.0, reason="adds a claim"', "quality_rejected: Reflect proposal refused: retrieval regression: grade 3.00 -> 2.20 over 5 retrieval queries"]) {
+      expect([makeRow(c, { outcome: "refused", reason, seconds: 1 }).correct, makeRow(fix, { outcome: "refused", reason, seconds: 1 }).correct]).toEqual([true, false]);
+    }
+  });
+
+  test("a control whose bad edit the gate refuses is right with the gate on and wrong with it off (#57)", () => {
+    const bad = NOTE.replace(/^description:.*$/m, "description: Rewrites how signing keys are rotated, with a new claim about AWS.");
+    const off = makeRow(c, { outcome: "proposal", proposal: bad, seconds: 1 }); // the gate is off: the bad edit is proposed and the checks score it
+    const on = makeRow(c, { outcome: "refused", reason: "quality_rejected: Reflect proposal quality gate rejected: score=2.0", seconds: 1 }); // the gate is on: the note stays as it was
+    expect([off.correct, on.correct]).toEqual([false, true]);
+  });
+
+  test("a retrieval check that could not grade is an error, not a refusal: it has no verdict, and a timeout is counted as one (#58)", () => {
+    const fix = mk("when-to-use-missing", inject("when-to-use-missing", NOTE) as string);
+    const reason = "quality_rejected: Reflect proposal refused: retrieval check could not grade the old content (timeout)";
+    for (const target of [c, fix]) {
+      expect(makeRow(target, { outcome: "refused", reason, served: "qwen3-27b", seconds: 40 })).toEqual({ id: target.id, class: target.class, outcome: "error", reason, seconds: 40, correct: null, checks: null, changed: [], values: {}, error: reason, timed_out: true });
+    }
+    // a model call that failed or gave no grade is no timeout, but is as much an error
+    for (const why of ["(error)", "(aborted)", ""]) {
+      const row = makeRow(c, { outcome: "refused", reason: `quality_rejected: Reflect proposal refused: retrieval check could not grade the new content ${why}`.trim(), seconds: 1 });
+      expect(row).toMatchObject({ outcome: "error", correct: null, checks: null });
+      expect("timed_out" in row).toBe(false);
+    }
+    const rows = [makeRow(c, { outcome: "refused", reason, seconds: 40 }), makeRow(c, { outcome: "refused", reason: "quality_rejected: Reflect proposal refused: retrieval regression: grade 3.00 -> 2.20 over 5 retrieval queries", seconds: 41 }), makeRow(c, { outcome: "none", seconds: 1 })];
+    expect(summarize(rows)).toMatchObject({ n_run: 3, n_scored: 2, n_errored: 1, timeouts: 1 });
+    expect(summarize(rows).metrics.refused).toEqual({ filter: 0, judge: 0, retrieval: 1, other: 0 }); // the regression is a refusal, the timeout is not
+    expect(summarize(rows).metrics.controls).toEqual({ n: 2, correct: 2, rate: 1 });
   });
 
   test("an error has no verdict and keeps its message", () => {
@@ -493,10 +591,12 @@ describe("generated.json", () => {
     return dir;
   };
 
-  test("vouches for assets made from the public cases as they are", () => {
-    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+  const made = (over: Record<string, unknown> = {}) => ({ seed: "42", inputs_sha256: assetsSha256(PUBLIC), generator_sha256: generatorSha256(), ...over });
+
+  test("vouches for assets made from the public cases as they are, by the generator as it is", () => {
+    const dir = privateDir(made());
     expect(generatedProblem(dir, PUBLIC)).toBeUndefined();
-    expect(readGenerated(dir)).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) });
+    expect(readGenerated(dir)).toEqual(made());
   });
 
   test("refuses assets without it, with one that is not readable, and with a digest that is not the public one", () => {
@@ -507,26 +607,55 @@ describe("generated.json", () => {
     expect(generatedProblem(privateDir({ seed: "42", inputs_sha256: "0".repeat(64) }), PUBLIC)).toContain("other public assets");
   });
 
+  test("the digest of the generator covers generate.ts, the rewrite and its lexicon, and nothing else of the repository (#44)", () => {
+    expect(GENERATOR_CODE).toEqual(["evals/reflect/src/generate.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]);
+    const root = mkdtempSync(join(tmpdir(), "reflect generator "));
+    cleanups.push(root);
+    for (const rel of GENERATOR_CODE) {
+      mkdirSync(join(root, dirname(rel)), { recursive: true });
+      cpSync(join(REPO, rel), join(root, rel));
+    }
+    expect(generatorSha256(root)).toBe(generatorSha256()); // the same files, the same digest, wherever the repository is
+    for (const rel of GENERATOR_CODE) {
+      const was = readFileSync(join(root, rel), "utf8");
+      writeFileSync(join(root, rel), `${was}\n// edited\n`);
+      expect(generatorSha256(root), rel).not.toBe(generatorSha256());
+      writeFileSync(join(root, rel), was);
+    }
+    mkdirSync(join(root, "lib"), { recursive: true });
+    writeFileSync(join(root, "lib", "negation.ts"), "// not part of the generator\n");
+    expect(generatorSha256(root)).toBe(generatorSha256());
+  });
+
+  test("assets whose stored generator digest is zeroed, or from another generator, or made before the generator was digested, are refused; the ones generate writes pass (#44)", () => {
+    for (const old of ["0".repeat(64), "f".repeat(64), generatorSha256().replace(/^./, (c) => (c === "a" ? "b" : "a"))]) {
+      expect(generatedProblem(privateDir(made({ generator_sha256: old })), PUBLIC), old).toBe("they were made by a generator that has changed since: generate.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in generated.json differs)");
+    }
+    expect(generatedProblem(privateDir({ seed: "42", inputs_sha256: assetsSha256(PUBLIC) }), PUBLIC)).toBe("generated.json has no generator_sha256, so nothing shows which generator made them (an older generate)");
+    expect(generatedProblem(privateDir(made({ generator_sha256: 42 })), PUBLIC)).toContain("has no generator_sha256");
+  });
+
+  test("a change to a file of the generator in the repository makes the assets made before it stale", () => {
+    const root = mkdtempSync(join(tmpdir(), "reflect generator "));
+    cleanups.push(root);
+    for (const rel of GENERATOR_CODE) {
+      mkdirSync(join(root, dirname(rel)), { recursive: true });
+      cpSync(join(REPO, rel), join(root, rel));
+    }
+    const dir = privateDir(made());
+    expect(generatedProblem(dir, PUBLIC, root)).toBeUndefined();
+    writeFileSync(join(root, "lib/rewrite/lexicon.ts"), `${readFileSync(join(root, "lib/rewrite/lexicon.ts"), "utf8")}\n`);
+    expect(generatedProblem(dir, PUBLIC, root)).toContain("generator that has changed since");
+  });
+
   test("a public case that changed makes the assets made from it stale", () => {
     const root = mkdtempSync(join(tmpdir(), "reflect-generated-"));
     cleanups.push(root);
     cpSync(PUBLIC, join(root, "assets"), { recursive: true });
-    const dir = privateDir({ seed: "42", inputs_sha256: assetsSha256(join(root, "assets")) });
+    const dir = privateDir(made({ inputs_sha256: assetsSha256(join(root, "assets")) }));
     expect(generatedProblem(dir, join(root, "assets"))).toBeUndefined();
     writeFileSync(join(root, "assets", "cases.jsonl"), `${readFileSync(join(root, "assets", "cases.jsonl"), "utf8")}\n `);
     expect(generatedProblem(dir, join(root, "assets"))).toContain("other public assets");
-  });
-
-  test("the seed to record: none for the public corpus, the seed the assets were made with for the private one, else private/seed", () => {
-    const dir = privateDir({ seed: "7", inputs_sha256: "x" });
-    writeFileSync(join(dir, "seed"), "123456789012345678\n");
-    expect(corpusSeed("public", dir, join(dir, "seed"))).toBeNull();
-    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("7");
-    expect(corpusSeed("own", dir, join(dir, "seed"))).toBe("123456789012345678");
-    expect(corpusSeed("own", dir, join(dir, "no-seed"))).toBeNull();
-    expect(readSeed(join(dir, "seed"))).toBe("123456789012345678");
-    rmSync(join(dir, "generated.json"));
-    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("123456789012345678");
   });
 });
 
@@ -565,7 +694,6 @@ describe("refusalOf", () => {
     expect(refusalOf("quality_rejected: Reflect proposal refused before the judge: placeholder_added")).toBe("filter");
     expect(refusalOf('quality_rejected: Reflect proposal quality gate rejected: score=3.0, reason="adds a claim"')).toBe("judge");
     expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval regression: grade 2.00 -> 1.40 over 5 retrieval queries")).toBe("retrieval");
-    expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval check could not grade the new content")).toBe("retrieval");
     expect(refusalOf("content_policy_reject: x")).toBe("other");
   });
 
@@ -591,6 +719,22 @@ describe("labelledQueries", () => {
 
   test("a note whose only grades are below 2 has none", () => {
     expect(labelledQueries(queries, qrel("q1", "a", 1)).has("a")).toBe(false);
+  });
+});
+
+describe("searchesFor", () => {
+  const note = (path: string, id: string): Case => mk("retrieval-miss", NOTE, { id, path });
+  const labelled = new Map([["knowledge/a", ["rotate signing keys", "key expiry"]], ["knowledge/b", ["only b"]]]);
+  const publicCases = [note("knowledge/a.md", "one"), note("knowledge/b.md", "two"), note("knowledge/c.md", "three")];
+
+  test("the public corpus gets the queries of its own notes, as they are labelled", () => {
+    expect([...searchesFor(publicCases, publicCases, labelled)]).toEqual([["knowledge/a", ["rotate signing keys", "key expiry"]], ["knowledge/b", ["only b"]]]);
+  });
+
+  test("a rewrite takes the queries of the public case with its id, written as the rewrite wrote the note, under the ref of its own note (#60)", () => {
+    const rewritten = [note("knowledge/x/a-renamed.md", "one"), note("knowledge/b.md", "two"), note("knowledge/c-renamed.md", "three"), note("knowledge/new.md", "added")];
+    const found = searchesFor(rewritten, publicCases, labelled, (q) => q.replace("signing", "SIGNED"));
+    expect([...found]).toEqual([["knowledge/x/a-renamed", ["rotate SIGNED keys", "key expiry"]], ["knowledge/b", ["only b"]]]); // a case with no queries, or with no public case, has none
   });
 });
 

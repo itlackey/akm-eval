@@ -2,13 +2,15 @@
 // read, and sampled. The data is never committed.
 //
 // public is SkillRet's test split. private is a library of the same size drawn from its train split, whose skill pool
-// is disjoint from the test pool, with train queries drawn in the test split's mix of one, two and three skills.
+// is disjoint from the test pool, with train queries drawn in the test split's mix of one, two and three skills. (The README and the summary
+// call it the custom corpus, of kind "split": it has no folder, since it is drawn from the dataset. Here it keeps its first name.)
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { sha256Files } from "../../../lib/provenance.ts";
+import { SEED, draw } from "./sample.ts";
 
-/** Seeds every draw: the private skills, the private queries, and --limit. It is recorded in summary.json. */
-export const SEED = 42;
+export { SEED, draw };
 
 export interface LockedFile {
   url: string;
@@ -170,33 +172,6 @@ export function readQueries(assetsDir: string, queriesName: string, qrelsName: s
   return queries;
 }
 
-/** mulberry32: a small seeded generator, so a draw is the same on every machine. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** `n` of the items, drawn at random under the seed and kept in their order. */
-export function draw<T>(items: T[], n: number, seed: number): T[] {
-  if (n > items.length) throw new Error(`cannot draw ${n} of ${items.length}`);
-  const random = mulberry32(seed);
-  const order = items.map((_, i) => i);
-  for (let i = 0; i < n; i++) {
-    const j = i + Math.floor(random() * (order.length - i));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
-  return order
-    .slice(0, n)
-    .sort((a, b) => a - b)
-    .map((i) => items[i]);
-}
-
 /** How many queries need one, two or three skills: size to count. */
 export function mix(queries: Query[]): Record<number, number> {
   const counts: Record<number, number> = {};
@@ -272,4 +247,29 @@ export const corpusFiles = (corpus: "public" | "private"): readonly string[] => 
 export async function loadCorpus(corpus: "public" | "private", assetsDir: string, limit?: number): Promise<Corpus> {
   await ensureFiles(assetsDir, corpusFiles(corpus));
   return corpus === "public" ? publicCorpus(assetsDir, limit) : privateCorpus(assetsDir, limit);
+}
+
+/**
+ * One sha256 over the data files a corpus read, named as they are in assets/ and not by where assets/ is, so the same
+ * data gives the same digest on any machine. sha256Files opens the paths it is given from the current folder, so this
+ * stands in the assets folder for the moment it takes, which holds no await.
+ */
+export function assetsDigest(assetsDir: string, corpus: "public" | "private"): string {
+  const here = process.cwd();
+  process.chdir(assetsDir);
+  try {
+    return sha256Files([...corpusFiles(corpus)]);
+  } finally {
+    process.chdir(here);
+  }
+}
+
+/**
+ * The queries of a corpus, read from the data files that are in assets/ now, with `limit` drawn as a run draws it. Nothing is fetched: this is what a
+ * stored run is scored against again, and it throws a message naming the files when they are not there.
+ */
+export function readCorpusQueries(corpus: "public" | "private", assetsDir: string, limit?: number): Query[] {
+  const missing = corpusFiles(corpus).filter((name) => !existsSync(join(assetsDir, name)));
+  if (missing.length > 0) throw new Error(`${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in ${assetsDir}. A run of benchmarks/skillret fetches them.`);
+  return corpus === "public" ? limited(readQueries(assetsDir, "test-queries.jsonl", "test-qrels.jsonl"), limit) : privateCorpus(assetsDir, limit).queries;
 }

@@ -2,9 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { buildManifest, caseDigests, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
+import { STRATEGY, reflectConfig } from "./collect.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -15,6 +19,13 @@ const temp = (): string => {
   dirs.push(d);
   return d;
 };
+
+/**
+ * The akm config a reflect run records in its summary: as a default run writes it (the defect filter on), and as a run with
+ * patches/defect-filter-off.json writes it, built the way the run builds it (reflectConfig, then the patch merged in).
+ */
+const ON = reflectConfig("http://localhost:8080/v1", "model", false);
+const OFF = patchedConfig(ON, { strategy: STRATEGY, configPatch: loadConfigPatch("evals/reflect/patches/defect-filter-off.json") });
 
 describe("replay", () => {
   // a stand-in for akm's filter: refuses a candidate that says "this revision", by the rule named for it
@@ -67,7 +78,7 @@ describe("reflectEdits", () => {
   function runOf(root: string, assets: string, over: Record<string, unknown> = {}, rows: object[] = ROWS): string {
     const run = join(root, "run");
     mkdirSync(run, { recursive: true });
-    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: RAN, ...over }));
+    writeFileSync(join(run, "summary.json"), JSON.stringify({ corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: RAN, ...over }));
     writeFileSync(join(run, "samples.jsonl"), `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`);
     return run;
   }
@@ -83,7 +94,7 @@ describe("reflectEdits", () => {
         { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
         { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
       ],
-      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [] },
+      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [], manifest: null },
     });
   });
 
@@ -125,7 +136,7 @@ describe("reflectEdits", () => {
     const rescored = reflectEdits(run, { ...same(root), rescore: true });
     expect(rescored.edits[0]).toEqual({ id: "a", label: "good", source: note("changed source"), candidate: note("a fixed") });
     expect(replay(rescored.edits, find).hits).toEqual([{ id: "a", label: "good", rule: "meta_commentary_added" }]);
-    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [] });
+    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [], manifest: null });
   });
 
   test("a run made by other code stops the replay with both digests, and is replayed with --rescore", () => {
@@ -184,8 +195,173 @@ describe("reflectEdits", () => {
     expect(inputs).toMatchObject({ corpus: "private", assets: join("private", "reflect", "assets"), differences: [] });
     // the public cases are another corpus: the digest of the run does not match them
     expect(() => reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root))).toThrow("assets_sha256 differs");
-    expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or private');
-    expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or private");
+    expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or custom');
+    expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or custom");
+  });
+
+  test("reads the cases of a custom run from the folder it recorded, and says when it recorded none", () => {
+    const { root, write } = repo();
+    const mine = join(root, "private", "reflect", "own notes");
+    write({ a: note("own a"), b: note("own b"), c: note("own c") }, mine);
+    const recorded = { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" };
+    const { edits, inputs } = reflectEdits(runOf(root, mine, recorded), same(root));
+    expect(edits.map((e) => e.source)).toEqual([note("own a"), note("own b")]);
+    expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes"), differences: [] });
+    // the seeded rewrite is in the folder it recorded, which is where generate puts it
+    write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
+    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" });
+    expect(reflectEdits(rewrite, same(root)).edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
+    // a folder outside the repository is not recorded: the summary cannot say where the cases were
+    expect(() => reflectEdits(runOf(root, mine, { ...recorded, corpus_folder: null }), same(root))).toThrow("a folder that its summary does not record");
+  });
+
+  // The filter refuses an edit before it is a proposal. A run that had it on holds only edits that passed it, so a replay of it would
+  // report 0 refused whatever the filter does: a result that looks like "the filter is harmless" and says nothing (#73).
+  describe("a run that had the defect filter on", () => {
+    const FIX = "Run reflect again with --config-patch evals/reflect/patches/defect-filter-off.json and replay that folder.";
+    const said = (run: string, why: string) => `${run} was not run with the defect filter off (${why}), so every proposal in it already passed the filter and a replay would report 0 refused. ${FIX}`;
+    const ALL = "placeholders, metaCommentary, frontmatterKeys";
+
+    test("a default run is refused with a message that says how to run it, also with --rescore", () => {
+      const { root, assets } = repo();
+      const run = runOf(root, assets, { config: ON });
+      const why = said(run, `its recorded config does not empty ${ALL} for the strategy ${STRATEGY}`);
+      expect(() => reflectEdits(run, same(root))).toThrow(why);
+      expect(() => reflectEdits(run, { ...same(root), rescore: true })).toThrow(why); // --rescore is about digests, and cannot make a filtered run mean something
+      // the run with the patch merged in, built by the same code, is replayed
+      expect(reflectEdits(runOf(root, assets, { config: OFF }), same(root)).edits.map((e) => e.id)).toEqual(["a", "b"]);
+    });
+
+    test("a filter that is only partly off is refused, naming the lists that are not empty", () => {
+      const { root, assets } = repo();
+      const partly = (lists: Record<string, unknown>) => patchedConfig(ON, { strategy: STRATEGY, configPatch: { path: "x", sha256: "x", patch: { improve: { strategies: { [STRATEGY]: { processes: { reflect: { defectFilter: lists } } } } } } } });
+      const run = runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: [] }) });
+      expect(() => reflectEdits(run, same(root))).toThrow(said(run, `its recorded config does not empty frontmatterKeys for the strategy ${STRATEGY}`));
+      const some = runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: ["this revision"], frontmatterKeys: [] }) });
+      expect(() => reflectEdits(some, same(root))).toThrow(said(some, `its recorded config does not empty metaCommentary for the strategy ${STRATEGY}`));
+      expect(() => reflectEdits(runOf(root, assets, { config: partly({ placeholders: [], metaCommentary: [], frontmatterKeys: "none" }) }), same(root))).toThrow("does not empty frontmatterKeys");
+    });
+
+    test("the setting is read for the strategy the run used, and a summary with no config says so", () => {
+      const { root, assets } = repo();
+      // --strategy mine, with a patch that makes it and turns its filter off: replayed. The filter turned off for reflect-only does not count for it.
+      const mine = patchedConfig(ON, { strategy: "mine", configPatch: { path: "x", sha256: "x", patch: { improve: { strategies: { mine: { processes: { reflect: { defectFilter: { placeholders: [], metaCommentary: [], frontmatterKeys: [] } } } } } } } } });
+      expect(reflectEdits(runOf(root, assets, { strategy: "mine", config: mine }), same(root)).edits).toHaveLength(2);
+      const run = runOf(root, assets, { strategy: "mine", config: OFF });
+      expect(() => reflectEdits(run, same(root))).toThrow(said(run, `its recorded config does not empty ${ALL} for the strategy mine`));
+      // a summary from before the strategy was recorded ran reflect-only
+      const { strategy: _s, ...older } = JSON.parse(readFileSync(join(runOf(root, assets), "summary.json"), "utf8"));
+      writeFileSync(join(root, "run", "summary.json"), JSON.stringify(older));
+      expect(reflectEdits(join(root, "run"), same(root)).edits).toHaveLength(2);
+      for (const config of [undefined, null, "no", []]) {
+        const bare = runOf(root, assets, { config });
+        expect(() => reflectEdits(bare, same(root)), JSON.stringify(config)).toThrow(said(bare, "its summary.json records no config, so nothing says the filter was off"));
+      }
+    });
+  });
+});
+
+describe("reflectEdits with a manifest", () => {
+  const note = (d: string) => `---\ndescription: ${d}\n---\n`;
+  const PUBLIC = join("evals", "reflect", "assets");
+  const ROWS = [
+    { id: "a", outcome: "proposal", correct: true, proposal: note("a fixed") },
+    { id: "b", outcome: "proposal", correct: false, proposal: note("b changed") },
+    { id: "c", outcome: "none", correct: false },
+  ];
+  const caseOf = (id: string, source: string, feedback = "f") => ({ id, class: "when-to-use-missing", path: `knowledge/${id}.md`, source, feedback, defect: "d", correct: "c", allow: ["when_to_use"] });
+
+  /** A repository with the public cases a, b and c, and a way to write them again. */
+  function repo() {
+    const root = temp();
+    const assets = join(root, PUBLIC);
+    mkdirSync(assets, { recursive: true });
+    const write = (cases: object[]) => writeFileSync(join(assets, "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
+    const cases = [caseOf("a", note("a")), caseOf("b", note("b")), caseOf("c", note("c"))];
+    write(cases);
+    return { root, assets, cases, write };
+  }
+  /** A run of those cases as harness-v3 writes it: a summary with a manifest and no digest of the cases or the code, and its samples. */
+  function runOf(root: string, cases: object[], over: Record<string, unknown> = {}, manifestOver: Record<string, unknown> = {}): string {
+    const dir = join(root, "run");
+    mkdirSync(dir, { recursive: true });
+    const manifest = buildManifest({
+      measurement: MEASUREMENT,
+      parts: lockedParts(MEASUREMENT),
+      corpus: "public",
+      cases: caseDigests(MEASUREMENT, parseCases(cases.map((c) => JSON.stringify(c)).join("\n"))),
+      completion: { selected: ["a", "b", "c"], scored: ["a", "b", "c"], errored: [] },
+    });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "reflect", corpus: "public", strategy: STRATEGY, config: OFF, manifest: { ...manifest, ...manifestOver }, ...over }));
+    writeFileSync(join(dir, "samples.jsonl"), `${ROWS.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    return dir;
+  }
+
+  test("a run with a manifest that had the defect filter on is refused too", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases, { config: ON });
+    expect(() => reflectEdits(run, { root })).toThrow("was not run with the defect filter off");
+    expect(() => reflectEdits(run, { root, rescore: true })).toThrow("was not run with the defect filter off");
+  });
+
+  test("replays a run whose cases and scorer are the ones here, with no digest of the cases or the code in its summary", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases);
+    const scorer = lockedParts(MEASUREMENT).scorer.sha256;
+    const { edits, inputs } = reflectEdits(run, { root });
+    expect(edits.map((e) => [e.id, e.label, e.source])).toEqual([["a", "good", note("a")], ["b", "bad", note("b")]]);
+    expect(inputs).toMatchObject({ mode: "stored", differences: [], missing_cases: [], manifest: { scorer: { stored: scorer, current: scorer }, cases_compared_on: "input" } });
+  });
+
+  test("another version of the eval's collector, or of the harness, does not stop it: a replay reads proposals, not what produced them", () => {
+    const { root, cases } = repo();
+    const parts = lockedParts(MEASUREMENT);
+    const other = nextVersion(parts.collector.version);
+    const run = runOf(root, cases, {}, { collector: { version: other, sha256: "7".repeat(64) }, harness_version: 9 });
+    expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
+    expect(parts.collector.version).not.toBe(other); // the run's version is not the live one, and the replay still went ahead
+  });
+
+  test("a case whose note changed since the run stops the replay, and the replay with --rescore reads the new note and says so", () => {
+    const { root, cases, write } = repo();
+    const run = runOf(root, cases);
+    write([caseOf("a", note("changed source")), cases[1] as object, cases[2] as object]);
+    const said = "the case a has another input (note, path or feedback) than the manifest of the run holds";
+    expect(() => reflectEdits(run, { root })).toThrow(said);
+    const rescored = reflectEdits(run, { root, rescore: true });
+    expect(rescored.edits[0]?.source).toBe(note("changed source"));
+    expect(rescored.inputs).toMatchObject({ mode: "rescore", differences: [said] });
+  });
+
+  test("a run scored by another scorer than the one here stops the replay and is sent to scripts/rescore", () => {
+    const { root, cases } = repo();
+    const run = runOf(root, cases, {}, { scorer: { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "5".repeat(64) } });
+    const now = lockedParts(MEASUREMENT).scorer.sha256;
+    expect(() => reflectEdits(run, { root })).toThrow(`the scorer differs: the proposals were labelled good or bad by ${"5".repeat(64)}, the scorer here gives ${now}. Score the run again with scripts/rescore`);
+    expect(reflectEdits(run, { root, rescore: true }).inputs.manifest).toEqual({ scorer: { stored: "5".repeat(64), current: now }, cases_compared_on: "input" });
+    expect(reflectEdits(run, { root, scorer: "5".repeat(64) }).inputs.differences).toEqual([]); // the scorer the run was labelled by, given
+  });
+
+  test("a run that recorded searches is held to its cases' labels, which the feedback is not part of", () => {
+    const { root, cases, write } = repo();
+    const run = runOf(root, cases, { retrieval_queries: { cases: 2 } });
+    write([caseOf("a", note("a"), "other feedback"), cases[1] as object, cases[2] as object]); // the feedback is an input, not a label
+    expect(reflectEdits(run, { root }).inputs).toMatchObject({ differences: [], manifest: { cases_compared_on: "labels" } });
+    write([caseOf("a", note("another note")), cases[1] as object, cases[2] as object]);
+    expect(() => reflectEdits(run, { root })).toThrow("the case a has another label than the manifest of the run holds");
+  });
+
+  test("a case id the manifest does not hold, a case that is gone, and a manifest that is not sound are named", () => {
+    const { root, cases } = repo();
+    const manifest = JSON.parse(readFileSync(join(runOf(root, cases), "summary.json"), "utf8")).manifest;
+    const { b: _b, ...fewer } = manifest.cases;
+    const without = runOf(root, cases, {}, { cases: fewer, completion: { selected: ["a", "c"], scored: ["a", "c"], errored: [] } });
+    expect(() => reflectEdits(without, { root })).toThrow("the case b has another input");
+    expect(() => reflectEdits(runOf(root, cases, {}, { manifest_version: 7 }), { root })).toThrow("has a manifest that is not sound: manifest_version is 7");
+    const gone = runOf(root, cases);
+    writeFileSync(join(root, PUBLIC, "cases.jsonl"), `${JSON.stringify(cases[0])}\n${JSON.stringify(cases[2])}\n`);
+    expect(() => reflectEdits(gone, { root })).toThrow(`the run has a case id that ${join(PUBLIC, "cases.jsonl")} lacks: b`);
+    expect(reflectEdits(gone, { root, rescore: true }).inputs.missing_cases).toEqual(["b"]);
   });
 });
 
@@ -204,7 +380,7 @@ describe("the command line", () => {
     const assets = join(SRC, "..", "assets");
     const [first, second] = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"));
     const results = temp();
-    const summary = { corpus: "public", assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC) };
+    const summary = { corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC) };
     writeFileSync(join(results, "summary.json"), JSON.stringify(summary));
     const rows = [
       { id: first.id, outcome: "proposal", correct: true, proposal: first.source },
@@ -239,6 +415,18 @@ describe("the command line", () => {
     const { inputs } = JSON.parse(rescored.out)[`reflect ${results}`];
     expect(inputs).toMatchObject({ mode: "rescore", assets_sha256: { stored: was, current: summary.assets_sha256 }, harness_sha256: { stored: null, current: summary.harness_sha256 } });
     expect(inputs.differences).toHaveLength(2);
+  });
+
+  test("stops with exit 2 on a run that had the defect filter on, also with --rescore, and says how to run it", () => {
+    const { akm, results, tamper } = setup();
+    tamper({ config: ON });
+    for (const extra of [[], ["--rescore"]]) {
+      const refused = run(["--akm-src", akm, "--reflect", results, ...extra]);
+      expect(refused.code).toBe(2);
+      expect(refused.out).toBe("");
+      expect(refused.err).toContain(`${results} was not run with the defect filter off`);
+      expect(refused.err).toContain("would report 0 refused. Run reflect again with --config-patch evals/reflect/patches/defect-filter-off.json");
+    }
   });
 
   test("--rescore without a run to hold is refused", () => {

@@ -1,5 +1,6 @@
 // The prompts. The reader prompt is the same for both arms. Only the sessions in it differ.
-// The judge prompts are the benchmark's own, one per question type, copied exactly.
+// The judge prompts are the benchmark's own, one per question type, copied exactly. They belong to the collector (collect.ts): what the
+// judge is sent decides its verdict, and a verdict is a model call. Reading a verdict is the scorer's (score.ts).
 
 export interface Turn {
   role: string;
@@ -9,6 +10,21 @@ export interface Turn {
 export interface SessionView {
   date: string;
   turns: Turn[];
+}
+
+/**
+ * The answer a reader gave, without its reasoning: what the judge is sent. A model that thinks first writes the thinking in a block
+ * (`<think>...</think>`, and the `thinking`, `thought` and `reasoning` forms of it), and the judge must grade the answer and not the
+ * candidates it weighed on the way. A block that never closes was cut off (the reply stopped at the token limit inside it), so it runs to
+ * the end of the reply; a closing tag with no opening one before it ends reasoning that began in the prompt (some templates put the opening
+ * tag there), so it takes everything before it. What is left is trimmed, and is empty when the reply was only reasoning.
+ */
+export function stripReasoning(reply: string): string {
+  return reply
+    .replace(/<(think|thinking|thought|reasoning)>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(?:think|thinking|thought|reasoning)>[\s\S]*$/i, "")
+    .replace(/^[\s\S]*<\/(?:think|thinking|thought|reasoning)>/i, "")
+    .trim();
 }
 
 export const renderSession = (s: SessionView, n: number): string => `### Session ${n}\nSession Date: ${s.date}\n${s.turns.map((t) => `${t.role}: ${t.content}`).join("\n")}`;
@@ -35,6 +51,9 @@ export function readerPrompt(sessions: SessionView[], questionDate: string, ques
 const ANSWER_FOR_CORRECT = "I will give you a question, a correct answer, and a response from a model. Please answer yes if the response contains the correct answer. Otherwise, answer no. If the response is equivalent to the correct answer or contains all the intermediate steps to get the correct answer, you should also answer yes. If the response only contains a subset of the information required by the answer, answer no. ";
 const OFF_BY_ONE = "In addition, do not penalize off-by-one errors for the number of days. If the question asks for the number of days/weeks/months, etc., and the model makes off-by-one errors (e.g., predicting 19 days when the answer is 18), the model's response is still correct. ";
 
+/** The benchmark's rule for an abstention question, from evaluate_qa.py: "_abs" is somewhere in the question id. It decides which judge prompt a question gets, so it is the collector's; the scorer has the same rule for the retrieval means (score.ts). */
+export const isAbstentionQuestion = (questionId: string): boolean => questionId.includes("_abs");
+
 export function judgePrompt(questionType: string, question: string, answer: string, response: string, abstention: boolean): string {
   const tail = (label: string, closing: string) => `\n\nQuestion: ${question}\n\n${label}: ${answer}\n\nModel Response: ${response}\n\n${closing}`;
   if (abstention) {
@@ -56,9 +75,3 @@ export function judgePrompt(questionType: string, question: string, answer: stri
       throw new Error(`unsupported LongMemEval question type: ${questionType}`);
   }
 }
-
-/** The benchmark's label rule: the judge's reply holds "yes". */
-export const isYes = (verdict: string): boolean => verdict.toLowerCase().includes("yes");
-
-/** A verdict that is exactly yes or no. Anything else is scored by the rule above but counted as undecidable. */
-export const isDecidable = (verdict: string): boolean => ["yes", "no"].includes(verdict.trim().toLowerCase().replace(/^['".\s]+|['".\s]+$/g, ""));

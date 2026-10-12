@@ -1,5 +1,4 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -26,46 +25,6 @@ describe("the public tasks", () => {
 
   test("none tells the agent to use akm or to consult a skill, and none names its gold ref", () => {
     for (const t of tasks) expect({ task: t, nudges: nudges(join(TASKS, t)) }).toEqual({ task: t, nudges: [] });
-  });
-
-  test("the az-cli skill and its memory teach several tags as one filter joined with &&, and not as a repeated --tag", () => {
-    // `az resource list --tag` takes a single tag, so a second --tag does not AND.
-    const skill = readFileSync(join(LIBRARIES, "az-cli", "skills", "az-cli", "SKILL.md"), "utf8");
-    const memory = readFileSync(join(LIBRARIES, "az-cli", "memories", "compound-tag-filter.md"), "utf8");
-    for (const text of [skill, memory]) {
-      expect(text).toMatch(/az resource list [^\n`]*--query "\[\?tags\.[^"]*&&[^"]*tags\.[^"]*\]/);
-      expect(text).not.toMatch(/--tag \S+ --tag /);
-    }
-  });
-
-  test("the az verifier takes the filter form, a repeated --tag and one of each, and not an OR, one tag or a missing projection", () => {
-    const task = join(TASKS, "workflow-compliance--feedback-trap-az-tag-list");
-    const dir = mkdtempSync(join(tmpdir(), "agent-ab-az-"));
-    try {
-      const passes = (command: string) => {
-        writeFileSync(join(dir, "commands.txt"), `${command}\n`);
-        return spawnSync("bash", [join(task, "tests", "verify.sh")], { cwd: dir }).status === 0;
-      };
-      const cols = "[name,type,location]";
-      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data'].${cols}" -o tsv`)).toBe(true);
-      expect(passes(`az resource list --query "[?tags.tier=='data' && tags.env=='prod'].{name:name,type:type,location:location}" --output tsv`)).toBe(true);
-      expect(passes(`az resource list --tag env=prod --tag tier=data --query "[].{name:name,type:type,location:location}" -o tsv`)).toBe(true);
-      expect(passes(`az resource list --tag env=prod --query "[?tags.tier=='data'].${cols}" -o tsv`)).toBe(true);
-      expect(passes(`az resource list --query "[?tags.env=='prod' || tags.tier=='data'].${cols}" -o tsv`)).toBe(false);
-      expect(passes(`az resource list --query "[?tags.env=='prod' and tags.tier=='data'].${cols}" -o tsv`)).toBe(false);
-      expect(passes(`az resource list --query "[?tags.env=='prod'].${cols}" -o tsv`)).toBe(false);
-      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data']" -o tsv`)).toBe(false);
-      expect(passes(`az resource list --query "[?tags.env=='prod' && tags.tier=='data'].${cols}" -o table`)).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("the opencode skill says which model is the anthropic default, because the instruction only asks for it", () => {
-    const instruction = readFileSync(join(TASKS, "workflow-compliance--repeated-fail-opencode-provider-token-train", "instruction.md"), "utf8");
-    const skill = readFileSync(join(LIBRARIES, "noisy", "skills", "opencode", "SKILL.md"), "utf8");
-    expect(instruction).not.toContain("claude-opus-4-7");
-    expect(skill).toContain("The anthropic default model is `anthropic/claude-opus-4-7`");
   });
 });
 

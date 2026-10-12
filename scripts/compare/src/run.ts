@@ -21,8 +21,11 @@ only in the treatment. Reads ${SUPPORTED.join(", ")}.
   --treatment AXES  what B changes against A: one or more of ${AXES.join(", ")}, separated by commas (default ${DEFAULT_TREATMENT.join(",")}).
                     build is the akm: its version, build and command. config is the strategy, the config patch, the akm config and the
                     time limit. model is the model and its engine settings. inputs is the cases and the private seed. harness is this
-                    repository's code (harness_sha256, else a clean git_commit). Every axis not named must be the same in every run, or
-                    the comparison is refused. An axis the summaries do not record the evidence for makes the report exploratory
+                    repository's code (harness_sha256, else a clean git_commit; for a run with a manifest, its collector). Every axis not
+                    named must be the same in every run, or the comparison is refused. An axis the summaries do not record the
+                    evidence for makes the report exploratory. The eval, corpus, collection, mode and embedder are the scope: they
+                    must be the same whatever the treatment. Runs with a manifest that were scored differently are scored again
+                    with the current scorer first (scripts/rescore), and a case with another input in the runs is left out
   --repeats PREFIX  the runs of a --repeat instead: PREFIX is the results folder's path up to the label, for example
                     evals/nightly/results/2026-10-11-baseline, which finds ...-baseline-r1 to ...-baseline-rN (or the path of a
                     ...-repeat-summary.json). Alone it reports each case's flip rate across the runs and the eval's noise floor, the mean
@@ -34,7 +37,8 @@ only in the treatment. Reads ${SUPPORTED.join(", ")}.
   --md FILE         write the report as markdown (it is printed to the terminal in any case)
   --seed N          the bootstrap's seed (default ${DEFAULTS.seed}); the same seed gives the same intervals
   --resamples N     bootstrap resamples (default ${DEFAULTS.resamples})
-  --tie X           retrieval: a query whose ndcg moved by X or less did not change (default ${DEFAULTS.tie})`;
+  --tie X           for a score that is not a verdict (retrieval's ndcg, skillret's, a Harbor task's difference): a case whose score
+                    moved by X or less did not change (default ${DEFAULTS.tie})`;
 
 function integer(value: string | undefined, flag: string, fallback: number, min: number): number {
   if (value === undefined) return fallback;

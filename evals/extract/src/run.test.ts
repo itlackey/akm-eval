@@ -1,10 +1,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { commandLine } from "../../../lib/akm/akm.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
-import { assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
+import { basename, join, resolve } from "node:path";
+import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
+import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
+import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { type LoadedCase, type Raw, assetsDigest, extractConfig, generatorSha256, loadCases, similarity } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
@@ -92,7 +95,11 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
   return { assets, results: join(root, "results") };
 }
 
-const ctx = { config: extractConfig("http://localhost:8080/v1", "the-model", false), baseUrl: "http://localhost:8080/v1", version: "0.9.99-test", model: "the-model", label: "t" };
+const ctx = { baseUrl: "http://localhost:8080/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
+
+/** The public corpus, read from `assets`. */
+const publicOf = (assets: string): ResolvedCorpus => ({ name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+const runPublic = (c: typeof ctx & Record<string, unknown>, folders: { assets: string; results: string }) => runCorpus(publicOf(folders.assets), c, folders.results);
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
   console.log = () => {};
@@ -149,7 +156,7 @@ const scenarios: Scenario[] = [
 describe("runCorpus", () => {
   test("runs each case in its own sandbox and scores what the queue holds", async () => {
     const folders = assetsFor(scenarios);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     const rows = samplesIn(summary.results_dir);
     expect(rows.map((r) => [r.id, r.outcome, r.correct])).toEqual([
       ["a-good", "saved", true],
@@ -177,12 +184,12 @@ describe("runCorpus", () => {
     expect(stored.results_dir).toBeUndefined();
     expect(stored.metrics.insights).toEqual({ n: 5, correct: 2, rate: 0.4 });
     expect(stored.metrics.routine).toEqual({ n: 2, correct: 1, rate: 0.5 });
-    expect(stored.metrics.planted).toEqual({ n: 1, correct: 0, rate: 0, saved_instruction: 1 });
+    expect(stored.metrics.planted).toEqual({ n: 1, correct: 0, rate: 0, saved_instruction: 1, ambiguous: 0 });
     expect(stored.metrics.classes.insight).toMatchObject({ n: 3, correct: 1, outcomes: { saved: 2, empty: 0, unusable: 1 }, memories: 2 });
   });
 
   test("akm gets the session where it reads Claude Code sessions, its own folders, the strategy, and none of the caller's settings", async () => {
-    await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
+    await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))));
     const extract = calls().find((c) => c.args[0] === "proposal" && c.args[1] === "extract");
     expect(extract.args).toEqual(["proposal", "extract", "--type", "claude", "--location", extract.projects, "--session-id", "a-good", "--strategy", "extract-only", "--format", "json"]);
     expect(extract.projects).toContain("akm-eval-extract-");
@@ -200,7 +207,7 @@ describe("runCorpus", () => {
 
   test("each case has a sandbox of its own, and the queue is read back only when extract queued something", async () => {
     const before = calls().length;
-    await quiet(() => runCorpus("public", ctx, assetsFor([scenarios[0], scenarios[2], scenarios[4]])));
+    await quiet(() => runPublic(ctx, assetsFor([scenarios[0], scenarios[2], scenarios[4]])));
     const mine = calls().slice(before);
     const extracts = mine.filter((c) => c.args[1] === "extract");
     expect(extracts).toHaveLength(3);
@@ -209,7 +216,7 @@ describe("runCorpus", () => {
   });
 
   test("--limit takes cases from each class in turn", async () => {
-    const summary = await quiet(() => runCorpus("public", { ...ctx, limit: 3 }, assetsFor(scenarios)));
+    const summary = await quiet(() => runPublic({ ...ctx, limit: 3 }, assetsFor(scenarios)));
     expect(samplesIn(summary.results_dir).map((r) => r.id)).toEqual(["a-good", "e-routine-right", "g-planted"]);
     expect(summary).toMatchObject({ n_cases: 9, n_run: 3, limit: 3 });
   });
@@ -221,7 +228,7 @@ describe("runCorpus", () => {
       { id: "z-failed", class: "insight", fake: { ok: false, warnings: ["no available harness matches type claude"] } },
       { id: "z-ok", class: "routine", fake: empty() },
     ]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     const rows = samplesIn(summary.results_dir);
     expect(rows[0]).toMatchObject({ outcome: "error", correct: null, error: "akm exited 78: engine unreachable (FAKE)" });
     expect(rows[1].error).toContain("akm exited 0");
@@ -234,7 +241,7 @@ describe("runCorpus", () => {
     const shown: string[] = [];
     const log = console.log;
     console.log = (...a: unknown[]) => void shown.push(a.join(" "));
-    const summary = await runCorpus("public", ctx, folders).finally(() => (console.log = log));
+    const summary = await runPublic(ctx, folders).finally(() => (console.log = log));
     const [row] = samplesIn(summary.results_dir);
     expect(row.error).toBe("akm exited 78: unreachable: <MODEL_BASE_URL>/chat/completions refused (FAKE)");
     expect(JSON.stringify(row)).not.toContain("localhost:8080");
@@ -244,7 +251,7 @@ describe("runCorpus", () => {
 
   test("stops after five cases in a row that errored, and keeps what it has", async () => {
     const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     expect(samplesIn(dir)).toHaveLength(5);
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
@@ -253,7 +260,7 @@ describe("runCorpus", () => {
 
   test("the summary it writes before it fails says the run was aborted, and why", async () => {
     const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runCorpus("public", ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
     expect(stored.status).toBe("aborted");
     expect(stored.aborted_reason).toBe("5 sessions in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
@@ -261,7 +268,7 @@ describe("runCorpus", () => {
     // and a run that went through every session, with errors that were not in a row, is complete
     const ok = (id: string) => ({ id, class: "routine", fake: empty() });
     const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
-    const whole = await quiet(() => runCorpus("public", { ...ctx, label: "whole" }, assetsFor([bad("a"), ok("b"), bad("c"), ok("d")])));
+    const whole = await quiet(() => runPublic({ ...ctx, label: "whole" }, assetsFor([bad("a"), ok("b"), bad("c"), ok("d")])));
     expect(JSON.parse(readFileSync(join(whole.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null, n_run: 4, n_errored: 2 });
   });
 
@@ -269,9 +276,9 @@ describe("runCorpus", () => {
     const ok = (id: string) => ({ id, class: "routine", fake: empty() });
     const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
     const late = assetsFor([ok("a"), ...Array.from({ length: 6 }, (_, i) => bad(`e${i}`))]);
-    await expect(quiet(() => runCorpus("public", ctx, late))).rejects.toThrow("stopped after 6 of 7");
+    await expect(quiet(() => runPublic(ctx, late))).rejects.toThrow("stopped after 6 of 7");
     const scattered = assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")]);
-    const summary = await quiet(() => runCorpus("public", ctx, scattered));
+    const summary = await quiet(() => runPublic(ctx, scattered));
     expect(summary).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6 });
   });
 });
@@ -281,14 +288,15 @@ describe("what summary.json says about the run", () => {
 
   test("the strategy, the config the sessions ran with, the engine's settings, a digest of the assets and the timeouts", async () => {
     const folders = assetsFor(scenarios.slice(0, 2));
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     const stored = storedIn(summary.results_dir);
     expect(stored).toMatchObject({ strategy: "extract-only", config_patch: null, seed: null, timeouts: 0, n_errored: 0, status: "complete", aborted_reason: null });
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code, the reflect code it imports and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: [resolve(import.meta.dir, "..", "..", "reflect", "src")] }));
+    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
+    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", endpoint: "http://localhost:8080/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
-    expect(stored.config).toEqual({ ...ctx.config, engines: { model: { ...ctx.config.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
+    const written = extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey);
+    expect(stored.config).toEqual({ ...written, engines: { model: { ...written.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
     expect(stored.config.engines.model).toMatchObject({ temperature: 0, enableThinking: false });
     expect(stored.assets_sha256).toBe(assetsDigest(folders.assets, loadCases(folders.assets)));
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -297,18 +305,17 @@ describe("what summary.json says about the run", () => {
 
   test("the digest covers every case, whatever --limit picked, and changes with the assets", async () => {
     const folders = assetsFor(scenarios.slice(0, 3));
-    const whole = storedIn((await quiet(() => runCorpus("public", ctx, folders))).results_dir);
-    const short = storedIn((await quiet(() => runCorpus("public", { ...ctx, label: "short", limit: 1 }, folders))).results_dir);
+    const whole = storedIn((await quiet(() => runPublic(ctx, folders))).results_dir);
+    const short = storedIn((await quiet(() => runPublic({ ...ctx, label: "short", limit: 1 }, folders))).results_dir);
     expect(short.assets_sha256).toBe(whole.assets_sha256);
     writeFileSync(join(folders.assets, "sessions", "-home-dev-insight", "a-good.jsonl"), `${JSON.stringify({ type: "user", message: { role: "user", content: "Another session." } })}\n`);
-    const changed = storedIn((await quiet(() => runCorpus("public", { ...ctx, label: "changed" }, folders))).results_dir);
+    const changed = storedIn((await quiet(() => runPublic({ ...ctx, label: "changed" }, folders))).results_dir);
     expect(changed.assets_sha256).not.toBe(whole.assets_sha256);
   });
 
   test("a key is named by variable and never held, and a key written into the config is redacted", async () => {
-    const withKey = { ...ctx, config: extractConfig("http://localhost:8080/v1", "the-model", true) };
-    (withKey.config as any).engines.other = { kind: "llm", apiKey: "sk-secret-value" };
-    const summary = await quiet(() => runCorpus("public", withKey, assetsFor(scenarios.slice(0, 1))));
+    const withKey = { ...ctx, hasKey: true, overrides: { strategy: "extract-only", configPatch: { path: "p.json", sha256: "a".repeat(64), patch: { engines: { other: { kind: "llm", apiKey: "sk-secret-value" } } } } } };
+    const summary = await quiet(() => runPublic(withKey, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
     expect(stored.config.engines.other.apiKey).toBe("<redacted>");
@@ -317,26 +324,95 @@ describe("what summary.json says about the run", () => {
 
   test("the endpoint is written as <MODEL_BASE_URL> in the config, with the user name, key and query it carried, and its host is in engine", async () => {
     const baseUrl = "https://alice:hunter2@gateway.example.com:8443/v1?api_key=abc123";
-    const hidden = { ...ctx, baseUrl, config: extractConfig(baseUrl, "the-model", true) };
-    const summary = await quiet(() => runCorpus("public", hidden, assetsFor(scenarios.slice(0, 1))));
+    const hidden = { ...ctx, baseUrl, hasKey: true };
+    const summary = await quiet(() => runPublic(hidden, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(stored.engine.endpoint).toBe("https://gateway.example.com:8443/v1?api_key=<redacted>");
+    expect(stored.engine.endpoint).toBe("https://gateway.example.com:8443");
+    expect(stored.engine.endpoint_id).toBe(endpointId(completionsUrl("https://gateway.example.com:8443/v1?api_key=another")));
     for (const secret of ["alice", "hunter2", "abc123"]) expect(JSON.stringify(stored)).not.toContain(secret);
     expect(JSON.stringify(stored.config)).not.toContain("https://");
     expect(JSON.stringify(samplesIn(summary.results_dir))).not.toContain("hunter2");
   });
 
-  test("the seed of a private corpus is the one in its map, else private/seed, and the public corpus has none", async () => {
+  test("a corpus is recorded as public or custom, with its kind, whether it is private and its seed, and a rewrite's seed is the one in its corpus config", async () => {
     const folders = assetsFor(scenarios.slice(0, 1));
-    const root = join(folders.assets, "..");
-    const [map, seed] = [join(root, "map.json"), join(root, "seed")];
-    writeFileSync(seed, "18446744073709551615\n");
-    expect(storedIn((await quiet(() => runCorpus("private", ctx, { ...folders, map, seed }))).results_dir).seed).toBe("18446744073709551615");
-    writeFileSync(map, JSON.stringify({ version: 1, seed: "42" }));
-    expect(storedIn((await quiet(() => runCorpus("private", { ...ctx, label: "mapped" }, { ...folders, map, seed }))).results_dir).seed).toBe("42");
-    expect(storedIn((await quiet(() => runCorpus("public", { ...ctx, label: "public" }, { ...folders, map, seed }))).results_dir).seed).toBeNull();
-    expect(storedIn((await quiet(() => runCorpus("private", { ...ctx, label: "none" }, { ...folders, map: join(root, "no-map"), seed: join(root, "no-seed") }))).results_dir).seed).toBeNull();
+    const custom = (config: CorpusConfig): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config, configFile: null, flag: "--corpus custom" });
+    const rewrite = storedIn((await quiet(() => runCorpus(custom({ kind: "rewrite", private: false, seed: "18446744073709551615", generated: "generated.json" }), ctx, folders.results))).results_dir);
+    expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "18446744073709551615" });
+    expect(rewrite.manifest).toMatchObject({ corpus: "custom", settings: { seed: "18446744073709551615" } });
+    const own = storedIn((await quiet(() => runCorpus(custom({ kind: "own", private: true }), { ...ctx, label: "own" }, folders.results))).results_dir);
+    expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    const pub = storedIn((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).results_dir);
+    expect(pub).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
+    for (const stored of [rewrite, own, pub]) expect(JSON.stringify(stored)).not.toContain(folders.assets); // the folder's name can say what is in it; it is recorded only when it is inside the repository, as corpus_folder
+    expect(rewrite.corpus_folder).toBeNull(); // the temporary folder is outside the repository
+  });
+
+  test("a custom corpus inside the repository records its folder from the repository root, written with /, and the public corpus records none", async () => {
+    const folders = assetsFor(scenarios.slice(0, 1));
+    const inside = mkdtempSync(join(import.meta.dir, "..", ".custom-run-"));
+    dirs.push(inside);
+    cpSync(folders.assets, join(inside, "assets"), { recursive: true });
+    const own: ResolvedCorpus = { name: "custom", folder: join(inside, "assets"), config: { kind: "own", private: true }, configFile: null, flag: "--cases notes" };
+    const stored = storedIn((await quiet(() => runCorpus(own, ctx, folders.results))).results_dir);
+    expect(stored.corpus_folder).toBe(`evals/extract/${basename(inside)}/assets`);
+    expect(JSON.stringify(stored)).not.toContain(inside); // never an absolute path
+    expect(storedIn((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).results_dir).corpus_folder).toBeNull();
+  });
+});
+
+describe("the manifest of a run", () => {
+  const storedIn = (dir: string) => JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+
+  test("is sound, names the parts the lock gives, and holds the digest of every selected case and what was scored", async () => {
+    const folders = assetsFor(scenarios);
+    const stored = storedIn((await quiet(() => runPublic(ctx, folders))).results_dir);
+    const { manifest } = stored;
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(readManifest(stored).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.settings).toEqual({ strategy: "extract-only", config_patch_sha256: null, timeout_ms: null, seed: null });
+    const loaded = loadCases(folders.assets);
+    expect(Object.keys(manifest.cases)).toEqual(scenarios.map((s) => s.id));
+    expect(manifest.cases).toEqual(caseDigests(MEASUREMENT, loaded));
+    const ids = scenarios.map((s) => s.id);
+    expect(manifest.completion).toEqual({ selected: ids, scored: ids.filter((id) => id !== "i-error"), errored: ["i-error"] });
+  });
+
+  test("stores in every row the raw output the scorer reads: scored again from the row, a case gives the row it stored", async () => {
+    const folders = assetsFor([...scenarios, { id: "j-slow", class: "insight", fake: { sleepMs: 20_000 } }]);
+    const summary = await quiet(() => runPublic({ ...ctx, timeoutMs: 3000 }, folders));
+    const rows = samplesIn(summary.results_dir);
+    const byId = new Map(loadCases(folders.assets).map((c) => [c.id, c]));
+    expect(rows.map((r) => r.outcome).sort()).toEqual(["empty", "empty", "error", "error", "saved", "saved", "saved", "saved", "saved", "unusable"]);
+    expect(rows.some((r) => r.timed_out === true)).toBe(true);
+    for (const row of rows) {
+      const read = MEASUREMENT.rawOf(row);
+      expect({ id: row.id, missing: "missing" in read ? read.missing : [] }).toEqual({ id: row.id, missing: [] });
+      expect(MEASUREMENT.score(byId.get(row.id) as LoadedCase, (read as { raw: Raw }).raw)).toEqual(row);
+    }
+  });
+
+  test("holds the config without the engine's settings, and the engine with the digest of its endpoint", async () => {
+    const stored = storedIn((await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))))).results_dir);
+    const { manifest, config, engine } = stored;
+    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(config)));
+    expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
+    expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
+    expect(manifest.engines).toEqual(engine.engines);
+    expect(manifest.engines.model).toEqual({ model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+  });
+
+  test("a run that stops early keeps every selected case in the manifest, with those it never ran in neither list", async () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } }));
+    const folders = assetsFor(many);
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("stopped after 5 of 7");
+    const { manifest } = storedIn(join(folders.results, readdirSync(folders.results)[0]));
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(manifest.completion).toEqual({ selected: many.map((s) => s.id), scored: [], errored: many.slice(0, 5).map((s) => s.id) });
   });
 });
 
@@ -345,7 +421,7 @@ describe("--strategy and --config-patch", () => {
 
   test("a strategy of its own is the one akm is asked for, and the patch is merged into the config every session runs with", async () => {
     const before = calls().length;
-    const summary = await quiet(() => runCorpus("public", { ...ctx, overrides: { strategy: "thorough", configPatch: patch } }, assetsFor(scenarios.slice(0, 1))));
+    const summary = await quiet(() => runPublic({ ...ctx, overrides: { strategy: "thorough", configPatch: patch } }, assetsFor(scenarios.slice(0, 1))));
     const extract = calls().slice(before).find((c) => c.args[1] === "extract");
     expect(extract.args.slice(extract.args.indexOf("--strategy"), extract.args.indexOf("--strategy") + 2)).toEqual(["--strategy", "thorough"]);
     expect(extract.strategies).toEqual(["extract-only", "thorough"]);
@@ -357,12 +433,11 @@ describe("--strategy and --config-patch", () => {
     expect(stored.engine).toMatchObject({ temperature: 0.7, enableThinking: false });
     expect(stored.config.engines.model.temperature).toBe(0.7);
     expect(Object.keys(stored.config.improve.strategies)).toEqual(["extract-only", "thorough"]);
-    expect(ctx.config.engines.model.temperature).toBe(0); // the eval's own config is not changed
   });
 
   test("without them, the eval's own strategy and config", async () => {
     const before = calls().length;
-    await quiet(() => runCorpus("public", ctx, assetsFor(scenarios.slice(0, 1))));
+    await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))));
     const extract = calls().slice(before).find((c) => c.args[1] === "extract");
     expect(extract.args[extract.args.indexOf("--strategy") + 1]).toBe("extract-only");
     expect(extract.temperature).toBe(0);
@@ -373,7 +448,7 @@ describe("--strategy and --config-patch", () => {
 describe("the queue and timeouts", () => {
   test("the queue is read when the session's own proposal ids say something was queued, though the list of proposals is empty", async () => {
     const folders = assetsFor([{ id: "a-hidden", class: "insight", fake: { ...saves(proposal("p1", "Exit 75: a stale pid file.")), hideTop: true } }]);
-    const summary = await quiet(() => runCorpus("public", ctx, folders));
+    const summary = await quiet(() => runPublic(ctx, folders));
     expect(samplesIn(summary.results_dir)[0]).toMatchObject({ outcome: "saved", correct: true });
   });
 
@@ -383,7 +458,7 @@ describe("the queue and timeouts", () => {
       { id: "b-fine", class: "routine", fake: empty() },
       { id: "c-down", class: "routine", fake: { exit: 78, error: "engine unreachable" } },
     ]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 3000 }, folders));
+    const summary = await quiet(() => runPublic({ ...ctx, timeoutMs: 3000 }, folders));
     const rows = samplesIn(summary.results_dir);
     expect(rows[0]).toMatchObject({ id: "a-slow", outcome: "error", correct: null, timed_out: true, error: "akm proposal extract timed out after 3s" });
     expect("timed_out" in rows[1]).toBe(false);
@@ -395,7 +470,7 @@ describe("the queue and timeouts", () => {
 
   test("a queue that akm does not list in time is a timeout too", async () => {
     const folders = assetsFor([{ id: "a-slow-list", class: "insight", fake: { ...saves(proposal("p1", "Exit 75: a stale pid file.")), listSleepMs: 20_000 } }]);
-    const summary = await quiet(() => runCorpus("public", { ...ctx, timeoutMs: 3000 }, folders));
+    const summary = await quiet(() => runPublic({ ...ctx, timeoutMs: 3000 }, folders));
     expect(samplesIn(summary.results_dir)[0]).toMatchObject({ outcome: "error", timed_out: true, error: "akm proposal timed out after 3s" });
     expect(summary.timeouts).toBe(1);
   });
@@ -428,6 +503,51 @@ describe("the command", () => {
     dirs.push(root);
     writeFileSync(join(root, "patch.json"), "{}");
     expect(run(["--strategy", "thorough", "--config-patch", join(root, "patch.json")], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+  });
+
+  test("your own notes go only to a model that models.json marks private, and the refusal comes before anything runs", () => {
+    const notes = mkdtempSync(join(tmpdir(), "extract-notes-"));
+    dirs.push(notes);
+    const done = run(["--cases", notes], model);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain(`--cases ${notes} sends your memories to the-model, which is not marked "private": true in models.json.`);
+    expect(done.err).toContain("The corpus is private: it has no corpus.json, and an own corpus without one is private.");
+    expect(done.err).not.toContain("no-such-akm-in-this-test"); // the akm was never asked for
+    // a corpus.json that says nothing private is in it lifts the refusal
+    writeFileSync(join(notes, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
+    const lifted = run(["--cases", notes], model);
+    expect(lifted.err).not.toContain("sends your memories");
+    expect(lifted.err).toContain("the custom corpus is missing"); // and the run goes on to look for the cases
+  });
+
+  test("run --corpus private refuses assets whose stored generator digest is zeroed, and takes freshly generated ones (#44)", () => {
+    const out = mkdtempSync(join(tmpdir(), "extract-generated-"));
+    dirs.push(out);
+    const made = Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", "7", "--out", out], { stdout: "pipe", stderr: "pipe" });
+    expect(made.exitCode).toBe(0);
+    writeFileSync(join(out, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "7", generated: "generated.json" }));
+    const generated = join(out, "generated.json");
+    const stored = JSON.parse(readFileSync(generated, "utf8"));
+    expect(stored.rewrite).toBe(generatorSha256()); // a digest of the generator's code
+    const fresh = run(["--cases", join(out, "assets")], model);
+    expect(fresh.err).not.toContain("generator that has changed since");
+    expect(fresh.err).toContain("no-such-akm-in-this-test"); // it went on to the akm check
+    writeFileSync(generated, JSON.stringify({ ...stored, rewrite: "0".repeat(64) }));
+    const zeroed = run(["--cases", join(out, "assets")], model);
+    expect(zeroed.code).toBe(2);
+    expect(zeroed.err).toContain("the private assets cannot be used: they were made by a generator that has changed since");
+    expect(zeroed.err).toContain("Make them again with: ./generate-assets --only extract");
+    expect(zeroed.err).not.toContain("no-such-akm-in-this-test");
+  });
+
+  test("--corpus private still works for one more release, with a line that names the new form", () => {
+    const done = run(["--corpus", "private"], model);
+    expect(done.err).toContain("extract: --corpus private is now --corpus custom. The old value works for one more release.");
+  });
+
+  test("--corpus takes public, custom or all, and refuses another value", () => {
+    expect(run(["--corpus", "everything"], model).err).toContain('--corpus must be public, custom or all, not "everything"');
+    expect(run(["--help"]).out).toContain("[--corpus public|custom|all] [--cases DIR]");
   });
 
   test("refuses an akm older than the one it was built on", () => {

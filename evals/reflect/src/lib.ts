@@ -1,140 +1,17 @@
-// Pure helpers for the reflect eval: the defects akm names, how one is injected into a clean note, the checks
-// that score a result, and the metrics. build.ts makes the public cases with them, generate.ts the private
+// Helpers for the reflect eval that are neither its scorer nor its collector: how a defect is injected into a clean note, the checks on a
+// case itself, the digests of the corpus, and reading the cases. build.ts makes the public cases with them, generate.ts the private
 // cases and run.ts runs the eval.
+//
+// The scorer is score.ts and the collector is collect.ts (see measurement.ts); this file re-exports both, so the eval and the evals that
+// borrow its checks (nightly, extract) import from one place.
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { engineConfig } from "../../../lib/akm/akm.ts";
+import { join, resolve } from "node:path";
 import { sha256File, sha256Text } from "../../../lib/provenance.ts";
+import { CLASSES, type Case, type CaseClass, type Defect, type Field, HANGING, akmProblems, collapse, descriptionProblem, hasCopiedFrontmatter, isDefect, parse, splitFrontmatter, whenToUseProblem } from "./score.ts";
 
-// The checks read frontmatter with bun's own YAML parser. Without it every result would look like broken YAML.
-if (typeof Bun.YAML?.parse !== "function") throw new Error("reflect: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
-
-export const DEFECTS = ["description-period", "description-quote", "description-truncated", "description-missing", "when-to-use-missing", "title-missing"] as const;
-export const CONTROLS = ["retrieval-miss", "unsupported-ask", "historical", "body-defect"] as const;
-export type Defect = (typeof DEFECTS)[number];
-export type CaseClass = Defect | (typeof CONTROLS)[number];
-export const CLASSES: readonly CaseClass[] = [...DEFECTS, ...CONTROLS];
-export const isDefect = (c: CaseClass): c is Defect => (DEFECTS as readonly string[]).includes(c);
-
-/** The three fields a reflect patch can change. `title` is the text of a level-1 heading akm adds to the body. */
-export type Field = "description" | "when_to_use" | "title";
-
-export interface Case {
-  id: string;
-  class: CaseClass;
-  /** Where the note sits in the bundle. It is the note's path under corpus/library. */
-  path: string;
-  /** The note: a clean one, or a clean one with the defect injected. */
-  source: string;
-  /** The negative feedback a user leaves. */
-  feedback: string;
-  /** What was injected, or what the note is when there is no defect. */
-  defect: string;
-  /** What a correct result is. */
-  correct: string;
-  /** The field a fix has to repair. Defect classes only. */
-  fix?: Field;
-  /** The fields a result may change. A field outside this list that changes is churn. */
-  allow: Field[];
-  /** Terms the feedback asks for that the note does not support. No changed field may carry one. */
-  forbid?: string[];
-  /** The versions and dates the note records. A `historical` case only. */
-  anchors?: string[];
-  canary?: string;
-}
-
-/** The ref akm gives a note: its path without `.md`, and without `/SKILL` for a skill. */
-export const refOf = (path: string): string => path.replace(/\.md$/, "").replace(/\/SKILL$/, "");
-
-// --- What akm names ---------------------------------------------------------------------------------------------
-// These mirror akm 0.9.26. `frontmatterProblems` in src/integrations/agent/prompts.ts lists the problems the prompt
-// tells the model to fix. `detectTruncatedDescription` in src/core/text-truncation.ts and `isValidDescription` in
-// src/commands/proposal/validators/proposal-quality-validators.ts say what a cut-off or invalid description is.
-// `detectDoubleFrontmatter` in the same file says what frontmatter copied into the body is.
-
-/** The text of a frontmatter block and the rest of the note. akm's `splitFrontmatter`. */
-export function splitFrontmatter(note: string): { fm: string | null; body: string } {
-  const m = note.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  return m ? { fm: m[1] ?? "", body: m[2] ?? "" } : { fm: null, body: note };
-}
-
-/** Words that end a sentence only when it was cut off. akm's `TRUNCATION_TRAILING_WORDS`. */
-const HANGING = new Set(
-  "a after an and are as at be been before being but by can could did do does for from had has have if in into is may might must of on onto or per shall should so than that the to upon via was were when which while will with would".split(" "),
-);
-
-const collapse = (s: string): string => s.replace(/\s+/g, " ").trim();
-
-/** akm reads a description from its first line and the indented lines after it. */
-const rawDescription = (fm: string): string => collapse(fm.match(/^description\s*:(.*(?:\r?\n[ \t]+.*)*)/m)?.[1] ?? "");
-
-/** A sentence split by a stray period: a period, a space and a lowercase word, except after `e.g.` and the like. */
-export function hasStrayPeriod(description: string): boolean {
-  return [...description.matchAll(/[\w`)\]]\. [a-z]/g)].some((m) => !/\b(?:e\.g|i\.e|vs|etc|cf)$/i.test(description.slice(0, (m.index ?? 0) + 1)));
-}
-
-export const hasEscapedQuote = (description: string): boolean => description.includes('\\"');
-
-/** A description that ends on a trailing mark, an ellipsis or a hanging word. akm's `detectTruncatedDescription`. */
-export function isTruncated(description: string): boolean {
-  const t = description.trim();
-  if (!t) return false;
-  if (/[,;:+]$/.test(t) || /\.{3,}$|…$/.test(t)) return true;
-  return HANGING.has((t.split(/\s+/).pop() ?? "").toLowerCase());
-}
-
-/** The problems akm finds in a note's frontmatter, in the order it lists them. A note with no frontmatter has none. */
-export function akmProblems(note: string): Defect[] {
-  const { fm, body } = splitFrontmatter(note);
-  if (fm === null) return [];
-  const problems: Defect[] = [];
-  const description = rawDescription(fm);
-  if (!description.replace(/^["' ]+|["' ]+$/g, "")) problems.push("description-missing");
-  else {
-    if (hasStrayPeriod(description)) problems.push("description-period");
-    else if (hasEscapedQuote(description)) problems.push("description-quote");
-    if (isTruncated(description)) problems.push("description-truncated");
-  }
-  if (!/^when_to_use\s*:\s*(?:\S|\r?\n[ \t]+\S)/m.test(fm)) problems.push("when-to-use-missing");
-  if (!/^title\s*:\s*\S/m.test(fm) && !/^#[ \t]+\S/m.test(body)) problems.push("title-missing");
-  return problems;
-}
-
-/** Frontmatter copied into the body: more than two `---` lines, or a body line that restates a field. */
-export function hasCopiedFrontmatter(note: string): boolean {
-  if (note.split(/\r?\n/).filter((l) => /^---\s*$/.test(l)).length > 2) return true;
-  return splitFrontmatter(note).body.split(/\r?\n/).some((l) => /^\s*(\*\*|__)?\s*(description|when_to_use)\s*(\*\*|__)?\s*:/i.test(l));
-}
-
-/** Descriptions that are a section heading, not a description. akm's `HEADING_FRAGMENT_PATTERNS`. */
-const HEADING = [
-  /^for example\b/i,
-  /^to reduce\b/i,
-  /^key (pitfalls|fixes|points|takeaways|considerations|steps|notes|tips|insights|features|benefits|risks)\b/i,
-  /^(examples?|summary|overview|introduction|takeaways|conclusion|notes?|tips?)$/i,
-];
-
-/** What is wrong with a description as akm's `isValidDescription` sees it, or undefined when nothing is. */
-export function descriptionProblem(value: string): string | undefined {
-  const v = value.trim();
-  if (v.length < 20 || v.length > 400) return `${v.length} characters, akm wants 20 to 400`;
-  if (/^[\d#*\->`]/.test(v)) return "starts with a digit or a markdown mark";
-  if (isTruncated(v) || HANGING.has(v.match(/([A-Za-z']+)[.!?]*$/)?.[1]?.toLowerCase() ?? "")) return "ends as if it was cut off";
-  if (HEADING.some((re) => re.test(v))) return "is a heading";
-  if (/^(def|function|async\s+def|async\s+function|class|const|let|var|export\s+function|export\s+const|export\s+default|import|public|private|protected|fn|func)\s+\S/i.test(v)) return "starts like code";
-  if ((v.match(/`/g) ?? []).length % 2 !== 0) return "has an odd number of backticks";
-  return undefined;
-}
-
-/** What is wrong with a `when_to_use`, or undefined when nothing is. */
-export function whenToUseProblem(value: string, description: string): string | undefined {
-  const v = value.trim();
-  if (v.length < 15 || v.length > 400) return `${v.length} characters, akm wants 15 to 400`;
-  if (/^when working with\b/i.test(v)) return "is the circular fallback";
-  if (v.toLowerCase() === description.trim().toLowerCase()) return "repeats the description";
-  return undefined;
-}
+export * from "./score.ts";
+export * from "./collect.ts";
 
 // --- Injecting a defect ------------------------------------------------------------------------------------------
 
@@ -272,162 +149,7 @@ export function inject(cls: CaseClass, clean: string): string | undefined {
   }
 }
 
-// --- Scoring -----------------------------------------------------------------------------------------------------
-
-interface Note {
-  body: string;
-  /** The frontmatter as YAML reads it, or undefined when it does not parse. */
-  data: Record<string, unknown> | undefined;
-}
-
-function parse(note: string): Note {
-  const { fm, body } = splitFrontmatter(note);
-  if (fm === null) return { body, data: {} };
-  try {
-    const data: unknown = Bun.YAML.parse(fm);
-    return { body, data: data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : {} };
-  } catch {
-    return { body, data: undefined };
-  }
-}
-
-/** What akm itself writes into a proposal's frontmatter (a `type:` line the note lacked): neither a fix nor churn. */
-const BOOKKEEPING = new Set(["type", "generated", "verified"]);
-
-const text = (value: unknown): string | undefined => (typeof value === "string" ? collapse(value) : undefined);
-const wordsOf = (s: string): string[] => s.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
-/** Does `after` keep every word of `before`? A repair that changes only the break keeps them all. */
-function keeps(before: string, after: string): boolean {
-  const kept = new Set(wordsOf(after));
-  return wordsOf(before).every((w) => kept.has(w));
-}
-
-/** A cut-off description without the hanging words and marks at its end, which are what a repair may drop. */
-function withoutTail(description: string): string {
-  const words = collapse(description).replace(/[.,;:+…]+$/, "").split(" ");
-  while (words.length > 0 && HANGING.has((words.at(-1) ?? "").toLowerCase())) words.pop();
-  return words.join(" ");
-}
-
-/** The heading akm adds to a body that has none: `# Title`, a blank line, then the old body without its leading blank lines. */
-export function addedTitle(before: string, after: string): string | undefined {
-  const m = after.match(/^\n# (\S[^\n]*)\n\n/);
-  return m && after.slice(m[0].length) === before.replace(/^(\r?\n)+/, "") ? m[1] : undefined;
-}
-
-/** The words of a value that name something: a digit, two capitals, a path or a dotted name. Spaces, hyphens and dashes of every kind split words. */
-function specifics(value: string): string[] {
-  return value
-    .split(/[\s\u2010-\u2015\u2212-]+/)
-    .map((t) => t.replace(/^[^\w`]+|[^\w`]+$/g, "").replace(/`/g, ""))
-    .filter((t) => t !== "" && /\d|[A-Z].*[A-Z]|[a-z][/_.][a-z]/.test(t));
-}
-
-/** The specific words of a changed value that the note does not hold. */
-const ungrounded = (value: string, note: string): string[] => specifics(value).filter((t) => !note.toLowerCase().includes(t.toLowerCase()));
-
-/** Does `after` still hold every name, number and path `before` had, however they are spelled or joined? Other words may change. */
-function keepsNames(before: string, after: string): boolean {
-  const kept = new Set(wordsOf(after));
-  return specifics(before).every((t) => wordsOf(t).every((w) => kept.has(w)));
-}
-
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-/** The ways a `when_to_use` may name what the note records: as written, and a date also as year and month. */
-function anchorForms(anchor: string): string[] {
-  const m = anchor.match(/^(\d{4})-(\d{2})-\d{2}$/);
-  return m ? [anchor, `${m[1]}-${m[2]}`, `${MONTHS[Number(m[2]) - 1]} ${m[1]}`] : [anchor];
-}
-
-const HISTORICAL = /\b(historical|history|legacy|obsolete|outdated|out of date|deprecated|superseded|former|formerly|previous|previously|past|archived?|older|old|no longer|retired)\b/i;
-
-export type CheckName = "body_kept" | "defect_fixed" | "no_extra_change" | "no_invented" | "not_current";
-export type Checks = Partial<Record<CheckName, boolean>>;
-
-export interface Scored {
-  checks: Checks;
-  /** The fields the result changes. `title` is a heading added to the body. */
-  changed: string[];
-  /** The new text of each changed field. */
-  values: Record<string, string>;
-}
-
-/**
- * The description akm writes itself when a note has frontmatter but no description and the model gives none: from
- * the title, the first heading or the first sentence. akm's `deriveDescriptionFromAsset` in reflect.ts.
- */
-function derivedDescription(note: Note): string | undefined {
-  const line = note.body.split(/\r?\n/).map((l) => l.trim()).find((l) => l && !/^(#{1,6}\s|```|~~~|[-*+]\s|\d+\.\s|>|\||<!--)/.test(l));
-  const candidates: [string | undefined, boolean][] = [
-    [text(note.data?.title), true],
-    [note.body.match(/^#{1,6}\s+(.+?)\s*$/m)?.[1], true],
-    [line?.match(/^(.+?[.!?])(\s|$)/)?.[1] ?? line, false],
-  ];
-  for (const [raw, isHeading] of candidates) {
-    const name = collapse((raw ?? "").replace(/`/g, "").replace(/^[#>*\-\s]+/, ""));
-    for (const v of !name ? [] : isHeading ? [`Reference notes on ${name}.`, name] : [name]) {
-      if (descriptionProblem(v.slice(0, 400)) === undefined) return v.slice(0, 400).trimEnd();
-    }
-  }
-  return undefined;
-}
-
-/** Is the defect repaired in `after`, with what the note said kept? */
-function isFixed(c: Case, before: Note, after: Note, title: string | undefined): boolean {
-  const [was, now] = [text(before.data?.description) ?? "", text(after.data?.description)];
-  const ok = now !== undefined && descriptionProblem(now) === undefined;
-  switch (c.class) {
-    case "description-period":
-      return ok && !hasStrayPeriod(now) && keeps(was, now);
-    case "description-quote":
-      return ok && !hasEscapedQuote(now) && keeps(was, now);
-    case "description-truncated":
-      return ok && keepsNames(withoutTail(was), now);
-    case "description-missing":
-      return ok && now !== derivedDescription(before); // the model's own description, not the one akm falls back to
-    case "when-to-use-missing": {
-      const w = text(after.data?.when_to_use);
-      return w !== undefined && whenToUseProblem(w, now ?? "") === undefined;
-    }
-    case "title-missing":
-      return title !== undefined;
-    default:
-      return false;
-  }
-}
-
-/**
- * Score a result with checks that need no judge. `proposal` is the note as the proposal would leave it, or undefined
- * when reflect made none, which leaves the note as it is.
- */
-export function score(c: Case, proposal: string | undefined): Scored {
-  const [before, after] = [parse(c.source), parse(proposal ?? c.source)];
-  const title = addedTitle(before.body, after.body);
-  const changed = after.data === undefined || before.data === undefined ? ["frontmatter"] : [...new Set([...Object.keys(before.data), ...Object.keys(after.data)])].filter((k) => !BOOKKEEPING.has(k) && !sameJson(before.data?.[k], after.data?.[k]));
-  if (title !== undefined) changed.push("title");
-  const values: Record<string, string> = {};
-  for (const k of changed) {
-    const v = k === "title" ? title : k === "description" || k === "when_to_use" ? text(after.data?.[k]) : undefined;
-    if (v !== undefined) values[k] = v;
-  }
-  const newText = Object.values(values).join("\n");
-  const checks: Checks = {
-    body_kept: after.body === before.body || (title !== undefined && c.allow.includes("title")),
-    no_extra_change: changed.every((k) => (c.allow as string[]).includes(k)),
-    no_invented: ungrounded(newText, c.source).length === 0 && !(c.forbid ?? []).some((t) => new RegExp(`(?<!\\w)${escapeRegExp(t)}(?!\\w)`, "i").test(newText)),
-  };
-  if (isDefect(c.class)) checks.defect_fixed = isFixed(c, before, after, title);
-  if (c.class === "historical") {
-    const w = values.when_to_use;
-    checks.not_current = w === undefined || HISTORICAL.test(w) || (c.anchors ?? []).some((a) => anchorForms(a).some((form) => w.includes(form)));
-  }
-  return { checks, changed, values };
-}
+// --- The cases themselves -----------------------------------------------------------------------------------------
 
 /** The field a class's fix has to repair. */
 export const fixOf = (cls: CaseClass): Field | undefined => (cls === "title-missing" ? "title" : cls === "when-to-use-missing" ? "when_to_use" : cls.startsWith("description-") ? "description" : undefined);
@@ -452,33 +174,6 @@ export function caseProblems(c: Case): string[] {
   if (c.class === "unsupported-ask" && !(c.forbid ?? []).length) problems.push("no forbidden term");
   if (c.class === "historical" && !(c.anchors ?? []).length) problems.push("no anchor");
   return problems;
-}
-
-// --- akm --------------------------------------------------------------------------------------------------------
-
-/** The strategy that runs reflect alone. */
-export const STRATEGY = "reflect-only";
-
-/**
- * The akm config for a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy
- * that runs reflect on its own, with its quality judge off. judge-gate scores the judge, so here every proposal reaches the checks.
- */
-export function reflectConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "reflect");
-  config.engines.reflect.temperature = 0;
-  config.engines.reflect.enableThinking = false;
-  const off = { enabled: false };
-  config.defaults.improveStrategy = STRATEGY;
-  config.improve = {
-    strategies: {
-      [STRATEGY]: {
-        engine: "reflect",
-        processes: { reflect: { enabled: true, qualityGate: off }, distill: off, consolidate: off, memoryInference: off, extract: off, validation: off, triage: off, proactiveMaintenance: off },
-        sync: { enabled: false, push: false },
-      },
-    },
-  };
-  return config;
 }
 
 /** Is `version` at least `minimum`? Both are semver. A prerelease is below its release and ordered by its tag. */
@@ -519,56 +214,48 @@ export function digestOf(files: [name: string, path: string][]): string {
 /** The digest of what a run reads from a corpus folder: its cases.jsonl. */
 export const assetsSha256 = (assets: string): string => digestOf([["cases.jsonl", join(assets, "cases.jsonl")]]);
 
-/** What generate writes beside the private assets: the seed they were made with, and the digest of the public assets they were made from. */
+const ROOT = resolve(import.meta.dir, "..", "..", "..");
+
+/** The code that decides what generate makes of the public cases, by its path from the repository root: generate itself, and the rewrite with its lexicon of tool names. */
+export const GENERATOR_CODE = ["evals/reflect/src/generate.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"];
+
+/** generator_sha256: one digest over GENERATOR_CODE in the repository at `root`. A change to any of those files changes it. */
+export const generatorSha256 = (root = ROOT): string => sha256Text(GENERATOR_CODE.map((rel) => `${rel}\0${sha256File(join(root, rel))}\n`).join(""));
+
+/** What generate writes beside the private assets: the seed they were made with, the digest of the public assets they were made from, and the digest of the code that made them. */
 export interface Generated {
   seed: string;
   inputs_sha256: string;
+  generator_sha256: string;
 }
 
 export const GENERATED = "generated.json";
 
-/** generated.json in `dir` (private/reflect), or undefined when it is missing or does not hold a seed and a digest. */
-export function readGenerated(dir: string): Generated | undefined {
+/** generated.json in `dir` (private/reflect), or undefined when it is missing or does not hold a seed and a digest of the public assets. Assets made before the generator was digested have no generator_sha256. */
+export function readGenerated(dir: string): (Omit<Generated, "generator_sha256"> & { generator_sha256?: string }) | undefined {
   try {
     const g = JSON.parse(readFileSync(join(dir, GENERATED), "utf8")) as Partial<Generated> | null;
-    return typeof g?.seed === "string" && typeof g.inputs_sha256 === "string" ? { seed: g.seed, inputs_sha256: g.inputs_sha256 } : undefined;
+    if (typeof g?.seed !== "string" || typeof g.inputs_sha256 !== "string") return undefined;
+    return { seed: g.seed, inputs_sha256: g.inputs_sha256, ...(typeof g.generator_sha256 === "string" ? { generator_sha256: g.generator_sha256 } : {}) };
   } catch {
     return undefined;
   }
 }
 
 /**
- * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, and
- * the public assets it names the digest of are the ones in `publicAssets` now. Assets made before the public ones changed, or by
- * an older generate, would score a different set than the public run does.
+ * Why the private assets next to generated.json in `dir` may not be used, or undefined when it vouches for them: it is there, the public
+ * assets it names the digest of are the ones in `publicAssets` now, and the generator that made them is the one in the repository at `root`.
+ * Assets made before the public ones changed, or by another generate or rewrite, would score a different set than the public run does.
  */
-export function generatedProblem(dir: string, publicAssets: string): string | undefined {
+export function generatedProblem(dir: string, publicAssets: string, root = ROOT): string | undefined {
   const generated = readGenerated(dir);
   if (!generated) return `${GENERATED} is missing or holds no seed and inputs_sha256, so nothing shows what they were made from`;
   if (generated.inputs_sha256 !== assetsSha256(publicAssets)) return `they were made from other public assets than the ones in this checkout (inputs_sha256 in ${GENERATED} differs)`;
+  if (generated.generator_sha256 === undefined) return `${GENERATED} has no generator_sha256, so nothing shows which generator made them (an older generate)`;
+  if (generated.generator_sha256 !== generatorSha256(root)) return `they were made by a generator that has changed since: generate.ts of this eval, or lib/rewrite and its lexicon (generator_sha256 in ${GENERATED} differs)`;
   return undefined;
 }
 
-/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
-export function readSeed(file: string): string | null {
-  try {
-    return readFileSync(file, "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The seed to record for a corpus: none for the public one. The private corpus records the seed its assets were made with
- * (generated.json beside them), which is not private/seed when generate-assets ran with --seed, and private/seed when there is no generated.json.
- */
-export function corpusSeed(corpus: string, privateDir: string, seedFile: string): string | null {
-  if (corpus === "public") return null;
-  return (corpus === "private" ? readGenerated(privateDir)?.seed : undefined) ?? readSeed(seedFile);
-}
-
-/** Did the command run past its timeout? runAkm ends the stderr of a command it killed with "akm timed out after <N>s", and runAkmJson throws a message that says so. */
-export const timedOutMessage = (message: string): boolean => /\btimed out after [\d.]+s\b/.test(message);
 
 // --- Cases, outcomes and metrics ---------------------------------------------------------------------------------
 
@@ -594,145 +281,3 @@ export function parseCases(content: string, where = "cases"): Case[] {
 /** The first N cases. The file is ordered so that any run of ten cases holds every class once. */
 export const selectCases = (cases: Case[], limit?: number): Case[] => (limit === undefined ? cases : cases.slice(0, limit));
 
-export type Outcome = "proposal" | "none" | "refused" | "unusable" | "error";
-
-/**
- * What reflect did on one asset, from the result of `akm improve <ref> --json-to-stdout`. akm exits 0 whatever
- * reflect did, so the outcome comes from the reflect action in the result.
- */
-export function reflectOutcome(improve: unknown): { outcome: Outcome; reason: string } {
-  const actions = (improve as { actions?: { mode?: string; result?: { ok?: boolean; reason?: string; error?: string } }[] } | null)?.actions ?? [];
-  const action = actions.find((a) => a.mode?.startsWith("reflect"));
-  if (!action?.result) return { outcome: "error", reason: "reflect did not run on the asset" };
-  const { ok, reason = "", error = "" } = action.result;
-  if (ok) return { outcome: "proposal", reason: "" };
-  const why = `${reason}: ${error}`.slice(0, 300);
-  if (reason === "no_change") return { outcome: "none", reason: why };
-  if (reason === "quality_rejected" || action.mode === "reflect-guard-rejected") return { outcome: "refused", reason: why };
-  if (reason === "parse_error") return { outcome: "unusable", reason: why };
-  return { outcome: "error", reason: why };
-}
-
-/** The queries akm's retrieval check grades an edit on: at most 5, as akm takes. */
-const MAX_QUERIES = 5;
-
-/**
- * The queries the retrieval eval labels as finding each note (grade 2 or 3), by ref, best grade first, at most five. They
- * stand in for the searches that a real asset has in the usage log, which the retrieval check of akm's reflect grades the
- * edit on. `queries` and `qrels` are the two jsonl files of evals/retrieval/assets.
- */
-export function labelledQueries(queries: string, qrels: string): Map<string, string[]> {
-  const text = new Map<string, string>();
-  for (const line of queries.split("\n")) if (line.trim()) text.set(JSON.parse(line).id, JSON.parse(line).query);
-  const found = new Map<string, { query: string; grade: number; id: string }[]>();
-  for (const line of qrels.split("\n")) {
-    if (!line.trim()) continue;
-    const q = JSON.parse(line) as { id: string; ref: string; grade: number };
-    const query = text.get(q.id);
-    if (query === undefined || q.grade < 2) continue;
-    found.set(q.ref, [...(found.get(q.ref) ?? []), { query, grade: q.grade, id: q.id }]);
-  }
-  return new Map([...found].map(([ref, list]) => [ref, list.sort((a, b) => b.grade - a.grade || (a.id < b.id ? -1 : 1)).slice(0, MAX_QUERIES).map((q) => q.query)]));
-}
-
-/** What refused an edit: akm's pre-judge defect filter, the quality judge, or the retrieval check that runs after the judge passes it. */
-export type Refusal = "filter" | "judge" | "retrieval" | "other";
-
-/** Which of the three refused an edit, from the reason akm gives. */
-export function refusalOf(reason: string): Refusal {
-  if (/refused before the judge/.test(reason)) return "filter";
-  if (/quality gate rejected/.test(reason)) return "judge";
-  if (/retrieval/.test(reason)) return "retrieval";
-  return "other";
-}
-
-/**
- * The model that answered reflect, as the response names it, from the usage report in the improve result. A gateway that
- * serves one name from several providers may answer with a different name each time.
- */
-export function servedModel(improve: unknown): string | undefined {
-  const usage = (improve as { usageReport?: { byProcessEngineModel?: { process?: string; model?: string }[] } } | null)?.usageReport;
-  return usage?.byProcessEngineModel?.find((p) => p.process === "reflect")?.model;
-}
-
-export interface Row {
-  id: string;
-  class: CaseClass;
-  outcome: Outcome;
-  correct: boolean | null;
-  checks: Checks | null;
-  changed: string[];
-  values: Record<string, string>;
-  reason: string;
-  /** The model that answered, as the response names it. */
-  served?: string;
-  /** What the note would be if the proposal were accepted, so a result can be scored again when the checks change. */
-  proposal?: string;
-  seconds: number;
-  error?: string;
-  /** The error was a timeout: akm ran past its timeout and was killed. Absent on every other row. */
-  timed_out?: true;
-}
-
-/** A row for a case. An error has no verdict. A reply akm could not use, or an edit its own filter refused, is never correct. */
-export function makeRow(c: Case, run: { outcome: Outcome; proposal?: string; reason?: string; served?: string; seconds: number; error?: string; timedOut?: boolean }): Row {
-  // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
-  const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
-  if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
-  const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
-  const correct = (run.outcome === "proposal" || run.outcome === "none") && Object.values(checks).every(Boolean);
-  return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };
-}
-
-export interface Stats {
-  n: number;
-  correct: number;
-  rate: number | null;
-}
-export interface ClassStats extends Stats {
-  outcomes: Record<Outcome, number>;
-  failed: Partial<Record<CheckName, number>>;
-}
-export interface Metrics {
-  defects: Stats;
-  controls: Stats;
-  classes: Partial<Record<CaseClass, ClassStats>>;
-  proposals: { n: number; touched_body: number };
-  /** The refused edits, by what refused them (see `refusalOf`). */
-  refused: Record<Refusal, number>;
-}
-
-const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
-const stats = (rows: Row[]): Stats => {
-  const scored = rows.filter((r) => r.outcome !== "error");
-  const correct = scored.filter((r) => r.correct).length;
-  return { n: scored.length, correct, rate: ratio(correct, scored.length) };
-};
-
-/** Defects fixed and controls kept, in total and per class, over the cases reflect gave an outcome for. */
-export function metrics(rows: Row[]): Metrics {
-  const classes: Metrics["classes"] = {};
-  for (const cls of CLASSES) {
-    const mine = rows.filter((r) => r.class === cls);
-    if (mine.length === 0) continue;
-    const outcomes: Record<Outcome, number> = { proposal: 0, none: 0, refused: 0, unusable: 0, error: 0 };
-    const failed: Partial<Record<CheckName, number>> = {};
-    for (const r of mine) {
-      outcomes[r.outcome]++;
-      for (const [name, ok] of Object.entries(r.checks ?? {})) if (!ok) failed[name as CheckName] = (failed[name as CheckName] ?? 0) + 1;
-    }
-    classes[cls] = { ...stats(mine), outcomes, failed };
-  }
-  const proposals = rows.filter((r) => r.outcome === "proposal");
-  const refused: Metrics["refused"] = { filter: 0, judge: 0, retrieval: 0, other: 0 };
-  for (const r of rows) if (r.outcome === "refused") refused[refusalOf(r.reason)]++;
-  return {
-    defects: stats(rows.filter((r) => isDefect(r.class))),
-    controls: stats(rows.filter((r) => !isDefect(r.class))),
-    classes,
-    proposals: { n: proposals.length, touched_body: proposals.filter((r) => r.checks?.body_kept === false).length },
-    refused,
-  };
-}
-
-export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);

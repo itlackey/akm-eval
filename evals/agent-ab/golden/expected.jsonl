@@ -1,0 +1,6 @@
+{"id":"drillbit--backup-policy-train","control":{"trials":3,"scored":3,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":3,"scored":3,"passed":3,"errored":0,"timed_out":0},"paired":true}
+{"id":"drillbit--scale-replicas-train","control":{"trials":3,"scored":3,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":3,"scored":3,"passed":2,"errored":0,"timed_out":1},"paired":true}
+{"id":"inkwell--add-healthcheck-train","control":{"trials":2,"scored":2,"passed":2,"errored":0,"timed_out":0},"akm":{"trials":2,"scored":1,"passed":1,"errored":1,"timed_out":1},"paired":true}
+{"id":"inkwell--new-service-train","control":{"trials":3,"scored":0,"passed":0,"errored":3,"timed_out":3},"akm":{"trials":3,"scored":3,"passed":2,"errored":0,"timed_out":0},"paired":false}
+{"id":"inkwell--new-service-scaled-train","control":{"trials":2,"scored":1,"passed":0,"errored":1,"timed_out":0},"akm":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"paired":false}
+{"id":"drillbit--fix-runbook-train","control":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"paired":false}

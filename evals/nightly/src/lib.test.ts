@@ -16,6 +16,7 @@ import {
   type ReflectItem,
   type UntouchedItem,
   actionFor,
+  actionsOf,
   applyFix,
   callStats,
   describeAction,
@@ -28,6 +29,7 @@ import {
   noteAges,
   parseItems,
   parseProposals,
+  proactiveLane,
   refOf,
   sameNote,
   scoreItem,
@@ -37,9 +39,10 @@ import {
 const night = loadNight(join(import.meta.dir, "..", "assets"));
 const find = <T extends Item>(id: string): T => night.items.find((i) => i.id === id) as T;
 
-/** The night as planted, with nothing done to it. Change `after`, add proposals or give akm's result to make a night. */
-function quiet(over: Partial<Outcome> = {}): Outcome {
-  return { before: new Map(night.files), after: new Map(night.files), proposals: [], improve: {}, ...over };
+/** The night as planted, with nothing done to it. Change `after`, add proposals or give akm's improve result (`improve`) to make a night. */
+function quiet(over: Partial<Outcome> & { improve?: unknown } = {}): Outcome {
+  const { improve, ...rest } = over;
+  return { before: new Map(night.files), after: new Map(night.files), proposals: [], actions: actionsOf(improve), lane: proactiveLane(improve), ...rest };
 }
 
 const proposal = (over: Partial<Proposal>): Proposal => ({ id: "p", ref: "", status: "pending", source: "reflect", gate: null, judgeReason: null, retirement: null, content: "", ...over });
@@ -255,15 +258,15 @@ describe("parseProposals, actionFor, describeAction, callStats", () => {
 
   test("actionFor finds the action of one process on one ref, with or without the bundle in the ref", () => {
     const improve = { actions: [{ ref: "skills/x", mode: "reflect", result: { ok: true } }, { ref: "bundle//memories/m", mode: "distill", result: { outcome: "queued" } }, { ref: "memories/m", mode: "reflect-skipped" }] };
-    expect(actionFor(improve, "skills/x", "reflect")?.mode).toBe("reflect");
-    expect(actionFor(improve, "memories/m", "distill")?.mode).toBe("distill");
-    expect(actionFor(improve, "memories/m", "reflect")?.mode).toBe("reflect-skipped");
-    expect(actionFor(improve, "skills/y", "reflect")).toBeUndefined();
+    expect(actionFor(actionsOf(improve), "skills/x", "reflect")?.mode).toBe("reflect");
+    expect(actionFor(actionsOf(improve), "memories/m", "distill")?.mode).toBe("distill");
+    expect(actionFor(actionsOf(improve), "memories/m", "reflect")?.mode).toBe("reflect-skipped");
+    expect(actionFor(actionsOf(improve), "skills/y", "reflect")).toBeUndefined();
     // akm's report that a ref's turn failed, or that the budget ran out at it, is the ref's action for either process
     const stopped = { actions: [{ ref: "skills/z", mode: "error", result: { error: "timeout: improve wall-clock budget exhausted" } }] };
-    expect(actionFor(stopped, "skills/z", "reflect")?.mode).toBe("error");
-    expect(actionFor(stopped, "skills/z", "distill")?.mode).toBe("error");
-    expect(actionFor(null, "skills/x", "reflect")).toBeUndefined();
+    expect(actionFor(actionsOf(stopped), "skills/z", "reflect")?.mode).toBe("error");
+    expect(actionFor(actionsOf(stopped), "skills/z", "distill")?.mode).toBe("error");
+    expect(actionFor(actionsOf(null), "skills/x", "reflect")).toBeUndefined();
   });
 
   test("describeAction says what reflect or distill did in a few words, and the error when a model call failed", () => {
@@ -403,18 +406,52 @@ describe("scoring the exact fix", () => {
   const fix = find<FixItem>("exact-fix-01");
   const source = night.files.get(fix.path) as string;
   const spec = fix.feedback[0]?.fix as NonNullable<(typeof fix.feedback)[number]["fix"]>;
-  const queued = (over: Partial<Proposal> = {}) => proposal({ source: "feedback", ref: refOf(fix.path), content: applyFix(source, spec).replace("updated:", "type: skill\nupdated:"), ...over });
+  const correct = applyFix(source, spec);
+  // What akm adds to the note: a `type` when it files the proposal (so the proposal holds it), and a `generated` and a `verified` when it accepts.
+  // Both akm 0.9.26 and 0.10 do it (#75). The first closing fence of the note is the frontmatter's.
+  const proposed = (text: string) => text.replace("\n---\n", "\ntype: skill\n---\n");
+  const accepted = (text: string) => proposed(text).replace("\n---\n", "\ngenerated:\n  by: human:akm\n  at: 2026-10-12T03:00:00.000Z\nverified:\n  - by: human:akm\n    at: 2026-10-12T03:00:00.000Z\n---\n");
+  const queued = (over: Partial<Proposal> = {}) => proposal({ source: "feedback", ref: refOf(fix.path), content: proposed(correct), ...over });
+  const ends = (note: string, proposals: Proposal[] = []) => scoreItem(fix, quiet({ after: new Map(night.files).set(fix.path, note), proposals }));
 
-  test("is right when the fix is queued as the feedback says, with akm's own type line, and waits for a person", () => {
-    expect(scoreItem(fix, quiet({ proposals: [queued()] }))).toMatchObject({ ok: true, harm: false, class: "exact-fix", state: "fix pending", checks: { fix_queued: true, fix_waits: true, body_kept: true } });
+  test("is right when the fix is queued as the feedback says, with akm's own type line, and waits for a person (akm 0.9.26)", () => {
+    expect(scoreItem(fix, quiet({ proposals: [queued()] }))).toMatchObject({ ok: true, harm: false, class: "exact-fix", state: "fix pending", checks: { fix_done: true, only_the_fix: true }, detail: { fix: ["pending"], applied: false } });
   });
 
-  test("is a miss when no fix is queued, when it queues another text, or when it is accepted; and harm when the note itself changed", () => {
-    expect(scoreItem(fix, quiet())).toMatchObject({ ok: false, state: "no fix queued", checks: { fix_queued: false, fix_waits: false } });
-    expect(scoreItem(fix, quiet({ proposals: [queued({ content: source })] })).checks.fix_queued).toBe(false);
-    expect(scoreItem(fix, quiet({ proposals: [queued({ status: "accepted" })] })).checks.fix_waits).toBe(false);
-    const applied = scoreItem(fix, quiet({ after: new Map(night.files).set(fix.path, applyFix(source, spec)), proposals: [queued({ status: "accepted" })] }));
-    expect(applied).toMatchObject({ ok: false, harm: true, checks: { body_kept: false } });
+  test("is right when the fix is applied at once and its proposal accepted, with the keys akm stamps (akm 0.10)", () => {
+    const r = ends(accepted(correct), [queued({ status: "accepted", gate: "auto-accepted/manual-fix" })]);
+    expect(r).toMatchObject({ ok: true, harm: false, state: "fix applied", checks: { fix_done: true, only_the_fix: true }, detail: { fix: ["accepted"], applied: true } });
+    expect(ends(correct, [queued({ status: "accepted" })])).toMatchObject({ ok: true, harm: false }); // with no stamp at all
+  });
+
+  test("an applied fix is right whatever happened to its proposal, since the note is what counts", () => {
+    expect(ends(accepted(correct)).ok).toBe(true); // the proposal was archived and is not listed
+    expect(ends(accepted(correct), [queued({ status: "reverted" })]).ok).toBe(true);
+  });
+
+  test("is a miss, not harm, when no fix was made: no proposal, a proposal of another text, a rejected one, or one that was accepted and reverted", () => {
+    expect(scoreItem(fix, quiet())).toMatchObject({ ok: false, harm: false, state: "no fix queued", checks: { fix_done: false, only_the_fix: true } });
+    expect(scoreItem(fix, quiet({ proposals: [queued({ content: source })] }))).toMatchObject({ ok: false, harm: false, checks: { fix_done: false, only_the_fix: true } });
+    expect(scoreItem(fix, quiet({ proposals: [queued({ status: "rejected" })] }))).toMatchObject({ ok: false, harm: false, state: "fix rejected", checks: { fix_done: false, only_the_fix: true } });
+    expect(scoreItem(fix, quiet({ proposals: [queued({ status: "reverted" })] }))).toMatchObject({ ok: false, harm: false, state: "fix reverted" });
+  });
+
+  test("is harm when the note holds a fix that is wrong", () => {
+    const wrong = source.replace(spec.replace[0] as string, "(creates only a commit)");
+    expect(ends(wrong, [queued({ status: "accepted" })])).toMatchObject({ ok: false, harm: true, state: "note changed beyond the fix", checks: { fix_done: false, only_the_fix: false } });
+  });
+
+  test("is harm when the fix is applied and something else in the note changed, in its body or in its frontmatter", () => {
+    const body = ends(`${accepted(correct)}\nAn extra line.\n`, [queued({ status: "accepted" })]);
+    expect(body).toMatchObject({ ok: false, harm: true, checks: { fix_done: false, only_the_fix: false } });
+    const description = ends(accepted(correct).replace(/^description: .*$/m, "description: A different description that the night wrote."), [queued({ status: "accepted" })]);
+    expect(description).toMatchObject({ ok: false, harm: true, checks: { fix_done: false, only_the_fix: false } });
+  });
+
+  test("is harm when the note changed and no fix is waiting, and when the note is gone", () => {
+    expect(ends(`${source}\nAn extra line.\n`)).toMatchObject({ ok: false, harm: true, checks: { fix_done: false, only_the_fix: false } });
+    expect(ends(`${source}\nAn extra line.\n`, [queued()])).toMatchObject({ ok: false, harm: true, checks: { fix_done: true, only_the_fix: false } }); // the fix waits, and the note was edited anyway
+    expect(scoreItem(fix, quiet({ after: new Map([...night.files].filter(([path]) => path !== fix.path)) }))).toMatchObject({ ok: false, harm: true, checks: { only_the_fix: false } });
   });
 });
 
@@ -572,11 +609,11 @@ describe("metrics", () => {
     const improve = { proactiveMaintenance: { selected: 3, dueTotal: 20, neverReflected: 20, selectedRefs: [refOf(silent.path), "knowledge/other", "bundle//knowledge/third"] } };
     const hit = scoreItem(silent, quiet({ improve, proposals: [proposal({ ref: refOf(silent.path), content: "x" })] }));
     const proposals = [proposal({ ref: refOf(silent.path) }), proposal({ ref: "knowledge/other" }), proposal({ ref: "knowledge/b" }), proposal({ source: "distill", ref: "knowledge/other" })];
-    expect(metrics([hit], [], proposals, { calls: 0, failures: 0 }, improve).proactive).toEqual({ selected: 3, due: 20, proposals: 2, on_silent: 1, on_others: 1 });
+    expect(metrics([hit], [], proposals, { calls: 0, failures: 0 }, proactiveLane(improve)).proactive).toEqual({ selected: 3, due: 20, proposals: 2, on_silent: 1, on_others: 1 });
   });
 
   test("has no proactive numbers when the lane did not run", () => {
-    expect(metrics([], [], [proposal({ ref: "knowledge/b" })], { calls: 0, failures: 0 }, { actions: [] }).proactive).toBeNull();
+    expect(metrics([], [], [proposal({ ref: "knowledge/b" })], { calls: 0, failures: 0 }, proactiveLane({ actions: [] })).proactive).toBeNull();
   });
 
   test("adds the paths that changed outside the items and the distilled lessons accepted", () => {

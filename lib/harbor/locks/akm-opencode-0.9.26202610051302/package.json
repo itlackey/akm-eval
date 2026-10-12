@@ -1,0 +1,8 @@
+{
+  "name": "akm-eval-akm-opencode",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "akm-opencode": "0.9.26202610051302"
+  }
+}

@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { UNVERSIONED, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
+import { clearRunning } from "../../../lib/results.ts";
+import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import * as akm from "./akm.ts";
-import { type Corpus, publicCorpus } from "./dataset.ts";
+import { BUILDER, withSemantic } from "./collect.ts";
+import { type Corpus, assetsDigest, privateCorpus, publicCorpus } from "./dataset.ts";
 import { type Split, fakeAkmScript, sandboxRunning, writeAssets } from "./fakes.ts";
-import { CURATE_CHECK, assetsDigest, curateSample, failureOf, runCorpus, withSemantic } from "./run.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { CURATE_CHECK, curateSample } from "./sample.ts";
+import { failureOf, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -38,10 +44,10 @@ const TEST: Split = {
 const TRAIN: Split = { skills: [["s1", "train skill"]], queries: [["p1", "a request", ["s1"]]] };
 
 /** The tiny corpus, a fake akm for it, and a place for the results. */
-function setup() {
+function setup(test: Split = TEST, train: Split = TRAIN) {
   const root = tmp();
   const assets = join(root, "assets");
-  writeAssets(assets, TEST, TRAIN);
+  writeAssets(assets, test, train);
   const script = fakeAkmScript(root);
   const cacheRoot = join(root, "index-cache");
   const sandboxes: string[] = [];
@@ -271,7 +277,7 @@ describe("runCorpus", () => {
     const corpus: Corpus = { ...s.corpus, corpus: "private" };
     const { result: summary } = await logged(() => runCorpus(corpus, s.ctx({ label: "p", semantic: false }), { assets: s.assets, results: s.results }));
     const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
-    expect(stored.seed).toBe(42);
+    expect(stored.seed).toBe("42"); // as text, as the seed of any custom corpus is
     expect(stored.assets_sha256).toBe(assetsDigest(s.assets, "private"));
     expect(stored.assets_sha256).not.toBe(assetsDigest(s.assets, "public"));
     expect(Object.keys(stored.config)).toEqual(["keyword"]);
@@ -547,6 +553,197 @@ describe("runCorpus", () => {
   });
 });
 
+/** What a run wrote: the summary and the rows of its results folder. */
+const stored = (dir: string) => ({
+  summary: JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")),
+  rows: readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)),
+});
+
+describe("the manifest of a run", () => {
+  const folders = (s: ReturnType<typeof setup>) => ({ assets: s.assets, results: s.results });
+
+  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every query", async () => {
+    const s = setup();
+    const { summary } = stored((await logged(() => runCorpus(s.corpus, s.ctx({ label: "m" }), folders(s)))).result.results_dir);
+    const { manifest } = summary;
+    expect(manifestProblems(manifest)).toEqual([]);
+    expect(readManifest(summary).kind).toBe("manifest");
+    const parts = lockedParts(MEASUREMENT);
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "skillret", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {}, engines: {} });
+    expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
+    expect(manifest.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(Object.keys(manifest.cases)).toEqual(["q1", "q2", "q3", "q4"]);
+    const library = sha256Json(akm.skillFiles(s.corpus.skills));
+    expect(manifest.cases.q2).toEqual({
+      input_sha256: sha256Json({ query: "compose containers with docker and migrate the postgres database schema", library }),
+      label_sha256: sha256Json({ relevant: ["t2", "t3"] }),
+    });
+    expect(manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4"], scored: ["q1", "q2", "q3", "q4"], errored: [] });
+    expect(manifest.config.redacted).toEqual({ keyword: summary.config.keyword, semantic: summary.config.semantic });
+    expect(summary).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null });
+  });
+
+  test("a query whose call failed is errored in the completion, and a skill that changed is another input for every query", async () => {
+    const s = setup();
+    const corpus: Corpus = { ...s.corpus, queries: [...s.corpus.queries, { id: "broken", query: "BROKEN docker networking", relevant: ["t2"] }] };
+    const first = stored((await logged(() => runCorpus(corpus, s.ctx({ label: "a", semantic: false }), folders(s)))).result.results_dir).summary.manifest;
+    expect(first.completion).toEqual({ selected: ["q1", "q2", "q3", "q4", "broken"], scored: ["q1", "q2", "q3", "q4"], errored: ["broken"] });
+    const edited: Corpus = { ...corpus, skills: corpus.skills.map((x) => (x.id === "t2" ? { ...x, text: `${x.text} and swarm` } : x)) };
+    const second = stored((await logged(() => runCorpus(edited, s.ctx({ label: "b", semantic: false }), folders(s)))).result.results_dir).summary.manifest;
+    for (const id of Object.keys(first.cases)) {
+      expect(second.cases[id].input_sha256).not.toBe(first.cases[id].input_sha256);
+      expect(second.cases[id].label_sha256).toBe(first.cases[id].label_sha256);
+    }
+  });
+
+  test("a limit does not change the input of a query: the library stays whole", async () => {
+    const s = setup();
+    const full = stored((await logged(() => runCorpus(s.corpus, s.ctx({ label: "f", semantic: false }), folders(s)))).result.results_dir).summary.manifest;
+    const limited = stored((await logged(() => runCorpus(publicCorpus(s.assets, 2), s.ctx({ label: "l", limit: 2, semantic: false }), folders(s)))).result.results_dir).summary.manifest;
+    expect(Object.keys(limited.cases).length).toBe(2);
+    for (const [id, digest] of Object.entries<any>(limited.cases)) expect(digest).toEqual(full.cases[id]);
+  });
+
+  test("the custom corpus is a split of the dataset: its summary says so, with its seed as text, and it holds nothing private", async () => {
+    const s = setup();
+    const corpus: Corpus = { ...s.corpus, corpus: "private" };
+    const { summary } = stored((await logged(() => runCorpus(corpus, s.ctx({ label: "c", semantic: false }), folders(s)))).result.results_dir);
+    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42" });
+    expect(summary.manifest).toMatchObject({ corpus: "custom", settings: { seed: "42" } });
+    expect(manifestProblems(summary.manifest)).toEqual([]);
+  });
+});
+
+describe("the index builder (#73)", () => {
+  test("is the file that lays out the bundle, and the default key of the semantic index names it", async () => {
+    expect(BUILDER).toEqual([join(import.meta.dir, "akm.ts")]);
+    expect(readFileSync(BUILDER[0] as string, "utf8")).toContain("export async function load(");
+    const s = setup();
+    const key = (): string => JSON.parse(readFileSync(join(s.cacheRoot, "skillret-public", "state.json"), "utf8")).key;
+    await logged(() => runCorpus(s.corpus, s.ctx(), { assets: s.assets, results: s.results }));
+    const named = key();
+    // the same index with no builder file is another key, so the default one does name akm.ts
+    rmSync(s.cacheRoot, { recursive: true });
+    await logged(() => runCorpus(s.corpus, s.ctx({ cache: { root: s.cacheRoot, cmd: ["bun", s.script], builder: [] } }), { assets: s.assets, results: s.results }));
+    expect(key()).not.toBe(named);
+  });
+
+  test("a change to a file the builder names builds a new index, and says why", async () => {
+    const s = setup();
+    const lay = join(s.root, "lay.ts");
+    writeFileSync(lay, "export const layout = 'skills/<id>/SKILL.md';\n");
+    const cache = { root: s.cacheRoot, cmd: ["bun", s.script], builder: [lay] };
+    const run = (label: string) => logged(() => runCorpus(s.corpus, s.ctx({ label, cache }), { assets: s.assets, results: s.results }));
+    expect((await run("one")).result.semantic_index).toBe("cold");
+    expect((await run("two")).result.semantic_index).toBe("warm");
+    writeFileSync(lay, "export const layout = 'skills/<name>/SKILL.md';\n");
+    const changed = await run("three");
+    expect(changed.result.semantic_index).toBe("cold");
+    expect(changed.lines.join("\n")).toContain("the code that lays out the bundle");
+  });
+});
+
+describe("rescore", () => {
+  /** A repository of the files the benchmark's measurement reads, around a tiny dataset: the code, lib/ and the lock are copies of this checkout's. */
+  function repo(s: ReturnType<typeof setup>): string {
+    const here = join(import.meta.dir, "..", "..", "..");
+    const root = tmp();
+    cpSync(join(here, "lib"), join(root, "lib"), { recursive: true });
+    mkdirSync(join(root, "benchmarks", "skillret", "src"), { recursive: true });
+    for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts")) cpSync(join(import.meta.dir, file), join(root, "benchmarks", "skillret", "src", file));
+    cpSync(join(here, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
+    cpSync(s.assets, join(root, "benchmarks", "skillret", "assets"), { recursive: true });
+    return root;
+  }
+  const folders = (s: ReturnType<typeof setup>) => ({ assets: s.assets, results: s.results });
+
+  test("scores a run again from the ranked results its samples.jsonl holds, to the rows and metrics it wrote", async () => {
+    const s = setup({ ...TEST, queries: [...TEST.queries, ["broken", "BROKEN docker networking", ["t2"]], ["empty", "EMPTY docker networking", ["t2"]]] });
+    const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "r", workers: 2 }), folders(s)));
+    clearRunning(result.results_dir);
+    const again = rescoreRun(readStored(result.results_dir), { root: repo(s) });
+    const was = stored(result.results_dir);
+    expect(again.changed).toEqual([]);
+    expect(again.dropped).toEqual([]);
+    expect(again.rows).toEqual(was.rows);
+    for (const field of ["metrics", "by_size", "errored", "timeouts", "no_results", "curate_check", "status", "aborted_reason", "n_queries", "call_seconds"]) expect([field, again.summary[field]]).toEqual([field, was.summary[field]]);
+    expect(again.summary.status).toBe("aborted"); // a call failed, and it still says so
+    expect(manifestProblems(again.summary.manifest)).toEqual([]);
+    expect(again.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+    expect(again.summary.manifest.collector).toEqual(was.summary.manifest.collector);
+    expect(again.summary.manifest.cases).toEqual(was.summary.manifest.cases);
+  });
+
+  test("a run from before the manifest, whose rows hold no scores, scores again too, to the rows it would write now", async () => {
+    const s = setup();
+    const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "old", semantic: false }), folders(s)));
+    clearRunning(result.results_dir);
+    const was = stored(result.results_dir);
+    const dir = `${result.results_dir}-before`;
+    mkdirSync(dir);
+    const { manifest: _m, corpus_kind: _k, corpus_private: _p, corpus_folder: _f, ...legacy } = was.summary;
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
+    writeFileSync(join(dir, "samples.jsonl"), was.rows.map(({ search: { scores: _s, ...search }, ...row }) => `${JSON.stringify({ ...row, search })}\n`).join(""));
+    const again = rescoreRun(readStored(dir), { root: repo(s) });
+    expect(again.legacy).toBe(true);
+    expect(again.rows).toEqual(was.rows);
+    expect(again.summary.metrics).toEqual(was.summary.metrics);
+    expect(again.summary.manifest.collector.version).toBe(UNVERSIONED);
+  });
+
+  test("a run that read other data files than the ones here is refused, and so is a run whose rows lack the ranked results", async () => {
+    const s = setup();
+    const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "x", semantic: false }), folders(s)));
+    clearRunning(result.results_dir);
+    const was = stored(result.results_dir);
+    const copy = (name: string, summary: object, rows: object[]): string => {
+      const dir = `${result.results_dir}-${name}`;
+      mkdirSync(dir);
+      writeFileSync(join(dir, "summary.json"), JSON.stringify(summary));
+      writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
+      return dir;
+    };
+    const { manifest: _m, ...legacy } = was.summary;
+    const other = copy("other", { ...legacy, assets_sha256: "0".repeat(64) }, was.rows);
+    expect(() => rescoreRun(readStored(other), { root: repo(s) })).toThrow(/was made before the manifest, and cannot be scored again: it read other data files than the ones in benchmarks\/skillret\/assets now/);
+    const thin = copy("thin", was.summary, was.rows.map(({ search: { ranked: _r, ...search }, ...row }) => ({ ...row, search })));
+    expect(() => rescoreRun(readStored(thin), { root: repo(s) })).toThrow(/its rows lack the raw output the skillret scorer reads: search.ranked \(4 rows: q1, q2, q3, q4\)/);
+  });
+
+  test("a run on the custom corpus, a split of the data files, records no folder and is scored against the split drawn again from the summary", async () => {
+    // a train split that can give the test split's mix: ten skills, with a query for every one, every pair and every triple of them
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const combos = (n: number, from = 0): string[][] => (n === 0 ? [[]] : ids.slice(from).flatMap((id, i) => combos(n - 1, from + i + 1).map((rest) => [id, ...rest])));
+    const train: Split = { skills: ids.map((id) => [id, `train skill ${id}`]), queries: [1, 2, 3].flatMap((n) => combos(n).map((needs): [string, string, string[]] => [`p-${needs.join("-")}`, `a request for ${needs.join(" and ")} skill`, needs])) };
+    const s = setup(TEST, train);
+    const custom = privateCorpus(s.assets);
+    const { result } = await logged(() => runCorpus(custom, s.ctx({ label: "split", semantic: false }), { assets: s.assets, results: s.results }));
+    clearRunning(result.results_dir);
+    const was = stored(result.results_dir);
+    expect(was.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42", n_queries: 4 });
+    const root = repo(s);
+    // the split is drawn again from the data files and the sample the summary records, with no folder
+    expect(MEASUREMENT.loadCases(root, was.summary)).toEqual(custom.queries);
+    expect(MEASUREMENT.loadCases(root, { ...was.summary, sample: { ...was.summary.sample, limit: 2 } })).toEqual(privateCorpus(s.assets, 2).queries);
+    // scripts/rescore asks a custom run for the folder of its cases (corpus_folder, or --cases DIR): a split has none, so it is given the folder of the data files
+    const again = rescoreRun(readStored(result.results_dir), { root, cases: "benchmarks/skillret/assets" });
+    expect(again.changed).toEqual([]);
+    expect(again.dropped).toEqual([]);
+    expect(again.rows).toEqual(was.rows);
+    expect(again.summary.metrics).toEqual(was.summary.metrics);
+    expect(again.summary.manifest.rescored_from).toMatchObject({ dropped: [] });
+  });
+
+  test("the queries a stored run is scored against are drawn as the run drew them, with the limit it recorded, and nothing is fetched", async () => {
+    const s = setup();
+    const root = repo(s);
+    expect(MEASUREMENT.loadCases(root, { corpus: "public", sample: { limit: 2 } })).toEqual(publicCorpus(s.assets, 2).queries);
+    expect(MEASUREMENT.loadCases(root, { corpus: "public", sample: { limit: null } })).toEqual(s.corpus.queries);
+    rmSync(join(root, "benchmarks", "skillret", "assets", "test-qrels.jsonl"));
+    expect(() => MEASUREMENT.loadCases(root, { corpus: "public" })).toThrow("test-qrels.jsonl is not in");
+  });
+});
+
 describe("the command line", () => {
   const run = (...args: string[]) => {
     const r = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { stdout: "pipe", stderr: "pipe" });
@@ -560,7 +757,7 @@ describe("the command line", () => {
   });
 
   test("refuses a corpus, a limit and a label it does not know", () => {
-    expect(run("--corpus", "everything")).toMatchObject({ code: 2, err: expect.stringContaining('--corpus must be public, private or all, not "everything"') });
+    expect(run("--corpus", "everything")).toMatchObject({ code: 2, err: expect.stringContaining('--corpus must be public, custom or all, not "everything"') });
     expect(run("--limit", "0")).toMatchObject({ code: 2, err: expect.stringContaining("--limit must be a positive integer") });
     expect(run("--limit", "ten")).toMatchObject({ code: 2 });
     expect(run("--label", "a b")).toMatchObject({ code: 2, err: expect.stringContaining("--label may use letters") });

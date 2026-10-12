@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRewrite, changedLines, generate, quotedFacts } from "./generate.ts";
-import { CASES, GENERATED, casesSha256 } from "./inputs.ts";
+import { CASES, GENERATED, casesSha256, generatorSha256 } from "./inputs.ts";
 import { type Case, parseCases } from "./lib.ts";
 
 const dirs: string[] = [];
@@ -144,7 +144,7 @@ describe("generate", () => {
     expect(readdirSync(out).sort()).toEqual(["assets", "map.json"]);
     expect(readdirSync(join(out, "assets")).sort()).toEqual([GENERATED, CASES].sort());
     expect(parseCases(readFileSync(join(out, "assets", CASES), "utf8")).map((c) => c.severity)).toEqual(["harmful", undefined, "churn"]);
-    expect(JSON.parse(readFileSync(join(out, "assets", GENERATED), "utf8"))).toEqual({ seed: "7", inputs_sha256: casesSha256(pub), rewrite: "lib/rewrite" });
+    expect(JSON.parse(readFileSync(join(out, "assets", GENERATED), "utf8"))).toEqual({ seed: "7", inputs_sha256: casesSha256(pub), rewrite: generatorSha256() });
   });
 
   test("rewrites the corpus with the seed, then the labels with the same map and --min-count 1000000", () => {

@@ -3,38 +3,36 @@
 // answered twice by the same model, once with the whole chat history (without akm) and once with only
 // the sessions akm retrieves (with akm), and a judge grades both. See ../README.md.
 //
-//   benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
+//   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
+import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
-import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
-import { endpointIdentity, harnessSha256 } from "../../../lib/provenance.ts";
+import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
-import { Akm, PROJECTION_LIMIT, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
-import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Question, type Sample } from "./dataset.ts";
-import { type ChatResult, type Endpoint, TEMPERATURE, chat } from "./llm.ts";
+import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
+import { type Context, NAME, READER_ORDER, TOP_K, collectQuestion, openSandbox, sampling } from "./collect.ts";
+import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Sample } from "./dataset.ts";
+import { CHAT_TIMEOUT_MS, TEMPERATURE, type Endpoint } from "./llm.ts";
 import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
-import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
-import { type SessionView, isDecidable, isYes, judgePrompt, readerPrompt } from "./prompts.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import type { Rate } from "./metrics.ts";
+import { type Row, summarize } from "./score.ts";
 
-const NAME = "longmemeval";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const HARNESS = harnessSha256(import.meta.dir);
-const TOP_K = 5;
 const DEFAULT_SAMPLE_SEED = 42;
-const MAX_ANSWER_TOKENS = 512;
-const MAX_JUDGE_TOKENS = 10; // the benchmark's own: evaluate_qa.py asks the judge for 10 tokens
 const GIVE_UP_AFTER = 3; // questions in a row that failed the same way, before the first one that did not
-const BENCHMARK_JUDGE = "gpt-4o-2024-08-06"; // the judge the benchmark's evaluate_qa.py uses for "gpt-4o"
 
-const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
+const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
                                   [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
                                   [--model ID] [--judge-model ID] [--akm COMMAND]
 
@@ -43,13 +41,15 @@ the whole chat history, and with only the sessions akm retrieves. The judge in J
 and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the model's endpoint. Settings come from
 .env at the repository root.
 
-  --corpus          public (default) fetches the pinned dataset into assets/ if it is not there. private
-                    reads private/longmemeval/assets/, made by ./generate-assets, and refuses them when
+  --corpus          public (default) fetches the pinned dataset into assets/ if it is not there. custom reads
+                    private/longmemeval/assets/, made by ./generate-assets, and refuses them when
                     private/longmemeval/generated.json is missing or does not match the files, the public
                     lock or the generator. all runs both and prints the two results side by side.
+  --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format, and a
+                    corpus.json. It is --corpus custom. See "Corpora" in README.md.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
-                    apart from seed, the seed that made the private dataset.
+                    apart from seed, the seed that made the custom dataset.
   --retrieval-only  no model and no judge: ingest, search, and score what akm retrieves against the
                     sessions that hold the answer
   --semantic        search with akm's semantic search as well as its keyword index: akm embeds each question's sessions
@@ -57,9 +57,9 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     indexes them, so a question takes longer. A search that does not come back as semantic is an
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
-  --resume DIR      carry on a stopped run in its results folder: with the same corpus, model, judge, endpoints (path
-                    included), akm (version, command, build, its uncommitted changes and config), search mode, dataset
-                    files, sample settings and code (harness_sha256), it asks only the questions that are not done.
+  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, collector, scorer,
+                    model, judge and their endpoints, akm version, command, build and uncommitted changes, and config) and
+                    code (harness_sha256), it asks only the questions that are not done.
                     Rows made by other code are refused, not carried on: start a new run, without --resume
 ${modelUsage}
 ${judgeUsage}
@@ -67,46 +67,16 @@ ${akmUsage}
 
 Needs akm on PATH, or in AKM_BIN.`;
 
-type Corpus = "public" | "private";
+type Build = ReturnType<typeof akmBuild>;
 
-interface Arm {
-  ok: boolean;
-  correct: boolean | null;
-  hypothesis: string | null;
-  verdict: string | null;
-  decidable: boolean | null;
-  error: string | null;
-  seconds: number | null;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  finish_reason: string | null;
-  model: string | null;
-  judge_model: string | null;
-}
-
-interface Row {
-  question_id: string;
-  question_type: string;
-  abstention: boolean;
-  question: string;
-  expected: string;
-  /** How many sessions the question's haystack has, and how many of them are longer than akm's keyword index keeps (PROJECTION_LIMIT). */
-  n_sessions: number;
-  sessions_over_projection_limit: number;
-  /** Scored for every question akm searched. The means leave out the abstention questions, which have no session to find. */
-  retrieval: Retrieval | null;
-  /** The sessions akm returned, in its rank order. */
-  retrieved_session_ids: string[] | null;
-  retrieval_error: string | null;
-  /** The akm call of this question timed out, which is not the same as akm failing. */
-  timed_out: boolean;
-  without_akm: Arm | null;
-  with_akm: Arm | null;
-}
-
-interface Summary {
+interface Summary extends ReturnType<typeof summarize> {
   eval: string;
-  corpus: Corpus;
+  /** `public` or `custom`, and for a custom corpus its kind and whether it is private (see lib/corpus.ts). */
+  corpus: string;
+  corpus_kind: string;
+  corpus_private: boolean;
+  /** The folder of the questions of a custom corpus from the repository root (corpusFolderOf), so that scripts/rescore finds them. Null for the public corpus, and for a folder outside the repository, which is never recorded: rescore takes --cases DIR for it. */
+  corpus_folder: string | null;
   label: string;
   date: string;
   /** True when the run asked every question it set out to. A summary written after each question says false until the last one. */
@@ -119,11 +89,11 @@ interface Summary {
   harness_sha256: string;
   model: string | null;
   judge_model: string | null;
-  observed_models: string[];
-  observed_judge_models: string[];
-  /** What identifies the model's and the judge's endpoint (endpointIdentity in lib/provenance.ts): scheme, host, port and path, with no credentials. Null when the run has no model. */
+  /** Where the model and the judge are called: the host, and the digest of the endpoint's identity (see endpointRecord in lib/provenance.ts). Never the path, which can name a deployment or carry a key. Null when the run has no model. */
   model_endpoint: string | null;
+  model_endpoint_id: string | null;
   judge_endpoint: string | null;
+  judge_endpoint_id: string | null;
   /** What every model and judge request sends: the temperature, and the most tokens each may answer with. Null when the run has no model. */
   temperature: number | null;
   max_tokens: { model: number; judge: number } | null;
@@ -141,183 +111,26 @@ interface Summary {
   /** The order the sessions akm returns go to the reader in: the haystack's, which is the order the baseline reads. */
   reader_order: string;
   retrieval_only: boolean;
+  /** "retrieval-only" for a run with no model, null for the rest. Another mode is another measurement (see the manifest). */
+  mode: string | null;
   dataset: Record<string, unknown>;
   /** One digest over the dataset files the run read (the lock or rewrite.json, and the questions), by name. */
   assets_sha256: string;
-  /** The seed of the rewrite that made the private dataset, as a decimal string: the one in generated.json beside the assets, which is not private/seed when generate-assets ran with --seed. Null for the public corpus. */
+  /** The seed of the rewrite that made the custom dataset, as a decimal string: the one in generated.json beside the assets, which is not private/seed when generate-assets ran with --seed. Null for the public corpus and for a corpus of your own. */
   seed: string | null;
   /** The seed of the draw of the questions (--sample-seed), a different thing from `seed`. Null when no draw was made because every question was asked. The same number is in sample.seed. */
   sample_seed: number | null;
   sample: Omit<Sample, "items">;
-  /** The sessions loaded into akm (one count per question, since every question loads its own haystack), and those over akm's keyword body cut. */
-  sessions_loaded: number;
-  sessions_over_projection_limit: number;
-  n_run: number;
-  n_scored: number;
-  n_errored: number;
-  /** Questions whose akm call timed out. They are part of n_errored. */
-  timeouts: number;
-  metrics: {
-    accuracy: { without_akm: Rate & { n_errored: number }; with_akm: Rate & { n_errored: number }; difference: PairedDifference } | null;
-    by_type: Record<string, { n: number; without_akm: Rate; with_akm: Rate }> | null;
-    /** Over the questions with an answer in the history. The abstention questions are counted in retrieval_abstention and left out. */
-    retrieval: RetrievalSummary;
-    retrieval_abstention: { n: number };
-  };
-  judge_undecidable: number;
-  notes: string[];
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
 }
 
 let commit: string | undefined;
 const gitCommit = (): string => (commit ??= commitOf(ROOT)); // asked once: the summary is written after every question
 
-/** The benchmark's rule for an abstention question, from evaluate_qa.py and print_retrieval_metrics.py: "_abs" is somewhere in the question id. */
-export const isAbstention = (questionId: string): boolean => questionId.includes("_abs");
-
 /** Why a summary that is not complete says aborted when nothing gave up: the run was cut short, or is still going and writes it again after the next question. */
 const UNFINISHED = "the run had not asked every question when this summary was written";
-
-/** The sessions go to the reader in the order of the haystack, as the baseline reads them, and not in akm's rank order. */
-const READER_ORDER = "haystack";
-
-/** The temperature and token limits a run sends, as summary.json holds them. A run with no model sends nothing. */
-const sampling = (retrievalOnly: boolean) => ({ temperature: retrievalOnly ? null : TEMPERATURE, max_tokens: retrievalOnly ? null : { model: MAX_ANSWER_TOKENS, judge: MAX_JUDGE_TOKENS } });
-
-const failedArm = (error: string, partial: Partial<Arm> = {}): Arm => ({ ok: false, correct: null, hypothesis: null, verdict: null, decidable: null, error, seconds: null, prompt_tokens: null, completion_tokens: null, finish_reason: null, model: null, judge_model: null, ...partial });
-
-/** One answer from the model, and the judge's verdict on it. */
-async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpoint): Promise<Arm> {
-  let reply: ChatResult;
-  try {
-    reply = await chat(model, prompt, { maxTokens: MAX_ANSWER_TOKENS });
-  } catch (e) {
-    return failedArm((e as Error).message);
-  }
-  const hypothesis = reply.text.trim();
-  const got = { hypothesis, seconds: reply.seconds, prompt_tokens: reply.promptTokens, completion_tokens: reply.completionTokens, finish_reason: reply.finishReason, model: reply.model };
-  try {
-    const verdictReply = await chat(judge, judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstention(q.question_id)), { maxTokens: MAX_JUDGE_TOKENS });
-    const verdict = verdictReply.text.trim();
-    return { ...failedArm(""), ...got, ok: true, error: null, verdict: verdict.slice(0, 200), decidable: isDecidable(verdict), correct: isYes(verdict), judge_model: verdictReply.model };
-  } catch (e) {
-    return failedArm(`judge: ${(e as Error).message}`, got);
-  }
-}
-
-interface Context {
-  akm: Akm;
-  model: Endpoint | null;
-  judge: Endpoint | null;
-}
-
-async function ask(q: Question, ctx: Context): Promise<Row> {
-  const sessions: SessionView[] = q.haystack_sessions.map((turns, i) => ({ date: q.haystack_dates[i], turns: turns.map((t) => ({ role: t.role, content: t.content })) }));
-  const row: Row = { question_id: q.question_id, question_type: q.question_type, abstention: isAbstention(q.question_id), question: q.question, expected: String(q.answer), n_sessions: sessions.length, sessions_over_projection_limit: overProjectionLimit(sessions), retrieval: null, retrieved_session_ids: null, retrieval_error: null, timed_out: false, without_akm: null, with_akm: null };
-
-  let retrieved: SessionView[] = [];
-  try {
-    const names = await ctx.akm.load(sessions, q.question_id);
-    const hits = await ctx.akm.search(q.question, TOP_K);
-    const indices = hits.map((name) => {
-      const i = names.get(name);
-      if (i === undefined) throw new Error(`akm returned ${name}, which this run did not add`);
-      return i;
-    });
-    row.retrieved_session_ids = indices.map((i) => q.haystack_session_ids[i]);
-    row.retrieval = retrievalMetrics(q.answer_session_ids, row.retrieved_session_ids, TOP_K);
-    // The baseline reads the haystack in its order, so the reader gets these sessions in that order too and not by rank.
-    // The order is signal for a question about what changed or came first. A session akm returned twice is read once.
-    retrieved = [...new Set(indices)].sort((a, b) => a - b).map((i) => sessions[i]);
-  } catch (e) {
-    row.retrieval_error = (e as Error).message;
-    row.timed_out = isAkmTimeout(row.retrieval_error);
-  }
-  if (!ctx.model || !ctx.judge) return row;
-
-  row.without_akm = await answer(readerPrompt(sessions, q.question_date, q.question), q, ctx.model, ctx.judge);
-  row.with_akm = row.retrieval_error === null ? await answer(readerPrompt(retrieved, q.question_date, q.question), q, ctx.model, ctx.judge) : failedArm(`akm: ${row.retrieval_error}`);
-  return row;
-}
-
-function armStats(rows: Row[], arm: "without_akm" | "with_akm") {
-  const ran = rows.filter((r) => r[arm] !== null);
-  const scored = ran.filter((r) => r[arm]?.ok);
-  return { ...rate(scored.filter((r) => r[arm]?.correct).length, scored.length), n_errored: ran.length - scored.length };
-}
-
-type Build = ReturnType<typeof akmBuild>;
-
-export function buildSummary(rows: Row[], ctx: { corpus: Corpus; label: string; model: Endpoint | null; judge: Endpoint | null; version: string; build: Build; searchMode: SearchMode; config: unknown; dataset: Record<string, unknown>; assets_sha256: string; seed: string | null; sample: Sample; dir: string; complete: boolean; abortedReason?: string }): Summary {
-  const retrievalOnly = ctx.model === null;
-  const both = rows.filter((r) => r.without_akm?.ok && r.with_akm?.ok);
-  const scoredQuestions = retrievalOnly ? rows.filter((r) => r.retrieval).length : both.length;
-  const arms = rows.flatMap((r) => [r.without_akm, r.with_akm]).filter((a): a is Arm => a !== null);
-  const undecidable = arms.filter((a) => a.ok && a.decidable === false).length;
-  const timeouts = rows.filter((r) => r.timed_out === true).length;
-  const searched = rows.filter((r) => r.retrieval !== null);
-  const notes: string[] = [];
-  const seen = (arm: "without_akm" | "with_akm", key: "model" | "judge_model") => [...new Set(rows.map((r) => r[arm]?.[key]).filter((m): m is string => !!m))].sort();
-  const observedJudges = [...new Set([...seen("without_akm", "judge_model"), ...seen("with_akm", "judge_model")])];
-  if (!retrievalOnly) {
-    // The name the endpoint answers with counts, since a name such as "gpt-4o" can mean any snapshot.
-    const judges = observedJudges.length > 0 ? observedJudges : [ctx.judge?.model ?? ""];
-    if (!judges.every((j) => j.toLowerCase() === BENCHMARK_JUDGE)) notes.push(`The judge is not ${BENCHMARK_JUDGE}, the judge the benchmark specifies (it answered as ${judges.join(", ")}). These scores are not comparable to published LongMemEval numbers.`);
-    if (undecidable > 0.02 * Math.max(arms.filter((a) => a.ok).length, 1)) notes.push(`The judge gave an answer other than yes or no for ${undecidable} of ${arms.filter((a) => a.ok).length} verdicts. Use a judge that answers directly.`);
-  }
-  if (timeouts > 0) notes.push(`akm timed out on ${timeouts} of ${rows.length} questions (an index or a search took longer than its limit), and they count as errored. A slower akm shows up here.`);
-  const types = [...new Set(rows.map((r) => r.question_type))].sort();
-  const withType = (t: string, arm: "without_akm" | "with_akm"): Rate => {
-    const scored = rows.filter((r) => r.question_type === t && r[arm]?.ok);
-    return rate(scored.filter((r) => r[arm]?.correct).length, scored.length);
-  };
-  return {
-    eval: NAME,
-    corpus: ctx.corpus,
-    label: ctx.label,
-    date: new Date().toISOString(),
-    complete: ctx.complete,
-    status: ctx.complete ? "complete" : "aborted",
-    aborted_reason: ctx.complete ? null : (ctx.abortedReason ?? UNFINISHED),
-    git_commit: gitCommit(),
-    harness_sha256: HARNESS,
-    model: ctx.model?.model ?? null,
-    judge_model: ctx.judge?.model ?? null,
-    observed_models: [...new Set([...seen("without_akm", "model"), ...seen("with_akm", "model")])],
-    observed_judge_models: observedJudges,
-    model_endpoint: ctx.model ? endpointIdentity(ctx.model.baseUrl) : null,
-    judge_endpoint: ctx.judge ? endpointIdentity(ctx.judge.baseUrl) : null,
-    ...sampling(retrievalOnly),
-    akm_version: ctx.version,
-    ...ctx.build,
-    top_k: TOP_K,
-    search_mode: ctx.searchMode,
-    config: ctx.config,
-    reader_order: READER_ORDER,
-    retrieval_only: retrievalOnly,
-    dataset: ctx.dataset,
-    assets_sha256: ctx.assets_sha256,
-    seed: ctx.seed,
-    sample_seed: ctx.sample.seed,
-    sample: { order: ctx.sample.order, seed: ctx.sample.seed, n: ctx.sample.n, total: ctx.sample.total, per_type: ctx.sample.per_type },
-    sessions_loaded: rows.reduce((n, r) => n + (r.n_sessions ?? 0), 0),
-    sessions_over_projection_limit: rows.reduce((n, r) => n + (r.sessions_over_projection_limit ?? 0), 0),
-    n_run: rows.length,
-    n_scored: scoredQuestions,
-    n_errored: rows.length - scoredQuestions,
-    timeouts,
-    metrics: {
-      accuracy: retrievalOnly ? null : { without_akm: armStats(rows, "without_akm"), with_akm: armStats(rows, "with_akm"), difference: pairedDifference(both.map((r) => ({ without: !!r.without_akm?.correct, with: !!r.with_akm?.correct }))) },
-      by_type: retrievalOnly ? null : Object.fromEntries(types.map((t) => [t, { n: rows.filter((r) => r.question_type === t).length, without_akm: withType(t, "without_akm"), with_akm: withType(t, "with_akm") }])),
-      // Upstream leaves the abstention questions out of retrieval: they have no session to find. Their count is all that is kept.
-      retrieval: summarizeRetrieval(searched.flatMap((r) => (r.abstention || !r.retrieval ? [] : [r.retrieval])), TOP_K),
-      retrieval_abstention: { n: searched.filter((r) => r.abstention).length },
-    },
-    judge_undecidable: undecidable,
-    notes,
-    results_dir: ctx.dir,
-  };
-}
 
 const questions = (n: number): string => `${n} question${n === 1 ? "" : "s"}`;
 const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
@@ -359,50 +172,73 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["questions errored", String(a.n_errored), String(b.n_errored)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
+  console.log(`\n${NAME}: public and custom side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
+/** The settings of the model or the judge as the manifest keeps them: the host and the digest of the endpoint's identity, never the path. */
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, ...endpointRecord(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
+
 /**
- * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one: the same corpus,
- * model, judge and the endpoints they are called at (scheme, host, port and path), akm (version, command, build with the fingerprint of
- * its uncommitted changes, and config), search mode, dataset, the digest of its files, sample and harness. A question with an arm that
- * errored is asked again. A run made by other code is refused, not continued: the summary would name this run's code for rows that code
- * did not make, and there is no mixed-version mode. A summary with no harness_sha256 is from before it was recorded, so its code is
- * unknown, and it is refused the same way.
+ * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
+ * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by the digest of its identity, so two deployments on
+ * one host differ, and a key or a trailing slash does not; it is shown as its host and the start of the digest.
  */
-export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoint | null; judge: Endpoint | null; dataset: Record<string, unknown>; assets_sha256: string; sample: Sample; version: string; build: Build; searchMode: SearchMode; config: unknown }): Row[] {
+export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
+  const out: string[] = [];
+  const show = (x: unknown) => (x === null || x === undefined ? "none" : String(x));
+  const part = (p: { version: string; sha256: string }) => `version ${p.version}, ${p.sha256.slice(0, 12)}`;
+  const note = (what: string, was: unknown, is: unknown) => {
+    if (was !== is) out.push(`a different ${what} (${show(was)}, now ${show(is)})`);
+  };
+  note("eval", prior.eval, now.eval);
+  note("corpus", prior.corpus, now.corpus);
+  note("mode", prior.mode, now.mode);
+  note("collector", part(prior.collector), part(now.collector));
+  note("scorer", part(prior.scorer), part(now.scorer));
+  note("harness version", prior.harness_version, now.harness_version);
+  note("akm version", prior.akm.version, now.akm.version);
+  note("akm command", prior.akm.bin, now.akm.bin);
+  note("akm build", prior.akm.build, now.akm.build);
+  note("akm build fingerprint", prior.akm.build_fingerprint, now.akm.build_fingerprint); // two edits of one commit are two builds
+  note("akm config", prior.config.sha256, now.config.sha256);
+  note("settings", canonical(prior.settings), canonical(now.settings));
+  note("treatment hints", canonical(prior.treatment_hints), canonical(now.treatment_hints));
+  for (const role of ["model", "judge"]) {
+    const was = prior.engines[role];
+    const is = now.engines[role];
+    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null, endpoint_id: null }));
+    note(role, was?.model, is?.model);
+    note(`${role} endpoint`, was === undefined ? null : endpointDisplay(was), is === undefined ? null : endpointDisplay(is));
+    note(`${role} settings`, rest(was), rest(is));
+  }
+  const ids = [...new Set([...Object.keys(prior.cases), ...Object.keys(now.cases)])];
+  const differ = ids.filter((id) => canonical(prior.cases[id]) !== canonical(now.cases[id]));
+  if (differ.length > 0) out.push(`different questions (${differ.length} of ${ids.length} differ in what they present or are judged by, or are not asked now)`);
+  return out;
+}
+
+/**
+ * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one, which its manifest says: the same
+ * corpus, the questions (each by the digest of what it presents and of what it is judged by), the collector and the scorer, the model, the
+ * judge and the endpoints they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and config), and
+ * harness. A question with an arm that errored is asked again. A run made by other code is refused, not continued: the summary would name
+ * this run's code for rows that code did not make, and there is no mixed-version mode. A summary with no manifest or no harness_sha256 is
+ * from before it was recorded, so its code is unknown, and it is refused the same way.
+ */
+export function resumableRows(dir: string, now: { manifest: RunManifest; retrievalOnly: boolean }): Row[] {
   const summaryPath = join(dir, "summary.json");
   if (!existsSync(summaryPath)) fail(`${dir} has no summary.json, so it is not a run to resume`);
   const prior = JSON.parse(readFileSync(summaryPath, "utf8")) as Summary;
-  // A summary without a search mode, a config or a digest is from before the summary held the endpoints, the sampling settings and the inputs, and before the reader got the sessions in the haystack's order.
-  if (prior.search_mode === undefined || prior.config === undefined || prior.assets_sha256 === undefined) fail(`${dir} was run by an older version of this eval, whose rows are not comparable to the ones it would add. Run again without --resume.`);
+  const reading = readManifest(prior);
+  if (reading.kind === "legacy") fail(`${dir} was run by an older version of this eval, before the run manifest, whose rows are not comparable to the ones it would add. Run again without --resume.`);
+  if (reading.kind === "invalid") fail(`${dir} has a manifest that is not sound (${reading.problems.join("; ")}). Run again without --resume.`);
+  if (reading.manifest.rescored_from !== undefined) fail(`${dir} is the result of scripts/rescore, not a run, so there is nothing in it to carry on. Resume the folder it was made from.`);
   if (prior.harness_sha256 !== HARNESS) {
     fail(`${dir} was run by other code than this run's: its harness_sha256 is ${prior.harness_sha256 ?? "not recorded (the summary is from before it was)"}, and this run's is ${HARNESS}. Its rows are not carried into a summary that names this code. Start a new run, without --resume.`);
   }
-  const endpoint = (e: Endpoint | null) => (e ? endpointIdentity(e.baseUrl) : null);
-  const settings = (retrievalOnly: boolean) => JSON.stringify(sampling(retrievalOnly));
-  const same: [string, unknown, unknown][] = [
-    ["corpus", prior.corpus, now.corpus],
-    ["model", prior.model, now.model?.model ?? null],
-    ["model endpoint", prior.model_endpoint, endpoint(now.model)],
-    ["judge", prior.judge_model, now.judge?.model ?? null],
-    ["judge endpoint", prior.judge_endpoint, endpoint(now.judge)],
-    ["akm version", prior.akm_version, now.version],
-    ["akm command", prior.akm_bin, now.build.akm_bin],
-    ["akm build", prior.akm_build, now.build.akm_build],
-    ["akm build fingerprint", prior.akm_build_fingerprint ?? null, now.build.akm_build_fingerprint], // two edits of one commit are two builds; a summary that predates the fingerprint has none
-    ["search mode", prior.search_mode, now.searchMode],
-    ["akm config", JSON.stringify(prior.config), JSON.stringify(now.config)],
-    ["reader order", prior.reader_order, READER_ORDER],
-    ["sampling settings", JSON.stringify({ temperature: prior.temperature, max_tokens: prior.max_tokens }), settings(now.model === null)],
-    ["dataset", JSON.stringify(prior.dataset), JSON.stringify(now.dataset)],
-    ["assets sha256", prior.assets_sha256, now.assets_sha256],
-    ["sample seed", prior.sample.seed, now.sample.seed],
-    ["sample size", prior.sample.n, now.sample.n],
-  ];
-  const show = (x: unknown) => (x === null ? "none" : String(x));
-  for (const [what, was, is] of same) if (was !== is) fail(`${dir} was run with a different ${what} (${show(was)}, now ${show(is)}). Run again with the same settings, or without --resume.`);
+  const [different] = manifestDifferences(reading.manifest, now.manifest);
+  if (different !== undefined) fail(`${dir} was run with ${different}. Run again with the same settings, or without --resume.`);
   const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter((l) => l.trim() !== "");
   const rows: Row[] = [];
   for (const [i, line] of lines.entries()) {
@@ -412,64 +248,120 @@ export function resumableRows(dir: string, now: { corpus: Corpus; model: Endpoin
       if (i < lines.length - 1) fail(`${join(dir, "samples.jsonl")} line ${i + 1} is not valid JSON`);
     }
   }
-  return rows.filter((r) => r.retrieval !== null && (now.model === null || (r.without_akm?.ok === true && r.with_akm?.ok === true)));
+  return rows.filter((r) => r.retrieval !== null && (now.retrievalOnly || (r.without_akm?.ok === true && r.with_akm?.ok === true)));
 }
 
 /**
- * Why the private assets in `tree` (private/longmemeval) may not be used, or undefined when generated.json vouches for them. The
+ * Why the custom assets in `tree` (private/longmemeval) may not be used, or undefined when generated.json vouches for them. The
  * public lock is the one in `publicAssets`.
  */
 export const privateProblem = (tree: string, publicAssets = join(EVAL_DIR, "assets"), where = relative(ROOT, tree) || tree): string | undefined => treeProblem(tree, publicAssets, where);
 
 export async function runCorpus(
-  corpus: Corpus,
+  corpus: ResolvedCorpus,
   args: { limit?: number; label: string; sampleSeed: number; resume?: string },
   ctx: Context & { version: string; build?: Build },
-  folders: { assets: string; results: string; publicAssets?: string } = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
-  },
+  folders: { results?: string; publicAssets?: string } = {},
 ): Promise<Summary> {
-  const { assets, results: parent } = folders;
-  // The private assets are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
+  const assets = corpus.folder;
+  const isPublic = corpus.name === "public";
+  const parent = folders.results ?? (isPublic ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
+  // The assets of a rewrite are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
   let seed: string | null = null;
-  if (corpus === "private") {
+  if (corpus.config.kind === "rewrite") {
     const problem = privateProblem(dirname(assets), folders.publicAssets);
     if (problem !== undefined) fail(problem);
     seed = readGenerated(dirname(assets))?.seed ?? null;
   }
   const searchMode = ctx.akm.mode;
+  const retrievalOnly = ctx.model === null;
   const config = ctx.akm.config();
   const build = ctx.build ?? akmBuild();
   let dataset: Record<string, unknown>;
-  if (corpus === "public") {
+  let datasetFiles: string[];
+  if (isPublic) {
     const lock = readLock(assets);
     dataset = { name: lock.dataset, source: lock.source, licence: lock.licence, revision: lock.revision, file: DATA_FILE, sha256: lock.files[DATA_FILE].sha256 };
-  } else {
+    datasetFiles = ["ASSETS.lock", DATA_FILE];
+  } else if (corpus.config.kind === "rewrite") {
     dataset = { ...JSON.parse(readFileSync(join(assets, "rewrite.json"), "utf8")), file: DATA_FILE };
+    datasetFiles = ["rewrite.json", DATA_FILE];
+  } else {
+    dataset = { name: "custom", file: DATA_FILE, sha256: sha256File(join(assets, DATA_FILE)) };
+    datasetFiles = [DATA_FILE];
   }
-  const path = corpus === "public" ? await ensureDataset(assets) : join(assets, DATA_FILE);
-  // Before the questions are read, so the file is not held twice. The private file is hashed as it is, not as rewrite.json says.
-  const assets_sha256 = digestFiles(assets, [corpus === "public" ? "ASSETS.lock" : "rewrite.json", DATA_FILE]);
+  const path = isPublic ? await ensureDataset(assets) : join(assets, DATA_FILE);
+  // Before the questions are read, so the file is not held twice. The custom file is hashed as it is, not as rewrite.json says.
+  const assets_sha256 = digestFiles(assets, datasetFiles);
   const sample = sampleQuestions(loadQuestions(path), args.limit, args.sampleSeed);
+  const selected = sample.items.map((q) => q.question_id);
   const rows: Row[] = [];
+  const digests = caseDigests(MEASUREMENT, sample.items);
+  // What the run is made of, apart from how far it got. A resume has to be the same.
+  const manifestOf = (completion: { selected: string[]; scored: string[]; errored: string[] }): RunManifest =>
+    buildManifest({
+      measurement: MEASUREMENT,
+      parts,
+      corpus: corpus.name,
+      mode: retrievalOnly ? "retrieval-only" : null,
+      cases: digests,
+      akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+      config,
+      engines: ctx.model && ctx.judge ? { model: engineOf(ctx.model), judge: engineOf(ctx.judge) } : {},
+      settings: { seed },
+      completion,
+    });
   let dir: string;
   if (args.resume === undefined) {
     dir = makeResultsDir(parent, args.label);
     writeFileSync(join(dir, "samples.jsonl"), "");
   } else {
     dir = resolve(args.resume);
-    rows.push(...resumableRows(dir, { corpus, model: ctx.model, judge: ctx.judge, dataset, assets_sha256, sample, version: ctx.version, build, searchMode, config }));
+    rows.push(...resumableRows(dir, { manifest: manifestOf({ selected, scored: [], errored: [] }), retrievalOnly }));
     writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
     markRunning(dir); // makeResultsDir marks a new folder, so a resumed one is marked here, once it is known to be this run's
   }
   const samples = join(dir, "samples.jsonl");
-  console.log(`${NAME} (${corpus}): ${sample.n} of ${sample.total} questions${sample.seed === null ? "" : `, drawn with sample seed ${sample.seed}`}${rows.length > 0 ? `, ${rows.length} already done` : ""}`);
+  console.log(`${NAME} (${corpus.name}): ${sample.n} of ${sample.total} questions${sample.seed === null ? "" : `, drawn with sample seed ${sample.seed}`}${rows.length > 0 ? `, ${rows.length} already done` : ""}`);
   if (ctx.model && sample.n > 50) console.log("  Each question sends the whole history, about 115k tokens, in the without-akm arm. Use --limit for a shorter run.");
 
-  const base = { corpus, label: args.label, model: ctx.model, judge: ctx.judge, version: ctx.version, build, searchMode, config, dataset, assets_sha256, seed, sample, dir: relative(ROOT, dir) };
   const save = (complete: boolean, abortedReason?: string) => {
-    const summary = buildSummary(rows, { ...base, complete, abortedReason });
+    const summary: Summary = {
+      eval: NAME,
+      ...corpusRecord(corpus),
+      corpus_folder: isPublic ? null : corpusFolderOf(assets),
+      label: args.label,
+      date: new Date().toISOString(),
+      complete,
+      status: complete ? "complete" : "aborted",
+      aborted_reason: complete ? null : (abortedReason ?? UNFINISHED),
+      git_commit: gitCommit(),
+      harness_sha256: HARNESS,
+      model: ctx.model?.model ?? null,
+      judge_model: ctx.judge?.model ?? null,
+      model_endpoint: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint : null,
+      model_endpoint_id: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint_id : null,
+      judge_endpoint: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint : null,
+      judge_endpoint_id: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint_id : null,
+      ...sampling(retrievalOnly),
+      akm_version: ctx.version,
+      ...build,
+      top_k: TOP_K,
+      search_mode: searchMode,
+      config,
+      reader_order: READER_ORDER,
+      retrieval_only: retrievalOnly,
+      mode: retrievalOnly ? "retrieval-only" : null,
+      dataset,
+      assets_sha256,
+      seed,
+      sample_seed: sample.seed,
+      sample: { order: sample.order, seed: sample.seed, n: sample.n, total: sample.total, per_type: sample.per_type },
+      ...summarize(rows),
+      manifest: manifestOf(completionOf(MEASUREMENT, selected, rows)),
+      results_dir: relative(ROOT, dir),
+    };
     const { results_dir: _dir, ...stored } = summary;
     writeFileSync(join(dir, "summary.json.tmp"), `${JSON.stringify(stored, null, 2)}\n`);
     renameSync(join(dir, "summary.json.tmp"), join(dir, "summary.json"));
@@ -482,15 +374,15 @@ export async function runCorpus(
   let anySearched = false;
   let gaveUp: string | undefined;
   let gaveUpOn: "akm" | "model" = "model";
-  const done = new Set(rows.map((r) => r.question_id));
+  const done = new Set(rows.map((r) => r.id));
   for (const q of sample.items) {
     if (done.has(q.question_id)) continue;
-    const row = await ask(q, ctx);
+    const row = await collectQuestion(q, ctx);
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     save(false);
-    const word = (a: Arm | null) => (a === null ? "-" : a.ok ? (a.correct ? "correct" : "wrong") : "error");
-    const seconds = (a: Arm | null) => (a?.seconds === null || a === null ? "" : ` ${a.seconds}s`);
+    const word = (a: Row["with_akm"]) => (a === null ? "-" : a.ok ? (a.correct ? "correct" : "wrong") : "error");
+    const seconds = (a: Row["with_akm"]) => (a?.seconds === null || a === null ? "" : ` ${a.seconds}s`);
     const hit = row.retrieval ? `hit ${row.retrieval.hit ? "yes" : "no"}, recall ${fixed(row.retrieval.recall)}` : `error ${row.retrieval_error?.slice(0, 80)}`;
     console.log(`  [${String(rows.length).padStart(String(sample.n).length)}/${sample.n}] ${q.question_type.padEnd(25)} ${q.question_id.slice(0, 14).padEnd(14)}  without akm: ${word(row.without_akm)}${seconds(row.without_akm)} | with akm: ${word(row.with_akm)}${seconds(row.with_akm)} | retrieval: ${hit}`);
     for (const arm of [row.without_akm, row.with_akm]) if (arm?.error) console.log(`      ${arm.error.slice(0, 160)}`);
@@ -527,18 +419,19 @@ const toEndpoint = (m: ModelSettings): Endpoint => ({ baseUrl: m.baseUrl, model:
 /**
  * The model under test and the judge. The model is resolved first (useModel also writes it to MODEL_* in `env`), and its endpoint and
  * key are the judge's fallback: a judge with no JUDGE_BASE_URL of its own, and no models.json line, goes where the model goes, which
- * for `--model` naming a models.json line is that line's URL and not the gateway in .env.
+ * for `--model` naming a models.json line is that line's URL and not the gateway in .env. `settings` are the same two as models.json has
+ * them, for the private-corpus check.
  */
-export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint } {
+export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint; settings: { model: ModelSettings; judge: ModelSettings } } {
   const model = useModel(values, failWith, env, entries);
   const judge = useJudge(values, failWith, env, entries, { baseUrl: model.baseUrl, apiKey: model.apiKey });
-  return { model: toEndpoint(model), judge: toEndpoint(judge) };
+  return { model: toEndpoint(model), judge: toEndpoint(judge), settings: { model, judge } };
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`longmemeval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -547,36 +440,44 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  try {
+    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const sampleSeed = values["sample-seed"] === undefined ? DEFAULT_SAMPLE_SEED : Number(values["sample-seed"]);
   if (!Number.isInteger(sampleSeed) || sampleSeed < 0) fail("--sample-seed must be a non-negative integer");
-  const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
-  if (values.resume !== undefined && corpora.length > 1) fail("--resume carries on one run, so pick one corpus with --corpus public or --corpus private");
-  for (const c of corpora) {
-    if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", DATA_FILE))) {
-      fail(`the private assets are missing (private/${NAME}/assets/${DATA_FILE}). Make them with: ./generate-assets --only ${NAME}`);
-    }
-    // Before the first corpus runs: under --corpus all the public run takes hours, and the private one would refuse after it.
-    const problem = c === "private" ? privateProblem(join(ROOT, "private", NAME)) : undefined;
-    if (problem !== undefined) fail(problem);
-  }
+  if (values.resume !== undefined && corpora.length > 1) fail("--resume carries on one run, so pick one corpus with --corpus public or --corpus custom");
   const retrievalOnly = values["retrieval-only"] === true;
   const searchMode: SearchMode = values.semantic === true ? "semantic" : "keyword";
   useAkm(values, fail);
-  const { model, judge } = retrievalOnly ? { model: null, judge: null } : resolveEndpoints(values, fail);
-  const label = values.label ?? slug(model?.model ?? "retrieval");
+  const endpoints = retrievalOnly ? null : resolveEndpoints(values, fail);
+  // Before any sandbox, and before the first corpus runs: a corpus that is private is not sent to a model or a judge that models.json does not mark private.
+  const refusal = privacyError(corpora, { model: endpoints?.settings.model, judge: endpoints?.settings.judge }, "chats");
+  if (refusal !== undefined) fail(refusal);
+  for (const c of corpora) {
+    if (c.name === "public") continue;
+    const tree = dirname(c.folder);
+    if (!existsSync(join(c.folder, DATA_FILE))) {
+      fail(c.config.kind === "rewrite" ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
+    }
+    // Before the first corpus runs: under --corpus all the public run takes hours, and the custom one would refuse after it.
+    const problem = c.config.kind === "rewrite" ? privateProblem(tree) : undefined;
+    if (problem !== undefined) fail(problem);
+  }
+  const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
-  const sandbox = createSandbox(NAME, searchMode === "semantic" ? { semantic: true } : {});
+  const sandbox = openSandbox(searchMode);
   try {
     const akm = new Akm(sandbox, searchMode);
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(await runCorpus(c, { limit, label, sampleSeed, resume: values.resume }, { akm, model, judge, version }));
-    if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);
+    for (const c of corpora) summaries.push(await runCorpus(c, { limit, label, sampleSeed, resume: values.resume }, { akm, model: endpoints?.model ?? null, judge: endpoints?.judge ?? null, version }));
+    if (summaries.length === 2) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
   } finally {
     removeSandbox(sandbox);
   }

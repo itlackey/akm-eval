@@ -18,19 +18,24 @@ The control arm is Harbor's own `opencode` agent. This class is that agent plus 
 
 The versions come from the job config (`run.ts` writes it): opencode as Harbor's own `version` option, the plugin and
 akm-cli as `akm_plugin_version` and `akm_cli_version`. By default both are npm releases, and the plugin depends on that
-exact akm-cli. A job that tests a checkout of akm gives `packages_dir` instead: a folder of the tarballs that
-`npm pack` made on the host, which `install` uploads with `environment.upload_dir` (Harbor 0.24.0 has no job setting
-for it) and installs from, as `akm_package` and, when the checkout holds the plugin, `plugin_package` name them.
+exact akm-cli. A release is installed from the lockfile committed for it in `locks/` (`npm ci`), so every container gets
+the same dependency tree: neither package pins its own dependencies, and `npm install` would take the newest that each
+caret range allows. A release with no lockfile is installed by `npm install`, and says so in what it records. A job that
+tests a checkout of akm gives `packages_dir` instead: a folder of the tarballs that `npm pack` made on the host, which
+`install` uploads with `environment.upload_dir` (Harbor 0.24.0 has no job setting for it) and installs from, as
+`akm_package` and, when the checkout holds the plugin, `plugin_package` name them. A checkout has no lockfile.
 
 What was installed is recorded, not required to be a version: the install writes `akm_install.json` into the trial's
 agent folder and into the trial's context (`metadata["akm"]`), with what `akm --version` printed, the akm-cli the
-plugin carries, how many assets the index holds and the AKM_* settings the arm ran with. After the run,
+plugin carries, how many assets the index holds, the AKM_* settings the arm ran with, the lockfile each install came
+from and a digest of the dependency tree each one holds (`npm ls --all --json`). After the run,
 `akm_plugin_status.json` holds the verdict on the plugin; Harbor keeps only the first exception of a trial, so an
 `AgentTimeoutError` hides the error raised here, and the file is how run.ts finds the plugin failure.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shlex
@@ -48,13 +53,18 @@ AKM_ROOT = "/opt/akm"
 BUNDLE = f"{AKM_ROOT}/bundle"
 LIBRARIES = f"{AKM_ROOT}/libraries"  # uploaded for the seed, removed after it
 PACKAGES = f"{AKM_ROOT}/packages"  # the tarballs of a checkout, uploaded for the install, removed after it
-PLUGIN_PREFIX = f"{AKM_ROOT}/plugin"  # where a plugin tarball is installed: npm puts the package in node_modules under it
+CLI_PREFIX = f"{AKM_ROOT}/cli"  # where akm-cli is installed: npm puts the package and its dependencies in node_modules under it
+CLI_BIN = f"{CLI_PREFIX}/node_modules/.bin/akm"
+PLUGIN_PREFIX = f"{AKM_ROOT}/plugin"  # where the plugin is installed, the same way
 PLUGIN_DIR = f"{PLUGIN_PREFIX}/node_modules/akm-opencode"
+# The lockfiles committed for the pinned releases: one folder per release, named <package>-<version>, with the package.json and the
+# package-lock.json that `npm ci` reads. evals/agent-ab/README.md ("Dependencies") says how one is made.
+LOCKS = Path(__file__).resolve().parent / "locks"
 WARM_DATA = f"{AKM_ROOT}/opencode-warm"  # the warm-up session's XDG_DATA_HOME, so its log is at a known path
 
-# The akm the plugin shells out to. Without this it runs the akm-cli it carries, which opencode installs without
-# install scripts, so on Node that copy has no SQLite binding and every command it runs fails. It is a link to the
-# akm-cli installed here, which is also the `akm` the agent's own shell finds.
+# The akm the plugin shells out to. Without this it runs the akm-cli it carries, which is installed without install
+# scripts, so on Node that copy has no SQLite binding and every command it runs fails. It is a link to the akm-cli
+# installed here, which is also the `akm` the agent's own shell finds.
 AKM_CLI = "/usr/local/bin/akm"
 
 # What the agent's commands run with. The five directories are one setting: with only some of them set, the index
@@ -153,15 +163,37 @@ def plugin_log_problem(logs: list[str]) -> str | None:
     return None
 
 
-def install_record(seeded: str, checked: str, env: dict[str, str]) -> dict:
-    """What the setup printed, as the record kept with the trial: `akm --version`, the akm-cli the plugin carries and the assets indexed."""
+def lock_folder(package: str, version: str) -> Path | None:
+    """The folder of the lockfile committed for this release of `package`, or None when there is none."""
+    folder = LOCKS / f"{package}-{version}"
+    return folder if (folder / "package-lock.json").is_file() else None
+
+
+def lock_sha256(folder: Path | None) -> str | None:
+    """The digest of a lockfile, for the record of an install. None for an install that has none."""
+    return hashlib.sha256((folder / "package-lock.json").read_bytes()).hexdigest() if folder else None
+
+
+def tree_sha256(trees: dict[str, str]) -> str:
+    """One digest over the dependency trees of the installs, so a run can compare its trials by one value."""
+    return hashlib.sha256("".join(f"{name}={trees[name]}\n" for name in sorted(trees)).encode()).hexdigest()
+
+
+def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = "", lockfiles: dict[str, str | None] | None = None) -> dict:
+    """What the setup printed, as the record kept with the trial: `akm --version`, the akm-cli the plugin carries, the assets indexed,
+    the lockfile each install came from (None: it came from no lockfile) and the digest of the dependency tree each one holds."""
     check = re.search(r"^AKM-SETUP akm=(\S*) plugin_akm_cli=(\S*)$", checked, re.MULTILINE)
     assets = re.search(r"^AKM-SETUP assets=(\d+)$", seeded, re.MULTILINE)
+    tree = re.search(r"^AKM-SETUP tree_akm_cli=([0-9a-f]{64}) tree_plugin=([0-9a-f]{64})$", trees, re.MULTILINE)
+    found = {"akm_cli": tree.group(1), "plugin": tree.group(2)} if tree else None
     return {
         "akm_version": check.group(1) if check else None,
         "plugin_akm_cli": check.group(2) if check else None,
         "assets_indexed": int(assets.group(1)) if assets else None,
         "env": dict(env),
+        "lockfiles": dict(lockfiles or {"akm_cli": None, "plugin": None}),
+        "dependency_trees": found,
+        "dependency_tree_sha256": tree_sha256(found) if found else None,
     }
 
 
@@ -172,9 +204,13 @@ class AkmOpenCode(OpenCode):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._plugin_name = f"akm-opencode@{self.options.akm_plugin_version}"
-        # The plugin from the npm registry by name and version. A plugin tarball is installed under PLUGIN_PREFIX and
-        # named as the folder it is in, which opencode loads as it does a local plugin.
-        self._plugin = f"file://{PLUGIN_DIR}" if self.options.plugin_package else self._plugin_name
+        # The lockfile each install comes from, or None when the release has none or a tarball replaces it.
+        self._akm_lock = None if self.options.akm_package else lock_folder("akm-cli", self.options.akm_cli_version)
+        self._plugin_lock = None if self.options.plugin_package else lock_folder("akm-opencode", self.options.akm_plugin_version)
+        # The plugin is installed under PLUGIN_PREFIX, from its lockfile, its release or its tarball, and named as the folder it
+        # is in, which opencode loads as it does a local plugin. opencode's own install of a plugin by name would resolve the
+        # plugin's dependencies when each container starts.
+        self._plugin = f"file://{PLUGIN_DIR}"
         # The plugin is the only config the two arms differ in. The rest of the config comes from the job.
         self._opencode_config = {**self._opencode_config, "plugin": [self._plugin]}
         self._proof_checked = False
@@ -211,15 +247,20 @@ class AkmOpenCode(OpenCode):
         await super().install(environment)  # Node and the pinned opencode
         owner = shlex.quote(str(environment.default_user or "root"))
         dirs = " ".join(shlex.quote(v) for k, v in AKM_ENV.items() if k.endswith("_DIR"))
-        await self.exec_as_root(environment, command=f"install -d -m 0755 {dirs} {LIBRARIES} {PACKAGES} && chown -R {owner} {AKM_ROOT}")
+        await self.exec_as_root(environment, command=f"install -d -m 0755 {dirs} {CLI_PREFIX} {PLUGIN_PREFIX} {LIBRARIES} {PACKAGES} && chown -R {owner} {AKM_ROOT}")
         if self.options.packages_dir:
             await environment.upload_dir(Path(self.options.packages_dir), PACKAGES)
             await self.exec_as_root(environment, command=f"chown -R {owner} {PACKAGES}")
+        for lock, prefix in ((self._akm_lock, CLI_PREFIX), (self._plugin_lock, PLUGIN_PREFIX)):
+            if lock:
+                await environment.upload_dir(lock, prefix)
+                await self.exec_as_root(environment, command=f"chown -R {owner} {prefix}")
         await self.exec_as_agent(environment, command=self._install_akm_command())
-        found = await self.exec_as_agent(environment, command=f'{NVM}readlink -f "$(command -v akm)"')
+        found = await self.exec_as_agent(environment, command=f"{NVM}readlink -f {CLI_BIN}")
         await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
-        if self.options.plugin_package:
-            await self.exec_as_agent(environment, command=self._install_plugin_command())
+        await self.exec_as_agent(environment, command=self._install_plugin_command())
+        # Before the tarballs go: `npm ls` reads a package installed from one against the file it names.
+        trees = await self.exec_as_agent(environment, command=self._trees_command())
         await self.exec_as_agent(environment, command=f"rm -rf {PACKAGES}")
         await environment.upload_dir(Path(self.options.libraries_dir), LIBRARIES)
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
@@ -232,23 +273,45 @@ class AkmOpenCode(OpenCode):
             env={"XDG_DATA_HOME": WARM_DATA, "XDG_STATE_HOME": f"{AKM_ROOT}/opencode-warm-state"},
         )
         checked = await self.exec_as_agent(environment, command=self._check_command())
-        self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env})
+        locks = {"akm_cli": lock_sha256(self._akm_lock), "plugin": lock_sha256(self._plugin_lock)}
+        self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks)
         self._record(INSTALL_FILE, self._installed)
 
     def _akm_target(self) -> str:
-        """What `npm i -g` installs as akm-cli: the tarball of a checkout, or the release the job names."""
+        """What `npm install` puts in as akm-cli when there is no lockfile: the tarball of a checkout, or the release the job names."""
         if self.options.akm_package:
             return f"{PACKAGES}/{self.options.akm_package}"
         return f"akm-cli@{self.options.akm_cli_version}"
 
     def _install_akm_command(self) -> str:
-        return f"set -euo pipefail; {NVM}npm i -g {shlex.quote(self._akm_target())} && akm --version"
+        # Under a prefix of its own, not `npm i -g`, which ignores a lockfile. With one, `npm ci` installs exactly what it holds.
+        if self._akm_lock:
+            npm = f"npm ci --prefix {CLI_PREFIX} --no-audit --no-fund"
+        else:
+            npm = f"npm install --prefix {CLI_PREFIX} --no-audit --no-fund {shlex.quote(self._akm_target())}"
+        return f"set -euo pipefail; {NVM}{npm} && {CLI_BIN} --version"
 
     def _install_plugin_command(self) -> str:
-        # Beside the plugin goes the akm-cli tarball, if there is one, so the akm-cli the plugin depends on is the one under
-        # test when the versions agree, and not a release from the registry.
-        tarballs = [f"{PACKAGES}/{name}" for name in (self.options.plugin_package, self.options.akm_package) if name]
-        return f"set -euo pipefail; {NVM}npm install --prefix {PLUGIN_PREFIX} --no-audit --no-fund {' '.join(shlex.quote(t) for t in tarballs)} && test -d {PLUGIN_DIR}"
+        if self._plugin_lock:
+            # opencode installs a plugin's dependencies without their install scripts, and so does this.
+            npm = f"npm ci --prefix {PLUGIN_PREFIX} --ignore-scripts --no-audit --no-fund"
+        else:
+            # Beside the plugin goes the akm-cli tarball, if there is one, so the akm-cli the plugin depends on is the one under
+            # test when the versions agree, and not a release from the registry.
+            targets = [f"{PACKAGES}/{name}" for name in (self.options.plugin_package, self.options.akm_package) if name] or [self._plugin_name]
+            npm = f"npm install --prefix {PLUGIN_PREFIX} --no-audit --no-fund {' '.join(shlex.quote(t) for t in targets)}"
+        return f"set -euo pipefail; {NVM}{npm} && test -d {PLUGIN_DIR}"
+
+    def _trees_command(self) -> str:
+        """Prints the digest of the dependency tree under each prefix: what `npm ls --all --json` says is installed there."""
+        return (
+            f"set -euo pipefail; {NVM}"
+            # npm ls exits 1 for a tree with a problem, such as an optional package this platform skips, and still prints it.
+            'tree(){ local out; out="$(npm ls --all --json --prefix "$1" || true)"; '
+            '[ -n "$out" ] || { echo "AKM-SETUP FATAL: npm ls printed nothing for $1" >&2; exit 1; }; printf "%s" "$out" | sha256sum | cut -d" " -f1; }; '
+            f'cli="$(tree {CLI_PREFIX})"; plugin="$(tree {PLUGIN_PREFIX})"; '
+            'echo "AKM-SETUP tree_akm_cli=$cli tree_plugin=$plugin"'
+        )
 
     def _seed_command(self) -> str:
         # A bundle with the fact templates akm scaffolds, then the library's type folders copied in (never loose files
@@ -281,14 +344,12 @@ class AkmOpenCode(OpenCode):
     def _check_command(self) -> str:
         """Fail the setup if akm or the plugin did not come up. What came up is printed, not compared with a version."""
         failed = shlex.quote(PLUGIN_FAILED)
-        # Where the akm-cli the plugin carries is: in opencode's cache for a plugin from the registry, under the prefix for a tarball.
-        carried_in = PLUGIN_PREFIX if self.options.plugin_package else '"$HOME/.cache/opencode"'
         return (
             f"set -euo pipefail; {NVM}"
             'fail(){ echo "AKM-SETUP FATAL: $*" >&2; exit 1; }; '
             'version="$(akm --version | tr -d "[:space:]")"; [ -n "$version" ] || fail "akm printed no version"; '
             # The akm-cli the plugin carries is the one it runs in process. It may differ from the akm installed here, so it is recorded.
-            f'hoisted="$(find {carried_in} -path "*/node_modules/akm-cli/package.json" -print -quit)"; '
+            f'hoisted="$(find {PLUGIN_PREFIX} -path "*/node_modules/akm-cli/package.json" -print -quit)"; '
             '[ -n "$hoisted" ] || fail "the plugin is not installed"; '
             'carried="$(node -p "require(process.argv[1]).version" "$hoisted")"; '
             f"log={WARM_DATA}/opencode/log; "

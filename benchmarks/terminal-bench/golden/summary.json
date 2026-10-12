@@ -1,0 +1,248 @@
+{
+  "report": {
+    "control": {
+      "trials": 6,
+      "scored": 5,
+      "errored": 1,
+      "passed": 3,
+      "tasks": 5,
+      "pass_rate": {
+        "value": 0.6,
+        "lo": 0.2,
+        "hi": 1,
+        "n": 5
+      },
+      "exceptions": {
+        "AgentTimeoutError": 1
+      },
+      "timeouts": 1,
+      "per_trial": {
+        "minutes": 4.4,
+        "agent_minutes": 3.1,
+        "cost_usd": 0.0312
+      },
+      "tokens": {
+        "input": 368000,
+        "cache": 339500,
+        "output": 6150,
+        "cost_usd": 0.0623
+      }
+    },
+    "akm": {
+      "trials": 5,
+      "scored": 3,
+      "errored": 2,
+      "passed": 1,
+      "tasks": 3,
+      "pass_rate": {
+        "value": 0.333,
+        "lo": 0,
+        "hi": 1,
+        "n": 3
+      },
+      "exceptions": {
+        "AgentTimeoutError": 1,
+        "RuntimeError": 1,
+        "AkmPluginNotLoadedError": 1
+      },
+      "timeouts": 2,
+      "per_trial": {
+        "minutes": 16,
+        "agent_minutes": 14.8,
+        "cost_usd": 0.0353
+      },
+      "tokens": {
+        "input": 329600,
+        "cache": 303400,
+        "output": 5530,
+        "cost_usd": 0.0705
+      }
+    },
+    "delta": {
+      "value": -0.5,
+      "lo": -1,
+      "hi": 0,
+      "n": 2,
+      "ci": [
+        -1,
+        0
+      ],
+      "resampled": "tasks"
+    },
+    "better": {
+      "akm": 0,
+      "control": 1,
+      "same": 1
+    },
+    "sign_test": {
+      "akm": 0,
+      "control": 1,
+      "n": 1,
+      "p": 1
+    },
+    "flips": {
+      "control": {
+        "tasks": 0,
+        "of": 0
+      },
+      "akm": {
+        "tasks": 0,
+        "of": 0
+      }
+    },
+    "engagement": {
+      "trials": 3,
+      "called": 2,
+      "rate": 0.667,
+      "calls": {
+        "akm_search": 1,
+        "akm_curate": 1
+      },
+      "curated_read": 0,
+      "called_split": {
+        "trials": 2,
+        "passed": 1,
+        "delta": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0,
+          "n": 1,
+          "ci": [
+            0,
+            0
+          ],
+          "resampled": "tasks"
+        }
+      },
+      "not_called_split": {
+        "trials": 1,
+        "passed": 0,
+        "delta": {
+          "value": -1,
+          "lo": -1,
+          "hi": -1,
+          "n": 1,
+          "ci": [
+            -1,
+            -1
+          ],
+          "resampled": "tasks"
+        }
+      },
+      "control_calls": 0
+    },
+    "tasks": [
+      {
+        "task": "build-cython-ext",
+        "control": "1/1",
+        "akm": "1/1",
+        "called": "1/1",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "chess-best-move",
+        "control": "1/1",
+        "akm": "0/1",
+        "called": "0/1",
+        "disagree": true,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "configure-git-webserver",
+        "control": "0/0 T",
+        "akm": "0/1 T",
+        "called": "1/1",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "fix-code-vulnerability",
+        "control": "0/1",
+        "akm": "0/0",
+        "called": "0/0",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "log-summary-date-ranges",
+        "control": "1/1",
+        "akm": "0/0 T",
+        "called": "0/0",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "polyglot-c-py",
+        "control": "0/1",
+        "akm": "0/0",
+        "called": "0/0",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      }
+    ]
+  },
+  "metrics": {
+    "control": {
+      "pass_rate": 0.6,
+      "passed": 3,
+      "scored": 5,
+      "errored": 1,
+      "timeouts": 1,
+      "minutes": 4.4,
+      "agent_minutes": 3.1,
+      "cost_usd": 0.0312
+    },
+    "akm": {
+      "pass_rate": 0.333,
+      "passed": 1,
+      "scored": 3,
+      "errored": 2,
+      "timeouts": 2,
+      "minutes": 16,
+      "agent_minutes": 14.8,
+      "cost_usd": 0.0353
+    },
+    "delta": {
+      "value": -0.5,
+      "lo": -1,
+      "hi": 0,
+      "n": 2
+    },
+    "better": {
+      "akm": 0,
+      "control": 1,
+      "same": 1
+    },
+    "engagement": {
+      "rate": 0.667,
+      "called": 2,
+      "trials": 3,
+      "curated_read": 0,
+      "control_calls": 0
+    }
+  },
+  "timeouts": {
+    "control": 1,
+    "akm": 2
+  },
+  "n_errored": 3
+}
