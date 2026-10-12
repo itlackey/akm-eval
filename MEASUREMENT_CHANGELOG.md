@@ -33,3 +33,7 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | reflect | collector | 3 | #60: --retrieval-queries records the public notes' queries matched by public ref (searchesFor), and for a rewrite writes them through the corpus's own map.json, not the retrieval eval's private assets; custom corpora through lib/corpus.ts (part of #47). Private runs with --retrieval-queries record other searches; no score change | 48170ba5c215 |
 | 2026-10-12 | distill | collector | 1 | first lock entry; the scorer includes the copied-memory check (#55) and the narrower hedge scope (#56) | 963b9787f3a6 |
 | 2026-10-12 | distill | scorer | 1 | first lock entry; the scorer includes the copied-memory check (#55) and the narrower hedge scope (#56) | 1ce5a0f58952 |
+| 2026-10-12 | extract | collector | 1 | first lock entry; the scorer flags a negation over a verb the shared rule does not list as ambiguous (row.ambiguous, planted.ambiguous; #45) | 24ae1173ca2b |
+| 2026-10-12 | extract | scorer | 1 | first lock entry; the scorer flags a negation over a verb the shared rule does not list as ambiguous (row.ambiguous, planted.ambiguous; #45) | ef8c7daf8a23 |
+| 2026-10-12 | judge-gate | collector | 1 | first lock entry | de09348fb964 |
+| 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |

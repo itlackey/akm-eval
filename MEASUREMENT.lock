@@ -50,6 +50,45 @@
         ]
       }
     },
+    "extract": {
+      "collector": {
+        "version": 1,
+        "sha256": "24ae1173ca2b3090e27e3d91b3081d66db956031ace6397b159f48db00ead633",
+        "files": [
+          "evals/extract/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "ef8c7daf8a2369e235173e12388a13a6e2607fdf5c14eb82d05fc98f6a6f76cd",
+        "files": [
+          "evals/extract/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
+    "judge-gate": {
+      "collector": {
+        "version": 1,
+        "sha256": "de09348fb9640ea96f5fe8e6be43c3938dc13a7b0d5b923e7b8f7f326effacf8",
+        "files": [
+          "evals/judge-gate/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "e2d745fa97c253183522609716b9f6512e12851f0157f26d84c967460e300df8",
+        "files": [
+          "evals/judge-gate/src/score.ts"
+        ]
+      }
+    },
     "longmemeval": {
       "collector": {
         "version": 3,

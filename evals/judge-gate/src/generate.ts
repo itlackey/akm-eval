@@ -8,13 +8,13 @@
 // may not add names to the map: a word that the texts did not make a name must stay a word in it, so what the reason
 // quotes stays in the texts. Then each case is checked against the public one. Everything is made in a folder beside
 // the assets and moved into place only when every check passes, so a failed run leaves the assets and the map of the
-// run before as they were. generated.json, beside the cases, says what they were made from, and run --corpus private
-// checks it.
+// run before as they were. generated.json, beside the cases, says what they were made from (the seed, the digest of the public
+// cases and the digest of this generator's code, `rewrite`), and run checks it.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { CASES, GENERATED, type Generated, casesSha256 } from "./inputs.ts";
+import { CASES, GENERATED, type Generated, casesSha256, generatorSha256 } from "./inputs.ts";
 import { type Case, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -173,7 +173,7 @@ export function generate(opts: { seed: string; out: string; publicAssets?: strin
 
     mkdirSync(staging, { recursive: true });
     writeFileSync(join(staging, CASES), text);
-    const made: Generated = { seed: opts.seed, inputs_sha256: casesSha256(publicAssets), rewrite: "lib/rewrite" };
+    const made: Generated = { seed: opts.seed, inputs_sha256: casesSha256(publicAssets), rewrite: generatorSha256() };
     writeFileSync(join(staging, GENERATED), `${JSON.stringify(made, null, 2)}\n`);
     rmSync(assets, { recursive: true, force: true });
     renameSync(staging, assets);

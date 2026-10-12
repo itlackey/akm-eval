@@ -56,12 +56,12 @@ version 1. No baseline results are committed to this repository, so none was rep
 
 ## Borderline, left as good
 
-7 cases the rubric does not clearly decide. Each kept its label and its text. The criterion of version 2 is evidence: a good
-label moved only where the case's own reason or its diff shows a change the rubric names, and nothing in these seven does. The
-rubric also says uncertain cases were labelled bad, which is how the reviews labelled a case they could not decide; version 2
-did not apply that sentence again, because which of these count as uncertain is a reading the rubric does not fix (b7ef274a,
-which mends a description by a reading the source cannot confirm, is the closest). Applying it to all seven would leave 4 good
-and 102 bad. Which criterion holds is the maintainer's decision. The body of each is unchanged, apart from the added title in 1ae76bf3.
+7 cases the rubric does not clearly decide. Each kept its label and its text. The criterion is evidence: a good label moves
+only where the case's own reason or its diff shows a change the rubric names, and nothing in these seven does. The maintainer
+decided on 2026-10-12 that they stay good. The first reviews put a case they could not decide in as bad. That was their practice
+and not a rule of the rubric, and it was not applied again, because which of these count as uncertain is a reading the rubric does
+not fix (b7ef274a, which mends a description by a reading the source cannot confirm, is the closest). Applied to all seven it would
+have left 4 good and 102 bad. The body of each is unchanged, apart from the added title in 1ae76bf3.
 
 | Case | Set | Why |
 |---|---|---|
@@ -81,4 +81,5 @@ and 102 bad. Which criterion holds is the maintainer's decision. The body of eac
   moved back to good, `good` and `churn` change by one case.
 - With d095f354 relabelled no good case has a `[negative]` line, and none of `night-10-01`, `queue-10-01` and `orphans` is good. The
   good set needs new cases for both, from the unpublished half, to cover what it now lacks.
-- Applying "uncertain cases are bad" to the seven borderline cases would leave 4 good and 102 bad.
+- The maintainer decided on 2026-10-12 to keep the seven borderline cases good, on the criterion of evidence. No label changed, so
+  `rubric_version` stays 2. The good set still needs to grow (#50), which needs new labelled cases.

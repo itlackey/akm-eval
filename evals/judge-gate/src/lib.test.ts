@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, hideInRow, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases } from "./lib.ts";
+import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -246,7 +246,7 @@ describe("errorRow", () => {
   });
 });
 
-describe("hideEndpoints and hideInRow", () => {
+describe("hideEndpoints and verdictOf", () => {
   test("hideEndpoints writes every endpoint of a config as <MODEL_BASE_URL>, and changes nothing else or the config it was given", () => {
     const config = {
       defaults: { llmEngine: "judge" },
@@ -271,11 +271,11 @@ describe("hideEndpoints and hideInRow", () => {
     expect(hideEndpoints(null)).toBeNull();
   });
 
-  test("hideInRow masks akm's reason and the error, and nothing else", () => {
-    const row: Row = { ...errorRow(make(1, "good"), "akm exited 1: http://host/v1 down", 1), reason: "tried http://host/v1" };
-    expect(hideInRow(row, "http://host/v1")).toMatchObject({ error: "akm exited 1: <MODEL_BASE_URL> down", reason: "tried <MODEL_BASE_URL>", id: "id-good-1" });
-    const judged = rowFromVerdict(make(1, "good"), { pass: true, score: 4 }, 1);
-    expect(hideInRow(judged, "http://host/v1")).toEqual(judged);
+  test("verdictOf keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
+    const parsed = { ok: true, pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, engine: "judge", usage: { note: "http://host/v1" } };
+    expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge" });
+    expect(verdictOf({ pass: true, score: 4 }, "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: undefined });
+    for (const reply of [null, 7, "text", [1, 2]]) expect(verdictOf(reply, "http://host/v1")).toBe(reply);
   });
 });
 
