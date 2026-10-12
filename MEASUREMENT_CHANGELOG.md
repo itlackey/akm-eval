@@ -17,3 +17,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | distill | collector | 1 | first lock entry | 963b9787f3a6 |
 | 2026-10-12 | distill | scorer | 1 | first lock entry | 2c1f25d96846 |
 | 2026-10-12 | distill | scorer | 2 | distill #55: a lesson that repeats more than three quarters of its memory word for word is bad (copied), and an update gets the same check on its added lines (not_copied, a sixth check). Scores change: the memory pasted back as the lesson, and the old lesson with the memory appended, no longer score good | ad61c176591e |
+| 2026-10-12 | distill | scorer | 3 | distill #56: a doubt excuses a claim only when it governs it, before the claim in its own clause (or unconfirmed, right after it), not any hedge word within the sentence. Scores change: an over-claim with a could, an if or a may in another clause, or after it, is no longer excused | 1ce5a0f58952 |
