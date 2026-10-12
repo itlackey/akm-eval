@@ -7,10 +7,12 @@ import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
 import { CLASSES } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-// The golden files are in ../golden/: twelve of the public cases, with 61 raw outputs for them. Each is a realistic answer of distill on akm
+// The golden files are in ../golden/: twelve of the public cases, with 63 raw outputs for them. Each is a realistic answer of distill on akm
 // 0.9.26: the right one, and each way to get it wrong (a lesson that over-claims, turns the advice round or leaves a fact out, a lesson
 // where none is wanted, an update that drops a line or adds a claim, a judge that rejects, a skip, a timeout, an unreachable endpoint,
-// an empty answer), and the lessons that hold a phrase only behind a negation over a verb the shared rule does not list. cases.jsonl is a copy of those cases with the memories they are measured against, so a change to the corpus does not
+// an empty answer), the lessons that hold a phrase only behind a negation over a verb the shared rule does not list, and two answers of
+// akm 0.9.31, captured on 2026-10-12: a lesson with tags, whose judge scores `reusable` where 0.9.26 scored `novelty`, and a skip because the
+// writer answered `decision: none`. cases.jsonl is a copy of those cases with the memories they are measured against, so a change to the corpus does not
 // move the golden files. See lib/golden.ts.
 const GOLDEN = join(import.meta.dir, "..", "golden");
 const OPTIONS = { omit: ["improve", "proposals"] };
@@ -87,6 +89,13 @@ describe("the golden rows of the scorer", () => {
     expect(read("distill queues a lesson that says the upgrade fixes every service")).toEqual([["bad", ["report-service", "invoice", "deprecation"], [], ["no breaking"], ["every service * can upgrade"]]]);
     // no other row is flagged, and none of the rows that were here before changed in any other field
     expect(expected.filter((_, i) => !/behind (do not think|did not ignore|a verdict|did not dispute)|the upgrade fixes every service/.test(raw[i].note)).every((r) => r.ambiguous.length === 0)).toBe(true);
+    // akm 0.9.31 (the akm range of the README): the same checks read its lesson, with tags in the frontmatter, and its skip when the writer says none
+    const newer = expected.filter((_, i) => raw[i].note.startsWith("akm 0.9.31"));
+    expect(newer.map((r) => [r.verdict, r.outcome, r.detail, r.scores])).toEqual([
+      ["good", "lesson", "deferred/distill-review: The lesson states what the memory says.", { reusable: 5, nonRedundancy: 5, grounding: 5 }],
+      ["missed", "skipped", "nothing_reusable", null],
+    ]);
+    expect(newer[0].lesson).not.toContain("tags"); // the tags are labels and not text: the checks read the description, the when_to_use and the body
     // a lesson that is rejected, skipped or invalid is nothing queued: missed where a lesson was wanted, right where it was not
     expect(verdicts("distill finds nothing reusable in the memory")).toEqual(["missed"]);
     expect(verdicts("the lesson fails akm's validation")).toEqual(["missed"]);
@@ -112,9 +121,9 @@ describe("the golden rows of the scorer", () => {
     const raw = lines("raw.jsonl");
     const rows = raw.map((line) => MEASUREMENT.score(cases.find((c) => c.id === line.case), (MEASUREMENT.rawOf({ id: line.case, ...line.raw }) as { raw: any }).raw));
     const summary = MEASUREMENT.summarize(rows);
-    expect(summary).toMatchObject({ n_run: 61, n_scored: 58, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
+    expect(summary).toMatchObject({ n_run: 63, n_scored: 60, n_errored: 3, timeouts: 1, served_models: ["qwen3-27b"] });
     expect(summary.metrics.lesson_updates).toMatchObject({ n: 13, right: 3, checks: { update_proposed: 11, existing_kept: 10, new_facts: 10, no_extra_claims: 8, not_copied: 8, no_new_lesson: 12 } });
-    expect(summary.metrics.good_lessons).toMatchObject({ n: 36, good: 13, ambiguous: 7 }); // the six lessons of #45 and the bad one of claim-03
+    expect(summary.metrics.good_lessons).toMatchObject({ n: 38, good: 14, ambiguous: 7 }); // the six lessons of #45 and the bad one of claim-03
     expect(summary.metrics.lesson_updates.ambiguous).toBe(0);
     expect(summary.metrics.bad_by.forbidden_claim).toBe(7);
     expect(summary.metrics.bad_by.copied).toBe(5);
