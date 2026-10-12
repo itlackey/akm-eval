@@ -53,7 +53,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
   version: "0.2",
   loadCases: (root, summary) => casesIn(assetsOf(root, summary)),
-  legacyProblem: () => "its samples.jsonl has one line per trial, and the manifest evals have one line per task with its trials",
   caseId: (c) => c.id,
   input: (c) => ({ task_sha256: c.task_sha256, library: c.library, library_sha256: c.library_sha256 }),
   labels: () => ({}),

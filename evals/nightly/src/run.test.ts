@@ -510,7 +510,7 @@ describe("runCorpus", () => {
     expect(rows[0].night.proposals.map((p: any) => p.source)).toContain("consolidate");
     clearRunning(dir); // the run ended in this process, which is where the marker is removed
     const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
     expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics).toEqual(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).metrics);
   });

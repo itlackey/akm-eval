@@ -5,11 +5,10 @@
 // digests of a run, and the scoring itself is in score.ts. A case is a query. The library the queries are asked of is the same for all of them,
 // so its digest is the context of each query's input.
 
-import { existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { assetsDigest, corpusFiles, readCorpusQueries, type Query } from "./dataset.ts";
+import { readCorpusQueries, type Query } from "./dataset.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /** The split a summary's corpus drew from: the test split for the public corpus, and the train split for the custom corpus (of kind "split"), which the first summaries called private. */
@@ -25,13 +24,6 @@ export const MEASUREMENT: Measurement<Query, Raw, Row> = {
   loadCases: (root, summary) => {
     const limit = typeof summary.sample?.limit === "number" ? summary.sample.limit : undefined;
     return readCorpusQueries(splitOf(summary), assetsOf(root), limit);
-  },
-  legacyProblem: (root, summary) => {
-    const split = splitOf(summary);
-    const assets = assetsOf(root);
-    if (corpusFiles(split).some((name) => !existsSync(join(assets, name)))) return `the data files of ${relative(root, assets)} are not here (a run of the benchmark fetches them)`;
-    if (summary.assets_sha256 !== assetsDigest(assets, split)) return `it read other data files than the ones in ${relative(root, assets)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
-    return undefined;
   },
   caseId: (q) => q.id,
   // akm is asked the request as the dataset has it, of a library that is the same for every query (`library`: the digest of its skills).

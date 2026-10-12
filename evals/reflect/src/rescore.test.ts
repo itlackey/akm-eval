@@ -72,17 +72,6 @@ describe("the folder of the cases of a run", () => {
     expect(casesFolder(root, { corpus: "private" })).toBe(join(root, "private", "reflect", "assets"));
     for (const corpus of ["own", "own-feedback", "constructor", undefined]) expect(() => casesFolder(root, { corpus }), String(corpus)).toThrow("which is neither public nor custom");
   });
-
-  test("a run from before the manifest is told apart by the cases it read, where they are", () => {
-    const tree = tmp();
-    mkdirSync(join(tree, "evals", "reflect"), { recursive: true });
-    cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
-    const digest = assetsSha256(join(tree, "evals", "reflect", "assets"));
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: digest })).toBeUndefined();
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: "0".repeat(64) })).toContain("it read other cases than the ones in evals/reflect/assets now");
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "private", assets_sha256: digest })).toContain("it read other cases than the ones in private/reflect/assets now"); // none there
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "custom", corpus_folder: null })).toContain("that its summary does not record");
-  });
 });
 
 describe("scripts/rescore on a custom corpus", () => {
@@ -103,7 +92,7 @@ describe("scripts/rescore on a custom corpus", () => {
     const tree = checkout("private/reflect/own notes");
     const dir = storedRun(tmp(), "2026-10-12-mine", CASES, rightRows(), custom({ corpus_folder: "private/reflect/own notes" }));
     const { result } = rescoreFolder(dir, { root: tree });
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(result.rows).toHaveLength(CASES.length);
     expect(result.summary.manifest.corpus).toBe("custom");
     expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: "private/reflect/own notes" });

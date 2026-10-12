@@ -377,7 +377,7 @@ describe("runCorpus", () => {
     void summary; // the fake akm pairs nothing here, so the run is "aborted"; its rows are still a stored run
     clearRunning(dir); // the run ended in this process, which is where the marker is removed
     const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
     rmSync(out, { recursive: true, force: true });
   });

@@ -52,7 +52,7 @@ interface Spec {
   summary?: Record<string, unknown>;
 }
 
-/** A results folder of the golden cases as harness-v3 writes it. A `manifest` that returns undefined leaves the summary without one: a legacy run. */
+/** A results folder of the golden cases as harness-v3 writes it. */
 export function run(spec: Spec = {}): string {
   const scored = CASES.map((c) => MEASUREMENT.score(c, (spec.raw ?? FIRST)(c)));
   const base = buildManifest({
@@ -107,7 +107,7 @@ describe("rescoring a distill run", () => {
     expect(out).toBe(`${dir}-rescored`);
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const s = summaryOf(out);
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_run: CASES.length, metrics: o.metrics, served_models: o.served_models, n_errored: o.n_errored, corpus: "public" });
@@ -138,12 +138,11 @@ describe("rescoring a distill run", () => {
     expect((summaryOf(out).manifest as RunManifest).completion.errored).toEqual(["lesson-01", "lesson-02"]);
   });
 
-  test("a run from before the manifest, whose rows hold no raw output, is refused and the rows' missing fields are named", () => {
+  test("a run whose rows hold no raw output is refused and the rows' missing fields are named", () => {
     const rows = (all: Row[]) => all.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "improve" && k !== "proposals")));
-    const legacy = run({ manifest: () => undefined, rows });
-    expect(readManifest(summaryOf(legacy)).kind).toBe("legacy");
-    expect(() => rescoreFolder(legacy)).toThrow(/cannot be scored again: its rows lack the raw output the distill scorer reads: improve \(\d+ rows?: [a-z0-9-]+.*\); proposals \(\d+ rows?:/);
-    expect(readdirSync(join(legacy, ".."))).toEqual(["2026-10-12-golden"]); // and writes nothing
+    const thin = run({ rows });
+    expect(() => rescoreFolder(thin)).toThrow(/cannot be scored again: its rows lack the raw output the distill scorer reads: improve \(\d+ rows?: [a-z0-9-]+.*\); proposals \(\d+ rows?:/);
+    expect(readdirSync(join(thin, ".."))).toEqual(["2026-10-12-golden"]); // and writes nothing
   });
 
   test("a folder that is not a run, and a run on a custom corpus whose folder was not recorded, are refused with what to do", () => {

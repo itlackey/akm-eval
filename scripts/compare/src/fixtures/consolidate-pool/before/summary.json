@@ -67,6 +67,10 @@
       "of": 4,
       "staged": 2
     },
+    "staged": {
+      "n": 2,
+      "safe": 0
+    },
     "precision": {
       "value": 0.25,
       "safe": 1,
@@ -174,5 +178,6 @@
     "anti_collapse_injected": null,
     "cold_start_budget": null,
     "warnings": []
-  }
+  },
+  "manifest": {"manifest_version":1,"eval":"consolidate","corpus":"public","collection":null,"mode":"pool","harness_version":3,"collector":{"version":"0.2"},"cases":{"p01":{"input_sha256":"747756ec69656a1e42dc6256cd350de335000b41148e8c8478c5882e4af3a217","label_sha256":"747756ec69656a1e42dc6256cd350de335000b41148e8c8478c5882e4af3a217"},"p02":{"input_sha256":"aad1cb9501ebfd2b18387af976fe7e037e82ea9e4a82175cf14f7d65669904c4","label_sha256":"aad1cb9501ebfd2b18387af976fe7e037e82ea9e4a82175cf14f7d65669904c4"},"p03":{"input_sha256":"9fcc75edfa099917227f94622937ed5c01d9b73a2f817ab2db65b2799cb0178b","label_sha256":"9fcc75edfa099917227f94622937ed5c01d9b73a2f817ab2db65b2799cb0178b"},"p04":{"input_sha256":"b319d9f8d7cbe4f5c69590ce6f157e753691d9ccf3d101f0fcca15fb44b52313","label_sha256":"b319d9f8d7cbe4f5c69590ce6f157e753691d9ccf3d101f0fcca15fb44b52313"},"p05":{"input_sha256":"566616d4e1d9a41feb2d57f61f1eb8862de330a6a20b075d3989001c730ac53b","label_sha256":"566616d4e1d9a41feb2d57f61f1eb8862de330a6a20b075d3989001c730ac53b"},"p06":{"input_sha256":"212de07351feba2873b27e2dbc9f6278e552ded29acf3f16d501fce9d1f07266","label_sha256":"212de07351feba2873b27e2dbc9f6278e552ded29acf3f16d501fce9d1f07266"},"p07":{"input_sha256":"7aff52c3629bf329c10a44795a0cc246334b9a5ff39c120f1f836065902699eb","label_sha256":"7aff52c3629bf329c10a44795a0cc246334b9a5ff39c120f1f836065902699eb"}},"akm":{"version":"0.9.99-test","bin":"akm","build":null,"build_fingerprint":null},"config":{"sha256":"7fdaaa0d0f0eae7bb0a86bbe5cceffd42a5fd6ab21ecec7f32d2328995cad53c","redacted":{"configVersion":"0.9.0","semanticSearchMode":"off","registries":[],"defaults":{"llmEngine":"model","improveStrategy":"night"},"engines":{"model":{"kind":"llm","provider":"openai","apiKey":"$MODEL_API_KEY"}}}},"settings":{"strategy":"consolidate","config_patch_sha256":null,"timeout_ms":null,"seed":null},"engines":{"model":{"model":"test-model","endpoint":"https://gateway.example.com","endpoint_id":"2467c53b1babc443bf5bd26d6e2bf571499a5e6324bae883d466c67157b51c25","temperature":0,"enableThinking":false,"timeoutMs":120000}},"treatment_hints":{},"completion":{"selected":["p01","p02","p03","p04","p05","p06","p07"],"scored":["p01","p02","p03","p04","p05","p06","p07"],"errored":[]}}
 }

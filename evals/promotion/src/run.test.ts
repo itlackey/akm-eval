@@ -433,7 +433,7 @@ describe("rescore", () => {
     expect(summary).toMatchObject({ n_cases: 20, n_run: 20, n_errored: 6, timeouts: 3 });
     const { out, result } = rescoreFolder(summary.results_dir);
     expect(out).toBe(`${summary.results_dir}-rescored`);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const was = stored(summary.results_dir);
     const now = stored(out);
     expect(now.rows).toEqual(was.rows);
@@ -451,7 +451,7 @@ describe("rescore", () => {
     expect(summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets" });
     expect(stored(dir).summary.corpus_folder).toBe("evals/promotion/assets"); // from the repository root, with /, never absolute
     const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(stored(out).rows).toEqual(stored(dir).rows);
     expect(stored(out).summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets", n_run: 20, n_errored: 6 });
     expect(MEASUREMENT.loadCases(REPO, stored(dir).summary).map((c) => c.id)).toEqual(parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8")).map((c) => c.id));
@@ -476,23 +476,6 @@ describe("rescore", () => {
     const again = rescoreFolder(summary.results_dir, { cases: dir });
     expect(again.result.relabelled).toEqual(["g-accept"]);
     expect(stored(again.out).rows[0]).toMatchObject({ id: "g-accept", label: "bad", category: "duplicate", outcome: "accept" });
-  });
-
-  test("a run from before the manifest scores again too, when it read the cases that are here now, and is refused when it did not", async () => {
-    const { summary } = await publicRun();
-    let n = 0;
-    const legacy = (change: (s: Record<string, any>) => void): string => {
-      const dir = `${summary.results_dir}-legacy-${++n}`;
-      cpSync(summary.results_dir, dir, { recursive: true });
-      const s = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-      delete s.manifest;
-      change(s);
-      writeFileSync(join(dir, "summary.json"), JSON.stringify(s));
-      return dir;
-    };
-    const { result } = rescoreFolder(legacy(() => {}));
-    expect(result).toMatchObject({ legacy: true, changed: [] });
-    expect(() => rescoreFolder(legacy((s) => (s.assets_sha256 = "0".repeat(64))))).toThrow(/was made before the manifest, and cannot be scored again: it read other cases than the ones in evals\/promotion\/assets now/);
   });
 
   test("a run whose rows lack the outcome the scorer reads is refused, with the field named", async () => {

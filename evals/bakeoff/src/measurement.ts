@@ -25,8 +25,6 @@ export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
     if (!existsSync(folder)) throw new Error(`the custom corpus ${summary.corpus_folder} is not here`);
     return loadCases(folder);
   },
-  // Every run of the Python bakeoff (corpus public or private, no manifest) is legacy, and none can be scored here.
-  legacyProblem: () => "it is a result of the Python bakeoff, which scored a model's reply to prompts of its own, and nothing here scores that",
   caseId: (c) => c.id,
   // The files of the case go into the bundle (or, for a session, to where akm reads sessions), and the process decides the command.
   input: (c) => ({ process: c.process, files: c.files.map((path) => ({ path, text: c.texts[path] })) }),

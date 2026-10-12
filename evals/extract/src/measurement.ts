@@ -4,11 +4,10 @@
 // This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { type LoadedCase, assetsDigest, loadCases } from "./lib.ts";
+import { type LoadedCase, loadCases } from "./lib.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /**
@@ -28,19 +27,6 @@ export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
   version: "0.2",
   loadCases: (root, summary) => loadCases(assetsOf(root, summary)),
-  legacyProblem: (root, summary) => {
-    let dir: string;
-    try {
-      dir = assetsOf(root, summary);
-    } catch (e) {
-      return (e as Error).message;
-    }
-    const now = () => assetsDigest(dir, loadCases(dir));
-    try {
-      if (existsSync(join(dir, "cases.json")) && summary.assets_sha256 === now()) return undefined;
-    } catch {} // cases that cannot be read are not the cases it read
-    return `it read other cases than the ones in ${relative(root, dir)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
-  },
   caseId: (c) => c.id,
   // The session goes into the sandbox where akm reads Claude Code sessions, under its project folder and its id.
   input: (c) => ({ id: c.id, project: c.project, session: c.session }),

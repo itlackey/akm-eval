@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { akmVersion, commandLine, writeConfig } from "../../../lib/akm/akm.ts";
-import { UNVERSIONED, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -672,24 +672,7 @@ describe("rescore", () => {
     expect(again.summary.manifest.cases).toEqual(was.summary.manifest.cases);
   });
 
-  test("a run from before the manifest, whose rows hold no scores, scores again too, to the rows it would write now", async () => {
-    const s = setup();
-    const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "old", semantic: false }), folders(s)));
-    clearRunning(result.results_dir);
-    const was = stored(result.results_dir);
-    const dir = `${result.results_dir}-before`;
-    mkdirSync(dir);
-    const { manifest: _m, corpus_folder: _f, ...legacy } = was.summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
-    writeFileSync(join(dir, "samples.jsonl"), was.rows.map(({ search: { scores: _s, ...search }, ...row }) => `${JSON.stringify({ ...row, search })}\n`).join(""));
-    const again = rescoreRun(readStored(dir), { root: repo(s) });
-    expect(again.legacy).toBe(true);
-    expect(again.rows).toEqual(was.rows);
-    expect(again.summary.metrics).toEqual(was.summary.metrics);
-    expect(again.summary.manifest.collector.version).toBe(UNVERSIONED);
-  });
-
-  test("a run that read other data files than the ones here is refused, and so is a run whose rows lack the ranked results", async () => {
+  test("a run whose rows lack the ranked results is refused", async () => {
     const s = setup();
     const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "x", semantic: false }), folders(s)));
     clearRunning(result.results_dir);
@@ -701,9 +684,6 @@ describe("rescore", () => {
       writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
       return dir;
     };
-    const { manifest: _m, ...legacy } = was.summary;
-    const other = copy("other", { ...legacy, assets_sha256: "0".repeat(64) }, was.rows);
-    expect(() => rescoreRun(readStored(other), { root: repo(s) })).toThrow(/was made before the manifest, and cannot be scored again: it read other data files than the ones in benchmarks\/skillret\/assets now/);
     const thin = copy("thin", was.summary, was.rows.map(({ search: { ranked: _r, ...search }, ...row }) => ({ ...row, search })));
     expect(() => rescoreRun(readStored(thin), { root: repo(s) })).toThrow(/its rows lack the raw output the skillret scorer reads: search.ranked \(4 rows: q1, q2, q3, q4\)/);
   });

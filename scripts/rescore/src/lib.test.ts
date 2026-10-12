@@ -5,8 +5,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
-import { endpointId, engineSettings } from "../../../lib/provenance.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { engineSettings } from "../../../lib/provenance.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun, rescoredName } from "./lib.ts";
@@ -41,7 +41,7 @@ interface Spec {
   summary?: Record<string, unknown>;
 }
 
-/** A results folder of the golden cases as harness-v3 writes it. A `manifest` that returns undefined leaves the summary without one: a legacy run. */
+/** A results folder of the golden cases as harness-v3 writes it. A `manifest` that returns undefined leaves the summary without one. */
 function run(spec: Spec = {}): string {
   const scored = CASES.map((c) => MEASUREMENT.score(c, (spec.raw ?? GOOD)(c)));
   const base = buildManifest({
@@ -98,7 +98,7 @@ describe("rescoreFolder", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(text(dir)).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const s = summaryOf(out);
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_run: 10, metrics: o.metrics, served: o.served, n_errored: o.n_errored });
@@ -131,33 +131,10 @@ describe("rescoreFolder", () => {
     expect(rowsOf(out).every((r, i) => JSON.stringify(r) === JSON.stringify(MEASUREMENT.score(CASES[i] as Case, BAD(CASES[i] as Case))))).toBe(true);
   });
 
-  test("a run that stores its raw output only under the fields the old rows had (a legacy run) is scored again too, and gets a manifest made from its summary", () => {
-    const legacy = run({ manifest: () => undefined });
-    expect(readManifest(summaryOf(legacy)).kind).toBe("legacy");
-    const { out, result } = rescoreFolder(legacy);
-    expect(result.legacy).toBe(true);
-    expect(rowsOf(out)).toEqual(rowsOf(legacy));
-    const m = summaryOf(out).manifest as RunManifest;
-    expect(manifestProblems(m)).toEqual([]);
-    expect(m).toMatchObject({ eval: "reflect", corpus: "public", harness_version: 0, collector: { version: UNVERSIONED }, akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null } });
-    expect(m.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: null, dropped: [] });
-    expect(Object.keys(m.cases)).toEqual(CASES.map((c) => c.id));
-    expect(m.completion.selected).toEqual(CASES.map((c) => c.id));
-    // the engine of an old summary has the endpoint's path in it, which the rescored one does not
-    expect(m.engines.reflect).toMatchObject({ endpoint: "https://gateway.example", endpoint_id: endpointId("https://gateway.example/deployment-A/v1/chat/completions") });
-  });
-
-  test("a legacy run is not scored again against cases it did not read, or when its rows lack the searches it recorded", () => {
-    expect(() => rescoreFolder(run({ manifest: () => undefined, summary: { assets_sha256: "9".repeat(64) } }))).toThrow(/was made before the manifest, and cannot be scored again: it read other cases than the ones in evals\/reflect\/assets now/);
-    expect(() => rescoreFolder(run({ manifest: () => undefined, summary: { retrieval_queries: { cases: 46 } } }))).toThrow("it recorded searches for the notes (--retrieval-queries)");
-  });
-
-  test("a legacy run's engine with the path is shown without it", () => {
-    const old = { model: "the-model", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000 };
-    const dir = run({ manifest: () => undefined, summary: { engine: { engine: "reflect", ...old, engines: { reflect: old } } } });
-    const { out } = rescoreFolder(dir);
-    expect(readFileSync(join(out, "summary.json"), "utf8")).not.toMatch(/DUMMYSECRET|k-DUMMY/);
-    expect(summaryOf(out).engine).toMatchObject({ endpoint: "https://gateway.example", endpoint_id: endpointId(old.endpoint), engines: { reflect: { endpoint: "https://gateway.example" } } });
+  test("a run made before akm-eval 0.2 (no manifest) is refused before anything else, and nothing is written", () => {
+    const old = run({ manifest: () => undefined, summary: { eval: "toy" } });
+    expect(() => rescoreFolder(old)).toThrow(`${old} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`);
+    expect(readdirSync(join(old, ".."))).toEqual(["2026-10-12-golden"]);
   });
 });
 
@@ -247,7 +224,7 @@ describe("the command", () => {
     const done = cmd(stale);
     expect(done.code).toBe(0);
     expect(done.out).toContain(`rescore: ${stale} -> ${stale}-rescored`);
-    expect(done.out).toContain("10 cases scored again (manifest); 10 rows differ from the stored ones");
+    expect(done.out).toContain("10 cases scored again; 10 rows differ from the stored ones");
     const refused = cmd(stale, join(tmp(), "nothing"));
     expect(refused.code).toBe(2);
     expect(refused.err).toContain("is not a results folder");
@@ -304,11 +281,13 @@ describe("the cases of a run on a custom corpus", () => {
     return { root, outside: join(outside, "my notes") };
   }
 
-  /** A stored run of tiny whose answers were "mine"; it is a legacy run (no manifest), which is the case that needs the folder most. */
+  /** A stored run of tiny whose answers were "mine". */
   function stored(summary: Record<string, unknown>) {
     const dir = join(tmp(), "2026-10-12-notes");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", status: "complete", n_cases: 2, ...summary }));
+    const digest = { input_sha256: "1".repeat(64), label_sha256: "2".repeat(64) };
+    const manifest = buildManifest({ measurement: { eval: "tiny", version: "0.1" }, corpus: String(summary.corpus), cases: { a: digest, b: digest }, completion: { selected: ["a", "b"], scored: ["a", "b"], errored: [] } });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", status: "complete", n_cases: 2, ...summary, manifest }));
     writeFileSync(join(dir, "samples.jsonl"), ["a", "b"].map((id) => `${JSON.stringify({ id, answer: "mine" })}\n`).join(""));
     return readStored(dir);
   }
@@ -419,7 +398,7 @@ describe("the custom corpus of skillret, a split of its dataset (no folder)", ()
     const { dir, cases, rows } = stored(M, root);
     expect(cases.map((q: any) => q.id)).toEqual(["a1", "a2", "a3"]); // the train queries, drawn as a run draws them
     const result = rescoreRun(readStored(dir), { root });
-    expect(result).toMatchObject({ dropped: [], changed: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ dropped: [], changed: [], relabelled: [] });
     expect(result.rows).toEqual(rows);
     expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: null });
     expect(manifestProblems(result.summary.manifest)).toEqual([]);

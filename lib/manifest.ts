@@ -18,9 +18,6 @@ export const MANIFEST_VERSION = 1;
 /** The generation of the harness. It changes only when every eval is broken at once, which harness-v3 did. */
 export const HARNESS_VERSION = 3;
 
-/** The collector version of a result collected before harness-v3 (a legacy run that scripts/rescore scored again). */
-export const UNVERSIONED = "0.0";
-
 type Obj = Record<string, any>;
 const isObject = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
 const HEX = /^[0-9a-f]{64}$/;
@@ -51,12 +48,6 @@ export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
   rawOf(row: Obj): { raw: Raw } | { missing: string[] };
   /** The scored row for a case and its raw output: the function the collector builds each row with. Pure. */
   score(c: Case, raw: Raw): Row;
-  /**
-   * For a run from before the manifest (a legacy summary): why its rows cannot be scored against the cases here, or undefined when they can.
-   * The run read other cases than the ones in the repository now (compare its `assets_sha256`), or used something its rows do not record.
-   * A run with a manifest does not need it: its cases carry their digests.
-   */
-  legacyProblem?(root: string, summary: Obj): string | undefined;
   /** The case ended in an error and has no verdict. Errored cases are left out of the counts. */
   errored(row: Row): boolean;
   /** The fields of the summary that come from the scored rows: its counts and `metrics`. Pure. A rescored summary takes these anew. */
@@ -242,9 +233,12 @@ export function manifestProblems(x: unknown): string[] {
 
 export type ManifestReading = { kind: "manifest"; manifest: RunManifest } | { kind: "legacy" } | { kind: "invalid"; problems: string[] };
 
+/** What compare, the matrix and scripts/rescore say of a run whose summary has no manifest. */
+export const noManifest = (folder: string): string => `${folder} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`;
+
 /**
- * What a summary says of how its run was made. A summary without `manifest` is legacy (written before harness-v3): comparable only as
- * exploratory. One with a manifest that is not sound, or that disagrees with the summary on the eval, corpus, collection or mode, is invalid.
+ * What a summary says of how its run was made. A summary without `manifest` is legacy (made before akm-eval 0.2, see noManifest). One with a
+ * manifest that is not sound, or that disagrees with the summary on the eval, corpus, collection or mode, is invalid.
  */
 export function readManifest(summary: Obj): ManifestReading {
   if (!isObject(summary) || summary.manifest === undefined) return { kind: "legacy" };

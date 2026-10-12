@@ -120,7 +120,7 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 scripts/rescore/run evals/reflect/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
 ```
 
-A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
+A run from before the manifest (made before akm-eval 0.2) is refused. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
 
 ## Run your own set
 

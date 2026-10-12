@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HARNESS_VERSION, type Measurement, REPO_ROOT, UNVERSIONED, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, manifestProblems, measuredEvals, readManifest } from "./manifest.ts";
+import { HARNESS_VERSION, type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, manifestProblems, measuredEvals, readManifest } from "./manifest.ts";
 import { endpointId, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
@@ -134,7 +134,6 @@ describe("the manifest", () => {
     expect(mutate((x) => (x.collector.sha256 = "short"))).toEqual(["collector needs a version"]); // a digest, when an older manifest has one, is a digest
     expect(mutate((x) => (x.scorer = { version: "0.1", sha256: "a".repeat(64) }))).toEqual([]); // older manifests also name the scorer
     expect(mutate((x) => (x.scorer = { version: 1 }))).toEqual(["scorer, when there is one, needs a version"]);
-    expect(mutate((x) => (x.collector.version = UNVERSIONED))).toEqual([]); // a result collected before harness-v3, scored again
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: 1 }, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: "0.3", sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual([]);
     expect(mutate((x) => (x.cases.a.input_sha256 = null))).toEqual(["the case a needs an input_sha256 and a label_sha256"]);

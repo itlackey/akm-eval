@@ -40,7 +40,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     const sha = library !== undefined && existsSync(library) ? sha256Dir(library) : summary.library?.sha256;
     return Object.entries(lock.tasks).map(([id, digest]) => caseOf(id, digest, sha));
   },
-  legacyProblem: () => "its samples.jsonl has one line per trial, and the manifest evals have one line per task with its trials",
   caseId: (c) => c.id,
   input: (c) => ({ task_digest: c.task_digest, library_sha256: c.library_sha256 }),
   labels: () => ({}),

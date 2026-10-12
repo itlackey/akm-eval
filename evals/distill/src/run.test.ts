@@ -295,8 +295,7 @@ describe("runCorpus", () => {
     expect(sa.assets_sha256).toBe(sb.assets_sha256);
     expect([sa.seed, sb.seed, sa.manifest.settings.seed, sb.manifest.settings.seed]).toEqual([null, null, null, null]);
     const members = [sa, sb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
-    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare checks summaries, and the matrix when it reads the manifest
-    expect(checkMembers(members, [], { manifest: true })).toMatchObject({ mismatches: [], gaps: [] });
+    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare and the matrix check summaries
     // a rewrite is different: its seed made the assets, so two seeds are two inputs
     const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { rewrite: true, seed: "1" }))), stored(await quiet(() => runFolders(ctx, b, { rewrite: true, seed: "2" })))];
     const rewrites = [ra, rb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));

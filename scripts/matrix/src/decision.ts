@@ -4,7 +4,7 @@
 
 import { basename, join } from "node:path";
 import type { Axis } from "../../compare/src/policy.ts";
-import { EVALS, MIN_REPEATS, type Dir, type Matrix, type Measured, type Row, type Signal, type Spread, type Stage, type State, type Verdict, baselineFor, compareAll, incompleteReason, incomparable, judge, manifestReasons, measuredOf, metricSpread, moreErrors, readJson, runDirs, scoredAlike, screenDiffers, treatmentAxes, unusableReason } from "./lib.ts";
+import { EVALS, MIN_REPEATS, type Dir, type Matrix, type Measured, type Row, type Signal, type Spread, type Stage, type State, type Verdict, baselineFor, compareAll, incompleteReason, incomparable, judge, measuredOf, metricSpread, moreErrors, readJson, runDirs, scoredAlike, screenDiffers, treatmentAxes, unusableReason } from "./lib.ts";
 import { type Cases, type Coverage, type NoiseFloor, type Paired, type PairedMetric, casesOf, noiseOf, pairedDifferent, pairedOf } from "./paired.ts";
 
 // ---- the report ------------------------------------------------------------------------------------------------------------
@@ -113,10 +113,10 @@ function caseReasons(cases: Cases | null): string[] {
   return parts.length === 0 ? [] : [`the sides scored different cases, so their rates are over different cases: ${parts.join("; ")}`];
 }
 
-/** The eval's versions over the runs behind a result, as "v0.2", or "v0.1, v0.2" when they differ, and null when a run has no manifest. */
+/** The eval's versions over the runs behind a result, as "v0.2", or "v0.1, v0.2" when they differ. */
 function versionsOf(m: Measured): string | null {
-  if (m.runs.length === 0 || m.runs.some((r) => !r.manifest)) return null;
-  return [...new Set(m.runs.map((r) => (r.manifest as NonNullable<typeof r.manifest>).collector.version))].sort().map((v) => `v${v}`).join(", ");
+  if (m.runs.length === 0) return null;
+  return [...new Set(m.runs.map((r) => r.identity.collector))].sort().map((v) => `v${v}`).join(", ");
 }
 
 /** Both results ran one akm: the same build, version and uncommitted changes. */
@@ -156,7 +156,7 @@ export function buildDecision(root: string, m: Matrix, state: State, minDelta: n
       const compares = compareAll(config.eval, bm, cm);
       // Which cases each side scored: two sides with as many errored cases can have failed on different ones.
       const found = casesOf(config.eval, bm.rescored ?? bm.dirs ?? [], cm.rescored ?? cm.dirs ?? []);
-      const { verdict, reading, exploratory } = judge(config.eval, compares, bm, cm, treatment, [...caseReasons(found.cases), ...manifestReasons(root, config.eval, bm0, cm0)]);
+      const { verdict, reading, exploratory } = judge(config.eval, compares, bm, cm, treatment, caseReasons(found.cases));
       const notes: string[] = same.unscored ? [same.unscored] : [];
       if (verdict === "not comparable") notes.push(incomparable(bm, cm, treatment, config.eval) ?? "");
       if (verdict === "exploratory") notes.push(`exploratory, not a conclusion: ${exploratory.join("; ")} (the metrics read: ${reading})`);

@@ -7,11 +7,11 @@
 // comparison declares the axes that are its treatment, the thing it measures. Every other axis must be the same in every run, in every
 // run of a repeat set and not only the first, and the policy says so when it is not: a mismatch is a refusal ("not comparable"). An
 // axis that cannot be checked, because a run does not record the evidence for it, makes the comparison exploratory: it is computed and
-// shown, and it is not a conclusion.
+// shown, and it is not a conclusion. Every run has a manifest: compare, the matrix and scripts/rescore refuse one that has none.
 
 import { createHash } from "node:crypto";
-import { UNVERSIONED, readManifest } from "../../../lib/manifest.ts";
-import { canonical, endpointDisplay, recordedEngine, withoutEngineSettings } from "../../../lib/provenance.ts";
+import type { RunManifest } from "../../../lib/manifest.ts";
+import { canonical, endpointDisplay, recordedEngine } from "../../../lib/provenance.ts";
 
 export { canonical };
 
@@ -80,12 +80,6 @@ function akmVersionOf(s: Row): string | null {
   return version !== null && plugin !== null ? `${version} (plugin ${plugin})` : version;
 }
 
-/**
- * A digest of the akm config a summary records, without the model's settings (those are the model axis). Null when the summary has no
- * config. The configs have secrets redacted, so the digest holds none.
- */
-export const configDigest = (config: unknown): string | null => (isObject(config) ? sha256(canonical(withoutEngineSettings(config))) : null);
-
 /** What a summary says about how its run was made, as text: null is "none recorded". Field by field the policy compares these. */
 export interface Identity {
   eval: string | null;
@@ -104,20 +98,15 @@ export interface Identity {
   config: string | null;
   model: string | null;
   engine: string | null;
-  assets_sha256: string | null;
   seed: string | null;
-  harness_sha256: string | null;
-  git_commit: string | null;
   limit: string | null;
   /** Settings that change what a run measures and belong to its scope, such as the embedder of consolidate and nightly (#69): a digest, null for none. */
   hints: string | null;
-  /** The summary carries a valid manifest (see lib/manifest.ts). A summary without one is legacy. */
-  manifest: boolean;
-  /** The eval's version the run was made with, when it has a manifest. Version 0.0 (UNVERSIONED) is a legacy run's. */
-  collector: string | null;
-  harness_version: string | null;
-  /** The `input_sha256` of each case of the run as JSON, when it has a manifest: what each case presents to akm. */
-  case_inputs: string | null;
+  /** The eval's version the run was made with. */
+  collector: string;
+  harness_version: string;
+  /** The `input_sha256` of each case of the run as JSON: what each case presents to akm. */
+  case_inputs: string;
 }
 
 const text = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : typeof x === "number" && Number.isFinite(x) ? String(x) : null);
@@ -129,44 +118,35 @@ export function corpusOf(s: Row): string | null {
 }
 
 /**
- * What a summary says about how its run was made. A summary with a manifest (lib/manifest.ts) is read from it: the akm, the config, the
- * engines, the settings and the hints. One without is legacy, and is read from the fields every summary has. Either way an engine's
- * endpoint is its host and the digest of its identity, never its path (#65).
+ * What a summary says about how its run was made, read from its manifest (lib/manifest.ts): the akm, the config, the engines, the settings
+ * and the hints. An engine's endpoint is its host, never its path (#65).
  */
 export function identityOf(s: Row): Identity {
-  const reading = readManifest(s);
-  const m = reading.kind === "manifest" ? reading.manifest : null;
+  const m = s.manifest as RunManifest;
   // the settings of every engine the run used, by name; a summary that records only the default engine's does not say what a routed one used
   const harbor = HARBOR.includes(s.eval);
   const recorded = (engines: Row): string => canonical(Object.fromEntries(Object.entries(engines).map(([name, e]) => [name, recordedEngine(e)])));
-  const engine = harbor ? harborEngine(s) : m ? recorded(m.engines) : isObject(s.engine) && isObject(s.engine.engines) ? recorded(s.engine.engines) : null;
-  const embedder = text(s.embedder);
-  const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
   return {
     eval: text(s.eval),
     corpus: corpusOf(s),
     collection: text(s.collection),
     mode: text(s.mode),
-    akm_version: m && !harbor ? m.akm.version : akmVersionOf(s),
-    akm_build: m && !harbor ? m.akm.build : text(s.akm_build),
-    akm_build_fingerprint: m && !harbor ? m.akm.build_fingerprint : text(s.akm_build_fingerprint),
-    akm_bin: m && !harbor ? m.akm.bin : text(s.akm_bin),
-    strategy: m ? m.settings.strategy : text(s.strategy),
-    config_patch: m ? m.settings.config_patch_sha256 : isObject(s.config_patch) ? text(s.config_patch.sha256) : null,
-    timeout_ms: m ? text(m.settings.timeout_ms) : text(s.timeout_ms),
-    config: harbor ? harborConfigDigest(s) : m ? m.config.sha256 : configDigest(s.config),
+    akm_version: harbor ? akmVersionOf(s) : m.akm.version,
+    akm_build: harbor ? text(s.akm_build) : m.akm.build,
+    akm_build_fingerprint: harbor ? text(s.akm_build_fingerprint) : m.akm.build_fingerprint,
+    akm_bin: harbor ? text(s.akm_bin) : m.akm.bin,
+    strategy: m.settings.strategy,
+    config_patch: m.settings.config_patch_sha256,
+    timeout_ms: text(m.settings.timeout_ms),
+    config: harbor ? harborConfigDigest(s) : m.config.sha256,
     model: text(s.model),
-    engine,
-    assets_sha256: text(s.assets_sha256),
-    seed: m ? m.settings.seed : text(s.seed),
-    harness_sha256: text(s.harness_sha256),
-    git_commit: text(s.git_commit),
+    engine: harbor ? harborEngine(s) : recorded(m.engines),
+    seed: m.settings.seed,
     limit: text(s.limit),
-    hints: Object.keys(hints).length === 0 ? null : canonical(hints),
-    manifest: m !== null,
-    collector: m ? m.collector.version : null,
-    harness_version: m ? String(m.harness_version) : null,
-    case_inputs: m ? canonical(Object.fromEntries(Object.entries(m.cases).map(([id, c]) => [id, c.input_sha256]))) : null,
+    hints: Object.keys(m.treatment_hints).length === 0 ? null : canonical(m.treatment_hints),
+    collector: m.collector.version,
+    harness_version: String(m.harness_version),
+    case_inputs: canonical(Object.fromEntries(Object.entries(m.cases).map(([id, c]) => [id, c.input_sha256]))),
   };
 }
 
@@ -208,8 +188,6 @@ interface Field {
   within?: boolean;
   /** The value of each member, for a field that is not one field of the identity. */
   values?: (ms: Member[]) => (string | null)[];
-  /** What a message says of a run that lacks the evidence: "<label> is not recorded in A". */
-  gap?: string;
 }
 
 const FIELDS: Field[] = [
@@ -229,22 +207,11 @@ const FIELDS: Field[] = [
   { name: "config", axis: "config", label: "the akm config", evidence: () => true },
   { name: "model", axis: "model", label: "the model" },
   { name: "engine", axis: "model", label: "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used)", evidence: () => true },
-  { name: "assets_sha256", axis: "inputs", label: "the cases (assets_sha256)", evidence: () => true },
   { name: "seed", axis: "inputs", label: "the seed of the private assets" },
   { name: "limit", axis: "inputs", label: "the --limit", within: true },
+  // The eval's version and the harness version. Another scorer is no difference, since a run is scored again (scripts/rescore).
+  { name: "harness", axis: "harness", label: "the eval's code", values: (ms) => ms.map((m) => `version ${m.identity.collector} (harness ${m.identity.harness_version})`) },
 ];
-
-/** The harness axis is not one field: the digest of the eval's code, else the commit it ran from, which must be clean to identify it. */
-const HARNESS: Field = { name: "harness", axis: "harness", label: "the eval's code", evidence: () => true, values: harnessValues, gap: "is not identified" };
-
-/** A commit that identifies the eval's code: not missing, not "unknown", and not a tree with changes that are not committed. */
-const cleanCommit = (c: string | null): c is string => c !== null && c !== "unknown" && !c.endsWith("-dirty");
-
-/** The harness of each member: the digest of the eval's code when every member has one, else the commit when it is clean, else null. */
-function harnessValues(ms: Member[]): (string | null)[] {
-  if (ms.every((m) => m.identity.harness_sha256 !== null)) return ms.map((m) => `digest ${m.identity.harness_sha256}`);
-  return ms.map((m) => (cleanCommit(m.identity.git_commit) ? `commit ${m.identity.git_commit}` : null));
-}
 
 const short = (v: string): string => v.replace(/\b[0-9a-f]{64}\b/g, (h) => h.slice(0, 12));
 
@@ -271,22 +238,11 @@ function hintsText(v: string): string {
   }
 }
 
-/** The harness of each member when every run has a manifest: the eval's version and the harness version. */
-function collectorValues(ms: Member[]): string[] {
-  return ms.map((m) => `version ${m.identity.collector} (harness ${m.identity.harness_version})`);
-}
-
 export interface CheckOptions {
   /**
-   * Read the harness from the manifest: the collector's version and digest, and the harness version, when every run has a manifest. Another scorer
-   * is no difference, since a run is scored again (scripts/rescore); and the cases are compared one by one by their digests, so
-   * `assets_sha256` is not compared. Off by default: the harness is then the digest of the eval's whole code.
-   */
-  manifest?: boolean;
-  /**
-   * With `manifest`: compare the input of every case the runs share (their `input_sha256`), and name the cases that differ as a difference of
-   * the `inputs` axis. For a caller that takes its numbers from the summaries and so cannot leave a case out (scripts/matrix). scripts/compare
-   * leaves out the cases whose input differs, up to a share of them, and does not set it.
+   * Compare the input of every case the runs share (their `input_sha256`), and name the cases that differ as a difference of the `inputs`
+   * axis. For a caller that takes its numbers from the summaries and so cannot leave a case out (scripts/matrix). scripts/compare leaves out
+   * the cases whose input differs, and does not set it.
    */
   caseInputs?: boolean;
 }
@@ -299,7 +255,6 @@ export interface CheckOptions {
  */
 export function checkMembers(members: Member[], treatment: Axis[], options: CheckOptions = {}): PolicyResult {
   const out: PolicyResult = { treatment, mismatches: [], gaps: [], treated: [] };
-  const byManifest = options.manifest === true && members.every((m) => m.identity.manifest);
   const sides = [...new Set(members.map((m) => m.side))];
   /** "A", or "the baseline and the config", or "the baseline r2 and r3" when only some of the runs of a side are meant. */
   const who = (group: Member[]): string => {
@@ -328,8 +283,7 @@ export function checkMembers(members: Member[], treatment: Axis[], options: Chec
     return { missing, groups: ordered };
   };
 
-  const fields: Field[] = [...FIELDS.filter((f) => !(byManifest && f.name === "assets_sha256")), byManifest ? { ...HARNESS, values: collectorValues, gap: "is not identified (a run from before harness-v3 with no harness_sha256)" } : HARNESS];
-  for (const f of fields) {
+  for (const f of FIELDS) {
     const display = (v: string | null): string => (v === null ? (f.none ?? "none") : f.name === "engine" ? engineText(v) : f.name === "hints" ? hintsText(v) : short(v));
     const describe = (groups: [string | null, Member[]][]) => groups.map(([v, ms]) => `${display(v)} in ${who(ms)}`).join(", ");
     const declared = f.axis !== "scope" && treatment.includes(f.axis);
@@ -347,9 +301,9 @@ export function checkMembers(members: Member[], treatment: Axis[], options: Chec
       continue;
     }
     if (all.groups.length > 1) out.mismatches.push({ axis: f.axis, field: f.name, message: `${f.label} differs: ${describe(all.groups)}` });
-    if (all.missing.length > 0) out.gaps.push({ axis: f.axis, field: f.name, message: `${f.label} ${f.gap ?? "is not recorded"} in ${who(all.missing)}${f.name === "harness" && !byManifest ? " (no harness_sha256, and git_commit is missing or has changes that are not committed)" : ""}` });
+    if (all.missing.length > 0) out.gaps.push({ axis: f.axis, field: f.name, message: `${f.label} is not recorded in ${who(all.missing)}` });
   }
-  if (byManifest && options.caseInputs === true) {
+  if (options.caseInputs === true) {
     const differ = casesWithOtherInputs(members);
     if (differ.length > 0) {
       const ids = differ.length <= 5 ? differ.join(", ") : `${differ.slice(0, 5).join(", ")} and ${differ.length - 5} more`;
@@ -362,7 +316,7 @@ export function checkMembers(members: Member[], treatment: Axis[], options: Chec
 
 /** The ids of the cases that every run has and that some run was given another input for, from the manifests. */
 function casesWithOtherInputs(members: Member[]): string[] {
-  const inputs = members.map((m) => JSON.parse(m.identity.case_inputs ?? "{}") as Record<string, string>);
+  const inputs = members.map((m) => JSON.parse(m.identity.case_inputs) as Record<string, string>);
   return Object.keys(inputs[0] ?? {})
     .filter((id) => inputs.every((x) => id in x) && new Set(inputs.map((x) => x[id])).size > 1)
     .sort();

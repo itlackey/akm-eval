@@ -560,12 +560,6 @@ describe("runCorpus", () => {
     expect(result.summary.report.control.passed).toBe(result.summary.metrics.control.passed);
   });
 
-  test("rescore refuses a run from before the manifest, whose samples.jsonl has one line per trial, and names the problem", () => {
-    const legacy = { dir: "2026-10-06-old", summary: { eval: "terminal-bench", corpus: "public", assets_sha256: "0".repeat(64) }, rows: [{ task: lock.sample[0], arm: "akm", reward: 1 }] };
-    expect(() => rescoreRun(legacy)).toThrow(RescoreError);
-    expect(() => rescoreRun(legacy)).toThrow("was made before the manifest, and cannot be scored again: its samples.jsonl has one line per trial");
-  });
-
   test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
     fakeAkm(false);
     const { root, env } = fakeUv();

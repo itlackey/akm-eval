@@ -64,6 +64,10 @@
       "of": 12,
       "staged": 0
     },
+    "staged": {
+      "n": 0,
+      "safe": 0
+    },
     "precision": {
       "value": 1,
       "safe": 5,
@@ -172,5 +176,6 @@
         "kept": 2
       }
     }
-  }
+  },
+  "manifest": {"manifest_version":1,"eval":"consolidate","corpus":"public","collection":null,"mode":null,"harness_version":3,"collector":{"version":"0.2"},"cases":{"dup-1":{"input_sha256":"9b58bc2595b405810c07694c6df11678ff3f72bc3bc14f29d2fd02741b60f8ec","label_sha256":"9b58bc2595b405810c07694c6df11678ff3f72bc3bc14f29d2fd02741b60f8ec"},"dup-2":{"input_sha256":"95425f39c2f8a9386f283ab63e31c51bef55c8e7b0552229350c55fdf7d31fe3","label_sha256":"95425f39c2f8a9386f283ab63e31c51bef55c8e7b0552229350c55fdf7d31fe3"},"sub-1":{"input_sha256":"0baa1371b708a9b6b505c406e5ea5147252f9936d613512cbd0dcbcfdc0fddcc","label_sha256":"0baa1371b708a9b6b505c406e5ea5147252f9936d613512cbd0dcbcfdc0fddcc"},"sub-2":{"input_sha256":"d7b08c645e08cb2fe9db5084a5716cc6bba4a78b07be2f5a7adefa8ff3441e55","label_sha256":"d7b08c645e08cb2fe9db5084a5716cc6bba4a78b07be2f5a7adefa8ff3441e55"},"sup-1":{"input_sha256":"bce5be6a6abb9da860dcf56adc919d77b347af79d2c9945451acc65adaa17a70","label_sha256":"bce5be6a6abb9da860dcf56adc919d77b347af79d2c9945451acc65adaa17a70"},"sup-2":{"input_sha256":"15afd6e92d5437db97435eae3cede0ad0924f1a6df3508471f82e99e15ef85f9","label_sha256":"15afd6e92d5437db97435eae3cede0ad0924f1a6df3508471f82e99e15ef85f9"},"con-1":{"input_sha256":"1797e048c229367e1c7aa2502f92165b1b930287d1f6c08191f129a8292ba170","label_sha256":"1797e048c229367e1c7aa2502f92165b1b930287d1f6c08191f129a8292ba170"},"con-2":{"input_sha256":"35d9af4d733f2c8452231d0efa13b28618c214bda3bd13385b135fd26b985268","label_sha256":"35d9af4d733f2c8452231d0efa13b28618c214bda3bd13385b135fd26b985268"},"ovl-1":{"input_sha256":"bb148ca4b53ea708cd380962adc5e4e4021c27fc243127c2b87b5d315aeb009e","label_sha256":"bb148ca4b53ea708cd380962adc5e4e4021c27fc243127c2b87b5d315aeb009e"},"ovl-2":{"input_sha256":"22577f75559d8c52b7716842b6f6a6c3db293cc9ebf6b857e02f0477a3400ebc","label_sha256":"22577f75559d8c52b7716842b6f6a6c3db293cc9ebf6b857e02f0477a3400ebc"},"unr-1":{"input_sha256":"2c3859060586c0b9b88a71bf6a83586c9ade64977080950cf0f04eb5be04af2d","label_sha256":"2c3859060586c0b9b88a71bf6a83586c9ade64977080950cf0f04eb5be04af2d"},"unr-2":{"input_sha256":"2528c243f16d8e90c1973539646b03bfd65b2d86364307e94db71d6afa754a92","label_sha256":"2528c243f16d8e90c1973539646b03bfd65b2d86364307e94db71d6afa754a92"}},"akm":{"version":"0.9.99-test","bin":"bun /work/akm/src/index.ts","build":"1a2b3c4","build_fingerprint":null},"config":{"sha256":"7fdaaa0d0f0eae7bb0a86bbe5cceffd42a5fd6ab21ecec7f32d2328995cad53c","redacted":{"configVersion":"0.9.0","semanticSearchMode":"off","registries":[],"defaults":{"llmEngine":"model","improveStrategy":"night"},"engines":{"model":{"kind":"llm","provider":"openai","apiKey":"$MODEL_API_KEY"}}}},"settings":{"strategy":"consolidate","config_patch_sha256":null,"timeout_ms":null,"seed":null},"engines":{"model":{"model":"test-model","endpoint":"https://gateway.example.com","endpoint_id":"2467c53b1babc443bf5bd26d6e2bf571499a5e6324bae883d466c67157b51c25","temperature":0,"enableThinking":false,"timeoutMs":120000}},"treatment_hints":{},"completion":{"selected":["dup-1","dup-2","sub-1","sub-2","sup-1","sup-2","con-1","con-2","ovl-1","ovl-2","unr-1","unr-2"],"scored":["dup-1","dup-2","sub-1","sub-2","sup-1","sup-2","con-1","con-2","ovl-1","ovl-2","unr-1","unr-2"],"errored":[]}}
 }

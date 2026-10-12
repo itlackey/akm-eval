@@ -5,16 +5,13 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { type ManifestReading, UNVERSIONED, loadMeasurement, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, noManifest, readManifest } from "../../../lib/manifest.ts";
 import { EVALS, EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
 import { AXES, type Axis, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "./policy.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
-/**
- * scripts/rescore, loaded when a comparison needs a run scored again and not before, so that what imports this file (scripts/matrix) does not need it.
- * Only a comparison of runs that carry a manifest and were scored differently gets here.
- */
+/** scripts/rescore, loaded when a comparison needs a run scored again and not before, so that what imports this file (scripts/matrix) does not need it. */
 const rescorer = (): typeof import("../../rescore/src/lib.ts") => createRequire(import.meta.url)("../../rescore/src/lib.ts");
 const EPS = 1e-9;
 
@@ -361,6 +358,7 @@ export function loadRun(path: string): Run {
   } catch {
     return fail(`${name}/summary.json is not valid JSON`);
   }
+  if (isObject(summary) && summary.manifest === undefined) return fail(noManifest(name));
   if (!isObject(summary) || typeof summary.eval !== "string") return fail(`${name}/summary.json is not an eval summary (it has no "eval")`);
   const reading = readManifest(summary);
   if (reading.kind === "invalid") return fail(`${name}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
@@ -399,14 +397,11 @@ export interface RunInfo {
   timeout_ms: number | null;
   limit: number | null;
   git_commit: string | null;
-  /** The digest of the eval's code and of the cases, for the summaries that record them. */
-  harness_sha256: string | null;
-  assets_sha256: string | null;
   status: string | null;
   n_cases: number;
   n_errored: number | null;
-  /** The eval's version the run was made with, "v<version>", for a run with a manifest. */
-  collector: string | null;
+  /** The eval's version the run was made with, "v<version>". */
+  collector: string;
   /** The run is a result of scripts/rescore, scored again from this folder. */
   rescored_from: string | null;
 }
@@ -415,8 +410,7 @@ const str = (x: unknown): string | null => (typeof x === "string" ? x : null);
 
 export function infoOf(run: Run): RunInfo {
   const s = run.summary;
-  const reading = readManifest(s);
-  const m = reading.kind === "manifest" ? reading.manifest : null;
+  const m = s.manifest as RunManifest;
   return {
     dir: run.dir,
     label: str(s.label),
@@ -431,13 +425,11 @@ export function infoOf(run: Run): RunInfo {
     timeout_ms: num(s.timeout_ms),
     limit: num(s.limit),
     git_commit: str(s.git_commit),
-    harness_sha256: str(s.harness_sha256),
-    assets_sha256: str(s.assets_sha256),
     status: str(s.status),
     n_cases: run.rows.length,
     n_errored: num(s.n_errored),
-    collector: m ? `v${m.collector.version}` : null,
-    rescored_from: m?.rescored_from?.results ?? null,
+    collector: `v${m.collector.version}`,
+    rescored_from: m.rescored_from?.results ?? null,
   };
 }
 
@@ -460,7 +452,7 @@ const byDir = (x: Run, y: Run): number => (x.dir < y.dir ? -1 : x.dir > y.dir ? 
  */
 export function policyOf(a: Run[], b: Run[], treatment: Axis[] = DEFAULT_TREATMENT): PolicyResult {
   const members = (side: string, runs: Run[]) => [...runs].sort(byDir).map((r) => ({ side, name: nameOf(r), identity: identityOf(r.summary) }));
-  return checkMembers([...members("A", a), ...members("B", b)], treatment, { manifest: true });
+  return checkMembers([...members("A", a), ...members("B", b)], treatment);
 }
 
 /**
@@ -898,10 +890,7 @@ export interface CompareOptions extends Partial<Options> {
  */
 export const MIN_SHARE = 0.8;
 
-const manifestOf = (run: Run) => {
-  const reading = readManifest(run.summary);
-  return reading.kind === "manifest" ? reading.manifest : null;
-};
+const manifestOf = (run: Run): RunManifest => run.summary.manifest;
 
 /** What `align` hands back: the runs as they are compared, and what was done to them. */
 interface Aligned {
@@ -912,39 +901,24 @@ interface Aligned {
   inputsDiffer: string[];
   /** The same, when the inputs are the treatment and the cases are kept. */
   treated: string[];
-  exploratory: string[];
   /** Said in the report without making it exploratory: the runs could not be scored again and are compared as they were scored. */
   warnings: string[];
 }
 
 /**
- * Brings runs that carry a manifest to one scorer and one set of inputs before they are compared, as the policy of the foundation says:
+ * Brings runs to one scorer and one set of inputs before they are compared, as the policy of the foundation says:
  *  - every run is scored again with the current scorer and labels (scripts/rescore), as the matrix does. When one cannot be (its rows
  *    lack the raw output, or its cases are in a folder outside the repository), the runs are compared as they were scored, and the report
  *    says so.
  *  - the input of a case differs among the runs: the case is left out, and named. When the inputs of more than 1 - MIN_SHARE of the shared
  *    cases differ, the comparison is refused as a difference of inputs, unless `inputs` is the treatment, which keeps them all.
- * A run without a manifest (written before harness-v3) is compared as before and makes the report exploratory, for an eval that can have a
- * manifest. An eval that declares no measurement yet cannot, and is compared by the earlier rules.
  */
 function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
-  const out: Aligned = { sides: named.map(([, runs]) => runs), rescored: [], inputsDiffer: [], treated: [], exploratory: [], warnings: [] };
-  const evalName = String(named[0]?.[1][0]?.summary.eval);
-  if (loadMeasurement(evalName) === null) return out;
+  const out: Aligned = { sides: named.map(([, runs]) => runs), rescored: [], inputsDiffer: [], treated: [], warnings: [] };
   const label = (side: string, runs: Run[], run: Run): string => (runs.length === 1 && side.length === 1 ? side : `${side}'s run ${nameOf(run)}`);
   const entries = named.flatMap(([side, runs]) => [...runs].sort(byDir).map((run) => ({ side, runs, run })));
-  const legacy = entries.filter((e) => manifestOf(e.run) === null);
-  if (legacy.length > 0) {
-    out.exploratory.push(`${legacy.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${legacy.length === 1 ? "has" : "have"} no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified`);
-    return out;
-  }
-
-  // a result of scripts/rescore on a run from before harness-v3 has a manifest, and a collector that no one versioned
-  const unversioned = entries.filter((e) => manifestOf(e.run)?.collector.version === UNVERSIONED);
-  if (unversioned.length > 0) out.exploratory.push(`${unversioned.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${unversioned.length === 1 ? "was" : "were"} collected before harness-v3 (version 0.0), so what it asked akm is not versioned`);
-
-  const sharedIds = (runs: Run[]): string[] => Object.keys(manifestOf(runs[0] as Run)?.cases ?? {}).filter((id) => runs.every((r) => manifestOf(r)?.cases[id] !== undefined));
-  const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r)?.cases[id]?.[field])).size;
+  const sharedIds = (runs: Run[]): string[] => Object.keys(manifestOf(runs[0] as Run).cases).filter((id) => runs.every((r) => manifestOf(r).cases[id] !== undefined));
+  const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r).cases[id]?.[field])).size;
   // every run is scored again with the current scorer and labels, so a scorer fix or a relabelled case applies to stored runs
   const { RescoreError, rescoreRun } = rescorer();
   const again = new Map<Run, Run>();
@@ -952,7 +926,7 @@ function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
     try {
       const result = rescoreRun({ dir: e.run.dir, summary: e.run.summary, rows: e.run.rows });
       // the numbers are the new ones; the run is still shown as it was stored
-      const manifest = { ...result.summary.manifest, rescored_from: e.run.summary.manifest?.rescored_from };
+      const manifest = { ...result.summary.manifest, rescored_from: e.run.summary.manifest.rescored_from };
       again.set(e.run, { ...e.run, summary: { ...result.summary, label: e.run.summary.label, manifest }, rows: result.rows });
     } catch (error) {
       if (!(error instanceof RescoreError)) throw error;
@@ -1062,7 +1036,7 @@ export function compareSets(runsA: Run[], runsB: Run[], options: CompareOptions 
     differences: diff,
     rescored: aligned.rescored,
     inputs_differ: aligned.inputsDiffer,
-    exploratory: [...exploratoryOf([["A", ra], ["B", rb]], policy), ...aligned.exploratory, ...coverageReasons(views, aligned.inputsDiffer.length, opts.tie)],
+    exploratory: [...exploratoryOf([["A", ra], ["B", rb]], policy), ...coverageReasons(views, aligned.inputsDiffer.length, opts.tie)],
     options: opts,
     warnings,
     views,
@@ -1189,7 +1163,7 @@ function spreadOf(values: (number | null)[]): Omit<SpreadReport, "path" | "role"
 export function compareRepeats(given: Run[], options: Partial<Options> = {}): RepeatsReport {
   const opts = { ...DEFAULTS, ...options };
   if (given.length < 2) fail("repeats need at least two runs");
-  const policy = checkMembers([...given].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), [], { manifest: true });
+  const policy = checkMembers([...given].sort(byDir).map((r) => ({ side: "the runs", name: nameOf(r), identity: identityOf(r.summary) })), []);
   if (policy.mismatches.length > 0) fail(`these runs are not repeats of one configuration: ${messages(policy.mismatches).join("; ")}.`);
   const aligned = align([["the runs", given]], []);
   const runs = aligned.sides[0] as Run[];
@@ -1254,7 +1228,7 @@ export function compareRepeats(given: Run[], options: Partial<Options> = {}): Re
   }
   if (views.length === 0) fail("the runs have no table of cases in common");
   for (const v of views) if (v.n_compared === 0) fail(`no case has a verdict in two of the runs${v.view ? ` (${v.view})` : ""}`);
-  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, rescored: aligned.rescored, inputs_differ: aligned.inputsDiffer, exploratory: [...exploratoryOf([["the runs", runs]], policy), ...aligned.exploratory], warnings, views };
+  return { mode: "repeats", eval: evalName, corpus: str(first.summary.corpus), collection: str(first.summary.collection), pool: first.summary.mode === "pool", runs: infos, options: { tie: opts.tie }, rescored: aligned.rescored, inputs_differ: aligned.inputsDiffer, exploratory: exploratoryOf([["the runs", runs]], policy), warnings, views };
 }
 
 // ---- the reports -------------------------------------------------------------------------------------------------------------

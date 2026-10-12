@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HARNESS_VERSION, type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf } from "../../../lib/manifest.ts";
+import { HARNESS_VERSION, type RunManifest, buildManifest, caseDigests, completionOf } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { type Case, type Raw, type Row, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
@@ -143,11 +143,6 @@ describe("the collector and the scorer in a decision row", () => {
     expect(md).toContain(`v${parts.collector.version} → v${parts.collector.version} (scored again) |`);
   });
 
-  test("a run from before the manifest has none to show, and a table of such runs has no column for it", () => {
-    const { row, root, m, state } = decide({ raw: BAD, legacy: true }, { raw: GOOD, legacy: true });
-    expect(row.collector).toEqual({ baseline: null, config: null });
-    expect(renderMarkdown(buildDecision(root, m, state, 0))).not.toContain("| version |");
-  });
 });
 
 describe("two sides scored by different scorers", () => {
@@ -218,32 +213,12 @@ describe("the collector and the inputs of the cases", () => {
   });
 });
 
-describe("a run from before the manifest", () => {
-  /** The checkout the matrix reads has an eval that declares a measurement. */
-  const declaring = (root: string): string => {
-    mkdirSync(join(root, "evals", "reflect", "src"), { recursive: true });
-    writeFileSync(join(root, "evals", "reflect", "src", "measurement.ts"), "// declares a measurement\n");
-    return root;
-  };
-
-  test("is exploratory for an eval that declares a measurement, and says which side", () => {
-    const m = matrix();
-    const one = decide({ raw: BAD, legacy: true }, { raw: GOOD }, m, declaring(tmp())).row;
-    expect(one).toMatchObject({ verdict: "exploratory", exploratory: ["the baseline has no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified"] });
-    expect(one.note).toContain("exploratory, not a conclusion: the baseline has no manifest (written before harness-v3)");
-    const both = decide({ raw: BAD, legacy: true }, { raw: GOOD, legacy: true }, m, declaring(tmp())).row;
-    expect(both.exploratory).toEqual(["the baseline and the config have no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified"]);
-    expect(both.metrics.find((x) => x.path === "defects.rate")).toMatchObject({ signal: "better" }); // compared as before
-  });
-
-  test("is compared by the earlier rules, with no note, for an eval that declares none", () => {
-    expect(decide({ raw: BAD, legacy: true }, { raw: GOOD, legacy: true }).row).toMatchObject({ verdict: "better", exploratory: [] });
-  });
-
-  test("a result scripts/rescore made from one has a collector no one versioned", () => {
-    const zero = { version: UNVERSIONED, sha256: "b".repeat(64) };
-    const { row } = decide({ raw: BAD, manifest: (m) => ({ ...m, collector: zero }) }, { raw: GOOD, manifest: (m) => ({ ...m, collector: zero }) }, matrix(), declaring(tmp()));
-    expect(row.exploratory).toEqual(["the baseline and the config were collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned"]);
+describe("a run made before akm-eval 0.2 (no manifest)", () => {
+  test("is no result, refused before anything else, and the reason says to run it again", () => {
+    const root = tmp();
+    const rec = side(root, "base", { raw: GOOD, legacy: true, summary: { status: "aborted" } });
+    expect(incompleteReason(root, rec.results[0])).toBe("evals/reflect/results/2026-10-09-sw-base-c-r1 was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again");
+    expect(loadMeasured(root, rec.results[0], 30, rec.repeat)).toBeNull();
   });
 });
 
@@ -254,16 +229,8 @@ describe("a result is read through the manifest", () => {
     const root = tmp();
     const spec: Spec = { raw: GOOD, summary: { akm_build: "stale-top", akm_version: "0.0.1", akm_build_fingerprint: "9".repeat(64), seed: 99 }, manifest: (m) => ({ ...m, akm: { ...m.akm, build: "b-manifest", version: "0.9.99-test", build_fingerprint: "8".repeat(64) }, settings: { ...m.settings, seed: "42" } }) };
     const measured = load(root, side(root, "base", spec)) as NonNullable<ReturnType<typeof load>>;
-    expect([measured.akm_build, measured.akm_version, measured.akm_build_fingerprint, measured.seed]).toEqual(["b-manifest", "0.9.99-test", "8".repeat(64), "42"]);
-    expect(measured.runs.map((r) => r.manifest?.collector)).toEqual([live().collector, live().collector, live().collector]);
-    expect(measured.runs.map((r) => r.identity.manifest)).toEqual([true, true, true]);
-  });
-
-  test("a run from before the manifest is read from the fields every summary has", () => {
-    const root = tmp();
-    const measured = load(root, side(root, "base", { raw: GOOD, legacy: true, summary: { akm_build: "b-top", seed: 99 } })) as NonNullable<ReturnType<typeof load>>;
-    expect([measured.akm_build, measured.akm_version, measured.seed]).toEqual(["b-top", "0.9.99-test", 99]);
-    expect(measured.runs.map((r) => r.manifest)).toEqual([null, null, null]);
+    expect([measured.akm_build, measured.akm_version, measured.akm_build_fingerprint]).toEqual(["b-manifest", "0.9.99-test", "8".repeat(64)]);
+    expect(measured.runs.map((r) => [r.identity.collector, r.identity.seed])).toEqual([0, 1, 2].map(() => [live().collector.version, "42"]));
   });
 
   test("a manifest the validator refuses makes the run no result, and says what is wrong", () => {
@@ -319,7 +286,8 @@ describe("the fingerprint of a job whose eval declares a measurement", () => {
     const now = fingerprintOf(root, job("tiny"), env);
     const dir = join(root, "evals", "tiny", "results", "2026-10-11-x");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", label: "x", status: "complete" }));
+    const manifest = buildManifest({ measurement: { eval: "tiny", version: "0.1" }, corpus: "public", cases: {}, completion: { selected: [], scored: [], errored: [] } });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", label: "x", status: "complete", manifest }));
     const rec: RunRecord = { stage: "screen", name: "t", eval: "tiny", label: "x", args: [], repeat: null, started: "", wall_seconds: 1, exit_code: 0, log: "", results: [{ scope: "", kind: "run", file: "evals/tiny/results/2026-10-11-x/summary.json" }], fingerprint: was.sha256, fingerprint_parts: was.parts };
     expect(resumable(root, rec, j, was)).toEqual({ skip: true, why: "" });
     expect(resumable(root, rec, j, now)).toEqual({ skip: false, why: "the eval's version (in its src/measurement.ts) or the harness version changed since its last run" });

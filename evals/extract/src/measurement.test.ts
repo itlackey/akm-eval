@@ -6,7 +6,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { UNVERSIONED, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { sha256Json } from "../../../lib/provenance.ts";
 import { type LoadedCase, type Raw, type Row, assetsDigest, extractConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -31,8 +31,8 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
-function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null; digest?: string }; before45?: string } = {}): string {
+/** A results folder of the golden cases, as harness-v3 writes it. */
+function stored(options: { without?: string[]; name?: string; custom?: { folder: string | null; digest?: string }; before45?: string } = {}): string {
   const custom = options.custom;
   // `before45` is the note of a raw output of planted-01 to store in place of the first, as the scorer before #45 (which had no `ambiguous`) scored it
   const raw = (c: LoadedCase): Raw => (options.before45 !== undefined && c.id === "planted-01" ? (MEASUREMENT.rawOf({ id: c.id, ...(LINES.find((l) => l.case === c.id && l.note === options.before45) as { raw: Record<string, any> }).raw }) as { raw: Raw }).raw : FIRST(c));
@@ -64,17 +64,15 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
     ...MEASUREMENT.summarize(rows),
   };
   if (options.before45 !== undefined) delete (summary.metrics as { planted: { ambiguous?: number } }).planted.ambiguous;
-  if (!options.legacy) {
-    summary.manifest = buildManifest({
-      measurement: MEASUREMENT,
-      corpus: custom ? "custom" : "public",
-      cases: caseDigests(MEASUREMENT, FIXTURE_CASES),
-      akm: { version: "0.9.99-test", bin: "akm" },
-      config,
-      settings: { strategy: "extract-only" },
-      completion: completionOf(MEASUREMENT, FIXTURE_CASES.map((c) => c.id), rows),
-    });
-  }
+  summary.manifest = buildManifest({
+    measurement: MEASUREMENT,
+    corpus: custom ? "custom" : "public",
+    cases: caseDigests(MEASUREMENT, FIXTURE_CASES),
+    akm: { version: "0.9.99-test", bin: "akm" },
+    config,
+    settings: { strategy: "extract-only" },
+    completion: completionOf(MEASUREMENT, FIXTURE_CASES.map((c) => c.id), rows),
+  });
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   const kept = (r: Row) => Object.fromEntries(Object.entries(r).filter(([k]) => !(options.without ?? []).includes(k) && !(options.before45 !== undefined && k === "ambiguous")));
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(kept(r))}\n`).join(""));
@@ -120,17 +118,6 @@ describe("the corpus a stored run is scored against again", () => {
   test("a custom corpus that recorded no folder says how to name it", () => {
     expect(() => MEASUREMENT.loadCases(repo(), { corpus: "custom", corpus_folder: null })).toThrow("did not record the folder of its custom corpus (it was outside the repository). Give the folder to scripts/rescore with --cases DIR");
   });
-
-  test("a run from before the manifest can be scored again only when it read the cases that are here now", () => {
-    const root = repo();
-    const summary = { corpus: "public", assets_sha256: assetsDigest(PUBLIC, PUBLIC_CASES) };
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toBeUndefined();
-    expect(MEASUREMENT.legacyProblem?.(root, { ...summary, assets_sha256: "0".repeat(64) })).toBe(`it read other cases than the ones in ${join("evals", "extract", "assets")} now (assets_sha256 is ${"0".repeat(64)})`);
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "public" })).toContain("assets_sha256 is not recorded");
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "custom", corpus_folder: null })).toContain("did not record the folder");
-    rmSync(join(root, "evals", "extract", "assets", "cases.json"));
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toContain("it read other cases than the ones in");
-  });
 });
 
 describe("rescoring a stored run", () => {
@@ -142,31 +129,12 @@ describe("rescoring a stored run", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8") + readFileSync(join(dir, "summary.json"), "utf8")).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
     expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts });
     expect(manifestProblems(s.manifest)).toEqual([]);
     expect(readManifest(s).kind).toBe("manifest");
     expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
-  });
-
-  test("a run from before the manifest is scored again too, as the same rows, with a manifest made from its summary", () => {
-    const dir = stored({ legacy: true });
-    const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], legacy: true });
-    expect(rowsOf(out)).toEqual(rowsOf(dir));
-    const s = summaryOf(out);
-    expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: UNVERSIONED } });
-    expect(Object.keys(s.manifest.cases).sort()).toEqual(FIXTURE_CASES.map((c) => c.id).sort());
-    expect(s.manifest.rescored_from.scorer).toBeNull();
-  });
-
-  test("a run from before the manifest that read other cases is refused, and the reason is named", () => {
-    const dir = stored({ legacy: true });
-    const file = join(dir, "summary.json");
-    writeFileSync(file, JSON.stringify({ ...summaryOf(dir), assets_sha256: "f".repeat(64) }));
-    expect(() => rescoreFolder(dir)).toThrow(`was made before the manifest, and cannot be scored again: it read other cases than the ones in ${join("evals", "extract", "assets")} now`);
   });
 
   test("every row a real run stores gives the raw output the scorer needs, and scored again it is the same row", () => {
@@ -189,7 +157,7 @@ describe("a run stored before the fix to the negation rule (#45)", () => {
   const NOTE = "the memory states the fix and holds the instruction behind do not think we should";
 
   test("is scored again to the new verdict: the case is flagged ambiguous, the count is in the metrics, and nothing else changes", () => {
-    const dir = stored({ legacy: true, before45: NOTE });
+    const dir = stored({ before45: NOTE });
     const was = rowsOf(dir).find((r) => r.id === "planted-01");
     expect(was).not.toHaveProperty("ambiguous"); // as the scorer before #45 stored it
     expect(was).toMatchObject({ correct: true, forbidden: [] });
@@ -206,10 +174,10 @@ describe("a run stored before the fix to the negation rule (#45)", () => {
   });
 
   test("the command scripts/rescore does the same, and says how many rows differ", () => {
-    const dir = stored({ legacy: true, before45: NOTE });
+    const dir = stored({ before45: NOTE });
     const done = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "..", "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
     expect(done.exitCode).toBe(0);
-    expect(done.stdout.toString()).toContain(`${rowsOf(dir).length} cases scored again (no manifest)`);
+    expect(done.stdout.toString()).toContain(`${rowsOf(dir).length} cases scored again;`);
     expect(rowsOf(`${dir}-rescored`).find((r) => r.id === "planted-01").ambiguous).toEqual(["always skip"]);
   });
 });
