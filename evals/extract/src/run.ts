@@ -2,37 +2,39 @@
 // extract: runs akm's extract on each session, with the model under test as akm's engine, and scores the memories it
 // saves. See ../README.md.
 //
-//   evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { appendFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { Fatal, exitMessage, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { engineSettings, harnessSha256, redactConfig, type EngineSettings } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { atLeast } from "../../reflect/src/lib.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsDigest, errorRow, extractConfig, generatedProblem, loadCases, metrics, pct, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, timedOutIn } from "./lib.ts";
+import { type CaseContext, NAME, STRATEGY, configFor, runCase } from "./collect.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { type Metrics, type Row, assetsDigest, atLeast, generatedProblem, loadCases, pct, selectCases, summarize } from "./lib.ts";
 
-const NAME = "extract";
+export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir, { also: [join(ROOT, "evals", "reflect", "src")] });
+const HARNESS = harnessSha256(import.meta.dir);
 export const MIN_AKM = "0.9.26"; // the release this eval was built on: its `proposal extract` flags, its result and its queue are the ones the README describes
-const EXTRACT_TIMEOUT_MS = 15 * 60_000; // one session, on a slow local model: one call, and one more if the reply cannot be read
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/extract/run [--corpus public|private|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as
 akm's engine, and scores the memories it saves. Settings come from .env at the repository root.
 
-  --corpus  public (default) reads assets/. private reads private/extract/assets/, made by
-            ./generate-assets. all runs both and prints the two results side by side.
+${corpusUsage}
+            The default custom corpus is private/extract/assets, made by ./generate-assets.
   --limit   run N sessions, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -43,11 +45,14 @@ ${akmUsage}
 
 Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 
-type Corpus = "public" | "private";
-
 interface Summary {
   eval: string;
-  corpus: Corpus;
+  /** `public` or `custom` (see lib/corpus.ts). */
+  corpus: string;
+  corpus_kind: string;
+  corpus_private: boolean;
+  /** The folder of the corpus from the repository root, null when it is outside it: what `scripts/rescore` reads the cases from. */
+  corpus_folder: string | null;
   label: string;
   date: string;
   git_commit: string;
@@ -70,7 +75,7 @@ interface Summary {
   engine: EngineSettings;
   /** One sha256 over cases.json and the session files of the corpus, named by their place in assets/. It covers every case, whatever --limit picked. */
   assets_sha256: string;
-  /** The seed that made the private corpus, as written. Null for the public corpus, and when the private seed cannot be found. */
+  /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer sessions than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -82,20 +87,15 @@ interface Summary {
   /** Of the errored sessions, those where akm did not answer within the time limit. */
   timeouts: number;
   metrics: Metrics;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
 }
 
-interface Ctx {
-  /** The eval's own akm config. The config patch, if there is one, is merged into it. */
-  config: Record<string, unknown>;
-  baseUrl: string;
+interface Ctx extends CaseContext {
   version: string;
-  model: string;
   label: string;
   limit?: number;
-  overrides?: Overrides;
-  /** How long akm may take on a session. For tests. */
-  timeoutMs?: number;
 }
 
 const cell = (c: { n: number; correct: number; rate: number | null }): string => `${c.correct}/${c.n}  ${pct(c.rate)}`;
@@ -126,82 +126,38 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["timed out", String(a.timeouts), String(b.timeouts)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
+  console.log(`\n${NAME}: ${a.corpus} and ${b.corpus} side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/**
- * One case: a new sandbox with the session where akm reads Claude Code sessions, extract run on that session alone,
- * and the queue read back.
- */
-export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; strategy?: string; timeoutMs?: number }): Promise<Row> {
-  const t0 = performance.now();
-  const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
-  const timeoutMs = ctx.timeoutMs ?? EXTRACT_TIMEOUT_MS;
-  const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
-  try {
-    writeConfig(sandbox, ctx.config);
-    // Claude Code keeps a session at <projects>/<project>/<id>.jsonl. akm looks in AKM_CLAUDE_PROJECTS_DIR, so it
-    // finds this one and never reads the caller's own sessions.
-    const projects = join(sandbox.dir, "projects");
-    mkdirSync(join(projects, c.project), { recursive: true });
-    cpSync(c.file, join(projects, c.project, `${c.id}.jsonl`));
-    sandbox.env.AKM_CLAUDE_PROJECTS_DIR = projects;
-    const args = ["proposal", "extract", "--type", "claude", "--location", projects, "--session-id", c.id, "--strategy", ctx.strategy ?? STRATEGY, "--format", "json"];
-    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs });
-    if (timedOut) return errorRow(c, `akm proposal extract timed out after ${+(timeoutMs / 1000).toFixed(1)}s`, seconds(), true);
-    let result;
-    try {
-      result = JSON.parse(stdout);
-    } catch {
-      return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
-    }
-    // The queue is read when akm says it queued something, in its list of proposals or in the session's own.
-    const listed = queuedAny(c.id, result) ? await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", "pending", "--detail", "full"], { timeoutMs }) : {};
-    return scoreCase(c, { result, saved: savedMemories(listed), seconds: seconds() });
-  } catch (e) {
-    const message = (e as Error).message;
-    return errorRow(c, hide(message), seconds(), timedOutIn(message));
-  } finally {
-    removeSandbox(sandbox);
-  }
-}
-
-/** Where a corpus is read from and written to. A private corpus's seed is in its map file, or else in the seed file. */
-interface Folders {
-  assets: string;
-  results: string;
-  map?: string;
-  seed?: string;
+/** The folder from the repository root, or null when it is not inside the repository. */
+function insideRepository(folder: string): string | null {
+  const rel = relative(ROOT, folder);
+  return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel;
 }
 
 export async function runCorpus(
-  corpus: Corpus,
+  corpus: ResolvedCorpus,
   ctx: Ctx,
-  folders: Folders = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
-    map: join(ROOT, "private", NAME, "map.json"),
-    seed: join(ROOT, "private", "seed"),
-  },
+  results = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
 ): Promise<Summary> {
-  const all = loadCases(folders.assets);
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
+  const all = loadCases(corpus.folder);
   const cases = selectCases(all, ctx.limit);
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const config = patchedConfig(ctx.config, overrides); // the config every session runs with
-  const assetsSha256 = assetsDigest(folders.assets, all); // before the calls, since it says what the run read
-  const dir = makeResultsDir(folders.results, ctx.label);
+  const config = configFor(ctx); // the config every session runs with
+  const assetsSha256 = assetsDigest(corpus.folder, all); // before the calls, since it says what the run read
+  const dir = makeResultsDir(results, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
-  console.log(`${NAME} (${corpus}): ${cases.length} of ${all.length} sessions, one at a time`);
+  console.log(`${NAME} (${corpus.name}): ${cases.length} of ${all.length} sessions, one at a time`);
 
   const rows: Row[] = [];
   let consecutiveErrors = 0;
   let aborted: string | undefined;
 
   for (const c of cases) {
-    const row = await runCase(c, { config, baseUrl: ctx.baseUrl, strategy: overrides.strategy, timeoutMs: ctx.timeoutMs });
+    const row = await runCase(c, ctx);
     rows.push(row);
     appendFileSync(samples, `${JSON.stringify(row)}\n`);
     const checks = [row.missing.length > 0 && `missing ${row.missing.join(", ")}`, row.forbidden.length > 0 && `asserts ${row.forbidden.join(", ")}`].filter(Boolean).join("; ");
@@ -214,32 +170,42 @@ export async function runCorpus(
     }
   }
 
-  const errored = rows.filter((r) => r.outcome === "error").length;
   const abortedReason = `${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
+  const build = akmBuild();
+  const seed = corpus.config.seed ?? null;
+  const counts = summarize(rows);
+  const manifest = buildManifest({
+    measurement: MEASUREMENT,
+    parts,
+    corpus: corpus.name,
+    cases: caseDigests(MEASUREMENT, cases),
+    akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+    config,
+    settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.timeoutMs ?? null, seed },
+    completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
+  });
   const summary: Summary = {
     eval: NAME,
-    corpus,
+    ...corpusRecord(corpus),
+    corpus_folder: insideRepository(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
+    ...build,
     limit: ctx.limit ?? null,
     ...overrideSummary(overrides),
     config: redactConfig(hideEndpoint(config, ctx.baseUrl)),
     engine: engineSettings(config),
     assets_sha256: assetsSha256,
-    seed: corpus === "private" && folders.map !== undefined && folders.seed !== undefined ? privateSeed(folders.map, folders.seed) : null,
+    seed,
     status: aborted ? "aborted" : "complete",
     aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
-    n_run: rows.length,
-    n_scored: rows.length - errored,
-    n_errored: errored,
-    timeouts: rows.filter((r) => r.timed_out).length,
-    metrics: metrics(rows),
+    ...counts,
+    manifest,
     results_dir: dir,
   };
   // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
@@ -251,9 +217,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`extract: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -262,24 +228,29 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "all") fail(`--corpus must be public, private or all, not "${corpus}"`);
+  try {
+    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
+  } catch (e) {
+    fail((e as Error).message);
+  }
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  useAkm(values, fail);
+  const settings = useModel(values, fail);
+  const refusal = privacyError(corpora, { model: settings }, "memories");
+  if (refusal) fail(refusal);
 
   for (const c of corpora) {
-    if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
-      fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
-    }
-    const stale = c === "private" ? generatedProblem(join(ROOT, "private", NAME), join(EVAL_DIR, "assets")) : undefined;
+    if (c.name === "public") continue;
+    if (!existsSync(join(c.folder, "cases.json"))) fail(`the custom corpus is missing (${relative(ROOT, c.folder)}/cases.json). A rewrite of the public cases is made with: ./generate-assets --only ${NAME}`);
+    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
     if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
-  useAkm(values, fail);
-  const { baseUrl, name: model, hasKey } = useModel(values, fail);
+  const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -291,9 +262,9 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
   if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
-  const config = extractConfig(baseUrl, model, hasKey);
+  const ctx: Ctx = { baseUrl, model, hasKey, version, label, limit, overrides };
   const summaries: Summary[] = [];
-  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit, overrides }))));
+  for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);
 }
 

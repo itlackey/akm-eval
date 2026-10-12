@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CLASSES, type Class, type LoadedCase, type Row, assetsDigest, checkSaved, claims, errorRow, extractConfig, extractOutcome, loadCases, mentions, metrics, normalize, privateSeed, queuedAny, savedMemories, scoreCase, selectCases, sessionText, similarity, timedOutIn } from "./lib.ts";
+import { CLASSES, type Class, type LoadedCase, type Row, assetsDigest, checkSaved, claims, errorRow, extractConfig, extractOutcome, loadCases, mentions, metrics, normalize, queuedAny, savedMemories, scoreCase, selectCases, sessionText, similarity, timedOutIn } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -891,24 +891,6 @@ describe("what the run read", () => {
     renameSync(join(moved, "sessions", "-home-dev-ledgerline"), join(moved, "sessions", "-home-dev-ledgerline2"));
     expect(assetsDigest(moved, loadCases(moved))).not.toBe(digest);
     expect(process.cwd()).toBe(here);
-  });
-
-  test("privateSeed is the seed in the corpus's map, else the one in the seed file, as written, else null", () => {
-    const root = mkdtempSync(join(tmpdir(), "extract-seed-"));
-    dirs.push(root);
-    const [map, seed] = [join(root, "map.json"), join(root, "seed")];
-    expect(privateSeed(map, seed)).toBeNull();
-    writeFileSync(seed, "18446744073709551615\n");
-    expect(privateSeed(map, seed)).toBe("18446744073709551615");
-    writeFileSync(map, JSON.stringify({ version: 1, seed: "42" }));
-    expect(privateSeed(map, seed)).toBe("42");
-    writeFileSync(map, JSON.stringify({ version: 1, seed: 7 }));
-    expect(privateSeed(map, seed)).toBe("7");
-    writeFileSync(map, "not json");
-    expect(privateSeed(map, seed)).toBe("18446744073709551615");
-    writeFileSync(map, JSON.stringify({ seed: "four" }));
-    writeFileSync(seed, "five\n");
-    expect(privateSeed(map, seed)).toBeNull();
   });
 });
 

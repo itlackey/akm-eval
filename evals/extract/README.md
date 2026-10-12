@@ -12,30 +12,43 @@ The model under test is extract's engine: it reads the session and writes what t
 
 ```
 evals/extract/run --corpus public
-evals/extract/run --corpus private
+evals/extract/run --corpus custom
+evals/extract/run --cases ~/notes/extract
 evals/extract/run --corpus all
 ```
 
-- `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
+- `--corpus` picks the assets: `public` (the default), `custom` or `all`, which runs both and prints the two results side by side, never as one number. `--cases DIR` names a custom corpus of your own and is `--corpus custom`. `--corpus private` still works for one more release, with a line that names the new form. See "Corpora" in the root README.
 - `--limit N` runs N sessions, taken from each class in turn, in file order. The first three cover a fact, an empty session and a planted instruction, and the first five every class. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--strategy NAME` runs the akm strategy NAME in place of `extract-only`. It can be a strategy that `--config-patch` defines, or one akm ships. `summary.json` records it as `strategy`.
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256. The triage thresholds, the event cut and the budget of extract are settings of this kind.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The private run reads `private/extract/assets/`. Make it first with `./generate-assets --only extract`. The run stops with an error when it is missing, or when `private/extract/generated.json` is missing or was written for other public cases than the ones in this checkout: make it again then.
+The default custom corpus is `private/extract/assets/`, the public cases rewritten from a seed. Make it first with `./generate-assets --only extract`. The run stops with an error when it is missing, or when `private/extract/generated.json` is missing or was written for other public cases than the ones in this checkout: make it again then. A corpus of your own notes is a folder with the same layout (see "Run your own set") and a `corpus.json`; with none, it is private, and the run refuses a model that `models.json` does not mark `"private": true` before it starts. See "The private flag" in the root README.
 
 A session takes about 15 seconds on a 27B model on a local GPU, 30 for the longest, and a whole run about six minutes. The sessions run one at a time.
 
-Each run writes two files to `evals/extract/results/<UTC date>-<label>/`, or to `private/extract/results/` for the private corpus:
+Each run writes two files to `evals/extract/results/<UTC date>-<label>/`, or to `private/extract/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many sessions ran, were scored and errored (`n_errored`, and `timeouts`, how many of those errors were an akm that did not answer in time), the model name, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of:
+  - `corpus`: `public` or `custom`, with `corpus_kind` (`rewrite` or `own`), `corpus_private` and `corpus_folder` (the corpus folder from the repository root, or null when it is outside it, which `scripts/rescore` reads the cases from). It never records an absolute path.
   - `strategy` and `config_patch` (path and SHA-256, or null): see `--strategy` and `--config-patch`.
   - `config`: the akm config the eval wrote for every session, with the patch merged in, as the file has it and with any key redacted. The model's key is a `$MODEL_API_KEY` reference and not a key, and the model's endpoint is written as `<MODEL_BASE_URL>` (its identity is in `engine`), so a summary can be shared. A URL that a config patch sets itself is recorded as the patch has it.
   - `engine`: the settings of the model under test in that config: `temperature`, `enableThinking`, `timeoutMs`, the engine's name, the model name and its endpoint (scheme, host, port and path, no credentials). The eval sets temperature 0 and thinking off, and a patch can change them, so this is where two runs are shown to have used the same settings.
   - `assets_sha256`: one SHA-256 over `cases.json` and every session file of the corpus, named by their place in `assets/`. It covers every case, whatever `--limit` picked, so a change to a case or a session changes it. Compare results only between runs with the same digest.
-  - `seed`: for the private corpus, the seed that made it, as written (a 64-bit integer): the one in `private/extract/map.json`, else the one in `private/seed`. Null for the public corpus, and when neither file can be read.
-- `samples.jsonl`: one line per session, with its class, what extract did, whether it was correct, the memories it saved with their text, type, confidence and `similarity`, the facts they missed, the planted claims they made, the model's reason when it saved nothing, and the time. A session that errored because akm did not answer in time has `timed_out: true`.
+  - `seed`: for a rewrite, the seed that made it, as written (a 64-bit integer), from its `corpus.json`. Null for the public corpus and for a corpus of your own.
+  - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engines, the strategy and the config patch, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
+- `samples.jsonl`: one line per session, with its class, what extract did, whether it was correct, the memories it saved with their text, type, confidence and `similarity`, the facts they missed, the planted claims they made, the model's reason when it saved nothing, and the time. A session that errored because akm did not answer in time has `timed_out: true`. The raw output of the session is `outcome`, `detail`, `saved` (the ref, type, confidence and text of each memory), `seconds`, `error` and `timed_out`; the rest of the row is scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
+
+## The collector, the scorer and the golden files
+
+The eval is in two parts (see "How results stay comparable" in the root README). `src/collect.ts` is the **collector**: it builds the sandbox and the akm config, runs the commands, reads akm's result and the queue, and builds each row with the scorer. `src/score.ts` is the **scorer**: the checks above and the metrics, pure and deterministic, with the rule of negation in `lib/negation.ts` that it shares with distill. `src/measurement.ts` declares both for `MEASUREMENT.lock`. A change to the scorer or to its labels (the cases) invalidates no run: any stored run is scored again with `scripts/rescore/run <results folder>`. A change to the collector makes earlier raw outputs incomparable and is versioned in the lock.
+
+`golden/` holds 42 raw outputs for 11 of the public cases, each a realistic answer of akm (a memory that states the facts, one that leaves some out, one that saves the planted instruction, a session left empty, a reply akm could not read, an error and a timeout), and the row the scorer gives for each. `src/golden.test.ts` fails when a scorer change alters a row, until `UPDATE_GOLDEN=1 bun test evals/extract/src/golden.test.ts` writes the expected rows again, together with the bump of the scorer in the lock.
+
+## Run your own set
+
+`--cases DIR` runs a folder in the layout of `assets/`: a `cases.json` and a session for each case at `sessions/<project>/<id>.jsonl`, as in "Assets", and a `corpus.json` (`{ "kind": "own", "private": true }`). The fields of a case are in `assets/README.md`. The run records `corpus_folder` when DIR is inside the repository, which is how `scripts/rescore` finds the cases again. For a folder outside it the run records null, and `scripts/rescore` is given the folder with `--cases DIR`.
 
 ## How extract is run
 
