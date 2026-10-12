@@ -109,8 +109,8 @@ interface Summary {
   tasks_sha256: Record<string, string>;
   /** One digest over the libraries digest, the digest of each selected task and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the identity of the endpoint it was sent to: scheme, host, port and path (null for the provider's own). Never a key. */
-  engine: { model: string; endpoint: string | null };
+  /** The model and the endpoint it was sent to: its host (scheme, host and port, null for the provider's own) and `endpoint_id`, a digest of its identity. Never the path, never a key. */
+  engine: { model: string; endpoint: string | null; endpoint_id: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -216,7 +216,7 @@ export async function runCorpus(
     libraries_sha256: librariesSha,
     tasks_sha256: taskDigests,
     assets_sha256: assetsSha256({ library: librariesSha, dataset: { tasks: taskDigests }, attempts }),
-    engine: { model: ctx.model, endpoint: endpointOf(ctx.env) },
+    engine: { model: ctx.model, ...endpointOf(ctx.env) },
     config: redactConfig(job),
     timeouts: timeoutsOf(trials),
     n_errored: erroredOf(report),

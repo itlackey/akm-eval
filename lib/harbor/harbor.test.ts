@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { sha256Text } from "../provenance.ts";
 import { spreadOf } from "../repeat.ts";
 import {
   FIXED_AKM_ENV,
@@ -910,16 +911,30 @@ describe("completionOf and statusOf", () => {
 });
 
 describe("endpointOf", () => {
-  test("is the identity of the base URL opencode is given: scheme, host, port and path, and never a key or a user", () => {
-    expect(endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" })).toBe("http://192.0.2.5:8080/v1?key=<redacted>");
-    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toBe("https://gateway.example.com/v1");
-    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/deployment-B/v1" })).not.toBe(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/deployment-A/v1" }));
+  const none = { endpoint: null, endpoint_id: null };
+
+  test("is the host of the base URL opencode is given and a digest of its identity, and never a path, a key or a user (#65)", () => {
+    const withKey = endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" });
+    expect(withKey).toEqual({ endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1?key=<redacted>") });
+    expect(JSON.stringify(withKey)).not.toMatch(/sk-secret|pass|\/v1/);
+    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toEqual({ endpoint: "https://gateway.example.com", endpoint_id: sha256Text("https://gateway.example.com/v1") });
+    // a path that names a deployment or holds a key is in the id and not in the host
+    const secretPath = endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/k-DUMMYSECRET0123/v1" });
+    expect(secretPath.endpoint).toBe("https://gateway.example.com");
+    expect(JSON.stringify(secretPath)).not.toContain("DUMMYSECRET0123");
+  });
+
+  test("tells two deployments on one host apart, and does not tell a change of key apart", () => {
+    const [a, b] = ["deployment-A", "deployment-B"].map((d) => endpointOf({ OPENAI_BASE_URL: `https://gateway.example.com/${d}/v1` }));
+    expect(a.endpoint).toBe(b.endpoint);
+    expect(a.endpoint_id).not.toBe(b.endpoint_id);
+    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1?api-key=one" })).toEqual(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1?api-key=two" }));
   });
 
   test("is null for the provider's own endpoint, and for text that is not a URL", () => {
-    expect(endpointOf({ OPENAI_API_KEY: "sk-secret" })).toBeNull();
-    expect(endpointOf({ OPENAI_BASE_URL: "  " })).toBeNull();
-    expect(endpointOf({ OPENAI_BASE_URL: "sk-secret-not-a-url" })).toBeNull();
+    expect(endpointOf({ OPENAI_API_KEY: "sk-secret" })).toEqual(none);
+    expect(endpointOf({ OPENAI_BASE_URL: "  " })).toEqual(none);
+    expect(endpointOf({ OPENAI_BASE_URL: "sk-secret-not-a-url" })).toEqual(none);
   });
 });
 

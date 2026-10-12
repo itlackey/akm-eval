@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type AkmArm, PINS, buildFingerprint, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { harnessSha256, sha256Text } from "../../../lib/provenance.ts";
+import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -198,7 +199,7 @@ describe("runCorpus", () => {
     const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toEqual({ ...cells(6), control: cells(3), akm: cells(3) });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080/v1" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1") });
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
     const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
@@ -206,6 +207,20 @@ describe("runCorpus", () => {
     for (const t of tasks) expect(stored.tasks_sha256[t]).toBe(sha256Dir(join(EVAL_DIR, "tasks", t)));
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries"))); // the component stays, to say which part moved
+  });
+
+  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
+    const { root, env } = fakeUv();
+    const results = join(root, "results");
+    const summaries: Record<string, any>[] = [];
+    for (const [label, path] of [["a", "k-DUMMYSECRET0123/v1"], ["b", "k-OTHERDEPLOYMENT456/v1"]]) {
+      const s = await quiet(() => runCorpus("public", { model: "openai/x", label, limit: 1, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: `https://gateway.example/${path}` } }, results));
+      summaries.push(readJson(join(s.results_dir, "summary.json")));
+      for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
+    }
+    expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
+    expect(summaries[0]?.engine.endpoint_id).not.toBe(summaries[1]?.engine.endpoint_id);
+    expect(identityOf(summaries[0] as Record<string, any>).engine).not.toBe(identityOf(summaries[1] as Record<string, any>).engine);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {

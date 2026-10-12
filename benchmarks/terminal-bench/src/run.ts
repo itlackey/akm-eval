@@ -131,8 +131,8 @@ interface Summary {
   completion: Completion;
   /** One digest over the library's digest, the pinned dataset (its digest and the digest of each selected task) and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the host of the endpoint it was sent to (null for the provider's own). Never a key. */
-  engine: { model: string; endpoint: string | null };
+  /** The model and the endpoint it was sent to: its host (scheme, host and port, null for the provider's own) and `endpoint_id`, a digest of its identity. Never the path, never a key. */
+  engine: { model: string; endpoint: string | null; endpoint_id: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -276,8 +276,8 @@ export function summarize(o: {
   akmEnv?: Record<string, string>;
   packages?: { file: string; sha256: string }[];
   library?: LibraryCount & { sha256: string | null };
-  /** The host of the endpoint the model was sent to, null for the provider's own. */
-  endpoint?: string | null;
+  /** The endpoint the model was sent to, as endpointOf records it: its host and the digest of its identity. Both null for the provider's own. */
+  endpoint?: ReturnType<typeof endpointOf>;
   job?: Record<string, unknown>;
 }): Summary {
   const jobDir = join(o.dir, "jobs", jobName(o.corpus));
@@ -309,7 +309,7 @@ export function summarize(o: {
     aborted_reason,
     completion,
     assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
-    engine: { model: o.model, endpoint: o.endpoint ?? null },
+    engine: { model: o.model, ...(o.endpoint ?? { endpoint: null, endpoint_id: null }) },
     config: redactConfig(o.job ?? {}),
     timeouts: timeoutsOf(trials),
     n_errored: erroredOf(report),

@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
-import { type AkmArm, PINS, buildFingerprint, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
+import { type AkmArm, PINS, buildFingerprint, endpointOf, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { identityOf } from "../../../scripts/compare/src/policy.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
+import { harnessSha256, sha256Text } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -283,14 +283,14 @@ describe("summarize", () => {
   test("writes the model with the host of its endpoint and no key, and the job config with its secrets redacted", () => {
     const dir = runDir({ [`${one}__a`]: result(one, "opencode") });
     const job = { n_attempts: 1, agents: [{ name: "opencode", kwargs: { version: "1", api_key: "sk-job-key", opencode_config: { provider: { openai: { options: { apiKey: "sk-nested", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" } } } } } }] };
-    summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, endpoint: "http://gateway.example.com:8080/v1", job });
+    summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir, exit: 0, endpoint: endpointOf({ OPENAI_BASE_URL: "http://gateway.example.com:8080/v1" }), job });
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://gateway.example.com:8080/v1" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://gateway.example.com:8080", endpoint_id: sha256Text("http://gateway.example.com:8080/v1") });
     expect(stored.config.agents[0].kwargs.api_key).toBe("<redacted>");
     expect(stored.config.agents[0].kwargs.opencode_config.provider.openai.options).toEqual({ apiKey: "<redacted>", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" }); // a $NAME reference holds no secret
     expect(JSON.stringify(stored.config)).not.toMatch(/sk-job-key|sk-nested/);
     const bare = summarize({ corpus: "public", label: "t", model: "openai/x", lock, tasks: [one], dir: runDir({}), exit: 0 });
-    expect(bare.engine).toEqual({ model: "openai/x", endpoint: null });
+    expect(bare.engine).toEqual({ model: "openai/x", endpoint: null, endpoint_id: null });
     expect(bare.config).toEqual({});
   });
 
@@ -455,7 +455,7 @@ describe("runCorpus", () => {
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toMatchObject({ expected: 4, completed: 4, failed: 0, missing: 0, control: { expected: 2 }, akm: { expected: 2 } });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080/v1" });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1") });
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
     expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -467,6 +467,20 @@ describe("runCorpus", () => {
     expect(readJson(join(more.results_dir, "summary.json")).assets_sha256).not.toBe(stored.assets_sha256);
     expect(readJson(join(attempts.results_dir, "summary.json")).assets_sha256).not.toBe(stored.assets_sha256); // other attempts
     expect(readJson(join(again.results_dir, "summary.json")).assets_sha256).toBe(stored.assets_sha256); // a rerun of the same
+  });
+
+  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
+    fakeAkm(false);
+    const { root, env } = fakeUv();
+    const summaries: Record<string, any>[] = [];
+    for (const [label, path] of [["a", "k-DUMMYSECRET0123/v1"], ["b", "k-OTHERDEPLOYMENT456/v1"]]) {
+      const s = await quiet(() => runCorpus("public", { model: "openai/x", label, limit: 1, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: `https://gateway.example/${path}` } }, join(root, "results")));
+      summaries.push(readJson(join(s.results_dir, "summary.json")));
+      for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
+    }
+    expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
+    expect(summaries[0]?.engine.endpoint_id).not.toBe(summaries[1]?.engine.endpoint_id);
+    expect(identityOf(summaries[0] as Record<string, any>).engine).not.toBe(identityOf(summaries[1] as Record<string, any>).engine);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {
@@ -626,7 +640,7 @@ describe("runCorpus", () => {
     for (const leaked of ["JUDGE_API_KEY", "MODEL_API_KEY", "AKM_BIN", "ANTHROPIC_API_KEY"]) expect(seen[leaked]).toBeUndefined();
     expect(JSON.stringify(seen)).not.toContain("judge-secret");
     const stored = readFileSync(join(s.results_dir, "summary.json"), "utf8");
-    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5/v1" });
+    expect(JSON.parse(stored).engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5", endpoint_id: sha256Text("http://192.0.2.5/v1") });
     expect(stored).not.toMatch(/model-key|judge-secret/);
   });
 
