@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { UNVERSIONED, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -688,7 +688,7 @@ describe("rescore", () => {
     expect(again.legacy).toBe(true);
     expect(again.rows).toEqual(was.rows);
     expect(again.summary.metrics).toEqual(was.summary.metrics);
-    expect(again.summary.manifest.collector.version).toBe(0);
+    expect(again.summary.manifest.collector.version).toBe(UNVERSIONED);
   });
 
   test("a run that read other data files than the ones here is refused, and so is a run whose rows lack the ranked results", async () => {

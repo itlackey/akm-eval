@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, nextVersion, readManifest } from "../../../lib/manifest.ts";
 import { sha256File, sha256Json } from "../../../lib/provenance.ts";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -163,24 +163,25 @@ describe("rescoring a retrieval run", () => {
   });
 
   test("a run with a manifest from another scorer is scored by the current one, and the manifest says which it was", () => {
-    const stale = { version: 1, sha256: "c".repeat(64) };
-    const dir = run({ manifest: (m) => ({ ...m, scorer: stale, collector: { version: 4, sha256: "d".repeat(64) } }), rows: (rows) => rows.map((r) => ({ ...r, n_relevant: r.n_relevant + 1 })) });
+    const stale = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) };
+    const other = { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) };
+    const dir = run({ manifest: (m) => ({ ...m, scorer: stale, collector: other }), rows: (rows) => rows.map((r) => ({ ...r, n_relevant: r.n_relevant + 1 })) });
     const { out, result } = rescoreFolder(dir);
     expect(result.changed.length).toBe(9);
     const m = summaryOf(out).manifest as RunManifest;
     expect(m.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
-    expect(m.collector).toEqual({ version: 4, sha256: "d".repeat(64) });
+    expect(m.collector).toEqual(other);
     expect(m.rescored_from?.scorer).toEqual(stale);
   });
 
-  test("a run from before the manifest is scored again too when it read the queries that are here, with its collector as version 0", () => {
+  test("a run from before the manifest is scored again too when it read the queries that are here, with its collector as version 0.0", () => {
     const legacy = run({ manifest: () => undefined });
     expect(readManifest(summaryOf(legacy)).kind).toBe("legacy");
     const { out, result } = rescoreFolder(legacy);
     expect(result.legacy).toBe(true);
     expect(rowsOf(out)).toEqual(rowsOf(legacy));
     const m = summaryOf(out).manifest as RunManifest;
-    expect(m.collector).toEqual({ version: 0, sha256: "b".repeat(64) });
+    expect(m.collector).toEqual({ version: UNVERSIONED, sha256: "b".repeat(64) });
     expect(m).toMatchObject({ eval: "retrieval", corpus: "public", collection: "library", akm: { version: "0.9.99-test" }, rescored_from: { scorer: null } });
     expect(manifestProblems(m)).toEqual([]);
   });

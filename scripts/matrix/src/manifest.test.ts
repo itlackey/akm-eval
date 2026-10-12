@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts } from "../../../lib/manifest.ts";
+import { FIRST_VERSION, type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { type Case, type Raw, type Row, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
@@ -40,9 +40,10 @@ afterEach(() => {
 });
 
 const live = () => lockedParts(MEASUREMENT);
+const lit = (version: string): string => version.replace(/\./g, "\\."); // a version as the text of a regular expression
 /** A scorer the live lock does not have: another version and digest. */
-const STALE = () => ({ version: live().scorer.version + 1, sha256: "c".repeat(64) });
-const OTHER_COLLECTOR = () => ({ version: live().collector.version + 1, sha256: "d".repeat(64) });
+const STALE = () => ({ version: nextVersion(live().scorer.version), sha256: "c".repeat(64) });
+const OTHER_COLLECTOR = () => ({ version: nextVersion(live().collector.version), sha256: "d".repeat(64) });
 
 interface Spec {
   raw: (c: Case) => Raw;
@@ -221,7 +222,7 @@ describe("the collector and the inputs of the cases", () => {
     const cfg: Spec = { raw: GOOD, manifest: (m) => ({ ...m, collector: other }) };
     const { row } = decide({ raw: BAD }, cfg);
     expect(row.verdict).toBe("not comparable");
-    expect(row.note).toMatch(new RegExp(`^the eval's code differs: collector ${live().collector.version} [0-9a-f]{12} \\(harness ${live().harness_version}\\) in the baseline, collector ${other.version} dddddddddddd \\(harness ${live().harness_version}\\) in the config$`));
+    expect(row.note).toMatch(new RegExp(`^the eval's code differs: collector ${lit(live().collector.version)} [0-9a-f]{12} \\(harness ${live().harness_version}\\) in the baseline, collector ${lit(other.version)} dddddddddddd \\(harness ${live().harness_version}\\) in the config$`));
     expect(row.collector).toEqual({ baseline: `v${live().collector.version}`, config: `v${other.version}` });
     const treated = decide({ raw: BAD }, cfg, matrix({ treatment: "harness" }));
     expect(treated.row).toMatchObject({ verdict: "better", exploratory: [], treatment: ["harness"] });
@@ -265,9 +266,9 @@ describe("a run from before the manifest", () => {
   });
 
   test("a result scripts/rescore made from one has a collector no one versioned", () => {
-    const zero = { version: 0, sha256: "b".repeat(64) };
+    const zero = { version: UNVERSIONED, sha256: "b".repeat(64) };
     const { row } = decide({ raw: BAD, manifest: (m) => ({ ...m, collector: zero }) }, { raw: GOOD, manifest: (m) => ({ ...m, collector: zero }) }, matrix(), declaring(tmp()));
-    expect(row.exploratory).toEqual(["the baseline and the config were collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned"]);
+    expect(row.exploratory).toEqual(["the baseline and the config were collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned"]);
   });
 });
 
@@ -313,12 +314,12 @@ describe("the fingerprint of a job whose eval declares a measurement", () => {
     write("collect.ts", "export const collect = 1;\n");
     write("score.ts", "export const score = 1;\n");
     write("measurement.ts", 'export const MEASUREMENT = { eval: "tiny", collector: ["evals/tiny/src/collect.ts"], scorer: ["evals/tiny/src/score.ts"] };\n');
-    lock(root, 1, 3);
+    lock(root, FIRST_VERSION, 3);
     return root;
   }
-  const lock = (root: string, collector: number, harness: number) => {
-    const part = (version: number) => ({ version, sha256: "a".repeat(64), files: [] });
-    writeFileSync(join(root, "MEASUREMENT.lock"), JSON.stringify({ lock_version: 1, harness_version: harness, evals: { tiny: { collector: part(collector), scorer: part(1) } } }));
+  const lock = (root: string, collector: string, harness: number) => {
+    const part = (version: string) => ({ version, sha256: "a".repeat(64), files: [] });
+    writeFileSync(join(root, "MEASUREMENT.lock"), JSON.stringify({ lock_version: 1, harness_version: harness, evals: { tiny: { collector: part(collector), scorer: part(FIRST_VERSION) } } }));
   };
 
   test("is made from the collector, not from this repository's code: it has a collector part and no harness part", () => {
@@ -338,10 +339,10 @@ describe("the fingerprint of a job whose eval declares a measurement", () => {
     writeFileSync(join(root, "evals", "tiny", "src", "collect.ts"), "export const collect = 2;\n");
     const edited = fingerprintOf(root, job("tiny"), env);
     expect(changed(first, edited)).toEqual(["collector"]);
-    lock(root, 2, 3);
+    lock(root, nextVersion(FIRST_VERSION), 3);
     const bumped = fingerprintOf(root, job("tiny"), env);
     expect(changed(edited, bumped)).toEqual(["collector"]);
-    lock(root, 2, 4);
+    lock(root, nextVersion(FIRST_VERSION), 4);
     expect(changed(bumped, fingerprintOf(root, job("tiny"), env))).toEqual(["collector"]);
   });
 

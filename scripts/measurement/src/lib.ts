@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LOCK_FILE, type Lock, type LockPart, loadMeasurement, measuredEvals, readLock, resolvedParts } from "../../../lib/manifest.ts";
+import { FIRST_VERSION, LOCK_FILE, type Lock, type LockPart, loadMeasurement, measuredEvals, nextVersion, readLock, resolvedParts } from "../../../lib/manifest.ts";
 
 export const CHANGELOG = "MEASUREMENT_CHANGELOG.md";
 
@@ -12,15 +12,15 @@ export const PARTS: readonly Part[] = ["collector", "scorer"];
 
 const HEAD = ["| date | eval | part | version | reason | sha256 |", "|---|---|---|---|---|---|"];
 
-/** The rows of the changelog, as [eval, part, version]. */
-function changelogRows(root: string): [string, string, number][] {
+/** The rows of the changelog, as [eval, part, version]. The version is read as the text of its column. */
+function changelogRows(root: string): [string, string, string][] {
   const file = join(root, CHANGELOG);
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8")
     .split("\n")
     .filter((l) => /^\| \d{4}-\d{2}-\d{2} \|/.test(l))
     .map((l) => l.split("|").map((c) => c.trim()))
-    .map((c): [string, string, number] => [c[2] ?? "", c[3] ?? "", Number(c[4])]);
+    .map((c): [string, string, string] => [c[2] ?? "", c[3] ?? "", c[4] ?? ""]);
 }
 
 /** One line per thing wrong, each saying what to run. Empty when the lock matches the files of every eval. */
@@ -76,7 +76,7 @@ function writeLock(root: string, lock: Lock): void {
 }
 
 /** Appends a row to the changelog, creating the file's table when there is none. */
-function appendChangelog(root: string, row: { date: string; name: string; part: string; version: number; reason: string; sha256: string }): void {
+function appendChangelog(root: string, row: { date: string; name: string; part: string; version: string; reason: string; sha256: string }): void {
   const file = join(root, CHANGELOG);
   const text = existsSync(file) ? readFileSync(file, "utf8") : "";
   const line = `| ${row.date} | ${row.name} | ${row.part} | ${row.version} | ${row.reason.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim()} | ${row.sha256.slice(0, 12)} |`;
@@ -90,9 +90,9 @@ export interface BumpOptions {
 }
 
 /**
- * Records a change to a part of an eval: the version goes up by one, the lock takes the digest and files as they are now, and the
- * changelog gets a row with the reason. An eval with no entry gets one, with both parts at version 1. `harness` raises the harness
- * version, for a deliberate break of every eval. Returns what it did, for the command to print.
+ * Records a change to a part of an eval: the minor number of the version goes up by one ("0.1" to "0.2"), the lock takes the digest and
+ * files as they are now, and the changelog gets a row with the reason. An eval with no entry gets one, with both parts at version 0.1.
+ * `harness` raises the harness version, a whole number, for a deliberate break of every eval. Returns what it did, for the command to print.
  */
 export function bump(root: string, name: string, part: Part | "harness", reason: string, options: BumpOptions = {}): string {
   if (reason.trim() === "") throw new Error("a bump needs --reason: say what changed and whether the scores change (or \"no score change\")");
@@ -101,22 +101,22 @@ export function bump(root: string, name: string, part: Part | "harness", reason:
   if (part === "harness") {
     lock.harness_version += 1;
     writeLock(root, lock);
-    appendChangelog(root, { date, name: "all", part: "harness", version: lock.harness_version, reason, sha256: "-" });
+    appendChangelog(root, { date, name: "all", part: "harness", version: String(lock.harness_version), reason, sha256: "-" });
     return `harness_version is now ${lock.harness_version}`;
   }
   const m = loadMeasurement(name, root);
   if (!m) throw new Error(`${name} declares no measurement: it has no src/measurement.ts. See lib/manifest.ts for the contract.`);
   const now = resolvedParts(m, root);
-  const made = (p: Part, version: number): LockPart => ({ version, sha256: now[p].sha256, files: now[p].files });
+  const made = (p: Part, version: string): LockPart => ({ version, sha256: now[p].sha256, files: now[p].files });
   const entry = lock.evals[name];
   if (!entry) {
-    lock.evals[name] = { collector: made("collector", 1), scorer: made("scorer", 1) };
+    lock.evals[name] = { collector: made("collector", FIRST_VERSION), scorer: made("scorer", FIRST_VERSION) };
     writeLock(root, lock);
-    for (const p of PARTS) appendChangelog(root, { date, name, part: p, version: 1, reason, sha256: now[p].sha256 });
-    return `${name}: first lock entry, collector and scorer at version 1`;
+    for (const p of PARTS) appendChangelog(root, { date, name, part: p, version: FIRST_VERSION, reason, sha256: now[p].sha256 });
+    return `${name}: first lock entry, collector and scorer at version ${FIRST_VERSION}`;
   }
   if (entry[part].sha256 === now[part].sha256 && entry[part].files.join("\n") === now[part].files.join("\n")) throw new Error(`${name}: the ${part} has not changed since the lock was written, so there is nothing to bump`);
-  const next = entry[part].version + 1;
+  const next = nextVersion(entry[part].version);
   entry[part] = made(part, next);
   writeLock(root, lock);
   appendChangelog(root, { date, name, part, version: next, reason, sha256: now[part].sha256 });

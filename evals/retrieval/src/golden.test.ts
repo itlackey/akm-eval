@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { goldenProblems, writeGolden } from "../../../lib/golden.ts";
-import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
+import { type Measurement, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { casesOf } from "./lib.ts";
 import { MEASUREMENT, setFolder } from "./measurement.ts";
 import { SYSTEMS } from "./score.ts";
@@ -173,10 +173,10 @@ describe("what a change to the scorer does to the golden test", () => {
   test("files made for another version of the scorer than the lock's fail until they are written again", () => {
     const live = lockedParts(MEASUREMENT).scorer.version; // whatever version the lock is at
     const problems = withCopy((dir) => {
-      writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: live + 1 }));
+      writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: nextVersion(live) }));
       return goldenProblems(MEASUREMENT, dir);
     });
-    expect(problems).toEqual([`scorer.json is for scorer version ${live + 1} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
+    expect(problems).toEqual([`scorer.json is for scorer version ${nextVersion(live)} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
   });
 
   test("a raw output the scorer cannot read, a case that is not there and a missing file are named", () => {

@@ -11,7 +11,7 @@
 //                   fixture. A case may have several lines: one correct answer, and each way to get it wrong.
 //   expected.jsonl  the row the scorer must give for the line of raw.jsonl at the same position. Fields the row copies from the raw output
 //                   and that are large (reflect's `proposal`) are left out: see `omit`.
-//   scorer.json     {"scorer_version": N}: the version of the scorer in MEASUREMENT.lock that the expected rows were made under.
+//   scorer.json     {"scorer_version": "0.1"}: the version of the scorer in MEASUREMENT.lock that the expected rows were made under, as a string.
 //
 // The test of an eval is three lines:
 //

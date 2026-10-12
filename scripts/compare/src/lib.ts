@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { type ManifestReading, loadMeasurement, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { type ManifestReading, UNVERSIONED, loadMeasurement, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { EVALS, EVAL_METRICS, type Dir, type MetricSpec, type Signal } from "../../matrix/src/lib.ts";
 import { AXES, type Axis, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "./policy.ts";
 
@@ -928,7 +928,7 @@ interface Aligned {
  * manifest. An eval that declares no measurement yet cannot, and is compared by the earlier rules.
  */
 /** The scorer this repository has now for an eval, as MEASUREMENT.lock records it; null when it has none. */
-function currentScorer(evalName: string): { version: number; sha256: string } | null {
+function currentScorer(evalName: string): { version: string; sha256: string } | null {
   try {
     const m = loadMeasurement(evalName);
     return m ? lockedParts(m).scorer : null;
@@ -950,8 +950,8 @@ function align(named: [string, Run[]][], treatment: Axis[]): Aligned {
   }
 
   // a result of scripts/rescore on a run from before harness-v3 has a manifest, and a collector that no one versioned
-  const unversioned = entries.filter((e) => manifestOf(e.run)?.collector.version === 0);
-  if (unversioned.length > 0) out.exploratory.push(`${unversioned.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${unversioned.length === 1 ? "was" : "were"} collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned`);
+  const unversioned = entries.filter((e) => manifestOf(e.run)?.collector.version === UNVERSIONED);
+  if (unversioned.length > 0) out.exploratory.push(`${unversioned.map((e) => label(e.side, e.runs, e.run)).join(" and ")} ${unversioned.length === 1 ? "was" : "were"} collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned`);
 
   const sharedIds = (runs: Run[]): string[] => Object.keys(manifestOf(runs[0] as Run)?.cases ?? {}).filter((id) => runs.every((r) => manifestOf(r)?.cases[id] !== undefined));
   const distinct = (runs: Run[], id: string, field: "input_sha256" | "label_sha256"): number => new Set(runs.map((r) => manifestOf(r)?.cases[id]?.[field])).size;

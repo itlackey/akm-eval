@@ -106,7 +106,7 @@ describe("rescoring a night", () => {
 describe("rescoring a night stored before a proposal had to be pending (#73)", () => {
   const RAW = jsonl(join(GOLDEN, "raw.jsonl"));
   const line = (note: string) => RAW.find((l) => l.note === note) as { case: string; raw: any; note: string };
-  /** What the scorer of the version before wrote for the silent items of the golden raw outputs, by the note that names the night. */
+  /** What the scorer before the fix wrote for the silent items of the golden raw outputs, by the note that names the night. */
   const BEFORE: Record<string, { ok: boolean; fix_proposed: boolean; state: string; proposal: string }> = {
     "the lane's proposal was rejected": { ok: true, fix_proposed: true, state: "proposal rejected", proposal: "rejected" },
     "the lane's proposal was reverted after it was accepted": { ok: true, fix_proposed: true, state: "proposal reverted", proposal: "reverted" },
@@ -114,11 +114,11 @@ describe("rescoring a night stored before a proposal had to be pending (#73)", (
     "the note was edited without a person": { ok: false, fix_proposed: true, state: "edited without a person (accepted)", proposal: "accepted" },
     "the lane plans the note and leaves a pending fix for a person": { ok: true, fix_proposed: true, state: "proposal pending", proposal: "pending" },
   };
-  /** The run stored by the scorer before the fix: the silent row as it wrote it, and the manifest of the scorer version before the live one. */
+  /** The run stored by the scorer before the fix: the silent row as it wrote it, and the manifest of a scorer older than the live one. */
   function storedBefore(note: string) {
     const was = BEFORE[note] as (typeof BEFORE)[string];
     const parts = lockedParts(MEASUREMENT);
-    const old = { ...parts.scorer, version: parts.scorer.version - 1, sha256: "e".repeat(64) };
+    const old = { ...parts.scorer, version: "0.0", sha256: "e".repeat(64) }; // older than any version the lock can have
     const edit = (rows: any[]) => rows.map((r) => ({ ...r, ok: was.ok, checks: { ...r.checks, fix_proposed: was.fix_proposed }, state: was.state, detail: { ...r.detail, proposal: was.proposal } }));
     return { ...stored([line(note)], edit, { scorer: old }), old };
   }
@@ -169,7 +169,7 @@ describe("rescoring a night stored before the exact fix was scored by the end st
   const WAS_WAITING = { ok: true, harm: false, checks: { fix_queued: true, fix_waits: true, body_kept: true, no_extra_change: true, no_invented: true }, state: "fix pending", detail: { fix: ["pending"], reflect: "no change" } };
   function storedBefore(note: string, was: Record<string, unknown>) {
     const parts = lockedParts(MEASUREMENT);
-    const old = { ...parts.scorer, version: parts.scorer.version - 1, sha256: "e".repeat(64) };
+    const old = { ...parts.scorer, version: "0.0", sha256: "e".repeat(64) }; // older than any version the lock can have
     const { dir, rows } = stored([line(note)], (rs) => rs.map((r) => ({ ...r, ...was })), { scorer: old });
     return { dir, rows, old };
   }

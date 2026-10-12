@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { FIRST_VERSION, type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, nextVersion, readManifest } from "../../../lib/manifest.ts";
 import { endpointId, engineSettings } from "../../../lib/provenance.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
@@ -19,7 +19,8 @@ const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(GOLDEN, "raw.
 const raw = (id: string, note: string): Raw => (RAW.find((l) => l.case === id && l.note === note) as { raw: Raw }).raw;
 const GOOD = (c: Case): Raw => raw(c.id, isDefect(c.class) ? "the model restores what the injection took away" : "the model leaves the note alone");
 const BAD = (c: Case): Raw => raw(c.id, isDefect(c.class) ? "the model proposes no change" : "the model rewrites the description and the when_to_use");
-const STALE = { version: 1, sha256: "c".repeat(64) };
+const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) }; // a scorer other than the live one
+const OTHER_COLLECTOR = { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) };
 const CONFIG = reflectConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 const dirs: string[] = [];
@@ -109,12 +110,12 @@ describe("rescoreFolder", () => {
   });
 
   test("takes the current scorer into the manifest and keeps the collector, the cases' inputs and everything else of the run", () => {
-    const dir = run({ raw: BAD, manifest: (m) => ({ ...m, scorer: STALE, collector: { version: 4, sha256: "d".repeat(64) } }) });
+    const dir = run({ raw: BAD, manifest: (m) => ({ ...m, scorer: STALE, collector: OTHER_COLLECTOR }) });
     const { out } = rescoreFolder(dir);
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
     expect(now.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
-    expect(now.collector).toEqual({ version: 4, sha256: "d".repeat(64) });
+    expect(now.collector).toEqual(OTHER_COLLECTOR);
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
     expect({ ...now, scorer: null, rescored_from: null }).toEqual({ ...was, scorer: null, rescored_from: null });
@@ -140,7 +141,7 @@ describe("rescoreFolder", () => {
     expect(rowsOf(out)).toEqual(rowsOf(legacy));
     const m = summaryOf(out).manifest as RunManifest;
     expect(manifestProblems(m)).toEqual([]);
-    expect(m).toMatchObject({ eval: "reflect", corpus: "public", harness_version: 0, collector: { version: 0, sha256: "b".repeat(64) }, scorer: lockedParts(MEASUREMENT).scorer, akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null } });
+    expect(m).toMatchObject({ eval: "reflect", corpus: "public", harness_version: 0, collector: { version: UNVERSIONED, sha256: "b".repeat(64) }, scorer: lockedParts(MEASUREMENT).scorer, akm: { version: "0.9.99-test", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null } });
     expect(m.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: null, dropped: [] });
     expect(Object.keys(m.cases)).toEqual(CASES.map((c) => c.id));
     expect(m.completion.selected).toEqual(CASES.map((c) => c.id));
@@ -298,7 +299,7 @@ describe("the cases of a run on a custom corpus", () => {
     write(join(root, "evals", "tiny", "src", "collect.ts"), "export const collect = 1;\n");
     write(join(root, "evals", "tiny", "src", "score.ts"), "export const score = 1;\n");
     write(join(root, "evals", "tiny", "src", "measurement.ts"), TINY);
-    const part = { version: 1, sha256: "a".repeat(64), files: [] };
+    const part = { version: FIRST_VERSION, sha256: "a".repeat(64), files: [] };
     write(join(root, "MEASUREMENT.lock"), JSON.stringify({ lock_version: 1, harness_version: 3, evals: { tiny: { collector: part, scorer: part } } }));
     const cases = (want: string) => ["a", "b"].map((id) => JSON.stringify({ id, q: `q${id}`, want })).join("\n") + "\n";
     write(join(root, "evals", "tiny", "assets", "cases.jsonl"), cases("public"));
@@ -404,7 +405,7 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
   }
 
   /** The stored run of the split: every query found first by both lines, with the manifest of the scorer `scorer` and, optionally, scores another scorer gave. */
-  function stored(M: any, root: string, scorer?: { version: number; sha256: string }, wrongScores = false) {
+  function stored(M: any, root: string, scorer?: { version: string; sha256: string }, wrongScores = false) {
     const summary0 = { corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, sample: { limit: null } };
     const cases = M.loadCases(root, summary0);
     const raws = cases.map((q: any) => ({ search: { ranked: [...q.relevant, "x"], seconds: 1 }, semantic_search: { ranked: [...q.relevant, "x"], seconds: 2 } }));
@@ -437,13 +438,14 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
 
   test("a run scored by an older scorer is scored again with the current one, from the ranked results", async () => {
     const { root, MEASUREMENT: M } = await checkout();
-    const { dir, rows } = stored(M, root, { version: 7, sha256: "c".repeat(64) }, true);
+    const older = { version: nextVersion(lockedParts(M).scorer.version), sha256: "c".repeat(64) };
+    const { dir, rows } = stored(M, root, older, true);
     expect(rowsOf(dir).every((r) => r.search.scores["NDCG@10"] === 0.123)).toBe(true);
     const result = rescoreRun(readStored(dir), { root });
     expect(result.changed).toEqual(["a1", "a2", "a3"]);
     expect(result.rows).toEqual(rows);
     expect(result.summary.manifest.scorer).toEqual(lockedParts(M).scorer);
-    expect(result.summary.manifest.rescored_from.scorer).toEqual({ version: 7, sha256: "c".repeat(64) });
+    expect(result.summary.manifest.rescored_from.scorer).toEqual(older);
   });
 
   test("a --cases given with it, as the benchmark's README used to say, has no folder to apply to: the run is scored the same, and no folder is recorded", async () => {

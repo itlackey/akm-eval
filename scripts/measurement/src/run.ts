@@ -19,9 +19,9 @@ does not take the files of the scorer, and a scorer that imports a file of the c
   check   recompute the digests and fail if a part changed without the lock being updated, or if an entry has no changelog row.
           scripts/check and CI run it.
   list    print the parts of every eval, their versions, and whether the lock is current.
-  bump    record a change: the part's version goes up by one, the lock takes the new digest, and a row with the reason is added to
-          ${CHANGELOG}. An eval with no entry gets one, at version 1. "bump harness" raises the harness version, a deliberate break of
-          every eval. Say in the reason whether the scores change, or write "no score change".`;
+  bump    record a change: the minor number of the part's version goes up by one ("0.1" to "0.2"), the lock takes the new digest,
+          and a row with the reason is added to ${CHANGELOG}. An eval with no entry gets one, at version 0.1. "bump harness" raises
+          the harness version, a deliberate break of every eval. Say in the reason whether the scores change, or write "no score change".`;
 
 function main(): number {
   let parsed: ReturnType<typeof parseArgs>;

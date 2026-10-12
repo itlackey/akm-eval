@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, currentDigests, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, currentDigests, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { actual, judgedLessons, namesReusable, readScores, report, route } from "./pass-bar.ts";
@@ -245,8 +245,8 @@ describe("judgedLessons", () => {
     const { root, assets } = repo();
     const OTHER = "9".repeat(64);
     const m = manifestOf(assets);
-    const run = runOf(root, assets, {}, rowsOf(realCases()), { ...m, scorer: { version: m.scorer.version + 1, sha256: OTHER } });
-    const said = `scorer.sha256 differs: the run was scored by scorer ${m.scorer.version + 1}, ${OTHER}, and the checks here give ${scorer}`;
+    const run = runOf(root, assets, {}, rowsOf(realCases()), { ...m, scorer: { version: nextVersion(m.scorer.version), sha256: OTHER } });
+    const said = `scorer.sha256 differs: the run was scored by scorer ${nextVersion(m.scorer.version)}, ${OTHER}, and the checks here give ${scorer}`;
     expect(() => judgedLessons(run, { root })).toThrow(said);
     const rescored = judgedLessons(run, { root, rescore: true });
     expect(rescored.judged).toHaveLength(3);
@@ -385,11 +385,11 @@ describe("the command line", () => {
   test("stops with exit 2 on a scorer that differs or a run with no manifest, naming it, and runs with --rescore, which the report says", () => {
     const { results, summary, tamper } = setup();
     const was = "9".repeat(64);
-    tamper({ manifest: { ...summary.manifest, scorer: { version: 1, sha256: was } } });
+    tamper({ manifest: { ...summary.manifest, scorer: { version: nextVersion(summary.manifest.scorer.version), sha256: was } } });
     const refused = run([results]);
     expect(refused.code).toBe(2);
     expect(refused.out).toBe("");
-    expect(refused.err).toContain(`scorer.sha256 differs: the run was scored by scorer 1, ${was}, and the checks here give ${summary.manifest.scorer.sha256}`);
+    expect(refused.err).toContain(`scorer.sha256 differs: the run was scored by scorer ${nextVersion(summary.manifest.scorer.version)}, ${was}, and the checks here give ${summary.manifest.scorer.sha256}`);
     expect(refused.err).toContain("add --rescore");
     const rescored = run(["--rescore", results]);
     expect(rescored.code).toBe(0);

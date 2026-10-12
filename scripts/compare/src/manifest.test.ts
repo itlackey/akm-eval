@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { endpointId } from "../../../lib/provenance.ts";
 import { rescoreFolder } from "../../rescore/src/lib.ts";
 import * as manifestModule from "../../../lib/manifest.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
@@ -108,7 +108,8 @@ function run(spec: Spec): string {
 }
 
 const compare = (a: string, b: string, options = {}) => comparePair(loadRun(a), loadRun(b), options);
-const STALE = { version: 1, sha256: "c".repeat(64) };
+const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) }; // a scorer other than the live one
+const lit = (version: string): string => version.replace(/\./g, "\\."); // a version as the text of a regular expression
 const metric = (r: ReturnType<typeof compare>, path: string) => r.views[0]?.metrics.find((m) => m.path === path);
 
 describe("two runs with a manifest", () => {
@@ -132,7 +133,7 @@ describe("two runs with a manifest", () => {
   test("a different collector is refused, naming both, unless the collector (harness) is the treatment, and then it is listed as the treatment", () => {
     // the version the lock gives reflect now, and another one: the test holds whatever version the live lock is at
     const live = lockedParts(MEASUREMENT).collector.version;
-    const other = live + 1;
+    const other = nextVersion(live);
     const harness = lockedParts(MEASUREMENT).harness_version;
     const a = run({ label: "a", raw: GOOD });
     const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, collector: { version: other, sha256: "d".repeat(64) } }) });
@@ -146,16 +147,16 @@ describe("two runs with a manifest", () => {
     };
     const refused = then(() => compare(a, b));
     expect(refused).toContain("these two runs cannot be compared case by case");
-    expect(refused).toMatch(new RegExp(`the eval's code differs: collector ${live} [0-9a-f]{12} \\(harness ${harness}\\) in A, collector ${other} dddddddddddd \\(harness ${harness}\\) in B`));
+    expect(refused).toMatch(new RegExp(`the eval's code differs: collector ${lit(live)} [0-9a-f]{12} \\(harness ${harness}\\) in A, collector ${lit(other)} dddddddddddd \\(harness ${harness}\\) in B`));
     expect(refused).toContain("--treatment");
     const allowed = compare(a, b, { treatment: ["config", "model", "harness"] });
-    expect(allowed.treated.join(" ")).toMatch(new RegExp(`the eval's code differs: collector ${live} .* in A, collector ${other} dddddddddddd`));
+    expect(allowed.treated.join(" ")).toMatch(new RegExp(`the eval's code differs: collector ${lit(live)} .* in A, collector ${lit(other)} dddddddddddd`));
     expect(allowed.exploratory).toEqual([]);
   });
 
   test("a change to the scorer alone is no difference: another version of the scorer is not an axis", () => {
     const a = run({ label: "a", raw: GOOD });
-    const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, scorer: { version: lockedParts(MEASUREMENT).scorer.version + 1, sha256: lockedParts(MEASUREMENT).scorer.sha256 } }) });
+    const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, scorer: { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: lockedParts(MEASUREMENT).scorer.sha256 } }) });
     expect(compare(a, b).rescored).toEqual([]); // the same digest under another version: nothing differs that scoring would change
   });
 
@@ -299,16 +300,16 @@ describe("a run without a manifest", () => {
     expect(compare(legacy("old1", BAD), legacy("old2", GOOD)).exploratory).toEqual(["A and B have no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified"]);
   });
 
-  test("a legacy run scored again by scripts/rescore has collector version 0: refused against a run of collector 1 unless the harness is the treatment, and then exploratory", () => {
+  test("a legacy run scored again by scripts/rescore has the unversioned collector, 0.0: refused against a run with a collector version unless the harness is the treatment, and then exploratory", () => {
     const dir = run({ label: "old", raw: BAD, summary: { assets_sha256: assetsSha256(join(ROOT, "evals", "reflect", "assets")) } });
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     const { manifest: _m, ...rest } = summary;
     writeFileSync(join(dir, "summary.json"), JSON.stringify(rest));
     const { out } = rescoreFolder(dir);
     const current = run({ label: "new", raw: GOOD });
-    expect(() => compare(out, current)).toThrow(new RegExp(`the eval's code differs: collector 0 b{12} \\(harness 0\\) in A, collector ${lockedParts(MEASUREMENT).collector.version} [0-9a-f]{12} \\(harness ${lockedParts(MEASUREMENT).harness_version}\\) in B`));
+    expect(() => compare(out, current)).toThrow(new RegExp(`the eval's code differs: collector ${lit(UNVERSIONED)} b{12} \\(harness 0\\) in A, collector ${lit(lockedParts(MEASUREMENT).collector.version)} [0-9a-f]{12} \\(harness ${lockedParts(MEASUREMENT).harness_version}\\) in B`));
     const r = compare(out, current, { treatment: ["config", "model", "harness"] });
-    expect(r.exploratory).toEqual(["A was collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned"]);
+    expect(r.exploratory).toEqual(["A was collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned"]);
     expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
   });
 
@@ -352,7 +353,7 @@ describe("repeats with a manifest", () => {
   });
 
   test("repeats of one configuration whose collector differs are refused", () => {
-    const runs = [run({ label: "r1", raw: GOOD }), run({ label: "r2", raw: GOOD, manifest: (m) => ({ ...m, collector: { version: lockedParts(MEASUREMENT).collector.version + 1, sha256: "d".repeat(64) } }) })];
+    const runs = [run({ label: "r1", raw: GOOD }), run({ label: "r2", raw: GOOD, manifest: (m) => ({ ...m, collector: { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) } }) })];
     expect(() => compareRepeats(runs.map(loadRun))).toThrow("these runs are not repeats of one configuration: the eval's code differs");
   });
 });

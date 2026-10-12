@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, nextVersion, readManifest } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { assetsSha256, distillConfig, loadCases } from "./lib.ts";
@@ -18,8 +18,9 @@ const GOLDEN = join(ROOT, "evals", "distill", "golden");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const GOLDEN_RAW: { case: string; note: string; raw: Record<string, unknown> }[] = jsonl(join(GOLDEN, "raw.jsonl"));
 const CASES: LoadedCase[] = loadCases(PUBLIC).filter((c) => GOLDEN_RAW.some((l) => l.case === c.id));
-/** The scorer that scored a run before a fix: a version below the lock's. */
-const STALE = { version: 1, sha256: "c".repeat(64) };
+/** The scorer that scored a run before a fix: another version than the lock's, and another digest. */
+const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) };
+const OTHER_COLLECTOR = { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) };
 const CONFIG = distillConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 /** The raw output the golden file holds for a case under this note, as the collector hands it to the scorer. */
@@ -119,12 +120,12 @@ describe("rescoring a distill run", () => {
   });
 
   test("takes the current scorer into the manifest and keeps the collector, the cases' inputs and the rest of the run", () => {
-    const dir = run({ manifest: (m) => ({ ...m, scorer: STALE, collector: { version: 4, sha256: "d".repeat(64) } }) });
+    const dir = run({ manifest: (m) => ({ ...m, scorer: STALE, collector: OTHER_COLLECTOR }) });
     const { out } = rescoreFolder(dir);
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
     expect(now.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
-    expect(now.collector).toEqual({ version: 4, sha256: "d".repeat(64) });
+    expect(now.collector).toEqual(OTHER_COLLECTOR);
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
     expect({ ...now, scorer: null, rescored_from: null }).toEqual({ ...was, scorer: null, rescored_from: null });
@@ -156,19 +157,19 @@ describe("rescoring a distill run", () => {
   });
 });
 
-/** A row as scorer 1 stored it: with no share of the memory repeated, and no check of it on an update. */
-const asScorer1 = (row: Row): Record<string, any> => {
+/** A row as the scorer before #55 stored it: with no share of the memory repeated, and no check of it on an update. */
+const asBefore55 = (row: Row): Record<string, any> => {
   const { copied: _copied, ...rest } = row as Record<string, any>;
   if (rest.checks) rest.checks = Object.fromEntries(Object.entries(rest.checks).filter(([k]) => k !== "not_copied"));
   return rest;
 };
 
 describe("the memory pasted back (#55)", () => {
-  test("scorer 1 called it a good lesson and a right update; scripts/rescore scores the stored raw output bad", () => {
+  test("the scorer before #55 called it a good lesson and a right update; scripts/rescore scores the stored raw output bad", () => {
     const dir = run({
       raw: (c) => (c.id === "lesson-01" ? rawFor(c.id, "the memory pasted back as the lesson") : c.id === "upd-01" ? rawFor(c.id, "the existing lesson with the memory appended") : FIRST(c)),
       manifest: (m) => ({ ...m, scorer: STALE }),
-      rows: (rows) => rows.map((r) => ({ ...asScorer1(r), ...(r.id === "lesson-01" ? { verdict: "good" } : r.id === "upd-01" ? { verdict: "right" } : {}) })),
+      rows: (rows) => rows.map((r) => ({ ...asBefore55(r), ...(r.id === "lesson-01" ? { verdict: "good" } : r.id === "upd-01" ? { verdict: "right" } : {}) })),
     });
     const stored = rowsOf(dir);
     expect(stored.find((r) => r.id === "lesson-01")).toMatchObject({ verdict: "good", missing: [], forbidden: [], contradicted: [] });
@@ -198,11 +199,11 @@ describe("a hedge elsewhere in the sentence (#56)", () => {
     "the lesson makes the claim after a permission that is not a doubt about it",
   ];
 
-  test.each(NOTES)("scorer 2 called it good: %s. scripts/rescore scores the stored raw output bad, and no other row moves", (note) => {
+  test.each(NOTES)("the scorer before #56 called it good: %s. scripts/rescore scores the stored raw output bad, and no other row moves", (note) => {
     const dir = run({
       raw: (c) => (c.id === "claim-01" ? rawFor(c.id, note) : FIRST(c)),
       manifest: (m) => ({ ...m, scorer: STALE }),
-      rows: (rows) => rows.map((r) => (r.id === "claim-01" ? { ...r, verdict: "good", forbidden: [] } : r)), // the row scorer 2 stored: the hedge word excused the claim
+      rows: (rows) => rows.map((r) => (r.id === "claim-01" ? { ...r, verdict: "good", forbidden: [] } : r)), // the row the scorer before #56 stored: the hedge word excused the claim
     });
     const stored = rowsOf(dir);
     expect(stored.find((r) => r.id === "claim-01")).toMatchObject({ verdict: "good", forbidden: [], missing: [], contradicted: [] });
@@ -285,8 +286,8 @@ describe("a run on a custom corpus (#47)", () => {
 });
 
 describe("a negation over a verb the shared rule does not list (#45)", () => {
-  // Each is a stored raw output that scorer 1 scored by word order and called good (or, for the last, bad) without a word of doubt: the negation
-  // excused the phrase, or denied the action, and the row had no `ambiguous`. scorer 2 keeps the verdict and names the phrase.
+  // Each is a stored raw output that the scorer before #45 scored by word order and called good (or, for the last, bad) without a word of doubt: the negation
+  // excused the phrase, or denied the action, and the row had no `ambiguous`. The scorer now keeps the verdict and names the phrase.
   const SAMPLES: [id: string, note: string, phrase: string][] = [
     ["lesson-01", "the lesson holds the advice behind do not think we should", "=wait for networkidle"],
     ["lesson-01", "the lesson holds the reversal behind did not ignore", "=wait for networkidle"],
@@ -296,7 +297,7 @@ describe("a negation over a verb the shared rule does not list (#45)", () => {
     ["claim-01", "the lesson holds the claim behind did not dispute", "works * all * layout"],
   ];
 
-  /** A run as scorer 1 stored it: rows with no `ambiguous`, and a summary whose counts have none either. */
+  /** A run as the scorer before #45 stored it: rows with no `ambiguous`, and a summary whose counts have none either. */
   function storedBefore(id: string, note: string): string {
     const raw = (c: LoadedCase): Raw => (c.id === id ? rawFor(id, note) : FIRST(c));
     const metrics = MEASUREMENT.summarize(CASES_SCORED(raw)).metrics;
@@ -329,7 +330,7 @@ describe("a negation over a verb the shared rule does not list (#45)", () => {
     expect(summaryOf(out).manifest.rescored_from.scorer).toEqual(STALE);
   });
 
-  test("the command does the same, and the verdict that scorer 1 gave a lesson that turns the advice round is still good: only the phrase is named", () => {
+  test("the command does the same, and the verdict that the scorer before #45 gave a lesson that turns the advice round is still good: only the phrase is named", () => {
     const dir = storedBefore("lesson-01", "the lesson holds the reversal behind did not ignore");
     const done = Bun.spawnSync(["bun", join(ROOT, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
     expect(done.exitCode).toBe(0);

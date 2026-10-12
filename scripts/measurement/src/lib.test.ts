@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REPO_ROOT, loadMeasurement, readLock, resolvedParts } from "../../../lib/manifest.ts";
+import { FIRST_VERSION, REPO_ROOT, isPartVersion, loadMeasurement, nextVersion, readLock, resolvedParts } from "../../../lib/manifest.ts";
 import { CHANGELOG, bump, checkLock, listLock } from "./lib.ts";
 
 const dirs: string[] = [];
@@ -85,8 +85,8 @@ describe("checkLock", () => {
     writeFileSync(join(root, "MEASUREMENT.lock"), JSON.stringify(lock));
     writeFileSync(join(root, CHANGELOG), "# Changelog\n");
     expect(checkLock(root)).toEqual([
-      `toy: ${CHANGELOG} has no entry for the collector at version 1. Use scripts/measurement/run bump, which writes it.`,
-      `toy: ${CHANGELOG} has no entry for the scorer at version 1. Use scripts/measurement/run bump, which writes it.`,
+      `toy: ${CHANGELOG} has no entry for the collector at version ${FIRST_VERSION}. Use scripts/measurement/run bump, which writes it.`,
+      `toy: ${CHANGELOG} has no entry for the scorer at version ${FIRST_VERSION}. Use scripts/measurement/run bump, which writes it.`,
     ]);
   });
 
@@ -122,8 +122,8 @@ describe("the files a part covers", () => {
     const problems = checkLock(root);
     expect(problems.length).toBe(1);
     expect(problems[0]).toMatch(/^toy: the collector changed since MEASUREMENT\.lock was written \(lock [0-9a-f]{12}, files now [0-9a-f]{12}\)\. A change to the collector is a measurement change/);
-    expect(listLock(root)).toEqual(["toy: collector v1 (changed, not bumped), scorer v1"]);
-    expect(bump(root, "toy", "collector", "deep.ts changed, no score change", DATE)).toBe("toy: collector is now version 2");
+    expect(listLock(root)).toEqual([`toy: collector v${FIRST_VERSION} (changed, not bumped), scorer v${FIRST_VERSION}`]);
+    expect(bump(root, "toy", "collector", "deep.ts changed, no score change", DATE)).toBe(`toy: collector is now version ${nextVersion(FIRST_VERSION)}`);
     expect(checkLock(root)).toEqual([]);
   });
 
@@ -134,7 +134,7 @@ describe("the files a part covers", () => {
     code(root, COLLECT, 'import { helper } from "../../../lib/helper.ts";\nexport const collect = helper;\n');
     expect(checkLock(root).join("\n")).toContain("(lock ");
     expect(checkLock(root).join("\n")).toContain("now also covers lib/helper.ts)");
-    expect(bump(root, "toy", "collector", "collect.ts uses helper.ts, no score change", DATE)).toBe("toy: collector is now version 2");
+    expect(bump(root, "toy", "collector", "collect.ts uses helper.ts, no score change", DATE)).toBe(`toy: collector is now version ${nextVersion(FIRST_VERSION)}`);
     code(root, COLLECT, "export const collect = 1;\n");
     expect(checkLock(root).join("\n")).toContain("no longer covers lib/helper.ts)");
   });
@@ -181,16 +181,16 @@ describe("the files a part covers", () => {
 });
 
 describe("bump", () => {
-  test("gives an eval with no entry both parts at version 1, with a changelog row each", () => {
+  test("gives an eval with no entry both parts at version 0.1, with a changelog row each", () => {
     const root = repo();
-    expect(bump(root, "toy", "scorer", "harness-v3: first lock entry", DATE)).toBe("toy: first lock entry, collector and scorer at version 1");
+    expect(bump(root, "toy", "scorer", "harness-v3: first lock entry", DATE)).toBe("toy: first lock entry, collector and scorer at version 0.1");
     const lock = readLock(root);
-    expect(lock.evals.toy?.collector).toMatchObject({ version: 1, files: ["evals/toy/src/collect.ts", "lib/shared.ts"] });
-    expect(lock.evals.toy?.scorer).toMatchObject({ version: 1, files: ["evals/toy/src/score.ts"] });
+    expect(lock.evals.toy?.collector).toMatchObject({ version: "0.1", files: ["evals/toy/src/collect.ts", "lib/shared.ts"] });
+    expect(lock.evals.toy?.scorer).toMatchObject({ version: "0.1", files: ["evals/toy/src/score.ts"] });
     const rows = readFileSync(join(root, CHANGELOG), "utf8").split("\n").filter((l) => l.startsWith("| 2026"));
     expect(rows).toEqual([
-      `| 2026-10-12 | toy | collector | 1 | harness-v3: first lock entry | ${lock.evals.toy?.collector.sha256.slice(0, 12)} |`,
-      `| 2026-10-12 | toy | scorer | 1 | harness-v3: first lock entry | ${lock.evals.toy?.scorer.sha256.slice(0, 12)} |`,
+      `| 2026-10-12 | toy | collector | 0.1 | harness-v3: first lock entry | ${lock.evals.toy?.collector.sha256.slice(0, 12)} |`,
+      `| 2026-10-12 | toy | scorer | 0.1 | harness-v3: first lock entry | ${lock.evals.toy?.scorer.sha256.slice(0, 12)} |`,
     ]);
   });
 
@@ -199,13 +199,32 @@ describe("bump", () => {
     bump(root, "toy", "collector", "first lock entry", DATE);
     const before = readLock(root);
     edit(root, "evals/toy/src/score.ts", "export const score = 2;\n");
-    expect(bump(root, "toy", "scorer", "no score change | a refactor", DATE)).toBe("toy: scorer is now version 2");
+    const next = nextVersion(before.evals.toy?.scorer.version as string);
+    expect(bump(root, "toy", "scorer", "no score change | a refactor", DATE)).toBe(`toy: scorer is now version ${next}`);
     const after = readLock(root);
-    expect(after.evals.toy?.scorer.version).toBe(2);
+    expect(after.evals.toy?.scorer.version).toBe(next);
     expect(after.evals.toy?.scorer.sha256).not.toBe(before.evals.toy?.scorer.sha256);
     expect(after.evals.toy?.collector).toEqual(before.evals.toy?.collector);
-    expect(readFileSync(join(root, CHANGELOG), "utf8")).toContain("| 2026-10-12 | toy | scorer | 2 | no score change \\| a refactor |");
+    expect(readFileSync(join(root, CHANGELOG), "utf8")).toContain(`| 2026-10-12 | toy | scorer | ${next} | no score change \\| a refactor |`);
     expect(checkLock(root)).toEqual([]);
+  });
+
+  test("each bump raises the minor number: 0.1, 0.2, ... 0.9, 0.10, and the changelog row of 0.10 is not taken for the one of 0.1", () => {
+    const root = repo();
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    const seen: string[] = [];
+    for (let i = 2; i <= 10; i++) {
+      edit(root, "evals/toy/src/collect.ts", `export const collect = ${i};\n`);
+      seen.push(bump(root, "toy", "collector", `change ${i}`, DATE).replace("toy: collector is now version ", ""));
+      expect(checkLock(root)).toEqual([]);
+    }
+    expect(seen).toEqual(["0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "0.10"]);
+    expect(readLock(root).evals.toy?.collector.version).toBe("0.10");
+    expect(readLock(root).evals.toy?.scorer.version).toBe("0.1");
+    expect(listLock(root)).toEqual(["toy: collector v0.10, scorer v0.1"]);
+    const log = readFileSync(join(root, CHANGELOG), "utf8");
+    writeFileSync(join(root, CHANGELOG), log.split("\n").filter((l) => !l.startsWith("| 2026-10-12 | toy | collector | 0.10 |")).join("\n"));
+    expect(checkLock(root)).toEqual([`toy: ${CHANGELOG} has no entry for the collector at version 0.10. Use scripts/measurement/run bump, which writes it.`]); // the rows of 0.1 to 0.9 are no entry for 0.10
   });
 
   test("refuses a bump with no reason, a part that has not changed, and an eval that declares nothing", () => {
@@ -228,9 +247,9 @@ describe("listLock", () => {
   test("shows each eval's parts, and a part that changed without a bump", () => {
     const root = repo();
     bump(root, "toy", "collector", "first lock entry", DATE);
-    expect(listLock(root)).toEqual(["toy: collector v1, scorer v1"]);
+    expect(listLock(root)).toEqual([`toy: collector v${FIRST_VERSION}, scorer v${FIRST_VERSION}`]);
     edit(root, "lib/shared.ts", "export const shared = 2;\n");
-    expect(listLock(root)).toEqual(["toy: collector v1 (changed, not bumped), scorer v1"]);
+    expect(listLock(root)).toEqual([`toy: collector v${FIRST_VERSION} (changed, not bumped), scorer v${FIRST_VERSION}`]);
   });
 });
 
@@ -238,6 +257,10 @@ describe("this repository", () => {
   test("MEASUREMENT.lock matches the files of every eval that declares a measurement", () => {
     expect(checkLock(REPO_ROOT)).toEqual([]);
     expect(readLock(REPO_ROOT).harness_version).toBeGreaterThanOrEqual(3);
+  });
+
+  test("every part of the lock has a version of the form MAJOR.MINOR", () => {
+    for (const [name, entry] of Object.entries(readLock(REPO_ROOT).evals)) for (const part of [entry.collector, entry.scorer]) expect([name, isPartVersion(part.version)]).toEqual([name, true]);
   });
 
   test("the command checks, lists and refuses what it should", () => {

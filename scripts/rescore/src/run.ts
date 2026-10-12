@@ -11,7 +11,7 @@ Scores each results folder (or the summary.json in it) of an eval again: the raw
 and the labels (the cases) that the repository has now, and the result is written to a new folder beside the original,
 <folder>-rescored (before the -rN of a repeat). The original is never modified. The new summary.json has the current scorer in its
 manifest, the collector of the original run, and rescored_from. A run without a manifest (from before harness-v3) is rescored too, with
-version 0 as its collector.
+version 0.0 as its collector.
 
 A run on the public corpus is scored against the committed cases. A run on a custom corpus is scored against the cases in its \`corpus_folder\`,
 which the summary records when the folder is inside the repository. A folder outside it is not recorded (its name can say what is in it), so

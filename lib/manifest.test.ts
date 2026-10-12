@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, manifestProblems, measuredEvals, measuredFiles, partSha256, readLock, readManifest } from "./manifest.ts";
+import { FIRST_VERSION, type Measurement, REPO_ROOT, UNVERSIONED, buildManifest, caseDigests, compareVersions, completionOf, corpusFolderOf, isPartVersion, loadMeasurement, lockedParts, manifestProblems, measuredEvals, measuredFiles, nextVersion, partSha256, readLock, readManifest } from "./manifest.ts";
 import { endpointId, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
@@ -20,7 +20,7 @@ function repo(lock: object = { lock_version: 1, harness_version: 3, evals: {} })
   writeFileSync(join(root, "MEASUREMENT.lock"), JSON.stringify(lock));
   return root;
 }
-const PART = { version: 2, sha256: "a".repeat(64), files: ["x.ts"] };
+const PART = { version: "0.2", sha256: "a".repeat(64), files: ["x.ts"] };
 
 const TOY = { eval: "toy", collector: ["evals/toy/src/collect.ts"], scorer: ["evals/toy/src/score.ts"] };
 const toy: Pick<Measurement, "caseId" | "input" | "labels"> & { errored: (r: { bad?: boolean }) => boolean } = {
@@ -53,9 +53,9 @@ describe("the digests of a part", () => {
 
 describe("the lock", () => {
   test("gives a run the versions of the lock and the digests of the files now, and refuses an eval it has no entry for", () => {
-    const root = repo({ lock_version: 1, harness_version: 3, evals: { toy: { collector: { ...PART, version: 4 }, scorer: { ...PART, version: 7 } } } });
+    const root = repo({ lock_version: 1, harness_version: 3, evals: { toy: { collector: { ...PART, version: "0.4" }, scorer: { ...PART, version: "0.7" } } } });
     const parts = lockedParts(TOY, root);
-    expect(parts).toEqual({ collector: { version: 4, sha256: partSha256(TOY.collector, root) }, scorer: { version: 7, sha256: partSha256(TOY.scorer, root) }, harness_version: 3 });
+    expect(parts).toEqual({ collector: { version: "0.4", sha256: partSha256(TOY.collector, root) }, scorer: { version: "0.7", sha256: partSha256(TOY.scorer, root) }, harness_version: 3 });
     expect(() => lockedParts({ ...TOY, eval: "other" }, root)).toThrow('MEASUREMENT.lock has no entry for other. Add it with: scripts/measurement/run bump other collector --reason "first lock entry"');
   });
 
@@ -73,7 +73,45 @@ describe("the lock", () => {
   test("the lock of this repository names the harness version and an entry for reflect", () => {
     const lock = readLock(REPO_ROOT);
     expect(lock.harness_version).toBeGreaterThanOrEqual(3);
-    expect(lock.evals.reflect?.collector.version).toBeGreaterThanOrEqual(1);
+    expect(isPartVersion(lock.evals.reflect?.collector.version)).toBe(true);
+  });
+
+  test("refuses a part whose version is not MAJOR.MINOR, and the unversioned marker, which a result has and the lock never does", () => {
+    const lockWith = (version: unknown) => repo({ lock_version: 1, harness_version: 3, evals: { toy: { collector: { ...PART, version }, scorer: PART } } });
+    expect(() => readLock(lockWith(FIRST_VERSION))).not.toThrow();
+    for (const bad of [1, 0.1, "1", "0.1.2", UNVERSIONED]) expect(() => readLock(lockWith(bad))).toThrow("has a bad entry for toy");
+  });
+});
+
+describe("the version of a part", () => {
+  test("is a string MAJOR.MINOR of whole numbers: 0.1, 1.0 and 0.10 are versions, and a number, 1, 0.1.2, a.b and -1.0 are not", () => {
+    for (const good of ["0.1", "1.0", "0.10", "0.0", "12.345"]) expect(isPartVersion(good)).toBe(true);
+    for (const bad of [1, 0.1, null, undefined, "1", "0.1.2", "a.b", "-1.0", "1.-1", "", ".1", "1.", " 0.1", "0.1 ", "01.1", "1.01", "0.1e2", "v0.1"]) expect(isPartVersion(bad)).toBe(false);
+  });
+
+  test("a bump raises the minor number by one: 0.1 to 0.2, 0.9 to 0.10, 1.4 to 1.5", () => {
+    expect(nextVersion("0.1")).toBe("0.2");
+    expect(nextVersion("0.9")).toBe("0.10");
+    expect(nextVersion("0.10")).toBe("0.11");
+    expect(nextVersion("1.4")).toBe("1.5");
+    expect(() => nextVersion("1")).toThrow('"1" is not a part version');
+    expect(() => nextVersion(2 as unknown as string)).toThrow("is not a part version");
+  });
+
+  test("is ordered by the major number and then the minor, as numbers, and is the same only when the strings are", () => {
+    expect(compareVersions("0.9", "0.10")).toBeLessThan(0);
+    expect(compareVersions("0.10", "0.9")).toBeGreaterThan(0);
+    expect(compareVersions("0.99", "1.0")).toBeLessThan(0);
+    expect(compareVersions("2.0", "1.20")).toBeGreaterThan(0);
+    expect(compareVersions("0.1", "0.1")).toBe(0);
+    expect(["1.0", "0.10", "0.9", "0.1"].sort(compareVersions)).toEqual(["0.1", "0.9", "0.10", "1.0"]);
+  });
+
+  test("the first version of an eval is 0.1 and the unversioned marker is 0.0, both versions", () => {
+    expect(FIRST_VERSION).toBe("0.1");
+    expect(UNVERSIONED).toBe("0.0");
+    expect(isPartVersion(UNVERSIONED)).toBe(true);
+    expect(compareVersions(UNVERSIONED, FIRST_VERSION)).toBeLessThan(0);
   });
 });
 
@@ -164,8 +202,8 @@ describe("the manifest", () => {
     const m = build();
     expect(manifestProblems(m)).toEqual([]);
     expect(m).toMatchObject({ manifest_version: 1, eval: "toy", corpus: "public", collection: null, mode: null, harness_version: 3, akm: { version: "0.9.26", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "s", config_patch_sha256: sha256Text("p"), timeout_ms: 5000, seed: "42" }, treatment_hints: { embedder: "real" } });
-    expect(m.collector).toEqual({ version: 2, sha256: partSha256(TOY.collector, root) });
-    expect(m.scorer.version).toBe(2);
+    expect(m.collector).toEqual({ version: PART.version, sha256: partSha256(TOY.collector, root) });
+    expect(m.scorer.version).toBe(PART.version);
   });
 
   test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and a digest and no path (#65)", () => {
@@ -192,7 +230,11 @@ describe("the manifest", () => {
     };
     expect(manifestProblems(null)).toEqual(["the manifest is not an object"]);
     expect(mutate((x) => (x.manifest_version = 2))).toEqual(["manifest_version is 2, and this harness reads 1"]);
-    expect(mutate((x) => (x.collector.sha256 = "short"))).toEqual(["collector needs a version and a sha256 digest"]);
+    expect(mutate((x) => (x.collector.sha256 = "short"))).toEqual(['collector needs a version ("MAJOR.MINOR", such as "0.1") and a sha256 digest']);
+    for (const bad of [1, "1", "0.1.2", "a.b", "-1.0"]) expect(mutate((x) => (x.scorer.version = bad))).toEqual(['scorer needs a version ("MAJOR.MINOR", such as "0.1") and a sha256 digest']);
+    expect(mutate((x) => (x.collector.version = UNVERSIONED))).toEqual([]); // a result collected before harness-v3, scored again
+    expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: 1, sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
+    expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: "0.3", sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual([]);
     expect(mutate((x) => (x.cases.a.input_sha256 = null))).toEqual(["the case a needs an input_sha256 and a label_sha256"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model, an endpoint that is a host with no path, and an endpoint_id digest"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://user:pw@gateway.example"))).toHaveLength(1);

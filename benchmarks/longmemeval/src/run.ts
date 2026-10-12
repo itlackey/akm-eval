@@ -187,7 +187,7 @@ const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, ...endpointR
 export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
   const out: string[] = [];
   const show = (x: unknown) => (x === null || x === undefined ? "none" : String(x));
-  const part = (p: { version: number; sha256: string }) => `version ${p.version}, ${p.sha256.slice(0, 12)}`;
+  const part = (p: { version: string; sha256: string }) => `version ${p.version}, ${p.sha256.slice(0, 12)}`;
   const note = (what: string, was: unknown, is: unknown) => {
     if (was !== is) out.push(`a different ${what} (${show(was)}, now ${show(is)})`);
   };
