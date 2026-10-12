@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { type CaseDigest, type Measurement, type PartRef, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, readManifest, REPO_ROOT } from "../../../lib/manifest.ts";
+import { type CaseDigest, type Measurement, type PartRef, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, readManifest, REPO_ROOT, UNVERSIONED } from "../../../lib/manifest.ts";
 import { canonical, recordedEngine, sha256Json } from "../../../lib/provenance.ts";
 
 type Obj = Record<string, any>;
@@ -156,8 +156,8 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
     manifest = {
       ...buildManifest({
         measurement: m,
-        // a run before harness-v3 has no collector version: its code is known by the harness_sha256 it recorded, as version 0
-        parts: { collector: { version: 0, sha256: typeof summary.harness_sha256 === "string" && /^[0-9a-f]{64}$/.test(summary.harness_sha256) ? summary.harness_sha256 : ZEROS }, scorer: parts.scorer, harness_version: 0 },
+        // a run before harness-v3 has no collector version: its code is known by the harness_sha256 it recorded, as version 0.0
+        parts: { collector: { version: UNVERSIONED, sha256: typeof summary.harness_sha256 === "string" && /^[0-9a-f]{64}$/.test(summary.harness_sha256) ? summary.harness_sha256 : ZEROS }, scorer: parts.scorer, harness_version: 0 },
         corpus: String(summary.corpus),
         collection: typeof summary.collection === "string" ? summary.collection : null,
         mode: typeof summary.mode === "string" ? summary.mode : null,

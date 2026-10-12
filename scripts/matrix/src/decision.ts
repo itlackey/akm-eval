@@ -3,6 +3,7 @@
 // See ../../../README.md ("Run a matrix").
 
 import { basename, join } from "node:path";
+import { compareVersions } from "../../../lib/manifest.ts";
 import type { Axis } from "../../compare/src/policy.ts";
 import { EVALS, MIN_REPEATS, type Dir, type Matrix, type Measured, type Row, type Signal, type Spread, type Stage, type State, type Verdict, baselineFor, compareAll, incompleteReason, incomparable, judge, manifestReasons, measuredOf, metricSpread, moreErrors, readJson, runDirs, scoredAlike, screenDiffers, treatmentAxes, unusableReason } from "./lib.ts";
 import { type Cases, type Coverage, type NoiseFloor, type Paired, type PairedMetric, casesOf, noiseOf, pairedDifferent, pairedOf } from "./paired.ts";
@@ -115,10 +116,10 @@ function caseReasons(cases: Cases | null): string[] {
   return parts.length === 0 ? [] : [`the sides scored different cases, so their rates are over different cases: ${parts.join("; ")}`];
 }
 
-/** The versions of one part ("collector" or "scorer") over the runs behind a result, as "v2", or "v1, v2" when they differ, and null when a run has no manifest. */
+/** The versions of one part ("collector" or "scorer") over the runs behind a result, as "v0.2", or "v0.1, v0.2" when they differ, and null when a run has no manifest. */
 function versionsOf(m: Measured, part: "collector" | "scorer"): string | null {
   if (m.runs.length === 0 || m.runs.some((r) => !r.manifest)) return null;
-  return [...new Set(m.runs.map((r) => (r.manifest as NonNullable<typeof r.manifest>)[part].version))].sort((a, b) => a - b).map((v) => `v${v}`).join(", ");
+  return [...new Set(m.runs.map((r) => (r.manifest as NonNullable<typeof r.manifest>)[part].version))].sort(compareVersions).map((v) => `v${v}`).join(", ");
 }
 
 /** Both results ran one akm: the same build, version and uncommitted changes. */

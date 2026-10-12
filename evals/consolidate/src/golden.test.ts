@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { goldenProblems, writeGolden } from "../../../lib/golden.ts";
-import { type Measurement, lockedParts } from "../../../lib/manifest.ts";
+import { type Measurement, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { KINDS } from "./pool-score.ts";
 import { RELATIONS } from "./cases.ts";
@@ -167,10 +167,10 @@ describe("what a change to the scorer does to the golden test", () => {
     const live = lockedParts(MEASUREMENT).scorer.version; // whatever version the lock is at
     for (const [from, options] of [[GOLDEN, OPTIONS], [POOL, POOL_OPTIONS]] as const) {
       const problems = withCopy(from, (dir) => {
-        writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: live + 1 }));
+        writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: nextVersion(live) }));
         return goldenProblems(MEASUREMENT, dir, options);
       });
-      expect(problems).toEqual([`scorer.json is for scorer version ${live + 1} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
+      expect(problems).toEqual([`scorer.json is for scorer version ${nextVersion(live)} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
     }
   });
 

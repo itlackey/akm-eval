@@ -6,7 +6,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
+import { UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, type Row, judgeConfig, orderFeedback, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -189,7 +189,7 @@ describe("rescoring a stored run", () => {
     expect(result).toMatchObject({ changed: [], legacy: true });
     const s = summaryOf(out);
     expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: 0 }, scorer: lockedParts(MEASUREMENT).scorer });
+    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: UNVERSIONED }, scorer: lockedParts(MEASUREMENT).scorer });
   });
 });
 

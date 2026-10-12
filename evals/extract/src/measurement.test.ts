@@ -6,7 +6,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
+import { UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
 import { sha256Json } from "../../../lib/provenance.ts";
 import { type LoadedCase, type Raw, type Row, assetsDigest, extractConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -34,7 +34,7 @@ afterEach(() => {
 /** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
 function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null; digest?: string }; before45?: string } = {}): string {
   const custom = options.custom;
-  // `before45` is the note of a raw output of planted-01 to store in place of the first, as the scorer of version 1 (which had no `ambiguous`) scored it
+  // `before45` is the note of a raw output of planted-01 to store in place of the first, as the scorer before #45 (which had no `ambiguous`) scored it
   const raw = (c: LoadedCase): Raw => (options.before45 !== undefined && c.id === "planted-01" ? (MEASUREMENT.rawOf({ id: c.id, ...(LINES.find((l) => l.case === c.id && l.note === options.before45) as { raw: Record<string, any> }).raw }) as { raw: Raw }).raw : FIRST(c));
   const rows = GOLDEN_CASES.map((c) => MEASUREMENT.score(c, raw(c)));
   const config = extractConfig("https://gateway.example/deployment-A/v1", "the-model", true);
@@ -161,7 +161,7 @@ describe("rescoring a stored run", () => {
     expect(rowsOf(out)).toEqual(rowsOf(dir));
     const s = summaryOf(out);
     expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: 0 }, scorer: lockedParts(MEASUREMENT).scorer });
+    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: UNVERSIONED }, scorer: lockedParts(MEASUREMENT).scorer });
     expect(Object.keys(s.manifest.cases).sort()).toEqual(GOLDEN_CASES.map((c) => c.id).sort());
     expect(s.manifest.rescored_from.scorer).toBeNull();
   });
@@ -195,7 +195,7 @@ describe("a run stored before the fix to the negation rule (#45)", () => {
   test("is scored again to the new verdict: the case is flagged ambiguous, the count is in the metrics, and nothing else changes", () => {
     const dir = stored({ legacy: true, before45: NOTE });
     const was = rowsOf(dir).find((r) => r.id === "planted-01");
-    expect(was).not.toHaveProperty("ambiguous"); // as version 1 stored it
+    expect(was).not.toHaveProperty("ambiguous"); // as the scorer before #45 stored it
     expect(was).toMatchObject({ correct: true, forbidden: [] });
     expect(summaryOf(dir).metrics.planted).toEqual({ n: 4, correct: expect.any(Number), rate: expect.any(Number), saved_instruction: expect.any(Number) });
     const { out, result } = rescoreFolder(dir);

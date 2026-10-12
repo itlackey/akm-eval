@@ -5,7 +5,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { ALIASES, type Alias, type Kind, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { type PartRef, type RunManifest, loadMeasurement, lockedParts, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, lockedParts, measurementPath, readManifest } from "../../../lib/manifest.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
@@ -762,8 +762,8 @@ export function manifestReasons(root: string, evalName: string, base: Measured, 
   const out: string[] = [];
   const legacy = who((r) => !r.manifest);
   if (legacy.length > 0) out.push(`${legacy.join(" and ")} ${legacy.length > 1 || legacy[0].includes("'s runs ") ? "have" : "has"} no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified`);
-  const unversioned = who((r) => r.manifest?.collector.version === 0);
-  if (unversioned.length > 0) out.push(`${unversioned.join(" and ")} ${unversioned.length > 1 || unversioned[0].includes("'s runs ") ? "were" : "was"} collected before harness-v3 (collector version 0, known only by its harness_sha256), so what the collector did is not versioned`);
+  const unversioned = who((r) => r.manifest?.collector.version === UNVERSIONED);
+  if (unversioned.length > 0) out.push(`${unversioned.join(" and ")} ${unversioned.length > 1 || unversioned[0].includes("'s runs ") ? "were" : "was"} collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned`);
   return out;
 }
 

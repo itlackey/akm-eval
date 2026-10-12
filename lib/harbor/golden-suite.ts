@@ -10,7 +10,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { goldenProblems, writeGolden } from "../golden.ts";
-import { type Measurement, lockedParts } from "../manifest.ts";
+import { type Measurement, lockedParts, nextVersion } from "../manifest.ts";
 import type { Row } from "./score.ts";
 
 const OPTIONS = { omit: ["trials"] };
@@ -96,11 +96,12 @@ export function goldenSuite(m: Measurement, golden: string): void {
 
     test("files made for another version of the scorer than the lock's fail until they are written again", () => {
       const live = lockedParts(m).scorer.version; // whatever version the lock is at
+      const other = nextVersion(live);
       const problems = withCopy((dir) => {
-        writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: live + 1 }));
+        writeFileSync(join(dir, "scorer.json"), JSON.stringify({ scorer_version: other }));
         return goldenProblems(m, dir, OPTIONS);
       });
-      expect(problems).toEqual([`scorer.json is for scorer version ${live + 1} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
+      expect(problems).toEqual([`scorer.json is for scorer version ${other} and MEASUREMENT.lock has ${live}: look at the expected rows, and write them again with UPDATE_GOLDEN=1`]);
     });
 
     test("a raw output the scorer cannot read and a case that is not there are named", () => {

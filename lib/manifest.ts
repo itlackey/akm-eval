@@ -29,6 +29,10 @@
 //
 // A pure refactor that keeps every score still changes the scorer digest: it passes the golden test, and bumps the scorer with the reason
 // "no score change".
+//
+// The version of a part is a string "MAJOR.MINOR" of whole numbers (isPartVersion), "0.1" at the first lock entry. A bump raises the minor
+// number (nextVersion: "0.1" to "0.2", "0.9" to "0.10"); there is no bump of the major number yet. "0.0" (UNVERSIONED) is the collector of a
+// result collected before harness-v3. Versions are compared for equality, and ordered (compareVersions) only to list them.
 
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -41,6 +45,36 @@ export const REPO_ROOT = resolve(import.meta.dir, "..");
 
 export const MANIFEST_VERSION = 1;
 export const LOCK_FILE = "MEASUREMENT.lock";
+
+// ---- the version of a part ---------------------------------------------------------------------------------------------------
+
+/**
+ * The version of a collector or a scorer: a string "MAJOR.MINOR" of whole numbers, such as "0.1", shown as "v0.1". Two versions are the
+ * same when the strings are the same, and a number has no leading zero, so "0.1" and "0.01" cannot both stand for one version.
+ */
+export function isPartVersion(x: unknown): x is string {
+  return typeof x === "string" && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(x);
+}
+
+/** The version both parts of an eval start at, in its first lock entry. */
+export const FIRST_VERSION = "0.1";
+
+/** The collector version of a result collected before harness-v3 (a legacy run that scripts/rescore scored again): nobody versioned its code. */
+export const UNVERSIONED = "0.0";
+
+/** The version a bump gives a part: the minor number goes up by one ("0.1" to "0.2", "0.9" to "0.10"). There is no bump of the major number yet. */
+export function nextVersion(version: string): string {
+  if (!isPartVersion(version)) throw new Error(`${JSON.stringify(version)} is not a part version: it is "MAJOR.MINOR" of whole numbers, such as "0.1"`);
+  const [major, minor] = version.split(".");
+  return `${major}.${Number(minor) + 1}`;
+}
+
+/** Orders two part versions: negative when `a` is older than `b`, 0 when they are the same, positive when `a` is newer. The major number first, then the minor, as numbers. */
+export function compareVersions(a: string, b: string): number {
+  const [aMajor = 0, aMinor = 0] = a.split(".").map(Number);
+  const [bMajor = 0, bMinor = 0] = b.split(".").map(Number);
+  return aMajor - bMajor || aMinor - bMinor;
+}
 
 type Obj = Record<string, any>;
 const isObject = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -114,7 +148,7 @@ export function corpusFolderOf(folder: string, root = REPO_ROOT): string | null 
 
 /** One part of an eval as MEASUREMENT.lock records it. `files` is the list the digest was made of, so a review can see what a bump covers. */
 export interface LockPart {
-  version: number;
+  version: string;
   sha256: string;
   files: string[];
 }
@@ -136,9 +170,9 @@ export function readLock(root = REPO_ROOT): Lock {
   } catch {
     throw new Error(`${LOCK_FILE} is not valid JSON`);
   }
-  const part = (p: unknown): boolean => isObject(p) && Number.isInteger(p.version) && p.version >= 1 && typeof p.sha256 === "string" && HEX.test(p.sha256) && Array.isArray(p.files) && p.files.every((f: unknown) => typeof f === "string");
+  const part = (p: unknown): boolean => isObject(p) && isPartVersion(p.version) && p.version !== UNVERSIONED && typeof p.sha256 === "string" && HEX.test(p.sha256) && Array.isArray(p.files) && p.files.every((f: unknown) => typeof f === "string");
   if (!isObject(lock) || lock.lock_version !== 1 || !Number.isInteger(lock.harness_version) || !isObject(lock.evals)) throw new Error(`${LOCK_FILE} is not a lock: it needs lock_version 1, a harness_version and evals`);
-  for (const [name, e] of Object.entries(lock.evals)) if (!isObject(e) || !part(e.collector) || !part(e.scorer)) throw new Error(`${LOCK_FILE} has a bad entry for ${name}: collector and scorer each need a version, a sha256 and files`);
+  for (const [name, e] of Object.entries(lock.evals)) if (!isObject(e) || !part(e.collector) || !part(e.scorer)) throw new Error(`${LOCK_FILE} has a bad entry for ${name}: collector and scorer each need a version ("MAJOR.MINOR", such as "0.1"), a sha256 and files`);
   return lock as unknown as Lock;
 }
 
@@ -191,8 +225,8 @@ export function measuredFiles(m: Pick<Measurement, "eval" | "collector" | "score
 
 /** The two parts of an eval as the files are now: the version the lock records, and the digest of the files as they are. */
 export interface Parts {
-  collector: { version: number; sha256: string };
-  scorer: { version: number; sha256: string };
+  collector: { version: string; sha256: string };
+  scorer: { version: string; sha256: string };
   harness_version: number;
 }
 
@@ -218,7 +252,7 @@ export function currentDigests(m: Pick<Measurement, "eval" | "collector" | "scor
 // ---- the manifest ------------------------------------------------------------------------------------------------------------
 
 export interface PartRef {
-  version: number;
+  version: string;
   sha256: string;
 }
 
@@ -334,14 +368,13 @@ export function completionOf<Row extends Obj>(m: Pick<Measurement<any, any, Row>
 
 const isString = (x: unknown): x is string => typeof x === "string";
 const nullable = (check: (x: unknown) => boolean) => (x: unknown): boolean => x === null || check(x);
-const isInt = (x: unknown): boolean => Number.isInteger(x) && (x as number) >= 0;
 const isHex = (x: unknown): boolean => isString(x) && HEX.test(x);
 const isIdList = (x: unknown): x is string[] => Array.isArray(x) && x.every(isString) && new Set(x).size === x.length;
 /** A host as endpointHost writes it: scheme, host and port, with nothing after them. A path in a summary is what #65 closes. */
 const isHost = (x: unknown): boolean => isString(x) && /^[a-z][a-z0-9+.-]*:\/\/[^/?#@\s]+$/i.test(x);
 
 function partProblems(name: string, p: unknown, out: string[]): void {
-  if (!isObject(p) || !isInt(p.version) || !isHex(p.sha256)) out.push(`${name} needs a version and a sha256 digest`);
+  if (!isObject(p) || !isPartVersion(p.version) || !isHex(p.sha256)) out.push(`${name} needs a version ("MAJOR.MINOR", such as "0.1") and a sha256 digest`);
 }
 
 /** What is wrong with a manifest, as messages; empty when it is sound. This is the one validator: comparison, rescore and the replay tools all read a manifest through it. */
@@ -377,7 +410,7 @@ export function manifestProblems(x: unknown): string[] {
   }
   if (x.rescored_from !== undefined) {
     const r = x.rescored_from;
-    if (!isObject(r) || !isString(r.results) || r.results.includes("/") || !isString(r.at) || !nullable((p) => isObject(p) && isInt(p.version) && isHex(p.sha256))(r.scorer) || !isIdList(r.dropped)) out.push("rescored_from needs results (a folder name), scorer (or null), at and dropped");
+    if (!isObject(r) || !isString(r.results) || r.results.includes("/") || !isString(r.at) || !nullable((p) => isObject(p) && isPartVersion(p.version) && isHex(p.sha256))(r.scorer) || !isIdList(r.dropped)) out.push("rescored_from needs results (a folder name), scorer (or null), at and dropped");
   }
   return out;
 }

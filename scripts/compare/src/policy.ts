@@ -10,7 +10,7 @@
 // shown, and it is not a conclusion.
 
 import { createHash } from "node:crypto";
-import { readManifest } from "../../../lib/manifest.ts";
+import { UNVERSIONED, readManifest } from "../../../lib/manifest.ts";
 import { canonical, endpointDisplay, recordedEngine, withoutEngineSettings } from "../../../lib/provenance.ts";
 
 export { canonical };
@@ -117,7 +117,7 @@ export interface Identity {
   hints: string | null;
   /** The summary carries a valid manifest (see lib/manifest.ts). A summary without one is legacy. */
   manifest: boolean;
-  /** The collector of the run, "version sha256", when it has a manifest. A collector of version 0 is a legacy run's, known only by its harness_sha256. */
+  /** The collector of the run, "version sha256", when it has a manifest. A collector of version 0.0 (UNVERSIONED) is a legacy run's, known only by its harness_sha256. */
   collector: string | null;
   /** The scorer of the run, "version sha256", when it has a manifest. The scorer is not an axis: a run is scored again. */
   scorer: string | null;
@@ -154,7 +154,7 @@ export function identityOf(s: Row): Identity {
   const engine = harbor ? harborEngine(s) : m ? recorded(m.engines) : isObject(s.engine) && isObject(s.engine.engines) ? recorded(s.engine.engines) : null;
   const embedder = text(s.embedder);
   const hints = { ...(embedder === null ? {} : { embedder }), ...(m?.treatment_hints ?? {}) };
-  const part = (p: { version: number; sha256: string }): string => `${p.version} ${p.sha256}`;
+  const part = (p: { version: string; sha256: string }): string => `${p.version} ${p.sha256}`;
   const corpus = corpusOf(s);
   return {
     eval: text(s.eval),
@@ -295,11 +295,11 @@ function hintsText(v: string): string {
   }
 }
 
-/** The harness of each member when every run has a manifest: the collector's version and digest, and the harness version. A legacy collector (version 0) with no digest of its code is unidentified. */
+/** The harness of each member when every run has a manifest: the collector's version and digest, and the harness version. A legacy collector (version 0.0) with no digest of its code is unidentified. */
 function collectorValues(ms: Member[]): (string | null)[] {
   return ms.map((m) => {
     const [version, sha] = (m.identity.collector ?? "").split(" ");
-    return version === "0" && /^0+$/.test(sha ?? "") ? null : `collector ${m.identity.collector} (harness ${m.identity.harness_version})`;
+    return version === UNVERSIONED && /^0+$/.test(sha ?? "") ? null : `collector ${m.identity.collector} (harness ${m.identity.harness_version})`;
   });
 }
 

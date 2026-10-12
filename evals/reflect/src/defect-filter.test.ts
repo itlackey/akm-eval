@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { buildManifest, caseDigests, lockedParts } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, lockedParts, nextVersion } from "../../../lib/manifest.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { STRATEGY, reflectConfig } from "./collect.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
@@ -316,9 +316,10 @@ describe("reflectEdits with a manifest", () => {
   test("another version of the eval's collector, or of the harness, does not stop it: a replay reads proposals, not what produced them", () => {
     const { root, cases } = repo();
     const parts = lockedParts(MEASUREMENT);
-    const run = runOf(root, cases, {}, { collector: { version: 9, sha256: "7".repeat(64) }, harness_version: 9 });
+    const other = nextVersion(parts.collector.version);
+    const run = runOf(root, cases, {}, { collector: { version: other, sha256: "7".repeat(64) }, harness_version: 9 });
     expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
-    expect(parts.collector.version).not.toBe(9); // the run's version 9 is not the live one, and the replay still went ahead
+    expect(parts.collector.version).not.toBe(other); // the run's version is not the live one, and the replay still went ahead
   });
 
   test("a case whose note changed since the run stops the replay, and the replay with --rescore reads the new note and says so", () => {
@@ -334,7 +335,7 @@ describe("reflectEdits with a manifest", () => {
 
   test("a run scored by another scorer than the one here stops the replay and is sent to scripts/rescore", () => {
     const { root, cases } = repo();
-    const run = runOf(root, cases, {}, { scorer: { version: 1, sha256: "5".repeat(64) } });
+    const run = runOf(root, cases, {}, { scorer: { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "5".repeat(64) } });
     const now = lockedParts(MEASUREMENT).scorer.sha256;
     expect(() => reflectEdits(run, { root })).toThrow(`the scorer differs: the proposals were labelled good or bad by ${"5".repeat(64)}, the scorer here gives ${now}. Score the run again with scripts/rescore`);
     expect(reflectEdits(run, { root, rescore: true }).inputs.manifest).toEqual({ scorer: { stored: "5".repeat(64), current: now }, cases_compared_on: "input" });
