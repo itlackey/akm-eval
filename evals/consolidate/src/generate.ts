@@ -10,13 +10,13 @@
 //
 // It works in a temporary folder, private/consolidate/.new, and moves assets/ and map.json into place only when the checks have
 // passed, with generated.json (the seed and the digest of the public cases) beside them. A failed run leaves the previous private
-// cases, map and generated.json as they were. `run --corpus private` stops when generated.json is missing or does not match the public cases.
+// cases, map and generated.json as they were. `run` on the custom corpus stops when generated.json is missing or does not match the public cases.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { type Case, INPUT_FILES, claimProblems, parseCases } from "./cases.ts";
 import { assetsDigest, generateInto } from "./inputs.ts";
-import { type Case, INPUT_FILES, claimProblems, parseCases } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");

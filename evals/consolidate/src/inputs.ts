@@ -1,11 +1,11 @@
 // What ties a consolidate or nightly run to its inputs, and a private set to the public one it was made from: the digest of
-// the files a run reads, the seed of a private set, the marker generated.json that `generate` leaves beside the assets, and
-// the fields every summary.json holds about the config and the assets. Both evals use it, nightly through its own lib.
+// the files a run reads, the marker generated.json that `generate` leaves beside the assets, and the fields every summary.json holds
+// about the config and the assets. Both evals use it, nightly through its own lib.
 //
 // `generate` writes into a temporary folder and moves the result into place only when every check has passed, so a failed run
-// leaves the previous private set as it was, and a run never meets a new map with old assets. generated.json says which seed and
-// which public inputs the set in the folder was made from. `run --corpus private` refuses a folder without it, or one made from
-// other public inputs than the ones in the repository now.
+// leaves the previous private set as it was, and a run never meets a new map with old assets. generated.json says which seed and which
+// public inputs the set in the folder was made from. A run on a rewrite refuses a folder without it, or one made from other public
+// inputs than the ones in the repository now.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -64,8 +64,9 @@ export function privateSeed(assets: string): string | null {
 }
 
 /**
- * Why a run on the private assets of `name` (in `dir`, private/<name>) cannot go ahead, or null when it can. `probe` is the file
- * of the assets that has to be there, and `publicInputs` gives the digest of the public inputs as they are now.
+ * Why a run on the rewrite of `name` (in `dir`, private/<name>) cannot go ahead, or null when it can. `probe` is the file of the assets that
+ * has to be there, and `publicInputs` gives the digest of the public inputs as they are now. Assets made from other public inputs would score
+ * another set than the public run.
  */
 export function privateAssetsProblem(name: string, dir: string, probe: string, publicInputs: () => string): string | null {
   if (!existsSync(join(dir, "assets", probe))) return `the private assets are missing (private/${name}/assets/${probe}). Make them with: ./generate-assets --only ${name}`;
@@ -102,7 +103,7 @@ export function replaceDir(next: string, target: string): void {
  * a temporary folder, `.new` in `out`, and returns what is wrong with them. Only when it returns nothing wrong are they moved into
  * `out`, and generated.json (the seed and the digest of the public inputs) is written last. A failure, whether `make` returns
  * problems or throws, removes the temporary folder and leaves the previous assets, map and generated.json as they were. A run that
- * dies while the files are moved leaves no generated.json, which `run --corpus private` refuses.
+ * dies while the files are moved leaves no generated.json, which `run` on the custom corpus refuses.
  */
 export function generateInto(out: string, seed: string, inputs: string, make: (stage: Stage) => string[]): string[] {
   const dir = join(out, ".new");

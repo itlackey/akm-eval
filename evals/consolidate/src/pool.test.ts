@@ -3,11 +3,16 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
+import { manifestProblems } from "../../../lib/manifest.ts";
+import { clearRunning } from "../../../lib/results.ts";
+import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsDigest } from "./inputs.ts";
 import { sandboxOptions } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 import { runPool } from "./run.ts";
-import { KINDS, type Kind, type Pool, POOL_STRATEGY, budgetWarnings, clusterRows, judgeRetirement, loadPool, poolFiles, poolImproveArgs, poolMetrics, poolProblems, retirementsFrom, scorePool, usageTotals, writePoolNotes } from "./pool.ts";
+import { rawFromPoolRun, retireProposals, usageRows } from "./collect.ts";
+import { KINDS, type Kind, type Pool, POOL_STRATEGY, type PoolRaw, budgetWarnings, clusterRows, judgeRetirement, loadPool, makePoolRow, poolCases, poolFiles, poolImproveArgs, poolMetrics, poolProblems, poolRawOf, poolSummarize, retirementsFrom, usageTotals, writePoolNotes } from "./pool.ts";
 
 const POOL_DIR = join(import.meta.dir, "..", "assets", "pool");
 const pool = loadPool(POOL_DIR);
@@ -183,6 +188,9 @@ const improve = (extra: Record<string, unknown> = {}, over: Record<string, unkno
   },
 });
 
+/** The raw output of a whole run, as the collector makes it from akm's result. */
+const runOf = (result: unknown, proposals: unknown = listing(), seconds = 5) => rawFromPoolRun(pool, result, proposals, seconds).run;
+
 describe("judgeRetirement", () => {
   test("a note the cluster allows is safe for its successor, wrong-successor for any other, and unsafe when it holds a claim of its own", () => {
     const [a, b] = cluster("subsumed-01").notes;
@@ -206,13 +214,13 @@ describe("judgeRetirement", () => {
 describe("retirementsFrom", () => {
   test("reads the retire proposals, with the successor, the label and whether akm staged it, and leaves out promotions", () => {
     const [a, b] = cluster("duplicate-01").notes;
-    const rows = retirementsFrom(pool, listing(retire(a, b, { gateDecision: { outcome: "staged" } }), { ref: "bundle//knowledge/x", source: "consolidate" }));
+    const rows = retirementsFrom(pool, retireProposals(listing(retire(a, b, { gateDecision: { outcome: "staged" } }), { ref: "bundle//knowledge/x", source: "consolidate" })));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ cluster: "duplicate-01", kind: "duplicate", retired: a, successor: b, verdict: "safe", staged: true, judged_as: "duplicate", reason: "same claims" });
   });
 
   test("throws on a retirement of a note that is not in the pool", () => {
-    expect(() => retirementsFrom(pool, listing(retire("stranger", "harrow-coffee-rota")))).toThrow("not a note of the pool");
+    expect(() => retirementsFrom(pool, retireProposals(listing(retire("stranger", "harrow-coffee-rota"))))).toThrow("not a note of the pool");
   });
 });
 
@@ -228,8 +236,8 @@ describe("poolMetrics", () => {
     retire(o1a, "harrow-coffee-rota"), // unsafe, not staged
     retire(t1a, "harrow-coffee-rota"), // allowed note, successor outside its cluster: wrong successor
   );
-  const rows = retirementsFrom(pool, proposals);
-  const m = poolMetrics(pool, rows, improve());
+  const rows = retirementsFrom(pool, retireProposals(proposals));
+  const m = poolMetrics(pool, rows, runOf(improve()));
 
   test("counts unsafe retirements and how many akm staged, precision, wrong successors and recall over the clusters that have a note to retire", () => {
     expect(m.unsafe).toEqual({ n: 2, of: 4, staged: 1 });
@@ -259,11 +267,21 @@ describe("poolMetrics", () => {
   });
 
   test("has no precision or recall to speak of when akm retires nothing, and recall 0", () => {
-    const none = poolMetrics(pool, [], improve());
+    const none = poolMetrics(pool, [], runOf(improve()));
     expect(none.precision.value).toBeNull();
     expect(none.recall.value).toBe(0);
     expect(none.unsafe).toEqual({ n: 0, of: 0, staged: 0 });
     expect(none.staged).toEqual({ n: 0, safe: 0 });
+  });
+});
+
+describe("clusterRows", () => {
+  test("is the rows of a pool and its retirements without the raw output, as the fixtures of scripts/compare make them", () => {
+    const [a, b] = cluster("duplicate-01").notes;
+    const rows = clusterRows(pool, retirementsFrom(pool, retireProposals(listing(retire(a, b))))) as { id: string; outcome: string }[];
+    expect(rows).toHaveLength(47);
+    expect(rows.find((r) => r.id === "duplicate-01")).toMatchObject({ outcome: "safe" });
+    expect(rows.find((r) => r.id === "duplicate-02")).toMatchObject({ outcome: "kept" });
   });
 });
 
@@ -280,7 +298,7 @@ describe("budgetWarnings", () => {
 
   test("keeps the cut pool and the deferred memories in the metrics", () => {
     const run = improve({}, { deferredMemories: 56, warnings: ["[consolidate] cold-start budget: reducing pool from 80 to 24 memories (2 safe chunks; remainder deferred)."] });
-    const m = poolMetrics(pool, [], run);
+    const m = poolMetrics(pool, [], runOf(run));
     expect(m.cold_start_budget).toEqual({ from: 80, to: 24, safe_chunks: 2 });
     expect(m.anti_collapse_injected).toBeNull();
     expect(m.chunks.deferred_memories).toBe(56);
@@ -290,28 +308,72 @@ describe("budgetWarnings", () => {
 
 describe("usageTotals", () => {
   test("adds the calls, failures and tokens of every row, and is zero for a report without rows", () => {
-    expect(usageTotals(improve()).calls).toBe(70);
-    expect(usageTotals({})).toEqual({ calls: 0, failures: 0, prompt_tokens: 0, completion_tokens: 0 });
+    expect(usageTotals(usageRows(improve())).calls).toBe(70);
+    expect(usageTotals(usageRows({}))).toEqual({ calls: 0, failures: 0, prompt_tokens: 0, completion_tokens: 0 });
   });
 });
 
-describe("scorePool and clusterRows", () => {
-  test("a result with no pair pass is an error, and so is a retirement outside the pool", () => {
-    expect(scorePool(pool, { consolidation: {} }, listing()).error).toContain("no pair pass");
-    expect(scorePool(pool, improve(), listing(retire("stranger", "harrow-coffee-rota"))).error).toContain("not a note of the pool");
+describe("the raw output of a pool run, and the rows scored from it", () => {
+  const rawOfRun = (result: unknown, proposals: unknown) => {
+    const { run, byCluster } = rawFromPoolRun(pool, result, proposals, 5);
+    return new Map<string, PoolRaw>(pool.clusters.map((c) => [c.id, { run, retire_proposals: byCluster.get(c.id) ?? [] }]));
+  };
+  const rowsOf = (raw: Map<string, PoolRaw>) => poolCases(pool).map((c) => makePoolRow(c, raw.get(c.id) as PoolRaw));
+
+  test("puts each retire proposal with the cluster that holds its note, and keeps the refs of those outside the pool", () => {
+    const [a, b] = cluster("duplicate-02").notes;
+    const [x] = cluster("overlap-02").notes;
+    const { run, byCluster } = rawFromPoolRun(pool, improve(), listing(retire(a, b), retire(x, a), retire("stranger", a), { ref: "bundle//knowledge/x", source: "consolidate" }), 7);
+    expect(byCluster.get("duplicate-02")).toHaveLength(1);
+    expect(byCluster.get("overlap-02")).toHaveLength(1);
+    expect([...byCluster.values()].reduce((n, list) => n + list.length, 0)).toBe(2);
+    expect(run.outside).toEqual(["memories/stranger"]);
+    expect(run).toMatchObject({ seconds: 7, chunks: { totalChunks: 7, failedChunks: 0, deferredMemories: 0, planned: 2 }, pair_pass: { initiators: 80, pairsConsidered: 40, pairsJudged: 38, failedJudgments: 2 } });
+  });
+
+  test("a result with no pair pass is an error row for every cluster, and so is a retirement outside the pool", () => {
+    const none = rowsOf(rawOfRun({ consolidation: {} }, listing()));
+    expect(none).toHaveLength(47);
+    expect(none.every((r) => r.outcome === "error" && r.error?.includes("no pair pass"))).toBe(true);
+    const stray = rowsOf(rawOfRun(improve(), listing(retire("stranger", "harrow-coffee-rota"))));
+    expect(stray.every((r) => r.outcome === "error" && r.error === "akm retired memories/stranger, which is not a note of the pool")).toBe(true);
+    expect(poolSummarize(stray)).toMatchObject({ n_errored: 1, n_scored: 0, metrics: null, status: "aborted", aborted_reason: "akm retired memories/stranger, which is not a note of the pool" });
   });
 
   test("scores a good run, keeps the served model names, and writes one row per cluster with the worst verdict", () => {
     const [a, b] = cluster("duplicate-02").notes;
     const [x] = cluster("overlap-02").notes;
-    const result = scorePool(pool, improve(), listing(retire(a, b), retire(x, a)));
-    expect(result.error).toBeUndefined();
-    expect(result.served_models).toEqual({ "served-a": 59, "served-b": 10 });
-    const rows = clusterRows(pool, result.retirements) as { id: string; outcome: string; retirements: unknown[] }[];
+    const rows = rowsOf(rawOfRun(improve(), listing(retire(a, b), retire(x, a))));
     expect(rows).toHaveLength(47);
     expect(rows.find((r) => r.id === "duplicate-02")).toMatchObject({ outcome: "safe" });
     expect(rows.find((r) => r.id === "overlap-02")).toMatchObject({ outcome: "unsafe" });
     expect(rows.find((r) => r.id === "single-03")).toMatchObject({ outcome: "kept", retirements: [] });
+    const summary = poolSummarize(rows);
+    expect(summary).toMatchObject({ n_run: 1, n_scored: 1, n_errored: 0, n_paired: 38, seconds: 5, status: "complete", aborted_reason: null });
+    expect(summary.served_models).toEqual({ "served-a": 59, "served-b": 10 });
+    expect(summary.metrics?.unsafe).toEqual({ n: 1, of: 2, staged: 0 });
+  });
+
+  test("the rows have the shape the compare tool reads, and the raw output is what a retirement is scored from", () => {
+    const [a, b] = cluster("duplicate-02").notes;
+    const rows = rowsOf(rawOfRun(improve(), listing(retire(a, b, { gateDecision: { outcome: "staged" } }))));
+    const row = rows.find((r) => r.id === "duplicate-02") as (typeof rows)[number];
+    expect(row).toMatchObject({ id: "duplicate-02", kind: "duplicate", notes: [a, b], may_retire: [a, b], outcome: "safe" });
+    expect(row.retirements).toEqual([{ retired: a, successor: b, verdict: "safe", staged: true, judged_as: "duplicate", reason: "same claims", only_in_retired: [], only_in_successor: [] }]);
+    expect(row.retire_proposals).toEqual(retireProposals(listing(retire(a, b, { gateDecision: { outcome: "staged" } }))));
+    expect(row.run?.pair_pass).toMatchObject({ pairsJudged: 38 });
+    // the stored row is enough to score it again, and gives the same row
+    const read = poolRawOf(JSON.parse(JSON.stringify(row)));
+    expect("raw" in read && makePoolRow(poolCases(pool).find((c) => c.id === "duplicate-02")!, read.raw)).toEqual(row);
+  });
+
+  test("a run that failed gives every cluster its error, and a row that lacks the raw output is refused", () => {
+    const failed: PoolRaw = { error: "akm improve timed out after 1.5s", timedOut: true, seconds: 1.5 };
+    const rows = poolCases(pool).map((c) => makePoolRow(c, failed));
+    expect(rows[0]).toMatchObject({ outcome: "error", error: "akm improve timed out after 1.5s", timed_out: true, run: null, retirements: [] });
+    expect(poolSummarize(rows)).toMatchObject({ n_errored: 1, n_scored: 0, timeouts: 1, seconds: 1.5, status: "aborted" });
+    expect(poolRawOf(JSON.parse(JSON.stringify(rows[0])))).toEqual({ raw: failed });
+    expect(poolRawOf({ id: "duplicate-01", kind: "duplicate", outcome: "safe", retirements: [] })).toEqual({ missing: ["run", "retire_proposals"] });
   });
 });
 
@@ -419,6 +481,33 @@ describe("runPool", () => {
       expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.config.engines.consolidate).toMatchObject({ endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0, enableThinking: false });
       expect(JSON.stringify(stored.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("writes a sound manifest of the pool mode, and its rows hold the raw output, so scripts/rescore scores the run again without akm", async () => {
+    const { root, ctx } = setup();
+    try {
+      const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null }, timeoutMs: 90_000 }, pool, join(root, "results")));
+      const dir = summary.results_dir;
+      const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+      expect(manifestProblems(stored.manifest)).toEqual([]);
+      expect(stored.manifest).toMatchObject({ eval: "consolidate", corpus: "public", mode: "pool", treatment_hints: { embedder: "deterministic" }, settings: { strategy: "consolidate", timeout_ms: 90_000, seed: null } });
+      expect(Object.keys(stored.manifest.cases)).toEqual(pool.clusters.map((c) => c.id));
+      expect(stored.manifest.completion).toMatchObject({ selected: pool.clusters.map((c) => c.id), errored: [] });
+      // every cluster is run beside every other note, so a change to any note changes the input digest of every cluster
+      const digests = poolCases(pool).map((c) => MEASUREMENT.input(c));
+      expect(new Set(digests.map((d: any) => d.pool_sha256)).size).toBe(1);
+      const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      expect(rows).toHaveLength(47);
+      expect(rows.every((r) => r.run?.pair_pass !== undefined && Array.isArray(r.retire_proposals))).toBe(true);
+      expect(rows.find((r) => r.id === "duplicate-01")).toMatchObject({ outcome: "safe" });
+      clearRunning(dir); // the run ended in this process, which is where the marker is removed
+      const { out, result } = rescoreFolder(dir);
+      expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+      expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
+      expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics).toEqual(stored.metrics);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
