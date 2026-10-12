@@ -16,8 +16,8 @@
         ]
       },
       "scorer": {
-        "version": 1,
-        "sha256": "ba3b3ecaf208dd99d9ba5a8ea44cc78e82dae455cd6b0c584f807daa64d88c06",
+        "version": 2,
+        "sha256": "7a80b0bc611b6a1bab2b73184ae5cbd79a2f2127b385bc94420f3cb4c39b313c",
         "files": [
           "benchmarks/longmemeval/src/metrics.ts",
           "benchmarks/longmemeval/src/score.ts",
