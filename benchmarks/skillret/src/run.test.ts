@@ -579,7 +579,7 @@ describe("the manifest of a run", () => {
       label_sha256: sha256Json({ relevant: ["t2", "t3"] }),
     });
     expect(manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4"], scored: ["q1", "q2", "q3", "q4"], errored: [] });
-    expect(manifest.config.redacted).toEqual({ plain: summary.config.keyword, semantic: summary.config.semantic });
+    expect(manifest.config.redacted).toEqual({ keyword: summary.config.keyword, semantic: summary.config.semantic });
     expect(summary).toMatchObject({ corpus: "public", corpus_folder: null, seed: null });
   });
 

@@ -140,10 +140,10 @@ describe("runCorpus", () => {
     // the sandbox is not the caller's bundle, and it is gone when the case ends
     expect(dirname(enrich.bundle).startsWith(join(tmpdir(), "akm-eval-bakeoff-"))).toBe(true);
     expect(sandboxes().filter((n) => !before.has(n))).toEqual([]);
-    // no summary or sample holds the key, and the config redacts it
+    // no summary or sample holds the key, and the config names it by reference
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8") + readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8");
     expect(text).not.toContain("model-secret");
-    expect((summary.config as any).engines.bakeoff.apiKey).toBe("<redacted>");
+    expect((summary.config as any).engines.bakeoff.apiKey).toBe("$MODEL_API_KEY");
     expect((summary.config as any).engines.bakeoff.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
     expect(summary.engine).toMatchObject({ model: "the-model", endpoint: "http://localhost:9", temperature: 0, enableThinking: false });
   });

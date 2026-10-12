@@ -852,9 +852,8 @@ describe("the manifest", () => {
       treatment_hints: {},
     });
     expect(s.manifest.akm.bin).toBe(s.akm_bin);
-    const { keyword: plain, ...semantic } = s.config; // a key named "keyword" would be redacted
-    expect(s.manifest.config.redacted).toEqual({ plain, ...semantic });
-    expect(s.manifest.config.sha256).toBe(sha256Json({ plain, ...semantic }));
+    expect(s.manifest.config.redacted).toEqual(s.config);
+    expect(s.manifest.config.sha256).toBe(sha256Json(s.config));
     expect(s.manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4", "n1", "n2"], scored: ["q1", "q2", "q3", "n1", "n2"], errored: ["q4"] }); // q4's search call failed
     expect(JSON.stringify(s.manifest)).not.toContain(folders.library);
   });

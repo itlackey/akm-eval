@@ -175,7 +175,7 @@ describe("runInputs", () => {
     const config = engineConfig(base, "m", true, "consolidate");
     const inputs = runInputs(config, hide, { dir: put(temp(), { "a.txt": "1" }), files: ["a.txt"] }, null);
     expect(inputs.seed).toBeNull();
-    expect(JSON.stringify(inputs.config)).toContain('"apiKey":"<redacted>"');
+    expect(JSON.stringify(inputs.config)).toContain('"apiKey":"$MODEL_API_KEY"');
     expect(JSON.stringify(inputs.config)).not.toContain("localhost");
     expect(config.engines.consolidate.endpoint).toBe(`${base}/chat/completions`); // the config that was written is not changed
   });

@@ -165,7 +165,7 @@ describe("Akm", () => {
     expect(new Akm(sandboxRunning(script, dirs, { semantic: true }), "semantic").config()).toEqual(semanticConfig());
     const sandbox = sandboxRunning(script, dirs);
     writeConfig(sandbox, { semanticSearchMode: "off", engines: { model: { endpoint: "http://h/v1", apiKey: "sk-live", model: "m" }, other: { apiKey: "$MODEL_API_KEY" } } });
-    expect(new Akm(sandbox).config()).toEqual({ semanticSearchMode: "off", engines: { model: { endpoint: "http://h/v1", apiKey: "<redacted>", model: "m" }, other: { apiKey: "<redacted>" } } });
+    expect(new Akm(sandbox).config()).toEqual({ semanticSearchMode: "off", engines: { model: { endpoint: "http://h/v1", apiKey: "<redacted>", model: "m" }, other: { apiKey: "$MODEL_API_KEY" } } });
   });
 
   test("a command that outlives its limit is a timeout, with the message the run counts", async () => {

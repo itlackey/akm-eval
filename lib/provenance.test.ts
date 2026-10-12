@@ -52,7 +52,7 @@ describe("sha256Files", () => {
 });
 
 describe("redactConfig", () => {
-  test("replaces the value of every key whose name contains key, token, secret, password, authorization or cookie, in any case, at any depth, and leaves the rest", () => {
+  test("replaces the value of every credential field (credentialField), in any case, at any depth, and leaves the rest", () => {
     const config = {
       engines: { m: { apiKey: "sk-1", API_KEY: "sk-2", Token: "t", maxTokens: 5, model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
       list: [{ api_key: "k", secret: { inner: "s" }, name: "n" }, ["x-api-key", "kept"]],
@@ -60,11 +60,15 @@ describe("redactConfig", () => {
       dbPassword: "p",
     };
     expect(redactConfig(config)).toEqual({
-      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", maxTokens: "<redacted>", model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
+      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", maxTokens: 5, model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
       list: [{ api_key: "<redacted>", secret: "<redacted>", name: "n" }, ["x-api-key", "kept"]],
       headers: { Authorization: "<redacted>", "Set-Cookie": "<redacted>", Accept: "*/*" },
       dbPassword: "<redacted>",
     });
+  });
+
+  test("keeps a $NAME or ${NAME} reference, which holds no secret, and redacts a value that only looks like one", () => {
+    expect(redactConfig({ apiKey: "$MODEL_API_KEY", auth: "${AUTH_VALUE}", token: "sk-$ABC", secret: "$ not-a-name", other: "$X" })).toEqual({ apiKey: "$MODEL_API_KEY", auth: "${AUTH_VALUE}", token: "<redacted>", secret: "<redacted>", other: "$X" });
   });
 
   test("does not change the config it is given", () => {
@@ -76,8 +80,8 @@ describe("redactConfig", () => {
   });
 
   test("credentialField is that rule", () => {
-    for (const name of ["apiKey", "x-api-key", "--api-key", "accessToken", "client_secret", "password", "Authorization", "SESSION_COOKIE", "OPENAI_API_KEY", "HF_TOKEN", "keyboard"]) expect([name, credentialField(name)]).toEqual([name, true]);
-    for (const name of ["auth", "author", "path", "model", "DATABASE_URL", "timeoutMs"]) expect([name, credentialField(name)]).toEqual([name, false]);
+    for (const name of ["apiKey", "x-api-key", "--api-key", "accessToken", "client_secret", "password", "Authorization", "SESSION_COOKIE", "OPENAI_API_KEY", "HF_TOKEN", "auth", "GH_PAT", "dbPass", "MYSQL_PWD"]) expect([name, credentialField(name)]).toEqual([name, true]);
+    for (const name of ["keyword", "keyboard", "maxTokens", "max_tokens", "tokenizer", "author", "bypass", "path", "model", "DATABASE_URL", "timeoutMs"]) expect([name, credentialField(name)]).toEqual([name, false]);
   });
 });
 

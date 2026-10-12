@@ -295,8 +295,7 @@ export async function runCollection(
       // what each query presents to akm: its text, in the library the run indexed. A library with another file in it is another input for every query.
       cases: caseDigests(MEASUREMENT, cases, () => ({ library_sha256: assets.library_sha256, bundles_sha256: assets.bundles_sha256 })),
       akm: { version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
-      // the keyword sandbox's config as `plain`: redaction takes the value of any key whose name contains "key"
-      config: (({ keyword: plain, ...semantic }) => ({ plain, ...semantic }))(indexes.config),
+      config: indexes.config,
       settings: { timeout_ms: ctx.callTimeoutMs ?? akm.CALL_TIMEOUT_MS, seed },
       completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
     });

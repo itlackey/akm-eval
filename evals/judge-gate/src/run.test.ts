@@ -252,9 +252,8 @@ describe("runCorpus", () => {
       const { summary: stored } = resultsOf(folders);
       const hidden = JSON.parse(JSON.stringify(cfg));
       hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
-      hidden.engines.judge.apiKey = "<redacted>";
       expect(stored.config).toEqual(hidden);
-      expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false });
+      expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false, apiKey: "$MODEL_API_KEY" });
       expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.assets_sha256).toBe(casesSha256(folders.assets));
       expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);

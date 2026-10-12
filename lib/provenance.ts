@@ -76,14 +76,24 @@ export function harnessSha256(evalSrcDir: string, options: { also?: string[]; ro
 
 const REDACTED = "<redacted>";
 
-/** Does a name hold a credential: it contains key, token, secret, password, authorization or cookie, in any case. The one rule of redaction. */
-export const credentialField = (name: string): boolean => /key|token|secret|password|authorization|cookie/i.test(name);
+/** A `$NAME` or `${NAME}` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
+const VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/;
 
-/** A deep copy of the config that is safe to write to a summary.json: the value of every credential field (credentialField), at any depth, is "<redacted>". */
+/**
+ * Does a name hold a credential, the one rule of redaction: it ends in key, secret, password, passwd, pwd, passphrase, credential, token,
+ * authorization or cookie, in any case (apiKey, x-api-key, access_token, MYSQL_PWD), or its last word is auth, bearer, pat or pass (GH_PAT,
+ * dbPass). maxTokens, keyword, tokenizer, author, path and bypass do not.
+ */
+export const credentialField = (name: string): boolean => {
+  const spelled = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase(); // apiKey is api_key, ghPat is gh_pat
+  return /(?:key|secret|password|passwd|pwd|passphrase|credential)s?$|(?:token|authorization|cookie)$|(?:^|[^a-z0-9])(?:auth|bearer|pat|pass)$/.test(spelled);
+};
+
+/** A deep copy of the config that is safe to write to a summary.json: the value of every credential field (credentialField), at any depth, is "<redacted>", unless it is a `$NAME` reference. */
 export function redactConfig(config: any): any {
   if (Array.isArray(config)) return config.map(redactConfig);
   if (typeof config !== "object" || config === null) return config;
-  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, credentialField(key) ? REDACTED : redactConfig(value)]));
+  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, credentialField(key) && !(typeof value === "string" && VARIABLE.test(value)) ? REDACTED : redactConfig(value)]));
 }
 
 const decoded = (text: string): string => {

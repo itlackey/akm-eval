@@ -203,9 +203,7 @@ describe("runCorpus", () => {
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
     expect(text).not.toContain("model-secret");
     const stored = JSON.parse(text);
-    const config = hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl); // the endpoint is <MODEL_BASE_URL>
-    config.engines.reflect.apiKey = "<redacted>";
-    expect(stored.config).toEqual(config);
+    expect(stored.config).toEqual(hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl)); // the key is the reference "$MODEL_API_KEY", which holds no secret, and the endpoint is <MODEL_BASE_URL>
     const settings = { model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 };
     expect(stored.engine).toEqual({ engine: "reflect", ...settings, engines: { reflect: settings } });
     expect(settings.endpoint).toBe("http://localhost:9"); // the host: never the path

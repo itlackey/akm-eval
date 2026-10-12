@@ -301,7 +301,7 @@ describe("summarize", () => {
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://gateway.example.com:8080" });
     expect(stored.config.agents[0].kwargs.api_key).toBe("<redacted>");
-    expect(stored.config.agents[0].kwargs.opencode_config.provider.openai.options).toEqual({ apiKey: "<redacted>", baseURL: "$MODEL_BASE_URL", token: "<redacted>" });
+    expect(stored.config.agents[0].kwargs.opencode_config.provider.openai.options).toEqual({ apiKey: "<redacted>", baseURL: "$MODEL_BASE_URL", token: "$MODEL_TOKEN" }); // a $NAME reference holds no secret
     expect(JSON.stringify(stored.config)).not.toMatch(/sk-job-key|sk-nested/);
     const bare = summarize({ corpus: PUBLIC, label: "t", model: "openai/x", lock, tasks: [one], dir: runDir({}), exit: 0 });
     expect(bare.engine).toEqual({ model: "openai/x", endpoint: null });

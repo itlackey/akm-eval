@@ -131,7 +131,7 @@ describe("what a run writes holds no endpoint credential", () => {
     // And the summary still says which endpoint it was: the host and port. Its `engine` holds no path, and its config names the endpoint (#65).
     const stored = JSON.parse(written["summary.json"]);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
-    expect(stored.config.engines.model.apiKey).toBe("<redacted>");
+    expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
     expect(stored.engine.endpoint).toBe("https://gateway.example:8443");
     expect(JSON.stringify(stored.engine)).not.toContain("/v1");
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });

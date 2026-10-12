@@ -317,7 +317,7 @@ describe("what summary.json says about the run", () => {
     const withKey = { ...ctx, hasKey: true, overrides: { strategy: "extract-only", configPatch: { path: "p.json", sha256: "a".repeat(64), patch: { engines: { other: { kind: "llm", apiKey: "sk-secret-value" } } } } } };
     const summary = await quiet(() => runPublic(withKey, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
-    expect(stored.config.engines.model.apiKey).toBe("<redacted>");
+    expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
     expect(stored.config.engines.other.apiKey).toBe("<redacted>");
     expect(JSON.stringify(stored)).not.toContain("sk-secret-value");
   });

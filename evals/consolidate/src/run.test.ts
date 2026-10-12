@@ -389,7 +389,7 @@ describe("runCorpus", () => {
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, INPUT_FILES));
     expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
-    expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "<redacted>", temperature: 0, enableThinking: false });
+    expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "consolidate" } });
     expect(summary.config.embedding).toBeUndefined();
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host

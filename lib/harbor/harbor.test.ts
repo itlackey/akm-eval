@@ -428,16 +428,16 @@ describe("parseAkmEnv", () => {
     expect(() => parseAkmEnv(["OPENAI_API_KEY=x"])).toThrow("only AKM_* settings");
     expect(() => parseAkmEnv(["akm_x=1"])).toThrow("only AKM_* settings");
     for (const key of FIXED_AKM_ENV) expect(() => parseAkmEnv([`${key}=/x`])).toThrow("the arm fixes it");
-    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_CLIENT_SECRET", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY", "AKM_SESSION_COOKIE"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
+    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_CLIENT_SECRET", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY", "AKM_AUTH_BEARER", "AKM_CREDENTIALS", "AKM_SESSION_COOKIE"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
     expect(() => parseAkmEnv(["AKM_X=1", "AKM_X=2"])).toThrow("given twice");
   });
 
-  test("decides what is a credential with the rule every eval shares (credentialField in lib/provenance.ts)", () => {
-    for (const key of ["AKM_CURATE_TIMEOUT", "AKM_AUTHOR", "AKM_BYPASS", "AKM_PATH_LIMIT"]) {
+  test("decides what is a credential with the rule every eval shares (credentialField in lib/provenance.ts), so a word that only contains one is not", () => {
+    for (const key of ["AKM_CURATE_TIMEOUT", "AKM_MAX_TOKENS", "AKM_TOKENIZER", "AKM_AUTHOR", "AKM_BYPASS", "AKM_PATH_LIMIT"]) {
       expect(credentialField(key), key).toBe(false);
       expect(parseAkmEnv([`${key}=1`])).toEqual({ [key]: "1" });
     }
-    for (const key of ["AKM_LLM_API_KEY", "AKM_ACCESS_TOKEN", "AKM_MAX_TOKENS"]) {
+    for (const key of ["AKM_LLM_API_KEY", "AKM_ACCESS_TOKEN", "AKM_MYSQL_PWD", "AKM_GH_PAT"]) {
       expect(credentialField(key), key).toBe(true);
       expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
     }
