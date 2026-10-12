@@ -36,7 +36,7 @@ const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdic
 const POOL_DIR = join(EVAL_DIR, "assets", "pool");
 
 const USAGE = `Usage: evals/consolidate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
-       evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME]
+       evals/consolidate/run --pool [--timeout-ms N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as its
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.

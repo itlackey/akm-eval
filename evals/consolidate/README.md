@@ -50,9 +50,9 @@ Each run writes two files to `evals/consolidate/results/<UTC date>-<label>/`, or
   - `corpus`, `corpus_kind`, `corpus_private` and `corpus_folder`: `public` or `custom`, the kind of a custom corpus (`rewrite` or `own`), whether it is private, and the folder of a custom corpus from the repository root (`private/consolidate/assets`) when it is inside the repository, else null (never an absolute path). `scripts/rescore` reads the cases of a custom run from `corpus_folder`. A `--pool` run records `corpus_folder: null`, since its pool is the committed one.
   - `manifest`: what the run was made of, to be compared with another (see "How results stay comparable" in the root README): the collector and scorer versions of `MEASUREMENT.lock`, the digest of every case's input and label, the settings, the engine and which cases were scored.
   - `timeouts`: how many of the errored cases were ones in which the eval killed akm for running past its time limit (2 minutes for `index` and `proposal list`, 30 for `improve`; 30 for `index` with the real embedder, which loads its model). They are counted in `n_errored` too, and a timed-out case has `timed_out: true` in `samples.jsonl`, so a slower akm or model shows up as timeouts and not as unexplained errors.
-  - `config`, `engine`: the akm config the eval wrote (with `--config-patch` merged in), with every secret redacted (`$MODEL_API_KEY` is a name and stays) and the endpoint written as `<MODEL_BASE_URL>`; and the settings of the engine it names as the default: `engine`, `model`, `endpoint` (scheme, host, port and path, no credentials), `temperature`, `enableThinking` and `timeoutMs`.
+  - `config`, `engine`: the akm config the eval wrote (with `--config-patch` merged in), with every secret redacted (`$MODEL_API_KEY` is a name and stays) and the endpoint written as `<MODEL_BASE_URL>`; and the settings of the engine it names as the default: `engine`, `model`, `endpoint` (its host and port only, never the path), `endpoint_id` (a sha256 of the endpoint's identity), `temperature`, `enableThinking` and `timeoutMs`.
   - `assets_sha256`: one digest over the files the run read, with their paths relative to the assets folder: `cases.jsonl`, or for `--pool` `labels.json` and the notes. Two runs with another digest read other cases.
-  - `seed`: the seed the private assets were made from (the one in `generated.json`, else `private/seed`), null for the public ones.
+  - `seed`: the seed of a rewrite corpus (the one in its `corpus.json`, which has to be the one in `generated.json`), null for the public corpus and for your own notes.
 - `samples.jsonl`: one line per case. Beside the verdict, a row holds the raw output of akm that the scorer reads (`pair_pass`, `retire_proposals`, `usage`, `hint`, or for a case that errored the error), so `scripts/rescore` can score the run again without akm (see "Measurement"). A line has the relation, the sides that were safe, whether akm paired the notes, the label its judge gave, the side it proposed to retire, whether that side was safe, whether akm staged it, the judge's reason, the claims it found only in the retired note and only in the kept one (`only_in_retired`, `only_in_successor`; null for a kept pair and on an akm build that does not record them), the time it took and, when the endpoint rate limited the case, how many times it was tried again. A case that timed out has `timed_out: true`.
 
 ## Run on a whole pool (`--pool`)
@@ -63,10 +63,16 @@ The per-case run gives consolidate one pair at a time. A real night gives it a w
 evals/consolidate/run --pool
 evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
 evals/consolidate/run --pool --strategy catchup --label catchup
-evals/consolidate/run --pool --config-patch antiCollapse-off.json --repeat 3
+evals/consolidate/run --pool --config-patch private/patches/anti-collapse-off.json --repeat 3
 ```
 
-It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/collect.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
+The last one needs a patch file of your own, which is not in the repository. To run the pool without anti-collapse, save this as `private/patches/anti-collapse-off.json`. akm 0.9.26 reads `antiCollapse.enabled` from the `consolidate` process of the strategy, and the pool run uses the strategy `consolidate`:
+
+```
+{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }
+```
+
+The pool run writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/collect.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus custom`, `--corpus all`, `--cases` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
 
 `--timeout-ms N` is akm's own wall-clock budget for the run (akm's default is 2 hours). A short one makes akm cut the pool to what the budget covers, using `consolidate.p90ChunkSecondsDefault` (30 seconds a chunk unless set), and akm says so in its "cold-start budget" warning. Without it that warning cannot appear.
 
