@@ -4,8 +4,8 @@
   "evals": {
     "reflect": {
       "collector": {
-        "version": 2,
-        "sha256": "0cb87ac1f0333d85b8b2bb6b4a8b6a577ca09844fab2fc9c304546ca131697e3",
+        "version": 3,
+        "sha256": "48170ba5c2151414cf692200b78c88d7a74853470062b00509d633730aeab69c",
         "files": [
           "evals/reflect/src/collect.ts",
           "lib/akm/akm.ts",
