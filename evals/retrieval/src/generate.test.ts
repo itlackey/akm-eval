@@ -396,7 +396,7 @@ describe("generate", () => {
     expect(readdirSync(out).sort()).toEqual(["assets", "books-map.json", "map.json"]);
   });
 
-  test("run --corpus private takes the assets it made and refuses them once the public inputs change", async () => {
+  test("run --corpus custom takes the assets it made and refuses them once the public inputs change", async () => {
     const { root, out, write } = publicRepo();
     await generate({ seed: "7", out, root });
     const assets = join(out, "assets");
@@ -414,7 +414,7 @@ describe("generate", () => {
     expect(staleAssets(assets, root)).toContain("have changed since");
   });
 
-  test("run --corpus private refuses assets that another rewrite made", async () => {
+  test("run --corpus custom refuses assets that another rewrite made", async () => {
     const { root, out } = publicRepo();
     await generate({ seed: "7", out, root });
     const assets = join(out, "assets");
@@ -427,7 +427,7 @@ describe("generate", () => {
     expect(staleAssets(assets, root)).toBeUndefined();
   });
 
-  test("run --corpus private refuses assets that have no generated.json", async () => {
+  test("run --corpus custom refuses assets that have no generated.json", async () => {
     const { root, out } = publicRepo();
     await generate({ seed: "7", out, root });
     rmSync(join(out, "assets", "generated.json"));

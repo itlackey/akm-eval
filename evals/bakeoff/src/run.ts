@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
@@ -49,8 +49,6 @@ Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 interface Summary {
   eval: string;
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, so scripts/rescore can read its cases. Null for the public corpus and for a folder outside the repository (then rescore takes --cases DIR). Never an absolute path. */
   corpus_folder: string | null;
   label: string;
@@ -75,7 +73,7 @@ interface Summary {
   engine: EngineSettings;
   /** The digest of the corpus folder: cases.json and the files the cases name, by path relative to it. */
   assets_sha256: string;
-  /** The seed of the corpus, when it is a rewrite of the public cases (corpus.json). Null for the public corpus and for your own. */
+  /** The seed of the corpus, when it is a rewrite of the public cases. Null for the public corpus and for your own. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -141,20 +139,17 @@ function printSideBySide(a: Summary, b: Summary): void {
 /** The folder a corpus's results go to: the eval's results/ for the public corpus, private/bakeoff/results for a custom one. */
 const resultsFolder = (corpus: ResolvedCorpus): string => (corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The generated.json of a rewrite: where its corpus.json says, else beside the assets folder. */
-const generatedFile = (corpus: ResolvedCorpus): string => (corpus.configFile && corpus.config.generated ? resolve(dirname(corpus.configFile), corpus.config.generated) : join(dirname(corpus.folder), GENERATED));
-
 /**
  * Why a corpus cannot be run, in a sentence that says what to do, or undefined when it can. A custom corpus needs its cases.json. A rewrite of
- * the public cases (the old --corpus private) must have been made from the public assets as they are now, by the generator as it is now, and
+ * the public cases must have been made from the public assets as they are now, by the generator as it is now, and
  * must be as generate wrote it: see privateAssetsProblem.
  */
 export function corpusProblem(corpus: ResolvedCorpus, publicFolder: string = join(EVAL_DIR, "assets")): string | undefined {
   if (corpus.name === "public") return undefined;
   const where = corpusFolderOf(corpus.folder) ?? corpus.folder;
-  const again = corpus.config.kind === "rewrite" ? ". Make it with: ./generate-assets --only bakeoff" : "";
+  const again = corpus.rewrite ? ". Make it with: ./generate-assets --only bakeoff" : "";
   if (!existsSync(join(corpus.folder, "cases.json"))) return `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
-  const stale = corpus.config.kind === "rewrite" ? privateAssetsProblem(corpus.folder, generatedFile(corpus), publicFolder, where) : undefined;
+  const stale = corpus.rewrite ? privateAssetsProblem(corpus.folder, join(dirname(corpus.folder), GENERATED), publicFolder, where) : undefined;
   return stale ? `the ${corpus.flag} corpus cannot be used: ${stale}` : undefined;
 }
 
@@ -194,7 +189,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const config = configFor(ctx);
   const build = akmBuild();
   const counts = summarize(rows);
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const manifest = buildManifest({
     measurement: MEASUREMENT,
     parts,
@@ -207,7 +202,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -267,11 +262,9 @@ async function main(): Promise<void> {
   if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) fail(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
   const configPatch = parseOverrides({ "config-patch": values["config-patch"] }, "", fail).configPatch;
 
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   for (const c of corpora) {
     const problem = corpusProblem(c);
     if (problem) fail(problem);

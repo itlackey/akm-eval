@@ -3,8 +3,7 @@
 // and a plain BM25 over the library, with the assets the author expected, and a judge model grades each pooled
 // asset 0 to 3. A pair that is already in qrels.jsonl is not graded again unless its asset changed since, so the run can
 // stop and resume. With --from it pools the results of a run instead, the semantic columns too.
-// With --cases DIR it does the same for a set of your own, from akm's results alone, and only with a judge that
-// models.json marks "private": true when the set is private, since the notes go to the judge. See ../README.md.
+// With --cases DIR it does the same for a set of your own, from akm's results alone. See ../README.md.
 //
 //   evals/retrieval/label [--corpus public|custom] [--cases DIR] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
 
@@ -12,7 +11,7 @@ import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } f
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
@@ -41,8 +40,7 @@ Use one judge for a set: label warns when the qrels were graded by another, or h
             corpus, the rewrite, is not graded: generate carries the public grades over to it).
   --cases   the folder of your own set, in the format of "Run your own set" in evals/retrieval/README.md. It is graded from
             what akm search and akm curate return for it (no BM25: the library is too big to list), and the grades are appended
-            to its qrels.jsonl. It sends your notes to the judge, so when the set is private it runs only if the judge
-            model's line in models.json says "private": true. Nothing is inferred from the URL or the name.
+            to its qrels.jsonl.
   --stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset the digest of the asset as the
             library has it now, and judge "legacy" when it records no judge, so that a later edit to the asset grades the pair
             again. It grades nothing, calls no judge and runs no akm, and can be run again: it stamps only what is not stamped.
@@ -168,8 +166,8 @@ export function poolFromSamples(queries: Query[], samples: string, depth = DEPTH
   return pooled;
 }
 
-/** The corpus a summary says it ran on, as a kind: `public`, `rewrite` or `own` (`private` for a run from before custom corpora). */
-const ranOn = (summary: { corpus?: unknown; corpus_kind?: unknown }): string => String(summary.corpus === "custom" ? summary.corpus_kind : summary.corpus);
+/** The corpus a summary says it ran on: `public`, or what is not (`custom`, or `private` and `own` for a run from before the corpora were renamed). */
+const ranOn = (summary: { corpus?: unknown }): string => String(summary.corpus);
 
 /**
  * The samples.jsonl of a results folder of `run`, after checking that the run is of the set that `label` grades: the library of the
@@ -179,15 +177,15 @@ export function readRun(dir: string, corpus: Corpus): string {
   const summaryFile = join(dir, "summary.json");
   const samplesFile = join(dir, "samples.jsonl");
   if (!existsSync(summaryFile) || !existsSync(samplesFile)) throw new Error(`${dir} is not a results folder of evals/retrieval/run: it needs a summary.json and a samples.jsonl.`);
-  let summary: { eval?: unknown; corpus?: unknown; corpus_kind?: unknown; collection?: unknown };
+  let summary: { eval?: unknown; corpus?: unknown; collection?: unknown };
   try {
     summary = JSON.parse(readFileSync(summaryFile, "utf8"));
   } catch {
     throw new Error(`${summaryFile} is not valid JSON`);
   }
   const collection = corpus === "own" ? "own" : "library";
-  if (summary.eval !== "retrieval" || ranOn(summary) !== corpus || summary.collection !== collection) {
-    throw new Error(`${dir} is a run of ${summary.eval === "retrieval" ? `the ${String(summary.collection)} collection of the ${ranOn(summary)} corpus` : "another eval"}, and this grades the ${collection} collection of the ${corpus} corpus. Pass the results folder of that run.`);
+  if (summary.eval !== "retrieval" || (ranOn(summary) === "public") !== (corpus === "public") || summary.collection !== collection) {
+    throw new Error(`${dir} is a run of ${summary.eval === "retrieval" ? `the ${String(summary.collection)} collection of the ${ranOn(summary)} corpus` : "another eval"}, and this grades the ${collection} collection of the ${corpus === "public" ? "public" : "custom"} corpus. Pass the results folder of that run.`);
   }
   return readFileSync(samplesFile, "utf8");
 }
@@ -486,17 +484,17 @@ async function main(): Promise<number> {
   };
   let corpora: ResolvedCorpus[];
   try {
-    corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", fail: stop });
+    corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(EVAL_DIR, "assets"), fail: stop });
   } catch (e) {
     console.error(`retrieval label: ${(e as Error).message}`);
     return 2;
   }
   const [chosen] = corpora;
-  if (corpora.length > 1 || chosen.config.kind === "rewrite") {
+  if (corpora.length > 1 || chosen.rewrite) {
     console.error(`retrieval label: ${corpora.length > 1 ? "--corpus all is for run" : "the rewrite in private/retrieval/assets is not graded: generate carries the public grades over to it"}. Grade the public library (the default), or a set of your own with --cases DIR.`);
     return 2;
   }
-  const corpus: Corpus = chosen.config.kind === "own" ? "own" : "public";
+  const corpus: Corpus = chosen.name === "custom" ? "own" : "public";
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
     console.error("retrieval label: --limit must be a positive integer");
@@ -530,11 +528,6 @@ async function main(): Promise<number> {
     return 2;
   }
   const { baseUrl, name: model } = judgeSettings;
-  const refusal = privacyError([chosen], { judge: judgeSettings }, "notes");
-  if (refusal) {
-    console.error(`retrieval label: ${refusal}`);
-    return 2;
-  }
   const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
   return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from) }, folders);
 }

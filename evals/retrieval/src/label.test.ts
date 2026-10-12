@@ -537,15 +537,15 @@ describe("poolFromSamples and readRun", () => {
 
   test("takes the samples of a run of the same corpus and collection", () => {
     expect(readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }, "the samples"), "public")).toBe("the samples");
-    expect(readRun(runFolder({ eval: "retrieval", corpus: "custom", corpus_kind: "own", collection: "own" }, "mine"), "own")).toBe("mine");
+    expect(readRun(runFolder({ eval: "retrieval", corpus: "custom", collection: "own" }, "mine"), "own")).toBe("mine");
     expect(readRun(runFolder({ eval: "retrieval", corpus: "own", collection: "own" }, "old"), "own")).toBe("old"); // a run from before custom corpora
   });
 
   test("refuses the folder of another collection, another corpus, another eval, or no run at all", () => {
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "books" }), "public")).toThrow("is a run of the books collection of the public corpus, and this grades the library collection of the public corpus");
-    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "custom", corpus_kind: "rewrite", collection: "library" }), "public")).toThrow("is a run of the library collection of the rewrite corpus");
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "custom", collection: "library" }), "public")).toThrow("is a run of the library collection of the custom corpus");
     expect(() => readRun(runFolder({ eval: "retrieval", corpus: "private", collection: "library" }), "public")).toThrow("the library collection of the private corpus");
-    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }), "own")).toThrow("this grades the own collection of the own corpus");
+    expect(() => readRun(runFolder({ eval: "retrieval", corpus: "public", collection: "library" }), "own")).toThrow("this grades the own collection of the custom corpus");
     expect(() => readRun(runFolder({ eval: "nightly", corpus: "public" }), "public")).toThrow("is a run of another eval");
     expect(() => readRun(runFolder(null), "public")).toThrow("is not a results folder of evals/retrieval/run");
     expect(() => readRun(join(tmp(), "nothing"), "public")).toThrow("is not a results folder");
@@ -846,26 +846,22 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
-  test("refuses to send the own set to a judge that models.json does not mark private, before it reads or runs anything", () => {
+  test("--corpus private, own and own-feedback were renamed: it stops with the new form, before it reads or runs anything", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" };
-    for (const args of [["--corpus", "own"], ["--cases", "notes"], ["--corpus", "custom", "--cases", "notes"]]) {
-      const done = run(args, judge);
-      expect(done.code).toBe(2);
-      expect(done.err).toContain('sends your notes to the judge m, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private. Mark the judge in models.json');
-      expect(done.err).not.toContain("secret");
-      expect(done.out).toBe("");
+    for (const old of ["private", "own", "own-feedback"]) {
+      const done = run(["--corpus", old], judge);
+      expect(done.code, old).toBe(2);
+      expect(done.err, old).toContain(`retrieval label: --corpus ${old} was renamed in 0.2: use `);
+      expect(done.err, old).not.toContain("secret");
+      expect(done.out, old).toBe("");
     }
-    expect(run(["--corpus", "own"], judge).err).toContain("retrieval: --corpus own is now --corpus custom --cases private/retrieval/own. The old value works for one more release.");
-    expect(run(["--cases", "notes"], judge).err).toContain("--cases notes sends your notes");
   });
 
   test("grades the public library or a set of your own, and says so for the rewrite and for all", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m" };
-    for (const args of [["--corpus", "custom"], ["--corpus", "private"]]) {
-      const done = run(args, judge);
-      expect(done.code).toBe(2);
-      expect(done.err).toContain("the rewrite in private/retrieval/assets is not graded: generate carries the public grades over to it. Grade the public library (the default), or a set of your own with --cases DIR.");
-    }
+    const done = run(["--corpus", "custom"], judge);
+    expect(done.code).toBe(2);
+    expect(done.err).toContain("the rewrite in private/retrieval/assets is not graded: generate carries the public grades over to it. Grade the public library (the default), or a set of your own with --cases DIR.");
     expect(run(["--corpus", "all"], judge).err).toContain("--corpus all is for run. Grade the public library (the default), or a set of your own with --cases DIR.");
     expect(run(["--corpus", "nope"], judge).err).toContain('--corpus must be public, custom or all, not "nope"');
     expect(run(["--cases", "notes", "--corpus", "public"], judge).err).toContain("--cases is a custom corpus");
@@ -881,9 +877,9 @@ describe("the command", () => {
     expect(run(["--help"]).out).toContain("--corpus  public (default)");
   });
 
-  test("describes the own guard as models.json says it, and --from and --stamp-legacy", () => {
+  test("describes --from and --stamp-legacy", () => {
     const help = run(["--help"]).out;
-    expect(help).toContain('to its qrels.jsonl. It sends your notes to the judge, so when the set is private it runs only if the judge\n            model\'s line in models.json says "private": true. Nothing is inferred from the URL or the name.');
+    expect(help).not.toContain('"private": true');
     expect(help).not.toContain("private network");
     expect(help).not.toContain("chat/, fast/");
     expect(help).toContain("--from    pool the first 10 results of every column of a run, semantic search included");

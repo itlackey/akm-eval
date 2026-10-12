@@ -44,7 +44,7 @@ export function retrievalSearches(corpus: ResolvedCorpus, root: string): Map<str
   const publicFile = join(root, "evals", NAME, "assets", "cases.jsonl");
   const publicCases = parseCases(readFileSync(publicFile, "utf8"), publicFile);
   if (corpus.name === "public") return searchesFor(publicCases, publicCases, labelled);
-  if (corpus.config.kind !== "rewrite") throw new Error(`--retrieval-queries does not apply to ${corpus.flag}: the queries are those of the public notes, matched to a corpus by public ref, so the corpus has to be the public one or a rewrite of it`);
+  if (!corpus.rewrite) throw new Error(`--retrieval-queries does not apply to ${corpus.flag}: the queries are those of the public notes, matched to a corpus by public ref, so the corpus has to be the public one or a rewrite of it`);
   const mapFile = join(dirname(corpus.folder), "map.json");
   if (!existsSync(mapFile)) throw new Error(`--retrieval-queries maps the queries through the rewrite map that generate writes beside the assets, and ${relative(root, mapFile)} is missing. ${REGENERATE}`);
   const casesFile = join(corpus.folder, "cases.jsonl");

@@ -1,5 +1,5 @@
 // What a matrix job was made from, as one digest: its arguments, the bytes of every file they name, the corpus it reads (the public assets, or
-// the custom corpus: its folder, its corpus.json and, for a rewrite, its generated.json; for an eval that declares a measurement the cases count
+// the custom corpus: its folder and, for a rewrite, its generated.json; for an eval that declares a measurement the cases count
 // by what they present to akm, `MEASUREMENT.input`, and not by their labels), the model settings it runs with (the endpoints whole, path
 // included), the akm it runs and the eval's code. The code of an eval that declares a measurement is its collector, as the run's
 // manifest will record it (lib/manifest.ts): a change to its scorer, or to another eval, is no reason to run the job again, since a stored
@@ -16,7 +16,7 @@ import { akmBuild, dirtyFingerprint, parseCommand } from "../../../lib/akm/akm.t
 import { REPO_ROOT, corpusFolderOf, loadMeasurement, lockedParts } from "../../../lib/manifest.ts";
 import { endpointIdentity, sha256Json } from "../../../lib/provenance.ts";
 import { canonical } from "../../compare/src/policy.ts";
-import { type Job, type RunRecord, HARBOR, corpusOf, customCorpus, customFolder, flagValue, hasFlag, readJson, runDirs, runnerFolder, unusableReason } from "./lib.ts";
+import { type Job, type RunRecord, HARBOR, corpusOf, customCorpus, flagValue, hasFlag, readJson, runDirs, runnerFolder, unusableReason } from "./lib.ts";
 
 const sha256 = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex");
 
@@ -82,7 +82,7 @@ const LOCK = "benchmarks/terminal-bench/assets/ASSETS.lock";
 /**
  * The files of an eval's corpus that hold its cases, by file name, for the evals that declare a measurement and whose cases are small enough to read at
  * every stage. A case file mixes what the case presents to akm with the labels it is scored by, and a relabelled case needs no new run: so the corpus
- * counts by `MEASUREMENT.input` of every case, and by the bytes of its other files (the library, the rubric, the sessions, the corpus.json). The cases
+ * counts by `MEASUREMENT.input` of every case, and by the bytes of its other files (the library, the rubric, the sessions). The cases
  * of agent-ab and terminal-bench have no labels (the verifier is part of the task), and those of longmemeval and skillret are a published dataset
  * pinned by a lock, so they count by their bytes or their lock. A corpus whose cases cannot be read counts by the bytes of every file.
  */
@@ -99,7 +99,7 @@ const CASE_FILES: Record<string, string[]> = {
 };
 
 /**
- * What an eval reads of its custom corpus beyond the corpus.json and the generated.json beside the folder: `inside`, the part of the folder it
+ * What an eval reads of its custom corpus beyond the generated.json beside the folder: `inside`, the part of the folder it
  * opens (terminal-bench takes the library of retrieval's rewrite and nothing else of it), and `more`, other files its runner opens.
  */
 const CUSTOM_READS: Record<string, { inside?: string; more?: (args: string[]) => string[] }> = {
@@ -113,18 +113,19 @@ const CUSTOM_READS: Record<string, { inside?: string; more?: (args: string[]) =>
 const fromRoot = (root: string, abs: string): string => corpusFolderOf(abs, root) ?? abs;
 
 /**
- * What a job reads of its custom corpus: the folder as lib/corpus.ts resolves it (`--cases DIR`, the folder of an old `--corpus` value, or the
- * eval's default), the corpus.json and the generated.json that sit beside a folder called `assets` (./generate-assets writes them there), and
- * for an own corpus private/seed. A folder inside the corpus folder is covered by the folder.
+ * What a job reads of its custom corpus: the folder as lib/corpus.ts resolves it (`--cases DIR`, or the rewrite in private/<eval>/assets), the
+ * generated.json beside a folder called `assets` (./generate-assets writes it there), and for a corpus of your own private/seed. A folder inside
+ * the corpus folder is covered by the folder.
  */
 function customPaths(root: string, evalName: string, args: string[]): string[] {
+  if (evalName === "skillret") return PUBLIC[evalName]?.(args) ?? []; // drawn from the dataset the lock pins: there is no folder
   const found = customCorpus(root, evalName, args);
-  if (found?.config.kind === "split") return PUBLIC[evalName]?.(args) ?? []; // drawn from the dataset the lock pins: there is no folder
-  const folder = found?.folder ?? resolve(root, customFolder(evalName, args) ?? "");
   const reads = CUSTOM_READS[evalName];
-  const beside = basename(folder) === "assets" ? [join(dirname(folder), "corpus.json"), join(dirname(folder), "generated.json")] : [];
-  const read = reads?.inside ? [join(folder, reads.inside), join(folder, "corpus.json"), join(folder, "generated.json")] : [folder];
-  return [...[...read, ...beside].map((p) => fromRoot(root, p)), ...(found?.config.kind === "own" ? [SEED] : []), ...(reads?.more?.(args) ?? [])];
+  if (found === null) return reads?.more?.(args) ?? [];
+  const folder = found.folder;
+  const beside = basename(folder) === "assets" ? [join(dirname(folder), "generated.json")] : [];
+  const read = reads?.inside ? [join(folder, reads.inside), join(folder, "generated.json")] : [folder];
+  return [...[...read, ...beside].map((p) => fromRoot(root, p)), ...(found.rewrite ? [] : [SEED]), ...(reads?.more?.(args) ?? [])];
 }
 
 /** The paths, from the repository root, of what a job reads for the corpus its flags name: the public one, the custom one, or both for `--corpus all`. A path outside the repository (a custom folder elsewhere) is absolute. */
@@ -156,7 +157,7 @@ export function inputsDigest(root: string, evalName: string, args: string[]): st
     if (chosen === "custom" || chosen === "all") {
       const custom = customCorpus(root, evalName, args);
       if (!custom) return null;
-      corpora.push({ summary: { corpus: "custom", corpus_kind: custom.config.kind, corpus_folder: custom.folder }, folder: custom.folder });
+      corpora.push({ summary: { corpus: "custom", corpus_folder: custom.folder }, folder: custom.folder });
     }
     // retrieval has a table of queries for each collection; the books are in a folder of the corpus that a corpus of your own may not have
     const variants = corpora.flatMap(({ summary, folder }) =>
@@ -327,7 +328,7 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
   return { sha256: sha256(canonical(parts)), parts };
 }
 
-const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the public assets, or the folder, corpus.json and generated.json of the custom corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code", collector: "the eval's collector (the code that decides what akm is asked, its version and the harness version)" };
+const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the public assets, or the folder and generated.json of the custom corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code", collector: "the eval's collector (the code that decides what akm is asked, its version and the harness version)" };
 
 /** Whether a stage may skip a job it already ran, and when not, why it runs again (empty for a job that was never run). */
 export function resumable(root: string, prior: RunRecord | undefined, job: Pick<Job, "label" | "args">, fp: Fingerprint): { skip: boolean; why: string } {

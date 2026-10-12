@@ -60,10 +60,10 @@ describe("the folder of the cases of a run", () => {
   const root = join(tmpdir(), "reflect root");
   test("is the eval's assets for the public corpus, the recorded folder for a custom one, and says so when there is none", () => {
     expect(casesFolder(root, { corpus: "public" })).toBe(join(root, "evals", "reflect", "assets"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" })).toBe(join(root, "private", "reflect", "assets"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" })).toBe(join(root, "private", "reflect", "own notes"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: join(tmpdir(), "elsewhere") })).toBe(join(tmpdir(), "elsewhere")); // what --cases DIR gives
-    for (const summary of [{ corpus: "custom", corpus_kind: "own", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite" }]) {
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: "private/reflect/assets" })).toBe(join(root, "private", "reflect", "assets"));
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: "private/reflect/own notes" })).toBe(join(root, "private", "reflect", "own notes"));
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: join(tmpdir(), "elsewhere") })).toBe(join(tmpdir(), "elsewhere")); // what --cases DIR gives
+    for (const summary of [{ corpus: "custom", corpus_folder: null }, { corpus: "custom" }]) {
       expect(() => casesFolder(root, summary), JSON.stringify(summary)).toThrow("its summary does not record (outside this repository, a folder is left out). scripts/rescore takes that folder with --cases DIR");
     }
   });
@@ -98,7 +98,7 @@ describe("scripts/rescore on a custom corpus", () => {
     cpSync(join(EVAL, "golden", "cases.jsonl"), join(tree, folder, "cases.jsonl"));
     return tree;
   }
-  const custom = (over: Record<string, unknown>) => ({ corpus: "custom", corpus_kind: "own", corpus_private: true, ...over });
+  const custom = (over: Record<string, unknown>) => ({ corpus: "custom", ...over });
 
   test("reads the cases from the folder the summary records, from the repository root", () => {
     const tree = checkout("private/reflect/own notes");
@@ -107,7 +107,7 @@ describe("scripts/rescore on a custom corpus", () => {
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
     expect(result.rows).toHaveLength(CASES.length);
     expect(result.summary.manifest.corpus).toBe("custom");
-    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" });
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: "private/reflect/own notes" });
   });
 
   test("refuses a run whose folder was outside the repository and says to name it with --cases, then reads the cases from the folder --cases names", () => {

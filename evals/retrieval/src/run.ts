@@ -11,7 +11,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, type Sandbox, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { type BuiltBy, type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
 import { type EngineSettings, engineSettings, harnessSha256, sha256Text } from "../../../lib/provenance.ts";
@@ -30,8 +30,6 @@ const ROOT = resolve(EVAL_DIR, "..", "..");
 const HARNESS = harnessSha256(import.meta.dir);
 export { SYSTEMS };
 const labelOf = (sys: System): string => `${sys.startsWith("semantic_") ? "semantic " : ""}${sys.endsWith("curate") ? "curate" : "search"}`;
-/** What a corpus is, as the output names it: `public`, `rewrite` (the public collections rewritten from a seed) or `own`. */
-type Kind = ResolvedCorpus["config"]["kind"];
 /** What --semantic says: score the semantic search (on), never (off), or only in a full run of the public and rewrite corpora (auto). */
 const SEMANTIC_FLAGS = ["on", "off", "auto"] as const;
 export type SemanticFlag = (typeof SEMANTIC_FLAGS)[number];
@@ -65,10 +63,8 @@ ${akmUsage}
 
 interface Summary {
   eval: string;
-  /** `public` or `custom`: the corpus the run read. `corpus_kind` says which kind of custom one. */
+  /** `public` or `custom`: the corpus the run read. */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, or null when it is outside the repository and for the public corpus. Never an absolute path: it can name what is in it. scripts/rescore reads the cases from it. */
   corpus_folder: string | null;
   /** library or books, or own for a corpus of your own. */
@@ -138,19 +134,21 @@ export function failureOf(summaries: Pick<Summary, "status" | "errored">[]): str
 /** The label of a run without --label. */
 const defaultLabel = (version: string): string => `akm-${version.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 
-/** How a collection is named in the output: `public books`, or `own`. */
-const where = (kind: Kind, collection: string): string => (kind === collection ? kind : `${kind} ${collection}`);
+/** A corpus of your own: custom, and not the rewrite. */
+const isOwn = (c: ResolvedCorpus): boolean => c.name === "custom" && !c.rewrite;
+
+/** How a collection is named in the output: `public books`, or `custom own`. */
+const where = (corpus: string, collection: string): string => `${corpus} ${collection}`;
 
 /** The folder of the kept semantic index of a collection: `retrieval-public-library`, `retrieval-rewrite-books`. Each own folder has an index of its own, named by its place, so a second one does not replace the first. */
-const indexName = (c: ResolvedCorpus, collection: string): string => `${NAME}-${c.config.kind === "own" ? `own-${sha256Text(c.folder).slice(0, 8)}` : `${c.config.kind}-${collection}`}`;
+const indexName = (c: ResolvedCorpus, collection: string): string => `${NAME}-${isOwn(c) ? `own-${sha256Text(c.folder).slice(0, 8)}` : `${c.name === "public" ? "public" : "rewrite"}-${collection}`}`;
 
 /** The width of a column of the table: the longest label, "semantic curate". */
 const COLUMN = 15;
 
 function printSummary(s: Summary): void {
   const systems = SYSTEMS.filter((sys) => s.metrics[sys] !== undefined);
-  const kind = s.corpus_kind as Kind;
-  console.log(`\n${NAME} (${where(kind, s.collection)}) | akm ${s.akm_version}, ${s.semantic_model ? `keyword and semantic (${s.semantic_model})` : "keyword"} search | ${s.n_queries} queries, ${s.n_assets} assets`);
+  console.log(`\n${NAME} (${where(s.corpus, s.collection)}) | akm ${s.akm_version}, ${s.semantic_model ? `keyword and semantic (${s.semantic_model})` : "keyword"} search | ${s.n_queries} queries, ${s.n_assets} assets`);
   console.log(`  index ${s.index_seconds.keyword} s for keyword search${s.index_seconds.semantic === undefined ? "" : `, ${s.index_seconds.semantic} s for semantic (${s.semantic_index ? INDEX_STATE[s.semantic_index] : "unknown"})`}`);
   console.log(`  ranking metrics over the ${s.n_scored} task queries that have a relevant asset (grade ${s.relevant_from_grade}+), first ${s.depth} results`);
   console.log(`  ${"".padEnd(16)}  ${systems.map((sys) => labelOf(sys).padEnd(COLUMN)).join("  ")}`.trimEnd());
@@ -178,7 +176,7 @@ function printSummary(s: Summary): void {
 /** The summaries as columns, never one pooled number. The collections of one corpus, or each collection's corpora side by side. */
 function printSideBySide(columns: Summary[]): void {
   const systems = SYSTEMS.filter((sys) => columns.every((c) => c.metrics[sys] !== undefined));
-  const one = columns.every((c) => c.corpus_kind === columns[0].corpus_kind);
+  const one = columns.every((c) => c.corpus === columns[0].corpus);
   const metrics: [string, (x: SystemMetrics) => string][] = [
     ["nDCG@10", (x) => fixed(x.ndcg_10)],
     ["nDCG@10 judged", (x) => fixed(x.ndcg_10_condensed)],
@@ -187,7 +185,7 @@ function printSideBySide(columns: Summary[]): void {
     ["MRR", (x) => fixed(x.mrr)],
     ["Recall@10", (x) => fixed(x.recall_10)],
   ];
-  const rows: string[][] = [["", ...columns.map((c) => (one ? c.collection : where(c.corpus_kind as Kind, c.collection)))], ["queries (scored)", ...columns.map((c) => `${c.n_queries} (${c.n_scored})`)]];
+  const rows: string[][] = [["", ...columns.map((c) => (one ? c.collection : where(c.corpus, c.collection)))], ["queries (scored)", ...columns.map((c) => `${c.n_queries} (${c.n_scored})`)]];
   for (const sys of systems) {
     for (const [label, f] of metrics) rows.push([`${labelOf(sys)} ${label}`, ...columns.map((c) => f(at(c.metrics, sys)))]);
     if (columns.some((c) => at(c.metrics, sys).banned_above !== null)) {
@@ -205,7 +203,7 @@ function printSideBySide(columns: Summary[]): void {
  * Whether a run scores the semantic search as well. With --semantic on it does, and with off it does not. With auto, the default, a run
  * with --limit is for checking a setup, and a corpus of your own may be a library of tens of thousands of assets: both are scored with keyword search alone.
  */
-export const withSemantic = (kind: Kind, limit?: number, flag: SemanticFlag = "auto"): boolean => (flag === "auto" ? limit === undefined && kind !== "own" : flag === "on");
+export const withSemantic = (own: boolean, limit?: number, flag: SemanticFlag = "auto"): boolean => (flag === "auto" ? limit === undefined && !own : flag === "on");
 
 export interface Folders {
   /** The library to index. */
@@ -221,7 +219,7 @@ export interface Folders {
 /** The collections a corpus holds, in the order they run. A collection is a library with its queries and qrels. */
 export function collectionsFor(c: ResolvedCorpus): { name: string; folders: Folders }[] {
   const results = c.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
-  if (c.config.kind === "own") return [{ name: "own", folders: { library: join(c.folder, "library"), assets: c.folder, results, bundles: join(c.folder, "bundles.json") } }];
+  if (isOwn(c)) return [{ name: "own", folders: { library: join(c.folder, "library"), assets: c.folder, results, bundles: join(c.folder, "bundles.json") } }];
   return [
     { name: "library", folders: { library: c.name === "public" ? join(ROOT, "corpus", "library") : join(c.folder, "library"), assets: c.folder, results } },
     { name: "books", folders: { library: join(c.folder, "books", "library"), assets: join(c.folder, "books"), results } },
@@ -243,7 +241,6 @@ export async function runCollection(
   ctx: { label?: string; limit?: number; semantic: boolean; semanticFlag?: SemanticFlag; callTimeoutMs?: number; newSandbox?: () => Sandbox; cache?: IndexInput["cache"] },
   folders: Folders,
 ): Promise<Summary> {
-  const kind = corpus.config.kind;
   const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   let all: Query[];
   let qrels: Qrel[];
@@ -253,7 +250,7 @@ export async function runCollection(
     all = parseQueries(readFileSync(queriesFile, "utf8"), queriesFile);
     qrels = parseQrels(readFileSync(qrelsFile, "utf8"), qrelsFile);
   } catch (e) {
-    fail(`${(e as Error).message}${kind === "own" ? `\n${OWN_HELP}` : ""}`);
+    fail(`${(e as Error).message}${isOwn(corpus) ? `\n${OWN_HELP}` : ""}`);
   }
   // What the run is made from, as it is now: label may append grades while the run is going. The library is read once, for the digest and for the semantic index kept between runs.
   const library = akm.libraryFiles(folders.library, folders.bundles);
@@ -265,18 +262,18 @@ export async function runCollection(
   }
   const cases = casesOf(selectQueries(all, ctx.limit), qrels);
   for (const c of cases) {
-    if (isTask(c) && Object.keys(c.grades).length === 0) fail(`${c.id} has no grades in qrels.jsonl.${kind === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
+    if (isTask(c) && Object.keys(c.grades).length === 0) fail(`${c.id} has no grades in qrels.jsonl.${corpus.name === "public" && collection === "library" ? " Run evals/retrieval/label first." : ""}`);
   }
 
   const systems = systemsFor(ctx.semantic);
-  const indexes = await openIndexes({ title: where(kind, collection), name: indexName(corpus, collection), library: folders.library, bundles: folders.bundles, contents: library, semantic: ctx.semantic, probe: cases[0].query, newSandbox: ctx.newSandbox, cache: ctx.cache });
+  const indexes = await openIndexes({ title: where(corpus.name, collection), name: indexName(corpus, collection), library: folders.library, bundles: folders.bundles, contents: library, semantic: ctx.semantic, probe: cases[0].query, newSandbox: ctx.newSandbox, cache: ctx.cache });
   try {
     const { version, nAssets } = indexes;
     const label = ctx.label ?? defaultLabel(version);
     const dir = makeResultsDir(folders.results, `${label}-${collection}`);
     const samples = join(dir, "samples.jsonl");
     writeFileSync(samples, "");
-    console.log(`${NAME} (${where(kind, collection)}): akm ${version}, ${nAssets} assets, ${cases.length} of ${all.length} queries`);
+    console.log(`${NAME} (${where(corpus.name, collection)}): akm ${version}, ${nAssets} assets, ${cases.length} of ${all.length} queries`);
 
     const rows: Row[] = [];
     const seen = { keyword: new Set<string>(), semantic: new Set<string>() };
@@ -290,7 +287,7 @@ export async function runCollection(
     }
 
     const build = akmBuild();
-    const seed = corpus.config.seed ?? null;
+    const seed = corpus.seed;
     const manifest = buildManifest({
       measurement: MEASUREMENT,
       parts,
@@ -305,7 +302,7 @@ export async function runCollection(
     });
     const summary: Summary = {
       eval: NAME,
-      ...corpusRecord(corpus),
+      corpus: corpus.name,
       corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
       collection,
       label,
@@ -358,8 +355,7 @@ async function main(): Promise<void> {
     fail((e as Error).message);
   }
   useAkm(values, fail);
-  // The run calls no model, so it needs no privacy check: a corpus that is flagged private is not sent anywhere.
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
@@ -371,11 +367,11 @@ async function main(): Promise<void> {
   const sets = corpora.flatMap((c) => collectionsFor(c).map((s) => ({ corpus: c, ...s })));
   for (const { corpus: c, folders: f } of sets) {
     if (c.name === "public" || [f.library, join(f.assets, "queries.jsonl"), join(f.assets, "qrels.jsonl")].every(existsSync)) continue;
-    fail(c.config.kind === "own" ? `${c.flag} does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
+    fail(isOwn(c) ? `${c.flag} does not hold a set in the eval's format.\n${OWN_HELP}` : `the private assets are missing (${relative(ROOT, f.assets)}/). Make them with: ./generate-assets --only ${NAME}`);
   }
   // The rewrite is of public files: if those changed since (label appended grades, the library moved), it is another set.
   for (const c of corpora) {
-    if (c.config.kind !== "rewrite") continue;
+    if (!c.rewrite) continue;
     const stale = staleAssets(c.folder, ROOT, relative(ROOT, c.folder));
     if (stale) fail(stale);
   }
@@ -390,7 +386,7 @@ async function main(): Promise<void> {
     }
   }
   for (const s of sets) {
-    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(s.corpus.config.kind, limit, flag as SemanticFlag), semanticFlag: flag as SemanticFlag }, s.folders);
+    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(isOwn(s.corpus), limit, flag as SemanticFlag), semanticFlag: flag as SemanticFlag }, s.folders);
     // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
     if (repeat === undefined) summaries.push(await run(label));
     else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));

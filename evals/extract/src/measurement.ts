@@ -14,7 +14,7 @@ import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.
 /**
  * The folder of the assets a run read. The public ones are in the repository. A custom corpus records its folder when it was inside it
  * (`corpus_folder`, from the repository root: `corpusFolderOf` in lib/manifest.ts; scripts/rescore sets it from `--cases DIR` when it is null).
- * A run from before corpus.json named its corpus `private`: the seeded rewrite generate makes.
+ * A run from before the corpora were renamed called its corpus `private`: the seeded rewrite generate makes.
  */
 function assetsOf(root: string, summary: Record<string, any>): string {
   if (summary.corpus === "public") return join(root, "evals", NAME, "assets");

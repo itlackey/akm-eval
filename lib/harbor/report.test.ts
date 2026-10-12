@@ -380,8 +380,8 @@ describe("sideBySide", () => {
   test("puts the two corpora in columns, with their timeouts, and pools nothing", () => {
     const a = buildReport([trial("a", "control", 0), trial("a", "akm", 1, { akm: { akm_show: 1 } })]);
     const b = buildReport([trial("c", "control", 1, { error: "AgentTimeoutError" }), trial("c", "akm", 0)]);
-    const lines = sideBySide("bench", { corpus: "public", report: a }, { corpus: "private", report: b });
-    expect(lines[0]).toBe("bench: public and private side by side (not pooled)");
+    const lines = sideBySide("bench", { corpus: "public", report: a }, { corpus: "custom", report: b });
+    expect(lines[0]).toBe("bench: public and custom side by side (not pooled)");
     expect(lines.find((l) => l.includes("timed out"))).toContain("1 control trials, 0 akm trials");
     expect(lines.find((l) => l.includes("akm called in"))).toContain("1 of 1 akm trials");
     const sign = lines.find((l) => l.includes("sign test"));
@@ -391,7 +391,7 @@ describe("sideBySide", () => {
 
   test("says when there is nothing to test, and when there is no run", () => {
     const tie = buildReport([trial("a", "control", 1), trial("a", "akm", 1)]);
-    const lines = sideBySide("bench", { corpus: "public", report: tie }, { corpus: "private", report: buildReport([]) });
+    const lines = sideBySide("bench", { corpus: "public", report: tie }, { corpus: "custom", report: buildReport([]) });
     const sign = lines.find((l) => l.includes("sign test"));
     expect(sign).toContain("no task differs");
     expect(sign).toContain("n/a");
@@ -399,6 +399,6 @@ describe("sideBySide", () => {
 
   test("notes that the difference resampled the attempts", () => {
     const r = buildReport([...attempts("a", [0, 0], [1, 0]), ...attempts("b", [0, 1], [1, 1])]);
-    expect(sideBySide("bench", { corpus: "public", report: r }, { corpus: "private", report: r }).find((l) => l.includes("difference"))).toContain("over 2 tasks and their attempts");
+    expect(sideBySide("bench", { corpus: "public", report: r }, { corpus: "custom", report: r }).find((l) => l.includes("difference"))).toContain("over 2 tasks and their attempts");
   });
 });

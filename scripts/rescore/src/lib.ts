@@ -59,15 +59,15 @@ function measurementOf(stored: Stored, root: string): Measurement {
 /** The corpus names of a run on a custom corpus: `custom`, and the names a run from before the corpora were renamed has. */
 const CUSTOM = ["custom", "private", "own", "own-feedback"];
 
-/** The run is on a custom corpus that is a split of a dataset (skillret's train split): it has no folder. */
-const isSplit = (summary: Obj): boolean => summary.corpus === "custom" && summary.corpus_kind === "split";
+/** The run is on skillret's custom corpus, a split of its dataset (the train split): it has no folder. */
+const isSplit = (summary: Obj): boolean => summary.eval === "skillret" && summary.corpus === "custom";
 
 /**
  * The summary the eval's `loadCases` reads to find the cases of the run. A run on the public corpus, and a run from before the corpora were renamed
  * (`private`, `own`), are read as they are: the eval knows where those cases are. A run on a custom corpus has them in `corpus_folder` (lib/manifest.ts
  * `corpusFolderOf`), and `cases` names the folder instead when the run did not record it or it has moved. Refuses, saying what to do, when the
- * folder is not known or is not there. A custom corpus of kind `split` (skillret's train split) is drawn from a dataset and has no folder at all
- * (lib/corpus.ts): the eval finds its cases itself, so the summary is read as it is, and a `--cases` has no folder to apply to and is left unused.
+ * folder is not known or is not there. The custom corpus of skillret (its train split) is drawn from a dataset and has no folder at all:
+ * the eval finds its cases itself, so the summary is read as it is, and a `--cases` has no folder to apply to and is left unused.
  */
 function summaryForCases(stored: Stored, root: string, cases: string | undefined): Obj {
   const { summary } = stored;

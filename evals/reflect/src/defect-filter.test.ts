@@ -203,13 +203,13 @@ describe("reflectEdits", () => {
     const { root, write } = repo();
     const mine = join(root, "private", "reflect", "own notes");
     write({ a: note("own a"), b: note("own b"), c: note("own c") }, mine);
-    const recorded = { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" };
+    const recorded = { corpus: "custom", corpus_folder: "private/reflect/own notes" };
     const { edits, inputs } = reflectEdits(runOf(root, mine, recorded), same(root));
     expect(edits.map((e) => e.source)).toEqual([note("own a"), note("own b")]);
     expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes"), differences: [] });
     // the seeded rewrite is in the folder it recorded, which is where generate puts it
     write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
-    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" });
+    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_folder: "private/reflect/assets" });
     expect(reflectEdits(rewrite, same(root)).edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
     // a folder outside the repository is not recorded: the summary cannot say where the cases were
     expect(() => reflectEdits(runOf(root, mine, { ...recorded, corpus_folder: null }), same(root))).toThrow("a folder that its summary does not record");

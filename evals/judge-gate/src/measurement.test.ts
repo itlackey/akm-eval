@@ -41,8 +41,6 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
   const summary: Record<string, unknown> = {
     eval: "judge-gate",
     corpus: custom ? "custom" : "public",
-    corpus_kind: custom ? "own" : "public",
-    corpus_private: custom !== undefined,
     corpus_folder: custom ? custom.folder : null,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
@@ -114,7 +112,7 @@ describe("the corpus a stored run is scored against again", () => {
   }
   const ids = (cases: Case[]) => cases.map((c) => c.id);
 
-  test("public is the committed cases, private (a run from before corpus.json) the seeded rewrite, and a custom corpus the folder it recorded", () => {
+  test("public is the committed cases, private (a run from before the corpora were renamed) the seeded rewrite, and a custom corpus the folder it recorded", () => {
     const root = repo();
     const expected = ids(PUBLIC_CASES);
     expect(ids(MEASUREMENT.loadCases(root, { corpus: "public" }))).toEqual(expected);

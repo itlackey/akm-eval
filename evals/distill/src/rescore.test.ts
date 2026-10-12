@@ -70,8 +70,6 @@ export function run(spec: Spec = {}): string {
   const summary: Record<string, unknown> = {
     eval: "distill",
     corpus: "public",
-    corpus_kind: "public",
-    corpus_private: false,
     corpus_folder: null,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
@@ -152,7 +150,7 @@ describe("rescoring a distill run", () => {
 
   test("a folder that is not a run, and a run on a custom corpus whose folder was not recorded, are refused with what to do", () => {
     expect(() => rescoreFolder(tmp())).toThrow(RescoreError);
-    const custom = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
+    const custom = run({ summary: { corpus: "custom", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
     expect(() => rescoreFolder(custom)).toThrow(/custom corpus outside the repository.*--cases DIR/);
   });
 });
@@ -248,7 +246,7 @@ describe("a run on a custom corpus (#47)", () => {
   }
   /** A stored run on the custom corpus, with the folder the summary records. */
   const stored = (folder: string | null) =>
-    readStored(run({ summary: { corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: folder }, manifest: (m) => ({ ...m, corpus: "custom" }) }));
+    readStored(run({ summary: { corpus: "custom", corpus_folder: folder }, manifest: (m) => ({ ...m, corpus: "custom" }) }));
   const verdict = (rows: Record<string, any>[], id: string) => rows.find((r) => r.id === id)?.verdict;
 
   test("is scored against the cases in the corpus_folder the summary records, from the repository root", () => {

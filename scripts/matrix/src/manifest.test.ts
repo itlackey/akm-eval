@@ -386,7 +386,6 @@ describe("a relabelled case does not run a row again", () => {
     mkdirSync(dir, { recursive: true });
     const cases = jsonl(join(GOLDEN, "cases.jsonl"));
     write(dir, "cases.jsonl", cases);
-    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":false}');
     return { dir, cases };
   }
 
@@ -414,7 +413,7 @@ describe("a relabelled case does not run a row again", () => {
     expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus"]);
     write(dir, "cases.jsonl", cases);
     expect(fingerprint("reflect", dir)).toEqual(first);
-    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":true}'); // a file of the corpus that is not a case file counts by its bytes
+    writeFileSync(join(dir, "extra.json"), "{}"); // a file of the corpus that is not a case file counts by its bytes
     expect(changed(first, fingerprint("reflect", dir))).toEqual(["corpus", "files"]);
   });
 
@@ -433,7 +432,6 @@ describe("a relabelled case does not run a row again", () => {
     const [queries, qrels] = ["queries", "qrels"].map((name) => jsonl(join(ROOT, "evals", "retrieval", "assets", `${name}.jsonl`)));
     write(dir, "queries.jsonl", queries as object[]);
     write(dir, "qrels.jsonl", qrels as object[]);
-    writeFileSync(join(dir, "corpus.json"), '{"kind":"own","private":false}');
     const first = fingerprint("retrieval", dir);
     write(dir, "qrels.jsonl", (qrels as Record<string, any>[]).map((r, i) => (i === 0 ? { ...r, grade: r.grade === 3 ? 2 : 3 } : r))); // a pair graded again
     expect(fingerprint("retrieval", dir)).toEqual(first);

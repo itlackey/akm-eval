@@ -9,7 +9,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { caseDigests, buildManifest, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
@@ -51,11 +51,8 @@ Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 
 interface Summary {
   eval: string;
-  /** "public", or "custom" for any other folder of cases. corpus_kind says where a custom one came from: "rewrite" (the public cases rewritten from a seed) or "own". */
+  /** "public", or "custom" for any other folder of cases. */
   corpus: string;
-  corpus_kind: string;
-  /** True when the corpus may go only to a model that models.json marks "private": true. */
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, for scripts/rescore. Null for the public corpus, and for a folder outside the repository: its name can say what is in it, so it is not recorded. */
   corpus_folder: string | null;
   label: string;
@@ -79,7 +76,7 @@ interface Summary {
   engine: EngineSettings;
   /** The digest of the corpus's cases.jsonl, named relative to the corpus folder. */
   assets_sha256: string;
-  /** The seed a rewrite was made with (its corpus.json holds the one in generated.json). Null for every other corpus. */
+  /** The seed a rewrite was made with, from its generated.json. Null for every other corpus. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -185,7 +182,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const abortedReason = `the first ${GIVE_UP_AFTER} cases got no outcome, so the run stopped. Last error: ${aborted}`;
   const config = configFor(ctx);
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const build = akmBuild();
   const counts = summarize(rows);
   const manifest = buildManifest({
@@ -201,7 +198,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpusFolder(corpus),
     label: ctx.label,
     date: new Date().toISOString(),
@@ -254,7 +251,7 @@ async function main(): Promise<void> {
   } catch (e) {
     fail((e as Error).message);
   }
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
@@ -263,16 +260,14 @@ async function main(): Promise<void> {
   useAkm(values, fail);
   const settings = useModel(values, fail);
   const { baseUrl, name: model, hasKey } = settings;
-  const refusal = privacyError(corpora, { model: settings });
-  if (refusal) fail(refusal);
 
   for (const c of corpora) {
     if (c.name === "public") continue;
     const shown = relative(ROOT, c.folder);
     if (!existsSync(join(c.folder, "cases.jsonl"))) {
-      fail(c.config.kind === "rewrite" ? `the private assets are missing (${shown}/cases.jsonl). Make them with: ./generate-assets --only ${NAME}` : `${c.flag}: ${shown}/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl, as assets/ does`);
+      fail(c.rewrite ? `the private assets are missing (${shown}/cases.jsonl). Make them with: ./generate-assets --only ${NAME}` : `${c.flag}: ${shown}/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl, as assets/ does`);
     }
-    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
+    const stale = c.rewrite ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
     if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   // The searches of every corpus are made now, so that a file that is missing stops the run here and not after the first corpus has run.

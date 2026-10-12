@@ -9,7 +9,7 @@ do not compare.
 
 Each case is a real proposal that `akm improve`'s reflect process made for an asset in the maintainer's own stash
 between July and October 2026. The cases are half of a larger labelled set. The other half is unpublished, and nothing in
-this repository runs it: `--corpus private` runs a light rewrite of these 106 cases, which is not that half (see "Known limits").
+this repository runs it: `--corpus custom` runs a light rewrite of these 106 cases, which is not that half (see "Known limits").
 A model that scores much better here than on the unpublished half has probably seen these cases.
 
 ## Fields
@@ -121,7 +121,7 @@ diff invents a rationale or drops a fact; those are harmful. The run scores the 
   feedback would pass 9 of the 11 good cases and 57 of the 95 bad ones without judging anything, and one that refused
   every case with a `[negative]` line would pass 11 of 11 and 80 of 95. The set has no good revision that follows
   negative feedback to test the other half of the rule.
-- `--corpus private` is not a held-out half. It is these same 106 cases with about 3 to 5 percent of their words
+- `--corpus custom` is not a held-out half. It is these same 106 cases with about 3 to 5 percent of their words
   renamed and renumbered by `lib/rewrite`; the prose, the labels, the severities and the diffs are the same, so a model
   that memorised a case still recognises it. A gap between the public and private scores points to memorisation; no gap
   does not rule it out.

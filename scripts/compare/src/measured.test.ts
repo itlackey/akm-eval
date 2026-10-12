@@ -162,7 +162,7 @@ describe("longmemeval: a retrieval-only run is another measurement", () => {
 describe("skillret: the custom corpus is a split of the dataset", () => {
   test("two runs on it compare like two on the public corpus, whatever the kind says", async () => {
     const f = await evalFixture("skillret");
-    const custom = { corpus: "custom" as const, corpusKind: "split", corpusFolder: null };
+    const custom = { corpus: "custom" as const, corpusFolder: null };
     const r = comparePair(loadRun(run(f, f.good, "good", custom)), loadRun(run(f, f.bad, "bad", custom)));
     expect(r).toMatchObject({ corpus: "custom", exploratory: [] });
     expect(r.views.map((v) => v.view)).toEqual(["search", "semantic_search"]);

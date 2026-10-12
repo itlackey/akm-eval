@@ -43,7 +43,7 @@ function stored(lines: { case: string; raw: any }[], edit: (rows: any[]) => any[
   dirs.push(join(dir, ".."));
   mkdirSync(dir, { recursive: true });
   const written = edit(rows);
-  const summary = { eval: "nightly", corpus: extra.corpus ?? "public", ...(extra.corpus === "custom" ? { corpus_kind: "own", corpus_private: true, corpus_folder: extra.corpus_folder ?? null } : {}), label: "golden", status: "complete", aborted_reason: null, embedder: "deterministic", n_items: 35, n_planted: rows.length, ...MEASUREMENT.summarize(written), manifest };
+  const summary = { eval: "nightly", corpus: extra.corpus ?? "public", ...(extra.corpus === "custom" ? { corpus_folder: extra.corpus_folder ?? null } : {}), label: "golden", status: "complete", aborted_reason: null, embedder: "deterministic", n_items: 35, n_planted: rows.length, ...MEASUREMENT.summarize(written), manifest };
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   writeFileSync(join(dir, "samples.jsonl"), written.map((r) => `${JSON.stringify(r)}\n`).join(""));
   return { dir, rows: written };

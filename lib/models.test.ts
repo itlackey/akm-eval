@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Endpoint, MODEL_OPTIONS, type ModelEntry, loadModels, privateModelError, resolveModel, useJudge, useModel } from "./models.ts";
+import { type Endpoint, MODEL_OPTIONS, type ModelEntry, loadModels, resolveModel, useJudge, useModel } from "./models.ts";
 
 const GATEWAY = "https://gateway.example/v1";
 const ENV = { MODEL_BASE_URL: GATEWAY, MODEL_API_KEY: "gw-key", MODEL_NAME: "my-model" };
@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("resolveModel", () => {
   test("the id is the flag, else MODEL_NAME, and goes to the gateway of .env with its key", () => {
-    expect(resolveModel("model", "cloud/some-model", ENV, NONE)).toEqual({ name: "cloud/some-model", baseUrl: GATEWAY, apiKey: "gw-key", private: false });
+    expect(resolveModel("model", "cloud/some-model", ENV, NONE)).toEqual({ name: "cloud/some-model", baseUrl: GATEWAY, apiKey: "gw-key" });
     expect(resolveModel("model", undefined, ENV, NONE).name).toBe("my-model");
     expect(resolveModel("model", " my-small-model ", ENV, NONE).name).toBe("my-small-model");
   });
@@ -30,8 +30,8 @@ describe("resolveModel", () => {
 
   test("a line of models.json goes to its own URL with the key its api_key_env names, and has no gateway id", () => {
     const m = resolveModel("model", "gpt-5.6-terra", { ...ENV, OPENAI_API_KEY: "oa-key" }, TERRA);
-    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key", private: false });
-    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "", private: false });
+    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" });
+    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "" });
   });
 
   test("says what to set when the id, the endpoint or an entry's key is missing, and never prints a key", () => {
@@ -46,26 +46,9 @@ describe("resolveModel", () => {
     }
   });
 
-  test("a private-corpus eval may use a line marked private: true, and refuses one without the flag and a model with no line", () => {
-    const entries: Record<string, ModelEntry> = { mine: { base_url: "http://localhost:8080/v1", private: true }, other: { base_url: "https://api.example.com/v1" } };
-    expect(privateModelError(resolveModel("model", "mine", ENV, entries), "--corpus own", "notes")).toBeUndefined();
-    expect(privateModelError(resolveModel("model", "other", ENV, entries), "--corpus own", "notes")).toBe('--corpus own sends your notes to other, which is not marked "private": true in models.json.');
-    expect(privateModelError(resolveModel("model", "my-model", ENV, entries), "--corpus own", "notes")).toContain('"private": true');
-  });
-
-  test("the same check refuses a judge that is not marked, and says it is the judge", () => {
-    const entries: Record<string, ModelEntry> = { mine: { base_url: "http://localhost:8080/v1", private: true }, other: { base_url: "https://api.example.com/v1" } };
-    expect(privateModelError(resolveModel("judge", "mine", ENV, entries), "--cases notes", "notes", "judge")).toBeUndefined();
-    expect(privateModelError(resolveModel("judge", "other", ENV, entries), "--cases notes", "notes", "judge")).toBe('--cases notes sends your notes to the judge other, which is not marked "private": true in models.json.');
-  });
-
-  test("an id such as constructor is not a line of models.json", () => {
-    expect(resolveModel("model", "constructor", ENV, NONE).private).toBe(false);
-  });
-
   test("the judge uses its own endpoint and key when set, and otherwise the model's", () => {
-    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "my-j", baseUrl: "http://judge/v1", apiKey: "jk", private: false });
-    expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key", private: false });
+    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "my-j", baseUrl: "http://judge/v1", apiKey: "jk" });
+    expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key" });
     expect(resolveModel("judge", undefined, { ...ENV, JUDGE_MODEL: "my-j2" }, NONE).name).toBe("my-j2");
     expect(() => resolveModel("judge", undefined, ENV, NONE)).toThrow("pass --judge-model ID, or set JUDGE_MODEL");
   });
@@ -75,7 +58,7 @@ describe("the judge's fallback endpoint", () => {
   const MODEL: Endpoint = { baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" };
 
   test("a judge with no endpoint of its own goes to the fallback, and not to the gateway of .env", () => {
-    expect(resolveModel("judge", "my-j", ENV, NONE, MODEL)).toEqual({ name: "my-j", baseUrl: MODEL.baseUrl, apiKey: "oa-key", private: false });
+    expect(resolveModel("judge", "my-j", ENV, NONE, MODEL)).toEqual({ name: "my-j", baseUrl: MODEL.baseUrl, apiKey: "oa-key" });
     expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_API_KEY: "jk" }, NONE, MODEL).apiKey).toBe("oa-key"); // the key goes with the endpoint
     expect(resolveModel("judge", "my-j", {}, NONE, MODEL).baseUrl).toBe(MODEL.baseUrl); // no MODEL_* needed
   });
@@ -144,7 +127,7 @@ describe("loadModels", () => {
   test("refuses a key it does not know, and says that an api_key belongs in the environment", () => {
     const line = (extra: string) => `{"a":{"base_url":"http://h/v1"${extra}}}`;
     expect(() => loadModels(write(line(',"api_key":"sk-SYNTH-secret"')))).toThrow('models.json: "a" has an unknown key "api_key": a key belongs in the environment. Set it in .env and name its variable in api_key_env.');
-    expect(() => loadModels(write(line(',"privat":true')))).toThrow('models.json: "a" has an unknown key "privat". The keys of a line are model, base_url, api_key_env, private');
+    expect(() => loadModels(write(line(',"privat":true')))).toThrow('models.json: "a" has an unknown key "privat". The keys of a line are model, base_url, api_key_env');
     expect(() => loadModels(write('{"ok":{"base_url":"http://h/v1"},"b":{"base_url":"http://h/v1","baseUrl":"x"}}'))).toThrow('"b" has an unknown key "baseUrl"');
     try {
       loadModels(write(line(',"api_key":"sk-SYNTH-secret"')));
@@ -152,7 +135,13 @@ describe("loadModels", () => {
       expect((e as Error).message).not.toContain("SYNTH"); // the message names the key, never its value
     }
     // every key a line may have still passes
-    expect(loadModels(write('{"a":{"base_url":"http://h/v1","model":"m","api_key_env":"A_KEY","private":true}}'))).toEqual({ a: { base_url: "http://h/v1", model: "m", api_key_env: "A_KEY", private: true } });
+    expect(loadModels(write('{"a":{"base_url":"http://h/v1","model":"m","api_key_env":"A_KEY"}}'))).toEqual({ a: { base_url: "http://h/v1", model: "m", api_key_env: "A_KEY" } });
+  });
+
+  test('refuses a line that still has "private", and says the prompt before a run with --cases replaces it', () => {
+    const message = 'models.json: "mine" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.';
+    expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":true}}'))).toThrow(message);
+    expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":false}}'))).toThrow(message);
   });
 
   test("refuses a line without a URL, a key where the name of one belongs, and a file that is not an object", () => {
@@ -202,44 +191,5 @@ describe("every eval and benchmark takes its model and akm the same way", () => 
       if (r.name === "benchmarks/longmemeval" && !/useJudge\(/.test(r.source)) missing.push(`${r.name}: no --judge-model`);
     }
     expect(missing).toEqual([]);
-  });
-});
-
-describe("every eval that reads a custom corpus", () => {
-  const ROOT = join(import.meta.dir, "..");
-  const runFiles = ["evals", "benchmarks"].flatMap((group) =>
-    readdirSync(join(ROOT, group))
-      .map((name) => ({ name: `${group}/${name}`, file: join(ROOT, group, name, "src", "run.ts") }))
-      .filter((r) => existsSync(r.file)),
-  );
-  // A run.ts reads a custom corpus when it asks lib/corpus.ts for one, or, until it does, when it names an own corpus by a string of "own"
-  // ("own", "own-feedback"), as its corpus or as the private/<eval>/own folder it reads.
-  const readsCustom = (source: string) => /["'`]own(-[a-z-]+)?["'`]/.test(source) || source.includes("resolveCorpora(");
-  // privacyError (lib/corpus.ts) checks the corpus's private flag; privateModelError (lib/models.ts) is the check it uses.
-  const guarded = (source: string) => source.includes("privacyError(") || source.includes("privateModelError(");
-  // The evals that read a custom corpus and send none of it to a model. Each says why.
-  const NOTHING_SENT = {
-    "evals/retrieval": "scores akm's search of your notes with the qrels you labelled: no model sees a note (the labelling tool, label.ts, checks the flag)",
-    "benchmarks/skillret": "calls no model, and its custom corpus is a split of a public dataset, not private (corpus kind split)",
-  } as Record<string, string>;
-
-  test("the scan finds the custom corpora, so it cannot pass by finding none", () => {
-    const found = runFiles.filter((r) => readsCustom(readFileSync(r.file, "utf8"))).map((r) => r.name);
-    for (const name of ["evals/promotion", "evals/distill", "evals/retrieval"]) expect(found).toContain(name);
-  });
-
-  test("each calls privacyError or privateModelError, unless it sends none to a model", () => {
-    const unchecked = runFiles.filter((r) => {
-      const source = readFileSync(r.file, "utf8");
-      return readsCustom(source) && !(r.name in NOTHING_SENT) && !guarded(source);
-    });
-    expect(unchecked.map((r) => `${r.name}: reads a custom corpus but never calls privacyError (lib/corpus.ts)`)).toEqual([]);
-  });
-
-  test("an exemption is kept only while its eval still reads a custom corpus and still sends none to a model", () => {
-    for (const name of Object.keys(NOTHING_SENT)) {
-      const source = readFileSync(join(ROOT, name, "src", "run.ts"), "utf8");
-      expect([name, readsCustom(source) && !guarded(source)]).toEqual([name, true]);
-    }
   });
 });

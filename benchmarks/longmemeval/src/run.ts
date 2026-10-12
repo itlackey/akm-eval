@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
@@ -45,8 +45,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     private/longmemeval/assets/, made by ./generate-assets, and refuses them when
                     private/longmemeval/generated.json is missing or does not match the files, the public
                     lock or the generator. all runs both and prints the two results side by side.
-  --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format, and a
-                    corpus.json. It is --corpus custom. See "Corpora" in README.md.
+  --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
+                    It is --corpus custom. See "Corpora" in README.md.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.
@@ -71,10 +71,8 @@ type Build = ReturnType<typeof akmBuild>;
 
 interface Summary extends ReturnType<typeof summarize> {
   eval: string;
-  /** `public` or `custom`, and for a custom corpus its kind and whether it is private (see lib/corpus.ts). */
+  /** `public` or `custom` (see lib/corpus.ts). */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of the questions of a custom corpus from the repository root (corpusFolderOf), so that scripts/rescore finds them. Null for the public corpus, and for a folder outside the repository, which is never recorded: rescore takes --cases DIR for it. */
   corpus_folder: string | null;
   label: string;
@@ -269,7 +267,7 @@ export async function runCorpus(
   const parent = folders.results ?? (isPublic ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
   // The assets of a rewrite are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
   let seed: string | null = null;
-  if (corpus.config.kind === "rewrite") {
+  if (corpus.rewrite) {
     const problem = privateProblem(dirname(assets), folders.publicAssets);
     if (problem !== undefined) fail(problem);
     seed = readGenerated(dirname(assets))?.seed ?? null;
@@ -284,7 +282,7 @@ export async function runCorpus(
     const lock = readLock(assets);
     dataset = { name: lock.dataset, source: lock.source, licence: lock.licence, revision: lock.revision, file: DATA_FILE, sha256: lock.files[DATA_FILE].sha256 };
     datasetFiles = ["ASSETS.lock", DATA_FILE];
-  } else if (corpus.config.kind === "rewrite") {
+  } else if (corpus.rewrite) {
     dataset = { ...JSON.parse(readFileSync(join(assets, "rewrite.json"), "utf8")), file: DATA_FILE };
     datasetFiles = ["rewrite.json", DATA_FILE];
   } else {
@@ -329,7 +327,7 @@ export async function runCorpus(
   const save = (complete: boolean, abortedReason?: string) => {
     const summary: Summary = {
       eval: NAME,
-      ...corpusRecord(corpus),
+      corpus: corpus.name,
       corpus_folder: isPublic ? null : corpusFolderOf(assets),
       label: args.label,
       date: new Date().toISOString(),
@@ -419,13 +417,12 @@ const toEndpoint = (m: ModelSettings): Endpoint => ({ baseUrl: m.baseUrl, model:
 /**
  * The model under test and the judge. The model is resolved first (useModel also writes it to MODEL_* in `env`), and its endpoint and
  * key are the judge's fallback: a judge with no JUDGE_BASE_URL of its own, and no models.json line, goes where the model goes, which
- * for `--model` naming a models.json line is that line's URL and not the gateway in .env. `settings` are the same two as models.json has
- * them, for the private-corpus check.
+ * for `--model` naming a models.json line is that line's URL and not the gateway in .env.
  */
-export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint; settings: { model: ModelSettings; judge: ModelSettings } } {
+export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint } {
   const model = useModel(values, failWith, env, entries);
   const judge = useJudge(values, failWith, env, entries, { baseUrl: model.baseUrl, apiKey: model.apiKey });
-  return { model: toEndpoint(model), judge: toEndpoint(judge), settings: { model, judge } };
+  return { model: toEndpoint(model), judge: toEndpoint(judge) };
 }
 
 async function main(): Promise<void> {
@@ -445,7 +442,7 @@ async function main(): Promise<void> {
   } catch (e) {
     fail((e as Error).message);
   }
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const sampleSeed = values["sample-seed"] === undefined ? DEFAULT_SAMPLE_SEED : Number(values["sample-seed"]);
@@ -455,17 +452,14 @@ async function main(): Promise<void> {
   const searchMode: SearchMode = values.semantic === true ? "semantic" : "keyword";
   useAkm(values, fail);
   const endpoints = retrievalOnly ? null : resolveEndpoints(values, fail);
-  // Before any sandbox, and before the first corpus runs: a corpus that is private is not sent to a model or a judge that models.json does not mark private.
-  const refusal = privacyError(corpora, { model: endpoints?.settings.model, judge: endpoints?.settings.judge }, "chats");
-  if (refusal !== undefined) fail(refusal);
   for (const c of corpora) {
     if (c.name === "public") continue;
     const tree = dirname(c.folder);
     if (!existsSync(join(c.folder, DATA_FILE))) {
-      fail(c.config.kind === "rewrite" ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
+      fail(c.rewrite ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
     }
     // Before the first corpus runs: under --corpus all the public run takes hours, and the custom one would refuse after it.
-    const problem = c.config.kind === "rewrite" ? privateProblem(tree) : undefined;
+    const problem = c.rewrite ? privateProblem(tree) : undefined;
     if (problem !== undefined) fail(problem);
   }
   const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");

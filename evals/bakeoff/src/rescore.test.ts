@@ -45,7 +45,7 @@ async function customRun(parent: string, required = ["retries", "2 seconds"]) {
   process.env.FAKE_PLAN = JSON.stringify({ infer: { retry: { derived: DERIVED } }, promote: { refs: ["memories/signed"] } });
   process.env.FAKE_LOG = join(root, "calls.jsonl");
   process.env.MODEL_API_KEY = "model-secret";
-  const corpus: ResolvedCorpus = { name: "custom", folder, config: { kind: "own", private: true }, configFile: null, flag: `--cases ${folder}` };
+  const corpus: ResolvedCorpus = { name: "custom", folder, rewrite: false, seed: null, flag: `--cases ${folder}` };
   const log = console.log;
   console.log = () => {};
   try {

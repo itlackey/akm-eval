@@ -9,7 +9,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
@@ -50,8 +50,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom` (see lib/corpus.ts). */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, null when it is outside it and for the public corpus (see corpusFolderOf in lib/manifest.ts): what `scripts/rescore` reads the cases from. */
   corpus_folder: string | null;
   label: string;
@@ -86,7 +84,7 @@ interface Summary {
   assets_sha256: string;
   /** The version of the rubric the labels were adjudicated under (assets/README.md). Scores from other versions do not compare. */
   rubric_version: number;
-  /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
+  /** The seed that made a rewritten corpus, null for the public corpus and for your own. */
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
   /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
@@ -180,7 +178,7 @@ export async function runCorpus(
   const abortedReason = aborted === undefined ? null : `${GIVE_UP_AFTER} cases in a row got no verdict, so the run stopped after ${rows.length} of ${cases.length}. Last: ${aborted}`;
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const build = akmBuild();
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -194,7 +192,7 @@ export async function runCorpus(
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
@@ -246,16 +244,14 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "notes");
-  if (refusal) fail(refusal);
 
   for (const c of corpora) {
     if (c.name === "public") continue;
     const where = corpusFolderOf(c.folder) ?? c.folder; // from the repository root when it is inside, else as it was given
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
+    const problem = c.rewrite ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
     if (problem) fail(problem);
   }
   const { baseUrl, name: model, hasKey } = settings;

@@ -83,7 +83,7 @@ if (cmd === "index") {
 `;
 
 /** The public corpus, with its cases in `folder`. */
-const publicCorpus = (folder: string): ResolvedCorpus => ({ name: "public", folder, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+const publicCorpus = (folder: string): ResolvedCorpus => ({ name: "public", folder, rewrite: false, seed: null, flag: "--corpus public" });
 
 const note = (name: string, what: string) => ({ name, text: `---\ndescription: ${name}\n---\n# ${name}\n\nFAKE: ${what}\n` });
 
@@ -412,27 +412,27 @@ describe("runCorpus", () => {
     expect(b.engine.temperature).toBe(0);
   });
 
-  test("a custom run records its kind, whether it is private and, for a rewrite, the seed in its corpus config; the public run has no seed", async () => {
+  test("a custom run records, for a rewrite, its seed; the public run and your own cases have none", async () => {
     const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")]);
-    const custom = (config: ResolvedCorpus["config"]): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config, configFile: null, flag: "--corpus custom" });
+    const custom = (rewrite: boolean, seed: string | null): ResolvedCorpus => ({ name: "custom", folder: folders.assets, rewrite, seed, flag: "--corpus custom" });
     const publicRun = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
-    expect(publicRun).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
-    const rewrite = await quiet(() => runCorpus(custom({ kind: "rewrite", private: false, seed: "777", generated: "generated.json" }), { ...ctx, label: "t2" }, folders.results));
-    expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "777" });
+    expect(publicRun).toMatchObject({ corpus: "public", seed: null });
+    const rewrite = await quiet(() => runCorpus(custom(true, "777"), { ...ctx, label: "t2" }, folders.results));
+    expect(rewrite).toMatchObject({ corpus: "custom", seed: "777" });
     expect(rewrite.manifest).toMatchObject({ corpus: "custom", settings: { seed: "777" } });
     expect(JSON.parse(readFileSync(join(rewrite.results_dir, "summary.json"), "utf8")).seed).toBe("777");
-    const own = await quiet(() => runCorpus(custom({ kind: "own", private: true }), { ...ctx, label: "t3" }, folders.results));
-    expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    const own = await quiet(() => runCorpus(custom(false, null), { ...ctx, label: "t3" }, folders.results));
+    expect(own).toMatchObject({ corpus: "custom", seed: null });
     expect(own.assets_sha256).toBe(assetsDigest(folders.assets, INPUT_FILES));
   });
 
   test("records the folder of a custom corpus only when it is inside the repository, and never an absolute path", () => {
-    const folder = (name: string): ResolvedCorpus => ({ name: "custom", folder: name, config: { kind: "own", private: true }, configFile: null, flag: "--cases x" });
+    const folder = (name: string): ResolvedCorpus => ({ name: "custom", folder: name, rewrite: false, seed: null, flag: "--cases x" });
     expect(corpusFields(folder(join(ROOT, "private", "consolidate", "assets"))).corpus_folder).toBe("private/consolidate/assets");
     expect(corpusFields(folder(join(tmpdir(), "my notes"))).corpus_folder).toBeNull();
     expect(corpusFields(folder(ROOT)).corpus_folder).toBeNull();
     // the public corpus is the committed cases: there is no folder to record
-    expect(corpusFields(publicCorpus(join(ROOT, "evals", "consolidate", "assets")))).toEqual({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null });
+    expect(corpusFields(publicCorpus(join(ROOT, "evals", "consolidate", "assets")))).toEqual({ corpus: "public", corpus_folder: null });
   });
 
   test("with the real embedder it sets akm's model in the config and no switch for the hash one, and records it", async () => {
@@ -507,26 +507,18 @@ describe("the command", () => {
     expect(help).toMatch(/--cases +the folder of a custom corpus/);
   });
 
-  test("takes --corpus private as the old name of the custom corpus, prints the new form, and runs as the corpus it is", () => {
-    const done = run(["--corpus", "private"], model);
-    expect(done.err).toContain("consolidate: --corpus private is now --corpus custom. The old value works for one more release.");
-  });
-
-  test("a custom folder of your own is a private corpus: a model that models.json does not mark private is refused before anything runs", () => {
-    const notes = mkdtempSync(join(tmpdir(), "consolidate notes-"));
-    dirs.push(notes);
-    writeFileSync(join(notes, "cases.jsonl"), readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl")));
-    const done = run(["--cases", notes], model);
-    expect(done.code).toBe(2);
-    expect(done.err).toContain(`--cases ${notes} sends your memories to the-model, which is not marked "private": true in models.json.`);
-    expect(done.err).toContain("The corpus is private: it has no corpus.json, and an own corpus without one is private.");
-    expect(done.err).not.toContain("could not run"); // it never got as far as akm
+  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const done = run(["--corpus", old], model);
+      expect(done.code, old).toBe(2);
+      expect(done.err, old).toContain(`consolidate: --corpus ${old} was renamed in 0.2: use `);
+      expect(done.err, old).not.toContain("could not run");
+    }
   });
 
   test("a custom folder says what is missing from it, and --pool takes no custom corpus", () => {
     const empty = mkdtempSync(join(tmpdir(), "consolidate-notes-"));
     dirs.push(empty);
-    writeFileSync(join(empty, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
     const missing = run(["--cases", empty], model);
     expect(missing.code).toBe(2);
     expect(missing.err).toContain(`${join(empty, "cases.jsonl")} is missing`);
@@ -536,11 +528,10 @@ describe("the command", () => {
     expect(run(["--pool", "--limit", "3"], model).err).toContain("--pool runs the public pool");
   });
 
-  test("a custom corpus that says it is not private goes on to the akm check", () => {
-    const open = mkdtempSync(join(tmpdir(), "consolidate-open-"));
-    dirs.push(open);
-    writeFileSync(join(open, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
-    writeFileSync(join(open, "cases.jsonl"), readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl")));
-    expect(run(["--cases", open], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+  test("a custom folder of your own goes on to the akm check", () => {
+    const notes = mkdtempSync(join(tmpdir(), "consolidate notes-"));
+    dirs.push(notes);
+    writeFileSync(join(notes, "cases.jsonl"), readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl")));
+    expect(run(["--cases", notes], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 });

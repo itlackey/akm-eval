@@ -130,18 +130,18 @@ describe("the cases and their labels", () => {
     expect(setFolder("/repo", { corpus: "public", corpus_folder: null, collection: "library" })).toBe(at("evals/retrieval/assets"));
     expect(setFolder("/repo", { corpus: "public", corpus_folder: null, collection: "books" })).toBe(at("evals/retrieval/assets/books"));
     // a custom corpus is where corpus_folder says, which rescore --cases sets and may make absolute
-    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "private/retrieval/own", collection: "own" })).toBe(at("private/retrieval/own"));
-    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: "/notes/work", collection: "own" })).toBe("/notes/work");
-    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/retrieval/assets", collection: "books" })).toBe(at("private/retrieval/assets/books"));
+    expect(setFolder("/repo", { corpus: "custom", corpus_folder: "private/retrieval/own", collection: "own" })).toBe(at("private/retrieval/own"));
+    expect(setFolder("/repo", { corpus: "custom", corpus_folder: "/notes/work", collection: "own" })).toBe("/notes/work");
+    expect(setFolder("/repo", { corpus: "custom", corpus_folder: "private/retrieval/assets", collection: "books" })).toBe(at("private/retrieval/assets/books"));
     // a run from before the corpora were renamed
     expect(setFolder("/repo", { corpus: "public", collection: "books" })).toBe(at("evals/retrieval/assets/books"));
     expect(setFolder("/repo", { corpus: "private", collection: "library" })).toBe(at("private/retrieval/assets"));
     expect(setFolder("/repo", { corpus: "own", collection: "own" })).toBe(at("private/retrieval/own"));
-    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null, collection: "books" })).toBe(at("private/retrieval/assets/books"));
+    expect(setFolder("/repo", { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null, collection: "books" })).toBe(at("private/retrieval/assets/books")); // a 0.2 run, which recorded its kind
   });
 
   test("refuses a run whose corpus was outside the repository and not named, and a collection it does not know", () => {
-    expect(() => setFolder("/repo", { corpus: "custom", corpus_kind: "own", corpus_folder: null, collection: "own" })).toThrow("the run's corpus was a folder outside the repository, and its summary does not name it (corpus_folder is null). Give it to scripts/rescore with --cases DIR");
+    expect(() => setFolder("/repo", { corpus: "custom", corpus_folder: null, collection: "own" })).toThrow("the run's corpus was a folder outside the repository, and its summary does not name it (corpus_folder is null). Give it to scripts/rescore with --cases DIR");
     expect(() => setFolder("/repo", { corpus: "public", collection: "papers" })).toThrow('the summary names the collection "papers"');
   });
 });
@@ -199,7 +199,7 @@ describe("what a change to the scorer does to the golden test", () => {
       mkdirSync(own, { recursive: true });
       writeFileSync(join(own, "queries.jsonl"), `${JSON.stringify({ id: "a1", query: "find it", kind: "direct" })}\n`);
       writeFileSync(join(own, "qrels.jsonl"), `${JSON.stringify({ id: "a1", ref: "notes/it", grade: 3, reason: "r" })}\n`);
-      expect(MEASUREMENT.loadCases(root, { corpus: "custom", corpus_kind: "own", corpus_folder: "private/retrieval/own", collection: "own" })).toEqual([{ id: "a1", query: "find it", kind: "direct", grades: { "notes/it": 3 }, banned: [] }]);
+      expect(MEASUREMENT.loadCases(root, { corpus: "custom", corpus_folder: "private/retrieval/own", collection: "own" })).toEqual([{ id: "a1", query: "find it", kind: "direct", grades: { "notes/it": 3 }, banned: [] }]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -41,7 +41,7 @@ a config or to reach a verdict. A summary is a result only when it says status "
                    filters almost nothing. Read X from the noise floor that confirm prints)
   --force          run rows again that a stage already ran, though nothing they were made from has changed. A stage skips a row only when it
                    exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the corpus it
-                   reads (the folder of a custom corpus with its corpus.json; the cases of an eval with a measurement count by what
+                   reads (the folder of a custom corpus; the cases of an eval with a measurement count by what
                    they present to akm and not by their labels, so a relabelled case is not run again), the model settings (MODEL_NAME,
                    MODEL_BASE_URL and JUDGE_BASE_URL each whole with its path, JUDGE_MODEL, models.json,
                    and OPENAI_BASE_URL for a Harbor eval), its akm (the command, its build and uncommitted changes, and the

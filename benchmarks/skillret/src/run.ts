@@ -12,7 +12,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, akmBuild, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
-import { type ResolvedCorpus, CORPUS_OPTIONS, corpusRecord, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, renamed } from "../../../lib/corpus.ts";
 import { type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, redactConfig, sha256Json } from "../../../lib/provenance.ts";
@@ -43,7 +43,7 @@ a skill changed or akm is not the same. Needs akm on PATH, or in AKM_BIN.
   --corpus  public (default) is the test split: 6,006 skills and 4,392 queries, fetched into assets/ at the pinned
             revision. custom is a library of the same size drawn from the train split, with train queries in the
             test split's mix of one, two and three skills. It is a split of the dataset and has no folder, so it takes
-            no --cases. all runs both. --corpus private works for one more release, as --corpus custom.
+            no --cases. all runs both.
   --limit   run N queries, drawn at random in proportion to how many skills a query needs. Never the first N. Keyword
             search only: a run of a few queries is for checking a setup, and a semantic index takes a quarter of an hour to build.
 ${akmUsage}
@@ -53,9 +53,6 @@ interface Summary {
   eval: string;
   /** `public` for the test split, `custom` for the train split drawn as the private library. */
   corpus: string;
-  /** `public`, or `split`: a custom corpus drawn from the dataset, with no folder. */
-  corpus_kind: string;
-  corpus_private: boolean;
   /** Always null: a split has no folder, and the data files are digested in assets_sha256. */
   corpus_folder: null;
   label: string;
@@ -190,12 +187,6 @@ export interface Folders {
   results: string;
 }
 
-/** The corpus of a dataset corpus as lib/corpus.ts names it: the test split is public, and the train split is a custom corpus of kind "split", which has no folder and holds nothing private. */
-const resolvedOf = (data: Corpus): ResolvedCorpus =>
-  data.corpus === "public"
-    ? { name: "public", folder: "", config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }
-    : { name: "custom", folder: "", config: { kind: "split", private: false }, configFile: null, flag: "--corpus custom" };
-
 /** What the run fails with once its summaries are written: undefined unless one of them is aborted. The message counts the failed calls of all of them. */
 export function failureOf(summaries: Pick<Summary, "status" | "errored" | "timeouts" | "curate_check">[]): string | undefined {
   if (!summaries.some((s) => s.status === "aborted")) return undefined;
@@ -210,7 +201,7 @@ export function failureOf(summaries: Pick<Summary, "status" | "errored" | "timeo
 export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: string; limit?: number }, folders: Folders): Promise<Summary> {
   const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const { skills, queries } = corpus;
-  const resolved = resolvedOf(corpus);
+  const name = corpus.corpus === "public" ? "public" : "custom"; // the train split is the custom corpus: it has no folder
   const library = sha256Json(akm.skillFiles(skills)); // what every query is asked of
   const started = {} as { label: string; dir: string; samples: string; assetsSha256: string };
   const { rows, ...collected } = await collect(
@@ -234,7 +225,7 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
   const manifest = buildManifest({
     measurement: MEASUREMENT,
     parts,
-    corpus: resolved.name,
+    corpus: name,
     // every query is asked of the same library: a skill that changed, or another akm layout of it, is another input for all of them
     cases: caseDigests(MEASUREMENT, queries, () => library),
     akm: { version: collected.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -245,7 +236,7 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(resolved),
+    corpus: name,
     corpus_folder: null,
     label: started.label,
     date: new Date().toISOString(),
@@ -298,16 +289,20 @@ async function main(): Promise<void> {
   }
   useAkm(values, fail);
   const assets = join(EVAL_DIR, "assets");
-  // The custom corpus is a split of the dataset: it has no folder, so there is nothing to give it and no notes in it to keep from a model. --corpus private is its old name.
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: assets, default: "split", aliases: { private: { folder: "", kind: "split" } }, fail });
+  // The custom corpus is a split of the dataset: it has no folder, so it takes no --cases.
+  const choice = values.corpus ?? "public";
+  const old = renamed(choice, "--corpus custom");
+  if (old) fail(old);
+  if (!["public", "custom", "all"].includes(choice)) fail(`--corpus must be public, custom or all, not "${choice}"`);
+  const corpora = choice === "all" ? ["public", "custom"] : [choice];
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
 
   const summaries: Summary[] = [];
   for (const c of corpora) {
-    const data = await loadCorpus(c.name === "public" ? "public" : "private", assets, limit);
-    const results = c.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
+    const data = await loadCorpus(c === "public" ? "public" : "private", assets, limit);
+    const results = c === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results");
     summaries.push(await runCorpus(data, { label: values.label, limit, semantic: withSemantic(limit) }, { assets, results }));
   }
   if (summaries.length === 2) printSideBySide(summaries[0], summaries[1]);

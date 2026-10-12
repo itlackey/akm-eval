@@ -1,7 +1,7 @@
 // #44: generate records a digest of its own code, lib/rewrite included, in generated.json, and a run on the rewrite refuses assets made by a generator that has changed.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { GENERATED, assetsDigest, generatorSha256, privateAssetsProblem, readGenerated, rewriteFiles } from "../../consolidate/src/inputs.ts";
@@ -91,21 +91,30 @@ describe("a rewrite made by generate", () => {
     expect(privateAssetsProblem("nightly", out, "items.jsonl", publicInputs, generator)).toBe("the private assets in private/nightly were made by a generator that has changed since: evals/nightly/src/generate.ts or a file it imports, or lib/rewrite (generator_sha256 in generated.json differs, or is missing): rerun ./generate-assets --only nightly");
   });
 
-  // The command, on a rewrite of its own: corpus.json beside the assets says it is a rewrite, as ./generate-assets writes it.
-  const run = (args: string[]) => {
+  // The command, in a copy of the code and the public assets of its own, so that private/ is the copy's and never the repository's.
+  const copyOfRepo = () => {
+    const tree = temp("nightly-tree-");
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(ROOT, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    for (const name of ["nightly", "consolidate", "distill", "reflect"]) cpSync(join(ROOT, "evals", name, "src"), join(tree, "evals", name, "src"), { recursive: true, filter: keep });
+    cpSync(PUBLIC, join(tree, "evals", "nightly", "assets"), { recursive: true });
+    copyFileSync(join(ROOT, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
+    return tree;
+  };
+  const run = (tree: string, args: string[]) => {
     const { MODEL_BASE_URL: _u, MODEL_NAME: _m, AKM_BIN: _a, ...rest } = process.env;
-    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd: temp("nightly-run-"), env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" }, stdout: "pipe", stderr: "pipe" });
+    const done = Bun.spawnSync(["bun", join(tree, "evals", "nightly", "src", "run.ts"), ...args], { cwd: tree, env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" }, stdout: "pipe", stderr: "pipe" });
     return { code: done.exitCode, err: done.stderr.toString() };
   };
 
   test("run --corpus custom refuses assets whose stored generator digest is zeroed, and goes on with freshly generated ones", () => {
-    const out = temp("nightly rewrite-");
-    expect(generate(out).exitCode).toBe(0);
-    writeFileSync(join(out, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "42", generated: "generated.json" }));
-    const fresh = run(["--cases", join(out, "assets")]);
+    const tree = copyOfRepo();
+    const out = join(tree, "private", "nightly");
+    expect(Bun.spawnSync(["bun", join(tree, "evals", "nightly", "src", "generate.ts"), "--seed", "42", "--out", out], { stdout: "pipe", stderr: "pipe" }).exitCode).toBe(0);
+    const fresh = run(tree, ["--corpus", "custom"]);
     expect(fresh.err).toContain("could not run `no-such-akm-in-this-test --version`"); // it got past the check of the assets
     zero(out);
-    const stale = run(["--cases", join(out, "assets")]);
+    const stale = run(tree, ["--corpus", "custom"]);
     expect(stale.code).toBe(2);
     expect(stale.err).toContain("were made by a generator that has changed since");
     expect(stale.err).toContain("rerun ./generate-assets --only nightly");

@@ -9,7 +9,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
@@ -49,8 +49,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom` (see lib/corpus.ts). */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, null when it is outside it and for the public corpus (see corpusFolderOf in lib/manifest.ts): what `scripts/rescore` reads the cases from. */
   corpus_folder: string | null;
   label: string;
@@ -75,7 +73,7 @@ interface Summary {
   engine: EngineSettings;
   /** One sha256 over cases.json and the session files of the corpus, named by their place in assets/. It covers every case, whatever --limit picked. */
   assets_sha256: string;
-  /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
+  /** The seed that made a rewritten corpus, null for the public corpus and for your own. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer sessions than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -167,7 +165,7 @@ export async function runCorpus(
 
   const abortedReason = `${GIVE_UP_AFTER} sessions in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
   const build = akmBuild();
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -181,7 +179,7 @@ export async function runCorpus(
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
@@ -233,16 +231,14 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
 
   for (const c of corpora) {
     if (c.name === "public") continue;
     if (!existsSync(join(c.folder, "cases.json"))) fail(`the custom corpus is missing (${corpusFolderOf(c.folder) ?? c.folder}/cases.json). A rewrite of the public cases is made with: ./generate-assets --only ${NAME}`);
-    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
+    const stale = c.rewrite ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
     if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }
   const { baseUrl, name: model, hasKey } = settings;

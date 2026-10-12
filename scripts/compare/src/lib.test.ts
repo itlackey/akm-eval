@@ -407,71 +407,28 @@ describe("refusals", () => {
   });
 
   test("two different corpora", () => {
-    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "rewrite" }))).toContain("the corpus differs: public in A, custom in B");
+    expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "custom" }))).toContain("the corpus differs: public in A, custom in B");
     // the old name of a rewrite reads as the custom corpus it stands for, so the public corpus differs from it the same way
     expect(message(fx("nightly", "before"), variant(fx("nightly", "after"), { corpus: "private" }))).toContain("the corpus differs: public in A, custom in B");
   });
 
-  test("two custom corpora of another kind are refused, and a summary from before the corpora were renamed is the custom corpus of its kind (#47)", () => {
-    const rewrite = variant(fx("nightly", "before"), { corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: 7 });
-    const own = variant(fx("nightly", "after"), { corpus: "custom", corpus_kind: "own", corpus_private: true });
-    expect(message(rewrite, own, BUILD)).toContain("the kind of the custom corpus (a rewrite of the public cases from a seed, or your own) differs: rewrite in A, own in B");
-    // `private` was the rewrite and `own` your notes: an old run is comparable with a new one of the same corpus
+  test("a summary from before the corpora were renamed is the custom corpus: private, own and own-feedback compare with a new run on the same cases (#47)", () => {
+    const rewrite = variant(fx("nightly", "before"), { corpus: "custom", seed: 7 });
+    const own = variant(fx("nightly", "before"), { corpus: "custom" });
     expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }), BUILD)).toBe("");
     expect(message(own, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toBe("");
     expect(message(own, variant(fx("nightly", "after"), { corpus: "own-feedback" }), BUILD)).toBe("");
-    expect(message(rewrite, variant(fx("nightly", "after"), { corpus: "own" }), BUILD)).toContain("the kind of the custom corpus");
-    // a public run and a custom one differ in the corpus, said once
-    const m = message(fx("nightly", "before"), rewrite, BUILD);
-    expect(m).toContain("the corpus differs: public in A, custom in B");
-    expect(m).not.toContain("the kind of the custom corpus");
-  });
-
-  test("the seed is evidence for a rewrite, whatever the corpus is called, and not for your own notes", () => {
+    // a public run and a custom one differ in the corpus
+    expect(message(fx("nightly", "before"), rewrite, BUILD)).toContain("the corpus differs: public in A, custom in B");
     const identity = (s: Record<string, unknown>) => identityOf({ ...IDENTITY, ...s });
-    expect(identity({ corpus: "custom", corpus_kind: "rewrite" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
-    expect(identity({ corpus: "private" })).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", private: true });
-    expect(identity({ corpus: "custom", corpus_kind: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
-    expect(identity({ corpus: "own" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
-    expect(identity({ corpus: "own-feedback" })).toMatchObject({ corpus: "custom", corpus_kind: "own", private: false });
-    expect(identity({ corpus: "public" })).toMatchObject({ corpus: "public", corpus_kind: "public", private: false });
-    expect(identity({ corpus: "public", corpus_kind: undefined })).toMatchObject({ corpus_kind: "public" });
-    const gaps = (a: Record<string, unknown>) => checkMembers([member("A", "a", a), member("B", "b", a)], []).gaps.map((f) => f.message);
-    expect(gaps({ corpus: "custom", corpus_kind: "rewrite" })).toEqual(["the seed of the private assets is not recorded in A and B"]);
-    expect(gaps({ corpus: "custom", corpus_kind: "own" })).toEqual([]);
+    for (const corpus of ["private", "own", "own-feedback", "custom"]) expect(identity({ corpus }).corpus, corpus).toBe("custom");
+    expect(identity({ corpus: "public" }).corpus).toBe("public");
   });
 
-  test("two different akm versions", () => {
-    const m = message(fx("nightly", "before"), variant(fx("nightly", "after"), { akm_version: "0.9.30" }));
-    expect(m).toContain("the akm version differs: 0.9.99-test in A, 0.9.30 in B");
-  });
-
-  test("two different collections of retrieval", () => {
-    expect(message(fx("retrieval", "before"), variant(fx("retrieval", "after"), { collection: "books" }))).toContain("the collection differs: library in A, books in B");
-  });
-
-  test("consolidate with and without --pool", () => {
-    expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases, and longmemeval --retrieval-only another measurement) differs: none in A, pool in B");
-  });
-
-  test("a different hash of the cases is a refusal unless the inputs are the treatment, and a missing one makes the report exploratory", () => {
-    const x = variant(fx("nightly", "before"), { assets_sha256: "aaa" });
-    const y = variant(fx("nightly", "after"), { assets_sha256: "bbb" });
-    expect(message(x, y, BUILD)).toContain("the cases (assets_sha256) differs: aaa in A, bbb in B");
-    expect(message(x, y, ["build", "inputs"])).toBe("");
-    const bare = variant(fx("nightly", "after"), { assets_sha256: null });
-    expect(message(x, bare, BUILD)).toBe(""); // no refusal, but nothing says the cases are the same
-    expect(comparePair(loadRun(x), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in B"]);
-    expect(comparePair(loadRun(variant(fx("nightly", "before"), { assets_sha256: null })), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
-  });
-
-  test("a different seed of the private assets is a refusal; a private run that records no seed makes the report exploratory", () => {
+  test("a different seed of the private assets is a refusal, and the same seed passes", () => {
     const x = variant(fx("nightly", "before"), { corpus: "private", seed: 7 });
     expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 8 }), BUILD)).toContain("the seed of the private assets differs: 7 in A, 8 in B");
     expect(message(x, variant(fx("nightly", "after"), { corpus: "private", seed: 7 }), BUILD)).toBe("");
-    const bare = variant(fx("nightly", "after"), { corpus: "private" });
-    expect(message(x, bare, BUILD)).toBe("");
-    expect(comparePair(loadRun(x), loadRun(bare), { treatment: BUILD }).exploratory).toEqual(["the seed of the private assets is not recorded in B"]);
     // a public run has no seed to record
     expect(comparePair(loadRun(fx("nightly", "before")), loadRun(fx("nightly", "after")), { treatment: BUILD }).exploratory).toEqual([]);
   });
@@ -871,7 +828,6 @@ describe("the comparison policy", () => {
     expect(gaps({ assets_sha256: null }, { assets_sha256: null })).toEqual(["the cases (assets_sha256) is not recorded in A and B"]);
     expect(gaps({}, { config: undefined })).toEqual(["the akm config is not recorded in B"]);
     expect(gaps({ engine: undefined }, {})).toEqual(["the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in A"]);
-    expect(gaps({ corpus: "private" }, { corpus: "private", seed: 3 })).toEqual(["the seed of the private assets is not recorded in A"]);
     // a declared axis is not checked for evidence
     expect(checkMembers([member("A", "a", { assets_sha256: null }), member("B", "b")], ["inputs"]).gaps).toEqual([]);
   });

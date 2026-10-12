@@ -181,11 +181,10 @@ describe("skillret: no model, and a custom corpus that is a split", () => {
     expect(confirmJobs(m, [{ config: m.configs[0] as never, reason: "" }])[0]?.args).toEqual(["--repeat", "3", "--label", "sw-base-c"]);
   });
 
-  test("its custom corpus has no folder: --corpus custom and the old --corpus private are one scope, and a custom row is not compared with a public one", () => {
+  test("its custom corpus has no folder: it is one scope, and a custom row is not compared with a public one", () => {
     expect(scopeKey({ name: "a", eval: "skillret", args: ["--corpus", "custom"] })).toBe("skillret corpus=custom");
-    expect(scopeKey({ name: "a", eval: "skillret", args: ["--corpus", "private"] })).toBe("skillret corpus=custom");
     expect(() => matrixOf("skillret", [], ["--corpus", "custom"])).toThrow("config pr has no baseline row that runs the same cases (skillret corpus=custom)");
-    expect(matrixOf("skillret", ["--corpus", "private"], ["--corpus", "custom"]).configs).toHaveLength(1);
+    expect(matrixOf("skillret", ["--corpus", "custom"], ["--corpus", "custom"]).configs).toHaveLength(1);
   });
 
   test("two results of the split are judged like two of the public corpus", async () => {
@@ -193,7 +192,7 @@ describe("skillret: no model, and a custom corpus that is a split", () => {
     const root = tmp();
     const m = matrixOf("skillret", ["--corpus", "custom"], ["--corpus", "custom"]);
     const state = emptyState(m);
-    const split = { corpus: "custom" as const, corpusKind: "split", corpusFolder: null };
+    const split = { corpus: "custom" as const, corpusFolder: null };
     state.confirm.base = side(root, f, "skillret", "base", f.good, split);
     state.confirm.pr = side(root, f, "skillret", "pr", f.bad, split);
     const row = buildDecision(root, m, state, 0).rows[0] as ReturnType<typeof buildDecision>["rows"][number];

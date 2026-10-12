@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { rewriteConfig, writeRewriteConfig, resolveCorpora } from "../../../lib/corpus.ts";
+import { resolveCorpora } from "../../../lib/corpus.ts";
 import { sha256Files } from "../../../lib/provenance.ts";
 import { type AssetsDigests, REWRITE_CODE, assetsDigests, assetsSha256, filesUnder, inFolder, manifestSha256, publicInputs, publicInputsSha256, readGenerated, readSeed, rewriteSha256, staleAssets } from "./inputs.ts";
 
@@ -191,16 +191,14 @@ describe("what the digest of the generator covers (#44)", () => {
     }
   });
 
-  test("assets whose stored digest is zeroed are refused, and freshly made ones pass, with the corpus.json that ./generate-assets writes beside them", () => {
+  test("assets whose stored digest is zeroed are refused, and freshly made ones pass, as the rewrite that --corpus custom reads", () => {
     const repo = tmp();
     put(repo, REPO);
     const dir = join(repo, "private", "retrieval");
     const assets = join(dir, "assets");
     put(assets, { "generated.json": JSON.stringify({ seed: "7", inputs_sha256: publicInputsSha256(repo), rewrite: rewriteSha256() }) });
-    writeRewriteConfig(dir);
-    const [custom] = resolveCorpora({ eval: "retrieval", values: { corpus: "custom" }, publicFolder: join(repo, "evals", "retrieval", "assets"), default: "rewrite", root: repo });
-    expect(custom).toMatchObject({ name: "custom", folder: assets, config: { kind: "rewrite", private: false, seed: "7" } });
-    expect(rewriteConfig(dir)).toEqual({ kind: "rewrite", private: false, seed: "7", generated: "assets/generated.json" });
+    const [custom] = resolveCorpora({ eval: "retrieval", values: { corpus: "custom" }, publicFolder: join(repo, "evals", "retrieval", "assets"), root: repo });
+    expect(custom).toMatchObject({ name: "custom", folder: assets, rewrite: true, seed: "7" });
     expect(staleAssets(custom.folder, repo, "private/retrieval/assets")).toBeUndefined();
     put(assets, { "generated.json": JSON.stringify({ seed: "7", inputs_sha256: publicInputsSha256(repo), rewrite: "0".repeat(64) }) });
     expect(staleAssets(custom.folder, repo, "private/retrieval/assets")).toBe(

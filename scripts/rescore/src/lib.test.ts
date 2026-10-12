@@ -257,7 +257,7 @@ describe("the command", () => {
     expect(cmd().code).toBe(2);
     expect(cmd("--help").out).toContain("Usage: scripts/rescore/run [--cases DIR] RESULTS_DIR...");
     // it says what it does with a custom corpus that is a split of a dataset, which has no folder
-    expect(cmd("--help").out).toContain('benchmarks/skillret is a split of its dataset and has no folder (corpus_kind "split"): its queries are drawn from the dataset files\nagain, with no --cases, and a --cases given with it has no folder to apply to and is left unused.');
+    expect(cmd("--help").out).toContain('benchmarks/skillret is a split of its dataset and has no folder: its queries are drawn from the dataset files\nagain, with no --cases, and a --cases given with it has no folder to apply to and is left unused.');
   });
 });
 
@@ -321,7 +321,7 @@ describe("the cases of a run on a custom corpus", () => {
 
   test("are read from the corpus_folder the summary records, from the repository root", () => {
     const { root } = checkout();
-    const result = rescoreRun(stored({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes" }), { root });
+    const result = rescoreRun(stored({ corpus: "custom", corpus_folder: "notes" }), { root });
     expect(rate(result)).toBe(1); // the folder's cases want "mine"
     expect(result.summary.corpus_folder).toBe("notes");
     expect(rate(rescoreRun(stored({ corpus: "public", corpus_folder: null }), { root }))).toBe(0); // the public cases want something else
@@ -329,7 +329,7 @@ describe("the cases of a run on a custom corpus", () => {
 
   test("a folder outside the repository is not recorded, and --cases names it: absolute, or from the root; the result records where it was read", () => {
     const { root, outside } = checkout();
-    const run = () => stored({ corpus: "custom", corpus_kind: "own", corpus_folder: null });
+    const run = () => stored({ corpus: "custom", corpus_folder: null });
     expect(() => rescoreRun(run(), { root })).toThrow(/was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts\/rescore with --cases DIR/);
     const absolute = rescoreRun(run(), { root, cases: outside });
     expect(rate(absolute)).toBe(0); // the cases there want "elsewhere"
@@ -343,11 +343,11 @@ describe("the cases of a run on a custom corpus", () => {
 
   test("--cases also names the cases of a run whose folder has moved, and of a run that predates corpus_folder", () => {
     const { root } = checkout();
-    const moved = stored({ corpus: "custom", corpus_kind: "own", corpus_folder: "gone/notes" });
+    const moved = stored({ corpus: "custom", corpus_folder: "gone/notes" });
     expect(() => rescoreRun(moved, { root })).toThrow("was made on the custom corpus in gone/notes, which is not a folder here. Put it back, or give scripts/rescore its place with --cases DIR");
     expect(rate(rescoreRun(moved, { root, cases: "notes" }))).toBe(1);
     expect(rescoreRun(moved, { root, cases: "notes" }).summary.corpus_folder).toBe("notes");
-    const before = stored({ corpus: "custom", corpus_kind: "own" }); // a custom run that did not record the field
+    const before = stored({ corpus: "custom" }); // a custom run that did not record the field
     expect(() => rescoreRun(before, { root })).toThrow(/was made on a custom corpus and does not record where, so the folder of its cases is not known here/);
     expect(rate(rescoreRun(before, { root, cases: "notes" }))).toBe(1);
     // a file is no folder
@@ -376,7 +376,7 @@ describe("the cases of a run on a custom corpus", () => {
 
 // ---- a custom corpus that is a split of a dataset: skillret's train split has no folder -----------------------------------------------------
 
-describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"split\")", () => {
+describe("the custom corpus of skillret, a split of its dataset (no folder)", () => {
   /**
    * A checkout of its own with skillret's code and the lock of this one, through links, and a dataset of a few skills and queries in assets/ where the
    * benchmark's data files are fetched to. The train queries are drawn from it as a run draws them, so the cases of a custom run are there to be read.
@@ -406,7 +406,7 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
 
   /** The stored run of the split: every query found first by both lines, with the manifest of the scorer `scorer` and, optionally, scores another scorer gave. */
   function stored(M: any, root: string, scorer?: { version: string; sha256: string }, wrongScores = false) {
-    const summary0 = { corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, sample: { limit: null } };
+    const summary0 = { corpus: "custom", corpus_folder: null, sample: { limit: null } };
     const cases = M.loadCases(root, summary0);
     const raws = cases.map((q: any) => ({ search: { ranked: [...q.relevant, "x"], seconds: 1 }, semantic_search: { ranked: [...q.relevant, "x"], seconds: 2 } }));
     const rows = cases.map((q: any, i: number) => M.score(q, raws[i]));
@@ -427,13 +427,13 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
     const result = rescoreRun(readStored(dir), { root });
     expect(result).toMatchObject({ dropped: [], changed: [], relabelled: [], legacy: false });
     expect(result.rows).toEqual(rows);
-    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: null });
     expect(manifestProblems(result.summary.manifest)).toEqual([]);
     expect(result.summary.manifest).toMatchObject({ corpus: "custom", rescored_from: { results: "2026-10-12-split", dropped: [] } });
     // and into a folder beside the original, as the command does
     const { out } = rescoreFolder(dir, { root });
     expect(out).toBe(`${dir}-rescored`);
-    expect(summaryOf(out)).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+    expect(summaryOf(out)).toMatchObject({ corpus: "custom", corpus_folder: null });
   });
 
   test("a run scored by an older scorer is scored again with the current one, from the ranked results", async () => {
@@ -453,7 +453,7 @@ describe("the custom corpus of skillret, a split of its dataset (corpus_kind \"s
     const { dir, rows } = stored(M, root);
     const result = rescoreRun(readStored(dir), { root, cases: "benchmarks/skillret/assets" });
     expect(result.rows).toEqual(rows);
-    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_folder: null });
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: null });
   });
 
   test("the data files not being there is a refusal that names them, as it is for the public corpus", async () => {

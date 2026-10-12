@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { staleAssets } from "../../../evals/retrieval/src/inputs.ts";
 import {
   AKM_ARM_OPTIONS,
@@ -29,7 +29,6 @@ import {
   pinsOf,
   positive,
   preflight,
-  privacyModel,
   releaseArm,
   statusOf,
 } from "../../../lib/harbor/harbor.ts";
@@ -79,9 +78,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom`. */
   corpus: string;
-  /** For a custom corpus, `rewrite` (the public library rewritten from a seed, by evals/retrieval) or `own`; `public` for the public one. */
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the library from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
   corpus_folder: string | null;
   label: string;
@@ -214,14 +210,14 @@ export function summarize(o: {
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
     engines: { opencode: { model: o.model, ...endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
-    settings: { seed: o.corpus.config.seed ?? null },
+    settings: { seed: o.corpus.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     treatment_hints: { attempts },
     completion: casesCompletion(MEASUREMENT, o.tasks, rows),
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(o.corpus),
+    corpus: o.corpus.name,
     corpus_folder: o.corpus.name === "custom" ? corpusFolderOf(o.corpus.folder) : null,
     label: o.label,
     date: new Date().toISOString(),
@@ -233,7 +229,7 @@ export function summarize(o: {
     dataset: { name: o.lock.registry, ref: o.lock.ref, source: o.lock.source, licence: o.lock.licence, tasks_in_dataset: Object.keys(o.lock.tasks).length, tasks_run_with_another_digest: otherDigests(trials, o.lock) },
     library: { path: relative(ROOT, libraryOf(o.corpus)), assets: o.library?.assets ?? null, measured_with: o.library?.measured_with ?? null, sha256: o.library?.sha256 ?? null },
     limit: o.limit ?? null,
-    seed: o.corpus.config.seed ?? null,
+    seed: o.corpus.seed,
     n_tasks: o.tasks.length,
     attempts,
     harbor_exit: o.exit,
@@ -282,9 +278,9 @@ export async function runCorpus(
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = relative(ROOT, libraryOf(c));
-  if (!existsSync(libraryOf(c))) return `the ${c.name} library is missing (${where}).${c.config.kind === "rewrite" ? " Make it with: ./generate-assets --only retrieval" : ""}`;
+  if (!existsSync(libraryOf(c))) return `the ${c.name} library is missing (${where}).${c.rewrite ? " Make it with: ./generate-assets --only retrieval" : ""}`;
   // The rewritten library is the retrieval eval's: it is used only when its generated.json says it was made from the public inputs as they are now.
-  return c.config.kind === "rewrite" ? staleAssets(c.folder, ROOT, relative(ROOT, c.folder)) : undefined;
+  return c.rewrite ? staleAssets(c.folder, ROOT, relative(ROOT, c.folder)) : undefined;
 }
 
 async function main(): Promise<void> {
@@ -309,7 +305,7 @@ async function main(): Promise<void> {
     fail((e as Error).message);
   }
   // The custom library is the retrieval eval's, so it is resolved as retrieval's corpus is: private/retrieval/assets, or --cases DIR.
-  const corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), default: "rewrite", aliases: { private: ALIASES.private }, fail, warn: (line) => console.error(line.replace(/^retrieval:/, `${NAME}:`)) });
+  const corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), fail });
   const limit = positive("--limit", values.limit);
   const attempts = positive("--attempts", values.attempts) ?? DEFAULT_ATTEMPTS;
   const repeat = positive("--repeat", values.repeat);
@@ -319,7 +315,7 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env } = preflight(values, (run) => privacyError(corpora, { model: privacyModel(run) }, "library"));
+  const { model, env } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 

@@ -68,7 +68,7 @@ async function stored(on: "public" | "own" = "public"): Promise<{ dir: string; r
   const work = tmp();
   const assets = join(work, "assets");
   writePublicAssets(assets);
-  const corpus: ResolvedCorpus = on === "public" ? { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" } : { name: "custom", folder: assets, config: { kind: "own", private: true }, configFile: null, flag: `--cases ${assets}` };
+  const corpus: ResolvedCorpus = on === "public" ? { name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" } : { name: "custom", folder: assets, rewrite: false, seed: null, flag: `--cases ${assets}` };
   server = fakeEndpoint();
   const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
   const log = console.log;
@@ -171,7 +171,7 @@ describe("scripts/rescore on a run of longmemeval", () => {
     const { dir, root } = await stored("own");
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     // the run recorded the kind and that its folder, which is outside the repository, is not recorded
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null });
+    expect(summary).toMatchObject({ corpus: "custom", corpus_folder: null });
     expect(() => rescoreFolder(dir, { root })).toThrow("was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
     // --cases names the folder, and the result says where the cases were read from this time
     cpSync(join(root, "benchmarks", "longmemeval", "assets"), join(root, "private", "longmemeval", "own"), { recursive: true });

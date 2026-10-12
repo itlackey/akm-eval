@@ -27,7 +27,6 @@ export interface RunSpec {
   label?: string;
   folder?: string;
   corpus?: "public" | "custom";
-  corpusKind?: string;
   /** Written as `corpus_folder` of a custom run. */
   corpusFolder?: string | null;
   /** The mode of the run, such as longmemeval's `retrieval-only`. */
@@ -75,7 +74,7 @@ export function buildRun(spec: RunSpec): { summary: Obj; rows: Obj[] } {
   const summary: Obj = {
     eval: m.eval,
     corpus,
-    ...(corpus === "custom" ? { corpus_kind: spec.corpusKind ?? "rewrite", corpus_private: false, corpus_folder: spec.corpusFolder ?? null } : {}),
+    ...(corpus === "custom" ? { corpus_folder: spec.corpusFolder ?? null } : {}),
     label: spec.label ?? "run",
     date: "2026-10-12T09:00:00.000Z",
     git_commit: "5d1c0de",
