@@ -27,6 +27,9 @@ export interface ChatOptions {
 
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+/** How long a request may take, unless the caller says otherwise. */
+export const CHAT_TIMEOUT_MS = 900_000;
+
 /** The temperature of every request, the benchmark's own for the model and the judge. run.ts records it in summary.json. */
 export const TEMPERATURE = 0;
 
@@ -39,7 +42,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One user message in, the reply text out. Throws when the request fails for good. */
 export async function chat(endpoint: Endpoint, prompt: string, options: ChatOptions = {}): Promise<ChatResult> {
-  const { temperature = TEMPERATURE, maxTokens, timeoutMs = 900_000, retries = 5, retryBackoffMs = 2000 } = options;
+  const { temperature = TEMPERATURE, maxTokens, timeoutMs = CHAT_TIMEOUT_MS, retries = 5, retryBackoffMs = 2000 } = options;
   const body = JSON.stringify({
     model: endpoint.model,
     messages: [{ role: "user", content: prompt }],

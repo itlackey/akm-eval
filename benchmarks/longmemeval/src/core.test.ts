@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { DATA_FILE, QUESTION_TYPES, type Question, ensureDataset, parseQuestions, sampleQuestions } from "./dataset.ts";
 import { retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
 import { pairedDifference, rate } from "./metrics.ts";
-import { isDecidable, isYes, judgePrompt, readerPrompt, renderSession } from "./prompts.ts";
+import { judgePrompt, readerPrompt, renderSession } from "./prompts.ts";
+import { isDecidable, isYes } from "./score.ts";
 
 const make = (id: string, type: string, extra: Partial<Question> = {}): Question => ({
   question_id: id,
