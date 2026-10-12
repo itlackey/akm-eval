@@ -61,8 +61,8 @@
         ]
       },
       "scorer": {
-        "version": 1,
-        "sha256": "1ce5a0f58952718121dd421c88c7744ad0c89e68d6895832cdacc3649eecf4c2",
+        "version": 2,
+        "sha256": "ab130dfb675d795136723f7c34f531a5910ea767836fc7988b73cb04a3136b8c",
         "files": [
           "evals/distill/src/score.ts",
           "lib/negation.ts"

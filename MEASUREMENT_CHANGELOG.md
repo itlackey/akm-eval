@@ -39,3 +39,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |
 | 2026-10-12 | bakeoff | collector | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | fb2b423bb008 |
 | 2026-10-12 | bakeoff | scorer | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | 2ca17e24721e |
+| 2026-10-12 | distill | scorer | 2 | a negation over a verb the shared rule does not list marks the phrase ambiguous (row.ambiguous, good_lessons.ambiguous, lesson_updates.ambiguous) (#45, distill half). verdict, missing, forbidden, contradicted and checks do not change; rows and metrics gain the field | ab130dfb675d |
