@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
 import type { Answer } from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
-import { type Judge, grade, labelCollection, makeJudge, pending, poolFromSamples, poolQueries, readRun, staleKeys } from "./label.ts";
+import { type Judge, LEGACY_JUDGE, grade, labelCollection, makeJudge, pending, poolFromSamples, poolQueries, readRun, stampLegacy, staleKeys } from "./label.ts";
 import { type Asset, PROMPT_SHA256, type Qrel, type Query, assetSha256, gradesByQuery, parseQrels } from "./lib.ts";
 import type { Folders } from "./run.ts";
 
@@ -313,7 +313,8 @@ type Answers = Record<string, { search: string[]; curate: string[] }>;
 /**
  * An akm over .md files that logs each call to `calls`. When the sandbox's config names bundles (a library indexed where it
  * is), each is a folder of files and its refs read `<bundle>//knowledge/<name>`. Otherwise the files are those of the sandbox's
- * bundle, and refs read `knowledge/<name>`. `search ""` lists them, and a query is answered from `answers`.
+ * bundle, and refs read `knowledge/<name>`; a file in a folder (`knowledge/a.md`) has the ref of its path (`knowledge/a`).
+ * `search ""` lists them, and a query is answered from `answers`.
  */
 const fakeAkm = (calls: string, answers: Answers) => `
 import { appendFileSync, readFileSync, readdirSync } from "node:fs";
@@ -324,7 +325,7 @@ if (cmd === "--version") { console.log("0.9.99-test"); process.exit(0); }
 if (cmd === "search" && process.argv[3] === "--help") { console.log("--detail=<detail> Detail level, or agent"); process.exit(0); }
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const roots = config.bundles ? Object.entries(config.bundles).map(([name, b]) => [name + "//", b.path]) : [["", process.env.AKM_BUNDLE_DIR]];
-const entries = roots.flatMap(([prefix, dir]) => readdirSync(dir).filter((f) => f.endsWith(".md")).sort().map((f) => ({ ref: prefix + "knowledge/" + f.slice(0, -3), type: "knowledge", name: f.slice(0, -3), description: "about " + f.slice(0, -3), path: join(dir, f) })));
+const entries = roots.flatMap(([prefix, dir]) => readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".md")).sort().map((f) => { const stem = f.slice(0, -3); const name = stem.split("/").pop(); return { ref: prefix + (stem.includes("/") ? stem : "knowledge/" + stem), type: "knowledge", name, description: "about " + name, path: join(dir, f) }; }));
 if (cmd === "index") { console.log(JSON.stringify({ ok: true, totalEntries: entries.length })); process.exit(0); }
 if (rest[0] === "") { console.log(JSON.stringify({ hits: rest[rest.indexOf("--type") + 1] === "knowledge" ? entries : [] })); process.exit(0); }
 const wanted = ${JSON.stringify(answers)}[rest[rest.indexOf("--") + 1]]?.[cmd] ?? [];
@@ -724,6 +725,119 @@ describe("grading a pair again, and the judges of a set", () => {
   });
 });
 
+describe("stampLegacy (#49)", () => {
+  const FILES = {
+    "knowledge/a.md": "---\ntitle: A\n---\nalpha alpha alpha\n",
+    "skills/s/SKILL.md": "---\nname: s\ndescription: a skill\n---\nthe skill body\n",
+    "commands/c.md": "run it with $ARGUMENTS\n",
+    "README.md": "not an asset\n",
+  };
+  /** The file each ref of FILES is, by akm's rules (library.ts). */
+  const FILE_OF: Record<string, string> = { "knowledge/a": "knowledge/a.md", "skills/s": "skills/s/SKILL.md", "commands/c": "commands/c.md" };
+  const digest = (library: string, ref: string) => assetSha256(ref, readFileSync(join(library, FILE_OF[ref] as string), "utf8"));
+  const row = (id: string, ref: string, grade: number, extra: object = {}) => ({ id, ref, grade, reason: `why ${id} ${ref}`, ...extra });
+
+  /** A library in a temp folder with the files above, and a qrels file with these rows. */
+  function set(rows: object[]) {
+    const root = tmp();
+    for (const [name, text] of Object.entries(FILES)) {
+      mkdirSync(dirname(join(root, "library", name)), { recursive: true });
+      writeFileSync(join(root, "library", name), text);
+    }
+    const qrels = join(root, "qrels.jsonl");
+    writeFileSync(qrels, jsonl(rows));
+    return { root, library: join(root, "library"), qrels, lines: () => readFileSync(qrels, "utf8").trim().split("\n").map((l) => JSON.parse(l)) };
+  }
+
+  test("gives each row that records no digest the digest of its asset as the library has it, and the judge 'legacy' when it records none, and changes nothing else", () => {
+    const s = set([row("q1", "knowledge/a", 3), row("q1", "skills/s", 0), row("q2", "knowledge/a", 1), row("q3", "commands/c", 2, { judge: "someone" }), row("q4", "knowledge/a", 2, { banned: undefined })]);
+    const before = readFileSync(s.qrels, "utf8");
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 5, left: 0, missing: [] });
+    const after = s.lines();
+    expect(after.map((r) => r.asset_sha256)).toEqual([digest(s.library, "knowledge/a"), digest(s.library, "skills/s"), digest(s.library, "knowledge/a"), digest(s.library, "commands/c"), digest(s.library, "knowledge/a")]);
+    expect(after.map((r) => r.judge)).toEqual([LEGACY_JUDGE, LEGACY_JUDGE, LEGACY_JUDGE, "someone", LEGACY_JUDGE]); // a row that names its judge keeps it
+    expect(LEGACY_JUDGE).toBe("legacy");
+    // every grade, reason, id and ref is as it was, in the same order, in the same format
+    const was = before.trim().split("\n").map((l) => JSON.parse(l));
+    expect(after.map(({ judge: _j, asset_sha256: _a, ...r }) => r)).toEqual(was.map(({ judge: _j, ...r }) => r));
+    expect(readFileSync(s.qrels, "utf8").endsWith("\n")).toBe(true);
+    expect(readFileSync(s.qrels, "utf8").split("\n")[0]).toBe(JSON.stringify({ ...was[0], judge: "legacy", asset_sha256: digest(s.library, "knowledge/a") }));
+    expect(gradesByQuery(parseQrels(readFileSync(s.qrels, "utf8")))).toEqual(gradesByQuery(parseQrels(before)));
+    expect(readdirSync(s.root).sort()).toEqual(["library", "qrels.jsonl"]); // no file is left beside it
+  });
+
+  test("can be run again: it stamps only what is not stamped, and leaves the file as it is when there is nothing to do", () => {
+    const s = set([row("q1", "knowledge/a", 3, { judge: "the-model", prompt_sha256: "p", date: "2026-10-11", asset_sha256: "e".repeat(64) }), row("q2", "skills/s", 2)]);
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 1, left: 1, missing: [] });
+    const once = readFileSync(s.qrels, "utf8");
+    expect(s.lines()[0]).toEqual({ id: "q1", ref: "knowledge/a", grade: 3, reason: "why q1 knowledge/a", judge: "the-model", prompt_sha256: "p", date: "2026-10-11", asset_sha256: "e".repeat(64) }); // a row label wrote is not touched
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 0, left: 2, missing: [] });
+    expect(readFileSync(s.qrels, "utf8")).toBe(once);
+    // a row added later without a digest is stamped by the next run
+    writeFileSync(s.qrels, `${once}${JSON.stringify(row("q5", "commands/c", 1))}\n`);
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 1, left: 2, missing: [] });
+    expect(s.lines()[2]).toMatchObject({ id: "q5", judge: "legacy", asset_sha256: digest(s.library, "commands/c") });
+  });
+
+  test("stamps only the last row of a pair: an older row of a pair that was graded again is history", () => {
+    const s = set([row("q1", "knowledge/a", 1), row("q1", "knowledge/a", 3, { judge: "the-model", asset_sha256: "f".repeat(64) }), row("q2", "knowledge/a", 2), row("q2", "knowledge/a", 3)]);
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 1, left: 3, missing: [] });
+    expect(s.lines().map((r) => r.asset_sha256)).toEqual([undefined, "f".repeat(64), undefined, digest(s.library, "knowledge/a")]);
+  });
+
+  test("writes nothing when a row names a ref that no file of the library gives, and names the refs", () => {
+    const s = set([row("q1", "knowledge/a", 3), row("q1", "knowledge/gone", 2), row("q2", "knowledge/gone", 2), row("q2", "agents/missing", 1)]);
+    const before = readFileSync(s.qrels, "utf8");
+    expect(stampLegacy(s.qrels, s.library)).toEqual({ stamped: 0, left: 0, missing: ["knowledge/gone", "agents/missing"] });
+    expect(readFileSync(s.qrels, "utf8")).toBe(before);
+  });
+
+  test("a later edit to an asset makes label grade the pair again, which it did not for a row without a digest", async () => {
+    // a library laid out as akm lays it out, graded before label wrote digests
+    const files = { "knowledge/a.md": "print the pdf version one\n", "knowledge/b.md": "nothing\n" };
+    const legacy = [{ id: "q1", ref: "knowledge/a", grade: 3, reason: "from the first run" }];
+    const queries = [{ id: "q1", query: "print the pdf", kind: "direct" }];
+    const answers: Answers = { "print the pdf": { search: ["a"], curate: ["a"] } };
+
+    const before = setup(files, queries, legacy, answers);
+    writeFileSync(join(before.root, "library", "knowledge", "a.md"), "print the pdf version two\n");
+    const unchanged = await printed(() => labelCollection("public", before.ctx(stubJudge({}).judge), before.folders));
+    expect(unchanged.out.join("\n")).toContain("1 pooled pairs, 1 already graded, 0 to grade"); // an edit to the asset changed nothing
+
+    const set = setup(files, queries, legacy, answers);
+    expect(stampLegacy(join(set.folders.assets, "qrels.jsonl"), set.folders.library)).toEqual({ stamped: 1, left: 0, missing: [] });
+    const settled = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(settled.out.join("\n")).toContain("1 pooled pairs, 1 already graded, 0 to grade"); // the asset is as it was when it was stamped
+    expect(settled.err.join("\n")).toContain("assets/qrels.jsonl has grades by legacy, and this run grades with the-model. Grades of different judges do not mix cleanly"); // the legacy grades are of another judge than this one
+
+    writeFileSync(join(set.root, "library", "knowledge", "a.md"), "print the pdf version two\n");
+    const { judge, seen } = stubJudge({ "knowledge/a": 1 });
+    const again = await printed(() => labelCollection("public", set.ctx(judge), set.folders));
+    expect(again.out.join("\n")).toContain("1 pooled pairs, 0 already graded, 1 to grade, 2 at a time (1 of them were graded from an asset that has changed since)");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain("print the pdf version two");
+    const rows = parseQrels(set.qrels());
+    expect(rows.map((r) => [r.judge, r.grade])).toEqual([["legacy", 3], ["the-model", 1]]); // the old row stays as history, the new grade replaces it
+    expect(gradesByQuery(rows).get("q1")).toEqual({ "knowledge/a": 1 });
+    const last = await printed(() => labelCollection("public", set.ctx(stubJudge({}).judge), set.folders));
+    expect(last.err).toEqual([]); // and it is not once the pair has been graded again
+  });
+
+  test("the library's own qrels all record the digest of their asset and a judge, and the digests are those of asset files", () => {
+    const rows = parseQrels(readFileSync(join(import.meta.dir, "..", "assets", "qrels.jsonl"), "utf8"));
+    expect(rows.length).toBe(1499);
+    expect(rows.filter((r) => !/^[0-9a-f]{64}$/.test(r.asset_sha256 ?? "")).length).toBe(0);
+    expect(rows.filter((r) => r.judge === undefined).length).toBe(0);
+    expect(new Set(rows.map((r) => r.judge))).toEqual(new Set([LEGACY_JUDGE])); // no row of the library was graded by label yet
+  });
+
+  test("the command: --stamp-legacy is for the public library, and says so for a set of your own", () => {
+    const done = Bun.spawnSync(["bun", join(import.meta.dir, "label.ts"), "--stamp-legacy", "--cases", "notes"], { cwd: tmp(), stdout: "pipe", stderr: "pipe" });
+    expect(done.exitCode).toBe(2);
+    expect(done.stderr.toString()).toContain("--stamp-legacy is for the public library, whose refs are worked out from its files.");
+  });
+});
+
 describe("the command", () => {
   // Bun loads the .env of its working folder. So the command runs in a folder of its own, with the judge settings it is given.
   const run = (args: string[], env: Record<string, string> = {}) => {
@@ -767,13 +881,14 @@ describe("the command", () => {
     expect(run(["--help"]).out).toContain("--corpus  public (default)");
   });
 
-  test("describes the own guard as models.json says it, and --from", () => {
+  test("describes the own guard as models.json says it, and --from and --stamp-legacy", () => {
     const help = run(["--help"]).out;
     expect(help).toContain('to its qrels.jsonl. It sends your notes to the judge, so when the set is private it runs only if the judge\n            model\'s line in models.json says "private": true. Nothing is inferred from the URL or the name.');
     expect(help).not.toContain("private network");
     expect(help).not.toContain("chat/, fast/");
     expect(help).toContain("--from    pool the first 10 results of every column of a run, semantic search included");
-    expect(help).toContain("[--from RESULTS_DIR]");
+    expect(help).toContain("[--from RESULTS_DIR] [--stamp-legacy]");
+    expect(help).toContain("--stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset");
   });
 
   test("stops with 2 when --from names a folder that is not a run", () => {

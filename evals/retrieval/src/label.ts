@@ -8,7 +8,7 @@
 //
 //   evals/retrieval/label [--corpus public|custom] [--cases DIR] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
 
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
@@ -17,6 +17,7 @@ import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../.
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
 import { type Asset, DEPTH, GRADE_SCHEMA, MAX_DOC_CHARS, PROMPT_SHA256, PROMPT_VERSION, type Qrel, type Query, SYSTEMS, assetSha256, isTask, judgeMessages, parseGrade, parseQueries, parseQrels, pool, qrelProvenance } from "./lib.ts";
+import { libraryRefs } from "./library.ts";
 import { type Folders, collectionsFor } from "./run.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
@@ -25,13 +26,14 @@ const CONCURRENCY = 2;
 const GIVE_UP_AFTER = 10; // grades that fail one after another, and the endpoint is not answering
 type Corpus = "public" | "own";
 
-const USAGE = `Usage: evals/retrieval/label [--corpus public|custom] [--cases DIR] [--limit N] [--from RESULTS_DIR] [--judge-model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/retrieval/label [--corpus public|custom] [--cases DIR] [--limit N] [--from RESULTS_DIR] [--stamp-legacy] [--judge-model ID] [--akm COMMAND]
 
 Grades what akm search, akm curate and a plain BM25 return for each task query in assets/queries.jsonl, and the
 assets the author expected, and appends the grades to assets/qrels.jsonl. A pair that already has a grade is
 skipped, so run it again to resume, unless the asset changed since it was graded: then it is graded again, and the
 new grade replaces the old. Each grade is written with the judge, a digest of the prompt, the date and a digest of
-the asset as the judge read it. A pair graded before label wrote them has none, and is never graded again.
+the asset as the judge read it. A pair graded before label wrote them has none, and is never graded again until
+--stamp-legacy gives it the digest of its asset as it is now.
 The judge is the model in JUDGE_BASE_URL, JUDGE_API_KEY and JUDGE_MODEL (.env at the repository root), or the one --judge-model names.
 Use one judge for a set: label warns when the qrels were graded by another, or have grades that record no judge.
 
@@ -41,6 +43,10 @@ Use one judge for a set: label warns when the qrels were graded by another, or h
             what akm search and akm curate return for it (no BM25: the library is too big to list), and the grades are appended
             to its qrels.jsonl. It sends your notes to the judge, so when the set is private it runs only if the judge
             model's line in models.json says "private": true. Nothing is inferred from the URL or the name.
+  --stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset the digest of the asset as the
+            library has it now, and judge "legacy" when it records no judge, so that a later edit to the asset grades the pair
+            again. It grades nothing, calls no judge and runs no akm, and can be run again: it stamps only what is not stamped.
+            It does not change a grade. For the public library only.
   --limit   label only the first N task queries
   --from    pool the first ${DEPTH} results of every column of a run, semantic search included, from the samples.jsonl of
             RESULTS_DIR (a results folder of evals/retrieval/run of this set), instead of the pool above, and grade what
@@ -419,10 +425,54 @@ export async function labelCollection(corpus: Corpus, ctx: { model: string; judg
   }
 }
 
+/** The judge of the rows that were graded before label recorded one. The library's are known to be graded by one model (assets/README.md), but the rows do not say which. */
+export const LEGACY_JUDGE = "legacy";
+
+export interface Stamped {
+  /** Rows given the digest of their asset. */
+  stamped: number;
+  /** Rows that had one already, or that a later row of their pair replaced. */
+  left: number;
+  /** The refs of rows that name no file of the library. Nothing is written while there is one. */
+  missing: string[];
+}
+
+/**
+ * Gives every row of the qrels at `qrelsPath` that records no `asset_sha256` the digest of its asset as the library at `library` has it now,
+ * and the judge "legacy" when it records no judge, so that a later edit to the asset makes label grade the pair again. A grade is never
+ * changed. Only the last row of a pair is stamped: an older row of a pair that was graded again is history, and the text it was graded
+ * from is not the text of today. The file is written again only when every row's ref names a file of the library, and then in one move.
+ * The refs of the files are worked out from the files alone (library.ts), which is how the public library is known to be laid out for akm,
+ * so akm is not run. Stamping again stamps nothing.
+ */
+export function stampLegacy(qrelsPath: string, library: string): Stamped {
+  const lines = readFileSync(qrelsPath, "utf8").split("\n");
+  const rows = lines.map((line) => (line.trim() ? (JSON.parse(line) as Qrel) : null));
+  const last = new Map<string, number>();
+  rows.forEach((r, i) => r && last.set(`${r.id}\t${r.ref}`, i));
+  const files = libraryRefs(library);
+  const missing: string[] = [];
+  const out = [...lines];
+  let stamped = 0;
+  let left = 0;
+  rows.forEach((r, i) => {
+    if (r === null) return;
+    if (r.asset_sha256 !== undefined || last.get(`${r.id}\t${r.ref}`) !== i) return void left++;
+    const file = files.get(r.ref)?.[0];
+    if (file === undefined) return void missing.push(r.ref);
+    out[i] = JSON.stringify({ ...r, judge: r.judge ?? LEGACY_JUDGE, asset_sha256: assetSha256(r.ref, readFileSync(join(library, file), "utf8")) });
+    stamped++;
+  });
+  if (missing.length > 0 || stamped === 0) return { stamped: 0, left, missing: [...new Set(missing)] };
+  writeFileSync(`${qrelsPath}.new`, out.join("\n"));
+  renameSync(`${qrelsPath}.new`, qrelsPath);
+  return { stamped, left, missing: [] };
+}
+
 async function main(): Promise<number> {
-  let values: { corpus?: string; cases?: string; limit?: string; from?: string; "judge-model"?: string; akm?: string; help?: boolean };
+  let values: { corpus?: string; cases?: string; limit?: string; from?: string; "stamp-legacy"?: boolean; "judge-model"?: string; akm?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, from: { type: "string" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, from: { type: "string" }, "stamp-legacy": { type: "boolean" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval label: ${(e as Error).message}\n\n${USAGE}`);
     return 2;
@@ -457,6 +507,20 @@ async function main(): Promise<number> {
     return 2;
   }
   const folders = collectionsFor(chosen)[0].folders;
+  if (values["stamp-legacy"]) {
+    if (corpus === "own") {
+      console.error("retrieval label: --stamp-legacy is for the public library, whose refs are worked out from its files. To have your own set's grades checked against its assets, grade them again with label.");
+      return 2;
+    }
+    const qrels = join(folders.assets, "qrels.jsonl");
+    const done = stampLegacy(qrels, folders.library);
+    if (done.missing.length > 0) {
+      console.error(`retrieval label: ${done.missing.length} refs of ${relative(ROOT, qrels)} name no file of the library, such as ${done.missing.slice(0, 3).join(", ")}. Nothing was changed.`);
+      return 1;
+    }
+    console.log(`retrieval label: stamped ${done.stamped} rows of ${relative(ROOT, qrels)} with the digest of their asset${done.stamped > 0 ? ` (judge "${LEGACY_JUDGE}" where none was recorded)` : ""}; ${done.left} rows already had one or were replaced by a later row of their pair.`);
+    return 0;
+  }
   let judgeSettings: ModelSettings;
   try {
     useAkm(values, stop);
