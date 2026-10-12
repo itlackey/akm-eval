@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { sha256File, sha256Json } from "../../../lib/provenance.ts";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -44,7 +44,7 @@ interface Spec {
   summary?: Record<string, unknown>;
 }
 
-/** A results folder of the golden cases of a collection as harness-v3 writes it. A `manifest` that returns undefined leaves the summary without one: a legacy run. */
+/** A results folder of the golden cases of a collection as harness-v3 writes it. */
 function run(spec: Spec = {}): string {
   const collection = spec.collection ?? "library";
   const cases = CASES.filter((c) => idsOf(collection).includes(c.id));
@@ -112,7 +112,7 @@ describe("rescoring a retrieval run", () => {
     expect(out).toBe(`${dir}-rescored`);
     expect(text(dir)).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const s = summaryOf(out);
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_queries: 9, n_scored: o.n_scored, metrics: o.metrics, abstention: o.abstention, errored: o.errored, n_assets: 259, assets: o.assets });
@@ -168,28 +168,6 @@ describe("rescoring a retrieval run", () => {
     const m = summaryOf(out).manifest as RunManifest;
     expect(m.collector).toEqual(other);
     expect(m.rescored_from?.scorer).toEqual(stale);
-  });
-
-  test("a run from before the manifest is scored again too when it read the queries that are here, with its collector as version 0.0", () => {
-    const legacy = run({ manifest: () => undefined });
-    expect(readManifest(summaryOf(legacy)).kind).toBe("legacy");
-    const { out, result } = rescoreFolder(legacy);
-    expect(result.legacy).toBe(true);
-    expect(rowsOf(out)).toEqual(rowsOf(legacy));
-    const m = summaryOf(out).manifest as RunManifest;
-    expect(m.collector).toEqual({ version: UNVERSIONED });
-    expect(m).toMatchObject({ eval: "retrieval", corpus: "public", collection: "library", akm: { version: "0.9.99-test" }, rescored_from: { scorer: null } });
-    expect(manifestProblems(m)).toEqual([]);
-  });
-
-  test("a run from before the manifest that named its corpus the old way is found all the same", () => {
-    const old = run({ manifest: () => undefined, summary: { corpus_folder: undefined } });
-    expect(rescoreFolder(old).result).toMatchObject({ changed: [], legacy: true });
-  });
-
-  test("a run from before the manifest that read other queries than the ones here is refused", () => {
-    const legacy = run({ manifest: () => undefined, summary: { assets: { library_sha256: "1".repeat(64), bundles_sha256: null, queries_sha256: "f".repeat(64), qrels_sha256: "2".repeat(64) } } });
-    expect(() => rescoreFolder(legacy)).toThrow(`was made before the manifest, and cannot be scored again: it read other queries than the ones in evals/retrieval/assets/queries.jsonl now (queries_sha256 is ${"f".repeat(64)})`);
   });
 
   test("a query that was reworded since the run is another case: it is left out, and named", () => {

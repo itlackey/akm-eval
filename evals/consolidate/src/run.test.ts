@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
@@ -377,7 +377,7 @@ describe("runCorpus", () => {
     void summary; // the fake akm pairs nothing here, so the run is "aborted"; its rows are still a stored run
     clearRunning(dir); // the run ended in this process, which is where the marker is removed
     const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
     rmSync(out, { recursive: true, force: true });
   });
@@ -388,11 +388,11 @@ describe("runCorpus", () => {
     const { summary } = resultsOf(folders);
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, INPUT_FILES));
-    expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
-    expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
+    expect(summary.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.config.engines.consolidate).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "<redacted>", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "consolidate" } });
     expect(summary.config.embedding).toBeUndefined();
-    expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+    expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
     // every key it wrote before is still there
     for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
     expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/

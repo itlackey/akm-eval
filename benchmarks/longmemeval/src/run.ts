@@ -14,7 +14,7 @@ import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
-import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
+import { type EngineSetting, canonical, endpointHost, harnessSha256, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
@@ -91,11 +91,9 @@ interface Summary extends ReturnType<typeof summarize> {
   harness_sha256: string;
   model: string | null;
   judge_model: string | null;
-  /** Where the model and the judge are called: the host, and the digest of the endpoint's identity (see endpointRecord in lib/provenance.ts). Never the path, which can name a deployment or carry a key. Null when the run has no model. */
+  /** The host the model and the judge are called at. Never the path, which can name a deployment or carry a key. Null when the run has no model. */
   model_endpoint: string | null;
-  model_endpoint_id: string | null;
   judge_endpoint: string | null;
-  judge_endpoint_id: string | null;
   /** What every model and judge request sends: the temperature, and the most tokens each may answer with. Null when the run has no model. */
   temperature: number | null;
   max_tokens: { model: number; judge: number } | null;
@@ -178,13 +176,12 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** The settings of the model or the judge as the manifest keeps them: the host and the digest of the endpoint's identity, never the path. */
-const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, ...endpointRecord(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
+/** The settings of the model or the judge as the manifest keeps them: the host of the endpoint, never the path. */
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
 
 /**
  * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
- * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by the digest of its identity, so two deployments on
- * one host differ, and a key or a trailing slash does not; it is shown as its host and the start of the digest.
+ * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by its host.
  */
 export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
   const out: string[] = [];
@@ -207,9 +204,9 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   for (const role of ["model", "judge"]) {
     const was = prior.engines[role];
     const is = now.engines[role];
-    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null, endpoint_id: null }));
+    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null }));
     note(role, was?.model, is?.model);
-    note(`${role} endpoint`, was === undefined ? null : endpointDisplay(was), is === undefined ? null : endpointDisplay(is));
+    note(`${role} endpoint`, was?.endpoint, is?.endpoint);
     note(`${role} settings`, rest(was), rest(is));
   }
   const ids = [...new Set([...Object.keys(prior.cases), ...Object.keys(now.cases)])];
@@ -327,10 +324,8 @@ export async function runCorpus(
       harness_sha256: HARNESS,
       model: ctx.model?.model ?? null,
       judge_model: ctx.judge?.model ?? null,
-      model_endpoint: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint : null,
-      model_endpoint_id: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint_id : null,
-      judge_endpoint: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint : null,
-      judge_endpoint_id: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint_id : null,
+      model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,
+      judge_endpoint: ctx.judge ? endpointHost(ctx.judge.baseUrl) : null,
       ...sampling(retrievalOnly),
       akm_version: ctx.version,
       ...build,

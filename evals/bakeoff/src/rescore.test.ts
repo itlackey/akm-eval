@@ -137,17 +137,3 @@ describe("a custom run on a folder outside the repository is rescored with --cas
     expect(folder).not.toBe(moved);
   });
 });
-
-describe("a run of the Python bakeoff", () => {
-  test("is legacy and cannot be rescored, whatever corpus it names", () => {
-    const root = mkdtempSync(join(tmpdir(), "bakeoff-legacy-"));
-    dirs.push(root);
-    for (const corpus of ["public", "private"]) {
-      const dir = join(root, corpus);
-      mkdirSync(dir);
-      writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "bakeoff", corpus, prompts_version: "0.9.15-style", models: [] }));
-      writeFileSync(join(dir, "samples.jsonl"), `${JSON.stringify({ case_id: "consolidate-memory-pool", output: "{}" })}\n`);
-      expect(() => rescoreRun(readStored(dir))).toThrow("was made before the manifest, and cannot be scored again: it is a result of the Python bakeoff");
-    }
-  });
-});

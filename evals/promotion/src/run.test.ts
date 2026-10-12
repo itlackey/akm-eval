@@ -7,7 +7,7 @@ import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { type Run, comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
@@ -170,7 +170,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(text);
     expect(stored.config.engines.judge).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
     expect(stored.config.improve.strategies.promotion.processes.triage).toEqual({ enabled: true, applyMode: "queue", judgment: { enabled: true } });
-    expect(stored.engine).toEqual({ engine: "judge", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.cases, folders.library));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
@@ -380,7 +380,7 @@ describe("the manifest of a run", () => {
     expect(summary.manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(summary.config)));
     expect(JSON.stringify(summary.manifest.config.redacted)).not.toContain("localhost");
     expect(summary.manifest.engines).toEqual(summary.engine.engines);
-    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", endpoint_id: sha256Text("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
     expect(JSON.stringify(summary)).not.toContain("localhost:1/v1"); // the summary's config names the endpoint as <MODEL_BASE_URL>
     expect(summary.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
   });
@@ -433,7 +433,7 @@ describe("rescore", () => {
     expect(summary).toMatchObject({ n_cases: 20, n_run: 20, n_errored: 6, timeouts: 3 });
     const { out, result } = rescoreFolder(summary.results_dir);
     expect(out).toBe(`${summary.results_dir}-rescored`);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const was = stored(summary.results_dir);
     const now = stored(out);
     expect(now.rows).toEqual(was.rows);
@@ -451,7 +451,7 @@ describe("rescore", () => {
     expect(summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets" });
     expect(stored(dir).summary.corpus_folder).toBe("evals/promotion/assets"); // from the repository root, with /, never absolute
     const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(stored(out).rows).toEqual(stored(dir).rows);
     expect(stored(out).summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets", n_run: 20, n_errored: 6 });
     expect(MEASUREMENT.loadCases(REPO, stored(dir).summary).map((c) => c.id)).toEqual(parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8")).map((c) => c.id));
@@ -476,23 +476,6 @@ describe("rescore", () => {
     const again = rescoreFolder(summary.results_dir, { cases: dir });
     expect(again.result.relabelled).toEqual(["g-accept"]);
     expect(stored(again.out).rows[0]).toMatchObject({ id: "g-accept", label: "bad", category: "duplicate", outcome: "accept" });
-  });
-
-  test("a run from before the manifest scores again too, when it read the cases that are here now, and is refused when it did not", async () => {
-    const { summary } = await publicRun();
-    let n = 0;
-    const legacy = (change: (s: Record<string, any>) => void): string => {
-      const dir = `${summary.results_dir}-legacy-${++n}`;
-      cpSync(summary.results_dir, dir, { recursive: true });
-      const s = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-      delete s.manifest;
-      change(s);
-      writeFileSync(join(dir, "summary.json"), JSON.stringify(s));
-      return dir;
-    };
-    const { result } = rescoreFolder(legacy(() => {}));
-    expect(result).toMatchObject({ legacy: true, changed: [] });
-    expect(() => rescoreFolder(legacy((s) => (s.assets_sha256 = "0".repeat(64))))).toThrow(/was made before the manifest, and cannot be scored again: it read other cases than the ones in evals\/promotion\/assets now/);
   });
 
   test("a run whose rows lack the outcome the scorer reads is refused, with the field named", async () => {

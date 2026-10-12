@@ -28,8 +28,8 @@ The default custom run reads `private/reflect/assets/`. Make it first with `./ge
 Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many cases ran, were scored and errored, how many had retrieval queries recorded (`retrieval_queries`, null without `--retrieval-queries`), the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
-  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with the value of every credential field replaced by `<redacted>` (`credentialField` in `lib/provenance.ts` decides by the name: `apiKey`, `api_key`, `token`, `secret`, `password`, `authorization` and the like) (a `$NAME` reference to an environment variable is kept) and the model's endpoint written as `<MODEL_BASE_URL>`.
-  - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `endpoint_id` (a sha256 of the endpoint's identity, which is what tells two deployments on one host apart), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
+  - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with the value of every credential field replaced by `<redacted>` (`credentialField` in `lib/provenance.ts` decides by the name: `apiKey`, `api_key`, `token`, `secret`, `password`, `authorization` and the like) and the model's endpoint written as `<MODEL_BASE_URL>`.
+  - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engines, the strategy and the config patch, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
   - `assets_sha256`: the digest of the corpus's `cases.jsonl`, so two runs on the same cases have the same digest wherever the repository is. A change to a case changes it, and `--limit` does not.
   - `corpus`: `public`, or `custom` for any other folder of cases. `corpus_folder` is the folder of a custom corpus from the repository root, which `scripts/rescore` reads the cases from again; it is `null` for the public corpus, and for a folder outside the repository, whose name can say what is in it, and then `scripts/rescore` takes the folder with `--cases DIR`.
@@ -120,7 +120,7 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 scripts/rescore/run evals/reflect/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
 ```
 
-A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
+A run from before the manifest (made before akm-eval 0.2) is refused. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
 
 ## Run your own set
 

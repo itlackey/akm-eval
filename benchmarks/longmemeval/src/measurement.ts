@@ -32,7 +32,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     if (!existsSync(file)) throw new Error(`${relative(root, file)} is missing. A public corpus is fetched by a run of benchmarks/${NAME}/run; a custom one is made by ./generate-assets --only ${NAME}`);
     return loadQuestions(file);
   },
-  legacyProblem: () => "its rows name the question as `question_id` and do not keep the raw output in the fields the scorer reads, so they cannot be paired with the questions here",
   caseId: (q) => q.question_id,
   // Everything the collector shows the model, the judge and akm: the question and its date, the sessions (as the reader reads them), and the
   // key the judge compares the answer with. The judge prompt depends on the type, and on the id (an abstention question).

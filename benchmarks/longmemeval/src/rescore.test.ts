@@ -87,7 +87,7 @@ describe("scripts/rescore on a run of longmemeval", () => {
     const { out, result } = rescoreFolder(dir, { root, now: new Date("2026-10-12T10:00:00Z") });
     expect(basename(out)).toBe(`${basename(dir)}-rescored`);
     expect([readFileSync(join(dir, "summary.json"), "utf8"), readFileSync(join(dir, "samples.jsonl"), "utf8")]).toEqual(before);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const original = JSON.parse(before[0]);
     const again = JSON.parse(readFileSync(join(out, "summary.json"), "utf8"));
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(before[1]);
@@ -155,15 +155,6 @@ describe("scripts/rescore on a run of longmemeval", () => {
     expect(message).toContain("with_akm.finish_reason (1 row: q-secret)");
     expect(message).toContain("retrieved_session_ids (1 row: q-passport_abs)");
     expect(existsSync(join(dir, "..", `${basename(dir)}-rescored`))).toBe(false); // nothing was written
-  });
-
-  test("a run from before the manifest cannot be scored again, and says why", async () => {
-    const { dir, root } = await stored();
-    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    const { manifest: _gone, ...legacy } = summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
-    expect(() => rescoreFolder(dir, { root })).toThrow("was made before the manifest, and cannot be scored again: its rows name the question as `question_id`");
-    expect(readStored(dir).rows).toHaveLength(3);
   });
 
   test("a run on a custom corpus is scored again from the folder its summary records, or from the one --cases names", async () => {

@@ -7,7 +7,7 @@ import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointId, endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
 import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -203,10 +203,12 @@ describe("runCorpus", () => {
     const text = readFileSync(join(summary.results_dir, "summary.json"), "utf8");
     expect(text).not.toContain("model-secret");
     const stored = JSON.parse(text);
-    expect(stored.config).toEqual(hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl)); // the key is the reference "$MODEL_API_KEY", which holds no secret, and the endpoint is <MODEL_BASE_URL>
-    const settings = { model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 };
+    const config = hideEndpoint(JSON.parse(JSON.stringify(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey))), ctx.baseUrl); // the endpoint is <MODEL_BASE_URL>
+    config.engines.reflect.apiKey = "<redacted>";
+    expect(stored.config).toEqual(config);
+    const settings = { model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 };
     expect(stored.engine).toEqual({ engine: "reflect", ...settings, engines: { reflect: settings } });
-    expect(settings.endpoint).toBe("http://localhost:9"); // the host, and the digest of the identity in endpoint_id: never the path
+    expect(settings.endpoint).toBe("http://localhost:9"); // the host: never the path
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
@@ -382,7 +384,7 @@ describe("the manifest of a run", () => {
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);
-    expect(manifest.engines.reflect).toEqual({ model: "the-model", endpoint: "http://localhost:9", endpoint_id: sha256Text("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(manifest.engines.reflect).toEqual({ model: "the-model", endpoint: "http://localhost:9", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
   });
 
   test("a path segment of the model URL is in no summary and no row, only its host and the digest (#65)", async () => {
@@ -395,12 +397,11 @@ describe("the manifest of a run", () => {
       expect(text).not.toContain("k-DUMMY");
     }
     const { manifest, engine } = stored(summary);
-    expect(manifest.engines.reflect).toMatchObject({ endpoint: "https://gateway.example", endpoint_id: endpointId(`${url}/chat/completions`) });
+    expect(manifest.engines.reflect).toMatchObject({ endpoint: "https://gateway.example" });
     expect(engine.endpoint).toBe("https://gateway.example");
-    // two deployments on one host are two endpoints
+    // two deployments on one host are one endpoint
     const other = stored(await quiet(() => runPublic({ ...ctx, baseUrl: "https://gateway.example/deployment-B/v1" }, setup(cases.slice(0, 1), plan).folders)));
-    expect(other.manifest.engines.reflect.endpoint).toBe("https://gateway.example");
-    expect(other.manifest.engines.reflect.endpoint_id).not.toBe(manifest.engines.reflect.endpoint_id);
+    expect(other.manifest.engines.reflect).toEqual(manifest.engines.reflect);
   });
 
   test("the searches a run records are part of the input of the notes they are for, so --retrieval-queries is part of the run's identity (#37)", async () => {

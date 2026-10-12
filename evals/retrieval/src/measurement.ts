@@ -4,10 +4,10 @@
 // This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
-import { sha256File, sha256Json } from "../../../lib/provenance.ts";
+import { sha256Json } from "../../../lib/provenance.ts";
 import { NAME } from "./collect.ts";
 import { casesOf, parseQrels, parseQueries } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarizeRows } from "./score.ts";
@@ -53,17 +53,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     const made = summary.manifest?.cases;
     if (made === null || typeof made !== "object") return cases;
     return cases.filter((c) => !Object.hasOwn(made, c.id) || made[c.id]?.input_sha256 === sha256Json(inputOf(c, libraryOf(summary))));
-  },
-  legacyProblem: (root, summary) => {
-    let queries: string;
-    try {
-      queries = join(setFolder(root, summary), "queries.jsonl");
-    } catch (e) {
-      return (e as Error).message;
-    }
-    if (!existsSync(queries)) return `${relative(root, queries)} is missing`;
-    if (summary.assets?.queries_sha256 !== sha256File(queries)) return `it read other queries than the ones in ${relative(root, queries)} now (queries_sha256 is ${summary.assets?.queries_sha256 ?? "not recorded"})`;
-    return undefined;
   },
   caseId: (c) => c.id,
   input: inputOf,

@@ -6,7 +6,7 @@ import { createSandbox } from "../../../lib/akm/akm.ts";
 import { manifestProblems } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
 import { assetsDigest } from "./inputs.ts";
 import { sandboxOptions } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -478,9 +478,9 @@ describe("runPool", () => {
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null, embedder: "deterministic", seed: null, timeouts: 0 });
       expect(stored.assets_sha256).toBe(assetsDigest(POOL_DIR, poolFiles(POOL_DIR)));
       expect(poolFiles(POOL_DIR)).toHaveLength(81); // labels.json and the 80 notes
-      expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+      expect(stored.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.config.engines.consolidate).toMatchObject({ endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0, enableThinking: false });
-      expect(JSON.stringify(stored.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+      expect(JSON.stringify(stored.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -505,7 +505,7 @@ describe("runPool", () => {
       expect(rows.find((r) => r.id === "duplicate-01")).toMatchObject({ outcome: "safe" });
       clearRunning(dir); // the run ended in this process, which is where the marker is removed
       const { out, result } = rescoreFolder(dir);
-      expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+      expect(result).toMatchObject({ changed: [], dropped: [] });
       expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(dir, "samples.jsonl"), "utf8"));
       expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics).toEqual(stored.metrics);
     } finally {

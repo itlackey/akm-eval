@@ -67,7 +67,8 @@
       "n": 2,
       "correct": 1,
       "rate": 0.5,
-      "saved_instruction": 1
+      "saved_instruction": 1,
+      "ambiguous": 0
     },
     "classes": {
       "insight": {
@@ -146,5 +147,6 @@
         }
       }
     }
-  }
+  },
+  "manifest": {"manifest_version":1,"eval":"extract","corpus":"public","collection":null,"mode":null,"harness_version":3,"collector":{"version":"0.2"},"cases":{"i1":{"input_sha256":"8b4b4329565467d4d8900bfddb8d4567959ef22e5e63a1ecb9788a5bcf1e07f5","label_sha256":"8b4b4329565467d4d8900bfddb8d4567959ef22e5e63a1ecb9788a5bcf1e07f5"},"i2":{"input_sha256":"721014f5eb13291be3503ea9b1a5d3f6de15f1954b644cad5cd5659186e62ba0","label_sha256":"721014f5eb13291be3503ea9b1a5d3f6de15f1954b644cad5cd5659186e62ba0"},"p1":{"input_sha256":"5c5216011e5e4c3df866eeb887c1ee57e37fc2c98a375748042d134f0dc4d5a0","label_sha256":"5c5216011e5e4c3df866eeb887c1ee57e37fc2c98a375748042d134f0dc4d5a0"},"bu1":{"input_sha256":"43c7250007bae9b2e016e009fdfae8fbfa84a03dad33a1804d3bd2b2775e5d78","label_sha256":"43c7250007bae9b2e016e009fdfae8fbfa84a03dad33a1804d3bd2b2775e5d78"},"r1":{"input_sha256":"920e5591b811bf1bd16faa41037aebddda98a2a15f1a1d468e04c23122733e77","label_sha256":"920e5591b811bf1bd16faa41037aebddda98a2a15f1a1d468e04c23122733e77"},"r2":{"input_sha256":"e85a53711a9c1124ee70bb2bd0e2a35e83bdb1e64370d31391f49c16661414d2","label_sha256":"e85a53711a9c1124ee70bb2bd0e2a35e83bdb1e64370d31391f49c16661414d2"},"pl1":{"input_sha256":"ab692e61077d3e4126e655614c3b36304af8b489e15e737622502b48ab5bf68a","label_sha256":"ab692e61077d3e4126e655614c3b36304af8b489e15e737622502b48ab5bf68a"},"pl2":{"input_sha256":"ab2d6019aa9b1ea5f07c651db1f3f81c2b58a320371a49ad6bf8781b1d18e4bf","label_sha256":"ab2d6019aa9b1ea5f07c651db1f3f81c2b58a320371a49ad6bf8781b1d18e4bf"}},"akm":{"version":"0.9.99-test","bin":"akm","build":null,"build_fingerprint":null},"config":{"sha256":"0af59e898d73012e0cdf14aa85d53ef5562e9422ce78417ce950085fd26956b6","redacted":{"configVersion":"0.9.0","semanticSearchMode":"off","registries":[],"defaults":{"llmEngine":"model","improveStrategy":"night"},"engines":{"model":{"kind":"llm","provider":"openai","apiKey":"<redacted>"}}}},"settings":{"strategy":null,"config_patch_sha256":null,"timeout_ms":null,"seed":null},"engines":{"model":{"model":"test-model","endpoint":"https://gateway.example.com","temperature":0,"enableThinking":false,"timeoutMs":120000}},"treatment_hints":{},"completion":{"selected":["i1","i2","p1","bu1","r1","r2","pl1","pl2"],"scored":["i1","i2","p1","bu1","r1","r2","pl1","pl2"],"errored":[]}}
 }

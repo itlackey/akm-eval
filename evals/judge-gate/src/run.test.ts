@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { commandLine, completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, judgeConfig, parseCases } from "./lib.ts";
@@ -252,9 +252,10 @@ describe("runCorpus", () => {
       const { summary: stored } = resultsOf(folders);
       const hidden = JSON.parse(JSON.stringify(cfg));
       hidden.engines.judge.endpoint = "<MODEL_BASE_URL>";
+      hidden.engines.judge.apiKey = "<redacted>";
       expect(stored.config).toEqual(hidden);
-      expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false, apiKey: "$MODEL_API_KEY" });
-      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+      expect(stored.config.engines.judge).toMatchObject({ temperature: 0, enableThinking: false });
+      expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
       expect(stored.assets_sha256).toBe(casesSha256(folders.assets));
       expect(stored.assets_sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(stored).toMatchObject({ strategy: "default", config_patch: null, seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
@@ -279,7 +280,6 @@ describe("runCorpus", () => {
       const stored = JSON.parse(text);
       expect(stored.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>");
       expect(stored.engine.endpoint).toBe("https://secret-host.example:8443"); // the host and port: never the path
-      expect(stored.engine.endpoint_id).toBe(endpointId(completionsUrl("https://secret-host.example:8443/v1?key=another-key"))); // the digest of the identity, which the key is not part of
     });
 
     test("the digest changes with the cases, and a rewrite records its seed", async () => {
@@ -366,7 +366,7 @@ describe("the manifest of a run", () => {
     expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(stored.config)));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(stored.engine.engines);
-    expect(manifest.engines.judge).toEqual({ model: "the-model", ...endpointRecord("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(manifest.engines.judge).toEqual({ model: "the-model", endpoint: endpointHost("http://localhost:9/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
   });
 
   test("stores in every row the raw output the scorer reads: scored again from the row, a case gives the row it stored", async () => {

@@ -57,7 +57,7 @@ describe("rescoring a per-case run", () => {
     const { out, result } = rescoreFolder(dir);
     expect(out).toBe(`${dir}-rescored`);
     expect(rowsOf(out)).toEqual(rows);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const was = summaryOf(dir);
     const now = summaryOf(out);
     expect(now).toMatchObject({ label: "golden-rescored", n_run: lines.length, metrics: was.metrics, served_models: was.served_models, n_errored: was.n_errored, n_paired: was.n_paired, timeouts: was.timeouts });
@@ -135,7 +135,7 @@ describe("rescoring a pool run", () => {
     const { dir, rows } = stored("pool", good);
     const { out, result } = rescoreFolder(dir);
     expect(rowsOf(out)).toEqual(rows);
-    expect(result).toMatchObject({ changed: [], dropped: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     const was = summaryOf(dir);
     const now = summaryOf(out);
     expect(now).toMatchObject({ mode: "pool", metrics: was.metrics, n_paired: 39, seconds: 271.4, status: "complete" });

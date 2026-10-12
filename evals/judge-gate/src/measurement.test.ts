@@ -6,7 +6,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { UNVERSIONED, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, type Row, judgeConfig, orderFeedback, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -31,8 +31,8 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
-function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null } } = {}): string {
+/** A results folder of the golden cases, as harness-v3 writes it. */
+function stored(options: { without?: string[]; name?: string; custom?: { folder: string | null } } = {}): string {
   const custom = options.custom;
   const rows = FIXTURE_CASES.map((c) => MEASUREMENT.score(c, FIRST(c)));
   const config = judgeConfig("https://gateway.example/deployment-A/v1", "the-model", true);
@@ -61,9 +61,7 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
     aborted_reason: null,
     n_cases: PUBLIC_CASES.length,
     ...MEASUREMENT.summarize(rows),
-  };
-  if (!options.legacy) {
-    summary.manifest = buildManifest({
+    manifest: buildManifest({
       measurement: MEASUREMENT,
       corpus: custom ? "custom" : "public",
       cases: caseDigests(MEASUREMENT, FIXTURE_CASES),
@@ -71,8 +69,8 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
       config,
       settings: { strategy: "default" },
       completion: completionOf(MEASUREMENT, FIXTURE_CASES.map((c) => c.id), rows),
-    });
-  }
+    }),
+  };
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   const kept = (r: Row) => Object.fromEntries(Object.entries(r).filter(([k]) => !(options.without ?? []).includes(k)));
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(kept(r))}\n`).join(""));
@@ -123,17 +121,6 @@ describe("the corpus a stored run is scored against again", () => {
   test("a custom corpus that recorded no folder says how to name it", () => {
     expect(() => MEASUREMENT.loadCases(repo(), { corpus: "custom", corpus_folder: null })).toThrow("did not record the folder of its custom corpus (it was outside the repository). Give the folder to scripts/rescore with --cases DIR");
   });
-
-  test("a run from before the manifest can be scored again only when it read the cases that are here now", () => {
-    const root = repo();
-    const summary = { corpus: "public", assets_sha256: casesSha256(PUBLIC) };
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toBeUndefined();
-    expect(MEASUREMENT.legacyProblem?.(root, { ...summary, assets_sha256: "0".repeat(64) })).toBe(`it read other cases than the ones in ${join("evals", "judge-gate", "assets")} now (assets_sha256 is ${"0".repeat(64)})`);
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "public" })).toContain("assets_sha256 is not recorded");
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "custom", corpus_folder: null })).toContain("did not record the folder");
-    rmSync(join(root, "evals", "judge-gate", "assets", "cases.jsonl"));
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toContain("it read other cases than the ones in");
-  });
 });
 
 describe("rescoring a stored run", () => {
@@ -145,7 +132,7 @@ describe("rescoring a stored run", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8") + readFileSync(join(dir, "summary.json"), "utf8")).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
     expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 2 });
     expect(manifestProblems(s.manifest)).toEqual([]);
@@ -173,19 +160,10 @@ describe("rescoring a stored run", () => {
     expect(summaryOf(out).manifest.cases[c.id].label_sha256).toBe(caseDigests(MEASUREMENT, [c])[c.id].label_sha256);
   });
 
-  test("a run from before the manifest cannot be scored again: its rows lack the verdict, and the field is named", () => {
-    const dir = stored({ legacy: true, without: ["verdict"] });
+  test("a run whose rows lack the verdict cannot be scored again, and the field is named", () => {
+    const dir = stored({ without: ["verdict"] });
     expect(() => rescoreFolder(dir)).toThrow(RescoreError);
     expect(() => rescoreFolder(dir)).toThrow(/rows lack the raw output the judge-gate scorer reads: verdict \(\d+ rows?: /);
-  });
-
-  test("a summary with no manifest is scored again when its rows hold the raw output, with a manifest made from the summary", () => {
-    const dir = stored({ legacy: true });
-    const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], legacy: true });
-    const s = summaryOf(out);
-    expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: UNVERSIONED } });
   });
 });
 

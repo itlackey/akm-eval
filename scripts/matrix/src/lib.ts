@@ -5,15 +5,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { type PartRef, type RunManifest, UNVERSIONED, loadMeasurement, measurementPath, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, noManifest, readManifest } from "../../../lib/manifest.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import type { Run } from "../../compare/src/lib.ts";
 import { AXES, HARBOR, type Axis, type Identity, type PolicyResult, checkMembers, identityOf, incompleteClause, incompleteOf, messages } from "../../compare/src/policy.ts";
 
-/**
- * scripts/rescore, loaded when a decision needs a result scored again and not before, as scripts/compare does: a matrix whose results were
- * all scored by one scorer, or made before the manifest, does not need it.
- */
+/** scripts/rescore, loaded when a decision needs a result scored again and not before, as scripts/compare does. */
 const rescorer = (): typeof import("../../rescore/src/lib.ts") => createRequire(import.meta.url)("../../rescore/src/lib.ts");
 
 export type Dir = "up" | "down";
@@ -431,8 +428,6 @@ export interface Spread {
 export interface RunFacts {
   name: string;
   identity: Identity;
-  /** The run's manifest, read through the one validator (lib/manifest.ts), or null for a run before the manifest. */
-  manifest?: RunManifest | null;
 }
 
 export interface Measured {
@@ -454,9 +449,6 @@ export interface Measured {
   seconds: number | null;
   metrics: unknown;
   repeated: boolean;
-  /** The digest of the cases the first run read, and the seed of its private assets, for the summaries that record them. */
-  assets_sha256?: string | null;
-  seed?: string | number | null;
   /** The results folders of the runs behind the numbers (absolute): one for a run, the repeats' for a repeat. */
   dirs?: string[];
   /** Every run behind the numbers, not the first alone: the policy checks each of them (see ../../compare/src/policy.ts). */
@@ -495,7 +487,7 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
   if (!isObject(top)) return "is not complete: its summary cannot be read";
   if (ref.kind === "run") {
     const inc = incompleteOf(top);
-    return inc ? incompleteClause(inc) : unsound(top, "its");
+    return unsound(top, dirname(ref.file), "its") ?? (inc ? incompleteClause(inc) : null);
   }
   const dirs = runDirs(file, top, "repeat");
   const listed = num(top.repeat);
@@ -504,24 +496,24 @@ export function incompleteReason(root: string, ref: ResultRef): string | null {
   for (const [i, dir] of dirs.entries()) {
     const s = readJson(join(dir, "summary.json"));
     if (!isObject(s)) return `is not complete: run r${i + 1} has no readable summary.json`;
+    const bad = unsound(s, relative(root, dir), `run r${i + 1}'s`);
+    if (bad) return bad;
     const inc = incompleteOf(s);
     if (inc) return incompleteClause(inc, `run r${i + 1}: `);
-    const bad = unsound(s, `run r${i + 1}'s`);
-    if (bad) return bad;
   }
   return null;
 }
 
-/** Why a summary's manifest is no manifest, as a clause to follow "the run", or null for a sound one and for a run before the manifest. A run whose manifest the validator refuses has an identity nobody can read. */
-function unsound(summary: unknown, whose: string): string | null {
-  const reading = readManifest(isObject(summary) ? summary : {});
+/** Why a summary's manifest is no manifest, as a clause to follow "the run", or null for a sound one. A run whose manifest the validator refuses has an identity nobody can read. */
+function unsound(summary: Record<string, any>, folder: string, whose: string): string | null {
+  const reading = readManifest(summary);
+  if (reading.kind === "legacy") return noManifest(folder);
   return reading.kind === "invalid" ? `is not usable: ${whose} manifest is not sound: ${reading.problems.join("; ")}` : null;
 }
 
 /**
  * `root` is the repository root; `ref.file` is from it. `wallSeconds` is the runner's own timing of the whole command. A run that was not complete is no result.
- * What the runs say of how they were made (the akm, the seed, the collector and the scorer) is read from the manifest, through lib/manifest.ts, where
- * a run has one; a run from before it is read from the fields every summary has.
+ * What the runs say of how they were made (the akm, the collector and the scorer) is read from the manifest, through lib/manifest.ts.
  */
 export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, repeat: number | null): Measured | null {
   const file = join(root, ref.file);
@@ -529,25 +521,19 @@ export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, 
   if (!s || incompleteReason(root, ref) !== null) return null;
   const dirs = runDirs(file, s, ref.kind);
   const summaries = ref.kind === "run" ? [s] : dirs.map((d) => readJson(join(d, "summary.json")));
-  const runs: RunFacts[] = summaries.map((x, i) => {
-    const summary = isObject(x) ? x : {};
-    const reading = readManifest(summary);
-    return { name: basename(dirs[i]), identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
-  });
-  const first = summaries.find(isObject) as Record<string, any> | undefined;
+  const runs: RunFacts[] = summaries.map((x, i) => ({ name: basename(dirs[i]), identity: identityOf(x) }));
+  const first = summaries[0];
   // a Harbor run's akm is the release it installed, which its summary records beside the manifest's
-  const m = first === undefined || HARBOR.includes(String(first.eval)) ? null : runs[summaries.indexOf(first)].manifest ?? null;
+  const m = HARBOR.includes(String(first.eval)) ? null : (first.manifest as RunManifest);
   const common = {
     scope: ref.scope,
     model: s.model ?? null,
     akm_build: m ? m.akm.build : s.akm_build ?? null,
     akm_version: m ? m.akm.version : s.akm_version ?? null,
-    akm_build_fingerprint: m ? m.akm.build_fingerprint : s.akm_build_fingerprint ?? first?.akm_build_fingerprint ?? null,
+    akm_build_fingerprint: m ? m.akm.build_fingerprint : s.akm_build_fingerprint ?? first.akm_build_fingerprint ?? null,
     metrics: s.metrics,
     dirs,
     runs,
-    assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null,
-    seed: m ? m.settings.seed : typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null,
   };
   if (ref.kind === "run") {
     return { ...common, n: 1, n_errored: num(s.n_errored), failed: num(at(s, "completion.failed")), calls: callsOf(s), seconds: wallSeconds, repeated: false };
@@ -621,20 +607,18 @@ export function assess(evalName: string, base: Measured, cfg: Measured, axes: Ax
     ...cfg.runs.map((r) => ({ side: "the config", name: r.name, identity: r.identity })),
   ];
   // The numbers of a result come from its summary, so a case whose input differs cannot be left out as scripts/compare leaves it out: it is a difference of inputs.
-  return checkMembers(members, axes, { manifest: true, caseInputs: true });
+  return checkMembers(members, axes, { caseInputs: true });
 }
 
-// ---- results from different scorers, and runs from before the manifest -----------------------------------------------------
+// ---- results from different scorers -----------------------------------------------------------------------------------------
 
 /**
  * Scores every run of both sides again, in memory, with the current scorer and labels (scripts/rescore), as scripts/compare does: a scorer fix
  * or a relabelled case applies to results already made. Nothing is written. A run that cannot be scored again, for want of the raw output its
- * scorer reads, refuses the pair, with the reason. Results with no manifest are left as they are: the decision calls them exploratory.
+ * scorer reads, refuses the pair, with the reason.
  */
 export function scoredAlike(root: string, base: Measured, cfg: Measured): { base: Measured; cfg: Measured; unscored?: string } {
-  const runs = [...base.runs, ...cfg.runs];
-  const manifests = runs.map((r) => r.manifest);
-  if (manifests.length === 0 || manifests.some((m) => !m) || !base.dirs?.length || !cfg.dirs?.length) return { base, cfg };
+  if (!base.dirs?.length || !cfg.dirs?.length) return { base, cfg };
   const { RescoreError, readStored, rescoreRun } = rescorer();
   type Attempt = { summary: Record<string, any>; run: Run } | { error: InstanceType<typeof RescoreError> };
   const attempt = (dir: string): Attempt => {
@@ -653,11 +637,7 @@ export function scoredAlike(root: string, base: Measured, cfg: Measured): { base
     if (failed) throw new RescoreError(`${side} cannot be scored again with the current scorer: ${failed.error.message}`);
     const done = attempts as { summary: Record<string, any>; run: Run }[];
     const summaries = done.map((d) => d.summary);
-    const rescored = summaries.map((summary) => {
-      const reading = readManifest(summary);
-      return { identity: identityOf(summary), manifest: reading.kind === "manifest" ? reading.manifest : null };
-    });
-    const runs = m.runs.map((r, i) => ({ ...r, ...rescored[i] }));
+    const runs = m.runs.map((r, i) => ({ ...r, identity: identityOf(summaries[i]) }));
     const numbers = m.repeated
       ? { metrics: spreadOf(summaries.map((x) => x.metrics)), n_errored: mean(summaries.map((x) => num(x.n_errored))), calls: mean(summaries.map(callsOf)) }
       : { metrics: summaries[0].metrics, n_errored: num(summaries[0].n_errored), calls: callsOf(summaries[0]) };
@@ -670,27 +650,6 @@ export function scoredAlike(root: string, base: Measured, cfg: Measured): { base
     if (e instanceof RescoreError) return { base, cfg, unscored: `${e.message}, so both sides are compared as they were scored` };
     throw e;
   }
-}
-
-/**
- * Why a result is no conclusion for want of a manifest, for an eval that declares a measurement (so can have one): a run written before
- * harness-v3 has no manifest, so its collector, its scorer and the inputs of its cases are not verified; a run that scripts/rescore made from
- * one has a collector no one versioned. Empty for an eval that declares none yet, whose runs are compared by the earlier rules.
- */
-export function manifestReasons(root: string, evalName: string, base: Measured, cfg: Measured): string[] {
-  if (measurementPath(evalName, root) === null) return [];
-  const sides = [["the baseline", base], ["the config", cfg]] as const;
-  const who = (pick: (r: RunFacts) => boolean): string[] =>
-    sides.flatMap(([side, m]) => {
-      const some = m.runs.filter(pick);
-      return some.length === 0 ? [] : [some.length === m.runs.length ? side : `${side}'s run${some.length === 1 ? "" : "s"} ${some.map((r) => r.name).join(" and ")}`];
-    });
-  const out: string[] = [];
-  const legacy = who((r) => !r.manifest);
-  if (legacy.length > 0) out.push(`${legacy.join(" and ")} ${legacy.length > 1 || legacy[0].includes("'s runs ") ? "have" : "has"} no manifest (written before harness-v3), so the collector, the scorer and the inputs of the cases are not verified`);
-  const unversioned = who((r) => r.manifest?.collector.version === UNVERSIONED);
-  if (unversioned.length > 0) out.push(`${unversioned.join(" and ")} ${unversioned.length > 1 || unversioned[0].includes("'s runs ") ? "were" : "was"} collected before harness-v3 (collector version 0.0, known only by its harness_sha256), so what the collector did is not versioned`);
-  return out;
 }
 
 /**

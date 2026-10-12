@@ -179,6 +179,13 @@
     "proposals": {
       "n": 6,
       "touched_body": 1
+    },
+    "refused": {
+      "filter": 0,
+      "judge": 0,
+      "retrieval": 0,
+      "other": 0
     }
-  }
+  },
+  "manifest": {"manifest_version":1,"eval":"reflect","corpus":"public","collection":null,"mode":null,"harness_version":3,"collector":{"version":"0.2"},"cases":{"d1":{"input_sha256":"798466cf63ce231618f5d2c830cc51d6af3c4fb33a6151838e9f7a2dee50fa14","label_sha256":"798466cf63ce231618f5d2c830cc51d6af3c4fb33a6151838e9f7a2dee50fa14"},"d2":{"input_sha256":"185febb37461ae87b2f4d607581f065202ab451ba0afd82ee16202680e5e38c1","label_sha256":"185febb37461ae87b2f4d607581f065202ab451ba0afd82ee16202680e5e38c1"},"d3":{"input_sha256":"117d873b7bd7089268bc379c16c6176077ee28b714775fc42ec99e80286a624d","label_sha256":"117d873b7bd7089268bc379c16c6176077ee28b714775fc42ec99e80286a624d"},"d4":{"input_sha256":"851c8c3bb066b20eb5b2499ad157e56529818e9bd935985d40a754d986f4325f","label_sha256":"851c8c3bb066b20eb5b2499ad157e56529818e9bd935985d40a754d986f4325f"},"d5":{"input_sha256":"9a6368ed1c6d08414c3713cf00a5a4ed09c52e889e68d07c4949ea12ec5611ba","label_sha256":"9a6368ed1c6d08414c3713cf00a5a4ed09c52e889e68d07c4949ea12ec5611ba"},"d6":{"input_sha256":"a27369fb04008c933babcc7baddfebd984ce007faaadf3f2568f561fa5248a95","label_sha256":"a27369fb04008c933babcc7baddfebd984ce007faaadf3f2568f561fa5248a95"},"c1":{"input_sha256":"45fb0254ec0f0ce1c7c6ce6379dfe8afa7ee7dfa13537d323c487f1d76357676","label_sha256":"45fb0254ec0f0ce1c7c6ce6379dfe8afa7ee7dfa13537d323c487f1d76357676"},"c2":{"input_sha256":"7be60ff60686577cbf697dd4146ff65c3b0039032d6ba7d29df9d36b390e40a2","label_sha256":"7be60ff60686577cbf697dd4146ff65c3b0039032d6ba7d29df9d36b390e40a2"},"c3":{"input_sha256":"d67d73341504b1f0ed2b01f0746464ab1d58f1fd73cad04fb03c06ea27bfaaea","label_sha256":"d67d73341504b1f0ed2b01f0746464ab1d58f1fd73cad04fb03c06ea27bfaaea"},"c4":{"input_sha256":"3063362de5407a2487a7012036356c88dd1cc4913c8037eb629fbaf6a8f1e17b","label_sha256":"3063362de5407a2487a7012036356c88dd1cc4913c8037eb629fbaf6a8f1e17b"}},"akm":{"version":"0.9.99-test","bin":"akm","build":null,"build_fingerprint":null},"config":{"sha256":"0af59e898d73012e0cdf14aa85d53ef5562e9422ce78417ce950085fd26956b6","redacted":{"configVersion":"0.9.0","semanticSearchMode":"off","registries":[],"defaults":{"llmEngine":"model","improveStrategy":"night"},"engines":{"model":{"kind":"llm","provider":"openai","apiKey":"<redacted>"}}}},"settings":{"strategy":"reflect-only","config_patch_sha256":null,"timeout_ms":null,"seed":null},"engines":{"model":{"model":"test-model","endpoint":"https://gateway.example.com","temperature":0,"enableThinking":false,"timeoutMs":120000}},"treatment_hints":{},"completion":{"selected":["d1","d2","d3","d4","d5","d6","c1","c2","c3","c4"],"scored":["d1","d2","d3","d4","d5","d6","c1","c2","c3","c4"],"errored":[]}}
 }

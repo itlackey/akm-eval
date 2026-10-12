@@ -4,7 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine, createSandbox, parseCommand, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { endpointId, harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
+import { harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
 import { corpusFolderOf, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
@@ -349,7 +349,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
       expect(s.config.keyword).toEqual(plain);
       expect(s.config.semantic).toMatchObject({ configVersion: "0.9.0", semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 } });
-      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, endpoint_id: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
+      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
       const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
       expect(stored.config).toEqual(s.config);
       const keyword = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, semantic: false }, folders));
@@ -367,7 +367,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, newSandbox }, folders));
       expect((s.config.keyword as typeof withKey).engines.model.apiKey).toBe("<redacted>");
       expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).not.toContain("sk-secret");
-      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com", endpoint_id: endpointId("https://api.example.com/v1/chat/completions"), timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com", endpoint_id: endpointId("https://api.example.com/v1/chat/completions") } } });
+      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com" } } });
     });
 
     test("has a digest of the queries and qrels the run read, the same on another machine and different when a grade is added", async () => {
@@ -852,8 +852,9 @@ describe("the manifest", () => {
       treatment_hints: {},
     });
     expect(s.manifest.akm.bin).toBe(s.akm_bin);
-    expect(s.manifest.config.redacted).toEqual(s.config);
-    expect(s.manifest.config.sha256).toBe(sha256Json(s.config));
+    const { keyword: plain, ...semantic } = s.config; // a key named "keyword" would be redacted
+    expect(s.manifest.config.redacted).toEqual({ plain, ...semantic });
+    expect(s.manifest.config.sha256).toBe(sha256Json({ plain, ...semantic }));
     expect(s.manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4", "n1", "n2"], scored: ["q1", "q2", "q3", "n1", "n2"], errored: ["q4"] }); // q4's search call failed
     expect(JSON.stringify(s.manifest)).not.toContain(folders.library);
   });

@@ -4,11 +4,11 @@
 // This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME, orderFeedback } from "./collect.ts";
-import { CASES, casesSha256 } from "./inputs.ts";
+import { CASES } from "./inputs.ts";
 import { parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
@@ -31,16 +31,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   loadCases: (root, summary) => {
     const file = join(assetsOf(root, summary), CASES);
     return parseCases(readFileSync(file, "utf8"), file);
-  },
-  legacyProblem: (root, summary) => {
-    let dir: string;
-    try {
-      dir = assetsOf(root, summary);
-    } catch (e) {
-      return (e as Error).message;
-    }
-    if (existsSync(join(dir, CASES)) && summary.assets_sha256 === casesSha256(dir)) return undefined;
-    return `it read other cases than the ones in ${relative(root, dir)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
   },
   caseId: (c) => c.id,
   // What goes to `akm improve judge` on stdin: the source, the candidate and the feedback with its negative lines first.

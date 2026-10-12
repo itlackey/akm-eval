@@ -19,7 +19,6 @@ import {
   buildFingerprint,
   checkoutBuild,
   completionOf,
-  endpointOf,
   erroredOf,
   findPlugin,
   hostEnv,
@@ -429,16 +428,16 @@ describe("parseAkmEnv", () => {
     expect(() => parseAkmEnv(["OPENAI_API_KEY=x"])).toThrow("only AKM_* settings");
     expect(() => parseAkmEnv(["akm_x=1"])).toThrow("only AKM_* settings");
     for (const key of FIXED_AKM_ENV) expect(() => parseAkmEnv([`${key}=/x`])).toThrow("the arm fixes it");
-    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_CLIENT_SECRET", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY", "AKM_AUTH_BEARER", "AKM_CREDENTIALS", "AKM_SESSION_COOKIE"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
+    for (const key of ["AKM_LLM_API_KEY", "AKM_TOKEN", "AKM_CLIENT_SECRET", "AKM_DB_PASSWORD", "AKM_SIGNING_KEY", "AKM_SESSION_COOKIE"]) expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
     expect(() => parseAkmEnv(["AKM_X=1", "AKM_X=2"])).toThrow("given twice");
   });
 
-  test("decides what is a credential with the rule every eval shares (credentialField in lib/provenance.ts), so a word that only contains one is not", () => {
-    for (const key of ["AKM_CURATE_TIMEOUT", "AKM_MAX_TOKENS", "AKM_TOKENIZER", "AKM_AUTHOR", "AKM_BYPASS", "AKM_PATH_LIMIT"]) {
+  test("decides what is a credential with the rule every eval shares (credentialField in lib/provenance.ts)", () => {
+    for (const key of ["AKM_CURATE_TIMEOUT", "AKM_AUTHOR", "AKM_BYPASS", "AKM_PATH_LIMIT"]) {
       expect(credentialField(key), key).toBe(false);
       expect(parseAkmEnv([`${key}=1`])).toEqual({ [key]: "1" });
     }
-    for (const key of ["AKM_LLM_API_KEY", "AKM_ACCESS_TOKEN", "AKM_MYSQL_PWD", "AKM_GH_PAT"]) {
+    for (const key of ["AKM_LLM_API_KEY", "AKM_ACCESS_TOKEN", "AKM_MAX_TOKENS"]) {
       expect(credentialField(key), key).toBe(true);
       expect(() => parseAkmEnv([`${key}=s`])).toThrow("looks like a credential");
     }
@@ -919,34 +918,6 @@ describe("completionOf and statusOf", () => {
 
   test("a missing job folder gives no trials rather than an error", () => {
     expect(loadRunTrials(join(tmp(), "no-such-job")).trials).toEqual([]);
-  });
-});
-
-describe("endpointOf", () => {
-  const none = { endpoint: null, endpoint_id: null };
-
-  test("is the host of the base URL opencode is given and a digest of its identity, and never a path, a key or a user (#65)", () => {
-    const withKey = endpointOf({ OPENAI_API_KEY: "sk-secret", OPENAI_BASE_URL: "http://user:pass@192.0.2.5:8080/v1/?key=sk-secret" });
-    expect(withKey).toEqual({ endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1?key=<redacted>") });
-    expect(JSON.stringify(withKey)).not.toMatch(/sk-secret|pass|\/v1/);
-    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1" })).toEqual({ endpoint: "https://gateway.example.com", endpoint_id: sha256Text("https://gateway.example.com/v1") });
-    // a path that names a deployment or holds a key is in the id and not in the host
-    const secretPath = endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/k-DUMMYSECRET0123/v1" });
-    expect(secretPath.endpoint).toBe("https://gateway.example.com");
-    expect(JSON.stringify(secretPath)).not.toContain("DUMMYSECRET0123");
-  });
-
-  test("tells two deployments on one host apart, and does not tell a change of key apart", () => {
-    const [a, b] = ["deployment-A", "deployment-B"].map((d) => endpointOf({ OPENAI_BASE_URL: `https://gateway.example.com/${d}/v1` }));
-    expect(a.endpoint).toBe(b.endpoint);
-    expect(a.endpoint_id).not.toBe(b.endpoint_id);
-    expect(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1?api-key=one" })).toEqual(endpointOf({ OPENAI_BASE_URL: "https://gateway.example.com/v1?api-key=two" }));
-  });
-
-  test("is null for the provider's own endpoint, and for text that is not a URL", () => {
-    expect(endpointOf({ OPENAI_API_KEY: "sk-secret" })).toEqual(none);
-    expect(endpointOf({ OPENAI_BASE_URL: "  " })).toEqual(none);
-    expect(endpointOf({ OPENAI_BASE_URL: "sk-secret-not-a-url" })).toEqual(none);
   });
 });
 

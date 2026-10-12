@@ -1,21 +1,18 @@
 // compare over runs that carry a manifest (harness-v3): reflect is the eval that writes one, so these tests build reflect runs from the golden
 // raw outputs of evals/reflect/golden, score them with the eval's own scorer, and write them as results folders with a manifest. The policy
 // they exercise: the collector (a difference is refused unless it is the treatment), the scorer and the labels (a difference is scored
-// again), the inputs of each case (a case with another input is left out), the coverage of each side (#41), and the legacy runs.
+// again), the inputs of each case (a case with another input is left out), the coverage of each side (#41), and runs with no manifest.
 
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { endpointId } from "../../../lib/provenance.ts";
-import { rescoreFolder } from "../../rescore/src/lib.ts";
-import * as manifestModule from "../../../lib/manifest.ts";
-import { type RunManifest, UNVERSIONED, buildManifest, caseDigests, completionOf, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { type Case, type Raw, type Row, assetsSha256, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, HARNESS_VERSION } from "../../../lib/manifest.ts";
+import { type Case, type Raw, type Row, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
-import { CompareError, MIN_SHARE, compareRepeats, comparePair, loadRun, renderPair, renderRepeats } from "./lib.ts";
-import { type Member, checkMembers, configDigest, identityOf } from "./policy.ts";
+import { CompareError, compareRepeats, comparePair, loadRun, renderPair, renderRepeats } from "./lib.ts";
+import { type Member, checkMembers, identityOf } from "./policy.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -206,26 +203,27 @@ describe("two runs with a manifest", () => {
     const r = compare(a, b);
     expect(r.inputs_differ).toEqual(moved);
     expect(r.views[0]?.n_paired).toBe(8);
-    expect(r.exploratory).toEqual([]); // 8 of the 10 cases both selected is the least a comparison may use
+    expect(r.exploratory).toEqual([]);
     const md = renderPair(r);
     expect(md).toContain(`> Left out. 2 cases were not given the same input in every run, so they are not compared: \`${moved[0]}\`, \`${moved[1]}\`.`);
     expect(md).toContain("Every number below is over the 8 scored in both.");
     expect(md).toContain("2 more cases are left out because their input differs.");
   });
 
-  test("more than a fifth of the cases given another input is a difference of inputs: refused unless inputs are the treatment, and then every case is compared", () => {
-    const moved = ids.slice(0, 3);
+  test("cases given another input are left out however many they are, and with the inputs as the treatment every case is compared", () => {
+    const moved = ids.slice(0, 7);
     const a = run({ label: "a", raw: GOOD });
     const b = run({ label: "b", raw: BAD, manifest: (m) => ({ ...m, cases: Object.fromEntries(Object.entries(m.cases).map(([id, d]) => [id, moved.includes(id) ? { ...d, input_sha256: "f".repeat(64) } : d])) }) });
-    expect(() => compare(a, b)).toThrow(`the cases were not given the same input in every run for 3 of the 10 cases they share (${moved.map((id) => `\`${id}\``).join(", ")}), and ${MIN_SHARE * 100}% must match.`);
-    expect(() => compare(a, b)).toThrow("--treatment inputs");
+    const left = compare(a, b);
+    expect(left.inputs_differ).toEqual(moved);
+    expect([left.views[0]?.n_paired, left.exploratory]).toEqual([3, []]);
     const r = compare(a, b, { treatment: ["config", "model", "inputs"] });
     expect(r.inputs_differ).toEqual([]);
     expect(r.views[0]?.n_paired).toBe(10);
-    expect(r.treated.join(" ")).toContain("3 cases were given another input in some run (the inputs are the treatment)");
+    expect(r.treated.join(" ")).toContain("7 cases were given another input in some run (the inputs are the treatment)");
   });
 
-  test("--retrieval-queries is part of a run's identity: a run with the searches and a run without them are refused, and compare with the inputs as the treatment (#37)", () => {
+  test("--retrieval-queries is part of a run's identity: a run with the searches and a run without them compare only the notes with no searches, and all of them with the inputs as the treatment (#37)", () => {
     const every = jsonl(join(ROOT, "evals", "reflect", "assets", "cases.jsonl")) as Case[];
     const searches = labelledQueries(readFileSync(join(ROOT, "evals", "retrieval", "assets", "queries.jsonl"), "utf8"), readFileSync(join(ROOT, "evals", "retrieval", "assets", "qrels.jsonl"), "utf8"));
     const refOf = (c: Case) => c.path.replace(/\.md$/, "").replace(/\/SKILL$/, "");
@@ -233,8 +231,9 @@ describe("two runs with a manifest", () => {
     const without = run({ label: "without", cases: every, raw: noop });
     const withQueries = run({ label: "with", cases: every, raw: noop, searches: (c) => searches.get(refOf(c)) ?? [], summary: { retrieval_queries: { cases: 46 } } });
     expect(every.filter((c) => (searches.get(refOf(c))?.length ?? 0) > 0).length).toBeGreaterThan(40);
-    expect(() => compare(without, withQueries)).toThrow(/cases were not given the same input in every run for \d+ of the 50 cases they share/);
-    expect(() => compare(without, withQueries)).toThrow("--treatment inputs");
+    const left = compare(without, withQueries);
+    expect(left.inputs_differ.length).toBeGreaterThan(40);
+    expect(left.views[0]?.n_paired).toBe(50 - left.inputs_differ.length);
     const r = compare(without, withQueries, { treatment: ["config", "model", "inputs"] });
     expect(r.views[0]?.n_paired).toBe(50);
     expect(r.treated.join(" ")).toMatch(/\d+ cases were given another input in some run/);
@@ -254,68 +253,31 @@ describe("two runs with a manifest", () => {
     const cov = r.views[0]?.coverage;
     expect(cov).toMatchObject({ selected_a: 10, scored_a: 8, scored_b: 8, errored_a: easy, errored_b: hard, scored_only_a: hard, scored_only_b: easy });
     expect(r.views[0]?.n_paired).toBe(6); // only the cases both scored decide it
-    expect(r.exploratory.join(" ")).toContain("only 6 of the 10 cases both runs selected could be compared (60%, and the least is 80%): 2 errored in A, 2 errored in B");
+    expect(r.exploratory).toEqual([]);
     const md = renderPair(r);
     expect(md).toContain(`Scored: A 8 of 10 cases, B 8 of 10 (errored: A ${easy.map((id) => `\`${id}\``).join(", ")}; B ${hard.map((id) => `\`${id}\``).join(", ")}).`);
     expect(md).toContain(`Scored on one side only, and so left out: in A ${hard.map((id) => `\`${id}\``).join(", ")}; in B ${easy.map((id) => `\`${id}\``).join(", ")}.`);
-    expect(md).toContain("> **Exploratory.**");
   });
 
-  test("an error on one case is a case less on one side: the others are compared, with the share they make", () => {
+  test("an error on one case is a case less on one side: the others are compared", () => {
     const r = compare(run({ label: "a", raw: GOOD }), run({ label: "b", raw: (c) => (c.id === ids[1] ? ERROR : BAD(c)) }));
     expect(r.views[0]?.coverage).toMatchObject({ scored_a: 10, scored_b: 9, errored_b: [ids[1]], scored_only_a: [ids[1]], scored_only_b: [] });
-    expect(r.exploratory).toEqual([]); // 9 of 10
+    expect(r.exploratory).toEqual([]);
     expect(renderPair(r)).toContain(`Scored: A 10 of 10 cases, B 9 of 10 (errored: A none; B \`${ids[1]}\`).`);
   });
 });
 
-describe("a run without a manifest", () => {
-  const legacy = (label: string, raw: (c: Case) => Raw): string => {
-    const dir = run({ label, raw });
-    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    const { manifest: _m, ...rest } = summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(rest));
-    return dir;
-  };
-
-  test("is compared as before and the report is exploratory, naming the run", () => {
-    const withManifest = run({ label: "new", raw: GOOD });
-    const r = compare(legacy("old", BAD), withManifest);
-    expect(r.exploratory).toEqual(["A has no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified"]);
-    expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
-    expect(compare(legacy("old1", BAD), legacy("old2", GOOD)).exploratory).toEqual(["A and B have no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified"]);
-  });
-
-  test("a legacy run scored again by scripts/rescore has the unversioned collector, 0.0: refused against a run with a collector version unless the harness is the treatment, and then exploratory", () => {
-    const dir = run({ label: "old", raw: BAD, summary: { assets_sha256: assetsSha256(join(ROOT, "evals", "reflect", "assets")) } });
-    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    const { manifest: _m, ...rest } = summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(rest));
-    const { out } = rescoreFolder(dir);
-    const current = run({ label: "new", raw: GOOD });
-    expect(() => compare(out, current)).toThrow(`the eval's code differs: version ${UNVERSIONED} (harness 0) in A, version ${MEASUREMENT.version} (harness ${HARNESS_VERSION}) in B`);
-    const r = compare(out, current, { treatment: ["config", "model", "harness"] });
-    expect(r.exploratory).toEqual(["A was collected before harness-v3 (version 0.0), so what it asked akm is not versioned"]);
-    expect(metric(r, "defects.rate")).toMatchObject({ a: 0, b: 1 });
-  });
-
-  test("an eval that declares no measurement yet has no manifest to write, so its runs are compared by the earlier rules", () => {
-    // the fixtures are nightly runs from before the manifest, and nightly declares a measurement now: it is read as if it did not
-    const real = manifestModule.loadMeasurement;
-    const undeclared = spyOn(manifestModule, "loadMeasurement").mockImplementation(((name: string, root?: string) => (name === "nightly" ? null : real(name, root))) as never);
-    try {
-      const fixtures = join(import.meta.dir, "fixtures", "nightly");
-      const r = comparePair(loadRun(join(fixtures, "before")), loadRun(join(fixtures, "after")), { treatment: ["build"] });
-      expect(r.exploratory).toEqual([]);
-    } finally {
-      undeclared.mockRestore();
-    }
+describe("a run without a sound manifest", () => {
+  test("a run made before akm-eval 0.2 (no manifest) is refused before anything else, with what to do", () => {
+    const dir = run({ label: "old", raw: GOOD, summary: { manifest: undefined, eval: "toy" } });
+    expect(() => loadRun(dir)).toThrow(`${dir} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`);
+    expect(() => compare(dir, run({ label: "new", raw: GOOD }))).toThrow(CompareError);
   });
 
   test("a manifest that is not sound stops the run being read, and says what is wrong", () => {
     const dir = run({ label: "bad", raw: GOOD, manifest: (m) => ({ ...m, manifest_version: 7 }) });
     expect(() => loadRun(dir)).toThrow("has a manifest that is not sound: manifest_version is 7");
-    const dir2 = run({ label: "bad2", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { model: "x", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1", endpoint_id: null, temperature: 0, enableThinking: false, timeoutMs: 1 } } }) });
+    const dir2 = run({ label: "bad2", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { model: "x", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1", temperature: 0, enableThinking: false, timeoutMs: 1 } } }) });
     const problem = (() => {
       try {
         loadRun(dir2);
@@ -324,7 +286,7 @@ describe("a run without a manifest", () => {
         return (e as Error).message;
       }
     })();
-    expect(problem).toContain("the engine reflect needs a model, an endpoint that is a host with no path, and an endpoint_id digest");
+    expect(problem).toContain("the engine reflect needs a model and an endpoint that is a host with no path");
   });
 });
 
@@ -346,6 +308,7 @@ describe("repeats with a manifest", () => {
 describe("the endpoint is never written whole into a comparison (#65)", () => {
   const URL_A = "https://gateway.example/k-DUMMYSECRET0123/v1/chat/completions";
   const URL_B = "https://gateway.example/deployment-B/v1/chat/completions";
+  const URL_C = "https://other.example:8443/k-DUMMYSECRET0123/v1/chat/completions";
   const withEndpoint = (label: string, url: string): string => {
     const config = { ...CONFIG, engines: { reflect: { ...CONFIG.engines.reflect, endpoint: url } } };
     const dir = run({ label, raw: GOOD, manifest: (m) => ({ ...m, engines: engineSettings(config).engines }) });
@@ -354,55 +317,29 @@ describe("the endpoint is never written whole into a comparison (#65)", () => {
     return dir;
   };
 
-  test("two deployments on one host are two engines, the refusal names the host and the start of each digest, and not the path", () => {
+  test("an engine is its model and the host of its endpoint: two paths on one host compare, another host is refused, named by its host and not its path", () => {
+    expect(compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["config"] }).views[0]?.n_paired).toBe(10);
     let message = "";
     try {
-      compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["config"] });
+      compare(withEndpoint("c", URL_A), withEndpoint("d", URL_C), { treatment: ["config"] });
     } catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toContain(`endpoint https://gateway.example (id ${endpointId(URL_A)?.slice(0, 12)}), temperature 0`);
-    expect(message).toContain(`endpoint https://gateway.example (id ${endpointId(URL_B)?.slice(0, 12)}), temperature 0`);
-    expect(message).not.toMatch(/DUMMYSECRET|k-DUMMY|deployment-B|\/v1/);
+    expect(message).toContain("endpoint https://gateway.example, temperature 0");
+    expect(message).toContain("endpoint https://other.example:8443, temperature 0");
+    expect(message).not.toMatch(/DUMMYSECRET|k-DUMMY|\/v1/);
   });
 
   test("declared as the treatment, the difference is listed without the path, in the report and in its JSON", () => {
-    const r = compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["model"] });
+    const r = compare(withEndpoint("a", URL_A), withEndpoint("b", URL_C), { treatment: ["model"] });
     const text = JSON.stringify(r) + renderPair(r);
-    expect(r.treated.join(" ")).toContain(`endpoint https://gateway.example (id ${endpointId(URL_A)?.slice(0, 12)}), temperature 0`);
-    expect(text).not.toMatch(/DUMMYSECRET|k-DUMMY|deployment-B/);
+    expect(r.treated.join(" ")).toContain("endpoint https://gateway.example, temperature 0");
+    expect(text).not.toMatch(/DUMMYSECRET|k-DUMMY/);
   });
 
-  test("a run that is not on the manifest, whose summary holds the identity with its path, is told apart the same way and shown without it", () => {
-    const old = (label: string, url: string): string => {
-      const dir = withEndpoint(label, url);
-      const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-      const { manifest: _m, ...rest } = summary;
-      const spec = { model: "the-model", endpoint: url.replace("/chat/completions", ""), temperature: 0, enableThinking: false, timeoutMs: 600000 };
-      writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...rest, engine: { engine: "reflect", ...spec, engines: { reflect: spec } } }));
-      return dir;
-    };
-    let message = "";
-    try {
-      compare(old("a", URL_A), old("b", URL_B), { treatment: ["config"] });
-    } catch (e) {
-      message = (e as Error).message;
-    }
-    expect(message).toContain("the engine settings");
-    expect(message).toContain("endpoint https://gateway.example (id ");
-    expect(message).not.toMatch(/DUMMYSECRET|k-DUMMY|deployment-B/);
-  });
-
-  test("an old summary and a new one for the same deployment have the same engine", () => {
-    const url = "https://gateway.example/deployment-A/v1/chat/completions";
-    const fresh = withEndpoint("fresh", url);
-    const summary = JSON.parse(readFileSync(join(fresh, "summary.json"), "utf8"));
-    const { manifest: _m, ...rest } = summary;
-    const spec = { model: "the-model", endpoint: "https://gateway.example/deployment-A/v1/chat/completions", temperature: 0, enableThinking: false, timeoutMs: 600000 };
-    const old = join(tmp(), "old");
-    cpSync(fresh, old, { recursive: true });
-    writeFileSync(join(old, "summary.json"), JSON.stringify({ ...rest, engine: { engine: "reflect", ...spec, engines: { reflect: spec } } }));
-    expect(() => compare(old, fresh, { treatment: ["config"] })).not.toThrow(/engine settings/);
+  test("the endpoint_id an older manifest has is left out", () => {
+    const older = run({ label: "e", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { ...m.engines.reflect, endpoint_id: "f".repeat(64) } as any } }) });
+    expect(compare(run({ label: "f", raw: GOOD }), older, { treatment: ["config"] }).views[0]?.n_paired).toBe(10);
   });
 });
 
@@ -420,20 +357,14 @@ describe("the policy", () => {
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     const identity = identityOf(summary);
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
-    expect(identity).toMatchObject({ manifest: true, akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: parts.collector.version, harness_version: String(parts.harness_version), hints: null });
-    expect(identity.config).toBe(configDigest(summary.config)); // the digest the earlier summaries get
-    expect(identity.engine).toContain(endpointId("http://localhost:9/v1/chat/completions") as string);
+    expect(identity).toMatchObject({ akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: parts.collector.version, harness_version: String(parts.harness_version), hints: null });
+    expect(identity.engine).toContain('"endpoint":"http://localhost:9"');
     expect(identity.engine).not.toContain("localhost:9/v1");
   });
 
-  test("with the manifest option the cases are compared one by one and the harness is the collector; without it, as scripts/matrix applies it, assets_sha256 and the digest of the code are compared", () => {
+  test("the cases are compared one by one and the harness is the collector: assets_sha256 and the digest of the code are not compared", () => {
     const a = run({ label: "a", raw: GOOD });
-    const b = withSummary(run({ label: "b", raw: GOOD }), { assets_sha256: "9".repeat(64), harness_sha256: "8".repeat(64) });
-    const members = [member("A", a), member("B", b)];
-    expect(checkMembers(members, [], { manifest: true }).mismatches).toEqual([]);
-    expect(checkMembers(members, []).mismatches.map((f) => f.field).sort()).toEqual(["assets_sha256", "harness"]);
-    // a member without a manifest keeps every field on its earlier rule
-    const old = withSummary(run({ label: "c", raw: GOOD }), { manifest: undefined, harness_sha256: "7".repeat(64) });
-    expect(checkMembers([member("A", a), member("B", old)], [], { manifest: true }).mismatches.map((f) => f.field)).toEqual(["harness"]);
+    const b = withSummary(run({ label: "b", raw: GOOD }), { assets_sha256: "9".repeat(64), harness_sha256: "8".repeat(64), git_commit: "9999999" });
+    expect(checkMembers([member("A", a), member("B", b)], []).mismatches).toEqual([]);
   });
 });
