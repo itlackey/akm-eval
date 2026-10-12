@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Scores stored results folders again with the current scorer and labels of their eval, into new folders beside them. See the README's "How results stay comparable".
 #
-#   scripts/rescore/run RESULTS_DIR...
+#   scripts/rescore/run [--cases DIR] RESULTS_DIR...
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v bun > /dev/null || { echo "rescore: bun is needed. See https://bun.sh" >&2; exit 2; }

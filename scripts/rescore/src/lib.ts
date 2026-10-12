@@ -4,7 +4,7 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { type CaseDigest, type Measurement, type PartRef, type RunManifest, buildManifest, caseDigests, completionOf, loadMeasurement, lockedParts, readManifest, REPO_ROOT } from "../../../lib/manifest.ts";
+import { type CaseDigest, type Measurement, type PartRef, type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, readManifest, REPO_ROOT } from "../../../lib/manifest.ts";
 import { canonical, recordedEngine, sha256Json } from "../../../lib/provenance.ts";
 
 type Obj = Record<string, any>;
@@ -36,6 +36,11 @@ export interface RescoreOptions {
   /** The checkout the cases and the scorer are read from. This one, but for tests. */
   root?: string;
   now?: Date;
+  /**
+   * The folder of the custom corpus the run was made on, when the run did not record it (`corpus_folder` is null: the folder was outside the
+   * repository) or it has moved. From the repository root, as the evals' own `--cases`, or absolute. The cases are read from it, whatever the run says.
+   */
+  cases?: string;
 }
 
 const isObject = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -51,6 +56,32 @@ function measurementOf(stored: Stored, root: string): Measurement {
   return m;
 }
 
+/** The corpus names of a run on a custom corpus: `custom`, and the names a run from before the corpora were renamed has. */
+const CUSTOM = ["custom", "private", "own", "own-feedback"];
+
+/**
+ * The summary the eval's `loadCases` reads to find the cases of the run. A run on the public corpus, and a run from before the corpora were renamed
+ * (`private`, `own`), are read as they are: the eval knows where those cases are. A run on a custom corpus has them in `corpus_folder` (lib/manifest.ts
+ * `corpusFolderOf`), and `cases` names the folder instead when the run did not record it or it has moved. Refuses, saying what to do, when the
+ * folder is not known or is not there.
+ */
+function summaryForCases(stored: Stored, root: string, cases: string | undefined): Obj {
+  const { summary } = stored;
+  const custom = CUSTOM.includes(String(summary.corpus));
+  if (cases === undefined && summary.corpus !== "custom") return summary;
+  if (!custom) throw new RescoreError(`${stored.dir} was made on the ${JSON.stringify(summary.corpus)} corpus, and --cases names the folder of a custom one`);
+  const folder = cases ?? summary.corpus_folder;
+  if (typeof folder !== "string" || folder.trim() === "") {
+    const why = summary.corpus_folder === null ? "outside the repository" : "and does not record where";
+    throw new RescoreError(`${stored.dir} was made on a custom corpus ${why}, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR, and compare the -rescored folder`);
+  }
+  const at = resolve(root, folder);
+  if (!existsSync(at) || !statSync(at).isDirectory()) {
+    throw new RescoreError(`${stored.dir} was made on the custom corpus in ${folder}, which is not a folder here. Put it back, or give scripts/rescore its place with --cases DIR`);
+  }
+  return { ...summary, corpus_folder: folder };
+}
+
 /**
  * Scores a stored run again: each row is read back into its raw output (`rawOf`), scored with the current scorer against the current case
  * (`score`), and the summary takes the counts and metrics from the new rows. The manifest is the run's own, with the current scorer, the
@@ -64,15 +95,16 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
   const m = measurementOf(stored, root);
   const reading = readManifest(summary);
   if (reading.kind === "invalid") throw new RescoreError(`${stored.dir} has a manifest that is not sound: ${reading.problems.join("; ")}`);
+  const seen = summaryForCases(stored, root, options.cases);
   const legacy = reading.kind === "legacy";
   if (legacy) {
-    const problem = m.legacyProblem?.(root, summary);
+    const problem = m.legacyProblem?.(root, seen);
     if (problem) throw new RescoreError(`${stored.dir} was made before the manifest, and cannot be scored again: ${problem}`);
   }
 
   let cases: any[];
   try {
-    cases = m.loadCases(root, summary);
+    cases = m.loadCases(root, seen);
   } catch (e) {
     throw new RescoreError(`the cases ${stored.dir} was scored against cannot be read: ${(e as Error).message}`);
   }
@@ -138,6 +170,7 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
 
   const engine = isObject(summary.engine) ? { ...summary.engine, ...recordedEngine(summary.engine), ...(isObject(summary.engine.engines) ? { engines: Object.fromEntries(Object.entries<any>(summary.engine.engines).map(([name, e]) => [name, recordedEngine(e)])) } : {}) } : summary.engine;
   const out: Obj = { ...summary, ...(engine === undefined ? {} : { engine }), ...m.summarize(rows), manifest };
+  if (options.cases !== undefined) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time
   if (typeof summary.label === "string") out.label = `${summary.label}-rescored`;
   return { summary: out, rows, dropped, changed, relabelled, legacy: reading.kind === "legacy" };
 }
