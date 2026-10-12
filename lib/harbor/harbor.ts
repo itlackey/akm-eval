@@ -1,6 +1,7 @@
 // What the evals that run an agent in Harbor share: the versions a run is made of, the model, the two arms and
 // Harbor itself. evals/agent-ab and benchmarks/terminal-bench both run opencode alone and with the akm plugin on the
-// same tasks, and both import this. The akm arm is akm_opencode.py beside it, and report.ts reads what the run leaves.
+// same tasks, and both import this. The akm arm is akm_opencode.py beside it, trials.ts reads what the run leaves, and report.ts and
+// score.ts score it. This file and trials.ts are the collector of both evals (see measured.ts); report.ts and score.ts are their scorer.
 
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -9,7 +10,13 @@ import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { credentialField, endpointRecord, sha256File, sha256Text } from "../provenance.ts";
-import { type ArmSummary, type Arm, type Report, type Trial, loadTrials, timedOut } from "./report.ts";
+import type { Arm, Trial } from "./report.ts";
+import type { RunTrial } from "./score.ts";
+import { TIMEOUT_ERRORS, loadTrials } from "./trials.ts";
+
+// What the scorer (score.ts) makes of the trials was in here: the summary of a run still imports it from here.
+export { erroredOf, metricsOf, timeoutsOf } from "./score.ts";
+export type { RunTrial } from "./score.ts";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
 export const PINS = { akm_cli: "0.9.26", akm_plugin: "0.9.26202610051302", opencode: "1.18.34", harbor: "0.24.0" } as const;
@@ -89,9 +96,10 @@ const hostnameOf = (url: string): string | null => {
  *
  * With no line and no MODEL_BASE_URL (or OPENAI_BASE_URL), an openai model goes to openai with the key
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
- * Only what Harbor needs goes into the environment (hostEnv), and the model's variables.
+ * Only what Harbor needs goes into the environment (hostEnv), and the model's variables. `private` is the `"private": true` of the model's
+ * line in models.json, false for a model with no line (lib/corpus.ts refuses a private corpus to any other).
  */
-export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string> } {
+export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; private: boolean } {
   const id = (flag ?? host.MODEL_NAME)?.trim();
   if (flag !== undefined && !id) fail("--model needs a model name");
   if (!id) fail("name the model: pass --model NAME, or set MODEL_NAME in .env, as opencode names it, such as openai/gpt-6-luna. See .env.example.");
@@ -121,7 +129,7 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
     const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
     if (!m.apiKey) fail(`no model key for ${model}: set MODEL_API_KEY (or the models.json line's api_key_env) in .env. Every trial would fail at the model call, after its setup.`);
-    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl } };
+    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl }, private: m.private };
   }
 
   const model = modelName(id);
@@ -129,20 +137,28 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
   if (provider === "openai") {
     const key = host.OPENAI_API_KEY?.trim() || host.MODEL_API_KEY?.trim();
     if (!key) fail("no model key: set MODEL_API_KEY (or OPENAI_API_KEY). Every trial would fail at the model call, after its setup.");
-    return { model, env: { ...env, OPENAI_API_KEY: key } };
+    return { model, env: { ...env, OPENAI_API_KEY: key }, private: false };
   }
   const own = providerVars(provider);
   for (const [k, v] of Object.entries(host)) if (v !== undefined && own.test(k)) env[k] = v;
-  return { model, env };
+  return { model, env, private: false };
 }
 
-/** What a run needs besides the model, checked before the first container starts. `values` are the parsed flags. */
-export function preflight(values: { model?: string } = {}): { model: string; env: Record<string, string> } {
+/**
+ * What a run needs besides the model, checked before the first container starts. `values` are the parsed flags. `refuse` is asked first,
+ * with the model, and a message it returns ends the run: it is how a private corpus turns away a model that is not marked private.
+ */
+export function preflight(values: { model?: string } = {}, refuse?: (run: { model: string; private: boolean }) => string | undefined): { model: string; env: Record<string, string>; private: boolean } {
   const settings = modelSettings(values.model, process.env);
+  const refusal = refuse?.(settings);
+  if (refusal) fail(refusal);
   if (!Bun.which("uv")) fail("uv is needed. See https://docs.astral.sh/uv/");
   if (Bun.spawnSync(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exitCode !== 0) fail("Docker is not reachable: `docker info` failed. Every trial runs in a container.");
   return settings;
 }
+
+/** What privacyError (lib/corpus.ts) reads of the model of a run: its name, and whether models.json marks it private. */
+export const privacyModel = (run: { model: string; private: boolean }): ModelSettings => ({ name: run.model, baseUrl: "", apiKey: "", private: run.private });
 
 // ---- the akm under test ---------------------------------------------------------------------------------------------------
 
@@ -450,14 +466,6 @@ export async function runHarbor(configFile: string, logFile: string, env: Record
 
 // ---- what the run left ----------------------------------------------------------------------------------------------------
 
-/** A trial as the run writes it to samples.jsonl: report.ts's, with whether it hit a time limit, and why the plugin was not live when it was not. */
-export interface RunTrial extends Trial {
-  /** The agent or its setup ran out of time (AgentTimeoutError, AgentSetupTimeoutError), whatever else the trial is later called. Counted apart from the other errors, so a slower akm shows as one. report.ts counts the timeouts of its tables from this. */
-  timed_out: boolean;
-  /** The plugin was not shown to be live in this trial, and why. Left out otherwise. */
-  plugin_problem?: string;
-}
-
 /** The exception of a trial whose plugin was not live. akm_opencode.py raises it. */
 export const PLUGIN_ERROR = "AkmPluginNotLoadedError";
 
@@ -480,7 +488,7 @@ export interface Observed {
 const distinct = <T>(xs: T[]): T[] => [...new Set(xs)].sort();
 
 /**
- * The trials of a Harbor job folder, as report.ts reads them, with two things report.ts cannot see.
+ * The trials of a Harbor job folder, as trials.ts reads them, with two things trials.ts cannot see.
  * A trial gets `timed_out` from its exception before anything else is done to it.
  * Harbor keeps the first exception of a trial only, so after an AgentTimeoutError the error that akm_opencode.py raises when the plugin
  * was not live is lost. The akm arm leaves akm_plugin_status.json for that: a trial whose file says the plugin was not live gets
@@ -490,7 +498,7 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
   const observed: Observed & { dependency_trees: string[] } = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null };
   if (!existsSync(jobDir)) return { trials: [], observed }; // Harbor never made the job: every cell of the grid is missing
   const trials = loadTrials(jobDir).map((t): RunTrial => {
-    const row: RunTrial = { ...t, timed_out: timedOut(t) };
+    const row: RunTrial = { ...t, timed_out: t.error !== null && TIMEOUT_ERRORS.has(t.error) };
     if (t.arm !== "akm") return row;
     const agent = join(jobDir, t.trial, "agent");
     const status = readJson(join(agent, "akm_plugin_status.json"));
@@ -513,39 +521,6 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
   });
   return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed), dependency_trees: distinct(observed.dependency_trees) } };
 }
-
-/** Trials that hit a time limit, by arm: the count that report.ts makes of its tables (`timedOut`). */
-export function timeoutsOf(trials: Trial[]): { control: number; akm: number } {
-  const count = (arm: Arm) => trials.filter((t) => t.arm === arm && timedOut(t)).length;
-  return { control: count("control"), akm: count("akm") };
-}
-
-/** The numbers of the report that `--repeat` takes the spread of, and that a matrix reads: all numbers or null, none text. */
-export function metricsOf(report: Report, trials: RunTrial[]) {
-  const timeouts = timeoutsOf(trials);
-  const arm = (a: ArmSummary, name: Arm) => ({
-    pass_rate: a.pass_rate?.value ?? null,
-    passed: a.passed,
-    scored: a.scored,
-    errored: a.errored,
-    timeouts: timeouts[name],
-    minutes: a.per_trial.minutes,
-    agent_minutes: a.per_trial.agent_minutes,
-    cost_usd: a.per_trial.cost_usd,
-  });
-  const d = report.delta;
-  const e = report.engagement;
-  return {
-    control: arm(report.control, "control"),
-    akm: arm(report.akm, "akm"),
-    delta: { value: d?.value ?? null, lo: d?.lo ?? null, hi: d?.hi ?? null, n: d?.n ?? null },
-    better: { ...report.better },
-    engagement: { rate: e.rate, called: e.called, trials: e.trials, curated_read: e.curated_read, control_calls: e.control_calls },
-  };
-}
-
-/** The errored trials of both arms, for the summary's n_errored. */
-export const erroredOf = (report: Report): number => report.control.errored + report.akm.errored;
 
 // ---- whether the run did what it set out to do ----------------------------------------------------------------------------
 

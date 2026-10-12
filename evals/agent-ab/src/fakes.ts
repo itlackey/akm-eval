@@ -1,7 +1,7 @@
 // What the agent-ab tests stand in for: a public folder of fictional-tool tasks and the library they seed, a copy of the
 // repository's code that runs the CLI in a folder of its own, and a `uv` and a `docker` that are not Harbor and Docker.
 
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -42,6 +42,7 @@ export function sandboxRepo(): string {
   const code = (rel: string) => cpSync(join(ROOT, rel), join(root, rel), { recursive: true, filter: (src) => !/\.test\.ts$|node_modules|test_.*\.py$|__pycache__/.test(src) });
   code("lib");
   code(join("evals", "agent-ab", "src"));
+  copyFileSync(join(ROOT, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock")); // a run stops without an entry for the eval
   const fixture = publicFixture();
   cpSync(join(fixture, "tasks"), join(root, "evals", "agent-ab", "tasks"), { recursive: true });
   cpSync(join(fixture, "libraries"), join(root, "evals", "agent-ab", "libraries"), { recursive: true });

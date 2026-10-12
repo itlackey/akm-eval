@@ -1,14 +1,12 @@
-// The report of the evals that run an agent in Harbor with and without akm (evals/agent-ab, benchmarks/terminal-bench):
-// what Harbor wrote for each trial, as pass rates, the paired difference with its sign test and the engagement split.
-// Their run.ts uses it after the run. It reads trial folders and does no I/O besides that.
+// The report of the evals that run an agent in Harbor with and without akm (evals/agent-ab, benchmarks/terminal-bench): the trials
+// each run recorded, as pass rates, the paired difference with its sign test and the engagement split. This is the SCORER half: it
+// does no I/O, and it imports nothing that collects (trials.ts reads Harbor's folders). A change here changes a score and invalidates
+// no run, since scripts/rescore scores the stored trials again. See score.ts, which makes the rows and the summary fields from it.
 //
 // A trial is one task run once by one arm. The control arm is opencode alone, the akm arm is opencode with the akm
 // plugin. A trial is scored when the verifier gave it a reward, and errored when it did not: it never got far enough,
 // or the plugin was not shown to be live. Errored trials are left out of the rates and counted. A trial whose agent ran
 // out of time is counted apart, as a timeout: Harbor still verifies it, so it is usually scored too.
-
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 
 export type Arm = "control" | "akm";
 
@@ -35,6 +33,8 @@ export interface Trial {
   digest?: string | null;
   /** The agent, or its setup, ran out of time. The run sets it before it relabels a trial, so a trial that timed out and then failed the plugin check still counts as a timeout. Left out in a trial read straight from Harbor's folder, which says it by its exception. */
   timed_out?: boolean;
+  /** The plugin was not shown to be live in this trial, and why. Left out otherwise. */
+  plugin_problem?: string;
 }
 
 export interface Estimate {
@@ -228,133 +228,7 @@ export function signTest(akm: number, control: number): number {
   return Math.min(1, 2 * tail);
 }
 
-/**
- * Where a shell command can start: the start of the text, or after `;`, `&`, `|`, `(` (which covers `$(`), a backtick,
- * `{` or a new line, after a control word such as `then` or `do`, or just inside the quote of `bash -c`.
- */
-const COMMAND_START = /(?:^|[;&|(`{\n]|\b(?:ba|z|da)?sh\s+(?:-\w+\s+)*-\w*c\s+["'])\s*(?:(?:if|then|do|else|elif|while|until|!)\s+)*/;
-/** What can stand before the command and leave it the one that runs: `VAR=value`, and sudo, xargs, env, time and the like with their flags and numbers (`xargs -n 1`, `timeout 10`). */
-const WRAPPERS = /(?:(?:sudo|xargs|env|time|nohup|exec|nice|timeout|stdbuf)\s+(?:(?:-\S+|\d+[smhd]?)\s+)*|[A-Za-z_]\w*=\S*\s+)*/;
-/** The command itself: `akm`, or a path that ends in it (`/usr/local/bin/akm`, `~/.bun/bin/akm`, `./akm`), then a space, the end or a shell operator. */
-const AKM_WORD = /(?:[\w.~$/{}-]*\/)?akm(?=[\s;&|)<>]|$)/;
-
-/**
- * A shell command that runs akm: akm is the command that runs, bare or by its path, at the start or after an operator,
- * in `$(...)` or backticks, or behind sudo, xargs, env and the like. Text that only mentions akm (`echo akm`,
- * `ls /opt/akm`, `cat akm.txt`, `which akm`) is not a call. A line of a here-document that starts with akm is counted,
- * since the pattern cannot tell it from a command. Not covered: a flag that takes its own word (`sudo -u root akm`).
- */
-const RUNS_AKM = new RegExp(COMMAND_START.source + WRAPPERS.source + AKM_WORD.source);
-
-/**
- * The akm calls in an `opencode run --format=json` stream: the plugin's tools, which are named akm_*, and with
- * `shell` the commands that run akm in the shell, which the arm with akm installed can do too. A line that is not JSON,
- * such as stderr, is skipped. A call is counted once however many events it has: opencode can write a tool call again
- * as it changes state, each time with the same callID, and the last event that has the command tells what it ran.
- * Events with no callID cannot be matched, so each of them counts as a call.
- */
-export function toolCalls(stream: string, shell = false): { akm: Record<string, number>; tools: number } {
-  const calls: { tool: string; command: string | undefined }[] = [];
-  const index = new Map<string, number>();
-  for (const line of stream.split("\n")) {
-    if (!line.startsWith("{")) continue;
-    let event: { type?: string; sessionID?: unknown; part?: { tool?: unknown; callID?: unknown; sessionID?: unknown; state?: { input?: { command?: unknown } } } };
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const tool = event.type === "tool_use" ? event.part?.tool : undefined;
-    if (typeof tool !== "string") continue;
-    const command = event.part?.state?.input?.command;
-    const callID = event.part?.callID;
-    // a call id is only unique within its session
-    const key = typeof callID === "string" && callID !== "" ? `${String(event.part?.sessionID ?? event.sessionID ?? "")}/${callID}` : null;
-    const seen = key === null ? undefined : index.get(key);
-    if (seen === undefined) {
-      if (key !== null) index.set(key, calls.length);
-      calls.push({ tool, command: typeof command === "string" ? command : undefined });
-    } else if (typeof command === "string") {
-      calls[seen].command = command;
-    }
-  }
-  const akm: Record<string, number> = {};
-  for (const { tool, command } of calls) {
-    const name = tool.startsWith("akm_") ? tool : shell && tool === "bash" && command !== undefined && RUNS_AKM.test(command) ? "akm (shell)" : undefined;
-    if (name) akm[name] = (akm[name] ?? 0) + 1;
-  }
-  return { akm, tools: calls.length };
-}
-
-/** Where the plugin writes what it curated for a session: the agent is told to read it. It is akm's other way in, apart from the tools. */
-const CURATED_FILE = /\/akm-opencode\/curated\//;
-
-/** Whether the opencode stream holds a read of the curated results. */
-export function readsCurated(stream: string): boolean {
-  for (const line of stream.split("\n")) {
-    if (!line.startsWith("{") || !line.includes("curated")) continue;
-    try {
-      const event = JSON.parse(line);
-      if (event.type === "tool_use" && event.part?.tool === "read" && CURATED_FILE.test(String(event.part?.state?.input?.filePath ?? ""))) return true;
-    } catch {
-      // a line that is not JSON, such as stderr
-    }
-  }
-  return false;
-}
-
-const num = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) ? x : null);
-
-/** Seconds from one ISO time to another, or null when either is missing. */
-function between(from: unknown, to: unknown): number | null {
-  if (typeof from !== "string" || typeof to !== "string") return null;
-  const seconds = (Date.parse(to) - Date.parse(from)) / 1000;
-  return Number.isFinite(seconds) ? round(seconds, 1) : null;
-}
-
-/** One trial folder of a Harbor job, or null when it holds no result. The arm is the agent's name, which Harbor keeps in result.json. */
-export function readTrial(dir: string, trial: string): Trial | null {
-  const file = join(dir, "result.json");
-  if (!existsSync(file)) return null;
-  const r = JSON.parse(readFileSync(file, "utf8"));
-  const agent: unknown = r.agent_info?.name;
-  const arm: Arm | null = agent === "akm-opencode" ? "akm" : agent === "opencode" ? "control" : null;
-  if (arm === null) throw new Error(`${file} is a trial of agent ${JSON.stringify(agent)}, which is neither opencode nor akm-opencode`);
-  const streamFile = join(dir, "agent", "opencode.txt");
-  const stream = existsSync(streamFile) ? readFileSync(streamFile, "utf8") : null;
-  const calls = stream === null ? null : toolCalls(stream, arm === "akm");
-  const usage = r.agent_result;
-  const seconds = between(r.started_at, r.finished_at);
-  const agentSeconds = between(r.agent_execution?.started_at, r.agent_execution?.finished_at);
-  return {
-    task: String(r.task_name ?? "").replace(/^[^/]*\//, ""),
-    arm,
-    trial,
-    reward: num(r.verifier_result?.rewards?.reward),
-    error: typeof r.exception_info?.exception_type === "string" ? r.exception_info.exception_type : null,
-    akm: calls?.akm ?? null,
-    tools: calls?.tools ?? null,
-    curated: arm === "akm" && stream !== null ? readsCurated(stream) : null,
-    tokens: usage && num(usage.n_input_tokens) !== null ? { input: num(usage.n_input_tokens) ?? 0, cache: num(usage.n_cache_tokens) ?? 0, output: num(usage.n_output_tokens) ?? 0 } : null,
-    costUsd: num(usage?.cost_usd),
-    seconds,
-    agentSeconds,
-    digest: typeof r.task_id?.ref === "string" ? r.task_id.ref : null,
-  };
-}
-
-/** Every trial of a Harbor job folder, in folder order. */
-export function loadTrials(jobDir: string): Trial[] {
-  const trials: Trial[] = [];
-  for (const entry of readdirSync(jobDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!entry.isDirectory()) continue;
-    const t = readTrial(join(jobDir, entry.name), entry.name);
-    if (t) trials.push(t);
-  }
-  return trials;
-}
-
-/** The exceptions Harbor records when the agent, or the setup before it, runs out of time. */
+/** The exceptions Harbor records when the agent, or the setup before it, runs out of time. The collector (trials.ts) has the same two, for the row it writes. */
 const TIMEOUTS = new Set(["AgentTimeoutError", "AgentSetupTimeoutError"]);
 
 const scored = (t: Trial): t is Trial & { reward: number } => t.reward !== null;
@@ -533,5 +407,5 @@ export function sideBySide(title: string, a: { corpus: string; report: Report },
     ["timed out", late(a.report), late(b.report)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  return [`${title}: public and private side by side (not pooled)`, ...rows.map((r) => `  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`)];
+  return [`${title}: ${a.corpus} and ${b.corpus} side by side (not pooled)`, ...rows.map((r) => `  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`)];
 }

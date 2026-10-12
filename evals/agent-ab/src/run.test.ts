@@ -1,17 +1,27 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type AkmArm, PINS, buildFingerprint, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
-import { harnessSha256, sha256Text } from "../../../lib/provenance.ts";
+import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { harnessSha256, sha256Json, sha256Text } from "../../../lib/provenance.ts";
 import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
+import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
+import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
+import { caseDigests, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
+import { clearRunning } from "../../../lib/results.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
 import { generate } from "./generate.ts";
+import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
+const PUBLIC = resolveCorpora({ eval: "agent-ab", values: {}, publicFolder: EVAL_DIR, default: "rewrite" })[0] as ResolvedCorpus;
+
+/** The rows of a samples.jsonl: one per task, with all its trials, the control's and the akm arm's. */
+const rowsOf = (dir: string): any[] => readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -168,7 +178,7 @@ describe("runCorpus", () => {
 
   test("writes the job, runs Harbor and leaves a summary that names the akm, the tasks, the settings and the library", async () => {
     const { root, env } = fakeUv();
-    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env }, join(root, "results")));
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 3, env }, join(root, "results")));
     const stored = readJson(join(s.results_dir, "summary.json"));
     expect(stored).toMatchObject({ eval: "agent-ab", corpus: "public", model: "openai/x", limit: 3, n_tasks: 3, attempts: 1, harbor_exit: 0 });
     expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_env: {} });
@@ -194,7 +204,7 @@ describe("runCorpus", () => {
   test("records that the run finished: its status, the grid of trials, the model's endpoint without a key, the job config and the digest of the cases", async () => {
     const { root, env } = fakeUv();
     const withKey = { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: "http://user:hunter2@192.0.2.5:8080/v1" };
-    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env: withKey }, join(root, "results")));
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 3, env: withKey }, join(root, "results")));
     const stored = readJson(join(s.results_dir, "summary.json"));
     const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
@@ -209,12 +219,92 @@ describe("runCorpus", () => {
     expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries"))); // the component stays, to say which part moved
   });
 
+  test("writes a manifest that says what the run was made of: the cases with their digests, the parts, the engine, the attempts and which tasks were scored", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "m", limit: 3, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: "http://192.0.2.5:8080/v1" } }, join(root, "results")));
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    expect(readManifest(stored).kind).toBe("manifest");
+    const m = stored.manifest;
+    const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
+    const parts = lockedParts(MEASUREMENT);
+    expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer });
+    expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
+    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1"), temperature: null, enableThinking: null, timeoutMs: null } });
+    expect(m.treatment_hints).toEqual({ attempts: 1 }); // a run of three attempts is not compared with a run of one
+    expect(m.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(m.config.redacted.datasets).toBeUndefined(); // the tasks are the cases
+    expect(m.config.redacted.agents).toHaveLength(2);
+    // what each task presented to the agent: its folder and the library it seeds. The scorer reads nothing of the case.
+    expect(Object.keys(m.cases).sort()).toEqual([...tasks].sort());
+    for (const c of casesIn(EVAL_DIR, tasks)) {
+      expect(m.cases[c.id]).toEqual({ input_sha256: sha256Json({ task_sha256: c.task_sha256, library: c.library, library_sha256: c.library_sha256 }), label_sha256: sha256Json({}) });
+      expect(c.library_sha256).toMatch(/^[0-9a-f]{64}$/);
+    }
+    expect(m.cases).toEqual(caseDigests(MEASUREMENT, casesIn(EVAL_DIR, tasks)));
+    expect(m.completion).toEqual({ selected: tasks, scored: tasks, errored: [] });
+    // one row per task in samples.jsonl, each with its trials
+    expect(rowsOf(s.results_dir).map((r) => [r.id, r.trials.length, r.paired])).toEqual(tasks.map((t) => [t, 2, true]));
+  });
+
+  test("lists a task with a trial in one arm only as selected and not scored, and the tasks Harbor never started as selected only", async () => {
+    const { root, env } = fakeUv();
+    const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "c", limit: 3, env: { ...env, UV_FAKE_MISSING: "1" } }, join(root, "results")))).rejects.toThrow("have no result");
+    const cut = readdirSync(join(root, "results")).find((d) => d.endsWith("-c")) as string;
+    expect(readJson(join(root, "results", cut, "summary.json")).manifest.completion).toEqual({ selected: tasks, scored: tasks.slice(0, 2), errored: tasks.slice(2) }); // the last task has the control's trial only
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "n", limit: 2, env: { ...env, UV_FAKE_NOTHING: "1" } }, join(root, "results")))).rejects.toThrow("Harbor wrote no job");
+    const none = readdirSync(join(root, "results")).find((d) => d.endsWith("-n")) as string;
+    expect(readJson(join(root, "results", none, "summary.json")).manifest.completion).toEqual({ selected: tasks.slice(0, 2), scored: [], errored: [] });
+  });
+
+  test("scores the trials to the report the code before the split gave them (buildReport over the trials in Harbor's order), and rescore gives it back from the stored rows", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "r", limit: 3, env: { ...env, UV_FAKE_TIMEOUTS: "1", UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    clearRunning(s.results_dir); // a single run leaves its marker to the exit of the process, and a folder that is still being written is not rescored
+    const trials = loadRunTrials(join(s.results_dir, "jobs", "agent-ab-public")).trials;
+    expect(s.report).toEqual(buildReport(trials));
+    const stored = readJson(join(s.results_dir, "summary.json"));
+    const before = readFileSync(join(s.results_dir, "summary.json"), "utf8");
+    const { out, result } = rescoreFolder(s.results_dir);
+    expect(out).toBe(`${s.results_dir}-rescored`);
+    expect(result.changed).toEqual([]);
+    const again = readJson(join(out, "summary.json"));
+    for (const key of ["report", "metrics", "timeouts", "n_errored"]) expect(again[key], key).toEqual(stored[key]);
+    expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(s.results_dir, "samples.jsonl"), "utf8"));
+    expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), scorer: stored.manifest.scorer, dropped: [] });
+    expect(again.manifest.collector).toEqual(stored.manifest.collector);
+    expect(again.manifest.cases).toEqual(stored.manifest.cases);
+    expect(again.manifest.completion).toEqual(stored.manifest.completion);
+    expect(readManifest(again).kind).toBe("manifest");
+    expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).toBe(before); // the original is not touched
+  });
+
+  test("rescore reads the verdicts from the raw trials in the rows and not from the numbers stored beside them", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "e", limit: 3, env }, join(root, "results")));
+    clearRunning(s.results_dir);
+    const stored = readStored(s.results_dir);
+    // the control passes the first task: change the reward of its trial, as a different scorer or verifier output would
+    const edited = stored.rows.map((row, i) => (i === 0 ? { ...row, trials: row.trials.map((t: any) => (t.arm === "control" ? { ...t, reward: 1 } : t)) } : row));
+    const result = rescoreRun({ ...stored, rows: edited });
+    expect(result.changed).toEqual([stored.rows[0]?.id]);
+    expect(result.summary.metrics.control.passed).toBe(stored.summary.metrics.control.passed + 1);
+    expect(result.rows[0]).toMatchObject({ control: { passed: 1 } });
+    expect(result.summary.report.control.passed).toBe(result.summary.metrics.control.passed);
+  });
+
+  test("rescore refuses a run from before the manifest, whose samples.jsonl has one line per trial, and names the problem", () => {
+    const legacy = { dir: "2026-10-06-old", summary: { eval: "agent-ab", corpus: "public", assets_sha256: "0".repeat(64) }, rows: [{ task: "drillbit--backup-policy-train", arm: "akm", reward: 1 }] };
+    expect(() => rescoreRun(legacy)).toThrow(RescoreError);
+    expect(() => rescoreRun(legacy)).toThrow("was made before the manifest, and cannot be scored again: its samples.jsonl has one line per trial");
+  });
+
   test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
     const summaries: Record<string, any>[] = [];
     for (const [label, path] of [["a", "k-DUMMYSECRET0123/v1"], ["b", "k-OTHERDEPLOYMENT456/v1"]]) {
-      const s = await quiet(() => runCorpus("public", { model: "openai/x", label, limit: 1, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: `https://gateway.example/${path}` } }, results));
+      const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label, limit: 1, env: { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: `https://gateway.example/${path}` } }, results));
       summaries.push(readJson(join(s.results_dir, "summary.json")));
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
@@ -227,7 +317,7 @@ describe("runCorpus", () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
     const reason = "Harbor exited 1; 1 of 6 expected trials have no result (control 0, akm 1)";
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 3, env: { ...env, UV_FAKE_MISSING: "1", UV_FAKE_EXIT: "1" } }, results))).rejects.toMatchObject({ code: 1, message: expect.stringContaining(reason) });
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 3, env: { ...env, UV_FAKE_MISSING: "1", UV_FAKE_EXIT: "1" } }, results))).rejects.toMatchObject({ code: 1, message: expect.stringContaining(reason) });
     const [run] = readdirSync(results);
     const dir = join(results, run);
     const stored = readJson(join(dir, "summary.json"));
@@ -242,14 +332,14 @@ describe("runCorpus", () => {
       akm: { expected: 3, completed: 2, failed: 0, missing: 1, unexpected: 0 },
     });
     for (const kept of ["job.json", "harbor.log", "samples.jsonl", "jobs"]) expect(existsSync(join(dir, kept)), kept).toBe(true);
-    expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(5);
+    expect(rowsOf(dir).flatMap((r) => r.trials)).toHaveLength(5); // the trials that finished, of the three tasks
     expect(stored.report.control.trials + stored.report.akm.trials).toBe(5);
   });
 
   test("a cell missing aborts the run even when Harbor exited 0, and a full grid with errored trials does not", async () => {
     const { root, env } = fakeUv();
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "m", limit: 2, env: { ...env, UV_FAKE_MISSING: "1" } }, join(root, "results")))).rejects.toThrow("1 of 4 expected trials have no result (control 0, akm 1)");
-    const errored = await quiet(() => runCorpus("public", { model: "openai/x", label: "e", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "m", limit: 2, env: { ...env, UV_FAKE_MISSING: "1" } }, join(root, "results")))).rejects.toThrow("1 of 4 expected trials have no result (control 0, akm 1)");
+    const errored = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "e", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
     expect(errored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
     expect(errored.completion).toMatchObject({ expected: 4, completed: 3, failed: 1, missing: 0 });
   });
@@ -257,7 +347,7 @@ describe("runCorpus", () => {
   test("a Harbor that made no job at all is an aborted run with every cell missing, and its summary is kept", async () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_NOTHING: "1" } }, results))).rejects.toThrow("Harbor wrote no job; 2 of 2 expected trials have no result (control 1, akm 1)");
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_NOTHING: "1" } }, results))).rejects.toThrow("Harbor wrote no job; 2 of 2 expected trials have no result (control 1, akm 1)");
     const [run] = readdirSync(results);
     const stored = readJson(join(results, run, "summary.json"));
     expect(stored).toMatchObject({ status: "aborted", harbor_exit: 0, completion: { expected: 2, completed: 0, failed: 0, missing: 2 } });
@@ -270,7 +360,7 @@ describe("runCorpus", () => {
     writeFileSync(join(packs, "akm-cli-0.9.27.tgz"), "an akm");
     writeFileSync(join(packs, "akm-opencode-0.9.27.tgz"), "a plugin");
     const arm: AkmArm = { bin: "~/code/akm", build: "v0.9.27-3-gabc-dirty", build_fingerprint: "e".repeat(64), cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: packs };
-    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, join(root, "results")));
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 1, env, arm, akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, join(root, "results")));
     const kwargs = readJson(join(s.results_dir, "job.json")).agents[1].kwargs;
     expect(kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", packages_dir: join(s.results_dir, "akm-packages"), akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(readFileSync(join(s.results_dir, "akm-packages", "akm-opencode-0.9.27.tgz"), "utf8")).toBe("a plugin");
@@ -284,7 +374,7 @@ describe("runCorpus", () => {
 
   test("records the digest of the dependency tree the akm containers installed, in akm_install and in the build identity, and the lockfiles they came from (#68)", async () => {
     const { root, env } = fakeUv();
-    const s = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
     const stored = readJson(join(s.results_dir, "summary.json"));
     const tree = "ee".repeat(32);
     expect(stored.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: true });
@@ -295,7 +385,7 @@ describe("runCorpus", () => {
 
   test("aborts a run whose akm containers installed different dependency trees, and says how many", async () => {
     const { root, env } = fakeUv();
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TREES: "differ" } }, join(root, "results")))).rejects.toThrow("the akm arm's containers installed 2 different dependency trees");
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TREES: "differ" } }, join(root, "results")))).rejects.toThrow("the akm arm's containers installed 2 different dependency trees");
     const [run] = readdirSync(join(root, "results"));
     const stored = readJson(join(root, "results", run, "summary.json"));
     expect(stored).toMatchObject({ status: "aborted", akm_build_fingerprint: null });
@@ -307,7 +397,7 @@ describe("runCorpus", () => {
     const { root, env } = fakeUv();
     const host = { MODEL_NAME: "openai/x", MODEL_API_KEY: "model-key", MODEL_BASE_URL: "http://192.0.2.5/v1", JUDGE_API_KEY: "judge-secret", AKM_BIN: "akm", HOME: process.env.HOME as string, PATH: env.PATH };
     const run = modelSettings(undefined, host, {});
-    const s = await quiet(() => runCorpus("public", { model: run.model, label: "t", limit: 1, env: run.env }, join(root, "results")));
+    const s = await quiet(() => runCorpus(PUBLIC, { model: run.model, label: "t", limit: 1, env: run.env }, join(root, "results")));
     const seen = readJson(join(s.results_dir, "uv-env.json"));
     expect(seen).toMatchObject({ OPENAI_API_KEY: "model-key", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
     for (const leaked of ["JUDGE_API_KEY", "MODEL_API_KEY", "AKM_BIN"]) expect(seen[leaked]).toBeUndefined();
@@ -315,13 +405,12 @@ describe("runCorpus", () => {
 
   test("counts the time-outs apart and shows the plugin failure that one of them hid", async () => {
     const { root, env } = fakeUv();
-    const timeouts = await quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TIMEOUTS: "1" } }, join(root, "results")));
+    const timeouts = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 2, env: { ...env, UV_FAKE_TIMEOUTS: "1" } }, join(root, "results")));
     expect(timeouts.timeouts).toEqual({ control: 0, akm: 1 });
     expect(timeouts.metrics.akm.timeouts).toBe(1);
     expect([timeouts.report.control.timeouts, timeouts.report.akm.timeouts]).toEqual([0, 1]); // the report's tables count the same trials
-    const rows = readFileSync(join(timeouts.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    expect(rows.filter((r) => r.timed_out).map((r) => r.arm)).toEqual(["akm"]);
-    const dead = await quiet(() => runCorpus("public", { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    expect(rowsOf(timeouts.results_dir).flatMap((r) => r.trials).filter((t) => t.timed_out).map((t) => t.arm)).toEqual(["akm"]);
+    const dead = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
     expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
     expect(dead.n_errored).toBe(1);
     expect(dead.timeouts.akm).toBe(1);
@@ -332,7 +421,7 @@ describe("runCorpus", () => {
   test("with --repeat, runs the eval into <label>-r1 to -rN and writes the spread of its metrics beside them", async () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
-    const runs = await quiet(() => repeatRuns(3, "t", (label) => runCorpus("public", { model: "openai/x", label, limit: 3, env }, results)));
+    const runs = await quiet(() => repeatRuns(3, "t", (label) => runCorpus(PUBLIC, { model: "openai/x", label, limit: 3, env }, results)));
     expect(runs).toHaveLength(3);
     const names = readdirSync(results).sort();
     expect(names.filter((n) => /-t-r[123]$/.test(n))).toHaveLength(3);
@@ -347,7 +436,7 @@ describe("runCorpus", () => {
 
   test("still leaves the summary when Harbor exits with an error, and says so", async () => {
     const { root, env } = fakeUv();
-    await expect(quiet(() => runCorpus("public", { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
+    await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 1, env: { ...env, UV_FAKE_EXIT: "3" } }, join(root, "results")))).rejects.toThrow("Harbor exited 3");
     const [run] = readdirSync(join(root, "results"));
     expect(readJson(join(root, "results", run, "summary.json")).harbor_exit).toBe(3);
   });
@@ -363,7 +452,7 @@ describe("the command line", () => {
   test("--help describes the flags of the akm under test, and the model, and says AKM_BIN is not read", () => {
     const { code, out } = run(["--help"]);
     expect(code).toBe(0);
-    for (const flag of ["--repeat", "--akm ", "--akm-env", "--model"]) expect(out).toContain(flag);
+    for (const flag of ["--repeat", "--akm ", "--akm-env", "--model", "--corpus", "--cases"]) expect(out).toContain(flag);
     expect(out).toMatch(/models\.json/);
     expect(out).toContain("AKM_BIN is not read");
     expect(out).toContain("akm-cli@x.y.z");
@@ -422,7 +511,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
       });
       return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
     };
-    const summary = (label: string, corpus: "public" | "private" = "public") => {
+    const summary = (label: string, corpus: "public" | "custom" = "public") => {
       const results = corpus === "public" ? join(root, "evals", "agent-ab", "results") : join(root, "private", "agent-ab", "results");
       return JSON.parse(readFileSync(join(results, readdirSync(results).find((d) => d.endsWith(`-${label}`)) as string, "summary.json"), "utf8"));
     };
@@ -515,12 +604,12 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(summary("plain").assets_sha256).toBe(s.assets_sha256);
   }, 60_000);
 
-  test("run --corpus private refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
+  test("run --corpus custom refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
     const { root, run, summary } = repo();
     const out = join(root, "private", "agent-ab");
     const assets = join(out, "assets");
     const refused = (said: string) => {
-      const done = run(["--corpus", "private", "--limit", "1", "--label", "p"]);
+      const done = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
       expect(done.code).toBe(2);
       expect(done.err).toContain(said);
     };
@@ -550,9 +639,44 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     refused("are not what generate wrote");
     writeFileSync(task, taskText);
 
-    const ran = run(["--corpus", "private", "--limit", "1", "--label", "p"]);
+    const ran = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
     expect(ran.code).toBe(0);
-    expect(summary("p", "private")).toMatchObject({ corpus: "private", status: "complete", completion: { expected: 2, completed: 2 } });
+    expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
+    expect(summary("p", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: "7" } });
+
+    // The old value works for one more release, says what it is now, and is the same corpus.
+    const old = run(["--corpus", "private", "--limit", "1", "--label", "old"]);
+    expect(old.code).toBe(0);
+    expect(old.err).toContain("agent-ab: --corpus private is now --corpus custom. The old value works for one more release.");
+    expect(summary("old", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", seed: "7" });
+  }, 60_000);
+
+  test("run --cases DIR runs a folder of your own tasks as a custom corpus, and keeps it from a model that models.json does not mark private unless its corpus.json says it holds nothing private", () => {
+    const { root, run, summary } = repo();
+    const mine = join(root, "mine");
+    cpSync(join(root, "evals", "agent-ab", "tasks"), join(mine, "tasks"), { recursive: true });
+    cpSync(join(root, "evals", "agent-ab", "libraries"), join(mine, "libraries"), { recursive: true });
+    const refused = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain('--cases mine sends your tasks to openai/x, which is not marked "private": true in models.json.');
+    expect(refused.err).toContain("it has no corpus.json, and an own corpus without one is private");
+    expect(refused.out).not.toContain("tasks x 2 arms"); // nothing ran
+
+    // a model that models.json marks private may see it
+    writeFileSync(join(root, "models.json"), JSON.stringify({ mine: { base_url: "http://192.0.2.9:8080/v1", api_key_env: "MINE_KEY", private: true } }));
+    const ran = run(["--cases", "mine", "--model", "mine", "--limit", "1", "--label", "own"], { MINE_KEY: "k" });
+    expect(ran.code, ran.err).toBe(0);
+    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "mine", seed: null, status: "complete" });
+    rmSync(join(root, "models.json"));
+
+    // a folder that says it holds nothing private may go to any model
+    writeFileSync(join(mine, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
+    expect(run(["--cases", "mine", "--limit", "1", "--label", "open"]).code).toBe(0);
+    expect(summary("open", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: false });
+    rmSync(join(mine, "tasks"), { recursive: true });
+    const empty = run(["--cases", "mine", "--limit", "1", "--label", "empty"]);
+    expect(empty.code).toBe(2);
+    expect(empty.err).toContain("mine must hold tasks/ and libraries/");
   }, 60_000);
 });
 
