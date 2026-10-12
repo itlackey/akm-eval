@@ -800,7 +800,7 @@ describe("a run that was cut short", () => {
 /** What a Harbor eval records of its job, the AKM_* settings of its akm arm and the endpoint of its model (see lib/harbor/harbor.ts), for the policy to read. */
 const harborIdentity = (akmEnv: Record<string, string> = {}, baseUrl = "https://gateway.example/deployment-A/v1", model = "m1") => {
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts: 3, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: ["a", "b"] }], arm: releaseArm(), akmEnv });
-  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, endpoint: endpointOf({ OPENAI_BASE_URL: baseUrl }) } };
+  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) } };
 };
 
 describe("the Harbor evals", () => {

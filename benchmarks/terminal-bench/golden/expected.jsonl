@@ -1,0 +1,7 @@
+{"id":"build-cython-ext","control":{"trials":1,"scored":1,"passed":1,"errored":0,"timed_out":0},"akm":{"trials":1,"scored":1,"passed":1,"errored":0,"timed_out":0},"paired":true}
+{"id":"chess-best-move","control":{"trials":1,"scored":1,"passed":1,"errored":0,"timed_out":0},"akm":{"trials":1,"scored":1,"passed":0,"errored":0,"timed_out":0},"paired":true}
+{"id":"configure-git-webserver","control":{"trials":1,"scored":0,"passed":0,"errored":1,"timed_out":1},"akm":{"trials":1,"scored":1,"passed":0,"errored":0,"timed_out":1},"paired":false}
+{"id":"fix-code-vulnerability","control":{"trials":1,"scored":1,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":1,"scored":0,"passed":0,"errored":1,"timed_out":0},"paired":false}
+{"id":"log-summary-date-ranges","control":{"trials":1,"scored":1,"passed":1,"errored":0,"timed_out":0},"akm":{"trials":1,"scored":0,"passed":0,"errored":1,"timed_out":1},"paired":false}
+{"id":"polyglot-c-py","control":{"trials":1,"scored":1,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"paired":false}
+{"id":"qemu-alpine-ssh","control":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"akm":{"trials":0,"scored":0,"passed":0,"errored":0,"timed_out":0},"paired":false}

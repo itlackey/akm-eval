@@ -1,0 +1,6 @@
+{"id":"drillbit--backup-policy-train","library":"drillbit","task_sha256":"a87696582d02bd7d08d4d2325eafad42d3919a979544415f92df1fb58ef98343","library_sha256":"e8360cbd5d362f57963776b18ee78590e85b0e6274b2f4f70f04611f337dd00a"}
+{"id":"drillbit--scale-replicas-train","library":"drillbit","task_sha256":"f832b6e6a06e1b3a3555ed5aa9cb5202db92b3c8c5fb13832d292d61b27b8154","library_sha256":"e8360cbd5d362f57963776b18ee78590e85b0e6274b2f4f70f04611f337dd00a"}
+{"id":"inkwell--add-healthcheck-train","library":"inkwell","task_sha256":"30904f6b34d78a5d09305d13a07615ed8aecfe9c65d3b2949cf49a6268d2d0fa","library_sha256":"21af836abdc812475b9d282bb211348ac9028727fd7458d8893da87912994130"}
+{"id":"inkwell--new-service-train","library":"inkwell","task_sha256":"fe7aa0d3c0d53de12536719b42599318a68c2233b3885ee38dc71d1289464959","library_sha256":"21af836abdc812475b9d282bb211348ac9028727fd7458d8893da87912994130"}
+{"id":"inkwell--new-service-scaled-train","library":"inkwell","task_sha256":"5a5dbba60f7751acd0e4781e22f634c478c3dc1933d285b85ae7f06b6194115e","library_sha256":"21af836abdc812475b9d282bb211348ac9028727fd7458d8893da87912994130"}
+{"id":"drillbit--fix-runbook-train","library":"drillbit","task_sha256":"ca406e290a70848224e567fe3d8ef2b60e181834013c428e63cf4492a874f4b9","library_sha256":"e8360cbd5d362f57963776b18ee78590e85b0e6274b2f4f70f04611f337dd00a"}

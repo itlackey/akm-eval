@@ -1,0 +1,7 @@
+{"id":"build-cython-ext","task_digest":"sha256:35dc561790e73f13e59837828ac0863c0893edc6b71d42cf7d58656c843adf12","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"chess-best-move","task_digest":"sha256:9ab8e4b3674282e751edafbd9b5bd551fef995fd6601585a2cdb04fd70c520da","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"configure-git-webserver","task_digest":"sha256:e3dc712acfecdb1338a889f86c97b37422c3778351253f9aca4236e895fdb36e","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"fix-code-vulnerability","task_digest":"sha256:d31348aa16b533a15f013420e4d9726dc529e6086adc7d6d48067d22cc18fe71","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"log-summary-date-ranges","task_digest":"sha256:27b074a2f10fff7606e096f3abd8dced418ad8fda0f53d88acbe477f2d9ceaf6","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"polyglot-c-py","task_digest":"sha256:25570ccacf63f573a252eaa2a9c62ee8b55f5aa228cc803b5beb39dd6d8afeb7","library_sha256":"abababababababababababababababababababababababababababababababab"}
+{"id":"qemu-alpine-ssh","task_digest":"sha256:60b7050b0e0aa51641208cf65766743d340e59575db2c4d2f8628240846c2a28","library_sha256":"abababababababababababababababababababababababababababababababab"}

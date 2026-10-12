@@ -2,6 +2,34 @@
   "lock_version": 1,
   "harness_version": 3,
   "evals": {
+    "agent-ab": {
+      "collector": {
+        "version": 1,
+        "sha256": "eff8c179bf105b5b2419b3043648f0d4c0c2d147af84de4aa9906a5bd341a046",
+        "files": [
+          "evals/agent-ab/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/cli.ts",
+          "lib/harbor/akm_opencode.py",
+          "lib/harbor/harbor.ts",
+          "lib/harbor/locks/akm-cli-0.9.26/package-lock.json",
+          "lib/harbor/locks/akm-cli-0.9.26/package.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package-lock.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package.json",
+          "lib/harbor/trials.ts",
+          "lib/models.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "d440c7e333b9d79e140496974940f121a01949d49ac09204c9d572cf4cfad792",
+        "files": [
+          "lib/harbor/report.ts",
+          "lib/harbor/score.ts"
+        ]
+      }
+    },
     "longmemeval": {
       "collector": {
         "version": 3,
@@ -41,6 +69,34 @@
         "sha256": "1395dfdb42d8543b3a97830ff4befa6d9c48f11d8de184c5322554ed6091c3aa",
         "files": [
           "evals/reflect/src/score.ts"
+        ]
+      }
+    },
+    "terminal-bench": {
+      "collector": {
+        "version": 1,
+        "sha256": "6be5329b6e6a3d0b96d83fa51d168a758076b31cb01f21ca1204f35b88ade9c9",
+        "files": [
+          "benchmarks/terminal-bench/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/cli.ts",
+          "lib/harbor/akm_opencode.py",
+          "lib/harbor/harbor.ts",
+          "lib/harbor/locks/akm-cli-0.9.26/package-lock.json",
+          "lib/harbor/locks/akm-cli-0.9.26/package.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package-lock.json",
+          "lib/harbor/locks/akm-opencode-0.9.26202610051302/package.json",
+          "lib/harbor/trials.ts",
+          "lib/models.ts",
+          "lib/provenance.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "d440c7e333b9d79e140496974940f121a01949d49ac09204c9d572cf4cfad792",
+        "files": [
+          "lib/harbor/report.ts",
+          "lib/harbor/score.ts"
         ]
       }
     }

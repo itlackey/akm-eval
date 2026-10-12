@@ -72,7 +72,7 @@ describe("the public tasks", () => {
   // Harbor's oracle and nop agents (see the README) and not here.
   test("each one with a shell verifier is passed by its solution and not by the workspace it starts with", () => {
     const shell = taskNames(join(EVAL_DIR, "tasks")).filter((t) => existsSync(join(EVAL_DIR, "tasks", t, "tests", "verify.sh")));
-    expect(shell).toHaveLength(6);
+    expect(shell).toHaveLength(3);
     for (const t of shell) expect(prove(t, join(EVAL_DIR, "tasks", t))).toEqual({ task: t, problems: [] });
   });
 });

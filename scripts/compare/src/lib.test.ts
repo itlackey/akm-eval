@@ -900,7 +900,7 @@ function harborSummary(over: { arm?: AkmArm; akmEnv?: Record<string, string>; ba
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: tasks }], arm, packagesDir: arm.packages ?? undefined, akmEnv });
   const job = jobRecord(cfg, "/run", "/repo");
   const observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
-  return { eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", model, ...akmSummary(arm, akmEnv, [], observed), assets_sha256: "a".repeat(64), engine: { model, endpoint: endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job };
+  return { eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", model, ...akmSummary(arm, akmEnv, [], observed), assets_sha256: "a".repeat(64), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job };
 }
 const checkoutArm = (over: Partial<AkmArm> = {}): AkmArm => ({ bin: "~/akm", build: "v0.9.27-3-gabc1234", build_fingerprint: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/run/akm-packages", ...over });
 
