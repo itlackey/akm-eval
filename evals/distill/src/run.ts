@@ -2,38 +2,40 @@
 // distill: runs akm's distill on the memory of each case, with the model under test as akm's engine, and scores
 // the lessons it queues. See ../README.md.
 //
-//   evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+//   evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
-import { appendFileSync, cpSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
-import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson, writeConfig, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
-import { Fatal, exitMessage, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { MODEL_OPTIONS, modelUsage, privateModelError, useModel } from "../../../lib/models.ts";
-import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
+import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
+import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
+import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
-import { type LoadedCase, type Metrics, type Row, STRATEGY, assetsSha256, corpusSeed, distillConfig, errorRow, generatedProblem, lessonProposals, loadCases, memoryRef, metrics, pct, scoreCase, selectCases, timedOutMessage } from "./lib.ts";
+import { type CaseContext, IMPROVE_TIMEOUT_MS, NAME, STRATEGY, configFor, runCase } from "./collect.ts";
+import { assetsSha256, generatedProblem, loadCases, selectCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
+import { type Metrics, type Row, pct, summarize } from "./score.ts";
 
-const NAME = "distill";
+export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 const HARNESS = harnessSha256(import.meta.dir);
-const IMPROVE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model: two model calls
-const STATES = ["pending", "accepted", "rejected", "reverted"]; // the states a proposal can be in
 const GIVE_UP_AFTER = 5; // consecutive cases that errored: the endpoint is down or rate limiting, and more cases would only hit it again
 
-const USAGE = `Usage: evals/distill/run [--corpus public|private|own|own-feedback|all] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
+const USAGE = `Usage: evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 Runs akm's distill on the memory of each case, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME
 as akm's engine, and scores the lessons it queues. Settings come from .env at the repository root.
 
-  --corpus  public (default) reads assets/. private reads private/distill/assets/, made by
-            ./generate-assets. own reads private/distill/own/assets/, labelled real memories (never published).
-            own-feedback reads private/distill/own/assets-feedback/: real memories that carry the feedback recorded about them.
-            all runs public and private and prints the two results side by side.
+${corpusUsage}
+            The default custom corpus is the rewrite in private/distill/assets, made by ./generate-assets. Your own labelled memories are
+            a custom corpus too: --cases DIR, with the feedback recorded about them in the cases that carry it.
   --limit   run N cases, taken from each class in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -44,11 +46,16 @@ ${akmUsage}
 
 Needs akm on PATH, or in AKM_BIN.`;
 
-type Corpus = "public" | "private" | "own" | "own-feedback";
-
 interface Summary {
   eval: string;
-  corpus: Corpus;
+  /** `public` or `custom`. */
+  corpus: string;
+  /** For a custom corpus, `rewrite` (the public cases rewritten from a seed) or `own` (your notes). `public` for the public one. */
+  corpus_kind: string;
+  /** True when the corpus may go only to a model that models.json marks `"private": true`. */
+  corpus_private: boolean;
+  /** The corpus folder from the repository root, or null when it is outside it: scripts/rescore reads the cases from here. */
+  corpus_folder: string | null;
   label: string;
   date: string;
   git_commit: string;
@@ -67,12 +74,12 @@ interface Summary {
   /** The strategy akm ran, and the config patch (path and SHA-256) merged into the config, if any. */
   strategy: string;
   config_patch: { path: string; sha256: string } | null;
-  /** The akm config the eval wrote, with secrets redacted, and the settings of its engine: temperature, thinking, endpoint host. */
+  /** The akm config the eval wrote, with secrets redacted and the endpoint written as <MODEL_BASE_URL>, and the settings of its engine: temperature, thinking, endpoint host. */
   config: Record<string, unknown>;
   engine: EngineSettings;
   /** One digest over the corpus's cases.json and bundle files, named relative to the corpus folder. */
   assets_sha256: string;
-  /** The seed of the private corpus's assets (generated.json), or private/seed for an own corpus. Null for the public corpus and when there is none. */
+  /** The seed of a rewrite (corpus.json or generated.json). Null for the public corpus and for your own notes, which no seed made. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -84,6 +91,8 @@ interface Summary {
   /** Of the errored cases, how many ended because akm ran past its timeout. */
   timeouts: number;
   metrics: Metrics;
+  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  manifest: RunManifest;
   results_dir: string;
 }
 
@@ -110,60 +119,41 @@ function printSideBySide(a: Summary, b: Summary): void {
     ["errored", String(a.n_errored), String(b.n_errored)],
   ];
   const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
-  console.log(`\n${NAME}: public and private side by side (not pooled)`);
+  console.log(`\n${NAME}: public and custom side by side (not pooled)`);
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** One case: a new sandbox with the case's bundle, distill run on its memory alone, and the queue read back. */
-export async function runCase(c: LoadedCase, ctx: { config: Record<string, unknown>; baseUrl: string; overrides?: Overrides; improveTimeoutMs?: number }): Promise<Row> {
-  const t0 = performance.now();
-  const seconds = () => Number(((performance.now() - t0) / 1000).toFixed(1));
-  const hide = (text: string): string => hideEndpoint(text, ctx.baseUrl); // akm's errors name the endpoint it called, and results get shared
-  const sandbox = createSandbox(NAME, { keepModelKey: true }); // the config names the model key as $MODEL_API_KEY
-  try {
-    writeConfig(sandbox, ctx.config);
-    cpSync(c.dir, join(sandbox.dir, "bundle"), { recursive: true });
-    if (c.feedback?.length) await runAkm(sandbox, ["index"]); // akm records feedback only against an indexed asset
-    for (const f of c.feedback ?? []) {
-      const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
-      if (fb.code !== 0) return errorRow(c, hide(exitMessage(fb.code, fb.stderr, fb.stdout)), seconds(), fb.timedOut);
-    }
-    const args = ["improve", memoryRef(c), "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--no-sync", "--require-engines", "--json-to-stdout", "--format", "json"];
-    const { stdout, stderr, code, timedOut } = await runAkm(sandbox, args, { timeoutMs: ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS });
-    if (timedOut) return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds(), true);
-    let improve: unknown;
-    try {
-      improve = JSON.parse(stdout);
-    } catch {
-      return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
-    }
-    if (code !== 0) return errorRow(c, hide(exitMessage(code, stderr, stdout)), seconds());
-    const listed = [];
-    for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"])) });
-    return scoreCase(c, { improve, proposals: lessonProposals(listed), seconds: seconds() });
-  } catch (e) {
-    const message = hide((e as Error).message);
-    return errorRow(c, message, seconds(), timedOutMessage(message));
-  } finally {
-    removeSandbox(sandbox);
-  }
+/** The folder under the repository root, with forward slashes, or null when `folder` is outside it. Its absolute path is never recorded: it can name what is in it. */
+export function folderIn(folder: string, root = ROOT): string | null {
+  const rel = relative(root, folder);
+  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
 }
 
-export async function runCorpus(
-  corpus: Corpus,
-  ctx: { config: Record<string, unknown>; baseUrl: string; version: string; model: string; label: string; limit?: number; overrides?: Overrides; improveTimeoutMs?: number },
-  folders: { assets: string; results: string; seed?: string } = {
-    assets: corpus === "public" ? join(EVAL_DIR, "assets") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "assets" : "assets-feedback") : join(ROOT, "private", NAME, "assets"),
-    results: corpus === "public" ? join(EVAL_DIR, "results") : corpus === "own" || corpus === "own-feedback" ? join(ROOT, "private", NAME, "own", corpus === "own" ? "results" : "results-feedback") : join(ROOT, "private", NAME, "results"),
-  },
-): Promise<Summary> {
-  const all = loadCases(folders.assets);
+/** Where the results of a corpus go: the eval's results/ for the public cases, and private/distill/ for a custom corpus (your notes in own/, the feedback ones apart). */
+export function resultsFolder(c: ResolvedCorpus): string {
+  if (c.name === "public") return join(EVAL_DIR, "results");
+  const priv = join(ROOT, "private", NAME);
+  if (c.folder === join(priv, "assets")) return join(priv, "results");
+  if (c.folder === join(priv, "own", "assets-feedback")) return join(priv, "own", "results-feedback");
+  return join(priv, "own", "results");
+}
+
+interface Ctx extends CaseContext {
+  version: string;
+  model: string;
+  label: string;
+  limit?: number;
+}
+
+export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: string = resultsFolder(corpus)): Promise<Summary> {
+  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
+  const all = loadCases(corpus.folder);
   const cases = selectCases(all, ctx.limit);
-  const assetsDigest = assetsSha256(folders.assets);
-  const dir = makeResultsDir(folders.results, ctx.label);
+  const assetsDigest = assetsSha256(corpus.folder);
+  const dir = makeResultsDir(results, ctx.label);
   const samples = join(dir, "samples.jsonl");
   writeFileSync(samples, "");
-  console.log(`${NAME} (${corpus}): ${cases.length} of ${all.length} cases, one at a time`);
+  console.log(`${NAME} (${corpus.name}): ${cases.length} of ${all.length} cases, one at a time`);
 
   const rows: Row[] = [];
   let consecutiveErrors = 0;
@@ -182,33 +172,48 @@ export async function runCorpus(
     }
   }
 
-  const errored = rows.filter((r) => r.verdict === "error").length;
   const abortedReason = `${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${rows.length} of ${cases.length}. Last error: ${aborted}`;
+  const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
+  const build = akmBuild();
+  const seed = corpus.config.seed ?? null; // a rewrite has one, your own notes do not: no seed made them
+  const counts = summarize(rows);
+  const manifest = buildManifest({
+    measurement: MEASUREMENT,
+    parts,
+    corpus: corpus.name,
+    cases: caseDigests(MEASUREMENT, cases),
+    akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
+    config: ctx.config,
+    settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.improveTimeoutMs ?? IMPROVE_TIMEOUT_MS, seed },
+    completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
+  });
   const summary: Summary = {
     eval: NAME,
-    corpus,
+    ...corpusRecord(corpus),
+    corpus_folder: folderIn(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
     harness_sha256: HARNESS,
     model: ctx.model,
     akm_version: ctx.version,
-    ...akmBuild(),
-    served_models: [...new Set(rows.flatMap((r) => r.served))].sort(),
+    ...build,
+    served_models: counts.served_models,
     limit: ctx.limit ?? null,
-    ...overrideSummary(ctx.overrides ?? defaultOverrides(STRATEGY)),
-    config: redactConfig(ctx.config),
+    ...overrideSummary(overrides),
+    config: hideEndpoint(redactConfig(ctx.config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host and the digest of its identity
     engine: engineSettings(ctx.config),
     assets_sha256: assetsDigest,
-    seed: corpusSeed(corpus, dirname(folders.assets), folders.seed ?? join(ROOT, "private", "seed")),
+    seed,
     status: aborted ? "aborted" : "complete",
     aborted_reason: aborted ? abortedReason : null,
     n_cases: all.length,
-    n_run: rows.length,
-    n_scored: rows.length - errored,
-    n_errored: errored,
-    timeouts: rows.filter((r) => r.timed_out).length,
-    metrics: metrics(rows),
+    n_run: counts.n_run,
+    n_scored: counts.n_scored,
+    n_errored: counts.n_errored,
+    timeouts: counts.timeouts,
+    metrics: counts.metrics,
+    manifest,
     results_dir: dir,
   };
   // The summary is written before the run fails, and says it was cut short: a reader of the folder must not take it for a whole run.
@@ -220,9 +225,9 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { corpus: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`distill: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -231,32 +236,33 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  const corpus = values.corpus ?? "public";
-  if (corpus !== "public" && corpus !== "private" && corpus !== "own" && corpus !== "own-feedback" && corpus !== "all") fail(`--corpus must be public, private, own, own-feedback or all, not "${corpus}"`);
+  try {
+    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
+  } catch (e) {
+    fail((e as Error).message);
+  }
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora: Corpus[] = corpus === "all" ? ["public", "private"] : [corpus];
+  // --corpus own and own-feedback are the old names of two custom corpora of your own memories, which work for one more release.
+  const aliases = { private: ALIASES.private, own: { folder: join("own", "assets"), kind: "own" as const }, "own-feedback": { folder: join("own", "assets-feedback"), kind: "own" as const } };
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases, fail });
 
   for (const c of corpora) {
-    if ((c === "own" || c === "own-feedback") && !existsSync(join(ROOT, "private", NAME, "own", c === "own" ? "assets" : "assets-feedback", "cases.json"))) {
-      fail(`the ${c} assets are missing (private/${NAME}/own/)`);
+    if (c.name === "public") continue;
+    if (!existsSync(join(c.folder, "cases.json"))) {
+      fail(`${c.flag} has no cases.json in ${folderIn(c.folder) ?? c.folder}.${c.config.kind === "rewrite" ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
     }
-    if (c === "private" && !existsSync(join(ROOT, "private", NAME, "assets", "cases.json"))) {
-      fail(`the private assets are missing (private/${NAME}/assets/cases.json). Make them with: ./generate-assets --only ${NAME}`);
-    }
-    const stale = c === "private" ? generatedProblem(join(ROOT, "private", NAME), join(EVAL_DIR, "assets")) : undefined;
-    if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
+    const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
+    if (stale) fail(`the rewrite in ${folderIn(c.folder) ?? c.folder} cannot be used: ${stale}. Make it again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const settings = useModel(values, fail);
   const { baseUrl, name: model, hasKey } = settings;
-  if (corpora.some((c) => c === "own" || c === "own-feedback")) {
-    const refusal = privateModelError(settings, `--corpus ${corpus}`, "memories");
-    if (refusal) fail(refusal);
-  }
+  const refusal = privacyError(corpora, { model: settings }, "memories");
+  if (refusal) fail(refusal);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
 
@@ -267,7 +273,7 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
-  const config = patchedConfig(distillConfig(baseUrl, model, hasKey), overrides);
+  const config = configFor({ baseUrl, model, hasKey, overrides });
   const summaries: Summary[] = [];
   for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { config, baseUrl, version, model, label: runLabel, limit, overrides }))));
   if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0], summaries[1]);

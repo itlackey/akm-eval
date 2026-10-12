@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusSeed, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, readSeed, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -835,9 +835,9 @@ describe("generated.json", () => {
       return root;
     };
 
-    test("covers generate.ts, lib.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
+    test("covers generate.ts, lib.ts and score.ts, the rule of negation they share with extract and the code of lib/rewrite, and not their tests", () => {
       const files = generatorFiles(REPO);
-      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
+      expect(files).toEqual(expect.arrayContaining(["evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts", "lib/negation.ts", "lib/rewrite/rewrite.ts", "lib/rewrite/lexicon.ts"]));
       expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
       expect(files.every((f) => existsSync(join(REPO, f)))).toBe(true);
       expect(generatorSha256(REPO)).toMatch(/^[0-9a-f]{64}$/);
@@ -861,7 +861,7 @@ describe("generated.json", () => {
       const root = copyOfGenerator();
       const dir = privateDir(marker({ rewrite: generatorSha256(root) }));
       expect(generatedProblem(dir, PUBLIC, root)).toBeUndefined();
-      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts"]) {
+      for (const name of ["lib/rewrite/lexicon.ts", "lib/rewrite/rewrite.ts", "lib/negation.ts", "evals/distill/src/generate.ts", "evals/distill/src/lib.ts", "evals/distill/src/score.ts"]) {
         const file = join(root, name);
         const text = readFileSync(file, "utf8");
         writeFileSync(file, `${text}\n// changed\n`);
@@ -880,33 +880,28 @@ describe("generated.json", () => {
   });
 });
 
-describe("corpusSeed", () => {
-  const files = () => {
-    const dir = mkdtempSync(join(tmpdir(), "distill-seed-"));
-    dirs.push(dir);
-    writeFileSync(join(dir, "generated.json"), JSON.stringify({ seed: "7", inputs_sha256: "x", rewrite: "y" }));
-    writeFileSync(join(dir, "seed"), "123456789012345678\n");
-    return { dir, seed: join(dir, "seed"), none: join(dir, "no-seed") };
-  };
+describe("corpusFolder", () => {
+  const root = join(tmpdir(), "a repo", "key-checkout");
 
-  test("the public corpus has no seed", () => {
-    const f = files();
-    expect(corpusSeed("public", f.dir, f.seed)).toBeNull();
+  test("the public corpus is the one in the repository, whatever the summary says", () => {
+    expect(corpusFolder(root, { corpus: "public", corpus_folder: "elsewhere" })).toBe(join(root, "evals", "distill", "assets"));
   });
 
-  test("the private corpus has the seed its assets were made with, which may not be private/seed", () => {
-    const f = files();
-    expect(corpusSeed("private", f.dir, f.seed)).toBe("7");
-    expect(readSeed(f.seed)).toBe("123456789012345678");
+  test("a custom corpus is the folder the run recorded, from the repository root, or the one given in its place", () => {
+    expect(corpusFolder(root, { corpus: "custom", corpus_folder: "private/distill/own/assets" })).toBe(join(root, "private", "distill", "own", "assets"));
+    expect(corpusFolder(root, { corpus: "custom", corpus_folder: join(tmpdir(), "my notes") })).toBe(join(tmpdir(), "my notes"));
   });
 
-  test("an own corpus, or a private one with no generated.json, has private/seed when there is one, else null", () => {
-    const f = files();
-    expect(corpusSeed("own", f.dir, f.seed)).toBe("123456789012345678");
-    expect(corpusSeed("own-feedback", f.dir, f.seed)).toBe("123456789012345678");
-    expect(corpusSeed("own", f.dir, f.none)).toBeNull();
-    rmSync(join(f.dir, "generated.json"));
-    expect(corpusSeed("private", f.dir, f.seed)).toBe("123456789012345678");
+  test("a custom corpus whose folder was outside the repository is not found without being told, and the message says how", () => {
+    expect(() => corpusFolder(root, { corpus: "custom", corpus_folder: null })).toThrow("whose folder it did not record");
+    expect(() => corpusFolder(root, { corpus: "custom", corpus_folder: null })).toThrow("--cases DIR");
+  });
+
+  test("a run from before custom corpora names its folder by its old corpus name", () => {
+    expect(corpusFolder(root, { corpus: "private" })).toBe(join(root, "private", "distill", "assets"));
+    expect(corpusFolder(root, { corpus: "own" })).toBe(join(root, "private", "distill", "own", "assets"));
+    expect(corpusFolder(root, { corpus: "own-feedback" })).toBe(join(root, "private", "distill", "own", "assets-feedback"));
+    expect(() => corpusFolder(root, { corpus: "toString" })).toThrow("whose folder it did not record");
   });
 });
 

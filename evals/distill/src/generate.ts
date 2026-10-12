@@ -7,7 +7,7 @@
 // memory, in a file name and in what a correct lesson must state. Then each case is checked against the public one.
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
 // fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed and the digest of the
-// public assets and the digest of the code that made them (this file, lib.ts, lib/negation.ts and lib/rewrite), and `run --corpus private` refuses assets
+// public assets and the digest of the code that made them (this file, lib.ts, score.ts, lib/negation.ts and lib/rewrite), and `run --corpus custom` refuses assets
 // without it, or with a digest that is no longer the public one or the generator's.
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -75,7 +75,7 @@ function rewrite(args: string[]): string {
 
 /**
  * Moves the assets, the map and generated.json from `work` into `out`, in place of the earlier ones. The marker goes out first and
- * comes in last, so a generation cut short here leaves assets with no marker, which `run --corpus private` refuses.
+ * comes in last, so a generation cut short here leaves assets with no marker, which `run --corpus custom` refuses.
  */
 export function install(work: string, out: string): void {
   rmSync(join(out, GENERATED), { force: true });

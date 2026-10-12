@@ -232,8 +232,8 @@ describe("judgedLessons", () => {
       const run = runOf(root, where, { corpus });
       expect(judgedLessons(run, same(root)).inputs, corpus).toMatchObject({ corpus, assets: folder, differences: [] });
     }
-    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }), same(root))).toThrow('names the corpus "somewhere-else", not public, private, own or own-feedback');
-    expect(() => judgedLessons(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined");
+    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }), same(root))).toThrow('read the corpus "somewhere-else"');
+    expect(() => judgedLessons(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("read the corpus undefined");
   });
 });
 

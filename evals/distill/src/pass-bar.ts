@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { harnessSha256 } from "../../../lib/provenance.ts";
-import { assetsSha256, checkLesson, lessonText, loadCases } from "./lib.ts";
+import { assetsSha256, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
@@ -93,14 +93,6 @@ export function report(judged: Judged[]): Report {
   return out;
 }
 
-/** The folder of the cases a run of `corpus` reads, as distill's run reads it. */
-function assetsOf(corpus: unknown, root: string): string {
-  if (corpus === "public") return join(root, "evals", "distill", "assets");
-  if (corpus === "private") return join(root, "private", "distill", "assets");
-  if (corpus === "own" || corpus === "own-feedback") return join(root, "private", "distill", "own", corpus === "own" ? "assets" : "assets-feedback");
-  throw new Error(`summary.json names the corpus ${JSON.stringify(corpus)}, not public, private, own or own-feedback`);
-}
-
 const DIGEST = /^[0-9a-f]{64}$/;
 
 /** A digest a summary.json holds, or null when it holds none or something that is not one. */
@@ -143,8 +135,8 @@ type SampleRow = { id: string; class: string; outcome: string; gate: string | nu
  */
 export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; inputs: Inputs } {
   const root = options.root ?? ROOT;
-  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus?: unknown; assets_sha256?: unknown; harness_sha256?: unknown };
-  const assets = assetsOf(summary.corpus, root);
+  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus?: unknown; corpus_folder?: unknown; assets_sha256?: unknown; harness_sha256?: unknown };
+  const assets = corpusFolder(root, summary);
   const corpus = summary.corpus as string;
   const where = relative(root, assets);
   const cases = new Map(loadCases(assets).map((c) => [c.id, c]));
