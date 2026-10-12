@@ -167,8 +167,8 @@
         ]
       },
       "scorer": {
-        "version": 3,
-        "sha256": "1899b9d4adf868cf1b1727ef4de1dd32020574c25c9c72033c2c9795bd3cf61b",
+        "version": 4,
+        "sha256": "230a668921813d0838d7795bd0f158dcb2f429cbe9a638b4e7dcac6f826838c3",
         "files": [
           "evals/consolidate/src/cases.ts",
           "evals/distill/src/score.ts",
