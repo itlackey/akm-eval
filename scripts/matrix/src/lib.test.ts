@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
+import { scoreQuery, summarize } from "../../../evals/retrieval/src/lib.ts";
 import { endpointOf, jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
 import { redactConfig } from "../../../lib/provenance.ts";
 import { buildReport } from "../../../lib/harbor/report.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
-import { EVALS, EVAL_METRICS, type Measured, type Matrix, type MetricSpec, type RunRecord, type State, assess, baselineFor, compareAll, confirmJobs, emptyState, findResults, incomparable, incompleteReason, judge, labelOf, loadMeasured, measuredOf, metricSpread, moreErrors, parseMatrix, resultsParents, runnerFolder, runnerPath, schedule, screenDiffers, screenJobs, selectForConfirm, treatmentAxes, unusableReason, verdictOf } from "./lib.ts";
+import { EVALS, EVAL_METRICS, type Measured, type Matrix, type MetricSpec, type RunRecord, type State, assess, baselineFor, compareAll, confirmJobs, corpusOf, emptyState, findResults, incomparable, incompleteReason, judge, labelOf, loadMeasured, measuredOf, metricSpread, moreErrors, parseMatrix, resultsParents, runnerFolder, runnerPath, schedule, scopeKey, screenDiffers, screenJobs, selectForConfirm, treatmentAxes, unusableReason, verdictOf } from "./lib.ts";
 import { type Axis, identityOf } from "../../compare/src/policy.ts";
 import { corpusPaths, fingerprintOf, readDotEnv, resumable } from "./fingerprint.ts";
 import { pairedOf } from "./paired.ts";
@@ -77,7 +78,7 @@ describe("parseMatrix", () => {
     bad({ configs: [{ name: "a", eval: "reflect", args: ["--repeat=2"] }] }, /leave out --repeat/);
     bad({ configs: [{ name: "a", eval: "reflect", args: ["--corpus", "all"] }] }, /pools corpora/);
     bad({ configs: [{ name: "a b", eval: "reflect" }] }, /name must use/);
-    bad({ repeats: 1 }, /2 or more/);
+    bad({ repeats: 2 }, /3 or more/);
     bad({ screen: { limit: { reflect: 0 } } }, /positive integer/);
     bad({ configs: [{ name: "a", eval: "distill" }] }, /no baseline row that runs the same cases/);
   });
@@ -233,7 +234,7 @@ const BASE = rm([0.8, 0.85], [0.9, 0.95]);
 
 describe("verdictOf", () => {
   test("better: the main metric's range does not overlap the baseline's and harm does not rise", () => {
-    expect(verdict(meas(BASE), meas(rm([0.9, 0.95], [0.9, 0.95])))).toBe("better");
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.9, 0.95])))).toBe("better");
   });
 
   test("overlapping ranges are no difference, even with a higher mean; touching ranges overlap", () => {
@@ -241,14 +242,28 @@ describe("verdictOf", () => {
     expect(verdict(meas(BASE), meas(rm([0.85, 0.9], [0.9, 0.95])))).toBe("no difference");
   });
 
-  test("mixed: a better main metric with more harm, even when the harm ranges overlap", () => {
-    expect(verdict(meas(BASE), meas(rm([0.9, 0.95], [0.85, 0.93])))).toBe("mixed"); // controls.rate (harm when it falls): mean 0.89 vs 0.925
-    expect(verdict(meas(BASE), meas(rm([0.9, 0.95], [0.9, 0.95], [0, 1])))).toBe("mixed"); // touched_body rose
+  test("mixed: a better main metric with more harm, the harm judged as a main metric is", () => {
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.7, 0.75])))).toBe("mixed"); // controls.rate (harm when it falls): its range is wholly below, by more than the ranges are wide
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.9, 0.95], [2, 3])))).toBe("mixed"); // touched_body rose from 0 in every run, to 2 or 3
+  });
+
+  test("harm whose range overlaps the baseline's is not a rise, whatever the means say (#54)", () => {
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.85, 0.93])))).toBe("better"); // controls.rate: mean 0.89 against 0.925, ranges overlap
+    expect(verdict(meas(BASE), meas(rm([0.8, 0.85], [0.85, 0.93])))).toBe("no difference");
+    expect(verdict(meas(rm([0.8, 0.85], [0.9, 0.95], [0, 1])), meas(rm([0.8, 0.85], [0.9, 0.95], [1, 2])))).toBe("no difference"); // touched_body 0.5 against 1.5, ranges touch
   });
 
   test("worse: the main metric is below the baseline's range, or harm rose with nothing gained", () => {
-    expect(verdict(meas(BASE), meas(rm([0.5, 0.7], [0.9, 0.95])))).toBe("worse");
+    expect(verdict(meas(BASE), meas(rm([0.5, 0.55], [0.9, 0.95])))).toBe("worse");
     expect(verdict(meas(BASE), meas(rm([0.8, 0.85], [0.6, 0.7])))).toBe("worse");
+    expect(verdict(meas(BASE), meas(rm([0.8, 0.85], [0.9, 0.95], [2, 3])))).toBe("worse");
+  });
+
+  test("ranges that do not overlap but are closer than they are wide are no difference; a gap as wide as the wider range is one (#54)", () => {
+    expect(verdict(meas(BASE), meas(rm([0.86, 0.96], [0.9, 0.95])))).toBe("no difference"); // gap 0.01, ranges 0.05 and 0.1
+    expect(verdict(meas(BASE), meas(rm([0.95, 1], [0.9, 0.95])))).toBe("better"); // gap 0.1, ranges 0.05 and 0.05
+    expect(verdict(meas(BASE), meas(rm([0.9, 1], [0.9, 0.95])))).toBe("no difference"); // gap 0.05, wider range 0.1
+    expect(verdict(meas(rm([0.8, 0.8], [0.9, 0.9])), meas(rm([0.81, 0.81], [0.9, 0.9])))).toBe("better"); // runs that never vary: any difference is a gap
   });
 
   test("a harm metric that clearly falls counts as better", () => {
@@ -263,8 +278,8 @@ describe("verdictOf", () => {
   });
 
   test("a different model or akm build is not comparable; no number is no result", () => {
-    expect(verdict(meas(BASE), meas(rm([0.9, 0.95], [0.9, 0.95]), { akm_build: "b2" }))).toBe("not comparable");
-    expect(verdict(meas(BASE), meas(rm([0.9, 0.95], [0.9, 0.95]), { model: "m2" }))).toBe("not comparable");
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.9, 0.95]), { akm_build: "b2" }))).toBe("not comparable");
+    expect(verdict(meas(BASE), meas(rm([0.92, 0.97], [0.9, 0.95]), { model: "m2" }))).toBe("not comparable");
     expect(verdict(meas(BASE), meas({ defects: { rate: null }, controls: { rate: null } }))).toBe("no result");
   });
 
@@ -411,9 +426,9 @@ describe("report", () => {
     };
     rep("base", "reflect", [[0.8, 0.9], [0.82, 0.92], [0.84, 0.94]]);
     rep("gate", "reflect", [[0.9, 0.9], [0.92, 0.92], [0.94, 0.94]]); // better
-    rep("off", "reflect", [[0.8, 0.8], [0.82, 0.82], [0.9, 0.84]]); // overlapping main, controls down: worse by harm
-    rep("base-r", "retrieval", [[0.7, 0], [0.71, 0]], "b1", "library");
-    rep("ret", "retrieval", [[0.7, 0], [0.72, 0]], "b1", "library");
+    rep("off", "reflect", [[0.8, 0.8], [0.82, 0.82], [0.9, 0.84]]); // controls fell clear of the baseline's range: worse by harm
+    rep("base-r", "retrieval", [[0.7, 0], [0.71, 0], [0.7, 0]], "b1", "library");
+    rep("ret", "retrieval", [[0.7, 0], [0.72, 0], [0.71, 0]], "b1", "library");
     return { root, m, state };
   }
 
@@ -423,7 +438,7 @@ describe("report", () => {
     expect(d.rows.map((r) => [r.config, r.scope, r.verdict, r.stage, r.n])).toEqual([
       ["gate", "", "better", "confirm", 3],
       ["off", "", "worse", "confirm", 3],
-      ["ret", "library", "no difference", "confirm", 2],
+      ["ret", "library", "no difference", "confirm", 3],
     ]);
     const gate = d.rows[0];
     expect(gate.metrics.find((x) => x.path === "defects.rate")).toMatchObject({ signal: "better", baseline: { min: 0.8, max: 0.84, mean: 0.82 }, config: { min: 0.9, max: 0.94, mean: 0.92 } });
@@ -600,7 +615,8 @@ describe("a build sweep in the decision", () => {
     expect(d.rows[0].note).not.toContain("not comparable");
     const md = renderMarkdown(d);
     expect(md).toContain("release 0.9.26 → v0.9.0-beta.60-2648-g9f6ad3461");
-    expect(md).toContain("shows both builds in the akm build column. Every axis outside the row's treatment must still be the same");
+    expect(md).toContain("shows both builds in the akm build column, a release with its version");
+    expect(md).toContain("Every axis outside the row's treatment must still be the same");
   });
 
   test('the same comparison from a row marked "treatment": "build", with no --akm in its flags', () => {
@@ -636,7 +652,7 @@ describe("assets_sha256 and seed", () => {
   const a = "a".repeat(64);
   const bb = "b".repeat(64);
   const withAssets = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(BASE, over);
-  const better = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(rm([0.9, 0.95], [0.9, 0.95]), over);
+  const better = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(rm([0.92, 0.97], [0.9, 0.95]), over);
 
   test("two summaries with another digest scored other cases, for either treatment", () => {
     for (const t of [["config"], ["build"]] as Axis[][]) {
@@ -672,7 +688,7 @@ describe("assets_sha256 and seed", () => {
   });
 
   test("the verdict is not comparable even when the numbers say better", () => {
-    const [x, y] = [withAssets({ assets_sha256: a }), meas(rm([0.9, 0.95], [0.9, 0.95]), { assets_sha256: bb })];
+    const [x, y] = [withAssets({ assets_sha256: a }), meas(rm([0.92, 0.97], [0.9, 0.95]), { assets_sha256: bb })];
     expect(verdictOf(compareAll("reflect", x, y), x, y)).toBe("not comparable");
   });
 
@@ -1066,7 +1082,7 @@ describe("the noise floor of the baselines", () => {
     const line = noiseLine(noiseFloors(root, m, state).floors[0]);
     expect(line).toContain("nightly base: 3 runs, mean flip rate ");
     expect(line).toContain("cases flip between two runs of one configuration");
-    expect(line).toContain("a main metric differs by 0.267 between two runs of one configuration, so start --min-delta at 0.267");
+    expect(line).toContain("a main metric differs by 0.267 on average between two runs of one configuration, so start --min-delta at 0.267");
   });
 
   test("a baseline whose repeats never changed gives no floor for --min-delta", () => {
@@ -1506,7 +1522,7 @@ function runnerTree() {
   for (const from of ["lib", "scripts/matrix/src", "scripts/compare/src"]) cpSync(join(REPO, from), join(root, from), { recursive: true, filter: (src) => !/node_modules|fixtures|\.test\.ts$/.test(src) });
   mkdirSync(join(root, "evals", "reflect"), { recursive: true });
   writeFileSync(join(root, "evals", "reflect", "run"), FAKE_EVAL, { mode: 0o755 });
-  writeFileSync(join(root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 2, baseline: { name: "base", eval: "reflect" }, configs: [{ name: "cfg", eval: "reflect", args: ["--config-patch", "patch.json"] }] }));
+  writeFileSync(join(root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 3, baseline: { name: "base", eval: "reflect" }, configs: [{ name: "cfg", eval: "reflect", args: ["--config-patch", "patch.json"] }] }));
   writeFileSync(join(root, "patch.json"), '{"improve":{"strategies":{}}}\n');
   git(root, "init", "-q");
   git(root, "add", "scripts", "lib", "evals");
@@ -1660,7 +1676,7 @@ describe("a stage as a process: what makes it resume or run again (F07)", () => 
     await t.stage(["--stage", "screen"]);
     const bin = await t.stage(["--stage", "screen"], { AKM_BIN: "fake-akm-2" });
     expect(t.runs()).toBe(4);
-    expect(bin.out).toContain("running again, the akm (AKM_BIN or --akm, or the build it runs) changed");
+    expect(bin.out).toContain("running again, the akm (AKM_BIN or --akm, or the build or version it runs) changed");
     await t.stage(["--stage", "screen"], { AKM_BIN: "fake-akm-2" });
     expect(t.runs()).toBe(4);
     const lib = join(t.root, "scripts", "matrix", "src", "paired.ts");
@@ -1987,7 +2003,7 @@ describe("the fingerprint of a job", () => {
     expect(eval_).not.toBe(FAKE_EVAL);
     writeFileSync(join(t.root, "evals", "reflect", "run"), eval_, { mode: 0o755 });
     git(t.root, "commit", "-q", "-a", "-m", "the private fake");
-    writeFileSync(join(t.root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 2, baseline: { name: "base", eval: "reflect", args: ["--corpus", "private"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus", "private", "--config-patch", "patch.json"] }] }));
+    writeFileSync(join(t.root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 3, baseline: { name: "base", eval: "reflect", args: ["--corpus", "private"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus", "private", "--config-patch", "patch.json"] }] }));
     const assets = join(t.root, "private", "reflect", "assets", "cases.jsonl");
     mkdirSync(join(t.root, "private", "reflect", "assets"), { recursive: true });
     const regenerate = (seed: string, text: string) => {
@@ -2110,3 +2126,353 @@ describe("the fingerprint of a job", () => {
     expect(resumable(root, rec, j, fp)).toMatchObject({ skip: false, why: "its last result is no result: the run was cut short: gave up" });
   });
 });
+
+// ---- the harm rule and the number of repeats (#54) ------------------------------------------------------------------------------
+
+/** mulberry32: a seeded generator, so that a simulation gives the same numbers on every run. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe("the verdict of configurations that did not change, and of one that did (#54)", () => {
+  // A judge-gate run: 11 good revisions, 67 harmful and 28 churn, each passing with a probability of its own, independently in every run.
+  const [GOOD, HARMFUL, CHURN] = [11, 67, 28];
+  const draw = (rand: () => number, n: number, lo: number, hi: number): number[] => Array.from({ length: n }, () => lo + (hi - lo) * rand());
+  const identity = identityOf({ ...IDENTIFIED, eval: "judge-gate", corpus: "public", akm_bin: "akm", model: "m1", akm_build: "b1", akm_version: "0.9.30" });
+  type Odds = { good: number[]; harmful: number[]; churn: number[] };
+  const run = (rand: () => number, odds: Odds) => {
+    const passed = (ps: number[]) => ps.filter((p) => rand() < p).length;
+    const [g, h, c] = [passed(odds.good), passed(odds.harmful), passed(odds.churn)];
+    return { precision: { value: g + h + c === 0 ? 0 : g / (g + h + c) }, good: { rate: g / GOOD }, bad_harmful: { rate: h / HARMFUL }, bad_churn: { rate: c / CHURN } };
+  };
+  const side = (rand: () => number, odds: Odds, repeats: number): Measured => ({ scope: "", n: repeats, model: "m1", akm_build: "b1", akm_version: "0.9.30", n_errored: 0, failed: null, calls: null, seconds: null, repeated: true, metrics: spreadOf(Array.from({ length: repeats }, () => run(rand, odds))), runs: Array.from({ length: repeats }, (_, i) => ({ name: `r${i + 1}`, identity })) });
+  /** How often the real compareAll and judge give each verdict, with `repeats` runs of each side, the config drawn from `change(odds)`. */
+  const tally = (seed: number, repeats: number, change: (odds: Odds) => Odds = (o) => o, trials = 1000): Record<string, number> => {
+    const rand = seeded(seed);
+    const odds: Odds = { good: draw(rand, GOOD, 0.2, 0.8), harmful: draw(rand, HARMFUL, 0, 0.3), churn: draw(rand, CHURN, 0, 0.6) };
+    const counts: Record<string, number> = {};
+    for (let i = 0; i < trials; i++) {
+      const [base, cfg] = [side(rand, odds, repeats), side(rand, change(odds), repeats)];
+      const { verdict } = judge("judge-gate", compareAll("judge-gate", base, cfg), base, cfg);
+      counts[verdict] = (counts[verdict] ?? 0) + 1;
+    }
+    return Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v / trials]));
+  };
+  const share = (t: Record<string, number>, ...verdicts: string[]): number => verdicts.reduce((sum, v) => sum + (t[v] ?? 0), 0);
+
+  test("a configuration that did not change is called better or worse a few percent of the time with 3 repeats, not two times in three", () => {
+    for (const seed of [11, 12, 13]) {
+      const t = tally(seed, 3);
+      expect(share(t, "better", "worse", "mixed"), `seed ${seed}: ${JSON.stringify(t)}`).toBeLessThanOrEqual(0.05);
+      expect(share(t, "no difference"), `seed ${seed}`).toBeGreaterThanOrEqual(0.95);
+    }
+  });
+
+  test("a large real gain in good.rate with harm unchanged reads better most of the time, and not worse", () => {
+    const t = tally(11, 3, (o) => ({ ...o, good: o.good.map((p) => Math.min(1, p + 0.6)) }));
+    expect(share(t, "better"), JSON.stringify(t)).toBeGreaterThan(0.5);
+    expect(share(t, "worse", "mixed"), JSON.stringify(t)).toBeLessThanOrEqual(0.05);
+  });
+
+  test("a real rise of a harm metric is still found most of the time: churn revisions passing 2.5 times as often read worse", () => {
+    const t = tally(11, 3, (o) => ({ ...o, churn: o.churn.map((p) => Math.min(1, p + 0.5)) }));
+    expect(share(t, "worse", "mixed"), JSON.stringify(t)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  test("two repeats are never a conclusion, however large the change", () => {
+    expect(tally(11, 2, (o) => ({ ...o, good: o.good.map((p) => Math.min(1, p + 0.6)) }), 200)).toEqual({ exploratory: 1 });
+    const [base, cfg] = [side(seeded(1), { good: [0.2], harmful: [], churn: [] }, 2), side(seeded(1), { good: [0.9], harmful: [], churn: [] }, 3)];
+    expect(judge("judge-gate", compareAll("judge-gate", base, cfg), base, cfg).exploratory).toEqual(["a conclusion needs at least 3 repeats on each side, and the baseline has 2"]);
+  });
+});
+
+describe("a better main metric whose paired interval includes 0 is flagged (#54)", () => {
+  test("one case moved: the ranges, which never vary, say better, and the note says that the paired interval crosses 0", () => {
+    const m = nightlyMatrix();
+    const { root, state } = nightlySweep(m, [firstOk(10), firstOk(10), firstOk(10)], [firstOk(11), firstOk(11), firstOk(11)]);
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row.verdict).toBe("better");
+    expect(row.paired).toMatchObject({ better: 1, worse: 0, agree: 19 });
+    expect(row.note).toMatch(/^the ranges say better and the paired interval includes 0: items\.rate \+0\.05 \(0 to \+0\.\d+\)$/);
+  });
+
+  test("a gain across many cases has an interval that excludes 0, and no flag", () => {
+    const m = nightlyMatrix();
+    const { root, state } = nightlySweep(m, [firstOk(8), firstOk(8), firstOk(8)], [firstOk(16), firstOk(16), firstOk(16)]);
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row.verdict).toBe("better");
+    expect(row.note).toBe("");
+  });
+});
+
+// ---- which cases each side scored, and the denominators (#41) ---------------------------------------------------------------
+
+describe("the cases each side scored (#41)", () => {
+  type State3 = "right" | "wrong" | "error";
+  const reflectRow = (id: string, s: State3) => ({ id, class: "description-period", outcome: s === "error" ? "error" : "proposal", correct: s === "right" });
+  /** Three identical runs of a reflect side that did with each case what `states` says. Its defects rate is that of the cases it scored. */
+  function writeSide(root: string, state: State, name: "base" | "pr", states: Record<string, State3>): void {
+    const ids = Object.keys(states);
+    const scored = ids.filter((id) => states[id] !== "error");
+    const right = scored.filter((id) => states[id] === "right").length;
+    const label = labelOf("sw", name, "confirm");
+    const rows = ids.map((id) => reflectRow(id, states[id]));
+    writeRepeat(root, "reflect", label, [0, 1, 2].map(() => reflectSummary(label, right / scored.length, 0.9, 0, { n_errored: ids.length - scored.length })), undefined, [rows, rows, rows]);
+    state.confirm[name] = record("confirm", name, "reflect", label, root, "repeat", 3);
+  }
+  const ok = Object.fromEntries(["ok-1", "ok-2", "ok-3", "ok-4", "ok-5", "ok-6"].map((id) => [id, "right" as State3]));
+  const m = oneConfig(["--strategy", "quick"]);
+
+  test("a config that trades two hard cases the baseline scored for two easy ones it errored on, with as many errors, is not better, and the row names them", () => {
+    const root = tmp();
+    const state = emptyState(m);
+    writeSide(root, state, "base", { ...ok, "hard-1": "wrong", "hard-2": "wrong", "easy-1": "error", "easy-2": "error" });
+    writeSide(root, state, "pr", { ...ok, "hard-1": "error", "hard-2": "error", "easy-1": "right", "easy-2": "right" });
+    const d = buildDecision(root, m, state, 0);
+    const row = d.rows[0];
+    // by the numbers it is better: the rate over the cases it scored rose from 6/8 to 8/8, and both sides errored on 2
+    expect(row.metrics.find((x) => x.path === "defects.rate")).toMatchObject({ signal: "better", baseline: { mean: 0.75 }, config: { mean: 1 } });
+    expect(row.n_errored).toEqual({ baseline: 2, config: 2 });
+    expect(row.verdict).toBe("exploratory");
+    expect(row.cases).toEqual({ baseline_only: ["hard-1", "hard-2"], config_only: ["easy-1", "easy-2"] });
+    expect(row.note).toContain("the sides scored different cases, so their rates are over different cases: only the baseline scored hard-1, hard-2; only the config scored easy-1, easy-2 (the metrics read: better)");
+    expect(row.coverage).toEqual({ baseline: { selected: 10, scored: 8, errored: 2 }, config: { selected: 10, scored: 8, errored: 2 } });
+    expect(renderMarkdown(d)).toContain("| 8 of 10, 2 errored → 8 of 10, 2 errored |");
+  });
+
+  test("the same two cases errored on both sides are the same cases: nothing is named and the gain is better", () => {
+    const root = tmp();
+    const state = emptyState(m);
+    writeSide(root, state, "base", { ...ok, "hard-1": "wrong", "hard-2": "wrong", "easy-1": "error", "easy-2": "error" });
+    writeSide(root, state, "pr", { ...ok, "hard-1": "right", "hard-2": "right", "easy-1": "error", "easy-2": "error" });
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row).toMatchObject({ verdict: "better", cases: { baseline_only: [], config_only: [] } });
+    expect(row.note).not.toContain("different cases");
+  });
+
+  test("a config that errored on cases the baseline scored is exploratory, the errors are counted, and the denominators show the fewer cases it scored", () => {
+    const root = tmp();
+    const state = emptyState(m);
+    writeSide(root, state, "base", { ...ok, "hard-1": "wrong", "hard-2": "wrong" });
+    writeSide(root, state, "pr", { ...ok, "hard-1": "error", "hard-2": "error" });
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row.verdict).toBe("exploratory"); // the cases differ as well
+    expect(row.note).toContain("only the baseline scored hard-1, hard-2");
+    expect(row.note).toContain("(the metrics read: incomplete)");
+    expect(row.note).toContain("more errored cases (2 vs 0)");
+    expect(row.coverage).toEqual({ baseline: { selected: 8, scored: 8, errored: 0 }, config: { selected: 8, scored: 6, errored: 2 } });
+  });
+
+  test("a case that errored in one repeat of a side and was scored in the others is scored", () => {
+    const root = tmp();
+    const state = emptyState(m);
+    writeSide(root, state, "base", { ...ok, "hard-1": "wrong" });
+    const label = labelOf("sw", "pr", "confirm");
+    const rows = (hard: State3) => Object.entries({ ...ok, "hard-1": hard }).map(([id, s]) => reflectRow(id, s));
+    writeRepeat(root, "reflect", label, [0, 1, 2].map(() => reflectSummary(label, 1, 0.9, 0, { n_errored: 0 })), undefined, [rows("error"), rows("right"), rows("right")]);
+    state.confirm.pr = record("confirm", "pr", "reflect", label, root, "repeat", 3);
+    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ cases: { baseline_only: [], config_only: [] } });
+  });
+});
+
+// ---- the akm build of a row (#66) -------------------------------------------------------------------------------------------
+
+describe("the decision tells two edits of one akm commit apart (#66)", () => {
+  const [one, two] = ["a".repeat(64), "b".repeat(64)];
+  const dirty = { akm_build: "abc1234-dirty" };
+  const build = oneConfig([], { treatment: "build" });
+
+  test("two uncommitted edits of one commit are not the same akm build: the note does not say so and the table shows both digests", () => {
+    const { root, state } = reflectSweep(build, { ...dirty, akm_build_fingerprint: two }, { ...dirty, akm_build_fingerprint: one });
+    const d = buildDecision(root, build, state, 0);
+    const row = d.rows[0];
+    expect(row).toMatchObject({ verdict: "better", baseline_akm_build_fingerprint: one, akm_build_fingerprint: two });
+    expect(row.note).not.toContain("same akm build");
+    expect(renderMarkdown(d)).toContain("| abc1234-dirty (aaaaaaaa) → abc1234-dirty (bbbbbbbb) |");
+  });
+
+  test("the same edit on both sides is the same build, and says so with its digest", () => {
+    const { root, state } = reflectSweep(build, { ...dirty, akm_build_fingerprint: one }, { ...dirty, akm_build_fingerprint: one });
+    expect(buildDecision(root, build, state, 0).rows[0].note).toContain("both ran the same akm build (abc1234-dirty (aaaaaaaa)), so this treatment changes nothing");
+    const clean = reflectSweep(build, { ...dirty }, { ...dirty });
+    expect(buildDecision(clean.root, build, clean.state, 0).rows[0].note).toContain("both ran the same akm build (abc1234-dirty), so this treatment changes nothing");
+  });
+
+  test("a release shows its version in the build column, for an upgrade and for a config row of one release", () => {
+    const upgrade = reflectSweep(build, { akm_build: null, akm_version: "0.9.31" }, { akm_build: null, akm_version: "0.9.30" });
+    expect(renderMarkdown(buildDecision(upgrade.root, build, upgrade.state, 0))).toContain("| release 0.9.30 → release 0.9.31 |");
+    const config = oneConfig(["--strategy", "quick"]);
+    const same = reflectSweep(config, { akm_build: null, akm_version: "0.9.31" }, { akm_build: null, akm_version: "0.9.31" });
+    expect(renderMarkdown(buildDecision(same.root, config, same.state, 0))).toContain("| release 0.9.31 |");
+  });
+
+  test("loadMeasured reads the fingerprint of a run and of a repeat", () => {
+    const root = tmp();
+    writeRun(root, "reflect", "sw-a-s", reflectSummary("sw-a-s", 0.5, 0.5, 0, { akm_build_fingerprint: one }));
+    const ref = (label: string, repeat: number | null) => findResults(root, { label, repeat, args: [], row: { name: "a", eval: "reflect", args: [] } }, 0)[0];
+    expect(loadMeasured(root, ref("sw-a-s", null), 5, null)!.akm_build_fingerprint).toBe(one);
+    writeRepeat(root, "reflect", "sw-b-c", [0, 1, 2].map(() => reflectSummary("x", 0.5, 0.5, 0, { akm_build_fingerprint: two })));
+    expect(loadMeasured(root, ref("sw-b-c", 3), 5, 3)!.akm_build_fingerprint).toBe(two);
+  });
+});
+
+// ---- retrieval: a fall in judged_10 (#71) -----------------------------------------------------------------------------------
+
+describe("retrieval is exploratory when it returns results nobody graded (#71)", () => {
+  const m = parseMatrix({ prefix: "sw", baseline: { name: "base", eval: "retrieval" }, configs: [{ name: "ret", eval: "retrieval", args: ["--x"] }] }, FILE);
+  /** Three runs of the retrieval eval whose four columns all have these values. */
+  function sweep(base: { ndcg: number; condensed: number; judged: number }, cfg: typeof base): { root: string; state: State } {
+    const root = tmp();
+    const state = emptyState(m);
+    for (const [name, v] of [["base", base], ["ret", cfg]] as const) {
+      const label = labelOf("sw", name, "confirm");
+      const column = { ndcg_10: v.ndcg, ndcg_10_condensed: v.condensed, judged_10: v.judged };
+      const metrics = { search: column, curate: column, semantic_search: column, semantic_curate: column };
+      writeRepeat(root, "retrieval", label, [0, 1, 2].map(() => ({ ...fixture("retrieval"), ...IDENTIFIED, model: undefined, akm_build: "b1", metrics })), "library");
+      state.confirm[name] = record("confirm", name, "retrieval", label, root, "repeat", 3, "library");
+    }
+    return { root, state };
+  }
+
+  test("a config whose judged_10 fell is not worse on ndcg_10 without a note to label its results first", () => {
+    const { root, state } = sweep({ ndcg: 0.8, condensed: 0.82, judged: 0.96 }, { ndcg: 0.6, condensed: 0.84, judged: 0.7 });
+    const row = buildDecision(root, m, state, 0).rows[0];
+    expect(row.metrics.find((x) => x.path === "search.ndcg_10")?.signal).toBe("worse");
+    expect(row.verdict).toBe("exploratory");
+    expect(row.note).toContain("the config returned results nobody graded (search.judged_10 0.96 → 0.7, curate.judged_10 0.96 → 0.7, semantic_search.judged_10 0.96 → 0.7, semantic_curate.judged_10 0.96 → 0.7)");
+    expect(row.note).toContain("label them first (evals/retrieval/label --from the config's results folder), then compare (the metrics read: worse)");
+  });
+
+  test("the same drop in ndcg_10 with the same share judged is worse, and a rise in the share judged does not make a verdict exploratory", () => {
+    const same = sweep({ ndcg: 0.8, condensed: 0.82, judged: 0.96 }, { ndcg: 0.6, condensed: 0.62, judged: 0.96 });
+    expect(buildDecision(same.root, m, same.state, 0).rows[0].verdict).toBe("worse");
+    const more = sweep({ ndcg: 0.8, condensed: 0.82, judged: 0.7 }, { ndcg: 0.9, condensed: 0.91, judged: 0.96 });
+    expect(buildDecision(more.root, m, more.state, 0).rows[0].verdict).toBe("better");
+  });
+
+  test("the row and the table show ndcg_10_condensed and judged_10 beside ndcg_10, and do not judge them", () => {
+    const { root, state } = sweep({ ndcg: 0.8, condensed: 0.82, judged: 0.96 }, { ndcg: 0.8, condensed: 0.84, judged: 0.96 });
+    const d = buildDecision(root, m, state, 0);
+    expect(d.rows[0].context.find((x) => x.path === "search.ndcg_10_condensed")).toMatchObject({ baseline: { mean: 0.82 }, config: { mean: 0.84 } });
+    expect(d.rows[0].context.map((x) => x.path)).toContain("semantic_curate.judged_10");
+    expect(d.rows[0].verdict).toBe("no difference");
+    const md = renderMarkdown(d);
+    expect(md).toContain("search.ndcg_10 ↑ 0.8 → 0.8<br>");
+    expect(md).toContain("search.ndcg_10_condensed 0.82 → 0.84");
+    expect(md).toContain("search.judged_10 0.96 → 0.96");
+    expect(md).toContain("a config whose judged_10 falls is exploratory until its results are labelled");
+  });
+
+  test("the context paths are keys the retrieval eval writes for a column", () => {
+    const written = summarize([scoreQuery({ a: 3 }, ["a", "b"])]);
+    for (const path of [...(EVALS.retrieval.context ?? []), ...(EVALS.retrieval.graded ?? [])]) expect(path.split(".")[1] in written, path).toBe(true);
+    expect(EVALS.retrieval.graded).toEqual(["search", "curate", "semantic_search", "semantic_curate"].map((c) => `${c}.judged_10`));
+  });
+});
+
+// ---- small fixes from the review of main (#73, #74) -------------------------------------------------------------------------
+
+describe("a promotion row with --cases DIR (#73)", () => {
+  const args = ["--cases", "my cases"];
+
+  test("is the own corpus: its results are looked for where own results go, and found", () => {
+    const root = tmp();
+    expect(corpusOf("promotion", args)).toBe("own");
+    expect(corpusOf("promotion", [])).toBe("public");
+    expect(corpusOf("promotion", ["--cases", "x", "--corpus", "own"])).toBe("own");
+    expect(corpusOf("distill", args)).toBe("public"); // only promotion takes --cases as an own corpus
+    expect(resultsParents(root, "promotion", args)).toEqual([join(root, "private", "promotion", "results"), join(root, "private", "promotion", "own", "results"), join(root, "private", "promotion", "own", "results-feedback")]);
+    const dir = join(root, "private", "promotion", "results", "2026-10-09-sw-a-s");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "promotion", corpus: "own", label: "sw-a-s" }));
+    const job = { label: "sw-a-s", repeat: null, args, row: { name: "a", eval: "promotion", args } };
+    expect(findResults(root, job, 0)).toEqual([{ scope: "", kind: "run", file: "private/promotion/results/2026-10-09-sw-a-s/summary.json" }]);
+  });
+
+  test("runs the same cases as a row that names --corpus own, and not those of the public corpus", () => {
+    const row = (a: string[]) => ({ name: "r", eval: "promotion", args: a });
+    expect(scopeKey(row(args))).toBe(scopeKey(row(["--corpus", "own", ...args])));
+    expect(scopeKey(row(args))).not.toBe(scopeKey(row([])));
+  });
+});
+
+describe("--help (#74)", () => {
+  test("says what --force skips a row on: the endpoints whole with their paths, the corpus, and the version akm prints", async () => {
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" });
+    const [out, code] = [await new Response(proc.stdout).text(), await proc.exited];
+    expect(code).toBe(0);
+    expect(out).toContain("MODEL_BASE_URL and JUDGE_BASE_URL each whole with its path");
+    expect(out).toContain("OPENAI_BASE_URL for a Harbor eval");
+    expect(out).toContain("version it prints");
+    expect(out).not.toContain("the host of MODEL_BASE_URL");
+  });
+});
+
+// ---- what a stage resumes on: the akm release and OPENAI_BASE_URL (#64) ----------------------------------------------------
+
+describe("an upgraded akm release and another OPENAI_BASE_URL run the row again (#64)", () => {
+  const job = (args: string[], evalName: string) => ({ args, row: { name: "r", eval: evalName, args: [] } });
+  const env = { AKM_BIN: "fake-akm", MODEL_NAME: "m1", MODEL_BASE_URL: "https://a.example.com/v1", MODEL_API_KEY: "key-one" };
+
+  /** A fake installed akm that prints `version`, in a folder of its own with a space in its name, outside any repository. */
+  function installAkm(version: string, folder = join(tmp(), "bin dir")): string {
+    mkdirSync(folder, { recursive: true });
+    const file = join(folder, "akm");
+    writeFileSync(file, `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+    return file;
+  }
+
+  test("the stage resumes with the same release and runs again after an upgrade of it", async () => {
+    const t = runnerTree();
+    const akm = installAkm("0.9.30");
+    const AKM_BIN = commandLine([akm]);
+    await t.stage(["--stage", "screen"], { AKM_BIN });
+    expect(t.runs()).toBe(2);
+    expect((await t.stage(["--stage", "screen"], { AKM_BIN })).out).toContain("already ran with the same inputs, skipped");
+    expect(t.runs()).toBe(2);
+    installAkm("0.9.31", dirname(akm)); // the same command, replaced by the next release
+    const upgraded = await t.stage(["--stage", "screen"], { AKM_BIN });
+    expect(t.runs()).toBe(4);
+    expect(upgraded.out).toContain("screen  base: running again, the akm (AKM_BIN or --akm, or the build or version it runs) changed since its last run");
+    await t.stage(["--stage", "screen"], { AKM_BIN });
+    expect(t.runs()).toBe(4);
+  });
+
+  test("the akm part of the fingerprint holds the version it prints, and a command that cannot be run has none", () => {
+    const root = tmp();
+    const akm = (version: string, folder?: string) => installAkm(version, folder);
+    const file = akm("0.9.30");
+    const of = (command: string) => fingerprintOf(root, job([], "reflect"), { ...env, AKM_BIN: command }).parts.akm;
+    const first = of(commandLine([file]));
+    expect(of(commandLine([file]))).toBe(first);
+    akm("0.9.31", dirname(file));
+    expect(of(commandLine([file]))).not.toBe(first);
+    expect(of("fake-akm")).toBe(of("fake-akm")); // no akm to print a version: the same as itself
+  });
+
+  test("a Harbor row is made from OPENAI_BASE_URL too, which stands in for MODEL_BASE_URL; another eval does not read it", () => {
+    const root = tmp();
+    const A = "https://gateway.example/deployment-A/v1";
+    const B = "https://gateway.example/deployment-B/v1";
+    const { MODEL_BASE_URL: _unset, ...withoutModelUrl } = env;
+    const of = (evalName: string, over: Record<string, string>) => fingerprintOf(root, job(evalName === "reflect" ? [] : ["--akm", "akm-cli@0.9.27"], evalName), { ...withoutModelUrl, ...over });
+    for (const harbor of ["agent-ab", "terminal-bench"]) {
+      const a = of(harbor, { OPENAI_BASE_URL: A });
+      const b = of(harbor, { OPENAI_BASE_URL: B });
+      expect(Object.keys(a.parts).filter((k) => a.parts[k] !== b.parts[k])).toEqual(["model"]);
+      expect(of(harbor, { OPENAI_BASE_URL: `${A}/` }).sha256).toBe(a.sha256); // as endpointIdentity has it
+      expect(of(harbor, { OPENAI_BASE_URL: "https://user:secret-one@gateway.example/deployment-A/v1" }).sha256).toBe(a.sha256); // no credentials in the identity
+      const rec: RunRecord = { stage: "screen", name: "r", eval: harbor, label: "x", args: [], repeat: null, started: "", wall_seconds: 1, exit_code: 0, log: "", results: [], fingerprint: a.sha256, fingerprint_parts: a.parts };
+      expect(resumable(root, rec, { label: "x", args: [] }, b)).toEqual({ skip: false, why: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval) changed since its last run" });
+    }
+    expect(of("reflect", { OPENAI_BASE_URL: A }).sha256).toBe(of("reflect", { OPENAI_BASE_URL: B }).sha256);
+  });
+});
+
