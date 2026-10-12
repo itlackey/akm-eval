@@ -186,8 +186,24 @@ describe("reflectEdits", () => {
     expect(inputs).toMatchObject({ corpus: "private", assets: join("private", "reflect", "assets"), differences: [] });
     // the public cases are another corpus: the digest of the run does not match them
     expect(() => reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root))).toThrow("assets_sha256 differs");
-    expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or private');
-    expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or private");
+    expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or custom');
+    expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or custom");
+  });
+
+  test("reads the cases of a custom run from the folder it recorded, and says when it recorded none", () => {
+    const { root, write } = repo();
+    const mine = join(root, "private", "reflect", "own notes");
+    write({ a: note("own a"), b: note("own b"), c: note("own c") }, mine);
+    const recorded = { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" };
+    const { edits, inputs } = reflectEdits(runOf(root, mine, recorded), same(root));
+    expect(edits.map((e) => e.source)).toEqual([note("own a"), note("own b")]);
+    expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes"), differences: [] });
+    // the seeded rewrite is where generate puts it, whether or not the summary says so
+    write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
+    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" });
+    expect(reflectEdits(rewrite, same(root)).edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
+    // a folder outside the repository is not recorded: the summary cannot say where the cases were
+    expect(() => reflectEdits(runOf(root, mine, { ...recorded, corpus_folder: null }), same(root))).toThrow("a folder outside this repository");
   });
 });
 

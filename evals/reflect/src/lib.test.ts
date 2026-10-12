@@ -16,7 +16,6 @@ import {
   atLeast,
   caseProblems,
   cleanProblems,
-  corpusSeed,
   digestOf,
   fixOf,
   generatedProblem,
@@ -27,7 +26,6 @@ import {
   metrics,
   parseCases,
   readGenerated,
-  readSeed,
   reflectConfig,
   reflectOutcome,
   refOf,
@@ -515,18 +513,6 @@ describe("generated.json", () => {
     expect(generatedProblem(dir, join(root, "assets"))).toBeUndefined();
     writeFileSync(join(root, "assets", "cases.jsonl"), `${readFileSync(join(root, "assets", "cases.jsonl"), "utf8")}\n `);
     expect(generatedProblem(dir, join(root, "assets"))).toContain("other public assets");
-  });
-
-  test("the seed to record: none for the public corpus, the seed the assets were made with for the private one, else private/seed", () => {
-    const dir = privateDir({ seed: "7", inputs_sha256: "x" });
-    writeFileSync(join(dir, "seed"), "123456789012345678\n");
-    expect(corpusSeed("public", dir, join(dir, "seed"))).toBeNull();
-    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("7");
-    expect(corpusSeed("own", dir, join(dir, "seed"))).toBe("123456789012345678");
-    expect(corpusSeed("own", dir, join(dir, "no-seed"))).toBeNull();
-    expect(readSeed(join(dir, "seed"))).toBe("123456789012345678");
-    rmSync(join(dir, "generated.json"));
-    expect(corpusSeed("private", dir, join(dir, "seed"))).toBe("123456789012345678");
   });
 });
 

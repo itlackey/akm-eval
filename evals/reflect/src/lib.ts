@@ -244,23 +244,7 @@ export function generatedProblem(dir: string, publicAssets: string): string | un
   return undefined;
 }
 
-/** The content of a seed file such as private/seed, trimmed, or null when there is none. */
-export function readSeed(file: string): string | null {
-  try {
-    return readFileSync(file, "utf8").trim() || null;
-  } catch {
-    return null;
-  }
-}
 
-/**
- * The seed to record for a corpus: none for the public one. The private corpus records the seed its assets were made with
- * (generated.json beside them), which is not private/seed when generate-assets ran with --seed, and private/seed when there is no generated.json.
- */
-export function corpusSeed(corpus: string, privateDir: string, seedFile: string): string | null {
-  if (corpus === "public") return null;
-  return (corpus === "private" ? readGenerated(privateDir)?.seed : undefined) ?? readSeed(seedFile);
-}
 // --- Cases, outcomes and metrics ---------------------------------------------------------------------------------
 
 export function parseCases(content: string, where = "cases"): Case[] {

@@ -10,11 +10,12 @@ The model under test is reflect's engine. The prompt, the patch and the proposal
 
 ```
 evals/reflect/run --corpus public
-evals/reflect/run --corpus private
+evals/reflect/run --corpus custom
+evals/reflect/run --cases ~/notes/reflect
 evals/reflect/run --corpus all
 ```
 
-- `--corpus` picks the assets. `all` runs both and prints the two results side by side, never as one number.
+- `--corpus` picks the assets: `public`, `custom`, or `all`, which runs both and prints the two results side by side, never as one number. `custom` is a folder of cases with a `corpus.json`: the seeded rewrite in `private/reflect/assets` by default, or the folder `--cases DIR` names (`--cases` alone is `--corpus custom`). `--corpus private` still works for one release, with a warning: it is `--corpus custom`. See "Corpora" in the root README and "Run your own set" below.
 - `--limit N` runs the first N cases. The first ten hold each class once and the first five mix defects and controls. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--retrieval-queries` records the retrieval eval's labelled queries for each note (grade 2 or 3 in `evals/retrieval/assets/qrels.jsonl`, at most 5, best first; 48 of the 50 public cases have some) as searches that found it, so the retrieval check of akm's reflect has queries to grade. The searches are part of what each note is given, so the `input_sha256` of those notes in the manifest covers them: a run with the flag and a run without it, or two runs made with other `queries.jsonl` or `qrels.jsonl`, differ in the input of the notes whose searches differ, and `scripts/compare` leaves those out or refuses the pair (see "How results stay comparable" in the root README). See "Measure the gates of akm's reflect".
@@ -22,16 +23,17 @@ evals/reflect/run --corpus all
 - `--config-patch FILE` deep-merges the JSON file into the config the eval writes: objects merge and arrays replace, as in akm's own config merge. A relative FILE is from the repository root. `summary.json` records `config_patch`: the path and its SHA-256.
 - `--label NAME` names the results folder, `<UTC date>-<label>`. The default is the model name.
 
-The private run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing, and when `private/reflect/generated.json` is missing or was made from other public cases than the ones in this checkout: `generate` writes it beside the assets, with the `seed` and the `inputs_sha256` of the public `cases.jsonl` it read. Make the assets again after a change to the public cases, and once for assets made before `generated.json` existed: `./generate-assets --only reflect` with the same seed gives the same assets, unless `lib/rewrite` or the public cases.jsonl changed since.
+The default custom run reads `private/reflect/assets/`. Make it first with `./generate-assets --only reflect`. The run stops with an error when it is missing, and when `private/reflect/generated.json` is missing or was made from other public cases than the ones in this checkout: `generate` writes it beside the assets, with the `seed` and the `inputs_sha256` of the public `cases.jsonl` it read. Make the assets again after a change to the public cases, and once for assets made before `generated.json` existed: `./generate-assets --only reflect` with the same seed gives the same assets, unless `lib/rewrite` or the public cases.jsonl changed since.
 
-Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for the private corpus:
+Each run writes two files to `evals/reflect/results/<UTC date>-<label>/`, or to `private/reflect/results/` for a custom corpus:
 
 - `summary.json`: the metrics, how many cases ran, were scored and errored, how many had retrieval queries recorded (`retrieval_queries`, null without `--retrieval-queries`), the model name, the model names that answered, the akm version and build (`akm_bin`, `akm_build`), the corpus and the git commit. It also says what the run was made of, and whether it finished:
   - `config`: the akm config the eval wrote, strategy and `--config-patch` included, with every `apiKey`, `api_key`, `token` and `secret` replaced by `<redacted>` (a `$NAME` reference to an environment variable is kept) and the model's endpoint written as `<MODEL_BASE_URL>`.
   - `engine`: the settings of the engine in that config: its name, `model`, the `endpoint` (the host and port, never the path), `endpoint_id` (a sha256 of the endpoint's identity, which is what tells two deployments on one host apart), `temperature` (0), `enableThinking` (false) and `timeoutMs`.
   - `manifest`: what the run was made of, for `scripts/compare` and `scripts/rescore`: the collector and the scorer of this eval (version and digest), the digest of the input and of the labels of every case it selected, the akm, the config without the engine settings, the engines, the strategy and the config patch, and which cases were scored and which errored. See "The collector, the scorer and the golden files".
   - `assets_sha256`: the digest of the corpus's `cases.jsonl`, so two runs on the same cases have the same digest wherever the repository is. A change to a case changes it, and `--limit` does not.
-  - `seed`: for the private corpus, the seed its assets were made with (from `generated.json`); `null` for the public corpus.
+  - `corpus`: `public`, or `custom` for any other folder of cases. `corpus_kind` is `public`, `rewrite` (the public cases rewritten from a seed) or `own` (your own), and `corpus_private` says whether the corpus may go only to a model that `models.json` marks `"private": true`. `corpus_folder` is the folder of a custom corpus from the repository root, which `scripts/rescore` reads the cases from again; it is `null` for a folder outside the repository, whose name can say what is in it, and then `scripts/rescore` takes the folder with `--cases DIR`.
+  - `seed`: for a rewrite, the seed its assets were made with (its `corpus.json` holds the one in `generated.json`); `null` for every other corpus.
   - `status`: `complete`, or `aborted` when the run stopped because the first five cases got no outcome. Then `n_run` may be less than the cases selected, and `aborted_reason` says why (otherwise `null`). The file is written before the run fails, so a folder that holds an aborted summary is not a whole run: do not compare it.
   - `timeouts`: how many of the errored cases ended because an akm command ran past its timeout (15 minutes) and was killed. They are counted in `n_errored` too, and their rows have `timed_out: true`, so an akm that got slower shows as timeouts and not as unexplained errors.
 - `samples.jsonl`: one line per case, with the outcome, each check, the fields reflect changed and their new text, the proposal itself, the model name that answered, akm's reason when it made no proposal, and the time it took. The raw output of the case is `outcome`, `reason`, `proposal`, `served`, `seconds`, `error` and `timed_out`; the checks, `correct`, `changed` and `values` are scored from it and the case, so `scripts/rescore` can score a run again when the checks change, with no akm and no model.
@@ -117,12 +119,16 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 scripts/rescore/run evals/reflect/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
 ```
 
-A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches.
+A run from before the manifest is rescored too, if it read the cases that are here now and did not record searches. A run of a custom corpus is rescored against the cases in `corpus_folder` of its `summary.json`; one whose folder was outside the repository needs `--cases DIR` (see "Rescore" in the root README).
+
+## Run your own set
+
+`--cases DIR` runs reflect on notes of your own. `DIR` holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md` for its fields), and optionally a `corpus.json` (see "Corpora" in the root README). Without a `corpus.json` it is an own corpus and is private: the run refuses, before anything runs, a model that `models.json` does not mark `"private": true`, because the notes go to it. Put `{ "kind": "own", "private": false }` in `corpus.json` to say that nothing private is in it. The results go to `private/reflect/results/`.
 
 ## Assets
 
 - `assets/cases.jsonl`: 50 cases. 32 carry one injected defect of a kind akm names, in six classes. 18 are controls, in four. Each has the note, the feedback a user leaves and what a correct result is. The classes, the fields and how the cases were made are in `assets/README.md`. The cases carry a canary string: do not train on them.
-- `private/reflect/assets/cases.jsonl`: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It writes into a temporary folder and moves the result into place only when every check passes, so a generation that fails leaves the earlier assets, map and `generated.json` as they were. It is made by `generate` and never published.
+- `private/reflect/assets/cases.jsonl`, the default custom corpus: the same cases with names, tool names, hosts, ids, dates, numbers and versions rewritten from a seed by `lib/rewrite`. A case's note, its path, its feedback, its forbidden terms and its anchors go through one mapping, so a name, a date, a number or a version changes the same way in all of them. `generate` checks that each rewritten note still holds the defect its class names, and only that one, and writes nothing when one does not. It writes into a temporary folder and moves the result into place only when every check passes, so a generation that fails leaves the earlier assets, map and `generated.json` as they were. It is made by `generate` and never published.
 
 ## The checks
 
@@ -155,7 +161,7 @@ For scale, run with akm 0.9.26 and a scripted model: one that never proposes a c
 
 The set is small. One defect case is 3.1 points of `defects` and one control is 5.6 points of `controls`. Read a change of a case or two as noise, and rerun before you trust a gap.
 
-A model may have seen the public cases in training. A much better public score than private score points to that. Run the private corpus on a local model, or on an API that does not train on your data.
+A model may have seen the public cases in training. A much better public score than rewritten score points to that. Run the custom corpus on a local model, or on an API that does not train on your data.
 
 ## Notes
 
