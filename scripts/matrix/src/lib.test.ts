@@ -1258,13 +1258,13 @@ describe("the identity of every run behind a result", () => {
     // the runs of the config were made from two edits of the commit
     const inside = verdictAndNote(quick(), [edited(A), edited(B), edited(A)], edited(A));
     expect(inside.verdict).toBe("not comparable");
-    expect(inside.note).toContain("the uncommitted changes of the akm build (akm_build_fingerprint) differs");
+    expect(inside.note).toContain("the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint) differs");
     expect(inside.note).toContain(`${A.slice(0, 12)} in the baseline and the config 2026-10-09-sw-pr-c-r1`);
     expect(inside.note).toContain(`${B.slice(0, 12)} in the config 2026-10-09-sw-pr-c-r2`);
     // the baseline and the config were made from two edits, or from an edit and from the clean commit
     expect(verdictAndNote(quick(), edited(B), edited(A)).verdict).toBe("not comparable");
     expect(verdictAndNote(quick(), edited(A), edited(null)).verdict).toBe("not comparable");
-    expect(verdictAndNote(quick(), edited(null), edited(A)).note).toContain(`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${A.slice(0, 12)} in the baseline, none in the config`);
+    expect(verdictAndNote(quick(), edited(null), edited(A)).note).toContain(`the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint) differs: ${A.slice(0, 12)} in the baseline, none in the config`);
     // a clean build has none on both sides, and the same edits have the same fingerprint
     expect(verdictAndNote(quick(), edited(null), edited(null)).verdict).toBe("better");
     expect(verdictAndNote(quick(), edited(A), edited(A)).verdict).toBe("better");

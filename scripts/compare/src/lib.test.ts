@@ -761,7 +761,7 @@ describe("the comparison policy", () => {
     const [A, B] = ["a".repeat(64), "b".repeat(64)];
     const dirty = (fingerprint: string | null) => ({ akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
     const refused = (a: Record<string, unknown>, b: Record<string, unknown>, treatment: Axis[] = []) => found(checkMembers([member("A", "a", a), member("B", "b", b)], treatment));
-    const label = "the uncommitted changes of the akm build (akm_build_fingerprint)";
+    const label = "the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint)";
     expect(identityOf({ ...IDENTITY, ...dirty(A) }).akm_build_fingerprint).toBe(A);
     expect(identityOf(IDENTITY).akm_build_fingerprint).toBeNull();
     expect(refused({}, {})).toEqual([]); // two clean builds, or two releases, or summaries from before the fingerprint
@@ -891,6 +891,15 @@ describe("the identity of a Harbor summary (R01)", () => {
       expect(policy([base], [other], ["build", axis as Axis]).mismatches).toEqual([]); // declared, the difference is the treatment
       expect(policy([base], [other], ["build", axis as Axis]).treated).toHaveLength(1);
     }
+  });
+
+  test("a summary written before library_assets was left out of the job still compares with one written after", () => {
+    const base = harborSummary();
+    const older = structuredClone(base);
+    older.config.agents = older.config.agents.map((agent: Record<string, any>) => ({ ...agent, kwargs: { ...(agent.kwargs ?? {}), library_assets: 259 } }));
+    expect(JSON.stringify(older.config)).toContain('"library_assets":259');
+    expect(policy([base], [older], ["build"])).toMatchObject({ mismatches: [], gaps: [], treated: [] });
+    expect(found(policy([base], [harborSummary({ akmEnv: { AKM_CURATE_TIMEOUT: "30" } })], ["build"]))).toHaveLength(1); // the digest still tells a real setting apart
   });
 
   test("a build treatment is not refused for what the build changes: the akm and plugin versions, the tarballs, the folders", () => {
@@ -1033,11 +1042,11 @@ describe("a release against a release", () => {
   test("two edits of one akm commit are two builds: refused, unless the build is the treatment", () => {
     const edited = (dir: string, right: number, fingerprint: string | null) => release(dir, right, { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: fingerprint });
     const [a, b] = [edited("a", 8, "a".repeat(64)), edited("b", 13, "b".repeat(64))];
-    const refusal = /the uncommitted changes of the akm build \(akm_build_fingerprint\) differs: aaaaaaaaaaaa in A, bbbbbbbbbbbb in B\. If a difference is what you are measuring, name its axis with --treatment/;
+    const refusal = /the uncommitted changes and installed dependencies of the akm build \(akm_build_fingerprint\) differs: aaaaaaaaaaaa in A, bbbbbbbbbbbb in B\. If a difference is what you are measuring, name its axis with --treatment/;
     expect(() => comparePair(loadRun(a), loadRun(b))).toThrow(refusal);
     expect(() => comparePair(loadRun(a), loadRun(edited("c", 13, null)))).toThrow(/differs: aaaaaaaaaaaa in A, none in B/);
     const r = comparePair(loadRun(a), loadRun(b), { treatment: ["build"] });
-    expect(r.treated).toEqual([`the uncommitted changes of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
+    expect(r.treated).toEqual([`the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint) differs: ${"a".repeat(12)} in A, ${"b".repeat(12)} in B`]);
     expect(r.exploratory).toEqual([]);
     // the report shows what tells the two builds apart, and does not call them the same akm
     expect(differences(infoOf(loadRun(a)), infoOf(loadRun(b))).map((d) => d.field)).toEqual(["akm_build_fingerprint"]);
@@ -1136,7 +1145,7 @@ describe("two sets of repeats", () => {
     // the third repeat of A was made from other edits of the same akm commit: the same, with or without a build treatment
     const edited = (dirs: string[]): string[] => dirs.map((d, i) => nightlyRun(join(tmp(), `edit-r${i + 1}`), A[i], { akm_build: "v0.9.26-1-gabc123-dirty", akm_build_fingerprint: (i === 2 ? "b" : "a").repeat(64) }));
     for (const [treatment, other] of [[["config"], bDirs], [["build"], releases]] as [Axis[], string[]][]) {
-      expect(refuse(edited(aDirs), other, treatment)).toThrow(/the uncommitted changes of the akm build \(akm_build_fingerprint\) differs/);
+      expect(refuse(edited(aDirs), other, treatment)).toThrow(/the uncommitted changes and installed dependencies of the akm build \(akm_build_fingerprint\) differs/);
     }
     expect(refuse(edited(aDirs), edited(aDirs), ["build"])).toThrow(/differs among the repeats of A/);
     // and a release against a release works when all of them agree

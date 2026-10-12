@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REPO_ROOT, readLock } from "../../../lib/manifest.ts";
+import { REPO_ROOT, loadMeasurement, readLock, resolvedParts } from "../../../lib/manifest.ts";
 import { CHANGELOG, bump, checkLock, listLock } from "./lib.ts";
 
 const dirs: string[] = [];
@@ -96,6 +96,87 @@ describe("checkLock", () => {
     expect(checkLock(root)[0]).toContain("MEASUREMENT.lock is missing");
     writeFileSync(join(root, "MEASUREMENT.lock"), "{");
     expect(checkLock(root)).toEqual(["MEASUREMENT.lock is not valid JSON"]);
+  });
+});
+
+describe("the files a part covers", () => {
+  const code = (root: string, path: string, text: string) => {
+    mkdirSync(join(root, path, ".."), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  const COLLECT = "evals/toy/src/collect.ts";
+  const SCORE = "evals/toy/src/score.ts";
+
+  test("an edit to a file that is only reached through an import fails the check, and the lock lists the files it covers", () => {
+    const root = repo();
+    code(root, COLLECT, 'import { helper } from "../../../lib/helper.ts";\nexport const collect = helper;\n');
+    code(root, "lib/helper.ts", 'import { deep } from "./deep.ts";\nexport const helper = deep;\n');
+    code(root, "lib/deep.ts", "export const deep = 1;\n");
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    const lock = readLock(root);
+    expect(lock.evals.toy?.collector.files).toEqual([COLLECT, "lib/deep.ts", "lib/helper.ts", "lib/shared.ts"]);
+    expect(lock.evals.toy?.scorer.files).toEqual([SCORE]);
+    expect(checkLock(root)).toEqual([]);
+
+    code(root, "lib/deep.ts", "export const deep = 2;\n"); // listed nowhere, and two imports away from the entry point
+    const problems = checkLock(root);
+    expect(problems.length).toBe(1);
+    expect(problems[0]).toMatch(/^toy: the collector changed since MEASUREMENT\.lock was written \(lock [0-9a-f]{12}, files now [0-9a-f]{12}\)\. A change to the collector is a measurement change/);
+    expect(listLock(root)).toEqual(["toy: collector v1 (changed, not bumped), scorer v1"]);
+    expect(bump(root, "toy", "collector", "deep.ts changed, no score change", DATE)).toBe("toy: collector is now version 2");
+    expect(checkLock(root)).toEqual([]);
+  });
+
+  test("a new import changes the part, and the check names the file that is now covered, or no longer", () => {
+    const root = repo();
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    code(root, "lib/helper.ts", "export const helper = 1;\n");
+    code(root, COLLECT, 'import { helper } from "../../../lib/helper.ts";\nexport const collect = helper;\n');
+    expect(checkLock(root).join("\n")).toContain("(lock ");
+    expect(checkLock(root).join("\n")).toContain("now also covers lib/helper.ts)");
+    expect(bump(root, "toy", "collector", "collect.ts uses helper.ts, no score change", DATE)).toBe("toy: collector is now version 2");
+    code(root, COLLECT, "export const collect = 1;\n");
+    expect(checkLock(root).join("\n")).toContain("no longer covers lib/helper.ts)");
+  });
+
+  test("a collector that imports the scorer does not take the scorer's changes, and the scorer's digest is its own", () => {
+    const root = repo();
+    code(root, COLLECT, 'import { score } from "./score.ts";\nexport const collect = score;\n');
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    expect(readLock(root).evals.toy?.collector.files).toEqual([COLLECT, "lib/shared.ts"]);
+    const before = readLock(root).evals.toy?.collector.sha256;
+    code(root, SCORE, "export const score = 2;\n");
+    expect(checkLock(root).map((p) => /the (collector|scorer) changed/.exec(p)?.[1])).toEqual(["scorer"]);
+    expect(resolvedParts(loadMeasurement("toy", root) as NonNullable<ReturnType<typeof loadMeasurement>>, root).collector.sha256).toBe(before as string);
+    code(root, "lib/shared.ts", "export const shared = 2;\n");
+    expect(checkLock(root).map((p) => /the (collector|scorer) changed/.exec(p)?.[1])).toEqual(["collector", "scorer"]);
+  });
+
+  test("a scorer that imports collector code is refused, whether it reaches a listed file directly or a helper of the collector", () => {
+    const root = repo();
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    code(root, SCORE, 'import { collect } from "./collect.ts";\nexport const score = collect;\n');
+    const direct = checkLock(root);
+    expect(direct.length).toBe(1);
+    expect(direct[0]).toContain(`toy: the scorer reaches ${COLLECT} (the scorer reaches it as ${SCORE} -> ${COLLECT}, the collector as ${COLLECT}), which the collector covers.`);
+    expect(direct[0]).toContain("A scorer must not depend on collection");
+    expect(() => bump(root, "toy", "scorer", "x", DATE)).toThrow("which the collector covers");
+
+    code(root, SCORE, 'import { via } from "../../../lib/via.ts";\nexport const score = via;\n');
+    code(root, "lib/via.ts", 'import { shared } from "./shared.ts";\nexport const via = shared;\n');
+    expect(checkLock(root)[0]).toContain("the scorer reaches lib/shared.ts (the scorer reaches it as evals/toy/src/score.ts -> lib/via.ts -> lib/shared.ts, the collector as lib/shared.ts)");
+
+    code(root, SCORE, 'import { both } from "../../../lib/both.ts";\nexport const score = both;\n');
+    code(root, COLLECT, 'import { both } from "../../../lib/both.ts";\nexport const collect = both;\n');
+    code(root, "lib/both.ts", "export const both = 1;\n"); // a helper that neither part lists, reached by both
+    expect(checkLock(root)[0]).toContain("the scorer reaches lib/both.ts");
+  });
+
+  test("an import that goes nowhere is named, so the files a part covers are never guessed", () => {
+    const root = repo();
+    bump(root, "toy", "collector", "first lock entry", DATE);
+    code(root, COLLECT, 'import { gone } from "./gone.ts";\nexport const collect = gone;\n');
+    expect(checkLock(root)).toEqual([`toy: ${COLLECT} imports ./gone.ts, which does not exist`]);
   });
 });
 

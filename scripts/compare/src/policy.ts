@@ -39,8 +39,10 @@ export const HARBOR = ["agent-ab", "terminal-bench"];
 /**
  * The keys of an agent of the Harbor job that another axis owns: the model (the model axis), the akm and plugin under test and where their
  * tarballs and the library are (the build, and the cases through assets_sha256). The rest of the job is the config: the settings of both arms.
+ * `library_assets` is the count the akm on this machine made of the library, a fact about the run and not a setting; summaries written
+ * before it was left out of the job's digest hold it, and they must still compare.
  */
-const AGENT_KWARGS_OWNED = ["akm_cli_version", "akm_plugin_version", "packages_dir", "akm_package", "plugin_package", "libraries_dir"];
+const AGENT_KWARGS_OWNED = ["akm_cli_version", "akm_plugin_version", "packages_dir", "akm_package", "plugin_package", "libraries_dir", "library_assets"];
 
 function harborAgent(agent: unknown): unknown {
   if (!isObject(agent)) return agent;
@@ -216,7 +218,7 @@ const FIELDS: Field[] = [
   { name: "hints", axis: "scope", label: "the settings that change what a run measures (the embedder)" },
   { name: "akm_version", axis: "build", label: "the akm version" },
   { name: "akm_build", axis: "build", label: "the akm build", none: "release" },
-  { name: "akm_build_fingerprint", axis: "build", label: "the uncommitted changes of the akm build (akm_build_fingerprint)", none: "none" },
+  { name: "akm_build_fingerprint", axis: "build", label: "the uncommitted changes and installed dependencies of the akm build (akm_build_fingerprint)", none: "none" },
   { name: "akm_bin", axis: "build", label: "the akm command (akm_bin)" },
   { name: "strategy", axis: "config", label: "the strategy" },
   { name: "config_patch", axis: "config", label: "the config patch" },

@@ -60,6 +60,7 @@ lib/models.ts        --model, --judge-model and models.json: which model a run u
 lib/negation.ts      the rule of negation that the checks of extract and distill share
 lib/provenance.ts    the digests, the redacted akm config and the engine settings that go into summary.json
 lib/manifest.ts      the run manifest in every summary.json, the lock, and the contract an eval declares itself by (MEASUREMENT)
+lib/closure.ts       the files a measured part covers: the ones an eval lists and every file they import
 lib/golden.ts        the golden tests of a scorer: raw outputs with the rows the scorer must give
 lib/results.ts       the results folder of a run and its .running marker
 lib/repeat.ts        --repeat
@@ -182,7 +183,7 @@ Every `summary.json` of an eval on the manifest has a `manifest` object (`lib/ma
 
 - `manifest_version`, `eval`, `corpus`, `collection`, `mode`: the scope. Runs of another eval, corpus, collection or mode (`consolidate --pool`) are never compared.
 - `harness_version`, from `MEASUREMENT.lock`.
-- `collector` and `scorer`: `{ version, sha256 }`, the version the lock records and the digest of the eval's declared files as they were when the run started.
+- `collector` and `scorer`: `{ version, sha256 }`, the version the lock records and the digest of the files the part covers (the ones the eval lists and the ones they import, see "The lock and the gate") as they were when the run started.
 - `cases`: `{ id: { input_sha256, label_sha256 } }` for every case the run selected. `input_sha256` digests what the case presents to akm (reflect: the note, its path, the feedback, and the searches the run recorded for it). `label_sha256` digests what the scorer judges the case by.
 - `akm`: `{ version, bin, build, build_fingerprint }`.
 - `config`: `{ sha256, redacted }`: the akm config with secrets redacted and without the engine settings, which are in `engines`.
@@ -205,6 +206,8 @@ scripts/measurement/run list
 ```
 
 It raises the version of that part by one, writes the digest and files, and adds the row. A pure refactor that keeps every score still changes the scorer digest: it must pass the golden tests, and be bumped with a reason that says "no score change". A relabelled case needs no bump: its `label_sha256` changes, and runs are rescored.
+
+**What a part covers.** An eval lists the entry points of its collector and of its scorer, and a part covers those files and every file of the repository that they import, and those import. An edit to a helper that is only reached through an import (a function in `lib/` that decides which variables akm gets, say) changes what the part does as much as an edit to a listed file, so it changes the digest and fails the gate. The imports followed are `import ... from "./x.ts"`, `export ... from`, `import("./x.ts")` and `require("./x.ts")` (not a type-only import, which is gone when the code runs), and for Python `from .x import y` and a module next to the file. The `files` the lock records are the ones that were resolved, so a review sees exactly what a bump covers, and a new import shows in the check as "now also covers lib/x.ts". The collector stops at the scorer's files: a collector that calls `makeRow` from `score.ts` does not take the scorer's changes, which are the scorer's. The other way round is refused. `scripts/measurement/run check`, and the start of every run, fail when the scorer reaches a file the collector covers, because `scripts/rescore` runs the scorer without akm and a change to collector code must not change a scorer's digest. A file that both parts import is refused for the same reason: keep what the scorer needs in a file that only the scorer imports. Not followed are packages (their versions are in the lockfiles), a path built when the code runs (`join(import.meta.dir, "x.json")`) and a script started by its name; list such a file as an entry point.
 
 ### Rescore
 
@@ -232,13 +235,14 @@ The contract is in the doc comments of `lib/manifest.ts`; `evals/reflect` is the
 1. **Split the scorer from the collector.** `src/score.ts` has `makeRow(case, raw)` and `metrics(rows)`, pure and deterministic. `src/collect.ts` builds the sandbox and the akm config, runs the commands, and builds each row with `makeRow`. A file belongs to one part, so that a scorer digest does not change when only collector code changes, and the other way round. Re-export both from `lib.ts` so imports do not move.
 2. **Store the raw output.** Every field of the raw output that `makeRow` reads is stored in the case's row in `samples.jsonl`, under the name the scorer reads, and it is what akm and the model returned (an outcome, a proposal, a reason, a verdict, the search results), not a derived score. Reflect's raw output is `outcome`, `reason`, `proposal`, `served`, `seconds`, `error` and `timed_out`; its checks, `correct` and `changed` are scored from it. Where a row did not keep a field the scorer reads, the row now does.
 3. **Declare `MEASUREMENT`** in `src/measurement.ts`, a `Measurement` (`lib/manifest.ts`):
-   - `eval`, `collector` and `scorer`: the files, from the repository root, `lib/` files included. The collector lists the run code and `lib/akm`; the scorer lists `score.ts` and the `lib/` files its checks use.
+   - `eval`, `collector` and `scorer`: the entry points, from the repository root, `lib/` files included; the files they import are covered too. The collector lists the run code and `lib/akm`; the scorer lists `score.ts` and the `lib/` files its checks use. The scorer must not import anything the collector covers.
    - `loadCases(root, summary)`, `caseId(case)`, `input(case, context)` and `labels(case)`: the cases with their labels as they are now, and the two values that are digested per case. `input` is everything that changes what akm sees, `context` what the run adds for a case (reflect: its recorded searches); `labels` is everything the scorer reads of the case.
    - the rescore adapter: `rawOf(row)` gives the raw output of a stored row, or the names of the fields it lacks; `score(case, raw)` is `makeRow`; `errored(row)` says a case has no verdict; `summarize(rows)` gives the summary fields that come from the rows (counts, `metrics`); `legacyProblem(root, summary)` (optional) says why a run from before the manifest cannot be scored against the cases here.
 4. **Write the manifest** in `run.ts`: `lockedParts(MEASUREMENT)` at the start of the run, which stops it when the lock has no entry, then `buildManifest` with `caseDigests(MEASUREMENT, cases, context)`, `completionOf` and the config, into `summary.json`. Hide the endpoint in the summary's `config`, and record `engine: engineSettings(config)`.
 5. **Golden tests** (`lib/golden.ts`): `evals/<name>/golden/` holds `cases.jsonl` (the labelled cases the outputs are for), `raw.jsonl` (`{case, note, raw}` per line: realistic raw outputs, from real runs where there are some, with the right answer and each way to get it wrong), `expected.jsonl` (the row the scorer must give for the line at the same position) and `scorer.json` (the scorer version they are for). `src/golden.test.ts` runs `goldenProblems`; a scorer change that alters a row fails it until `UPDATE_GOLDEN=1 bun test evals/<name>/src/golden.test.ts` writes the files again, which the scorer's version bump asks for.
 6. **Add the lock entry:** `scripts/measurement/run bump <name> collector --reason "first lock entry"` writes both parts at version 1 and their rows in the changelog.
 7. Add the eval's metrics to `EVALS` in `scripts/matrix/src/lib.ts` and its per-case reading to `scripts/compare/src/lib.ts`, if they are not there.
+8. **Tests read the lock; they do not copy it.** A bump is a routine change, so no test may hold a collector or scorer version, a harness version or a digest of the live lock as a literal. A test that needs one reads it from `lockedParts(MEASUREMENT)` (`.collector.version`, `.scorer.sha256`, `.harness_version`), and a test that needs *another* version uses the live one plus one. A golden test is the exception that is meant: `golden/scorer.json` holds the scorer version the expected rows are for, so a scorer bump fails it until `UPDATE_GOLDEN=1` writes the rows again.
 
 ## Run a matrix
 

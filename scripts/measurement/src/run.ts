@@ -13,7 +13,8 @@ const USAGE = `Usage: scripts/measurement/run check
 
 Every eval that declares a MEASUREMENT (src/measurement.ts) has two parts in MEASUREMENT.lock: its collector, the files that decide what
 akm is asked and what is kept of the answer, and its scorer, the files that turn a raw output into a score. Each has a version and a
-digest of its files.
+digest of its files: the ones the eval lists and every file of the repository they import. The lock records that list. The collector
+does not take the files of the scorer, and a scorer that imports a file of the collector is refused.
 
   check   recompute the digests and fail if a part changed without the lock being updated, or if an entry has no changelog row.
           scripts/check and CI run it.

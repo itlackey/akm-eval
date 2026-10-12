@@ -22,13 +22,16 @@
 //   4. src/run.ts writes `manifest: buildManifest(...)` into summary.json, after `lockedParts(MEASUREMENT)` at the start of the run.
 //   5. golden/: raw outputs with their expected rows, and src/golden.test.ts, which runs `goldenProblems` (lib/golden.ts has the layout).
 //   6. MEASUREMENT.lock has an entry for the eval: `scripts/measurement/run bump <eval> collector --reason "..."` writes the first one.
+//   7. Tests read versions from `lockedParts(MEASUREMENT)`, never as literals: a bump is routine and must not break them. (The golden
+//      files are bound to the scorer version on purpose; a scorer bump asks for UPDATE_GOLDEN=1.)
 //
 // A pure refactor that keeps every score still changes the scorer digest: it passes the golden test, and bumps the scorer with the reason
 // "no score change".
 
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { chain, checkListed, importClosure } from "./closure.ts";
 import { type EngineSetting, engineSettings, manifestDigest, redactConfig, sha256File, sha256Json, withoutEngineSettings } from "./provenance.ts";
 
 /** The repository root, one folder above lib/. */
@@ -48,18 +51,22 @@ const HEX = /^[0-9a-f]{64}$/;
  * the collector got back from akm and the model, in the fields the scorer reads. `Row` is the scored row, one line of samples.jsonl.
  *
  * The three digests the manifest holds come from here:
- *  - `collector.sha256` is the digest of the files in `collector`, `scorer.sha256` that of the files in `scorer`. A file is listed once, in
- *    one list: a scorer digest must not change when only collector code changes, and the other way round. Shared code in lib/ is listed in
- *    the list of the part that runs it (lib/akm/akm.ts is the collector of every eval that drives akm).
+ *  - `collector.sha256` is the digest of the files of the collector, `scorer.sha256` that of the files of the scorer. The lists are entry
+ *    points: a part covers the files it lists and every file of the repository they import, and those import (lib/closure.ts), so an edit
+ *    to a helper that is only reached through an import still changes the digest. MEASUREMENT.lock records the files that were covered.
+ *    A file is in one part: a scorer digest must not change when only collector code changes, and the other way round. So the collector
+ *    stops at the scorer's files (a collector that imports `makeRow` from score.ts does not take the scorer's changes), and a scorer that
+ *    reaches a file of the collector is refused. Shared code in lib/ is listed in the list of the part that runs it (lib/akm/akm.ts is the
+ *    collector of every eval that drives akm).
  *  - `input_sha256` of a case digests `input(case)`: what the case presents to akm. A changed input makes the case a different case.
  *  - `label_sha256` of a case digests `labels(case)`: what the scorer judges it by. A changed label means the run is scored again.
  */
 export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
   /** The eval's name, as `summary.eval` has it, and its folder under evals/ or benchmarks/. */
   eval: string;
-  /** The files that decide what akm is asked and what is recorded of its answer, from the repository root: the eval's run code, the sandbox and the config it builds, and the lib/ files it runs on. */
+  /** The entry points of the files that decide what akm is asked and what is recorded of its answer, from the repository root: the eval's run code, the sandbox and the config it builds, and the lib/ files it runs on. The files they import are covered too. */
   collector: string[];
-  /** The files that turn a raw output into a row and rows into metrics, from the repository root. Not the labels (the cases): those have their digest per case. */
+  /** The entry points of the files that turn a raw output into a row and rows into metrics, from the repository root. The files they import are covered too. Not the labels (the cases): those have their digest per case. */
   scorer: string[];
   /** The cases a summary's corpus holds now, with their labels, read from `root`. This is what a run is scored against again. Throws a message when the corpus cannot be read. */
   loadCases(root: string, summary: Obj): Case[];
@@ -126,20 +133,45 @@ export function partSha256(files: string[], root = REPO_ROOT): string {
   const seen = new Set<string>();
   return manifestDigest(
     files.map((file) => {
-      if (isAbsolute(file) || file.split("/").includes("..") || file.includes("\\")) throw new Error(`${file}: a measured file is named from the repository root, with forward slashes`);
+      checkListed(file, root);
       if (seen.has(file)) throw new Error(`${file} is listed twice in one part`);
       seen.add(file);
-      if (!existsSync(join(root, file))) throw new Error(`${file} is listed in a measurement and does not exist`);
       return [file, sha256File(join(root, file))];
     }),
   );
 }
 
-/** The files of the eval's two parts, checked: a file may be in one list only. */
-export function measuredFiles(m: Pick<Measurement, "eval" | "collector" | "scorer">): { collector: string[]; scorer: string[] } {
+/** One part of an eval as the files are now: the files it covers, which are the ones it lists and everything they import, and the digest of them. */
+export interface ResolvedPart {
+  files: string[];
+  sha256: string;
+}
+
+/**
+ * The files the two parts of an eval cover, and their digests. A file may be listed in one part only. The collector stops at the files
+ * the scorer lists, so a collector that calls the scorer's `makeRow` does not take the scorer's changes. Throws when the scorer reaches a
+ * file that the collector covers: a scorer must not depend on collection.
+ */
+export function resolvedParts(m: Pick<Measurement, "eval" | "collector" | "scorer">, root = REPO_ROOT): { collector: ResolvedPart; scorer: ResolvedPart } {
   const both = m.collector.filter((f) => m.scorer.includes(f));
   if (both.length > 0) throw new Error(`${m.eval}: ${both.join(", ")} is in both the collector and the scorer. A file belongs to one part, so a change to it invalidates one thing.`);
-  return { collector: [...m.collector].sort(), scorer: [...m.scorer].sort() };
+  const scorer = importClosure(m.scorer, root);
+  const collector = importClosure(m.collector, root, new Set(m.scorer));
+  const shared = scorer.files.filter((f) => collector.from.has(f));
+  if (shared.length > 0) {
+    const named = shared.slice(0, 3).map((f) => `${f} (the scorer reaches it as ${chain(scorer, f)}, the collector as ${chain(collector, f)})`);
+    throw new Error(
+      `${m.eval}: the scorer reaches ${named.join("; ")}${shared.length > 3 ? ` and ${shared.length - 3} more` : ""}, which the collector covers. ` +
+        "A scorer must not depend on collection: scripts/rescore runs it without akm, and a change to collector code must not change the scorer's digest. Keep what the scorer needs in files that only it imports.",
+    );
+  }
+  return { collector: { files: collector.files, sha256: partSha256(collector.files, root) }, scorer: { files: scorer.files, sha256: partSha256(scorer.files, root) } };
+}
+
+/** The files each part of the eval covers now, imports included. */
+export function measuredFiles(m: Pick<Measurement, "eval" | "collector" | "scorer">, root = REPO_ROOT): { collector: string[]; scorer: string[] } {
+  const parts = resolvedParts(m, root);
+  return { collector: parts.collector.files, scorer: parts.scorer.files };
 }
 
 /** The two parts of an eval as the files are now: the version the lock records, and the digest of the files as they are. */
@@ -164,8 +196,8 @@ export function lockedParts(m: Pick<Measurement, "eval" | "collector" | "scorer"
 
 /** The digests of the two parts of an eval as the files are now, whatever the lock says. */
 export function currentDigests(m: Pick<Measurement, "eval" | "collector" | "scorer">, root = REPO_ROOT): { collector: string; scorer: string } {
-  const files = measuredFiles(m);
-  return { collector: partSha256(files.collector, root), scorer: partSha256(files.scorer, root) };
+  const parts = resolvedParts(m, root);
+  return { collector: parts.collector.sha256, scorer: parts.scorer.sha256 };
 }
 
 // ---- the manifest ------------------------------------------------------------------------------------------------------------
