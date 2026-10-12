@@ -67,6 +67,21 @@ describe("the files a set of entry points reaches", () => {
     expect(importClosure(["a/entry.ts"], root).files).toEqual(["a/entry.ts"]);
   });
 
+  test("reads a script that starts with a shebang line, and follows what it imports (#73)", () => {
+    const root = repo({
+      "a/entry.ts": '#!/usr/bin/env bun\n// a script\nimport { b } from "./b.ts";\nexport const x = b;\n',
+      "a/b.ts": '#!/usr/bin/env node\r\nimport { c } from "../lib/c.ts";\r\nexport const b = c;\r\n', // a line feed and a carriage return both end the line
+      "lib/c.ts": "#!/usr/bin/env bun\nexport const c = 1;\n", // a shebang and nothing else to follow
+      "a/only.ts": "#!/usr/bin/env bun",
+    });
+    expect(importClosure(["a/entry.ts"], root).files).toEqual(["a/b.ts", "a/entry.ts", "lib/c.ts"]);
+    expect(importClosure(["a/only.ts"], root).files).toEqual(["a/only.ts"]);
+    // a script of this repository that starts with one, and the lexicon it imports
+    expect(importClosure(["lib/rewrite/rewrite.ts"], join(import.meta.dir, "..")).files).toContain("lib/rewrite/lexicon.ts");
+    // only the first line is a shebang: a later line that starts with #! is still a syntax error, and says so
+    expect(() => importClosure(["a/late.ts"], repo({ "a/late.ts": 'import { x } from "./x.ts";\n#!/usr/bin/env bun\n', "a/x.ts": "export const x = 1;\n" }))).toThrow("a/late.ts: its imports cannot be read");
+  });
+
   test("stops at the files it is told to leave to another part, with what they import", () => {
     const root = repo({
       "a/collect.ts": 'import { makeRow } from "./score.ts";\nimport { run } from "../lib/run.ts";\n',

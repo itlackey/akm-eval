@@ -39,3 +39,14 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |
 | 2026-10-12 | bakeoff | collector | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | fb2b423bb008 |
 | 2026-10-12 | bakeoff | scorer | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | 2ca17e24721e |
+| 2026-10-12 | agent-ab | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 2c8cddfe2257 |
+| 2026-10-12 | bakeoff | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | b95da4e2ca88 |
+| 2026-10-12 | distill | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | c610a71c3e3c |
+| 2026-10-12 | extract | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 714cbadd73a8 |
+| 2026-10-12 | judge-gate | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 0ef7d870a298 |
+| 2026-10-12 | longmemeval | collector | 4 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 24ee168a4881 |
+| 2026-10-12 | promotion | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 1c7b3bfdbde6 |
+| 2026-10-12 | reflect | collector | 4 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 7c37dcb317cb |
+| 2026-10-12 | retrieval | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | 3ec3a06b3212 |
+| 2026-10-12 | skillret | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | f7998935e63f |
+| 2026-10-12 | terminal-bench | collector | 2 | no score change, no config change: lib/akm/akm.ts has a comment saying that configVersion and the provider kind are pinned on purpose (#52) | f76ab669f4e8 |

@@ -51,10 +51,14 @@ function resolveFile(root: string, rel: string): string | null {
   return null;
 }
 
-/** The files a TypeScript or JavaScript file imports, as the specifiers it writes: only relative ones. */
+/**
+ * The files a TypeScript or JavaScript file imports, as the specifiers it writes: only relative ones. The parser takes a first line that starts
+ * with #! (`#!/usr/bin/env bun`) for a syntax error, which bun does not when it runs the file, so that line is read as a comment.
+ */
 function scriptImports(file: string, text: string, loader: "ts" | "tsx" | "js" | "jsx"): string[] {
   try {
-    return new Bun.Transpiler({ loader }).scanImports(text).map((i) => i.path).filter((p) => p.startsWith("./") || p.startsWith("../"));
+    const code = text.startsWith("#!") ? `//${text.slice(2)}` : text;
+    return new Bun.Transpiler({ loader }).scanImports(code).map((i) => i.path).filter((p) => p.startsWith("./") || p.startsWith("../"));
   } catch (e) {
     throw new Error(`${file}: its imports cannot be read, so the files it covers cannot be listed (${(e as Error).message.split("\n")[0]})`);
   }

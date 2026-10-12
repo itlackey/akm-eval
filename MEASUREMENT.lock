@@ -4,8 +4,8 @@
   "evals": {
     "agent-ab": {
       "collector": {
-        "version": 1,
-        "sha256": "eff8c179bf105b5b2419b3043648f0d4c0c2d147af84de4aa9906a5bd341a046",
+        "version": 2,
+        "sha256": "2c8cddfe2257dbacaeecd3b076d816ba210d5afaa7ef841c64cc0a7e6ebc5a8a",
         "files": [
           "evals/agent-ab/src/collect.ts",
           "lib/akm/akm.ts",
@@ -32,8 +32,8 @@
     },
     "bakeoff": {
       "collector": {
-        "version": 1,
-        "sha256": "fb2b423bb0088fcf2c1615f9431659f5531ea55c08f593ebb8f4abba5d99ff21",
+        "version": 2,
+        "sha256": "b95da4e2ca887441dc8d419f825f99b76523bd1f036d900f8068d2bb7f552e5d",
         "files": [
           "evals/bakeoff/src/collect.ts",
           "lib/akm/akm.ts",
@@ -51,8 +51,8 @@
     },
     "distill": {
       "collector": {
-        "version": 1,
-        "sha256": "963b9787f3a66a4c479e9f9032637a687d54edc27ff90ed68ff472d3f9e44ce1",
+        "version": 2,
+        "sha256": "c610a71c3e3cc73412a2dfb45dae5a2023e71cb3b09c36592126319922ccdb6b",
         "files": [
           "evals/distill/src/collect.ts",
           "lib/akm/akm.ts",
@@ -71,8 +71,8 @@
     },
     "extract": {
       "collector": {
-        "version": 1,
-        "sha256": "24ae1173ca2b3090e27e3d91b3081d66db956031ace6397b159f48db00ead633",
+        "version": 2,
+        "sha256": "714cbadd73a8b6ad8c8da9782307dee5d96e89476c6687265ed7af16a86a3c4e",
         "files": [
           "evals/extract/src/collect.ts",
           "lib/akm/akm.ts",
@@ -91,8 +91,8 @@
     },
     "judge-gate": {
       "collector": {
-        "version": 1,
-        "sha256": "de09348fb9640ea96f5fe8e6be43c3938dc13a7b0d5b923e7b8f7f326effacf8",
+        "version": 2,
+        "sha256": "0ef7d870a29890331add7a1f365a5add94bd5530bfe1d2918beccd77e76759de",
         "files": [
           "evals/judge-gate/src/collect.ts",
           "lib/akm/akm.ts",
@@ -110,8 +110,8 @@
     },
     "longmemeval": {
       "collector": {
-        "version": 3,
-        "sha256": "d87913946f1d482992c92ebbdfecb3e2f893e56f149e472ce4bfef430202a6d8",
+        "version": 4,
+        "sha256": "24ee168a48815ec9645157959aa3c0e82b7c89ca3a2a940eb70e52783f07fd43",
         "files": [
           "benchmarks/longmemeval/src/akm.ts",
           "benchmarks/longmemeval/src/collect.ts",
@@ -133,8 +133,8 @@
     },
     "promotion": {
       "collector": {
-        "version": 1,
-        "sha256": "fd84fc1fa73076c6f2c668a6bb5b2d3f3893000b818f3af382c1dfb4bbd5bbef",
+        "version": 2,
+        "sha256": "1c7b3bfdbde627542353554982e9bb0a4b915fd3a5419053a102fd13b3895e51",
         "files": [
           "evals/promotion/src/collect.ts",
           "lib/akm/akm.ts",
@@ -152,8 +152,8 @@
     },
     "reflect": {
       "collector": {
-        "version": 3,
-        "sha256": "48170ba5c2151414cf692200b78c88d7a74853470062b00509d633730aeab69c",
+        "version": 4,
+        "sha256": "7c37dcb317cb51b1f960c73b7137599fece46ff0c10b68a70eb5eae42e9f4a74",
         "files": [
           "evals/reflect/src/collect.ts",
           "lib/akm/akm.ts",
@@ -171,8 +171,8 @@
     },
     "retrieval": {
       "collector": {
-        "version": 1,
-        "sha256": "545140dcd503384e1e308fbbe84fd74d099a014c7914abd50dd6cdd72e9530d8",
+        "version": 2,
+        "sha256": "3ec3a06b32125e095bed8ca83fdbba85e62c83413eb9a0b67564136dfbb73fb0",
         "files": [
           "evals/retrieval/src/akm.ts",
           "evals/retrieval/src/collect.ts",
@@ -193,8 +193,8 @@
     },
     "skillret": {
       "collector": {
-        "version": 1,
-        "sha256": "acd3032eaf8de01dfc4daaa7e290ab1c27d1392b2c6c337fbc59d0bc80950417",
+        "version": 2,
+        "sha256": "f7998935e63f33e41fe84f1e9d539427d1a0436eba71b9adfd4becfca1709c38",
         "files": [
           "benchmarks/skillret/src/akm.ts",
           "benchmarks/skillret/src/collect.ts",
@@ -215,8 +215,8 @@
     },
     "terminal-bench": {
       "collector": {
-        "version": 1,
-        "sha256": "6be5329b6e6a3d0b96d83fa51d168a758076b31cb01f21ca1204f35b88ade9c9",
+        "version": 2,
+        "sha256": "f76ab669f4e82c87d84fd43e6fd351db8dba02eeafb3226a1971a09b41ffdf1a",
         "files": [
           "benchmarks/terminal-bench/src/collect.ts",
           "lib/akm/akm.ts",
