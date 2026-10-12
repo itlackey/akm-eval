@@ -19,7 +19,9 @@
 //   2. src/collect.ts (the collector): builds the sandbox and the akm config, runs the commands, and builds each row with the scorer's
 //      `makeRow`. It stores in the row every field of the raw output that the scorer reads, so the row can be scored again without akm.
 //   3. src/measurement.ts: `export const MEASUREMENT: Measurement`, the declaration below. It wires the two and is itself in neither digest.
-//   4. src/run.ts writes `manifest: buildManifest(...)` into summary.json, after `lockedParts(MEASUREMENT)` at the start of the run.
+//   4. src/run.ts writes `manifest: buildManifest(...)` into summary.json, after `lockedParts(MEASUREMENT)` at the start of the run. A run on a
+//      custom corpus also writes `corpus_folder: corpusFolderOf(folder)`, and `loadCases(root, summary)` reads the cases of such a run from
+//      `summary.corpus_folder` (scripts/rescore sets it from `--cases DIR` when the run could not record it).
 //   5. golden/: raw outputs with their expected rows, and src/golden.test.ts, which runs `goldenProblems` (lib/golden.ts has the layout).
 //   6. MEASUREMENT.lock has an entry for the eval: `scripts/measurement/run bump <eval> collector --reason "..."` writes the first one.
 //   7. Tests read versions from `lockedParts(MEASUREMENT)`, never as literals: a bump is routine and must not break them. (The golden
@@ -30,7 +32,7 @@
 
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { chain, checkListed, importClosure } from "./closure.ts";
 import { type EngineSetting, engineSettings, manifestDigest, redactConfig, sha256File, sha256Json, withoutEngineSettings } from "./provenance.ts";
 
@@ -93,6 +95,19 @@ export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
   errored(row: Row): boolean;
   /** The fields of the summary that come from the scored rows: its counts and `metrics`. Pure. A rescored summary takes these anew. */
   summarize(rows: Row[]): Obj;
+}
+
+// ---- the folder of a custom corpus --------------------------------------------------------------------------------------------
+
+/**
+ * What a summary records as `corpus_folder` for a run on a custom corpus read from `folder`: the path from the repository root, written with `/`
+ * and with no leading `./` or `..`, when the folder is inside the repository, else null. It is never an absolute path: a folder outside the
+ * repository (your notes) can name what is in it. `scripts/rescore` reads the cases of a custom run from this folder, and takes `--cases DIR`
+ * when it is null. A public run records null.
+ */
+export function corpusFolderOf(folder: string, root = REPO_ROOT): string | null {
+  const rel = relative(root, resolve(root, folder));
+  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
 }
 
 // ---- the lock ----------------------------------------------------------------------------------------------------------------
