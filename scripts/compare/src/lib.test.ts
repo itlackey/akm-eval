@@ -11,7 +11,7 @@ import { metrics as nightlyMetrics } from "../../../evals/nightly/src/lib.ts";
 import { metrics as promotionMetrics } from "../../../evals/promotion/src/lib.ts";
 import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/lib.ts";
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
-import { EVAL_METRICS } from "../../matrix/src/lib.ts";
+import { EVAL_METRICS, GAP_FACTOR } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
 import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
 import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
@@ -195,9 +195,7 @@ describe("the per-case reading of each eval agrees with the eval's own metrics",
   });
 
   test("every eval in EVAL_METRICS is one compare reads, and every metric is per case or reported from the summaries", () => {
-    // The Harbor evals are in EVAL_METRICS for the matrix. Their rows are trials of two arms, which compare has no reading for.
-    const harbor = ["agent-ab", "terminal-bench"];
-    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).filter((name) => !harbor.includes(name)).sort());
+    expect([...SUPPORTED].sort()).toEqual(Object.keys(EVAL_METRICS).sort());
   });
 });
 
@@ -440,7 +438,7 @@ describe("refusals", () => {
   });
 
   test("consolidate with and without --pool", () => {
-    expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases) differs: none in A, pool in B");
+    expect(message(fx("consolidate", "before"), fx("consolidate-pool", "before"))).toContain("the mode (consolidate --pool is another set of cases, and longmemeval --retrieval-only another measurement) differs: none in A, pool in B");
   });
 
   test("a different hash of the cases is a refusal unless the inputs are the treatment, and a missing one makes the report exploratory", () => {
@@ -472,8 +470,8 @@ describe("refusals", () => {
   });
 
   test("an eval compare has no reading for", () => {
-    const a = writeRun(join(tmp(), "a"), { eval: "agent-ab", corpus: "public", akm_version: "1" }, [{ id: "t1" }]);
-    expect(() => comparePair(loadRun(a), loadRun(writeRun(join(tmp(), "b"), { eval: "agent-ab", corpus: "public", akm_version: "1" }, [{ id: "t1" }])))).toThrow(/agent-ab, which compare has no per-case reading for. It reads nightly, consolidate, distill/);
+    const a = writeRun(join(tmp(), "a"), { eval: "widget", corpus: "public", akm_version: "1" }, [{ id: "t1" }]);
+    expect(() => comparePair(loadRun(a), loadRun(writeRun(join(tmp(), "b"), { eval: "widget", corpus: "public", akm_version: "1" }, [{ id: "t1" }])))).toThrow(/widget, which compare has no per-case reading for. It reads nightly, consolidate, distill/);
   });
 
   test("the same folder twice, and runs with no case in common", () => {
@@ -1249,5 +1247,78 @@ describe("the command with a treatment", () => {
       expect(res.exitCode).toBe(2);
       expect(text(res.stderr)).toContain("compare:");
     }
+  });
+});
+
+// ---- what the --help of compare says, and what its README says of the noise floor (#73, #74) -----------------------------------------------------
+
+describe("--help (#74)", () => {
+  const help = (): string => Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--help"], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
+
+  test("names every flag it takes and every eval it reads, and the scores --tie applies to", () => {
+    const out = help();
+    for (const flag of ["--treatment", "--repeats", "--against", "--collection", "--json", "--md", "--seed", "--resamples", "--tie"]) expect(out, flag).toContain(flag);
+    for (const name of SUPPORTED) expect(out, name).toContain(name);
+    expect(out).toContain("(retrieval's ndcg, skillret's, a Harbor task's difference)");
+    expect(out).not.toContain("--tie X           retrieval:");
+    // the flags it does not take are refused
+    expect(Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), "--force"], { stdout: "pipe", stderr: "pipe" }).exitCode).toBe(2);
+  });
+});
+
+describe("the noise floor is for two single runs (#73)", () => {
+  /** The chance that a case with probability p of being right, scored by its mean over k runs on each of two sides of one configuration, comes out different. */
+  const flips = (p: number, k: number): number => {
+    const pmf = Array.from({ length: k + 1 }, (_, j) => (choose(k, j) * p ** j * (1 - p) ** (k - j)));
+    return 1 - pmf.reduce((sum, x) => sum + x * x, 0);
+  };
+  const choose = (n: number, r: number): number => (r === 0 ? 1 : (choose(n, r - 1) * (n - r + 1)) / r);
+
+  test("with 3 repeats a side, nothing changed flips about 1.4 to 2.3 times as many cases as between two runs, as the README says", () => {
+    expect(flips(0.5, 1)).toBeCloseTo(0.5, 10); // expected_flips counts 2p(1-p) of such a case
+    expect(flips(0.5, 3) / flips(0.5, 1)).toBeCloseTo(1.375, 3);
+    expect(flips(0.1, 3) / flips(0.1, 1)).toBeCloseTo(2.27, 2);
+    // the rarer the flip, the larger the factor, and it never reaches 3 for 3 repeats
+    expect(flips(0.01, 3) / flips(0.01, 1)).toBeGreaterThan(flips(0.1, 3) / flips(0.1, 1));
+    expect(flips(0.001, 3) / flips(0.001, 1)).toBeLessThan(3);
+    const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+    expect(readme).not.toContain("A comparison of A and B with about that many flips is no change.");
+    expect(readme).toContain("A comparison of two single runs with about that many flips is no change.");
+    expect(readme).toContain("about 1.4 times `expected_flips` cases");
+    expect(readme).toContain("about 2.3 times");
+    const root = readFileSync(join(import.meta.dir, "..", "..", "..", "README.md"), "utf8");
+    expect(root).not.toContain("A change that flips about that many cases is no change.");
+    expect(root).toContain("about 1.4 to 2.3 times as many");
+  });
+
+  test("min_delta_hint is the largest mean pairwise difference of the main metrics, as the README and the report say, and not the largest difference", () => {
+    const r = compareRepeats(["noise-r1", "noise-r2", "noise-r3"].map((n) => loadRun(fx("nightly", n))));
+    const rate = r.views[0]?.metrics.find((m) => m.path === "items.rate");
+    const [lo, hi] = [Math.min(...(rate?.values as number[])), Math.max(...(rate?.values as number[]))];
+    expect(rate?.pairwise_spread as number).toBeLessThan(hi - lo); // with three runs the mean of the three pairs is under the largest difference
+    expect(r.views[0]?.min_delta_hint).toBe(rate?.pairwise_spread ?? null);
+    const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+    expect(readme).toContain("which is the mean difference between two runs and not the largest difference between two of them");
+  });
+});
+
+describe("what the README says of the policy and of the matrix's rule (#74)", () => {
+  const readme = readFileSync(join(import.meta.dir, "..", "README.md"), "utf8");
+
+  test("the rule of the matrix is a range that does not overlap and a gap, and not the first alone", () => {
+    const intro = readme.split("\n").slice(0, 6).join("\n");
+    expect(intro).toContain(`with a gap of at least ${GAP_FACTOR} times the wider of the two ranges`);
+    expect(intro).toContain("lies wholly on one side of the baseline's");
+    expect(intro).not.toMatch(/does not overlap/);
+  });
+
+  test("policy.ts imports lib/, as the README says, and nothing else of this repository", () => {
+    const source = readFileSync(join(import.meta.dir, "policy.ts"), "utf8");
+    const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1] as string);
+    expect(imports.length).toBeGreaterThan(0);
+    for (const specifier of imports) expect(specifier.startsWith("node:") || specifier.startsWith("../../../lib/"), specifier).toBe(true);
+    expect(imports).toContain("../../../lib/provenance.ts");
+    expect(readme).not.toContain("no imports of its own");
+    expect(readme).toContain("which imports only `lib/`");
   });
 });

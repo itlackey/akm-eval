@@ -53,6 +53,8 @@ export interface Unit {
 export interface Metric {
   path: string;
   of: ((units: Unit[]) => number | null) & { n?: (units: Unit[]) => number };
+  /** For a metric reported beside the judged ones: it has no better or worse direction, it is a count to look at (extract's planted.ambiguous). */
+  undirected?: true;
 }
 
 /** The cases of a run as one table. Most evals have one; retrieval has one for each of akm's commands and indexes (search, curate, ...). */
@@ -62,9 +64,11 @@ export interface View {
   binary: boolean;
   /** The eval has a per-case harm. */
   hasHarm: boolean;
+  /** What a score that is not a verdict is called, for the cases of several runs: `ndcg` (the default), or `difference` for a Harbor task. */
+  score?: string;
   units: Unit[];
   metrics: Metric[];
-  /** Metrics the matrix does not judge, reported beside them without a verdict of their own: retrieval's ndcg over the judged results alone, and the share judged. */
+  /** Metrics the matrix does not judge, reported beside them without a verdict of their own: retrieval's ndcg over the judged results alone and the share judged, extract's planted.ambiguous. */
   extra?: Metric[];
 }
 
@@ -92,7 +96,7 @@ export const EXTRACT_INSIGHT_CLASSES = ["insight", "preference", "buried"];
 
 type Adapter = (rows: Row[], summary: Row) => View[];
 
-const oneView = (units: Unit[], metrics: Metric[], hasHarm = true): View[] => [{ name: "", binary: true, hasHarm, units, metrics }];
+const oneView = (units: Unit[], metrics: Metric[], hasHarm = true, extra: Metric[] = []): View[] => [{ name: "", binary: true, hasHarm, units, metrics, extra }];
 
 const nightly: Adapter = (rows) =>
   oneView(
@@ -190,6 +194,7 @@ const judgeGate: Adapter = (rows) => {
 
 const extract: Adapter = (rows) => {
   const saidPlanted = (r: Row) => r.class === "planted" && Array.isArray(r.forbidden) && r.forbidden.length > 0;
+  const ambiguousPlanted = (r: Row) => r.class === "planted" && !saidPlanted(r) && Array.isArray(r.ambiguous) && r.ambiguous.length > 0;
   return oneView(
     rows.map((r) => (r.outcome === "error" || r.correct === null ? unit(r, null, "error", r.class) : unit(r, verdict(r.correct === true), `${r.outcome}${r.correct === true ? "" : ", wrong"}`, r.class, (r.class === "routine" && r.correct === false) || saidPlanted(r)))),
     [
@@ -197,6 +202,9 @@ const extract: Adapter = (rows) => {
       { path: "routine.rate", of: share((r) => r.correct === true, (r) => r.class === "routine") },
       { path: "planted.saved_instruction", of: tally(saidPlanted) },
     ],
+    true,
+    // planted sessions whose memory holds the planted phrase behind a negation the scorer cannot read, and no claim: not saved, not safe either. Read them.
+    [{ path: "planted.ambiguous", of: tally(ambiguousPlanted), undirected: true }],
   );
 };
 
@@ -219,9 +227,89 @@ const retrieval: Adapter = (rows) =>
     return { name: col, binary: false, hasHarm: false, units, metrics: [{ path: `${col}.ndcg_10`, of: Object.assign(mean, { n: (us: Unit[]) => us.length }) }], extra: [{ path: `${col}.ndcg_10_condensed`, of: meanOf("ndcg_10_condensed") }, { path: `${col}.judged_10`, of: meanOf("judged_10") }] };
   });
 
+const average = (xs: number[]): number | null => (xs.length === 0 ? null : xs.reduce((s, x) => s + x, 0) / xs.length);
+
+/**
+ * agent-ab and terminal-bench: a row is a task with every trial of it, both arms and every attempt (lib/harbor/score.ts). The task's score is the akm
+ * arm's mean reward minus the control's, over the trials the verifier gave a reward. That is the task's term in the paired difference, and `delta.value`
+ * is the mean of those terms (lib/harbor/report.ts). A task without a rewarded trial in each arm has no verdict. The harm metrics count trials and not
+ * tasks (akm trials that never got a reward, control trials that called akm), some of them in tasks with no verdict, so they are shown from the summaries.
+ */
+const harbor: Adapter = (rows) => {
+  const rewards = (r: Row, arm: "akm" | "control"): number[] => (Array.isArray(r.trials) ? r.trials : []).filter((t: Row) => t.arm === arm && num(t.reward) !== null).map((t: Row) => t.reward);
+  const difference = (r: Row): number | null => {
+    const [akm, control] = [average(rewards(r, "akm")), average(rewards(r, "control"))];
+    return akm === null || control === null ? null : akm - control;
+  };
+  const passed = (t: Row | undefined): string => (isObject(t) ? `${t.passed}/${t.scored}` : "–");
+  const units = rows.map((r) => {
+    const d = difference(r);
+    return d === null ? unit(r, null, "error", "") : unit(r, d, `control ${passed(r.control)}, akm ${passed(r.akm)}`, "");
+  });
+  return [{ name: "", binary: false, hasHarm: false, score: "difference", units, metrics: [{ path: "delta.value", of: Object.assign((us: Unit[]) => average(us.map((u) => u.score as number)), { n: (us: Unit[]) => us.length }) }], extra: [] }];
+};
+
+/** bakeoff: a row is a case of one of its processes. Right when the output has the shape and every check holds; `checks.rate` is the mean share of a case's checks that held. */
+const bakeoff: Adapter = (rows) => {
+  const checksHeld = (r: Row): number => {
+    const checks = Object.values(isObject(r.checks) ? r.checks : {});
+    return r.structure === true && checks.length > 0 ? checks.filter(Boolean).length / checks.length : 0;
+  };
+  const units = rows.map((r) => (r.outcome === "error" ? unit(r, null, "error", r.process) : unit(r, verdict(r.correct === true), `${r.outcome}${r.correct === true ? "" : ", wrong"}`, r.process)));
+  return oneView(
+    units,
+    [
+      { path: "case_pass.rate", of: share((r) => r.correct === true) },
+      { path: "checks.rate", of: Object.assign((us: Unit[]) => average(us.map((u) => checksHeld(u.row))), { n: (us: Unit[]) => us.length }) },
+    ],
+    false,
+    [{ path: "valid_output.rate", of: share((r) => r.structure === true) }],
+  );
+};
+
+/**
+ * longmemeval: a row is a question. `with_akm` is whether the judge marked the answer given with akm's five sessions correct, over the questions that arm
+ * answered; `retrieval` is the sessions akm returned, scored by its ndcg, over the questions with an answer in the history (the abstention questions are left
+ * out of the means, as in the benchmark). A retrieval-only run has no answers and so only the second table.
+ */
+const longmemeval: Adapter = (rows) => {
+  const views: View[] = [];
+  const arm = (r: Row, name: "with_akm" | "without_akm"): Row | null => (isObject(r[name]) && r[name].ok === true ? r[name] : null);
+  if (rows.some((r) => isObject(r.with_akm))) {
+    const units = rows.filter((r) => isObject(r.with_akm)).map((r) => (arm(r, "with_akm") === null ? unit(r, null, "error", r.question_type) : unit(r, verdict(arm(r, "with_akm")?.correct === true), arm(r, "with_akm")?.correct === true ? "right" : "wrong", r.question_type)));
+    const rate = share((r) => arm(r, "with_akm")?.correct === true, (r) => arm(r, "with_akm") !== null);
+    // with akm minus without it, over the questions both arms answered
+    const both = (us: Unit[]): Unit[] => us.filter((u) => arm(u.row, "with_akm") !== null && arm(u.row, "without_akm") !== null);
+    const difference = Object.assign((us: Unit[]) => average(both(us).map((u) => Number(arm(u.row, "with_akm")?.correct === true) - Number(arm(u.row, "without_akm")?.correct === true))), { n: (us: Unit[]) => both(us).length });
+    views.push({ name: "with_akm", binary: true, hasHarm: false, units, metrics: [{ path: "accuracy.with_akm.rate", of: rate }], extra: [{ path: "accuracy.difference.value", of: difference }] });
+  }
+  if (rows.some((r) => isObject(r.retrieval))) {
+    const searched = rows.filter((r) => isObject(r.retrieval) && r.abstention !== true);
+    const units = searched.map((r) => unit(r, num(r.retrieval.ndcg), `ndcg ${num(r.retrieval.ndcg)?.toFixed(3) ?? "–"}`, r.question_type));
+    const mean = (field: string) => Object.assign((us: Unit[]) => average(us.flatMap((u) => (num(u.row.retrieval?.[field]) === null ? [] : [num(u.row.retrieval[field]) as number]))), { n: (us: Unit[]) => us.length });
+    const hit = Object.assign((us: Unit[]) => average(us.map((u) => Number(u.row.retrieval?.hit === true))), { n: (us: Unit[]) => us.length });
+    views.push({ name: "retrieval", binary: false, hasHarm: false, units, metrics: [{ path: "retrieval.hit_rate", of: hit }, { path: "retrieval.recall", of: mean("recall") }], extra: [{ path: "retrieval.mrr", of: mean("mrr") }, { path: "retrieval.ndcg", of: mean("ndcg") }] });
+  }
+  return views;
+};
+
+const SKILLRET_LINES = ["search", "semantic_search"];
+
+/** skillret: a row is a query, asked of the keyword index and, in a run without --limit, the semantic one. Its score is the NDCG@10 of the ranking akm returned; a call that failed has none. */
+const skillret: Adapter = (rows) =>
+  SKILLRET_LINES.filter((line) => rows.some((r) => isObject(r[line]))).map((line) => {
+    const at = (r: Row, name: string): number | null => num(r[line]?.scores?.[name]);
+    const units = rows.map((r) => {
+      const ndcg = at(r, "NDCG@10");
+      return unit(r, ndcg, ndcg === null ? "no score" : `ndcg ${ndcg.toFixed(3)}`, Array.isArray(r.relevant) ? `${r.relevant.length} needed` : "");
+    });
+    const mean = (name: string) => Object.assign((us: Unit[]) => average(us.flatMap((u) => (at(u.row, name) === null ? [] : [at(u.row, name) as number]))), { n: (us: Unit[]) => us.length });
+    return { name: line, binary: false, hasHarm: false, units, metrics: [{ path: `${line}.NDCG@10`, of: mean("NDCG@10") }], extra: ["Recall@10", "Completeness@10", "MAP@10"].map((name) => ({ path: `${line}.${name}`, of: mean(name) })) };
+  });
+
 /** The eval names compare can read, with how a summary picks the reading (consolidate --pool is another set of rows). */
-const ADAPTERS: Record<string, Adapter> = { nightly, consolidate, "consolidate-pool": consolidatePool, distill, reflect, promotion, "judge-gate": judgeGate, extract, retrieval };
-export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval"];
+const ADAPTERS: Record<string, Adapter> = { nightly, consolidate, "consolidate-pool": consolidatePool, distill, reflect, promotion, "judge-gate": judgeGate, extract, retrieval, "agent-ab": harbor, "terminal-bench": harbor, bakeoff, longmemeval, skillret };
+export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret"];
 
 // ---- reading a results folder ---------------------------------------------------------------------------------------------
 
@@ -566,8 +654,8 @@ export interface Flip {
   delta: number;
 }
 
-/** A metric the matrix does not judge, reported beside the ones it does (retrieval's ndcg over the judged results, and the share judged). */
-export type InfoReport = Omit<MetricReport, "role"> & { role: "info" };
+/** A metric the matrix does not judge, reported beside the ones it does (retrieval's ndcg over the judged results and the share judged, extract's planted.ambiguous). Its direction is null for a count to look at. */
+export type InfoReport = Omit<MetricReport, "role" | "dir"> & { role: "info"; dir: Dir | null };
 
 export interface MetricReport {
   path: string;
@@ -701,12 +789,13 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
   if (paired.length === 0) fail(`the two runs have no case in common that both gave a verdict${va[0].name ? ` (${va[0].name})` : ""}: A has ${idsA.size} cases, B has ${idsB.size}, ${both.length} are in both`);
 
   const binary = va[0].binary;
+  const scoreWord = va[0].score ?? "ndcg";
   const unitOf = (maps: Map<string, Unit>[], id: string): Unit => maps.find((m) => m.has(id))!.get(id)!;
   /** What a side did with a case: the run's own words, or for several runs how often it was right. */
   const stateOf = (maps: Map<string, Unit>[], id: string): string => {
     const xs = scores(maps, id);
     if (maps.length === 1) return unitOf(maps, id).state;
-    return binary ? `${xs.filter((x) => x === 1).length}/${xs.length} right` : `ndcg ${meanOf(xs).toFixed(3)} (mean of ${xs.length})`;
+    return binary ? `${xs.filter((x) => x === 1).length}/${xs.length} right` : `${scoreWord} ${meanOf(xs).toFixed(3)} (mean of ${xs.length})`;
   };
   const harmOf = (maps: Map<string, Unit>[], id: string): number => {
     const us = maps.flatMap((m) => (m.get(id)?.score != null ? [m.get(id)!] : []));
@@ -753,9 +842,9 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
   const [ua, ub] = [side(mapsA), side(mapsB)];
   const metrics: MetricReport[] = [];
   const pairedUnits = paired.map((id) => unitOf(mapsA, id));
-  const report = <R extends MetricReport["role"] | "info">(path: string, role: R, dir: Dir, metric: Metric) => {
+  const report = <R extends MetricReport["role"] | "info", D extends Dir | null>(path: string, role: R, dir: D, metric: Metric) => {
     const e = setBootstrap(ua, ub, metric.of, indexes, opts.resamples);
-    return { path, role, dir, n: metric.of.n?.(pairedUnits) ?? null, a: round(e.a), b: round(e.b), delta: round(e.delta), ci: (e.lo === null || e.hi === null ? null : [round(e.lo) as number, round(e.hi) as number]) as [number, number] | null, resamples_used: e.used, signal: signalOf(dir, e) };
+    return { path, role, dir, n: metric.of.n?.(pairedUnits) ?? null, a: round(e.a), b: round(e.b), delta: round(e.delta), ci: (e.lo === null || e.hi === null ? null : [round(e.lo) as number, round(e.hi) as number]) as [number, number] | null, resamples_used: e.used, signal: role === "info" || dir === null ? ("n/a" as Signal) : signalOf(dir, e) };
   };
   for (const spec of EVAL_METRICS[evalName]) {
     const [metricA, metricB] = [va[0].metrics.find((m) => m.path === spec.path), vb[0].metrics.find((m) => m.path === spec.path)];
@@ -763,7 +852,7 @@ function compareView(evalName: string, va: View[], vb: View[], opts: Options, na
     metrics.push(report(spec.path, spec.role, spec.dir, metricA));
   }
   const info: InfoReport[] = [];
-  for (const x of va[0].extra ?? []) if (vb[0].extra?.some((y) => y.path === x.path)) info.push(report(x.path, "info", "up", x));
+  for (const x of va[0].extra ?? []) if (vb[0].extra?.some((y) => y.path === x.path)) info.push(report(x.path, "info", x.undirected ? null : "up", x));
   const scoredIn = (maps: Map<string, Unit>[], id: string): boolean => scores(maps, id).length > 0;
   const coverage: Coverage = {
     selected_a: idsA.size,
@@ -1055,7 +1144,7 @@ export interface RepeatsViewReport {
   cases: CaseRate[];
   by_group: { group: string; n: number; unstable: number; flip_rate: number }[];
   metrics: SpreadReport[];
-  /** The largest pairwise spread of a main metric: a change smaller than this is within what two runs of one configuration show. */
+  /** The largest `pairwise_spread` of a main metric, which is the mean difference between two runs and not the largest: a change smaller than this is within what two runs of one configuration show. */
   min_delta_hint: number | null;
 }
 
@@ -1233,7 +1322,7 @@ export function renderPair(r: PairReport): string {
     out.push(`Scored: A ${c.scored_a} of ${c.selected_a} cases, B ${c.scored_b} of ${c.selected_b}${c.errored_a.length + c.errored_b.length > 0 ? ` (errored: A ${c.errored_a.length > 0 ? listIds(c.errored_a) : "none"}; B ${c.errored_b.length > 0 ? listIds(c.errored_b) : "none"})` : ""}. Every number below is over the ${v.n_paired} scored in both.${c.scored_only_a.length + c.scored_only_b.length > 0 ? ` Scored on one side only, and so left out: ${[c.scored_only_a.length > 0 ? `in A ${listIds(c.scored_only_a)}` : "", c.scored_only_b.length > 0 ? `in B ${listIds(c.scored_only_b)}` : ""].filter(Boolean).join("; ")}.` : ""}`, "");
     if (v.metrics.length + v.info.length > 0) {
       out.push("| metric | A | B | B − A | 95% interval | cases | |", "|---|---|---|---|---|---|---|");
-      for (const m of [...v.metrics, ...v.info]) out.push(`| ${m.path} ${ARROW[m.dir]}${m.role === "harm" ? " (harm)" : m.role === "info" ? " (not judged)" : ""} | ${fmt(m.a)} | ${fmt(m.b)} | ${signed(m.delta)} | ${m.ci ? `${signed(m.ci[0])} to ${signed(m.ci[1])}` : "–"} | ${m.n === null ? v.n_paired : m.n} of ${v.n_paired} | ${SIGNAL[m.signal]} |`);
+      for (const m of [...v.metrics, ...v.info]) out.push(`| ${m.path}${m.dir === null ? "" : ` ${ARROW[m.dir]}`}${m.role === "harm" ? " (harm)" : m.role === "info" ? (m.dir === null ? " (a count to look at, not judged)" : " (not judged)") : ""} | ${fmt(m.a)} | ${fmt(m.b)} | ${signed(m.delta)} | ${m.ci ? `${signed(m.ci[0])} to ${signed(m.ci[1])}` : "–"} | ${m.n === null ? v.n_paired : m.n} of ${v.n_paired} | ${SIGNAL[m.signal]} |`);
       out.push("");
     }
     if (v.better.length > 0) out.push("### Flipped to better", "", ...listFlips(v.better, v.binary), "");
