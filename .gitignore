@@ -10,5 +10,4 @@ evals/*/results/*
 benchmarks/*/results/*
 !evals/*/results/.gitkeep
 !benchmarks/*/results/.gitkeep
-evals/bakeoff/models.yaml
 models.json

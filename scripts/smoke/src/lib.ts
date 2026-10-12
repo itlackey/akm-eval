@@ -144,7 +144,7 @@ export const ENTRIES: Entry[] = [
   { dir: "evals/nightly" },
   { dir: "evals/promotion", needs: "akm's embedding model, which akm downloads into .cache/models the first time (133 MB, from huggingface.co)" },
   { dir: "evals/agent-ab", skip: "needs Docker" },
-  { dir: "evals/bakeoff", skip: "never runs akm" },
+  { dir: "evals/bakeoff", skip: "the smoke has no canned replies for its five commands yet" },
   { dir: "benchmarks/terminal-bench", skip: "needs Docker" },
   { dir: "benchmarks/longmemeval", skip: "downloads the LongMemEval dataset" },
   { dir: "benchmarks/skillret", skip: "downloads the SkillRet dataset" },

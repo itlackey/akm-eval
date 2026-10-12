@@ -6,10 +6,9 @@
 # With no name it runs all four, the quick ones first:
 #   measurement  MEASUREMENT.lock against the files of every eval's collector and scorer: a change to either that is not bumped fails
 #   typecheck  bun install --frozen-lockfile and tsc in every src folder that has a tsconfig.json
-#   python     the bakeoff suite (verify and unittest) and the tests of the akm arm in lib/harbor, with uv
+#   python     the tests of the akm arm in lib/harbor, with uv
 #   test       bun test at the root. Every test uses a fake akm, so none needs akm or Docker, and an akm on PATH or an AKM_BIN in the
-#              environment changes nothing. The few tests that run a real akm run only with AKM_EVAL_REAL_AKM=1. The tests of
-#              bakeoff's --help need uv, and are skipped without it
+#              environment changes nothing. The few tests that run a real akm run only with AKM_EVAL_REAL_AKM=1
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
@@ -39,8 +38,6 @@ run_python() {
   local harbor
   harbor="$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)"
   [ -n "$harbor" ] || { echo "check: could not read the Harbor pin from lib/harbor/harbor.ts" >&2; return 1; }
-  uv run --project evals/bakeoff/src --frozen python evals/bakeoff/src/bakeoff.py verify || return 1
-  uv run --project evals/bakeoff/src --frozen python -m unittest discover -s evals/bakeoff/src || return 1
   uv run --no-project --python 3.12 --with "harbor==$harbor" --with pytest pytest lib/harbor || return 1
 }
 

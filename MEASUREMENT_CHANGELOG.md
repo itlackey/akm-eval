@@ -37,3 +37,5 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | extract | scorer | 1 | first lock entry; the scorer flags a negation over a verb the shared rule does not list as ambiguous (row.ambiguous, planted.ambiguous; #45) | ef8c7daf8a23 |
 | 2026-10-12 | judge-gate | collector | 1 | first lock entry | de09348fb964 |
 | 2026-10-12 | judge-gate | scorer | 1 | first lock entry | e2d745fa97c2 |
+| 2026-10-12 | bakeoff | collector | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | fb2b423bb008 |
+| 2026-10-12 | bakeoff | scorer | 1 | first lock entry; bakeoff now drives akm's own jobs through lib/akm (#46) | 2ca17e24721e |

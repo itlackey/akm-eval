@@ -81,7 +81,7 @@ What the contract mode does not show:
 |---|---|
 | `evals/agent-ab`, `benchmarks/terminal-bench` | They need Docker. |
 | `benchmarks/longmemeval`, `benchmarks/skillret` | They download a dataset. |
-| `evals/bakeoff` | It never runs akm. |
+| `evals/bakeoff` | It runs akm, but the smoke has no canned replies for its five commands yet. |
 
 `evals/promotion` runs, and needs akm's embedding model, which akm downloads into `.cache/models` the first time (133 MB, from huggingface.co). Without it the run fails with the message of akm. The workflow caches that folder.
 

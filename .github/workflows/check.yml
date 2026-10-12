@@ -28,7 +28,7 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      # uv runs the bakeoff suite and the tests of the akm arm in lib/harbor. Nothing is cached.
+      # uv runs the tests of the akm arm in lib/harbor. Nothing is cached.
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: false
