@@ -3,13 +3,15 @@
 #
 # Settings are KEY=value lines. A line may start with spaces and may start with `export `, and a key may be followed by spaces
 # before the `=`. A blank line, a line that starts with # and a line with no = are skipped. A value in "double" or 'single'
-# quotes loses its quotes and is otherwise taken as it is, # included.
+# quotes loses its quotes and is otherwise taken as it is, # included. After the closing quote, a space and a # start a comment, so
+# `MODEL_NAME="small" # the local one` is `small`.
 # An unquoted value ends at a # that has a space before it, so `MODEL_NAME=small # the local one` is `small`.
 # A variable that is already set wins, so a setting given on the command line beats .env.
 
 # Exports the settings of the file `$1`, if it exists. Its locals start with _env_, so a setting never hides behind one.
 load_env() {
   local _env_file="$1" _env_line _env_key _env_val _env_stripped
+  local _env_dq='^"([^"]*)"([[:space:]]+#.*|[[:space:]]*)$' _env_sq="^'([^']*)'([[:space:]]+#.*|[[:space:]]*)\$"
   [ -f "$_env_file" ] || return 0
   while IFS= read -r _env_line || [ -n "$_env_line" ]; do
     _env_line="${_env_line%$'\r'}"
@@ -22,7 +24,7 @@ load_env() {
     _env_key="${_env_key%"${_env_key##*[![:space:]]}"}"
     _env_val="${_env_line#*=}"
     [[ "$_env_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-    if [[ "$_env_val" =~ ^\"(.*)\"$ ]] || [[ "$_env_val" =~ ^\'(.*)\'$ ]]; then
+    if [[ "$_env_val" =~ $_env_dq ]] || [[ "$_env_val" =~ $_env_sq ]] || [[ "$_env_val" =~ ^\"(.*)\"$ ]] || [[ "$_env_val" =~ ^\'(.*)\'$ ]]; then
       _env_val="${BASH_REMATCH[1]}"
     elif [[ "$_env_val" != \"* && "$_env_val" != \'* ]]; then
       _env_stripped="${_env_val%%[[:space:]]#*}"

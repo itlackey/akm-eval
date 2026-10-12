@@ -62,12 +62,21 @@ export function harnessSha256(evalSrcDir: string, options: { also?: string[]; ro
   return manifestDigest([...paths].map((path) => [relative(base, path).split(sep).join("/"), sha256File(path)]));
 }
 
-/** A `$NAME` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
-const VARIABLE = /^\$[A-Za-z_][A-Za-z0-9_]*$/;
+/** A `$NAME` or `${NAME}` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
+const VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/;
 const REDACTED = "<redacted>";
 
-/** Does a field of a config, or a header, hold a credential, going by its name: authorization, x-api-key, api-key, access_token, client_secret, password, apiKey, or any other name ending in key, token, secret or password, in any case. maxTokens and tokenizer do not. */
-const credentialField = (name: string): boolean => /(?:key|secret|password|passwd|credential)s?$|(?:token|authorization)$|^(?:set-)?cookie$/.test(name.toLowerCase());
+/**
+ * Does a name hold a credential: the name of a field of a config, of a header, of a command-line flag or of an environment variable. It
+ * does when it ends in key, secret, password, passwd, pwd, passphrase, credential, token, authorization or cookie, in any case
+ * (authorization, x-api-key, access_token, client_secret, apiKey, MYSQL_PWD, SESSION_COOKIE), or when its last word is auth, bearer, pat or
+ * pass (auth, bearer, GH_PAT, dbPass). maxTokens, tokenizer, author, path and bypass do not. This is the one rule for a credential's name:
+ * redactConfig, and whatever else must decide by a name, use it.
+ */
+export const credentialField = (name: string): boolean => {
+  const spelled = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase(); // apiKey is api_key, ghPat is gh_pat
+  return /(?:key|secret|password|passwd|pwd|passphrase|credential)s?$|(?:token|authorization|cookie)$|(?:^|[^a-z0-9])(?:auth|bearer|pat|pass)$/.test(spelled);
+};
 
 /** Is this text, which is a value, the name of a credential header or field: a single word that credentialField says holds a credential. */
 const credentialName = (text: unknown): boolean => typeof text === "string" && /^[A-Za-z0-9_.-]+$/.test(text) && credentialField(text);
@@ -114,18 +123,24 @@ function cleanText(text: string): string {
 /**
  * A deep copy of the config that is safe to write to a summary.json, for every engine and every field:
  *  - the value under a credential field is replaced by "<redacted>", at any depth, in objects and in arrays. A field is a credential
- *    by its name (see credentialField): apiKey, api_key, token, secret, password, authorization, x-api-key, client_secret, and the like.
- *    A header in a list is covered too, as a "Name: value" line, as a ["Name", "value"] pair or as {name, value}.
+ *    by its name (see credentialField): apiKey, api_key, token, secret, password, authorization, auth, bearer, pat, pass, x-api-key,
+ *    client_secret, and the like. A header in a list is covered too, as a "Name: value" line, as a ["Name", "value"] pair or as {name, value},
+ *    and so is the word after a credential flag at any place in a list of arguments: ["serve", "--api-key", "sk-...", "--port", "80"].
  *  - in every string that holds a URI, such as an engine's endpoint or a registry's URL, the user name and password before the host
  *    and the fragment are removed, and the value of each credential parameter of the query (api_key, key, token, access_token, auth,
  *    sig, signature, password, secret, in any case) is replaced by "<redacted>". The scheme, host, port and path stay.
- * A `$NAME` reference to an environment variable holds no secret, and stays wherever it is: as the value of apiKey or of ?api_key=.
+ * A `$NAME` or `${NAME}` reference to an environment variable holds no secret, and stays wherever it is: as the value of apiKey or of ?api_key=.
  */
 export function redactConfig(config: any): any {
   if (typeof config === "string") return cleanText(config);
   if (Array.isArray(config)) {
     const pair = config.length === 2 && credentialName(config[0]) && typeof config[1] === "string" && !VARIABLE.test(config[1]);
-    return pair ? [cleanText(config[0]), REDACTED] : config.map(redactConfig);
+    if (pair) return [cleanText(config[0]), REDACTED];
+    return config.map((item, i) => {
+      const flag = config[i - 1];
+      const value = typeof item === "string" && typeof flag === "string" && flag.startsWith("-") && credentialName(flag) && !item.startsWith("-") && !VARIABLE.test(item);
+      return value ? REDACTED : redactConfig(item);
+    });
   }
   if (typeof config !== "object" || config === null) return config;
   const named = ["name", "key", "header"].some((field) => credentialName(config[field])); // {name: "X-Api-Key", value: "..."}

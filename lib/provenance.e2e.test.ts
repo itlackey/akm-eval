@@ -17,8 +17,9 @@ const MODEL_KEY = "DUMMY_MODEL_KEY";
 const BASE_URL = `https://dummy-user:${USER_PASSWORD}@gateway.example:8443/v1?api_key=${QUERY_SECRET}`;
 const SECRETS = [QUERY_SECRET, USER_PASSWORD, MODEL_KEY];
 
-/** A fake akm for distill. `improve` logs the endpoint and the key it was given, and fails for the case whose bundle says so, naming the endpoint as akm does. */
-const FAKE_AKM = `
+/** A fake akm for distill. `improve` logs the endpoint and the key it was given, and fails for the case whose bundle says so, naming the endpoint as akm does. The log is a path in the script, since akm gets none of the test's variables. */
+const FAKE_AKM = (log: string) => `
+const LOG = ${JSON.stringify(log)};
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 const args = process.argv.slice(2);
@@ -27,7 +28,7 @@ if (args[0] === "--version") { console.log("0.9.99-test"); process.exit(0); }
 if (args[0] === "improve") {
   const config = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, "config.json"), "utf8"));
   const endpoint = config.engines.model.endpoint;
-  appendFileSync(env.FAKE_LOG, JSON.stringify({ endpoint, apiKey: config.engines.model.apiKey, modelKey: env.MODEL_API_KEY ?? null }) + "\\n");
+  appendFileSync(LOG, JSON.stringify({ endpoint, apiKey: config.engines.model.apiKey, modelKey: env.MODEL_API_KEY ?? null }) + "\\n");
   if (JSON.parse(readFileSync(join(env.AKM_BUNDLE_DIR, "fake.json"), "utf8")).fail) {
     console.error(JSON.stringify({ ok: false, error: "request to " + endpoint + " was refused", code: "FAKE" }));
     process.exit(78);
@@ -48,17 +49,17 @@ beforeAll(() => {
   const root = mkdtempSync(join(tmpdir(), "provenance-e2e-fake-"));
   dirs.push(root);
   const script = join(root, "fake-akm.ts");
-  writeFileSync(script, FAKE_AKM);
   log = join(root, "calls.jsonl");
-  saved = { AKM_BIN: process.env.AKM_BIN, FAKE_LOG: process.env.FAKE_LOG, MODEL_API_KEY: process.env.MODEL_API_KEY };
+  writeFileSync(script, FAKE_AKM(log));
+  saved = { AKM_BIN: process.env.AKM_BIN, MODEL_API_KEY: process.env.MODEL_API_KEY };
   process.env.AKM_BIN = commandLine(["bun", script]); // the fake this test wrote, whatever the caller has
-  process.env.FAKE_LOG = log;
 });
 afterAll(() => {
   for (const [k, v] of Object.entries(saved)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); // the folder of the fake akm, which afterEach keeps
 });
 afterEach(() => {
   for (const d of dirs.splice(1)) rmSync(d, { recursive: true, force: true });
@@ -129,9 +130,9 @@ describe("what a run writes holds no endpoint credential", () => {
 
     // And the summary still says which endpoint it was: scheme, host, port and path, with the credentials gone.
     const stored = JSON.parse(written["summary.json"]);
-    expect(stored.config.engines.model.endpoint).toStartWith("https://gateway.example:8443/v1?api_key=<redacted>");
+    expect(stored.config.engines.model.endpoint).toBe("https://gateway.example:8443/v1/chat/completions?api_key=<redacted>");
     expect(stored.config.engines.model.apiKey).toBe("$MODEL_API_KEY");
-    expect(stored.engine.endpoint).toBe("https://gateway.example:8443/v1?api_key=<redacted>");
+    expect(stored.engine.endpoint).toBe("https://gateway.example:8443/v1/chat/completions?api_key=<redacted>");
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, n_errored: 1 });
     expect(existsSync(join(summary.results_dir, "summary.json"))).toBe(true);
   });

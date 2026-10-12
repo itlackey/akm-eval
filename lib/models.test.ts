@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Endpoint, MODEL_OPTIONS, type ModelEntry, loadModels, privateModelError, resolveModel, useJudge, useModel } from "./models.ts";
@@ -11,6 +11,11 @@ const TERRA: Record<string, ModelEntry> = { "gpt-5.6-terra": { base_url: "https:
 const stop = (message: string): never => {
   throw new Error(message);
 };
+
+const dirs: string[] = [];
+afterEach(() => {
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 describe("resolveModel", () => {
   test("the id is the flag, else MODEL_NAME, and goes to the gateway of .env with its key", () => {
@@ -118,7 +123,9 @@ describe("useModel", () => {
 
 describe("loadModels", () => {
   const write = (text: string) => {
-    const file = join(mkdtempSync(join(tmpdir(), "models-test-")), "models.json");
+    const dir = mkdtempSync(join(tmpdir(), "models-test-"));
+    dirs.push(dir);
+    const file = join(dir, "models.json");
     writeFileSync(file, text);
     return file;
   };
@@ -126,6 +133,20 @@ describe("loadModels", () => {
   test("is empty when there is no file, and reads the lines of one", () => {
     expect(loadModels(join(tmpdir(), "no-such-dir-for-models", "models.json"))).toEqual({});
     expect(loadModels(write(JSON.stringify(TERRA)))).toEqual(TERRA);
+  });
+
+  test("refuses a key it does not know, and says that an api_key belongs in the environment", () => {
+    const line = (extra: string) => `{"a":{"base_url":"http://h/v1"${extra}}}`;
+    expect(() => loadModels(write(line(',"api_key":"sk-SYNTH-secret"')))).toThrow('models.json: "a" has an unknown key "api_key": a key belongs in the environment. Set it in .env and name its variable in api_key_env.');
+    expect(() => loadModels(write(line(',"privat":true')))).toThrow('models.json: "a" has an unknown key "privat". The keys of a line are model, base_url, api_key_env, private');
+    expect(() => loadModels(write('{"ok":{"base_url":"http://h/v1"},"b":{"base_url":"http://h/v1","baseUrl":"x"}}'))).toThrow('"b" has an unknown key "baseUrl"');
+    try {
+      loadModels(write(line(',"api_key":"sk-SYNTH-secret"')));
+    } catch (e) {
+      expect((e as Error).message).not.toContain("SYNTH"); // the message names the key, never its value
+    }
+    // every key a line may have still passes
+    expect(loadModels(write('{"a":{"base_url":"http://h/v1","model":"m","api_key_env":"A_KEY","private":true}}'))).toEqual({ a: { base_url: "http://h/v1", model: "m", api_key_env: "A_KEY", private: true } });
   });
 
   test("refuses a line without a URL, a key where the name of one belongs, and a file that is not an object", () => {

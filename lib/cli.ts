@@ -2,6 +2,8 @@
 // the label a model name makes, and the two texts that get written into results or printed: the model endpoint hidden, and
 // what akm said when a command failed.
 
+import { completionsUrl } from "./akm/akm.ts";
+
 /** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
 export class Fatal extends Error {
   constructor(
@@ -30,13 +32,15 @@ export const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g
 /**
  * `value` with the model's endpoint written as <MODEL_BASE_URL>, in every string of it. akm's errors and the config the
  * eval writes name the endpoint, and it may carry a key or a user name, and results get shared. The base URL is
- * replaced where it stands, so the path after it stays: `<MODEL_BASE_URL>/chat/completions`. A string, an array or an
+ * replaced where it stands, so the path after it stays: `<MODEL_BASE_URL>/chat/completions`. The endpoint of a base URL with a query
+ * has the path before the query (see completionsUrl), so it is replaced as a whole. A string, an array or an
  * object goes in and comes out as itself, a copy. Without a base URL nothing is replaced.
  */
 export function hideEndpoint<T>(value: T, baseUrl: string): T {
   const base = baseUrl.replace(/\/+$/, "");
+  const endpoint = completionsUrl(baseUrl);
   const hide = (x: unknown): unknown => {
-    if (typeof x === "string") return base === "" ? x : x.split(base).join("<MODEL_BASE_URL>");
+    if (typeof x === "string") return base === "" ? x : x.split(endpoint).join(endpoint === base ? "<MODEL_BASE_URL>" : "<MODEL_BASE_URL>/chat/completions").split(base).join("<MODEL_BASE_URL>");
     if (Array.isArray(x)) return x.map(hide);
     if (typeof x === "object" && x !== null) return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, hide(v)]));
     return x;

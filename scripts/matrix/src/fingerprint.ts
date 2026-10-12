@@ -95,7 +95,7 @@ export function corpusPaths(evalName: string, args: string[]): string[] {
 /** The digest of the corpus a job reads: each path of corpusPaths, by name, with the digest of its bytes. It holds no content and no checkout path. */
 const corpusDigest = (root: string, evalName: string, args: string[]): string => sha256(corpusPaths(evalName, args).map((path) => `${path}\0${digestPath(root, path)}\n`).join(""));
 
-/** The settings of a `.env` the way lib/env.sh reads them: KEY=value lines, `export ` allowed, quotes dropped, an unquoted value ends at ` #`; the first line of a key wins. */
+/** The settings of a `.env` the way lib/env.sh reads them: KEY=value lines, `export ` allowed, quotes dropped, an unquoted value ends at ` #`, a quoted one at its closing quote and a ` #` comment after it; the first line of a key wins. */
 export function readDotEnv(file: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!existsSync(file)) return out;
@@ -108,9 +108,12 @@ export function readDotEnv(file: string): Record<string, string> {
     const key = line.slice(0, eq).trimEnd();
     let value = line.slice(eq + 1);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-    const quoted = /^"(.*)"$/.exec(value) ?? /^'(.*)'$/.exec(value);
+    const quoted = /^"([^"]*)"(?:\s+#[^]*|\s*)$/.exec(value) ?? /^'([^']*)'(?:\s+#[^]*|\s*)$/.exec(value) ?? /^"([^]*)"$/.exec(value) ?? /^'([^]*)'$/.exec(value);
     if (quoted) value = quoted[1];
-    else if (!value.startsWith('"') && !value.startsWith("'")) value = value.replace(/\s#.*$/, "").trimEnd();
+    else if (!value.startsWith('"') && !value.startsWith("'")) {
+      const stripped = value.replace(/\s#[^]*$/, "");// env.sh trims the space before a comment, and leaves the end of a value that has none
+      if (stripped !== value) value = stripped.trimEnd();
+    }
     if (!(key in out)) out[key] = value;
   }
   return out;

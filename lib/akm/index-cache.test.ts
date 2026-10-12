@@ -88,12 +88,13 @@ describe("cachedIndex", () => {
 
   test("keeps the config that the build wrote, such as bundles that are indexed where they are", async () => {
     const s = setup();
-    const first = await s.open({}, async (sandbox) => {
+    const make = async (sandbox: Sandbox): Promise<number> => {
       writeFileSync(join(sandbox.dir, "config", "config.json"), JSON.stringify({ semanticSearchMode: "auto", bundles: { notes: { path: "/somewhere" } } }));
       return s.build(sandbox);
-    });
+    };
+    const first = await s.open({}, make);
     first.release();
-    const second = await s.open();
+    const second = await s.open({}, make);
     second.release();
     expect(second.state).toBe("warm");
     expect(JSON.parse(readFileSync(join(s.folder, "config", "config.json"), "utf8")).bundles).toEqual({ notes: { path: "/somewhere" } });
@@ -146,7 +147,7 @@ describe("cachedIndex", () => {
       expect(index.state).toBe("cold");
       index.release();
     }
-    expect(s.log.filter((l) => l.includes("akm, its build, its embedding model or the index's folder is not the same"))).toHaveLength(2);
+    expect(s.log.filter((l) => l.includes("akm, its build, its embedding model, the code that lays out the bundle or the index's folder is not the same"))).toHaveLength(2);
 
     // a copy of the cache in another place is not the index that akm made, because akm recorded the paths
     const moved = tmp();
@@ -154,6 +155,35 @@ describe("cachedIndex", () => {
     const other = await cachedIndex({ name: "skillret-public", version: "0.9.100", files: files(), extra: "bundles indexed in place", root: join(moved, "cache"), cmd: ["bun", s.script], log: (l) => void s.log.push(l) }, s.build);
     expect(other.state).toBe("cold");
     other.release();
+  });
+
+  test("never uses an index that other code laid out: another builder, or a change to a file the builder names", async () => {
+    const s = setup();
+    const lay = join(s.root, "layout.ts");
+    writeFileSync(lay, "export const layout = 'bundle/skills';\n");
+    const make = (sandbox: Sandbox) => s.build(sandbox);
+    (await s.open({ builder: [lay] }, make)).release();
+    const warm = await s.open({ builder: [lay] }, make);
+    expect(warm.state).toBe("warm"); // the same builder and the same file
+    warm.release();
+
+    const relaid = async (sandbox: Sandbox): Promise<number> => {
+      const entries = await s.build(sandbox); // the same files, laid out by other code
+      return entries;
+    };
+    const other = await s.open({ builder: [lay] }, relaid);
+    expect(other.state).toBe("cold");
+    other.release();
+    expect(s.log[s.log.length - 1]).toContain("the code that lays out the bundle");
+
+    writeFileSync(lay, "export const layout = 'skills';\n"); // a file the builder calls into
+    const edited = await s.open({ builder: [lay] }, relaid);
+    expect(edited.state).toBe("cold");
+    edited.release();
+    expect(s.builds.map((b) => b.fresh)).toEqual([true, true, true]); // each from nothing
+    const again = await s.open({ builder: [lay] }, relaid);
+    expect(again.state).toBe("warm");
+    again.release();
   });
 
   test("removes an index that was not finished, and one whose build failed, and builds a new one", async () => {
@@ -249,7 +279,7 @@ describe("cachedIndex", () => {
       expect(other.builtBy.akm_build).toBe(after);
       const bin = other.builtBy.akm_bin;
       expect(s.log[s.log.length - 1]).toBe(
-        `  the index skillret-public in the cache cannot be reused: akm, its build, its embedding model or the index's folder is not the same: it was built by akm 0.9.99 build ${before} (${bin}), and this run is akm 0.9.99 build ${after} (${bin}). Building a new one.`,
+        `  the index skillret-public in the cache cannot be reused: akm, its build, its embedding model, the code that lays out the bundle or the index's folder is not the same: it was built by akm 0.9.99 build ${before} (${bin}), and this run is akm 0.9.99 build ${after} (${bin}). Building a new one.`,
       );
       const last = await s.open(spec); // and the build that is kept is the one that was built last
       last.release();
@@ -292,7 +322,7 @@ describe("cachedIndex", () => {
       expect(two.builtBy.akm_build).toBe(one.builtBy.akm_build);
       expect(two.builtBy.akm_build_fingerprint).not.toBe(one.builtBy.akm_build_fingerprint);
       expect(s.builds).toEqual([{ fresh: true }, { fresh: true }, { fresh: true }]); // from nothing, each time
-      expect(s.log[s.log.length - 1]).toContain("akm, its build, its embedding model or the index's folder is not the same: it was built by akm 0.9.99 build");
+      expect(s.log[s.log.length - 1]).toContain("akm, its build, its embedding model, the code that lays out the bundle or the index's folder is not the same: it was built by akm 0.9.99 build");
       expect(s.log[s.log.length - 1]).toContain(`changes ${one.builtBy.akm_build_fingerprint?.slice(0, 12)}`);
       expect(s.log[s.log.length - 1]).toContain(`changes ${two.builtBy.akm_build_fingerprint?.slice(0, 12)}`);
     });
@@ -340,8 +370,9 @@ describe("cachedIndex", () => {
       (await s.open()).release();
       const path = join(s.folder, "state.json");
       const saved = JSON.parse(readFileSync(path, "utf8"));
-      // the key as it was computed before the fingerprint, from the same parts
-      const before = digest([saved.builtBy.version, saved.builtBy.akm_bin, saved.builtBy.akm_build ?? "", SEMANTIC_MODEL, s.folder, "", JSON.stringify(semanticConfig())].join("\0"));
+      // the key as it was computed before the fingerprint, from the same parts and the digest of the builder
+      const builder = digest(s.build.toString());
+      const before = digest([saved.builtBy.version, saved.builtBy.akm_bin, saved.builtBy.akm_build ?? "", SEMANTIC_MODEL, s.folder, "", builder, JSON.stringify(semanticConfig())].join("\0"));
       expect(saved.key).toBe(before);
       expect(saved.builtBy.akm_build_fingerprint).toBeUndefined();
       const kept = await s.open();

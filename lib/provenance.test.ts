@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Text } from "./provenance.ts";
+import { credentialField, endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Text } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -155,6 +155,60 @@ describe("redactConfig and the credentials of an export", () => {
     noLeaks(redactConfig(config));
     expect(JSON.stringify(config)).toBe(before);
     expect(before).toContain("DUMMY_QUERY_SECRET");
+  });
+});
+
+describe("redactConfig and the credentials a --config-patch can bring in", () => {
+  test("redacts the fields auth, bearer, pat and pass, in any spelling, and keeps the fields that only look like them", () => {
+    const redacted = redactConfig({
+      engines: { m: { auth: "Bearer SYNTH_AUTH", bearer: "SYNTH_BEARER", pat: "SYNTH_PAT", pass: "SYNTH_PASS", Auth: "SYNTH_AUTH", ghPat: "SYNTH_PAT", db_pass: "SYNTH_PASS", "x-auth": "SYNTH_AUTH", bearerToken: "SYNTH_BEARER", MYSQL_PWD: "SYNTH_PWD", passphrase: "SYNTH_PHRASE", "Set-Cookie": "SYNTH_COOKIE", SESSION_COOKIE: "SYNTH_COOKIE" } },
+      kept: { author: "a", path: "/p", bypass: true, compat: 1, passes: 3, oauth: "o", patterns: ["x"], authors: "b" },
+    });
+    expect(JSON.stringify(redacted)).not.toContain("SYNTH_");
+    expect(Object.values(redacted.engines.m)).toEqual(Array(13).fill("<redacted>"));
+    expect(redacted.kept).toEqual({ author: "a", path: "/p", bypass: true, compat: 1, passes: 3, oauth: "o", patterns: ["x"], authors: "b" });
+  });
+
+  test("redacts the word after a credential flag wherever the flag stands in a list of arguments", () => {
+    const redacted = redactConfig({
+      args: ["serve", "--api-key", "SYNTH_ONE", "--port", "80", "--token", "SYNTH_TWO", "--password", "SYNTH_THREE", "--model", "m"],
+      short: ["--api-key", "SYNTH_PAIR"],
+      equals: ["serve", "--api-key=SYNTH_EQUALS", "--secret=SYNTH_SECRET"],
+      kept: ["--api-key", "$MODEL_API_KEY", "--token", "${OTHER_TOKEN}", "--api-key", "--verbose", "--port", "80", "--keyboard", "us"],
+      last: ["serve", "--token"],
+      nested: [{ command: ["run", "--bearer", "SYNTH_BEARER", "--pat", "SYNTH_PAT", "--auth", "SYNTH_AUTH", "--pass", "SYNTH_PASS"] }],
+    });
+    expect(JSON.stringify(redacted)).not.toContain("SYNTH_");
+    expect(redacted.args).toEqual(["serve", "--api-key", "<redacted>", "--port", "80", "--token", "<redacted>", "--password", "<redacted>", "--model", "m"]);
+    expect(redacted.short).toEqual(["--api-key", "<redacted>"]);
+    expect(redacted.equals).toEqual(["serve", "--api-key=<redacted>", "--secret=<redacted>"]);
+    expect(redacted.kept).toEqual(["--api-key", "$MODEL_API_KEY", "--token", "${OTHER_TOKEN}", "--api-key", "--verbose", "--port", "80", "--keyboard", "us"]);
+    expect(redacted.last).toEqual(["serve", "--token"]);
+    expect(redacted.nested[0].command).toEqual(["run", "--bearer", "<redacted>", "--pat", "<redacted>", "--auth", "<redacted>", "--pass", "<redacted>"]);
+  });
+
+  test("${NAME} is kept like $NAME, as the value of a field, of a query parameter and of a flag, and a value that only looks like one is redacted", () => {
+    expect(redactConfig({ apiKey: "${MODEL_API_KEY}", auth: "${AUTH_VALUE}", headers: { Authorization: "${OTHER_AUTH}" }, endpoint: "https://h.example/v1?api_key=${MODEL_API_KEY}&token=$OTHER" })).toEqual({
+      apiKey: "${MODEL_API_KEY}",
+      auth: "${AUTH_VALUE}",
+      headers: { Authorization: "${OTHER_AUTH}" },
+      endpoint: "https://h.example/v1?api_key=${MODEL_API_KEY}&token=$OTHER",
+    });
+    const odd = redactConfig({ apiKey: "${}", token: "${A-B}", secret: "${NAME", pat: "${NAME}x", pass: "$ {NAME}" });
+    expect(odd).toEqual({ apiKey: "<redacted>", token: "<redacted>", secret: "<redacted>", pat: "<redacted>", pass: "<redacted>" });
+  });
+
+  test("a config patch with all of these leaves none of its synthetic secrets in what a summary records", () => {
+    const patch = { engines: { gw: { endpoint: "https://u:SYNTH_USER@gw.example/v1?pat=SYNTH_QUERY", auth: "Bearer SYNTH_AUTH", bearer: "SYNTH_BEARER", pat: "SYNTH_PAT", pass: "SYNTH_PASS", args: ["--model", "m", "--api-key", "SYNTH_FLAG", "--port", "80"], env: ["PASS=SYNTH_ENV", "OK=1"] } } };
+    const text = JSON.stringify(redactConfig(patch));
+    expect(text).not.toContain("SYNTH_");
+    expect(text).toContain("gw.example/v1?pat=<redacted>");
+    expect(text).toContain('"OK=1"');
+  });
+
+  test("credentialField is the one rule for a name: config fields, flags and environment variables", () => {
+    for (const name of ["apiKey", "api_key", "x-api-key", "--api-key", "accessToken", "client_secret", "password", "MYSQL_PWD", "GPG_PASSPHRASE", "GH_PAT", "SESSION_COOKIE", "Authorization", "auth", "AUTH", "bearer", "pass", "dbPass", "OPENAI_API_KEY", "HF_TOKEN"]) expect([name, credentialField(name)]).toEqual([name, true]);
+    for (const name of ["maxTokens", "tokenizer", "author", "path", "bypass", "compat", "passes", "oauth", "model", "DATABASE_URL", "PATH", "HOME", "keyboard", "timeoutMs"]) expect([name, credentialField(name)]).toEqual([name, false]);
   });
 });
 
