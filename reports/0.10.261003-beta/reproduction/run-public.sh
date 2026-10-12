@@ -16,15 +16,16 @@ for name in judge-gate reflect distill consolidate extract nightly promotion bak
   "evals/$name/run" --repeat 3 --label bifrost-qwen-akm-0.10
 done
 
-# These larger agent benchmarks use GPT-120; the judge remains the existing Qwen judge.
-# Harbor requires a nonempty key even for a keyless gateway. "local" is a dummy value.
-MODEL_API_KEY="${MODEL_API_KEY:-local}" evals/agent-ab/run --repeat 3 --model freellm/gpt-oss:120b --akm akm-cli@0.10.261003-beta --label bifrost-gpt120-akm-0.10
-MODEL_API_KEY="${MODEL_API_KEY:-local}" benchmarks/terminal-bench/run --attempts 3 --model freellm/gpt-oss:120b --akm akm-cli@0.10.261003-beta --label bifrost-gpt120-akm-0.10
 benchmarks/longmemeval/run --retrieval-only --label akm-0.10-public
-benchmarks/longmemeval/run --model freellm/gpt-oss:120b --label bifrost-gpt120-akm-0.10
 benchmarks/skillret/run --label akm-0.10-public
 
 matrix=reports/0.10.261003-beta/reproduction/reflect-matrix.json
 scripts/matrix/run "$matrix" --stage screen
 scripts/matrix/run "$matrix" --stage confirm --only filter-off
 scripts/matrix/run "$matrix" --stage screen # unchanged rows should be skipped
+
+# These larger agent benchmarks use GPT-120; the judge remains the existing Qwen judge.
+# Harbor requires a nonempty key even for a keyless gateway. "local" is a dummy value.
+MODEL_API_KEY="${MODEL_API_KEY:-local}" evals/agent-ab/run --repeat 3 --model freellm/gpt-oss:120b --akm akm-cli@0.10.261003-beta --label bifrost-gpt120-akm-0.10
+MODEL_API_KEY="${MODEL_API_KEY:-local}" benchmarks/terminal-bench/run --attempts 3 --model freellm/gpt-oss:120b --akm akm-cli@0.10.261003-beta --label bifrost-gpt120-akm-0.10
+benchmarks/longmemeval/run --model freellm/gpt-oss:120b --label bifrost-gpt120-akm-0.10

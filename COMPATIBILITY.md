@@ -7,8 +7,8 @@ Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PAT
 | `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode` |
 | `evals/judge-gate` | 0.9.25-alpha.2 or later | 0.10.261003-beta: three full real-model repeats, no errors |
 | `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta: full real-model run with six indexed-ref errors; matrix pilots pass |
-| `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | contract smoke only (0.9.26, 0.9.31) |
-| `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | contract smoke only; pool timings on 0.9.30 |
+| `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: full real-model run, no errors, including lesson updates |
+| `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: full real-model pair run, no errors; default deterministic embedder |
 | `evals/extract` | 0.9.26 or later | contract smoke only |
 | `evals/nightly` | 0.9.26 or later | contract smoke only |
 | `evals/promotion` | 0.9.26. It writes into akm's `state.db` and stops with a message when the table layout differs | 0.9.26 (2026-10-07) |
