@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { endpointRecord, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
@@ -423,10 +423,10 @@ describe("runCorpus", () => {
     const { summary } = resultsOf(folders);
     expect(summary).toMatchObject({ status: "complete", aborted_reason: null, seed: null });
     expect(summary.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
-    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
-    expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
+    expect(summary.engine).toEqual({ engine: "nightly", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { nightly: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "<redacted>", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
-    expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its identity
+    expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
     // every key it wrote before is still there
     for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
     // the digest of the code covers the night's own src folder, the consolidate, distill and reflect code it imports, and lib/

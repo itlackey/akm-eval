@@ -11,7 +11,7 @@
 
 import { createHash } from "node:crypto";
 import type { RunManifest } from "../../../lib/manifest.ts";
-import { canonical, endpointDisplay, recordedEngine } from "../../../lib/provenance.ts";
+import { canonical } from "../../../lib/provenance.ts";
 
 export { canonical };
 
@@ -33,7 +33,7 @@ type Row = Record<string, any>;
 const isObject = (x: unknown): x is Row => typeof x === "object" && x !== null && !Array.isArray(x);
 const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
 
-/** The evals that run in a container with Harbor. Their summaries hold the job as `config`, not an akm config, and no engine table. */
+/** The evals that run in a container with Harbor. Their summaries hold the job as `config`, not an akm config. */
 export const HARBOR = ["agent-ab", "terminal-bench"];
 
 /**
@@ -63,14 +63,6 @@ function harborConfigDigest(s: Row): string | null {
   if (!isObject(s.config) || !isObject(s.akm_env)) return null;
   const { datasets: _datasets, n_attempts: _attempts, agents, ...job } = s.config;
   return sha256(canonical({ ...job, agents: Array.isArray(agents) ? agents.map(harborAgent) : agents ?? null, akm_env: s.akm_env }));
-}
-
-/** The model and endpoint of a Harbor run, as the table of engines the other evals record: opencode is the one engine. A host with no scheme is a legacy summary, which does not say which deployment. */
-function harborEngine(s: Row): string | null {
-  if (!isObject(s.engine) || typeof s.engine.model !== "string") return null;
-  const endpoint = s.engine.endpoint ?? null;
-  if (endpoint !== null && !(typeof endpoint === "string" && endpoint.includes("://"))) return null;
-  return canonical({ opencode: recordedEngine({ model: s.engine.model, endpoint, endpoint_id: s.engine.endpoint_id }) });
 }
 
 /** The akm version of a run; for a Harbor run with the plugin's, which it installs beside akm and which the build includes. */
@@ -119,13 +111,13 @@ export function corpusOf(s: Row): string | null {
 
 /**
  * What a summary says about how its run was made, read from its manifest (lib/manifest.ts): the akm, the config, the engines, the settings
- * and the hints. An engine's endpoint is its host, never its path (#65).
+ * and the hints. An engine is its model and settings and the host of its endpoint (#65): the `endpoint_id` an older manifest has is left out.
  */
 export function identityOf(s: Row): Identity {
   const m = s.manifest as RunManifest;
-  // the settings of every engine the run used, by name; a summary that records only the default engine's does not say what a routed one used
   const harbor = HARBOR.includes(s.eval);
-  const recorded = (engines: Row): string => canonical(Object.fromEntries(Object.entries(engines).map(([name, e]) => [name, recordedEngine(e)])));
+  // the settings of every engine the run used, by name
+  const engines = canonical(Object.fromEntries(Object.entries<Row>(m.engines).map(([name, { endpoint_id: _id, ...e }]) => [name, e])));
   return {
     eval: text(s.eval),
     corpus: corpusOf(s),
@@ -140,7 +132,7 @@ export function identityOf(s: Row): Identity {
     timeout_ms: text(m.settings.timeout_ms),
     config: harbor ? harborConfigDigest(s) : m.config.sha256,
     model: text(s.model),
-    engine: harbor ? harborEngine(s) : recorded(m.engines),
+    engine: engines,
     seed: m.settings.seed,
     limit: text(s.limit),
     hints: Object.keys(m.treatment_hints).length === 0 ? null : canonical(m.treatment_hints),
@@ -206,7 +198,7 @@ const FIELDS: Field[] = [
   { name: "timeout_ms", axis: "config", label: "the time limit (timeout_ms)" },
   { name: "config", axis: "config", label: "the akm config", evidence: () => true },
   { name: "model", axis: "model", label: "the model" },
-  { name: "engine", axis: "model", label: "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used)", evidence: () => true },
+  { name: "engine", axis: "model", label: "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used)" },
   { name: "seed", axis: "inputs", label: "the seed of the private assets" },
   { name: "limit", axis: "inputs", label: "the --limit", within: true },
   // The eval's version and the harness version. Another scorer is no difference, since a run is scored again (scripts/rescore).
@@ -215,12 +207,13 @@ const FIELDS: Field[] = [
 
 const short = (v: string): string => v.replace(/\b[0-9a-f]{64}\b/g, (h) => h.slice(0, 12));
 
-/** Engines as a message names them: by name, then each setting that is set. An endpoint is its host and the start of its digest, never its path (#65). */
+/** Engines as a message names them: by name, then each setting that is set. An endpoint is its host (#65). */
 function engineText(v: string): string {
   try {
     const engines = Object.entries(JSON.parse(v) as Row);
     const one = (e: Row) =>
-      [e.model === null || e.model === undefined ? null : `model ${e.model}`, e.endpoint === null && e.endpoint_id === null ? null : `endpoint ${endpointDisplay(e)}`, ...["temperature", "enableThinking", "timeoutMs"].map((k) => (e[k] === null || e[k] === undefined ? null : `${k} ${e[k]}`))]
+      ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"]
+        .map((k) => (e[k] === null || e[k] === undefined ? null : `${k} ${e[k]}`))
         .filter((x) => x !== null)
         .join(", ") || "none";
     return engines.length === 0 ? "none" : engines.map(([name, e]) => `${name}: ${one(e)}`).join("; ");

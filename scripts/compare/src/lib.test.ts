@@ -13,8 +13,8 @@ import { DEFECTS, metrics as reflectMetrics } from "../../../evals/reflect/src/l
 import { summarize } from "../../../evals/retrieval/src/lib.ts";
 import { EVAL_METRICS, GAP_FACTOR } from "../../matrix/src/lib.ts";
 import { CompareError, DEFAULT_TREATMENT, EXTRACT_INSIGHT_CLASSES, REFLECT_DEFECTS, SUPPORTED, compareRepeats, comparePair, compareSets, differences, findRepeats, infoOf, loadRun, pairedBootstrap, policyOf, quantile, refusals, renderPair, renderRepeats, resampleIndexes, rng, setBootstrap, signTest, signalOf, viewsOf, type CompareOptions, type PairReport, type Unit } from "./lib.ts";
-import { type AkmArm, akmSummary, endpointOf, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
-import { engineSettings, redactConfig } from "../../../lib/provenance.ts";
+import { type AkmArm, akmSummary, jobConfig, jobRecord, releaseArm } from "../../../lib/harbor/harbor.ts";
+import { endpointHost, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { manifested } from "./fixtures/make.ts";
 import { AXES, type Axis, type Member, checkMembers, identityOf as identityOfManifest, incompleteOf, parseAxes } from "./policy.ts";
 
@@ -776,7 +776,7 @@ describe("the comparison policy", () => {
     expect(found(permuted)).toEqual(found(r));
   });
 
-  test("the settings of every engine a run uses are compared, a routed engine too, and the endpoint's path with them (R02)", () => {
+  test("the settings of every engine a run uses are compared, a routed engine too, and the endpoint by its host (R02)", () => {
     const worker = (over: Record<string, unknown>) => ({ model: "w", endpoint: "https://worker-a.example/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, ...over });
     const routed = (w: Record<string, unknown>) => ({
       config: { ...IDENTITY.config, engines: { ...IDENTITY.config.engines, worker: { kind: "llm", model: "w", endpoint: "<WORKER_URL>" } }, improve: { strategies: { night: { processes: { distill: { engine: "worker" } } } } } },
@@ -784,15 +784,15 @@ describe("the comparison policy", () => {
     });
     const refused = (b: Record<string, unknown>, treatment: Axis[] = []) => checkMembers([member("A", "a", routed({})), member("B", "b", routed(b))], treatment);
     expect(found(refused({}))).toEqual([]);
-    for (const change of [{ model: "w2" }, { endpoint: "https://worker-b.example/v1" }, { endpoint: "https://worker-a.example/v2" }, { temperature: 0.7 }, { timeoutMs: 60000 }, { enableThinking: true }]) {
+    for (const change of [{ model: "w2" }, { endpoint: "https://worker-b.example/v1" }, { endpoint: "https://worker-a.example:8443/v1" }, { temperature: 0.7 }, { timeoutMs: 60000 }, { enableThinking: true }]) {
       const r = refused(change);
       expect(found(r), JSON.stringify(change)).toHaveLength(1);
       expect(r.mismatches[0].axis).toBe("model");
       expect(found(refused(change, ["model"]))).toEqual([]); // declared as a model treatment
       expect(refused(change, ["model"]).treated).toHaveLength(1);
     }
-    // the endpoint path of the default engine is part of the identity too
-    expect(found(checkMembers([member("A", "a"), member("B", "b", { engine: { ...IDENTITY.engine, engines: { model: { ...IDENTITY.engine.engines.model, endpoint: "https://gateway.example.com/v2" } } } })], []))).toHaveLength(1);
+    // another path on the same host is the same endpoint: only the host is recorded
+    expect(found(checkMembers([member("A", "a"), member("B", "b", { engine: { ...IDENTITY.engine, engines: { model: { ...IDENTITY.engine.engines.model, endpoint: "https://gateway.example.com/v2" } } } })], []))).toEqual([]);
   });
 
   test("the order of the keys of the engine settings does not change the identity, and a credential is not in it (R02)", () => {
@@ -831,7 +831,7 @@ function harborSummary(over: { arm?: AkmArm; akmEnv?: Record<string, string>; ba
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: tasks }], arm, packagesDir: arm.packages ?? undefined, akmEnv });
   const job = jobRecord(cfg, "/run", "/repo");
   const observed = { akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null };
-  return manifested({ eval: "agent-ab", corpus: "public", status: "complete", model, ...akmSummary(arm, akmEnv, [], observed), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) }, config: redactConfig(job), job }, tasks);
+  return manifested({ eval: "agent-ab", corpus: "public", status: "complete", model, ...akmSummary(arm, akmEnv, [], observed), engine: { model, endpoint: endpointHost(baseUrl) }, config: redactConfig(job), job }, tasks);
 }
 const checkoutArm = (over: Partial<AkmArm> = {}): AkmArm => ({ bin: "~/akm", build: "v0.9.27-3-gabc1234", build_fingerprint: null, cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/run/akm-packages", ...over });
 
@@ -839,12 +839,11 @@ describe("the identity of a Harbor summary (R01)", () => {
   const run = (summary: Record<string, any>, name: string) => ({ dir: name, summary, rows: [] });
   const policy = (a: Record<string, any>[], b: Record<string, any>[], treatment: Axis[]) => policyOf(a.map((s, i) => run(s, `a${i}`)), b.map((s, i) => run(s, `b${i}`)), treatment);
 
-  test("another endpoint, another deployment path or another AKM_* setting is refused unless it is the treatment", () => {
+  test("another endpoint host or another AKM_* setting is refused unless it is the treatment, and another deployment path on one host is not a difference", () => {
     const base = harborSummary();
     expect(policy([base], [harborSummary()], ["build"])).toMatchObject({ mismatches: [], gaps: [], treated: [] });
     for (const [change, axis] of [
       [{ baseUrl: "https://other.example/deployment-A/v1" }, "model"],
-      [{ baseUrl: "https://gateway.example/deployment-B/v1" }, "model"],
       [{ akmEnv: { AKM_CURATE_TIMEOUT: "30" } }, "config"],
     ] as const) {
       const other = harborSummary(change);
@@ -853,6 +852,7 @@ describe("the identity of a Harbor summary (R01)", () => {
       expect(policy([base], [other], ["build", axis as Axis]).mismatches).toEqual([]); // declared, the difference is the treatment
       expect(policy([base], [other], ["build", axis as Axis]).treated).toHaveLength(1);
     }
+    expect(policy([base], [harborSummary({ baseUrl: "https://gateway.example/deployment-B/v1" })], ["build"]).mismatches).toEqual([]);
   });
 
   test("a summary written before library_assets was left out of the job still compares with one written after", () => {
@@ -883,16 +883,13 @@ describe("the identity of a Harbor summary (R01)", () => {
     expect(policy([base], [harborSummary({ tasks: ["a"] })], ["build"]).mismatches).toEqual([]); // the tasks are the cases (assets_sha256), which the summary digests
   });
 
-  test("a summary that records no config, no AKM_* settings or no engine is a gap, so the result is exploratory", () => {
+  test("a summary that records no config or no AKM_* settings is a gap, so the result is exploratory", () => {
     const base = harborSummary();
-    const legacy = { ...base, config: undefined, engine: undefined };
-    expect(policy([base], [legacy], ["build"]).gaps.map((f) => f.field).sort()).toEqual(["config", "engine"]);
-    expect(policy([legacy], [legacy], ["build"]).gaps).toHaveLength(2);
+    const bare = { ...base, config: undefined };
+    expect(policy([base], [bare], ["build"]).gaps.map((f) => f.field)).toEqual(["config"]);
     expect(policy([base], [{ ...base, akm_env: undefined }], ["build"]).gaps.map((f) => f.field)).toEqual(["config"]);
-    // an endpoint recorded as a host only (before the path was kept) does not say which deployment it was
-    expect(policy([base], [{ ...base, engine: { model: "openai/m1", endpoint: "gateway.example" } }], ["build"]).gaps.map((f) => f.field)).toEqual(["engine"]);
     // a declared axis is not asked for evidence
-    expect(policy([base], [legacy], ["build", "config", "model"]).gaps).toEqual([]);
+    expect(policy([base], [bare], ["build", "config"]).gaps).toEqual([]);
   });
 
   test("the repeats of one side must agree too", () => {

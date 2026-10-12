@@ -6,7 +6,7 @@ import { commandLine } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { checkMembers, identityOf } from "../../../scripts/compare/src/policy.ts";
-import { endpointRecord, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
@@ -257,7 +257,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(text);
     expect(stored.config.engines.model).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
     expect(stored.config.improve.strategies["distill-only"].engine).toBe("model");
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });

@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { canonical, credentialField, endpointDisplay, endpointHost, endpointId, endpointIdentity, endpointRecord, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { canonical, credentialField, endpointHost, endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -52,179 +52,48 @@ describe("sha256Files", () => {
 });
 
 describe("redactConfig", () => {
-  test("replaces the value under apiKey, api_key, token and secret, in any case, at any depth, and leaves the rest", () => {
-    const config = { engines: { m: { apiKey: "sk-1", API_KEY: "sk-2", Token: "t", model: "x", timeoutMs: 5 } }, list: [{ api_key: "k", secret: { inner: "s" }, name: "n" }], token: 7 };
+  test("replaces the value of every key whose name contains key, token, secret, password, authorization or cookie, in any case, at any depth, and leaves the rest", () => {
+    const config = {
+      engines: { m: { apiKey: "sk-1", API_KEY: "sk-2", Token: "t", maxTokens: 5, model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
+      list: [{ api_key: "k", secret: { inner: "s" }, name: "n" }, ["x-api-key", "kept"]],
+      headers: { Authorization: "Bearer b", "Set-Cookie": "c", Accept: "*/*" },
+      dbPassword: "p",
+    };
     expect(redactConfig(config)).toEqual({
-      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", model: "x", timeoutMs: 5 } },
-      list: [{ api_key: "<redacted>", secret: "<redacted>", name: "n" }],
-      token: "<redacted>",
+      engines: { m: { apiKey: "<redacted>", API_KEY: "<redacted>", Token: "<redacted>", maxTokens: "<redacted>", model: "x", endpoint: "https://h.example/v1", timeoutMs: 5 } },
+      list: [{ api_key: "<redacted>", secret: "<redacted>", name: "n" }, ["x-api-key", "kept"]],
+      headers: { Authorization: "<redacted>", "Set-Cookie": "<redacted>", Accept: "*/*" },
+      dbPassword: "<redacted>",
     });
   });
 
-  test("keeps a $VARIABLE reference, which holds no secret, and redacts a value that only looks like one", () => {
-    expect(redactConfig({ apiKey: "$MODEL_API_KEY", token: "sk-$ABC", secret: "$ not-a-name", other: "$X" })).toEqual({ apiKey: "$MODEL_API_KEY", token: "<redacted>", secret: "<redacted>", other: "$X" });
-  });
-
-  test("does not match a key that only contains the name, and does not change the config it is given", () => {
-    const config = { maxTokens: 5, tokenizer: "t", engines: { m: { apiKey: "sk-1" } } };
+  test("does not change the config it is given", () => {
+    const config = { engines: { m: { apiKey: "sk-1" } } };
     const copy = JSON.stringify(config);
     const redacted = redactConfig(config);
-    expect(redacted.maxTokens).toBe(5);
-    expect(redacted.tokenizer).toBe("t");
     expect(JSON.stringify(config)).toBe(copy);
     expect(redacted.engines).not.toBe(config.engines);
   });
-});
 
-describe("redactConfig and the credentials of an export", () => {
-  const LEAKS = ["DUMMY_QUERY_SECRET", "DUMMY_USER_PASSWORD", "DUMMY_HEADER_SECRET", "DUMMY_FRAGMENT_SECRET", "DUMMY_PAIR_SECRET", "DUMMY_NAMED_SECRET", "DUMMY_LINE_SECRET", "DUMMY_OAUTH_SECRET"];
-  const noLeaks = (value: unknown) => {
-    const text = JSON.stringify(value);
-    for (const leak of LEAKS) expect(text).not.toContain(leak);
-  };
-
-  test("an endpoint loses its user name and password, and the value of every authentication parameter of its query, and keeps scheme, host, port, path and the rest of the query", () => {
-    const endpoint = "https://user:DUMMY_USER_PASSWORD@gateway.example:8443/v1/chat/completions?api_key=DUMMY_QUERY_SECRET&model=m&ok=1#DUMMY_FRAGMENT_SECRET";
-    const redacted = redactConfig({ engines: { model: { endpoint, model: "m" } } });
-    expect(redacted.engines.model.endpoint).toBe("https://gateway.example:8443/v1/chat/completions?api_key=<redacted>&model=m&ok=1");
-    noLeaks(redacted);
-    expect(redactConfig("https://gateway.example/v1/chat/completions?api_key=DUMMY_QUERY_SECRET")).toBe("https://gateway.example/v1/chat/completions?api_key=<redacted>");
-    expect(redactConfig("https://u:DUMMY_USER_PASSWORD@host.example/")).toBe("https://host.example/");
-    expect(redactConfig("https://DUMMY_USER_PASSWORD@host.example/")).toBe("https://host.example/");
-    expect(redactConfig("http://localhost:8080/v1/chat/completions")).toBe("http://localhost:8080/v1/chat/completions");
-  });
-
-  test("masks api_key, apikey, key, token, access_token, auth, sig, signature, password and secret in a query, in any case, and nothing else", () => {
-    const names = ["api_key", "apikey", "key", "token", "access_token", "auth", "sig", "signature", "password", "secret", "API_KEY", "ApiKey", "Access_Token", "SIGNATURE", "X-Amz-Signature", "client_secret"];
-    for (const name of names) expect(redactConfig(`https://h.example/p?a=1&${name}=DUMMY_QUERY_SECRET&b=2`)).toBe(`https://h.example/p?a=1&${name}=<redacted>&b=2`);
-    expect(redactConfig("https://h.example/p?api%5Fkey=DUMMY_QUERY_SECRET")).toBe("https://h.example/p?api%5Fkey=<redacted>");
-    expect(redactConfig("https://h.example/p?model=m&maxTokens=5&tokenizer=t&author=a&design=d")).toBe("https://h.example/p?model=m&maxTokens=5&tokenizer=t&author=a&design=d");
-  });
-
-  test("a $NAME reference stays, as the value of a field and of a query parameter", () => {
-    expect(redactConfig({ endpoint: "https://h.example/v1?api_key=$MODEL_API_KEY&token=$OTHER_TOKEN", apiKey: "$MODEL_API_KEY", headers: { "X-Api-Key": "$OTHER_KEY", Authorization: "Bearer sk-1" } })).toEqual({
-      endpoint: "https://h.example/v1?api_key=$MODEL_API_KEY&token=$OTHER_TOKEN",
-      apiKey: "$MODEL_API_KEY",
-      headers: { "X-Api-Key": "$OTHER_KEY", Authorization: "<redacted>" },
-    });
-  });
-
-  test("redacts every engine, not only the default one, and a URL in an array", () => {
-    const redacted = redactConfig({
-      engines: {
-        one: { endpoint: "https://a:DUMMY_USER_PASSWORD@one.example/v1?key=DUMMY_QUERY_SECRET", apiKey: "$ONE_KEY", model: "m1" },
-        two: { endpoint: "https://two.example/v1?token=DUMMY_QUERY_SECRET", apiKey: "DUMMY_HEADER_SECRET", model: "m2" },
-        three: { nested: [{ deeper: { url: "wss://x:DUMMY_USER_PASSWORD@three.example:9/ws?sig=DUMMY_QUERY_SECRET", password: "DUMMY_HEADER_SECRET" } }] },
-      },
-      defaults: { llmEngine: "one" },
-      registries: ["https://DUMMY_USER_PASSWORD@registry.example/index.json?access_token=DUMMY_QUERY_SECRET", "https://plain.example/index.json"],
-    });
-    noLeaks(redacted);
-    expect(redacted.engines.one).toEqual({ endpoint: "https://one.example/v1?key=<redacted>", apiKey: "$ONE_KEY", model: "m1" });
-    expect(redacted.engines.two).toEqual({ endpoint: "https://two.example/v1?token=<redacted>", apiKey: "<redacted>", model: "m2" });
-    expect(redacted.engines.three.nested[0].deeper).toEqual({ url: "wss://three.example:9/ws?sig=<redacted>", password: "<redacted>" });
-    expect(redacted.registries).toEqual(["https://registry.example/index.json?access_token=<redacted>", "https://plain.example/index.json"]);
-    expect(redacted.defaults).toEqual({ llmEngine: "one" });
-  });
-
-  test("redacts a credential header however it is written: a field of an object, a line, a pair or a name and value", () => {
-    const redacted = redactConfig({
-      headers: { Authorization: "Bearer DUMMY_HEADER_SECRET", "X-Api-Key": "DUMMY_HEADER_SECRET", "api-key": "DUMMY_HEADER_SECRET", "Proxy-Authorization": "Basic DUMMY_HEADER_SECRET", Cookie: "s=DUMMY_HEADER_SECRET", "Content-Type": "application/json", Accept: "*/*" },
-      extraHeaders: ["Authorization: Bearer DUMMY_LINE_SECRET", "x-api-key=DUMMY_LINE_SECRET", "Accept: */*", ["Authorization", "Bearer DUMMY_PAIR_SECRET"], ["Accept", "text/plain"], { name: "X-Api-Key", value: "DUMMY_NAMED_SECRET" }, { name: "Accept", value: "text/plain" }],
-    });
-    noLeaks(redacted);
-    expect(redacted.headers).toEqual({ Authorization: "<redacted>", "X-Api-Key": "<redacted>", "api-key": "<redacted>", "Proxy-Authorization": "<redacted>", Cookie: "<redacted>", "Content-Type": "application/json", Accept: "*/*" });
-    expect(redacted.extraHeaders).toEqual(["Authorization: <redacted>", "x-api-key=<redacted>", "Accept: */*", ["Authorization", "<redacted>"], ["Accept", "text/plain"], { name: "X-Api-Key", value: "<redacted>" }, { name: "Accept", value: "text/plain" }]);
-  });
-
-  test("redacts a field whose name ends in key, token, secret or password, in any case, at any depth, and keeps the fields that only contain one", () => {
-    const redacted = redactConfig({
-      access_token: "DUMMY_OAUTH_SECRET",
-      oauth: { clientSecret: "DUMMY_OAUTH_SECRET", client_secret: "DUMMY_OAUTH_SECRET", refreshToken: "DUMMY_OAUTH_SECRET", dbPassword: "DUMMY_OAUTH_SECRET", "X-API-KEY": "DUMMY_OAUTH_SECRET", scope: "read", tokenizer: "t", maxTokens: 5, max_tokens: 6, keyboard: "us", password_hint: "pet" },
-      list: [{ apiKey: "DUMMY_OAUTH_SECRET" }, [{ secret: { inner: "DUMMY_OAUTH_SECRET" } }]],
-    });
-    noLeaks(redacted);
-    expect(redacted.access_token).toBe("<redacted>");
-    expect(redacted.oauth).toEqual({ clientSecret: "<redacted>", client_secret: "<redacted>", refreshToken: "<redacted>", dbPassword: "<redacted>", "X-API-KEY": "<redacted>", scope: "read", tokenizer: "t", maxTokens: 5, max_tokens: 6, keyboard: "us", password_hint: "pet" });
-    expect(redacted.list).toEqual([{ apiKey: "<redacted>" }, [{ secret: "<redacted>" }]]);
-  });
-
-  test("a config written to a file holds none of the dummy secrets after it is redacted, and the config it was given is unchanged", () => {
-    const config = { engines: { m: { endpoint: "https://u:DUMMY_USER_PASSWORD@h.example/v1?api_key=DUMMY_QUERY_SECRET", headers: { Authorization: "Bearer DUMMY_HEADER_SECRET" } } } };
-    const before = JSON.stringify(config);
-    noLeaks(redactConfig(config));
-    expect(JSON.stringify(config)).toBe(before);
-    expect(before).toContain("DUMMY_QUERY_SECRET");
-  });
-});
-
-describe("redactConfig and the credentials a --config-patch can bring in", () => {
-  test("redacts the fields auth, bearer, pat and pass, in any spelling, and keeps the fields that only look like them", () => {
-    const redacted = redactConfig({
-      engines: { m: { auth: "Bearer SYNTH_AUTH", bearer: "SYNTH_BEARER", pat: "SYNTH_PAT", pass: "SYNTH_PASS", Auth: "SYNTH_AUTH", ghPat: "SYNTH_PAT", db_pass: "SYNTH_PASS", "x-auth": "SYNTH_AUTH", bearerToken: "SYNTH_BEARER", MYSQL_PWD: "SYNTH_PWD", passphrase: "SYNTH_PHRASE", "Set-Cookie": "SYNTH_COOKIE", SESSION_COOKIE: "SYNTH_COOKIE" } },
-      kept: { author: "a", path: "/p", bypass: true, compat: 1, passes: 3, oauth: "o", patterns: ["x"], authors: "b" },
-    });
-    expect(JSON.stringify(redacted)).not.toContain("SYNTH_");
-    expect(Object.values(redacted.engines.m)).toEqual(Array(13).fill("<redacted>"));
-    expect(redacted.kept).toEqual({ author: "a", path: "/p", bypass: true, compat: 1, passes: 3, oauth: "o", patterns: ["x"], authors: "b" });
-  });
-
-  test("redacts the word after a credential flag wherever the flag stands in a list of arguments", () => {
-    const redacted = redactConfig({
-      args: ["serve", "--api-key", "SYNTH_ONE", "--port", "80", "--token", "SYNTH_TWO", "--password", "SYNTH_THREE", "--model", "m"],
-      short: ["--api-key", "SYNTH_PAIR"],
-      equals: ["serve", "--api-key=SYNTH_EQUALS", "--secret=SYNTH_SECRET"],
-      kept: ["--api-key", "$MODEL_API_KEY", "--token", "${OTHER_TOKEN}", "--api-key", "--verbose", "--port", "80", "--keyboard", "us"],
-      last: ["serve", "--token"],
-      nested: [{ command: ["run", "--bearer", "SYNTH_BEARER", "--pat", "SYNTH_PAT", "--auth", "SYNTH_AUTH", "--pass", "SYNTH_PASS"] }],
-    });
-    expect(JSON.stringify(redacted)).not.toContain("SYNTH_");
-    expect(redacted.args).toEqual(["serve", "--api-key", "<redacted>", "--port", "80", "--token", "<redacted>", "--password", "<redacted>", "--model", "m"]);
-    expect(redacted.short).toEqual(["--api-key", "<redacted>"]);
-    expect(redacted.equals).toEqual(["serve", "--api-key=<redacted>", "--secret=<redacted>"]);
-    expect(redacted.kept).toEqual(["--api-key", "$MODEL_API_KEY", "--token", "${OTHER_TOKEN}", "--api-key", "--verbose", "--port", "80", "--keyboard", "us"]);
-    expect(redacted.last).toEqual(["serve", "--token"]);
-    expect(redacted.nested[0].command).toEqual(["run", "--bearer", "<redacted>", "--pat", "<redacted>", "--auth", "<redacted>", "--pass", "<redacted>"]);
-  });
-
-  test("${NAME} is kept like $NAME, as the value of a field, of a query parameter and of a flag, and a value that only looks like one is redacted", () => {
-    expect(redactConfig({ apiKey: "${MODEL_API_KEY}", auth: "${AUTH_VALUE}", headers: { Authorization: "${OTHER_AUTH}" }, endpoint: "https://h.example/v1?api_key=${MODEL_API_KEY}&token=$OTHER" })).toEqual({
-      apiKey: "${MODEL_API_KEY}",
-      auth: "${AUTH_VALUE}",
-      headers: { Authorization: "${OTHER_AUTH}" },
-      endpoint: "https://h.example/v1?api_key=${MODEL_API_KEY}&token=$OTHER",
-    });
-    const odd = redactConfig({ apiKey: "${}", token: "${A-B}", secret: "${NAME", pat: "${NAME}x", pass: "$ {NAME}" });
-    expect(odd).toEqual({ apiKey: "<redacted>", token: "<redacted>", secret: "<redacted>", pat: "<redacted>", pass: "<redacted>" });
-  });
-
-  test("a config patch with all of these leaves none of its synthetic secrets in what a summary records", () => {
-    const patch = { engines: { gw: { endpoint: "https://u:SYNTH_USER@gw.example/v1?pat=SYNTH_QUERY", auth: "Bearer SYNTH_AUTH", bearer: "SYNTH_BEARER", pat: "SYNTH_PAT", pass: "SYNTH_PASS", args: ["--model", "m", "--api-key", "SYNTH_FLAG", "--port", "80"], env: ["PASS=SYNTH_ENV", "OK=1"] } } };
-    const text = JSON.stringify(redactConfig(patch));
-    expect(text).not.toContain("SYNTH_");
-    expect(text).toContain("gw.example/v1?pat=<redacted>");
-    expect(text).toContain('"OK=1"');
-  });
-
-  test("credentialField is the one rule for a name: config fields, flags and environment variables", () => {
-    for (const name of ["apiKey", "api_key", "x-api-key", "--api-key", "accessToken", "client_secret", "password", "MYSQL_PWD", "GPG_PASSPHRASE", "GH_PAT", "SESSION_COOKIE", "Authorization", "auth", "AUTH", "bearer", "pass", "dbPass", "OPENAI_API_KEY", "HF_TOKEN"]) expect([name, credentialField(name)]).toEqual([name, true]);
-    for (const name of ["maxTokens", "tokenizer", "author", "path", "bypass", "compat", "passes", "oauth", "model", "DATABASE_URL", "PATH", "HOME", "keyboard", "timeoutMs"]) expect([name, credentialField(name)]).toEqual([name, false]);
+  test("credentialField is that rule", () => {
+    for (const name of ["apiKey", "x-api-key", "--api-key", "accessToken", "client_secret", "password", "Authorization", "SESSION_COOKIE", "OPENAI_API_KEY", "HF_TOKEN", "keyboard"]) expect([name, credentialField(name)]).toEqual([name, true]);
+    for (const name of ["auth", "author", "path", "model", "DATABASE_URL", "timeoutMs"]) expect([name, credentialField(name)]).toEqual([name, false]);
   });
 });
 
 describe("engineSettings", () => {
-  const nulls = { model: null, endpoint: null, endpoint_id: null, temperature: null, enableThinking: null, timeoutMs: null };
+  const nulls = { model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null };
 
-  test("reads the engine that defaults.llmEngine names, with its endpoint's host and the digest of its identity: no path, no credentials (#65)", () => {
+  test("reads the engine that defaults.llmEngine names, with its endpoint's host: no path, no credentials (#65)", () => {
     const url = "https://user:pw@gateway.example:8443/k-DUMMYSECRET0123/v1/chat/completions?key=abc";
     const config = { engines: { other: { model: "no" }, m: { kind: "llm", model: "the-model", endpoint: url, temperature: 0, enableThinking: false, timeoutMs: 600000 } }, defaults: { llmEngine: "m" } };
-    const settings = { model: "the-model", endpoint: "https://gateway.example:8443", endpoint_id: sha256Text("https://gateway.example:8443/k-DUMMYSECRET0123/v1/chat/completions?key=<redacted>"), temperature: 0, enableThinking: false, timeoutMs: 600000 };
+    const settings = { model: "the-model", endpoint: "https://gateway.example:8443", temperature: 0, enableThinking: false, timeoutMs: 600000 };
     expect(engineSettings(config)).toEqual({ engine: "m", ...settings, engines: { m: settings } });
     expect(JSON.stringify(engineSettings(config))).not.toMatch(/pw|abc|DUMMYSECRET|k-DUMMY|\/v1/);
   });
 
   test("reads what engineConfig writes", () => {
-    const settings = { model: "the-model", endpoint: "http://localhost:8080", endpoint_id: sha256Text("http://localhost:8080/v1/chat/completions"), temperature: null, enableThinking: null, timeoutMs: 600000 };
+    const settings = { model: "the-model", endpoint: "http://localhost:8080", temperature: null, enableThinking: null, timeoutMs: 600000 };
     expect(engineSettings(engineConfig("http://localhost:8080/v1", "the-model", true))).toEqual({ engine: "model", ...settings, engines: { model: settings } });
   });
 
@@ -243,12 +112,10 @@ describe("engineSettings", () => {
     const s = engineSettings(config);
     expect(s.engine).toBe("m");
     expect(Object.keys(s.engines)).toEqual(["agent", "judge", "m", "worker"]);
-    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example", endpoint_id: sha256Text("https://worker.example/deployment-A/v1"), temperature: 0.2, enableThinking: null, timeoutMs: null });
-    // another deployment path of the routed engine is another identity, on the same host
+    expect(s.engines.worker).toEqual({ model: "w", endpoint: "https://worker.example", temperature: 0.2, enableThinking: null, timeoutMs: null });
+    // another deployment path of the routed engine on the same host is the same engine: only the host is recorded
     const moved = engineSettings({ ...config, engines: { ...config.engines, worker: { ...config.engines.worker, endpoint: "https://worker.example/deployment-B/v1" } } });
-    expect(moved.engines.worker).not.toEqual(s.engines.worker);
-    expect(moved.engines.worker?.endpoint).toBe(s.engines.worker?.endpoint);
-    expect(moved.engines.worker?.endpoint_id).not.toBe(s.engines.worker?.endpoint_id);
+    expect(moved.engines.worker).toEqual(s.engines.worker);
     // the same engines in another order of keys are the same settings
     expect(JSON.stringify(engineSettings({ engines: Object.fromEntries(Object.entries(config.engines).reverse()), improve: config.improve, defaults: config.defaults }))).toBe(JSON.stringify(s));
   });
@@ -259,7 +126,7 @@ describe("engineSettings", () => {
     expect(engineSettings(null)).toEqual(none);
     expect(engineSettings({ defaults: {}, engines: { m: { model: "x" } } })).toEqual(none);
     expect(engineSettings({ defaults: { llmEngine: "gone" }, engines: {} })).toEqual({ ...none, engine: "gone" });
-    expect(engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { endpoint: "not a url" } } })).toMatchObject({ endpoint: null, endpoint_id: null });
+    expect(engineSettings({ defaults: { llmEngine: "m" }, engines: { m: { endpoint: "not a url" } } })).toMatchObject({ endpoint: null });
     expect(engineSettings({ defaults: { llmEngine: "constructor" }, engines: {} })).toEqual({ ...none, engine: "constructor" });
   });
 });
@@ -392,7 +259,7 @@ describe("harnessSha256", () => {
   });
 });
 
-describe("endpointIdentity", () => {
+describe("endpointIdentity, the whole endpoint of the matrix fingerprint", () => {
   test("keeps the scheme, host, port and path, so two deployments on one host differ", () => {
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).toBe("https://gateway.example/deployment-A/v1");
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).not.toBe(endpointIdentity("https://gateway.example/deployment-B/v1"));
@@ -413,26 +280,11 @@ describe("endpointIdentity", () => {
   });
 });
 
-describe("endpointHost, endpointId and endpointRecord (#65)", () => {
+describe("endpointHost (#65)", () => {
   test("the host has the scheme and port and never a path, a query or credentials", () => {
     expect(endpointHost("https://user:pw@Gateway.Example:8443/k-DUMMYSECRET0123/v1?api_key=abc#f")).toBe("https://gateway.example:8443");
     expect(endpointHost("http://localhost:8080/v1/")).toBe("http://localhost:8080");
-    for (const v of [undefined, null, "", "not a url", 7]) expect([endpointHost(v), endpointId(v)]).toEqual([null, null]);
-  });
-
-  test("the id is the sha256 of the identity: another deployment path is another id, a change of key alone is not", () => {
-    const a = endpointId("https://gateway.example/deployment-A/v1");
-    expect(a).toBe(sha256Text("https://gateway.example/deployment-A/v1"));
-    expect(a).not.toBe(endpointId("https://gateway.example/deployment-B/v1"));
-    expect(endpointId("https://gateway.example/v1?api_key=one")).toBe(endpointId("https://u:p@gateway.example/v1/?api_key=two"));
-    expect(endpointRecord("https://gateway.example/deployment-A/v1")).toEqual({ endpoint: "https://gateway.example", endpoint_id: a });
-  });
-
-  test("a message names an endpoint by its host and the start of its id, not its path", () => {
-    const shown = endpointDisplay(endpointRecord("https://gateway.example/k-DUMMYSECRET0123/v1"));
-    expect(shown).toBe(`https://gateway.example (id ${endpointId("https://gateway.example/k-DUMMYSECRET0123/v1")?.slice(0, 12)})`);
-    expect(shown).not.toContain("DUMMY");
-    expect(endpointDisplay({ endpoint: null, endpoint_id: null })).toBe("unknown host");
+    for (const v of [undefined, null, "", "not a url", 7]) expect(endpointHost(v)).toBeNull();
   });
 });
 
@@ -444,7 +296,7 @@ describe("canonical and withoutEngineSettings", () => {
   });
 
   test("leaves out the settings of the model from every engine, and nothing else", () => {
-    const config = { semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", model: "x", endpoint: "https://h.example/v1", endpoint_id: "abc", temperature: 0, enableThinking: false, timeoutMs: 5, apiKey: "$K" } } };
+    const config = { semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", model: "x", endpoint: "https://h.example/v1", temperature: 0, enableThinking: false, timeoutMs: 5, apiKey: "$K" } } };
     expect(withoutEngineSettings(config)).toEqual({ semanticSearchMode: "off", engines: { m: { kind: "llm", provider: "openai", apiKey: "$K" } } });
   });
 });

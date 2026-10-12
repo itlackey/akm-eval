@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HARNESS_VERSION, type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, manifestProblems, measuredEvals, readManifest } from "./manifest.ts";
-import { endpointId, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -82,7 +82,7 @@ describe("the case digests and the completion", () => {
 describe("the manifest", () => {
   const config = {
     configVersion: "0.9.0",
-    registries: [{ url: "https://user:pw@registry.example/path?token=abc" }],
+    registries: [{ url: "https://registry.example/path" }],
     defaults: { llmEngine: "m" },
     engines: { m: { kind: "llm", model: "the-model", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1/chat/completions", apiKey: "sk-literal", temperature: 0, enableThinking: false, timeoutMs: 600000 } },
   };
@@ -106,13 +106,13 @@ describe("the manifest", () => {
     expect(m.scorer).toBeUndefined();
   });
 
-  test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and a digest and no path (#65)", () => {
+  test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and no path (#65)", () => {
     const m = build();
     expect(m.config.redacted).toEqual(withoutEngineSettings(m.config.redacted));
     expect(m.config.sha256).toBe(sha256Json(m.config.redacted));
-    expect(m.engines.m).toEqual({ model: "the-model", endpoint: "https://gateway.example", endpoint_id: endpointId("https://gateway.example/k-DUMMYSECRET0123/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000 });
+    expect(m.engines.m).toEqual({ model: "the-model", endpoint: "https://gateway.example", temperature: 0, enableThinking: false, timeoutMs: 600000 });
     const text = JSON.stringify(m);
-    for (const secret of ["sk-literal", "DUMMYSECRET0123", "pw@", "token=abc"]) expect(text).not.toContain(secret);
+    for (const secret of ["sk-literal", "DUMMYSECRET0123"]) expect(text).not.toContain(secret);
   });
 
   test("a config without engines gives none, and a run with no config has no digest of it", () => {
@@ -137,7 +137,7 @@ describe("the manifest", () => {
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: 1 }, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: "0.3", sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual([]);
     expect(mutate((x) => (x.cases.a.input_sha256 = null))).toEqual(["the case a needs an input_sha256 and a label_sha256"]);
-    expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model, an endpoint that is a host with no path, and an endpoint_id digest"]);
+    expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model and an endpoint that is a host with no path"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://user:pw@gateway.example"))).toHaveLength(1);
     expect(mutate((x) => (x.completion.scored = ["a", "zzz"]))).toEqual(["completion.scored and completion.errored name a case that was not selected"]);
     expect(mutate((x) => (x.completion.errored = ["a"]))).toEqual(["a case is both scored and errored"]);

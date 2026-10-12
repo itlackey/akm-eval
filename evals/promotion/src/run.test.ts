@@ -7,7 +7,7 @@ import { createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointRecord, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { type Run, comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
@@ -170,7 +170,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(text);
     expect(stored.config.engines.judge).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
     expect(stored.config.improve.strategies.promotion.processes.triage).toEqual({ enabled: true, applyMode: "queue", judgment: { enabled: true } });
-    expect(stored.engine).toEqual({ engine: "judge", model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", ...endpointRecord("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.engine).toEqual({ engine: "judge", model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { judge: { model: "the-model", endpoint: endpointHost("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.cases, folders.library));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
@@ -380,7 +380,7 @@ describe("the manifest of a run", () => {
     expect(summary.manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(summary.config)));
     expect(JSON.stringify(summary.manifest.config.redacted)).not.toContain("localhost");
     expect(summary.manifest.engines).toEqual(summary.engine.engines);
-    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", endpoint_id: sha256Text("http://localhost:1/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(summary.manifest.engines.judge).toEqual({ model: "the-model", endpoint: "http://localhost:1", temperature: 0, enableThinking: false, timeoutMs: 600_000 });
     expect(JSON.stringify(summary)).not.toContain("localhost:1/v1"); // the summary's config names the endpoint as <MODEL_BASE_URL>
     expect(summary.config.engines.judge.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
   });

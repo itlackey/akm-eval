@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import { scoreQuery, summarize } from "../../../evals/retrieval/src/lib.ts";
-import { endpointOf, jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
-import { redactConfig } from "../../../lib/provenance.ts";
+import { jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
+import { endpointHost, redactConfig } from "../../../lib/provenance.ts";
 import { buildReport } from "../../../lib/harbor/report.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
@@ -785,7 +785,7 @@ describe("a run that was cut short", () => {
 /** What a Harbor eval records of its job, the AKM_* settings of its akm arm and the endpoint of its model (see lib/harbor/harbor.ts), for the policy to read. */
 const harborIdentity = (akmEnv: Record<string, string> = {}, baseUrl = "https://gateway.example/deployment-A/v1", model = "m1") => {
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts: 3, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: ["a", "b"] }], arm: releaseArm(), akmEnv });
-  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) } };
+  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, endpoint: endpointHost(baseUrl) } };
 };
 
 describe("the Harbor evals", () => {
@@ -823,19 +823,18 @@ describe("the Harbor evals", () => {
     expect(verdictHarbor(base, called)).toBe("mixed");
   });
 
-  test("a Harbor summary records its job and engine, and an eval that records neither is exploratory (R01)", () => {
+  test("a Harbor summary records its job, and one that does not is exploratory (R01)", () => {
     const [base, better] = [measured([0, 0, 0]), measured([1, 1, 1])];
     expect(judge("agent-ab", compareAll("agent-ab", base, better), base, better).exploratory).toEqual([]);
-    // runs from before the job and the engine were recorded leave those axes unchecked
-    const legacy = (m: Measured): Measured => ({ ...m, runs: m.runs.map((r) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), config: undefined, engine: undefined }) })) });
-    expect(judge("agent-ab", compareAll("agent-ab", base, better), base, legacy(better), ["build"]).exploratory).toEqual(["the akm config is not recorded in the config", "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the config"]);
-    expect(verdictOf(compareAll("agent-ab", base, better), base, legacy(better), ["build"], "agent-ab")).toBe("exploratory");
+    const bare = (m: Measured): Measured => ({ ...m, runs: m.runs.map((r) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), config: undefined }) })) });
+    expect(judge("agent-ab", compareAll("agent-ab", base, better), base, bare(better), ["build"]).exploratory).toEqual(["the akm config is not recorded in the config"]);
+    expect(verdictOf(compareAll("agent-ab", base, better), base, bare(better), ["build"], "agent-ab")).toBe("exploratory");
   });
 
   test("an undeclared change of the AKM_* settings or of the model's endpoint makes two Harbor results not comparable, declared it is the treatment (R01)", () => {
     const withIdentity = (m: Measured, id: ReturnType<typeof harborIdentity>): Measured => ({ ...m, runs: m.runs.map((r, i) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), ...id }) })) });
     const base = measured([0, 0, 0]);
-    const [env, path] = [withIdentity(measured([1, 1, 1]), harborIdentity({ AKM_CURATE_TIMEOUT: "30" })), withIdentity(measured([1, 1, 1]), harborIdentity({}, "https://gateway.example/deployment-B/v1"))];
+    const [env, path] = [withIdentity(measured([1, 1, 1]), harborIdentity({ AKM_CURATE_TIMEOUT: "30" })), withIdentity(measured([1, 1, 1]), harborIdentity({}, "https://other.example/deployment-A/v1"))];
     expect(verdictOf(compareAll("agent-ab", base, env), base, env, ["build"], "agent-ab")).toBe("not comparable");
     expect(incomparable(base, env, ["build"], "agent-ab")).toContain("the akm config differs");
     expect(incomparable(base, path, ["config"], "agent-ab")).toContain("the engine settings");

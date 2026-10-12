@@ -5,7 +5,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildManifest } from "../../../../lib/manifest.ts";
-import { recordedEngine, sha256Json } from "../../../../lib/provenance.ts";
+import { endpointHost, sha256Json } from "../../../../lib/provenance.ts";
 
 const W = resolve(import.meta.dir, "..", "..", "..", "..");
 const OUT = import.meta.dir;
@@ -29,7 +29,7 @@ export function manifested(s: Record<string, any>, ids: string[]): Record<string
       cases: Object.fromEntries(ids.map((id) => [id, { input_sha256: sha256Json({ id }), label_sha256: sha256Json({ id }) }])),
       akm: { version: s.akm_version, bin: s.akm_bin, build: s.akm_build, build_fingerprint: s.akm_build_fingerprint },
       config: s.config,
-      engines: Object.fromEntries(Object.entries<any>(engines).map(([name, e]) => [name, recordedEngine(e)])),
+      engines: Object.fromEntries(Object.entries<any>(engines).map(([name, e]) => [name, { model: e.model ?? null, endpoint: endpointHost(e.endpoint), temperature: e.temperature ?? null, enableThinking: e.enableThinking ?? null, timeoutMs: e.timeoutMs ?? null }])),
       settings: { strategy: s.strategy, config_patch_sha256: s.config_patch?.sha256, timeout_ms: s.timeout_ms, seed: s.seed == null ? null : String(s.seed) },
       treatment_hints: s.embedder ? { embedder: s.embedder } : {},
       completion: { selected: ids, scored: ids, errored: [] },

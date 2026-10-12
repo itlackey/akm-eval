@@ -20,7 +20,6 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
-  endpointOf,
   jobRecord,
   parseAkm,
   parseAkmEnv,
@@ -34,7 +33,7 @@ import { type Report, buildReport, formatReport, sideBySide as sideBySideOf } fr
 import { type RunTrial, makeRow, summarize } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
-import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { NAME, attemptsFor, collect, jobConfig } from "./collect.ts";
@@ -107,8 +106,8 @@ interface Summary {
   tasks_sha256: Record<string, string>;
   /** One digest over the libraries digest, the digest of each selected task and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the endpoint it was sent to: its host (scheme, host and port, null for the provider's own) and `endpoint_id`, a digest of its identity. Never the path, never a key. */
-  engine: { model: string; endpoint: string | null; endpoint_id: string | null };
+  /** The model and the host of the endpoint it was sent to (scheme, host and port, null for the provider's own). Never the path, never a key. */
+  engine: { model: string; endpoint: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -192,7 +191,7 @@ export async function runCorpus(
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
-    engines: { opencode: { model: ctx.model, ...endpointOf(ctx.env), temperature: null, enableThinking: null, timeoutMs: null } },
+    engines: { opencode: { model: ctx.model, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), temperature: null, enableThinking: null, timeoutMs: null } },
     settings: { seed: c.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     treatment_hints: { attempts },
@@ -220,7 +219,7 @@ export async function runCorpus(
     libraries_sha256: got.librariesSha,
     tasks_sha256: got.taskDigests,
     assets_sha256: assetsSha256({ library: got.librariesSha, dataset: { tasks: got.taskDigests }, attempts }),
-    engine: { model: ctx.model, ...endpointOf(ctx.env) },
+    engine: { model: ctx.model, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL) },
     config: redactConfig(job),
     timeouts: scored.timeouts,
     n_errored: scored.n_errored,

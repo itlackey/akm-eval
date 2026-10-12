@@ -9,7 +9,7 @@ import { join, relative, resolve } from "node:path";
 import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
 import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
-import { credentialField, endpointRecord, sha256File, sha256Text } from "../provenance.ts";
+import { credentialField, sha256File, sha256Text } from "../provenance.ts";
 import type { Arm, Trial } from "./report.ts";
 import type { RunTrial } from "./score.ts";
 import { TIMEOUT_ERRORS, loadTrials } from "./trials.ts";
@@ -574,15 +574,6 @@ export function statusOf(exit: number, completion: Completion, jobWritten = true
   if (completion.missing > 0) reasons.push(`${completion.missing} of ${completion.expected} expected trials have no result (control ${completion.control.missing}, akm ${completion.akm.missing})`);
   if (completion.unexpected > 0) reasons.push(`${completion.unexpected} trials fall outside the grid of tasks, arms and attempts the job asked for`);
   return reasons.length === 0 ? { status: "complete", aborted_reason: null } : { status: "aborted", aborted_reason: reasons.join("; ") };
-}
-
-/**
- * What a summary records of the endpoint opencode is given (OPENAI_BASE_URL in `env`): its host, scheme and port, to read, and `endpoint_id`,
- * the sha256 of its identity, to compare (see endpointRecord). The path is never written down: it can name a deployment or carry a key
- * (#65). Two deployments on one host have two ids. Both are null for the provider's own endpoint, and for a value that is not a URL.
- */
-export function endpointOf(env: Record<string, string>): { endpoint: string | null; endpoint_id: string | null } {
-  return endpointRecord(env.OPENAI_BASE_URL);
 }
 
 /**

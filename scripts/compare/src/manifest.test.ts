@@ -7,7 +7,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { endpointId } from "../../../lib/provenance.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { type Case, type Raw, type Row, isDefect, labelledQueries, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
@@ -278,7 +277,7 @@ describe("a run without a sound manifest", () => {
   test("a manifest that is not sound stops the run being read, and says what is wrong", () => {
     const dir = run({ label: "bad", raw: GOOD, manifest: (m) => ({ ...m, manifest_version: 7 }) });
     expect(() => loadRun(dir)).toThrow("has a manifest that is not sound: manifest_version is 7");
-    const dir2 = run({ label: "bad2", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { model: "x", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1", endpoint_id: null, temperature: 0, enableThinking: false, timeoutMs: 1 } } }) });
+    const dir2 = run({ label: "bad2", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { model: "x", endpoint: "https://gateway.example/k-DUMMYSECRET0123/v1", temperature: 0, enableThinking: false, timeoutMs: 1 } } }) });
     const problem = (() => {
       try {
         loadRun(dir2);
@@ -287,7 +286,7 @@ describe("a run without a sound manifest", () => {
         return (e as Error).message;
       }
     })();
-    expect(problem).toContain("the engine reflect needs a model, an endpoint that is a host with no path, and an endpoint_id digest");
+    expect(problem).toContain("the engine reflect needs a model and an endpoint that is a host with no path");
   });
 });
 
@@ -309,6 +308,7 @@ describe("repeats with a manifest", () => {
 describe("the endpoint is never written whole into a comparison (#65)", () => {
   const URL_A = "https://gateway.example/k-DUMMYSECRET0123/v1/chat/completions";
   const URL_B = "https://gateway.example/deployment-B/v1/chat/completions";
+  const URL_C = "https://other.example:8443/k-DUMMYSECRET0123/v1/chat/completions";
   const withEndpoint = (label: string, url: string): string => {
     const config = { ...CONFIG, engines: { reflect: { ...CONFIG.engines.reflect, endpoint: url } } };
     const dir = run({ label, raw: GOOD, manifest: (m) => ({ ...m, engines: engineSettings(config).engines }) });
@@ -317,25 +317,30 @@ describe("the endpoint is never written whole into a comparison (#65)", () => {
     return dir;
   };
 
-  test("two deployments on one host are two engines, the refusal names the host and the start of each digest, and not the path", () => {
+  test("an engine is its model and the host of its endpoint: two paths on one host compare, another host is refused, named by its host and not its path", () => {
+    expect(compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["config"] }).views[0]?.n_paired).toBe(10);
     let message = "";
     try {
-      compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["config"] });
+      compare(withEndpoint("c", URL_A), withEndpoint("d", URL_C), { treatment: ["config"] });
     } catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toContain(`endpoint https://gateway.example (id ${endpointId(URL_A)?.slice(0, 12)}), temperature 0`);
-    expect(message).toContain(`endpoint https://gateway.example (id ${endpointId(URL_B)?.slice(0, 12)}), temperature 0`);
-    expect(message).not.toMatch(/DUMMYSECRET|k-DUMMY|deployment-B|\/v1/);
+    expect(message).toContain("endpoint https://gateway.example, temperature 0");
+    expect(message).toContain("endpoint https://other.example:8443, temperature 0");
+    expect(message).not.toMatch(/DUMMYSECRET|k-DUMMY|\/v1/);
   });
 
   test("declared as the treatment, the difference is listed without the path, in the report and in its JSON", () => {
-    const r = compare(withEndpoint("a", URL_A), withEndpoint("b", URL_B), { treatment: ["model"] });
+    const r = compare(withEndpoint("a", URL_A), withEndpoint("b", URL_C), { treatment: ["model"] });
     const text = JSON.stringify(r) + renderPair(r);
-    expect(r.treated.join(" ")).toContain(`endpoint https://gateway.example (id ${endpointId(URL_A)?.slice(0, 12)}), temperature 0`);
-    expect(text).not.toMatch(/DUMMYSECRET|k-DUMMY|deployment-B/);
+    expect(r.treated.join(" ")).toContain("endpoint https://gateway.example, temperature 0");
+    expect(text).not.toMatch(/DUMMYSECRET|k-DUMMY/);
   });
 
+  test("the endpoint_id an older manifest has is left out", () => {
+    const older = run({ label: "e", raw: GOOD, manifest: (m) => ({ ...m, engines: { reflect: { ...m.engines.reflect, endpoint_id: "f".repeat(64) } as any } }) });
+    expect(compare(run({ label: "f", raw: GOOD }), older, { treatment: ["config"] }).views[0]?.n_paired).toBe(10);
+  });
 });
 
 describe("the policy", () => {
@@ -353,7 +358,7 @@ describe("the policy", () => {
     const identity = identityOf(summary);
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(identity).toMatchObject({ akm_version: "0.9.99-test", akm_bin: "akm", strategy: "reflect-only", collector: parts.collector.version, harness_version: String(parts.harness_version), hints: null });
-    expect(identity.engine).toContain(endpointId("http://localhost:9/v1/chat/completions") as string);
+    expect(identity.engine).toContain('"endpoint":"http://localhost:9"');
     expect(identity.engine).not.toContain("localhost:9/v1");
   });
 

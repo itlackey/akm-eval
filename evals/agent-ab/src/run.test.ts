@@ -215,7 +215,7 @@ describe("runCorpus", () => {
     const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toEqual({ ...cells(6), control: cells(3), akm: cells(3) });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1") });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080" });
     expect(stored.corpus_folder).toBeNull(); // a public run has no folder to record
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
@@ -247,7 +247,7 @@ describe("runCorpus", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
     expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
-    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1"), temperature: null, enableThinking: null, timeoutMs: null } });
+    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", temperature: null, enableThinking: null, timeoutMs: null } });
     expect(m.treatment_hints).toEqual({ attempts: 1 }); // a run of three attempts is not compared with a run of one
     expect(m.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(m.config.redacted.datasets).toBeUndefined(); // the tasks are the cases
@@ -311,7 +311,7 @@ describe("runCorpus", () => {
     expect(result.summary.report.control.passed).toBe(result.summary.metrics.control.passed);
   });
 
-  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
+  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host are the same endpoint (#65)", async () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
     const summaries: Record<string, any>[] = [];
@@ -321,8 +321,7 @@ describe("runCorpus", () => {
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
     expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
-    expect(summaries[0]?.engine.endpoint_id).not.toBe(summaries[1]?.engine.endpoint_id);
-    expect(identityOf(summaries[0] as Record<string, any>).engine).not.toBe(identityOf(summaries[1] as Record<string, any>).engine);
+    expect(identityOf(summaries[0] as Record<string, any>).engine).toBe(identityOf(summaries[1] as Record<string, any>).engine);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {

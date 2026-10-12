@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { engineConfig } from "../../../lib/akm/akm.ts";
-import { endpointRecord, sha256Files } from "../../../lib/provenance.ts";
+import { endpointHost, sha256Files } from "../../../lib/provenance.ts";
 import { assetsDigest, generateInto, privateAssetsProblem, replaceDir, runInputs } from "./inputs.ts";
 
 const dirs: string[] = [];
@@ -165,17 +165,17 @@ describe("runInputs", () => {
     const inputs = runInputs(config, hide, { dir: assets, files: ["cases.jsonl"] }, "7");
     expect(inputs.assets_sha256).toBe(assetsDigest(assets, ["cases.jsonl"]));
     expect(inputs.seed).toBe("7");
-    expect(inputs.engine).toEqual({ engine: "consolidate", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(inputs.engine).toEqual({ engine: "consolidate", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { consolidate: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(JSON.stringify(inputs)).not.toContain("sk-secret");
     expect((inputs.config as any).engines.consolidate).toMatchObject({ apiKey: "<redacted>", endpoint: "<MODEL_BASE_URL>/chat/completions", temperature: 0 });
     expect((inputs.config as any).defaults).toEqual({ llmEngine: "consolidate" });
   });
 
-  test("keeps a $VARIABLE key reference as it is, writes the endpoint as <MODEL_BASE_URL>, and has no seed for the public assets", () => {
+  test("redacts a $VARIABLE key reference too, writes the endpoint as <MODEL_BASE_URL>, and has no seed for the public assets", () => {
     const config = engineConfig(base, "m", true, "consolidate");
     const inputs = runInputs(config, hide, { dir: put(temp(), { "a.txt": "1" }), files: ["a.txt"] }, null);
     expect(inputs.seed).toBeNull();
-    expect(JSON.stringify(inputs.config)).toContain('"apiKey":"$MODEL_API_KEY"');
+    expect(JSON.stringify(inputs.config)).toContain('"apiKey":"<redacted>"');
     expect(JSON.stringify(inputs.config)).not.toContain("localhost");
     expect(config.engines.consolidate.endpoint).toBe(`${base}/chat/completions`); // the config that was written is not changed
   });

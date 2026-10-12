@@ -37,7 +37,7 @@ What two runs may differ in is `src/policy.ts`, which the matrix applies too. Ru
 |---|---|---|
 | `build` | the akm | `akm_version`, `akm_build`, `akm_build_fingerprint` (the digest of a checkout's uncommitted changes and, for a Harbor run, of the dependencies its containers installed), `akm_bin` |
 | `config` | the akm config the eval wrote | `strategy`, `config_patch` (its hash), a digest of `config`, `timeout_ms` |
-| `model` | the model and its engine | `model`, and in `engine.engines` the model, the endpoint (its host and `endpoint_id`, a digest of its identity: never its path, which messages and reports never carry), temperature, `enableThinking` and `timeoutMs` of every engine the run used |
+| `model` | the model and its engine | `model`, and in `engine.engines` the model, the endpoint (its host: never its path, which messages and reports never carry), temperature, `enableThinking` and `timeoutMs` of every engine the run used |
 | `inputs` | the cases | the `input_sha256` of each case, and the private `seed`: see "Runs with a manifest" |
 | `harness` | this repository's code | the collector's version and the harness version: see "Runs with a manifest" |
 

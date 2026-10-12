@@ -233,7 +233,8 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
     // every query is asked of the same library: a skill that changed, or another akm layout of it, is another input for all of them
     cases: caseDigests(MEASUREMENT, queries, () => library),
     akm: { version: collected.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
-    config: collected.configs,
+    // the keyword sandbox's config as `plain`: redaction takes the value of any key whose name contains "key"
+    config: (({ keyword: plain, ...semantic }) => ({ plain, ...semantic }))(collected.configs),
     engines: {}, // no model service is called
     settings: { strategy: null, config_patch_sha256: null, timeout_ms: ctx.callTimeoutMs ?? null, seed },
     completion: completionOf(MEASUREMENT, queries.map((q) => q.id), rows),

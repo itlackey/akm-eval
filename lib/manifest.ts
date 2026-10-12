@@ -118,7 +118,7 @@ export interface RunManifest {
   config: { sha256: string | null; redacted: unknown };
   /** What a run was set to do that is not in the akm config. */
   settings: { strategy: string | null; config_patch_sha256: string | null; timeout_ms: number | null; seed: string | null };
-  /** The settings of every engine the config uses. `endpoint` is the host only and `endpoint_id` the digest of the endpoint's identity: never a path. */
+  /** The settings of every engine the config uses. `endpoint` is the host only: never a path. */
   engines: Record<string, EngineSetting>;
   /** Settings that change what a run measures and belong to its scope, such as `embedder`: runs that differ in one are never compared. */
   treatment_hints: Record<string, string | number | boolean | null>;
@@ -213,7 +213,7 @@ export function manifestProblems(x: unknown): string[] {
   if (!isObject(x.engines)) out.push("engines is an object of engine settings");
   else {
     for (const [name, e] of Object.entries<any>(x.engines)) {
-      if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint) || !nullable(isHex)(e.endpoint_id)) out.push(`the engine ${name} needs a model, an endpoint that is a host with no path, and an endpoint_id digest`);
+      if (!isObject(e) || !nullable(isString)(e.model) || !nullable(isHost)(e.endpoint)) out.push(`the engine ${name} needs a model and an endpoint that is a host with no path`);
     }
   }
   if (!isObject(x.treatment_hints) || !Object.values(x.treatment_hints).every((v) => v === null || ["string", "number", "boolean"].includes(typeof v))) out.push("treatment_hints is an object of strings, numbers, booleans and nulls");

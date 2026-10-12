@@ -20,7 +20,6 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
-  endpointOf,
   jobRecord,
   loadRunTrials,
   parseAkm,
@@ -35,7 +34,7 @@ import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } fro
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
-import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, collect, jobName, readLock } from "./collect.ts";
@@ -109,8 +108,8 @@ interface Summary {
   completion: Completion;
   /** One digest over the library's digest, the pinned dataset (its digest and the digest of each selected task) and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the endpoint it was sent to: its host (scheme, host and port, null for the provider's own) and `endpoint_id`, a digest of its identity. Never the path, never a key. */
-  engine: { model: string; endpoint: string | null; endpoint_id: string | null };
+  /** The model and the host of the endpoint it was sent to (scheme, host and port, null for the provider's own). Never the path, never a key. */
+  engine: { model: string; endpoint: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -176,8 +175,8 @@ export function summarize(o: {
   akmEnv?: Record<string, string>;
   packages?: { file: string; sha256: string }[];
   library?: LibraryCount & { sha256: string | null };
-  /** The endpoint the model was sent to, as endpointOf records it: its host and the digest of its identity. Both null for the provider's own. */
-  endpoint?: ReturnType<typeof endpointOf>;
+  /** The host of the endpoint the model was sent to, null for the provider's own. */
+  endpoint?: string | null;
   job?: Record<string, unknown>;
 }): Summary {
   const jobDir = join(o.dir, "jobs", jobName(o.corpus.name));
@@ -196,7 +195,7 @@ export function summarize(o: {
   const scored = scoreRows(rows);
 
   const akmFields = akmSummary(arm, akmEnv, o.packages ?? [], observed);
-  const endpoint = o.endpoint ?? { endpoint: null, endpoint_id: null };
+  const endpoint = o.endpoint ?? null;
   const { datasets: _datasets, n_attempts: _attempts, ...jobSettings } = o.job ?? {}; // the tasks and the attempts are the cases and the hint below
   const manifest = buildManifest({
     measurement: MEASUREMENT,
@@ -205,7 +204,7 @@ export function summarize(o: {
     cases: caseDigests(MEASUREMENT, o.tasks.map((id) => caseOf(id, o.lock.tasks[id], o.library?.sha256))),
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
-    engines: { opencode: { model: o.model, ...endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
+    engines: { opencode: { model: o.model, endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
     settings: { seed: o.corpus.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     treatment_hints: { attempts },
@@ -233,7 +232,7 @@ export function summarize(o: {
     aborted_reason,
     completion,
     assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
-    engine: { model: o.model, ...endpoint },
+    engine: { model: o.model, endpoint },
     config: redactConfig(o.job ?? {}),
     timeouts: scored.timeouts,
     n_errored: scored.n_errored,
@@ -264,7 +263,7 @@ export async function runCorpus(
   const akmEnv = ctx.akmEnv ?? {};
   const dir = makeResultsDir(results, ctx.label);
   const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, env: ctx.env, arm, akmEnv });
-  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointOf(ctx.env), job: jobRecord(got.cfg, dir, ROOT) });
+  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
   printSummary(summary);
   if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;

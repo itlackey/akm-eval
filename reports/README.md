@@ -41,19 +41,9 @@ Read a `summary.json` before you commit it:
 - Every field that names the model's endpoint. The path of a URL can name a deployment or a project, or carry a key (`https://gateway.example/k-…/v1`), so the policy never compares a path and a summary written by harness-v3 never holds one, except in the places below that a later change will close:
   - `config.engines.<name>.endpoint`: `<MODEL_BASE_URL>` in `judge-gate`, `extract`, `consolidate`, `nightly` and `reflect`, and the whole URL in `distill`, `promotion` and any summary written before harness-v3. Replace a whole URL with `<MODEL_BASE_URL>`. The digest of `config` leaves the engine settings out, so this changes nothing a comparison reads.
   - `engine.endpoint` and `engine.engines.<name>.endpoint`: the host and port. In a summary written before harness-v3 they hold the endpoint's identity with its path, and in `agent-ab` and `terminal-bench` they still do: replace them with the host.
-  - `engine.endpoint_id`, `engine.engines.<name>.endpoint_id`, and `manifest.engines.<name>.endpoint` and `endpoint_id`: a host, and a sha256 of the identity. They hold no path and are safe to publish. **Keep `endpoint_id`**: it is how a comparison tells two deployments on one host apart. Without it the engine reads as the host alone, which is another deployment than the one the run used, and a comparison with a run of that deployment is refused as "not comparable".
+  - `manifest.engines.<name>.endpoint`: the host. It holds no path and is safe to publish, as is the `endpoint_id` (a sha256) of an older summary.
   - `model_endpoint` and `judge_endpoint` of `longmemeval`: the identity with its path. Replace them with the host.
 - An own run reports counts and rates of your notes. Read the `by_class` and per-case parts for a name of your own.
-
-### A baseline whose endpoint you redacted
-
-A summary written before harness-v3 compares with a run made today for the same deployment, because the policy reads the identity it finds under `engine.engines.<name>.endpoint` as a host and a digest, the way a new run records it. If you redact that field to the host alone, the digest is lost and the baseline reads as another deployment. Put the digest of the identity you removed in `endpoint_id` beside the host, and the comparison is as it was:
-
-```
-printf %s 'https://gateway.example/deployment-A/v1/chat/completions' | sha256sum
-```
-
-That is the identity of the URL of the engine's `endpoint` in the akm config (scheme, host, port and path, no credentials, the query in order). For a summary with a `manifest` there is nothing to do: its `endpoint_id` is already a digest.
 
 ## Compare with a published run
 
