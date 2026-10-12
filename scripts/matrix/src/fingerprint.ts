@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { akmBuild, dirtyFingerprint } from "../../../lib/akm/akm.ts";
+import { akmBuild, dirtyFingerprint, parseCommand } from "../../../lib/akm/akm.ts";
 import { endpointIdentity } from "../../../lib/provenance.ts";
 import { canonical } from "../../compare/src/policy.ts";
 import { type Job, type RunRecord, HARBOR, flagValue, hasFlag, readJson, runDirs, unusableReason } from "./lib.ts";
@@ -124,14 +124,18 @@ const effectiveEnv = (root: string, env: Env): Env => ({ ...readDotEnv(join(root
 /** The endpoint a run calls, as lib/provenance.ts identifies it: scheme, host, port and path, with no credentials. A value that is no URL is told apart by a digest of it. */
 const endpointOf = (url: string | undefined): string | null => endpointIdentity(url) ?? (url?.trim() ? `unreadable ${sha256(url).slice(0, 12)}` : null);
 
-/** The model settings a run uses, without a key: the model and the whole endpoint of the model under test and of the judge, and the digest of models.json (it holds no keys). */
-function modelSettings(root: string, env: Env): Record<string, string | null> {
+/**
+ * The model settings a run uses, without a key: the model and the whole endpoint of the model under test and of the judge, and the digest of
+ * models.json (it holds no keys). The Harbor evals also read OPENAI_BASE_URL, which stands in for an empty MODEL_BASE_URL (lib/harbor/harbor.ts).
+ */
+function modelSettings(root: string, env: Env, evalName: string): Record<string, string | null> {
   return {
     MODEL_NAME: env.MODEL_NAME ?? null,
     MODEL_BASE_URL: endpointOf(env.MODEL_BASE_URL),
     JUDGE_MODEL: env.JUDGE_MODEL ?? null,
     JUDGE_BASE_URL: endpointOf(env.JUDGE_BASE_URL),
     "models.json": existsSync(join(root, "models.json")) ? digestPath(root, "models.json") : null,
+    ...(HARBOR.includes(evalName) ? { OPENAI_BASE_URL: endpointOf(env.OPENAI_BASE_URL) } : {}),
   };
 }
 
@@ -149,11 +153,25 @@ const describe = (dir: string): string | null => {
 const expandHome = (command: string): string => command.replace(/(^|\s)~\//g, `$1${homedir()}/`);
 
 /**
- * The akm a job runs. For an eval that runs akm on this machine: `--akm`, else AKM_BIN of the environment or .env, else `akm`, with the build
- * that command identifies (akmBuild() of lib/akm/akm.ts, which every eval records as `akm_build` and `akm_build_fingerprint`). For a Harbor
- * eval, `--akm` is a release (the string) or a checkout (its folder, with the build of that checkout and its uncommitted changes).
+ * What `akm --version` prints for a command (empty: `akm`), or null when it cannot be run. An installed release is no git checkout and has no
+ * build, so the command is the same before and after an upgrade and the version is all that tells the two apart.
  */
-function akmIdentity(args: string[], evalName: string, env: Env): { command: string; build: string | null; fingerprint: string | null } {
+function printedVersion(command: string): string | null {
+  try {
+    const run = Bun.spawnSync([...parseCommand(command || "akm"), "--version"], { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: 30_000 });
+    return run.exitCode === 0 ? run.stdout.toString().trim() || null : null;
+  } catch {
+    return null; // not installed, or not a command
+  }
+}
+
+/**
+ * The akm a job runs. For an eval that runs akm on this machine: `--akm`, else AKM_BIN of the environment or .env, else `akm`, with the build
+ * that command identifies (akmBuild() of lib/akm/akm.ts, which every eval records as `akm_build` and `akm_build_fingerprint`) and the version it
+ * prints. For a Harbor eval, `--akm` is a release (the string) or a checkout (its folder, with the build of that checkout and its uncommitted
+ * changes).
+ */
+function akmIdentity(args: string[], evalName: string, env: Env): { command: string; build: string | null; fingerprint: string | null; version?: string | null } {
   const flag = flagValue(args, "--akm");
   if (HARBOR.includes(evalName)) {
     const folder = flag ? expandHome(flag) : "";
@@ -166,7 +184,7 @@ function akmIdentity(args: string[], evalName: string, env: Env): { command: str
     if (command) process.env.AKM_BIN = command;
     else delete process.env.AKM_BIN;
     const { akm_bin, akm_build, akm_build_fingerprint } = akmBuild();
-    return { command: akm_bin, build: akm_build, fingerprint: akm_build_fingerprint };
+    return { command: akm_bin, build: akm_build, fingerprint: akm_build_fingerprint, version: printedVersion(command) };
   } finally {
     if (saved === undefined) delete process.env.AKM_BIN;
     else process.env.AKM_BIN = saved;
@@ -192,14 +210,14 @@ export function fingerprintOf(root: string, job: Pick<Job, "args" | "row">, env:
     args: sha256(canonical(job.args)),
     files: sha256(canonical(files)),
     corpus: corpusDigest(root, job.row.eval, job.args),
-    model: sha256(canonical(modelSettings(root, full))),
+    model: sha256(canonical(modelSettings(root, full, job.row.eval))),
     akm: sha256(canonical(akmIdentity(job.args, job.row.eval, full))),
     harness: sha256(harnessIdentity(root)),
   };
   return { sha256: sha256(canonical(parts)), parts };
 }
 
-const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the assets, library and generated.json of the public, private or own corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json)", akm: "the akm (AKM_BIN or --akm, or the build it runs)", harness: "this repository's code" };
+const NAMES: Record<string, string> = { args: "its arguments", files: "a file its arguments name (a config patch or a cases folder)", corpus: "the corpus it reads (the assets, library and generated.json of the public, private or own corpus)", model: "the model settings (MODEL_NAME, the endpoints with their paths, the judge, models.json, OPENAI_BASE_URL for a Harbor eval)", akm: "the akm (AKM_BIN or --akm, or the build or version it runs)", harness: "this repository's code" };
 
 /** Whether a stage may skip a job it already ran, and when not, why it runs again (empty for a job that was never run). */
 export function resumable(root: string, prior: RunRecord | undefined, job: Pick<Job, "label" | "args">, fp: Fingerprint): { skip: boolean; why: string } {

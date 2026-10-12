@@ -23,7 +23,7 @@ every axis it does not name must be the same in the baseline and the config. Sta
 
   --stage screen   runs the baseline and every config once, with the label <prefix>-<name>-s, and the --limit of the file's
                    "screen.limit" for its eval
-  --stage confirm  runs --repeat N (the file's "repeats", default 3) for the baseline and for every config whose screen result differs from
+  --stage confirm  runs --repeat N (the file's "repeats", default 3, at least 3) for the baseline and for every config whose screen result differs from
                    its baseline's, with the label <prefix>-<name>-c. First it prints, for each baseline already confirmed, the per-case
                    noise floor of its repeats (scripts/compare), which is where to start --min-delta. The decision then has a paired
                    column: scripts/compare on all the repeats of each side, pooled by case
@@ -39,9 +39,10 @@ a config or to reach a verdict. A summary is a result only when it says status "
   --min-delta X    confirm: a config differs when a main or harm metric of the screen moved by more than X (default 0: any change, which
                    filters almost nothing. Read X from the noise floor that confirm prints)
   --force          run rows again that a stage already ran, though nothing they were made from has changed. A stage skips a row only when it
-                   exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the model
-                   settings (MODEL_NAME, the host of MODEL_BASE_URL and JUDGE_BASE_URL, models.json), its akm and this repository's code
-                   (git HEAD and the diff of tracked changes) are the same as when it ran
+                   exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the corpus it
+                   reads, the model settings (MODEL_NAME, MODEL_BASE_URL and JUDGE_BASE_URL each whole with its path, JUDGE_MODEL,
+                   models.json, and OPENAI_BASE_URL for a Harbor eval), its akm (the command, its build and uncommitted changes, and the
+                   version it prints) and this repository's code (git HEAD and the diff of tracked changes) are the same as when it ran
   --dry-run        print what a stage would run`;
 
 function loadState(file: string, m: Matrix): State {

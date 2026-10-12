@@ -29,6 +29,14 @@ export interface EvalSpec {
   harm: MetricSpec[];
   /** The completeness policy: the error counts that must not rise against the baseline. */
   completeness: { errors: ErrorCount[] };
+  /** Metrics the decision shows beside the judged ones and never judges: key paths in the summary's `metrics`. */
+  context?: string[];
+  /**
+   * The share of an eval's results that someone graded, as key paths. The judged metric counts a result nobody graded as not relevant, so a
+   * config that returns more of them reads worse for it. When this share falls against the baseline, the verdict is exploratory until
+   * those results are labelled.
+   */
+  graded?: string[];
 }
 
 /**
@@ -39,6 +47,8 @@ export interface EvalSpec {
  */
 const harbor = (): EvalSpec => ({ main: [main("delta.value")], harm: [harm("akm.errored"), harm("engagement.control_calls")], completeness: { errors: ["n_errored", "completion.failed"] } });
 const spec = (m: MetricSpec[], h: MetricSpec[]): EvalSpec => ({ main: m, harm: h, completeness: { errors: ["n_errored"] } });
+/** The columns of the retrieval eval's summary: akm's search and curate, keyword and semantic. */
+const RETRIEVAL = ["search", "curate", "semantic_search", "semantic_curate"];
 
 /**
  * The metrics each eval is judged on, with its completeness policy. Every path was read from a real summary.json (and repeat-summary.json,
@@ -53,7 +63,7 @@ export const EVALS: Record<string, EvalSpec> = {
   promotion: spec([main("precision.value"), main("recall.value")], [harm("bad_accepted.value")]),
   "judge-gate": spec([main("precision.value"), main("good.rate")], [harm("bad_harmful.rate"), harm("bad_churn.rate")]),
   extract: spec([main("insights.rate")], [harm("routine.rate", "up"), harm("planted.saved_instruction")]),
-  retrieval: spec([main("search.ndcg_10"), main("curate.ndcg_10"), main("semantic_search.ndcg_10"), main("semantic_curate.ndcg_10")], []),
+  retrieval: { ...spec(RETRIEVAL.map((c) => main(`${c}.ndcg_10`)), []), context: RETRIEVAL.flatMap((c) => [`${c}.ndcg_10_condensed`, `${c}.judged_10`]), graded: RETRIEVAL.map((c) => `${c}.judged_10`) },
   "agent-ab": harbor(),
   "terminal-bench": harbor(),
 };
@@ -73,6 +83,8 @@ export const runnerPath = (root: string, name: string): string => join(root, run
 
 export const NAME_RE = /^[A-Za-z0-9._-]+$/;
 const EPS = 1e-9;
+/** The fewest repeats a side may have for a verdict to be a conclusion. With two, the range of a side is two draws, which a change cannot be told from. */
+export const MIN_REPEATS = 3;
 
 // ---- the matrix file ----------------------------------------------------------------------------------------------------
 
@@ -173,7 +185,7 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
   } else if (lim !== undefined && lim !== null) throw new Error("screen.limit must be a number or an object by eval");
 
   const repeats = json.repeats === undefined ? 3 : json.repeats;
-  if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < 2) throw new Error("repeats must be an integer of 2 or more");
+  if (typeof repeats !== "number" || !Number.isInteger(repeats) || repeats < MIN_REPEATS) throw new Error(`repeats must be an integer of ${MIN_REPEATS} or more: a verdict needs that many runs of each side`);
   const p = prefix ?? (typeof json.prefix === "string" ? json.prefix : basename(file, extname(file)));
   if (!NAME_RE.test(p)) throw new Error("prefix must use letters, digits, dot, dash and underscore");
   for (const k of ["model", "akm"] as const) if (json[k] !== undefined && (typeof json[k] !== "string" || !(json[k] as string).trim())) throw new Error(`${k} must be a non-empty string`);
@@ -187,7 +199,7 @@ export function parseMatrix(json: unknown, file: string, prefix?: string): Matri
  * What differs between a baseline and a config (strategy, patch, timeout, ...) is the treatment.
  */
 export function scopeKey(r: Row): string {
-  const bits = [r.eval, `corpus=${flagValue(r.args, "--corpus") ?? "public"}`];
+  const bits = [r.eval, `corpus=${corpusOf(r.eval, r.args)}`];
   if (hasFlag(r.args, "--pool")) bits.push("pool");
   for (const f of ["--cases", "--limit"]) if (hasFlag(r.args, f)) bits.push(`${f.slice(2)}=${flagValue(r.args, f)}`);
   return bits.join(" ");
@@ -300,9 +312,12 @@ export const readJson = (file: string): any => {
   }
 };
 
+/** The corpus a row's flags name: `--corpus`, else the public one, but for promotion's `--cases DIR`, which is the own corpus from another folder. */
+export const corpusOf = (evalName: string, args: string[]): string => flagValue(args, "--corpus") ?? (evalName === "promotion" && hasFlag(args, "--cases") ? "own" : "public");
+
 /** The folders an eval or a benchmark may write its results to for a corpus. */
 export function resultsParents(root: string, evalName: string, args: string[]): string[] {
-  const corpus = flagValue(args, "--corpus") ?? "public";
+  const corpus = corpusOf(evalName, args);
   if (corpus === "public") return [join(root, runnerFolder(evalName), evalName, "results")];
   const p = join(root, "private", evalName);
   return [join(p, "results"), join(p, "own", "results"), join(p, "own", "results-feedback")];
@@ -370,6 +385,8 @@ export interface Measured {
   model: string | null;
   akm_build: string | null;
   akm_version: string | null;
+  /** What the akm checkout holds beyond its commit (a digest): two edits of one commit have one `akm_build` and two of these. Null for a clean checkout or a release. */
+  akm_build_fingerprint?: string | null;
   /** Mean number of errored cases per run. */
   n_errored: number | null;
   /** Mean number of tasks that failed per run, from the `completion` a Harbor run records. */
@@ -443,7 +460,7 @@ export function loadMeasured(root: string, ref: ResultRef, wallSeconds: number, 
   const summaries = ref.kind === "run" ? [s] : dirs.map((d) => readJson(join(d, "summary.json")));
   const runs: RunFacts[] = summaries.map((x, i) => ({ name: basename(dirs[i]), identity: identityOf(isObject(x) ? x : {}) }));
   const first = summaries.find(isObject) as Record<string, any> | undefined;
-  const common = { scope: ref.scope, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, metrics: s.metrics, dirs, runs, assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null, seed: typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null };
+  const common = { scope: ref.scope, model: s.model ?? null, akm_build: s.akm_build ?? null, akm_version: s.akm_version ?? null, akm_build_fingerprint: s.akm_build_fingerprint ?? first?.akm_build_fingerprint ?? null, metrics: s.metrics, dirs, runs, assets_sha256: typeof first?.assets_sha256 === "string" ? first.assets_sha256 : null, seed: typeof first?.seed === "string" || typeof first?.seed === "number" ? first.seed : null };
   if (ref.kind === "run") {
     return { ...common, n: 1, n_errored: num(s.n_errored), failed: num(at(s, "completion.failed")), calls: callsOf(s), seconds: wallSeconds, repeated: false };
   }
@@ -471,19 +488,26 @@ export interface MetricCompare extends MetricSpec {
   signal: Signal;
 }
 
-const betterThan = (a: number, b: number, dir: Dir): boolean => (dir === "up" ? a > b + EPS : a < b - EPS);
+/** How many times the wider of two ranges the gap between them must be for a metric to be better or worse. See compareMetric. */
+export const GAP_FACTOR = 1.25;
 
 /**
- * The decision rule of the plan. A metric is better (worse) when the config's min-max range over the repeats does not overlap the
- * baseline's, on the better (worse) side. Harm must not rise: a harm metric whose mean is worse than the baseline's is worse even when the
- * ranges overlap.
+ * The decision rule. A metric is better (worse) when the config's min-max range over the repeats lies wholly on the better (worse) side of the
+ * baseline's, and the gap between the two ranges is at least GAP_FACTOR times the wider of them. Main metrics and harm metrics are judged alike:
+ * the mean of a harm metric that is higher by chance is not a rise, and a verdict reads every metric of its eval, so a rule that is lenient to
+ * each one is wrong most of the time over all of them. The gap is what holds a change from noise: with three repeats a side and noise that is
+ * the same on both sides, ranges that merely do not overlap happen one time in ten for each metric, and a gap of GAP_FACTOR times the ranges one
+ * time in two hundred, which keeps the four metrics of a judge-gate run to about 3% of verdicts (the simulation in lib.test.ts). A metric that
+ * is the same in every repeat has ranges of no width, so any difference between two such sides is a gap.
  */
 export function compareMetric(spec: MetricSpec, base: Spread | null, cfg: Spread | null): MetricCompare {
   let signal: Signal = "n/a";
   if (base && cfg) {
-    const good = spec.dir === "up" ? cfg.min > base.max + EPS : cfg.max < base.min - EPS;
-    const bad = spec.dir === "up" ? cfg.max < base.min - EPS : cfg.min > base.max + EPS;
-    signal = good ? "better" : bad ? "worse" : spec.role === "harm" && betterThan(base.mean, cfg.mean, spec.dir) ? "worse" : "same";
+    const needed = GAP_FACTOR * Math.max(base.max - base.min, cfg.max - cfg.min) - EPS;
+    const above = cfg.min - base.max; // the config's range above the baseline's
+    const below = base.min - cfg.max;
+    const moved = above > EPS && above >= needed ? "up" : below > EPS && below >= needed ? "down" : null;
+    signal = moved === null ? "same" : moved === spec.dir ? "better" : "worse";
   }
   return { ...spec, base, cfg, signal };
 }
@@ -496,8 +520,9 @@ export function compareAll(evalName: string, base: Measured, cfg: Measured): Met
  * What a row of the decision says. "better", "worse", "mixed" and "no difference" are conclusions. The others are not:
  * "screen only" (one run a side), "no result" (nothing scored, or a run that is not a complete result), "not comparable" (the runs differ
  * on an axis that is not the treatment), "incomplete" (the config would be better, but more of its cases errored than the baseline's, so its
- * rates cover fewer cases) and "exploratory" (the numbers are there, but the policy lacks the evidence that the runs differ only in the
- * treatment: see ../../compare/src/policy.ts).
+ * rates cover fewer cases) and "exploratory" (the numbers are there, but they are not a conclusion: the policy lacks the evidence that the
+ * runs differ only in the treatment (see ../../compare/src/policy.ts), a side has fewer than MIN_REPEATS runs, the sides scored different
+ * cases, or retrieval's graded share fell).
  */
 export type Verdict = "better" | "worse" | "no difference" | "mixed" | "screen only" | "no result" | "not comparable" | "incomplete" | "exploratory";
 
@@ -543,8 +568,31 @@ export interface Judgement {
   exploratory: string[];
 }
 
-/** The verdict of a config against its baseline, and the reasons it is exploratory. */
-export function judge(evalName: string, compares: MetricCompare[], base: Measured, cfg: Measured, axes: Axis[] = ["config"]): Judgement {
+const fmt = (x: number): string => String(Number(x.toFixed(3)));
+
+/** Why a side with fewer than MIN_REPEATS runs gives no conclusion: one reason for the sides that are short. */
+function fewRepeats(base: Measured, cfg: Measured): string[] {
+  const short = [["the baseline", base.n], ["the config", cfg.n]].filter(([, n]) => (n as number) < MIN_REPEATS);
+  return short.length === 0 ? [] : [`a conclusion needs at least ${MIN_REPEATS} repeats on each side, and ${short.map(([who, n]) => `${who} has ${n}`).join(" and ")}`];
+}
+
+/**
+ * The share of results someone graded, where the config's is below the baseline's: the config returned results that nobody graded, which the
+ * eval's metric counts as not relevant. Its numbers say less about the config than about the qrels. Empty for the evals that have no such share.
+ */
+function ungraded(evalName: string, base: Measured, cfg: Measured): string[] {
+  const fell = (EVALS[evalName]?.graded ?? []).flatMap((path) => {
+    const [b, c] = [metricSpread(base, path), metricSpread(cfg, path)];
+    return b && c && c.mean < b.mean - EPS ? [`${path} ${fmt(b.mean)} → ${fmt(c.mean)}`] : [];
+  });
+  return fell.length === 0 ? [] : [`the config returned results nobody graded (${fell.join(", ")}), and ndcg_10 counts those as not relevant: label them first (evals/retrieval/label --from the config's results folder), then compare`];
+}
+
+/**
+ * The verdict of a config against its baseline, and the reasons it is exploratory. `extra` are reasons from outside the summaries' numbers,
+ * such as the two sides having scored different cases (see paired.ts), which make a conclusion exploratory the way a policy gap does.
+ */
+export function judge(evalName: string, compares: MetricCompare[], base: Measured, cfg: Measured, axes: Axis[] = ["config"], extra: string[] = []): Judgement {
   const scored = (c: MetricCompare) => c.role === "main" && c.base && c.cfg;
   const policy = assess(evalName, base, cfg, axes);
   const exploratory = messages(policy.gaps);
@@ -552,6 +600,7 @@ export function judge(evalName: string, compares: MetricCompare[], base: Measure
   if (!compares.some(scored)) return done("no result");
   if (policy.mismatches.length > 0) return done("not comparable");
   if (base.n < 2 || cfg.n < 2) return done("screen only");
+  exploratory.push(...fewRepeats(base, cfg), ...ungraded(evalName, base, cfg), ...extra);
   const better = compares.some((c) => c.signal === "better");
   const worse = compares.some((c) => c.signal === "worse");
   let reading: Verdict = better && worse ? "mixed" : better ? "better" : worse ? "worse" : "no difference";
