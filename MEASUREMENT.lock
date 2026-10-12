@@ -2,6 +2,28 @@
   "lock_version": 1,
   "harness_version": 3,
   "evals": {
+    "consolidate": {
+      "collector": {
+        "version": 1,
+        "sha256": "22bee74f6918311dd8887e946d4333e8a4db9500a377953b2001493678068e5a",
+        "files": [
+          "evals/consolidate/src/collect.ts",
+          "evals/consolidate/src/sandbox.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "3e604024d2b94cc8892ec279b17e1ab39fd77065ff8deeff5fb56230018c161e",
+        "files": [
+          "evals/consolidate/src/cases.ts",
+          "evals/consolidate/src/pool-score.ts",
+          "evals/consolidate/src/score.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,
