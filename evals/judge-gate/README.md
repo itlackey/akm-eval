@@ -15,7 +15,7 @@ evals/judge-gate/run --cases ~/notes/judge-gate
 evals/judge-gate/run --corpus all
 ```
 
-- `--corpus` picks the assets: `public` (the default), `custom` or `all`, which runs both and prints the two results side by side, never as one number. `custom` is the default custom corpus, a light rewrite of the same 106 cases, not held-out data (see Assets). `--cases DIR` names a custom corpus of your own and is `--corpus custom`. See "Corpora" in the root README.
+- `--corpus` picks the assets: `public` (the default), `custom` or `all`, which runs both and prints the two results side by side, never as one number. `custom` is the default custom corpus, a light rewrite of the same 106 cases, not held-out data (see Assets). `--cases DIR` names a custom corpus of your own and is `--corpus custom`. It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README). See "Corpora" in the root README.
 - `--limit N` runs N cases, in the good/bad proportion of the whole set, with at least one good and one bad from two cases on (good cases are a tenth of the set). Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--strategy NAME` makes the akm improve strategy NAME the default of the config the eval writes, in place of `default`. It can be a strategy that `--config-patch` defines, or one akm ships. akm's judge takes its quality gate from that strategy. `summary.json` records it as `strategy`.

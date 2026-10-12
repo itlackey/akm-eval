@@ -30,7 +30,7 @@ evals/bakeoff/run --process schema-repair --repeat 3
 ```
 
 - `--corpus` picks the cases. `public` is the committed cases. `custom` is `private/bakeoff/assets`, the public cases rewritten from a seed, or the folder `--cases DIR` names. `all` runs both and prints the two results side by side, never as one number. See "Corpora" in the root README.
-- `--cases DIR` runs the corpus in `DIR`, which holds a `cases.json` and the files it names (see "Assets"). It is `--corpus custom --cases DIR`.
+- `--cases DIR` runs the corpus in `DIR`, which holds a `cases.json` and the files it names (see "Assets"). It is `--corpus custom --cases DIR`. It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README).
 - `--process NAME` runs one process only.
 - `--limit N` runs N cases, the first of each process in turn, so a short run covers every process.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.

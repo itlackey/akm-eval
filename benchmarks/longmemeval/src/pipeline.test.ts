@@ -888,6 +888,17 @@ describe("the command", () => {
     expect(run.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
   });
 
+  test("--cases asks before it sends the chats to the model and the judge: with no terminal and no -y it stops before anything runs, and -y goes on", () => {
+    const notes = tmp();
+    writeFileSync(join(notes, DATA_FILE), JSON.stringify(tinyDataset()));
+    const asked = command(["--cases", notes, "--limit", "1"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain(`longmemeval: add -y to send the cases in ${notes} to synthetic-model at http://127.0.0.1:9/v1 and synthetic-judge at http://127.0.0.1:9/v1 without asking`);
+    // --retrieval-only has no model and no judge, so there is nothing to ask about
+    expect(command(["--cases", notes, "--retrieval-only"]).err).not.toContain("add -y");
+    expect(command(["--cases", notes, "--limit", "1", "--yes"]).err).not.toContain("add -y");
+  });
+
   test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
     for (const old of ["private", "own", "own-feedback"]) {
       const refused = command(["--corpus", old]);

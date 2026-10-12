@@ -51,6 +51,7 @@ scored with keyword search only, unless --semantic on says otherwise. Needs akm 
             files that have changed since: make them again. all runs public and the default custom corpus.
   --cases   the folder of a custom corpus of your own: queries.jsonl, qrels.jsonl and library/, and bundles.json for a library
             of bundles. It is --corpus custom. See "Run your own set" in evals/retrieval/README.md.
+  -y, --yes  accepted and not needed: this eval sends your set to no model. The matrix passes it to every row with --cases.
   --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only,
             unless --semantic on.
   --semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora (not with
@@ -338,7 +339,7 @@ export async function runCollection(
 }
 
 async function main(): Promise<void> {
-  let values: { akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; semantic?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; semantic?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, semantic: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {

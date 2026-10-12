@@ -134,7 +134,7 @@ Two groups, `ai-skills` and `print`, hold 59% of the graded rows and 60% of the 
 evals/retrieval/run --cases ~/notes/retrieval
 ```
 
-Put a labelled set of your own in a folder and run it like the others, with `--cases DIR`. It is a custom corpus. It is scored with the same metrics, and its results go to `private/retrieval/results/`. Nothing in the folder is published. The folder holds:
+Put a labelled set of your own in a folder and run it like the others, with `--cases DIR`. It is a custom corpus. It is scored with the same metrics, and its results go to `private/retrieval/results/`. Nothing in the folder is published. `run` sends it to no model and takes `-y` only for the matrix. The folder holds:
 
 - `queries.jsonl` and `qrels.jsonl`, in the format that `assets/README.md` describes. A query whose `kind` is `nontask` (or `chitchat`, `notification`, `log` or `status`) is an input whose right result is nothing. Every other query needs grades in `qrels.jsonl`.
 - `library/`: the folder akm should index, or a link to it. It is copied into the sandbox as one bundle, so the refs in `qrels.jsonl` are the refs `akm search` prints for it.
@@ -189,7 +189,7 @@ The prompt is `umbrela-akm-v1`, from our lab's earlier retrieval harness: one as
 
 Run it again after a change to the library or to akm. The pool takes in the new top 10, and only the pairs that are new get a grade.
 
-`--cases DIR` grades your own set the same way, with these differences. Your notes go to the judge. The pool is the top 10 of `akm search` and of `akm curate` over the bundles, with no BM25 and no expected assets: akm lists 200 assets for a call, so `label` cannot list a library of tens of thousands to run a BM25 over, and it knows an asset only by what akm returned for it. A query with `expected` assets stops the run for the same reason. The grades are appended to the folder's `qrels.jsonl` in the rows it has (`id`, `ref`, `grade`, `reason`), and nothing is written to `assets/`. `label` reads 16,000 characters of an asset. Grades that another tool made with another window, prompt or judge do not mix cleanly with these (the library's grades moved on 19.5% of its pairs when the window went from 1,500 to 16,000 characters), so find out how a set was graded before you extend it.
+`--cases DIR` grades your own set the same way, with these differences. Your notes go to the judge, so `label` says which one and asks first; `-y` skips the question. The pool is the top 10 of `akm search` and of `akm curate` over the bundles, with no BM25 and no expected assets: akm lists 200 assets for a call, so `label` cannot list a library of tens of thousands to run a BM25 over, and it knows an asset only by what akm returned for it. A query with `expected` assets stops the run for the same reason. The grades are appended to the folder's `qrels.jsonl` in the rows it has (`id`, `ref`, `grade`, `reason`), and nothing is written to `assets/`. `label` reads 16,000 characters of an asset. Grades that another tool made with another window, prompt or judge do not mix cleanly with these (the library's grades moved on 19.5% of its pairs when the window went from 1,500 to 16,000 characters), so find out how a set was graded before you extend it.
 
 ## Score a run again
 

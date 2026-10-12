@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
 import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
@@ -46,7 +46,9 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     private/longmemeval/generated.json is missing or does not match the files, the public
                     lock or the generator. all runs both and prints the two results side by side.
   --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
-                    It is --corpus custom. See "Corpora" in README.md.
+                    It is --corpus custom. See "Corpora" in README.md. The run says which model and judge it sends the
+                    chats to and asks first.
+  -y, --yes         send the chats of --cases without asking.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.
@@ -426,7 +428,7 @@ export function resolveEndpoints(values: { model?: string; "judge-model"?: strin
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -464,6 +466,7 @@ async function main(): Promise<void> {
   }
   const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, endpoints === null ? [] : [{ role: "model", name: endpoints.model.model, baseUrl: endpoints.model.baseUrl }, { role: "judge", name: endpoints.judge.model, baseUrl: endpoints.judge.baseUrl }]);
 
   const sandbox = openSandbox(searchMode);
   try {

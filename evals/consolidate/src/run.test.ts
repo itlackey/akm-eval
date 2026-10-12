@@ -532,6 +532,6 @@ describe("the command", () => {
     const notes = mkdtempSync(join(tmpdir(), "consolidate notes-"));
     dirs.push(notes);
     writeFileSync(join(notes, "cases.jsonl"), readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl")));
-    expect(run(["--cases", notes], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--cases", notes, "-y"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 });

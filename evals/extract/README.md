@@ -48,7 +48,7 @@ The eval is in two parts (see "How results stay comparable" in the root README).
 
 ## Run your own set
 
-`--cases DIR` runs a folder in the layout of `assets/`: a `cases.json` and a session for each case at `sessions/<project>/<id>.jsonl`, as in "Assets". The fields of a case are in `assets/README.md`. The run records `corpus_folder` when DIR is inside the repository, which is how `scripts/rescore` finds the cases again. For a folder outside it the run records null, and `scripts/rescore` is given the folder with `--cases DIR`.
+`--cases DIR` runs a folder in the layout of `assets/`: a `cases.json` and a session for each case at `sessions/<project>/<id>.jsonl`, as in "Assets". It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README). The fields of a case are in `assets/README.md`. The run records `corpus_folder` when DIR is inside the repository, which is how `scripts/rescore` finds the cases again. For a folder outside it the run records null, and `scripts/rescore` is given the folder with `--cases DIR`.
 
 ## How extract is run
 

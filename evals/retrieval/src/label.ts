@@ -11,7 +11,8 @@ import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } f
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, type Sandbox, akmUsage, akmVersion, completionsUrl, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
-import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
+import { Fatal } from "../../../lib/cli.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { JUDGE_OPTIONS, type ModelSettings, judgeUsage, useJudge } from "../../../lib/models.ts";
 import * as akm from "./akm.ts";
 import { Bm25 } from "./bm25.ts";
@@ -40,7 +41,7 @@ Use one judge for a set: label warns when the qrels were graded by another, or h
             corpus, the rewrite, is not graded: generate carries the public grades over to it).
   --cases   the folder of your own set, in the format of "Run your own set" in evals/retrieval/README.md. It is graded from
             what akm search and akm curate return for it (no BM25: the library is too big to list), and the grades are appended
-            to its qrels.jsonl.
+            to its qrels.jsonl. It sends your notes to the judge: it says which one and asks first, and -y or --yes skips the question.
   --stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset the digest of the asset as the
             library has it now, and judge "legacy" when it records no judge, so that a later edit to the asset grades the pair
             again. It grades nothing, calls no judge and runs no akm, and can be run again: it stamps only what is not stamped.
@@ -468,7 +469,7 @@ export function stampLegacy(qrelsPath: string, library: string): Stamped {
 }
 
 async function main(): Promise<number> {
-  let values: { corpus?: string; cases?: string; limit?: string; from?: string; "stamp-legacy"?: boolean; "judge-model"?: string; akm?: string; help?: boolean };
+  let values: { corpus?: string; cases?: string; yes?: boolean; limit?: string; from?: string; "stamp-legacy"?: boolean; "judge-model"?: string; akm?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, from: { type: "string" }, "stamp-legacy": { type: "boolean" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -528,6 +529,13 @@ async function main(): Promise<number> {
     return 2;
   }
   const { baseUrl, name: model } = judgeSettings;
+  try {
+    await confirmCases(values, [{ role: "judge", name: model, baseUrl }]);
+  } catch (e) {
+    if (!(e instanceof Fatal)) throw e;
+    console.error(`retrieval label: ${e.message}`);
+    return e.code;
+  }
   const judge = makeJudge(baseUrl, judgeSettings.apiKey, model, undefined, undefined, (ms, why) => console.log(`  ${stamp()} waiting ${Math.round(ms / 1000)} s: ${why}`));
   return labelCollection(corpus, { model, judge, limit, from: values.from === undefined ? undefined : resolve(values.from) }, folders);
 }

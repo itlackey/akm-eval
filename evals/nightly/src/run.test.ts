@@ -606,7 +606,7 @@ describe("the command", () => {
     expect(missing.code).toBe(2);
     expect(missing.err).toContain(`${join(empty, "items.jsonl")} is missing`);
     cpSync(join(import.meta.dir, "..", "assets"), empty, { recursive: true });
-    expect(run(["--cases", empty], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--cases", empty, "-y"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
   test("refuses an akm older than the one it is written for", () => {

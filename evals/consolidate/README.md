@@ -31,7 +31,7 @@ evals/consolidate/run --corpus all
 ```
 
 - `--corpus public|custom|all` picks the corpus. `public` is the committed cases. `custom` is the rewrite in `private/consolidate/assets`, or the folder `--cases DIR` names. `all` runs `public` and the custom corpus and prints the two results side by side, never as one number. See "Corpora" in the root README.
-- `--cases DIR` is the folder of a custom corpus (it is `--corpus custom`). The folder holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md`).
+- `--cases DIR` is the folder of a custom corpus (it is `--corpus custom`). The folder holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md`). It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README).
 - `--limit N` runs N cases, taking the first case of each relation in turn. Use it to check a setup.
 - `--repeat N` runs the corpus N times into `<label>-r1` to `<label>-rN` folders and writes the `min`, `max` and `mean` of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. See "Repeat a run" in the root README.
 - `--embedder deterministic|real` picks how akm embeds the notes to find the pairs it judges: its word-hash embedder (the default) or its built-in model. See "How consolidate pairs notes". It works with `--pool` too.

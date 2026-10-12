@@ -586,7 +586,7 @@ describe("run --corpus custom", () => {
   test("a folder of your own goes on to the akm check, and takes no --retrieval-queries", () => {
     const tree = copyOfRepo();
     const notes = ownNotes();
-    expect(bun(tree, "run.ts", ["--cases", notes]).err).toContain("could not run"); // stopped for want of akm
+    expect(bun(tree, "run.ts", ["--cases", notes, "-y"]).err).toContain("could not run"); // stopped for want of akm
     const queried = bun(tree, "run.ts", ["--cases", notes, "--retrieval-queries"]);
     expect(queried.code).toBe(2);
     expect(queried.err).toContain(`--retrieval-queries does not apply to --cases ${notes}`); // the queries are those of the public notes: they are matched by public ref

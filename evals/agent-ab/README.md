@@ -17,7 +17,7 @@ evals/agent-ab/run --repeat 3
 evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 ```
 
-- `--corpus` picks the tasks: `public` (the default) or `custom`, and `all` runs both and prints the two results side by side, never as one number. `custom` is the six tasks with made-up tools, rewritten from a seed (`private/agent-ab/assets/`, see "The private tasks"), or the folder `--cases DIR` names. A folder of your own holds `tasks/` and `libraries/`, laid out as the public ones are (see "Corpora" in the root README).
+- `--corpus` picks the tasks: `public` (the default) or `custom`, and `all` runs both and prints the two results side by side, never as one number. `custom` is the six tasks with made-up tools, rewritten from a seed (`private/agent-ab/assets/`, see "The private tasks"), or the folder `--cases DIR` names. A folder of your own holds `tasks/` and `libraries/`, laid out as the public ones are (see "Corpora" in the root README). The run shows the model and the endpoint the agent will use, and asks before it starts; `-y` skips the question.
 - `--limit N` runs N tasks, spread over the task families, once per arm. Use it to check a setup. Without it every task runs three times per arm.
 - `--model NAME` is the model, as opencode names it. It wins over `MODEL_NAME`. See "What it needs".
 - `--repeat N` runs the whole eval N times, into `<label>-r1` to `<label>-rN`, and writes the min, max and mean of each metric to `<UTC date>-<label>-repeat-summary.json` beside them. Six tasks are few: a run differs from the next by a task or two, and a change smaller than that spread is not a change. With `--corpus all` each corpus is repeated on its own and the two are not printed side by side.

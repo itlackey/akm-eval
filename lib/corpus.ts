@@ -8,14 +8,19 @@
 
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline";
+import { fail } from "./cli.ts";
+import { endpointIdentity } from "./provenance.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 
-/** The options of the two flags, for parseArgs, and their lines of the usage text. */
-export const CORPUS_OPTIONS = { corpus: { type: "string" }, cases: { type: "string" } } as const;
+/** The options of the flags, for parseArgs, and their lines of the usage text. */
+export const CORPUS_OPTIONS = { corpus: { type: "string" }, cases: { type: "string" }, yes: { type: "boolean", short: "y" } } as const;
 export const corpusUsage = `  --corpus  public (default) is the committed cases. custom is the rewrite in private/<eval>/assets that ./generate-assets makes.
             all runs public and custom and prints them side by side. See "Corpora" in README.md.
-  --cases   the folder of a custom corpus of your own, in the eval's format. It is --corpus custom.`;
+  --cases   the folder of a custom corpus of your own, in the eval's format. It is --corpus custom. The run says which model it sends the
+            cases to and asks first.
+  -y, --yes  send the cases of --cases without asking.`;
 
 /** One corpus of a run. */
 export interface ResolvedCorpus {
@@ -85,4 +90,46 @@ export function resolveCorpora(o: ResolveOptions): ResolvedCorpus[] {
       ? { name: "custom", folder: resolve(root, cases), rewrite: false, seed: null, flag: `--cases ${cases}` }
       : { name: "custom", folder: join(dir, "assets"), rewrite: true, seed: seedOf(join(dir, "assets", "generated.json")) ?? seedOf(join(dir, "generated.json")), flag: `--corpus ${choice}` };
   return choice === "all" ? [publicCorpus, custom] : [custom];
+}
+
+/** A model or a judge the cases go to, with the base URL it is called at. A model whose provider Harbor reaches itself has none. */
+export interface Recipient {
+  role: "model" | "judge";
+  name: string;
+  baseUrl?: string;
+}
+
+/** The endpoint as scheme://host[:port]/path, with no credentials and no query. */
+const shown = (baseUrl: string | undefined): string => (baseUrl === undefined ? "its provider's own endpoint" : (endpointIdentity(baseUrl)?.split("?")[0] ?? "an endpoint that is not a URL"));
+
+/** One line from the terminal. The end of the input is no. */
+const readLine = (question: string): Promise<string> =>
+  new Promise((done) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.once("close", () => done("n"));
+    rl.question(question, (answer) => {
+      done(answer);
+      rl.close();
+    });
+  });
+
+/**
+ * Before a run sends the cases of `--cases DIR` to a model, says where they go and asks. Every run that sends them calls it once, after the
+ * model is known and before the akm sandbox or any model call. Without `--cases`, or with `-y`, it asks nothing. Without a terminal it stops
+ * and says to add `-y`, and an answer other than yes stops it with exit 1. `io` is for tests.
+ */
+export async function confirmCases(
+  values: { cases?: string; yes?: boolean },
+  to: Recipient[],
+  io: { tty?: boolean; ask?: (question: string) => Promise<string>; log?: (line: string) => void } = {},
+): Promise<void> {
+  const { cases, yes } = values;
+  if (cases === undefined || yes === true || to.length === 0) return;
+  const where = to.map((r) => `${r.name} at ${shown(r.baseUrl)}`);
+  if (!(io.tty ?? process.stdin.isTTY)) return fail(`add -y to send the cases in ${cases} to ${where.join(" and ")} without asking`);
+  const log = io.log ?? console.log;
+  log(`The cases in ${cases} will be sent to:`);
+  to.forEach((r, i) => log(`  ${r.role}  ${where[i]}`));
+  const answer = (await (io.ask ?? readLine)("Continue? [Y/n] ")).trim().toLowerCase();
+  if (answer !== "" && answer !== "y" && answer !== "yes") fail("Stopped: nothing was sent.", 1);
 }

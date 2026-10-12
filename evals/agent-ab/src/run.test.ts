@@ -687,7 +687,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the cases from it
     const mine = join(root, "notes", "mine");
     ownTasks(mine);
-    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
     expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
     expect(inside.result.changed).toEqual([]);
@@ -703,7 +703,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownTasks(outside);
-    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
     const stored = summary("out", "custom");
     expect(stored).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
@@ -722,7 +722,15 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const mine = join(root, "mine");
     cpSync(join(root, "evals", "agent-ab", "tasks"), join(mine, "tasks"), { recursive: true });
     cpSync(join(root, "evals", "agent-ab", "libraries"), join(mine, "libraries"), { recursive: true });
-    const ran = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
+    // it asks before anything runs: with no terminal and no -y it stops, naming the model and the endpoint the agent will use
+    const asked = run(["--cases", "mine", "--limit", "1", "--label", "asked"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at its provider's own endpoint without asking");
+    const gateway = run(["--cases", "mine", "--limit", "1", "--label", "asked"], { MODEL_BASE_URL: "https://user:SYNTH-pass@gw.example.net:8443/deployment/v1?api_key=SYNTH-key" });
+    expect(gateway.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at https://gw.example.net:8443/deployment/v1 without asking");
+    expect(gateway.err + gateway.out).not.toContain("SYNTH");
+    expect(existsSync(join(root, "private", "agent-ab", "results"))).toBe(false); // nothing ran
+    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
     expect(ran.code, ran.err).toBe(0);
     expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "mine", seed: null, status: "complete" });
     rmSync(join(mine, "tasks"), { recursive: true });

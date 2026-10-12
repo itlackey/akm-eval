@@ -124,7 +124,7 @@ A run from before the manifest is rescored too, if it read the cases that are he
 
 ## Run your own set
 
-`--cases DIR` runs reflect on notes of your own. `DIR` holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md` for its fields) (see "Corpora" in the root README). The results go to `private/reflect/results/`. `--retrieval-queries` does not apply to it: the queries are those of the public notes.
+`--cases DIR` runs reflect on notes of your own. `DIR` holds a `cases.jsonl` in the format of `assets/cases.jsonl` (see `assets/README.md` for its fields) (see "Corpora" in the root README). It asks before it sends the cases to the model (`-y` skips the question: see "Corpora" in the root README). The results go to `private/reflect/results/`. `--retrieval-queries` does not apply to it: the queries are those of the public notes.
 
 ## Assets
 

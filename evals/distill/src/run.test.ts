@@ -536,6 +536,21 @@ describe("run --corpus custom", () => {
     return { code: p.exitCode, err: p.stderr.toString() };
   };
 
+  test("--cases asks before it sends the cases to the model: with no terminal and no -y it stops before akm is asked for, and -y or --yes goes on; --corpus custom never asks", () => {
+    const tree = copyOfRepo();
+    const notes = join(tree, "my notes");
+    cpSync(join(EVAL, "assets"), notes, { recursive: true });
+    const asked = bun(tree, "run.ts", ["--cases", notes]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain(`distill: add -y to send the cases in ${notes} to m at http://127.0.0.1:9/v1 without asking`);
+    expect(asked.err).not.toContain("could not run");
+    for (const yes of ["-y", "--yes"]) expect(bun(tree, "run.ts", ["--cases", notes, yes]).err, yes).toContain("could not run"); // past the question, stopped for want of akm
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
+    const rewrite = bun(tree, "run.ts", ["--corpus", "custom"]);
+    expect(rewrite.err).toContain("could not run"); // the rewrite is the repository's own, derived from public cases: nothing to ask
+    expect(rewrite.err).not.toContain("add -y");
+  }, 60_000);
+
   test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
     const tree = copyOfRepo();
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
