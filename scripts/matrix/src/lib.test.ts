@@ -1823,6 +1823,7 @@ describe("the fingerprint of a job", () => {
       for (const path of publicPaths) expect(existsSync(join(REPO, path)), `${name}: ${path}`).toBe(true);
       const second = corpusPaths(name, ["--corpus", name === "promotion" ? "own" : "private"]);
       expect(second.some((p) => p.startsWith("private/")), name).toBe(true);
+      expect(corpusPaths(name, ["--corpus", "custom"]), name).toEqual(second); // the old value names the default custom corpus
       for (const path of [...publicPaths, ...second]) expect(path, name).not.toMatch(/(^|\/)results/); // a run's own output is no input
       expect(corpusPaths(name, ["--corpus", "all"]).sort(), name).toEqual([...new Set([...publicPaths, ...second])].sort());
     }
@@ -1914,6 +1915,72 @@ describe("the fingerprint of a job", () => {
     expect(promote("--cases", "cases-dir")).toEqual(viaCases); // the default own folder is not read
     lay(root, ["cases-dir/cases.jsonl"], "two");
     expect(promote("--cases", "cases-dir").sha256).not.toBe(viaCases.sha256);
+  });
+
+  test("a custom corpus is its folder with the corpus.json and generated.json that go with it, whichever way the row names it (#47)", () => {
+    const root = tmp();
+    const corpus = (args: string[], name = "reflect") => fingerprintOf(root, job(args, name), env).parts.corpus;
+    const config = (over: object = {}) => JSON.stringify({ kind: "rewrite", private: false, seed: "42", generated: "assets/generated.json", ...over });
+    lay(root, ["evals/reflect/assets/cases.jsonl", "private/reflect/assets/cases.jsonl"], "one");
+    writeFileSync(join(root, "private", "reflect", "assets", "generated.json"), '{"seed":"42"}');
+    writeFileSync(join(root, "private", "reflect", "corpus.json"), config());
+    const custom = corpus(["--corpus", "custom"]);
+    // the old value, the default and the flag give the same folder
+    expect(corpus(["--corpus", "private"])).toBe(custom);
+    expect(corpus(["--corpus=custom"])).toBe(custom);
+    expect(corpus(["--cases", "private/reflect/assets"])).not.toBe(corpus([])); // a custom corpus is not the public one
+    // each of the folder, the corpus.json beside it and the generated.json in it is part of what the job read
+    const edits: [string, () => void][] = [
+      ["the cases", () => lay(root, ["private/reflect/assets/cases.jsonl"], "two")],
+      ["the corpus.json", () => writeFileSync(join(root, "private", "reflect", "corpus.json"), config({ private: true }))],
+      ["the generated.json", () => writeFileSync(join(root, "private", "reflect", "assets", "generated.json"), '{"seed":"42","made":"again"}')],
+    ];
+    for (const [what, edit] of edits) {
+      const before = corpus(["--corpus", "custom"]);
+      edit();
+      expect(corpus(["--corpus", "custom"]), what).not.toBe(before);
+    }
+    expect(corpus([])).toBe(corpus(["--corpus", "public"])); // the public corpus is none of them
+    // a corpus.json that is not sound stops the run, not the fingerprint: the job is recorded as it ended
+    writeFileSync(join(root, "private", "reflect", "corpus.json"), '{"kind":"rewrite","privat":false}');
+    expect(() => corpus(["--corpus", "custom"])).not.toThrow();
+    writeFileSync(join(root, "private", "reflect", "corpus.json"), config());
+    // --corpus all is both
+    const all = corpus(["--corpus", "all"]);
+    lay(root, ["evals/reflect/assets/cases.jsonl"], "public two");
+    const publicChanged = corpus(["--corpus", "all"]);
+    lay(root, ["private/reflect/assets/cases.jsonl"], "custom three");
+    expect(new Set([all, publicChanged, corpus(["--corpus", "all"])]).size).toBe(3);
+  });
+
+  test("--cases DIR is the folder it names, inside the repository or not, with the corpus.json that sits in it", () => {
+    const root = tmp();
+    const corpus = (args: string[], name = "promotion") => fingerprintOf(root, job(args, name), env).parts.corpus;
+    // inside the repository: named by its path from the root, and the corpus.json is one of its files
+    lay(root, ["notes/cases.jsonl"], "one");
+    writeFileSync(join(root, "notes", "corpus.json"), '{"kind":"own","private":true}');
+    const inside = corpus(["--cases", "notes"]);
+    writeFileSync(join(root, "notes", "corpus.json"), '{"kind":"own","private":false}');
+    expect(corpus(["--cases", "notes"])).not.toBe(inside);
+    lay(root, ["other/cases.jsonl"], "one");
+    expect(corpus(["--cases", "other"])).not.toBe(corpus(["--cases", "notes"])); // another folder is another corpus, with the same bytes or not
+    // outside it: the bytes count, the place does not, and a folder of another name does
+    const folder = (parent: string, name: string, text: string) => {
+      const dir = join(tmp(), parent, name);
+      lay(dir, ["cases.jsonl"], text);
+      return dir;
+    };
+    const a = corpus(["--cases", folder("here", "my notes", "one")]);
+    expect(corpus(["--cases", folder("there", "my notes", "one")])).toBe(a);
+    expect(corpus(["--cases", folder("here", "my notes", "two")])).not.toBe(a);
+    expect(corpus(["--cases", folder("here", "other notes", "one")])).not.toBe(a);
+    // the default folder of the eval is not read when the row names another
+    lay(root, ["private/promotion/own/cases.jsonl"], "default one");
+    const named = corpus(["--cases", "notes"]);
+    lay(root, ["private/promotion/own/cases.jsonl"], "default two");
+    expect(corpus(["--cases", "notes"])).toBe(named);
+    // --corpus own is promotion's default folder
+    expect(corpus(["--corpus", "own"])).toBe(corpus(["--corpus", "custom"]));
   });
 
   test("the Harbor evals: agent-ab reads its tasks and libraries, and terminal-bench its library, which for the private corpus is the retrieval eval's", () => {
@@ -2379,27 +2446,54 @@ describe("retrieval is exploratory when it returns results nobody graded (#71)",
 
 // ---- small fixes from the review of main (#73, #74) -------------------------------------------------------------------------
 
-describe("a promotion row with --cases DIR (#73)", () => {
-  const args = ["--cases", "my cases"];
+describe("the corpus a row names: public, custom, and the old values (#47)", () => {
+  const row = (evalName: string, args: string[]) => ({ name: "r", eval: evalName, args });
 
-  test("is the own corpus: its results are looked for where own results go, and found", () => {
+  test("is public, custom or all: --cases alone is custom for every eval, and private, own and own-feedback are custom", () => {
+    expect(corpusOf("reflect", [])).toBe("public");
+    expect(corpusOf("reflect", ["--corpus", "public"])).toBe("public");
+    expect(corpusOf("reflect", ["--corpus=custom"])).toBe("custom");
+    expect(corpusOf("reflect", ["--corpus", "all"])).toBe("all");
+    for (const evalName of ["promotion", "distill", "reflect"]) expect(corpusOf(evalName, ["--cases", "my cases"]), evalName).toBe("custom");
+    expect(corpusOf("promotion", ["--cases=x"])).toBe("custom");
+    for (const old of ["private", "own", "own-feedback"]) expect(corpusOf("distill", ["--corpus", old]), old).toBe("custom");
+    expect(corpusOf("promotion", ["--cases", "x", "--corpus", "own"])).toBe("custom");
+    expect(corpusOf("reflect", ["--corpus", "elsewhere"])).toBe("elsewhere"); // the runner refuses what it does not know
+  });
+
+  test("a row's results are looked for where the corpus writes them: the eval's results/ for public, private/<eval>/ for custom, and found", () => {
     const root = tmp();
-    expect(corpusOf("promotion", args)).toBe("own");
-    expect(corpusOf("promotion", [])).toBe("public");
-    expect(corpusOf("promotion", ["--cases", "x", "--corpus", "own"])).toBe("own");
-    expect(corpusOf("distill", args)).toBe("public"); // only promotion takes --cases as an own corpus
-    expect(resultsParents(root, "promotion", args)).toEqual([join(root, "private", "promotion", "results"), join(root, "private", "promotion", "own", "results"), join(root, "private", "promotion", "own", "results-feedback")]);
+    const args = ["--cases", "my cases"];
+    expect(resultsParents(root, "promotion", [])).toEqual([join(root, "evals", "promotion", "results")]);
+    for (const a of [args, ["--corpus", "custom"], ["--corpus", "own"], ["--corpus", "private"]]) {
+      expect(resultsParents(root, "promotion", a), a.join(" ")).toEqual([join(root, "private", "promotion", "results"), join(root, "private", "promotion", "own", "results"), join(root, "private", "promotion", "own", "results-feedback")]);
+    }
     const dir = join(root, "private", "promotion", "results", "2026-10-09-sw-a-s");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "promotion", corpus: "own", label: "sw-a-s" }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "promotion", corpus: "custom", corpus_kind: "own", label: "sw-a-s" }));
     const job = { label: "sw-a-s", repeat: null, args, row: { name: "a", eval: "promotion", args } };
     expect(findResults(root, job, 0)).toEqual([{ scope: "", kind: "run", file: "private/promotion/results/2026-10-09-sw-a-s/summary.json" }]);
   });
 
-  test("runs the same cases as a row that names --corpus own, and not those of the public corpus", () => {
-    const row = (a: string[]) => ({ name: "r", eval: "promotion", args: a });
-    expect(scopeKey(row(args))).toBe(scopeKey(row(["--corpus", "own", ...args])));
-    expect(scopeKey(row(args))).not.toBe(scopeKey(row([])));
+  test("a baseline and a config run the same cases when they name the same folder, however they name it", () => {
+    // reflect's default custom corpus is the rewrite in private/reflect/assets, which --corpus private named before
+    expect(scopeKey(row("reflect", ["--corpus", "private"]))).toBe(scopeKey(row("reflect", ["--corpus", "custom"])));
+    expect(scopeKey(row("reflect", ["--corpus", "custom"]))).toBe("reflect corpus=custom folder=private/reflect/assets");
+    expect(scopeKey(row("reflect", []))).toBe("reflect corpus=public");
+    // promotion's default is your own notes, which --corpus own named
+    expect(scopeKey(row("promotion", ["--corpus", "own"]))).toBe(scopeKey(row("promotion", ["--corpus", "custom"])));
+    expect(scopeKey(row("promotion", ["--corpus", "custom"]))).toBe("promotion corpus=custom folder=private/promotion/own");
+    // distill's own corpus is not its default one
+    expect(scopeKey(row("distill", ["--corpus", "own"]))).not.toBe(scopeKey(row("distill", ["--corpus", "custom"])));
+    expect(scopeKey(row("distill", ["--corpus", "own-feedback"]))).not.toBe(scopeKey(row("distill", ["--corpus", "own"])));
+    // --cases DIR is the folder it names, which another row may name too
+    expect(scopeKey(row("promotion", ["--cases", "x"]))).toBe("promotion corpus=custom cases=x");
+    expect(scopeKey(row("promotion", ["--cases", "x"]))).toBe(scopeKey(row("promotion", ["--corpus", "own", "--cases", "x"])));
+    expect(scopeKey(row("promotion", ["--cases", "x"]))).not.toBe(scopeKey(row("promotion", ["--cases", "y"])));
+    expect(scopeKey(row("promotion", ["--cases", "x"]))).not.toBe(scopeKey(row("promotion", [])));
+    // a config on the old value finds its baseline on the new one
+    const m = parseMatrix({ prefix: "sw", baseline: { name: "base", eval: "reflect", args: ["--corpus", "custom"] }, configs: [{ name: "old", eval: "reflect", args: ["--corpus", "private", "--strategy", "quick"] }] }, FILE);
+    expect(baselineFor(m, m.configs[0]).name).toBe("base");
   });
 });
 

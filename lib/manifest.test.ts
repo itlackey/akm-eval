@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, loadMeasurement, lockedParts, manifestProblems, measuredEvals, measuredFiles, partSha256, readLock, readManifest } from "./manifest.ts";
+import { type Measurement, REPO_ROOT, buildManifest, caseDigests, completionOf, corpusFolderOf, loadMeasurement, lockedParts, manifestProblems, measuredEvals, measuredFiles, partSha256, readLock, readManifest } from "./manifest.ts";
 import { endpointId, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
@@ -213,5 +213,22 @@ describe("the manifest", () => {
     expect(readManifest({ eval: "toy", corpus: "private", manifest: m })).toEqual({ kind: "invalid", problems: ['the manifest says corpus is "public" and the summary says "private"'] });
     expect(readManifest({ eval: "other", manifest: m })).toMatchObject({ kind: "invalid" });
     expect(readManifest({ manifest: m })).toEqual({ kind: "manifest", manifest: m }); // a summary that leaves a field out is not contradicted by it
+  });
+});
+
+describe("the folder of a custom corpus", () => {
+  test("is recorded from the repository root when it is inside, with forward slashes, and is null for a folder outside it, never an absolute path", () => {
+    const root = "/work/a checkout/key-akm-eval";
+    expect(corpusFolderOf("/work/a checkout/key-akm-eval/private/reflect/assets", root)).toBe("private/reflect/assets");
+    expect(corpusFolderOf("private/reflect/assets", root)).toBe("private/reflect/assets"); // a relative folder is from the root, as --cases is
+    expect(corpusFolderOf("./notes//mine/", root)).toBe("notes/mine");
+    expect(corpusFolderOf("a/../b", root)).toBe("b");
+    expect(corpusFolderOf("/work/a checkout/key-akm-eval-copy/notes", root)).toBeNull(); // a sibling whose name starts like the root
+    expect(corpusFolderOf("/home/user/notes", root)).toBeNull();
+    expect(corpusFolderOf("../notes", root)).toBeNull();
+    expect(corpusFolderOf("..", root)).toBeNull();
+    expect(corpusFolderOf("/work/a checkout/key-akm-eval", root)).toBeNull(); // the repository itself is no corpus folder
+    expect(corpusFolderOf("..notes/x", root)).toBe("..notes/x"); // a name that starts with two dots is inside
+    expect(corpusFolderOf(join(REPO_ROOT, "private", "x"))).toBe("private/x");
   });
 });

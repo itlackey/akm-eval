@@ -4,7 +4,7 @@
 
 import { basename, join } from "node:path";
 import type { Axis } from "../../compare/src/policy.ts";
-import { EVALS, MIN_REPEATS, type Dir, type Matrix, type Measured, type Row, type Signal, type Spread, type Stage, type State, type Verdict, baselineFor, compareAll, incompleteReason, incomparable, judge, measuredOf, metricSpread, moreErrors, readJson, runDirs, screenDiffers, treatmentAxes, unusableReason } from "./lib.ts";
+import { EVALS, MIN_REPEATS, type Dir, type Matrix, type Measured, type Row, type Signal, type Spread, type Stage, type State, type Verdict, baselineFor, compareAll, incompleteReason, incomparable, judge, manifestReasons, measuredOf, metricSpread, moreErrors, readJson, runDirs, scoredAlike, screenDiffers, treatmentAxes, unusableReason } from "./lib.ts";
 import { type Cases, type Coverage, type NoiseFloor, type Paired, type PairedMetric, casesOf, noiseOf, pairedDifferent, pairedOf } from "./paired.ts";
 
 // ---- the report ------------------------------------------------------------------------------------------------------------
@@ -33,6 +33,11 @@ export interface DecisionRow {
   baseline_akm_version: string | null;
   baseline_akm_build_fingerprint: string | null;
   model: string | null;
+  /** The collector and the scorer each side's runs were made and scored with, "v<version>" (the versions of MEASUREMENT.lock), null for a run from before the manifest. Several versions among the runs of one side are listed. The scorers are those of the stored results: see `rescored`. */
+  collector: { baseline: string | null; config: string | null };
+  scorer: { baseline: string | null; config: string | null };
+  /** The two sides had been scored by different scorers, or against different labels, so both were scored again with the current scorer (scripts/rescore) before the metrics were compared. Nothing was written. */
+  rescored: boolean;
   /** Why the verdict is "exploratory": evidence the policy needs and the summaries lack. Empty for a row that may be used for a conclusion. */
   exploratory: string[];
   /** scripts/compare on the repeats of both sides, in the confirm stage: the cases that flipped, a sign test and the paired intervals. */
@@ -74,6 +79,9 @@ const emptyRow = (config: Row, base: Row, stage: Stage, treatment: Axis[]): Deci
   baseline_akm_version: null,
   baseline_akm_build_fingerprint: null,
   model: null,
+  collector: { baseline: null, config: null },
+  scorer: { baseline: null, config: null },
+  rescored: false,
   exploratory: [],
   paired: null,
   coverage: { baseline: null, config: null },
@@ -107,6 +115,12 @@ function caseReasons(cases: Cases | null): string[] {
   return parts.length === 0 ? [] : [`the sides scored different cases, so their rates are over different cases: ${parts.join("; ")}`];
 }
 
+/** The versions of one part ("collector" or "scorer") over the runs behind a result, as "v2", or "v1, v2" when they differ, and null when a run has no manifest. */
+function versionsOf(m: Measured, part: "collector" | "scorer"): string | null {
+  if (m.runs.length === 0 || m.runs.some((r) => !r.manifest)) return null;
+  return [...new Set(m.runs.map((r) => (r.manifest as NonNullable<typeof r.manifest>)[part].version))].sort((a, b) => a - b).map((v) => `v${v}`).join(", ");
+}
+
 /** Both results ran one akm: the same build, version and uncommitted changes. */
 const sameBuild = (a: Measured, b: Measured): boolean => a.akm_build === b.akm_build && a.akm_version === b.akm_version && (a.akm_build_fingerprint ?? null) === (b.akm_build_fingerprint ?? null);
 
@@ -129,19 +143,28 @@ export function buildDecision(root: string, m: Matrix, state: State, minDelta: n
       rows.push({ ...emptyRow(config, base, stage, treatment), note });
       continue;
     }
-    for (const cm of cs) {
-      const bm = bs.find((x) => x.scope === cm.scope);
-      const row: DecisionRow = { ...emptyRow(config, base, stage, treatment), scope: cm.scope, n: cm.n, calls: { baseline: null, config: cm.calls }, seconds: { baseline: null, config: cm.seconds }, n_errored: { baseline: null, config: cm.n_errored }, akm_build: cm.akm_build, akm_version: cm.akm_version, akm_build_fingerprint: cm.akm_build_fingerprint ?? null, model: cm.model };
-      if (!bm) {
+    for (const cm0 of cs) {
+      const bm0 = bs.find((x) => x.scope === cm0.scope);
+      const row: DecisionRow = { ...emptyRow(config, base, stage, treatment), scope: cm0.scope, n: cm0.n, calls: { baseline: null, config: cm0.calls }, seconds: { baseline: null, config: cm0.seconds }, n_errored: { baseline: null, config: cm0.n_errored }, akm_build: cm0.akm_build, akm_version: cm0.akm_version, akm_build_fingerprint: cm0.akm_build_fingerprint ?? null, model: cm0.model, collector: { baseline: null, config: versionsOf(cm0, "collector") }, scorer: { baseline: null, config: versionsOf(cm0, "scorer") } };
+      if (!bm0) {
         const why = unusableReason(root, state[stage][base.name]);
         rows.push({ ...row, note: why ? `the baseline run ${why}` : "the baseline has no result for this scope" });
         continue;
       }
+      const shown = { collector: { baseline: versionsOf(bm0, "collector"), config: versionsOf(cm0, "collector") }, scorer: { baseline: versionsOf(bm0, "scorer"), config: versionsOf(cm0, "scorer") } };
+      // Results scored by different scorers, or against different labels, are scored again with the current scorer, as scripts/compare does.
+      const same = scoredAlike(root, bm0, cm0);
+      if ("refusal" in same) {
+        rows.push({ ...row, ...shown, verdict: "not comparable", note: same.refusal });
+        continue;
+      }
+      const [bm, cm] = [same.base, same.cfg];
       const compares = compareAll(config.eval, bm, cm);
       // Which cases each side scored: two sides with as many errored cases can have failed on different ones.
-      const found = casesOf(config.eval, bm.dirs ?? [], cm.dirs ?? []);
-      const { verdict, reading, exploratory } = judge(config.eval, compares, bm, cm, treatment, caseReasons(found.cases));
+      const found = casesOf(config.eval, bm.rescored ?? bm.dirs ?? [], cm.rescored ?? cm.dirs ?? []);
+      const { verdict, reading, exploratory } = judge(config.eval, compares, bm, cm, treatment, [...caseReasons(found.cases), ...manifestReasons(root, config.eval, bm0, cm0)]);
       const notes: string[] = [];
+      if (same.again) notes.push(`${same.again}, so both were scored again with the current scorer`);
       if (verdict === "not comparable") notes.push(incomparable(bm, cm, treatment, config.eval) ?? "");
       if (verdict === "exploratory") notes.push(`exploratory, not a conclusion: ${exploratory.join("; ")} (the metrics read: ${reading})`);
       else if (exploratory.length > 0) notes.push(`exploratory: ${exploratory.join("; ")}`);
@@ -155,7 +178,7 @@ export function buildDecision(root: string, m: Matrix, state: State, minDelta: n
       // excludes 0 where the ranges overlap is said in the note.
       let paired: Paired | null = null;
       if (stage === "confirm" && bm.repeated && cm.repeated && verdict !== "no result" && verdict !== "not comparable") {
-        const result = pairedOf(config.eval, bm.dirs ?? [], cm.dirs ?? [], treatment);
+        const result = pairedOf(config.eval, bm.rescored ?? bm.dirs ?? [], cm.rescored ?? cm.dirs ?? [], treatment);
         paired = result.paired;
         if (result.note) notes.push(result.note);
       }
@@ -172,6 +195,8 @@ export function buildDecision(root: string, m: Matrix, state: State, minDelta: n
       notes.push(...moreErrors(config.eval, bm, cm));
       rows.push({
         ...row,
+        ...shown,
+        rescored: same.again !== null,
         n: Math.min(bm.n, cm.n),
         verdict,
         note: notes.join("; "),
@@ -259,12 +284,14 @@ export function renderMarkdown(d: Decision): string {
   const out = [`# Matrix decision: ${d.prefix}`, "", `Matrix \`${basename(d.matrix)}\`, generated ${d.generated}. A cell reads baseline → config, as mean (min–max over the repeats). ↑ higher is better, ↓ lower is better; harm must not rise. Verdicts apply one rule to every metric, harm included: the config's range lies wholly on one side of the baseline's, with a gap at least as wide as the wider range; n=1 is "screen only". The scored column is the cases that got a verdict of the cases given, per run, and how many errored. A config with more errored cases than its baseline is never "better" (it is "incomplete"), and a row is "exploratory", not a conclusion, when its summaries lack the evidence that only the treatment differs, a side has fewer than ${MIN_REPEATS} repeats, the two sides scored different cases, or (retrieval) the share of judged results fell.`, ""];
   if (d.rows.some((r) => r.treatment.includes("build"))) out.push("A row whose config runs another akm build than its baseline shows both builds in the akm build column, a release with its version, a checkout with changes that are not committed with the start of the digest of those changes. Every axis outside the row's treatment must still be the same, the model included.", "");
   if (d.rows.some((r) => r.context.some((x) => x.baseline || x.config))) out.push("Retrieval rows also show ndcg_10_condensed (nDCG over the results that someone graded) and judged_10 (the share of results that someone graded) under the main metrics. They are not judged. ndcg_10 counts a result nobody graded as not relevant, so a config whose judged_10 falls is exploratory until its results are labelled (evals/retrieval/label --from its results folder).", "");
+  if (d.rows.some((r) => r.collector.baseline || r.collector.config)) out.push("The collector, scorer column shows the versions of `MEASUREMENT.lock` that the runs behind each side were collected and scored with, baseline → config. Two collector versions are not comparable unless `harness` is the row's treatment. When the two sides were scored by different scorers, or against different labels, both are scored again with the current scorer before they are compared (the row says so), and the column shows the versions the stored results were scored with.", "");
   if (d.rows.some((r) => r.paired)) out.push("The paired column is scripts/compare on all the repeats of the baseline and of the config, pooled by case: each case is scored by its mean over the repeats of a side, and the order of the repeats does not matter. It shows the cases whose mean went up (better) and down (worse), the cases that agree and the sign test on the flips, then each metric as config minus baseline with the 95% interval of a bootstrap over the cases. It does not change the verdict; a \"no difference\" whose interval excludes 0 says so in its note.", "");
   const groups = new Map<string, DecisionRow[]>();
   for (const r of d.rows) groups.set(`${r.eval}${r.scope ? ` (${r.scope})` : ""} vs ${r.baseline}`, [...(groups.get(`${r.eval}${r.scope ? ` (${r.scope})` : ""} vs ${r.baseline}`) ?? []), r]);
   for (const [title, rows] of groups) {
     const withPaired = rows.some((r) => r.paired);
-    out.push(`## ${title}`, "", `| config | runs | main metric | harm | scored | calls | seconds | akm build | model |${withPaired ? " paired |" : ""} verdict |`, `|---|---|---|---|---|---|---|---|---|${withPaired ? "---|" : ""}---|`);
+    const withParts = rows.some((r) => r.collector.baseline || r.collector.config || r.scorer.baseline || r.scorer.config);
+    out.push(`## ${title}`, "", `| config | runs | main metric | harm | scored | calls | seconds | akm build | model |${withParts ? " collector, scorer |" : ""}${withPaired ? " paired |" : ""} verdict |`, `|---|---|---|---|---|---|---|---|---|${withParts ? "---|" : ""}${withPaired ? "---|" : ""}---|`);
     for (const r of rows) {
       const cell = (role: "main" | "harm") =>
         [
@@ -273,7 +300,9 @@ export function renderMarkdown(d: Decision): string {
         ].join("<br>") || "–";
       const pair = (p: { baseline: number | null; config: number | null }) => `${fmtNum(p.baseline)} → ${fmtNum(p.config)}`;
       const build = r.treatment.includes("build") ? `${buildLabel(r.baseline_akm_build, r.baseline_akm_version, r.baseline_akm_build_fingerprint)} → ${buildLabel(r.akm_build, r.akm_version, r.akm_build_fingerprint)}` : buildLabel(r.akm_build, r.akm_version, r.akm_build_fingerprint);
-      out.push(`| ${r.config} | ${r.n} | ${cell("main")} | ${cell("harm")} | ${fmtCoverage(r.coverage.baseline)} → ${fmtCoverage(r.coverage.config)} | ${pair(r.calls)} | ${pair(r.seconds)} | ${build} | ${r.model ?? "–"} |${withPaired ? ` ${pairedCell(r.paired)} |` : ""} **${r.verdict}**${r.note ? `<br>${r.note}` : ""} |`);
+      const parts = (p: { baseline: string | null; config: string | null }) => `${p.baseline ?? "–"} → ${p.config ?? "–"}`;
+      const partsCell = `collector ${parts(r.collector)}<br>scorer ${parts(r.scorer)}${r.rescored ? " (scored again)" : ""}`;
+      out.push(`| ${r.config} | ${r.n} | ${cell("main")} | ${cell("harm")} | ${fmtCoverage(r.coverage.baseline)} → ${fmtCoverage(r.coverage.config)} | ${pair(r.calls)} | ${pair(r.seconds)} | ${build} | ${r.model ?? "–"} |${withParts ? ` ${partsCell} |` : ""}${withPaired ? ` ${pairedCell(r.paired)} |` : ""} **${r.verdict}**${r.note ? `<br>${r.note}` : ""} |`);
     }
     out.push("");
   }
