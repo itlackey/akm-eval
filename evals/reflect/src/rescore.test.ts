@@ -157,3 +157,30 @@ describe("a run stored before the fix of #57", () => {
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8")).toBe(stored);
   });
 });
+
+describe("a run stored before the fix of #58", () => {
+  // Two golden refusals by the retrieval check that could not grade, as the scorer wrote them then: a refusal by the retrieval gate, and wrong.
+  const checks = { body_kept: true, no_extra_change: true, no_invented: true, defect_fixed: false };
+  const TIMEOUT = { id: "description-quote-02", class: "description-quote", outcome: "refused", reason: "quality_rejected: Reflect proposal refused: retrieval check could not grade the old content (timeout)", served: "qwen3-27b", seconds: 128.4, correct: false, checks, changed: [], values: {} };
+  const FAILED = { id: "title-missing-04", class: "title-missing", outcome: "refused", reason: "quality_rejected: Reflect proposal refused: retrieval check could not grade the new content (error)", served: "qwen3-27b", seconds: 33, correct: false, checks, changed: [], values: {} };
+
+  test("are errors when scored again, through scripts/rescore: not refusals, not scored, and the timeout is counted", () => {
+    const dir = runBefore(tmp(), [TIMEOUT, FAILED]);
+    const before = readStored(dir).summary;
+    expect(before).toMatchObject({ n_errored: 0, timeouts: 0, metrics: { refused: { retrieval: 2 }, defects: { n: 6, correct: 4, rate: 0.6667 } } }); // a slow endpoint read as a strict retrieval gate
+    const { rows, summary } = rescoreWithCommand(dir);
+    expect(rows.find((r) => r.id === TIMEOUT.id)).toEqual({ id: TIMEOUT.id, class: TIMEOUT.class, outcome: "error", reason: TIMEOUT.reason, seconds: 128.4, correct: null, checks: null, changed: [], values: {}, error: TIMEOUT.reason, timed_out: true });
+    expect(rows.find((r) => r.id === FAILED.id)).toMatchObject({ outcome: "error", correct: null, checks: null, error: FAILED.reason });
+    expect(rows.find((r) => r.id === FAILED.id)).not.toHaveProperty("timed_out");
+    expect(summary).toMatchObject({ n_run: 10, n_scored: 8, n_errored: 2, timeouts: 1, metrics: { refused: { filter: 0, judge: 0, retrieval: 0, other: 0 }, defects: { n: 4, correct: 4, rate: 1 } } });
+    expect(summary.manifest.completion).toMatchObject({ errored: [TIMEOUT.id, FAILED.id].sort() });
+    expect(summary.manifest.completion.scored).not.toContain(TIMEOUT.id);
+  });
+
+  test("a second rescore of the rescored folder gives the same rows", () => {
+    const first = rescoreWithCommand(runBefore(tmp(), [TIMEOUT, FAILED]));
+    const parent = tmp();
+    const dir = storedRun(parent, "2026-10-12-again", CASES, first.rows, {}, STALE);
+    expect(rescoreWithCommand(dir).rows).toEqual(first.rows);
+  });
+});

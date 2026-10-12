@@ -321,7 +321,7 @@ export interface Row {
   proposal?: string;
   seconds: number;
   error?: string;
-  /** The error was a timeout: akm ran past its timeout and was killed. Absent on every other row. */
+  /** The error was a timeout: akm ran past its timeout and was killed, or the model call of its retrieval check timed out. Absent on every other row. */
   timed_out?: true;
 }
 
@@ -346,13 +346,26 @@ export interface Raw {
 }
 
 /**
- * A row for a case. An error has no verdict. A reply akm could not use is never correct. An edit that a gate refused never reaches the note,
- * which ends as it was, so it is scored as a note left alone: right for a control, a miss for a defect.
+ * Did akm's retrieval check fail to grade the edit, because the model call it makes timed out, failed or gave no grade? akm 0.9.26 reports
+ * that as a refusal ("retrieval check could not grade the old content (timeout)"), but nothing was judged: the edit was neither passed
+ * nor refused on its merits, and the case has no verdict, like any other call that failed.
+ */
+const couldNotGrade = (run: Raw): boolean => run.outcome === "refused" && /retrieval check could not grade/i.test(run.reason ?? "");
+
+/**
+ * A row for a case. An error has no verdict, and a retrieval check that could not grade is one. A reply akm could not use is never correct.
+ * An edit that a gate refused never reaches the note, which ends as it was, so it is scored as a note left alone: right for a control, a
+ * miss for a defect.
  */
 export function makeRow(c: Case, run: Raw): Row {
+  const noGrade = couldNotGrade(run);
+  const outcome: Outcome = noGrade ? "error" : run.outcome;
   // An error left no response, so nothing answered: the name akm reports then is only the one it asked for.
-  const base = { id: c.id, class: c.class, outcome: run.outcome, reason: run.reason ?? "", ...(run.served && run.outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
-  if (run.outcome === "error") return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(run.timedOut ? { timed_out: true as const } : {}) };
+  const base = { id: c.id, class: c.class, outcome, reason: run.reason ?? "", ...(run.served && outcome !== "error" ? { served: run.served } : {}), seconds: run.seconds };
+  if (outcome === "error") {
+    const timedOut = run.timedOut || (noGrade && /\(timeout\)/i.test(run.reason ?? ""));
+    return { ...base, correct: null, checks: null, changed: [], values: {}, error: run.error ?? run.reason, ...(timedOut ? { timed_out: true as const } : {}) };
+  }
   const { checks, changed, values } = score(c, run.outcome === "proposal" ? run.proposal : undefined);
   const correct = run.outcome !== "unusable" && Object.values(checks).every(Boolean);
   return { ...base, correct, checks, changed, values, ...(run.outcome === "proposal" && run.proposal !== undefined ? { proposal: run.proposal } : {}) };

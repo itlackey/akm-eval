@@ -34,6 +34,7 @@ import {
   selectCases,
   servedModel,
   splitFrontmatter,
+  summarize,
   timedOutMessage,
 } from "./lib.ts";
 
@@ -450,6 +451,24 @@ describe("makeRow", () => {
     expect([off.correct, on.correct]).toEqual([false, true]);
   });
 
+  test("a retrieval check that could not grade is an error, not a refusal: it has no verdict, and a timeout is counted as one (#58)", () => {
+    const fix = mk("when-to-use-missing", inject("when-to-use-missing", NOTE) as string);
+    const reason = "quality_rejected: Reflect proposal refused: retrieval check could not grade the old content (timeout)";
+    for (const target of [c, fix]) {
+      expect(makeRow(target, { outcome: "refused", reason, served: "qwen3-27b", seconds: 40 })).toEqual({ id: target.id, class: target.class, outcome: "error", reason, seconds: 40, correct: null, checks: null, changed: [], values: {}, error: reason, timed_out: true });
+    }
+    // a model call that failed or gave no grade is no timeout, but is as much an error
+    for (const why of ["(error)", "(aborted)", ""]) {
+      const row = makeRow(c, { outcome: "refused", reason: `quality_rejected: Reflect proposal refused: retrieval check could not grade the new content ${why}`.trim(), seconds: 1 });
+      expect(row).toMatchObject({ outcome: "error", correct: null, checks: null });
+      expect("timed_out" in row).toBe(false);
+    }
+    const rows = [makeRow(c, { outcome: "refused", reason, seconds: 40 }), makeRow(c, { outcome: "refused", reason: "quality_rejected: Reflect proposal refused: retrieval regression: grade 3.00 -> 2.20 over 5 retrieval queries", seconds: 41 }), makeRow(c, { outcome: "none", seconds: 1 })];
+    expect(summarize(rows)).toMatchObject({ n_run: 3, n_scored: 2, n_errored: 1, timeouts: 1 });
+    expect(summarize(rows).metrics.refused).toEqual({ filter: 0, judge: 0, retrieval: 1, other: 0 }); // the regression is a refusal, the timeout is not
+    expect(summarize(rows).metrics.controls).toEqual({ n: 2, correct: 2, rate: 1 });
+  });
+
   test("an error has no verdict and keeps its message", () => {
     expect(makeRow(c, { outcome: "error", reason: "HTTP 500", seconds: 2 })).toMatchObject({ correct: null, checks: null, error: "HTTP 500" });
   });
@@ -568,7 +587,6 @@ describe("refusalOf", () => {
     expect(refusalOf("quality_rejected: Reflect proposal refused before the judge: placeholder_added")).toBe("filter");
     expect(refusalOf('quality_rejected: Reflect proposal quality gate rejected: score=3.0, reason="adds a claim"')).toBe("judge");
     expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval regression: grade 2.00 -> 1.40 over 5 retrieval queries")).toBe("retrieval");
-    expect(refusalOf("quality_rejected: Reflect proposal refused: retrieval check could not grade the new content")).toBe("retrieval");
     expect(refusalOf("content_policy_reject: x")).toBe("other");
   });
 
