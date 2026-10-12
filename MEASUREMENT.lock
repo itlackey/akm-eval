@@ -2,6 +2,25 @@
   "lock_version": 1,
   "harness_version": 3,
   "evals": {
+    "bakeoff": {
+      "collector": {
+        "version": 1,
+        "sha256": "fb2b423bb0088fcf2c1615f9431659f5531ea55c08f593ebb8f4abba5d99ff21",
+        "files": [
+          "evals/bakeoff/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "2ca17e24721eed998a53a5b816027ace18ca7dca76dc18275a99f804d23d444f",
+        "files": [
+          "evals/bakeoff/src/score.ts"
+        ]
+      }
+    },
     "reflect": {
       "collector": {
         "version": 2,
