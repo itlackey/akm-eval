@@ -66,7 +66,7 @@ evals/consolidate/run --pool --strategy catchup --label catchup
 evals/consolidate/run --pool --config-patch antiCollapse-off.json --repeat 3
 ```
 
-It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/pool.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
+It writes the 80 memories of `assets/pool/` into one sandbox, indexes them, runs a single `akm improve --strategy consolidate --no-sync` and scores the retire proposals against the labels. The strategy is `POOL_STRATEGY` in `src/collect.ts` unless `--strategy` names another; `--config-patch` and `--repeat` work as in the per-case run (`summary.json` records `strategy` and `config_patch`, and a repeat summary spreads the pool metrics). `--pool` reads the public pool only: it refuses `--corpus private`, `--corpus all` and `--limit`. A call that the endpoint rate limits is not tried again; it shows in `calls.failures`.
 
 `--timeout-ms N` is akm's own wall-clock budget for the run (akm's default is 2 hours). A short one makes akm cut the pool to what the budget covers, using `consolidate.p90ChunkSecondsDefault` (30 seconds a chunk unless set), and akm says so in its "cold-start budget" warning. Without it that warning cannot appear.
 
