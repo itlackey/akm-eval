@@ -63,14 +63,14 @@ describe("the folder of the cases of a run", () => {
     expect(casesFolder(root, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" })).toBe(join(root, "private", "reflect", "assets"));
     expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" })).toBe(join(root, "private", "reflect", "own notes"));
     expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: join(tmpdir(), "elsewhere") })).toBe(join(tmpdir(), "elsewhere")); // what --cases DIR gives
-    for (const summary of [{ corpus: "custom", corpus_kind: "own", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null }, { corpus: "custom", corpus_kind: "own" }, { corpus: "own" }]) {
-      expect(() => casesFolder(root, summary), JSON.stringify(summary)).toThrow("outside this repository, which a summary does not record. scripts/rescore takes that folder with --cases DIR");
+    for (const summary of [{ corpus: "custom", corpus_kind: "own", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite" }]) {
+      expect(() => casesFolder(root, summary), JSON.stringify(summary)).toThrow("its summary does not record (outside this repository, a folder is left out). scripts/rescore takes that folder with --cases DIR");
     }
   });
 
-  test("is private/reflect/assets for a run from before corpus_folder, which called the seeded rewrite private", () => {
+  test("is the kind's folder for a run from before the corpora were renamed, which called the seeded rewrite private, and refuses a name reflect never had", () => {
     expect(casesFolder(root, { corpus: "private" })).toBe(join(root, "private", "reflect", "assets"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "rewrite" })).toBe(join(root, "private", "reflect", "assets"));
+    for (const corpus of ["own", "own-feedback", "constructor", undefined]) expect(() => casesFolder(root, { corpus }), String(corpus)).toThrow("which is neither public nor custom");
   });
 
   test("a run from before the manifest is told apart by the cases it read, where they are", () => {
@@ -81,7 +81,7 @@ describe("the folder of the cases of a run", () => {
     expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: digest })).toBeUndefined();
     expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: "0".repeat(64) })).toContain("it read other cases than the ones in evals/reflect/assets now");
     expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "private", assets_sha256: digest })).toContain("it read other cases than the ones in private/reflect/assets now"); // none there
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "custom", corpus_folder: null })).toContain("outside this repository");
+    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "custom", corpus_folder: null })).toContain("that its summary does not record");
   });
 });
 
@@ -110,22 +110,36 @@ describe("scripts/rescore on a custom corpus", () => {
     expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" });
   });
 
-  test("refuses a run whose folder was outside the repository and says to name it with --cases, then reads it from there", () => {
+  test("refuses a run whose folder was outside the repository and says to name it with --cases, then reads the cases from the folder --cases names", () => {
     const tree = checkout("somewhere/else");
     const dir = storedRun(tmp(), "2026-10-12-mine", CASES, rightRows(), custom({ corpus_folder: null }));
     const stored = readStored(dir);
     expect(() => rescoreRun(stored, { root: tree })).toThrow(RescoreError);
-    expect(() => rescoreRun(stored, { root: tree })).toThrow("the cases it read were in a folder outside this repository, which a summary does not record. scripts/rescore takes that folder with --cases DIR");
-    // --cases DIR is the summary with the folder it names, from the root or absolute
-    const named = (folder: string) => rescoreRun({ ...stored, summary: { ...stored.summary, corpus_folder: folder } }, { root: tree });
-    expect(named("somewhere/else").changed).toEqual([]);
-    expect(named(join(tree, "somewhere", "else")).changed).toEqual([]);
+    expect(() => rescoreRun(stored, { root: tree })).toThrow("outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
+    // --cases DIR, from the repository root or absolute
+    expect(rescoreRun(stored, { root: tree, cases: "somewhere/else" })).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    const absolute = rescoreRun(stored, { root: tree, cases: join(tree, "somewhere", "else") });
+    expect(absolute.changed).toEqual([]);
+    expect(absolute.summary.corpus_folder).toBe("somewhere/else"); // inside the checkout it was given from
+  });
+
+  test("scripts/rescore --cases DIR names a folder outside the repository, and the rescored summary does not record it", () => {
+    const notes = tmp();
+    cpSync(join(EVAL, "golden", "cases.jsonl"), join(notes, "cases.jsonl"));
+    const dir = storedRun(tmp(), "2026-10-12-mine", CASES, rightRows(), custom({ corpus_folder: null }));
+    const refused = Bun.spawnSync(["bun", join(REPO, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+    expect(refused.exitCode).toBe(2);
+    expect(refused.stderr.toString()).toContain("Give it to scripts/rescore with --cases DIR");
+    const { rows, summary } = rescoreWithCommand(dir, ["--cases", notes]);
+    expect(rows).toHaveLength(CASES.length);
+    expect(summary.corpus_folder).toBeNull();
+    expect(JSON.stringify(summary)).not.toContain(notes);
   });
 });
 
 /** scripts/rescore on a results folder, run as the command: the folder it writes beside it, read back. */
-function rescoreWithCommand(dir: string) {
-  const p = Bun.spawnSync(["bun", join(REPO, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
+function rescoreWithCommand(dir: string, flags: string[] = []) {
+  const p = Bun.spawnSync(["bun", join(REPO, "scripts", "rescore", "src", "run.ts"), ...flags, dir], { stdout: "pipe", stderr: "pipe" });
   expect(p.stderr.toString()).toBe("");
   expect(p.exitCode).toBe(0);
   const out = `${dir}-rescored`;

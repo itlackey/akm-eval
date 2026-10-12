@@ -11,18 +11,24 @@ import { NAME } from "./collect.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
+/** The kind of corpus that the names a run used before the corpora were renamed stand for. reflect never had an own corpus. */
+const LEGACY_KIND: Record<string, "rewrite"> = { private: "rewrite" };
+
 /**
  * The folder of the cases a run read, in the repository at `root`. The public corpus is the eval's own assets. A custom corpus records
- * `corpus_folder`, its folder from the repository root, or null when it was outside the repository: the name of such a folder can say what
- * is in it, so a summary does not keep it. scripts/rescore names that folder with --cases DIR, which it puts in `corpus_folder` of the
- * summary it hands to loadCases, from the root or absolute. A run from before `corpus_folder` read the seeded rewrite in
- * private/reflect/assets, and called it "private".
+ * `corpus_folder`, its folder from the repository root (lib/manifest.ts `corpusFolderOf`), and null when it was outside the repository: the
+ * name of such a folder can say what is in it, so a summary does not keep it. scripts/rescore hands loadCases a summary whose `corpus_folder`
+ * is the folder it was given with --cases DIR when the run did not record it. A run from before the corpora were renamed has the name of its
+ * kind: a rewrite (`private`) was read from private/reflect/assets, where generate puts it.
  */
 export function casesFolder(root: string, summary: Record<string, any>): string {
   if (summary.corpus === "public") return join(root, "evals", NAME, "assets");
-  if (typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
-  if (summary.corpus_folder === undefined && (summary.corpus_kind === "rewrite" || summary.corpus === "private")) return join(root, "private", NAME, "assets");
-  throw new Error("the cases it read were in a folder outside this repository, which a summary does not record. scripts/rescore takes that folder with --cases DIR");
+  if (summary.corpus === "custom") {
+    if (typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
+    throw new Error("the cases it read were in a folder that its summary does not record (outside this repository, a folder is left out). scripts/rescore takes that folder with --cases DIR");
+  }
+  if (Object.hasOwn(LEGACY_KIND, String(summary.corpus))) return join(root, "private", NAME, "assets"); // the folder of a rewrite
+  throw new Error(`it names the corpus ${JSON.stringify(summary.corpus)}, which is neither public nor custom`);
 }
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {

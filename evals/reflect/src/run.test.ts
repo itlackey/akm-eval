@@ -11,7 +11,7 @@ import { endpointId, endpointRecord, harnessSha256, sha256Json, sha256Text, with
 import { libraryFileOf } from "./build.ts";
 import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { MIN_AKM, defaultResults, insideRepository, runCorpus } from "./run.ts";
+import { MIN_AKM, corpusFolder, defaultResults, runCorpus } from "./run.ts";
 
 const REPO = join(import.meta.dir, "..", "..", "..");
 const dirs: string[] = [];
@@ -251,12 +251,14 @@ describe("runCorpus", () => {
     expect(await record(mine)).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null, seed: null });
   });
 
-  test("names the corpus folder from the repository root when it is inside it, and records none when it is not", () => {
-    expect(insideRepository(join(REPO, "private", "reflect", "assets"), REPO)).toBe("private/reflect/assets");
-    expect(insideRepository(join(REPO, "evals", "reflect", "assets"), REPO)).toBe("evals/reflect/assets");
-    expect(insideRepository(REPO, REPO)).toBeNull();
-    expect(insideRepository(join(REPO, "..", "reflect-notes"), REPO)).toBeNull();
-    expect(insideRepository(join(REPO, "..", `${basename(REPO)}-copy`, "assets"), REPO)).toBeNull(); // a sibling folder whose name starts like the repository's
+  test("records the folder of a custom corpus from the repository root when it is inside it, null when it is not, and null for the public corpus", () => {
+    const custom = (folder: string) => corpusOf(folder, "custom", { kind: "own", private: true });
+    expect(corpusFolder(custom(join(REPO, "private", "reflect", "assets")), REPO)).toBe("private/reflect/assets");
+    expect(corpusFolder(custom(join(REPO, "private", "reflect", "own notes")), REPO)).toBe("private/reflect/own notes");
+    expect(corpusFolder(custom(REPO), REPO)).toBeNull();
+    expect(corpusFolder(custom(join(REPO, "..", "reflect-notes")), REPO)).toBeNull();
+    expect(corpusFolder(custom(join(REPO, "..", `${basename(REPO)}-copy`, "assets")), REPO)).toBeNull(); // a sibling folder whose name starts like the repository's
+    expect(corpusFolder(corpusOf(join(REPO, "evals", "reflect", "assets")), REPO)).toBeNull();
   });
 
   test("a custom corpus puts its results in private/reflect/results unless told otherwise, and the public one in the eval's own folder", () => {

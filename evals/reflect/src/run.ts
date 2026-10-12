@@ -5,12 +5,12 @@
 //   evals/reflect/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--retrieval-queries] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { caseDigests, buildManifest, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { caseDigests, buildManifest, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -54,7 +54,7 @@ interface Summary {
   corpus_kind: string;
   /** True when the corpus may go only to a model that models.json marks "private": true. */
   corpus_private: boolean;
-  /** The corpus folder from the repository root, for scripts/rescore. Null when it is outside the repository: its name can say what is in it, so it is not recorded. */
+  /** The folder of a custom corpus from the repository root, for scripts/rescore. Null for the public corpus, and for a folder outside the repository: its name can say what is in it, so it is not recorded. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -141,11 +141,8 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0] as number)}  ${r[1].padEnd(w[1] as number)}  ${r[2].padEnd(w[2] as number)}`);
 }
 
-/** The folder from the repository root, or null when it is outside it. */
-export function insideRepository(folder: string, root = ROOT): string | null {
-  const rel = relative(root, folder);
-  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
-}
+/** What the summary records as `corpus_folder`: the folder of a custom corpus from the repository root, null when it is outside it, and null for the public corpus. */
+export const corpusFolder = (corpus: ResolvedCorpus, root = ROOT): string | null => (corpus.name === "custom" ? corpusFolderOf(corpus.folder, root) : null);
 
 /** The public results go to the eval's own folder, and those of a custom corpus to private/, which is gitignored. */
 export const defaultResults = (corpus: ResolvedCorpus, root = ROOT): string => (corpus.name === "public" ? join(root, "evals", NAME, "results") : join(root, "private", NAME, "results"));
@@ -203,7 +200,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(corpus),
-    corpus_folder: insideRepository(assets),
+    corpus_folder: corpusFolder(corpus),
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
