@@ -1,5 +1,7 @@
 # bakeoff
 
+**Being rebuilt (#46).** This eval is moving from a frozen copy of akm's prompts to akm itself, and keeps only the jobs no other eval measures. The inventory, with what measures each retired job now, is in [`reports/retired-evals.md`](../../reports/retired-evals.md#bakeoffs-frozen-prompt-jobs). Five jobs and 15 of the 120 cases stay: memory inference (4), `remember --enrich` (4), schema repair of a lesson (4), the summary of a session (1) and consolidate's promotion pass (2). The text below describes the Python eval until the rebuild replaces it.
+
 Which model runs akm's model-backed jobs best: valid output, correct facts, real quotes, speed?
 
 akm hands work to a model: it consolidates memories, distils lessons, judges and triages proposals, and more. This eval gives a model work of that kind and scores the reply. It measures a model on a frozen snapshot of akm-style prompts, not akm. It never runs akm, so it cannot register a change to akm, such as a better prompt, parser, schema or repair turn: tuning any of those does not move its numbers. To measure akm, use the evals that run it (`evals/consolidate`, `evals/distill`, `evals/reflect`, `evals/extract`, `evals/judge-gate`, `evals/nightly` and `evals/promotion`). Use this one to compare models on the same fixed work.
