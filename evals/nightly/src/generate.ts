@@ -11,15 +11,15 @@
 // facts and claims it did.
 //
 // It works in a temporary folder, private/nightly/.new, and moves assets/ and map.json into place only when the checks have
-// passed, with generated.json (the seed and the digest of the public night) beside them. A failed run leaves the previous private
-// night, map and generated.json as they were. `run` on the custom corpus stops when generated.json is missing or does not match the public night.
+// passed, with generated.json (the seed, the digest of the public night and the digest of this generator) beside them. A failed run leaves the previous private
+// night, map and generated.json as they were. `run` on the custom corpus stops when generated.json is missing, or does not match the public night or this generator.
 
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { assetsDigest, generateInto } from "../../consolidate/src/inputs.ts";
+import { assetsDigest, generateInto, generatorSha256 } from "../../consolidate/src/inputs.ts";
 import { lessonFile, memoryBody, mentions } from "../../distill/src/lib.ts";
 import type { DistillItem } from "./items.ts";
-import { type Night, loadNight, nightFiles, nightProblems } from "./night.ts";
+import { GENERATOR_CODE, type Night, loadNight, nightFiles, nightProblems } from "./night.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -73,7 +73,7 @@ function main(): number {
   const publicNight = loadNight(publicAssets);
   let summary = "";
   // Everything is made in a temporary folder and moved into place when it has passed the checks, so a failure leaves the previous private night as it was.
-  const problems = generateInto(out, seed, assetsDigest(publicAssets, nightFiles(publicAssets)), (stage) => {
+  const problems = generateInto(out, seed, assetsDigest(publicAssets, nightFiles(publicAssets)), generatorSha256(GENERATOR_CODE), (stage) => {
     rewrite(["--seed", seed, "--map", stage.map, join(publicAssets, "library"), join(stage.assets, "library")]);
     summary = rewrite(["--map", stage.map, "--min-count", "1000000", join(publicAssets, "items.jsonl"), join(stage.assets, "items.jsonl")]);
     try {

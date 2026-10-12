@@ -19,7 +19,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { INPUT_FILES, RELATIONS, parseCases, selectCases } from "./cases.ts";
 import { type CollectContext, NAME, POOL_STRATEGY, type PoolContext, RATE_LIMIT_TRIES, STRATEGY, collectPool, effectiveConfig, runCase } from "./collect.ts";
-import { type RunInputs, assetsDigest, privateAssetsProblem, runInputs } from "./inputs.ts";
+import { GENERATOR_CODE, type RunInputs, assetsDigest, generatorSha256, privateAssetsProblem, runInputs } from "./inputs.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { loadPool, poolCases, poolFiles } from "./pool.ts";
 import { type PoolMetrics, type PoolRaw, type PoolRow, makePoolRow, poolSummarize } from "./pool-score.ts";
@@ -417,7 +417,7 @@ async function main(): Promise<void> {
   const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl", () => assetsDigest(publicAssets, INPUT_FILES)) : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl", () => assetsDigest(publicAssets, INPUT_FILES), () => generatorSha256(GENERATOR_CODE)) : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
     if (problem) fail(problem);
   }
   const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");

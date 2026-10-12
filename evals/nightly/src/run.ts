@@ -17,14 +17,14 @@ import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, pa
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type RunInputs, assetsDigest, privateAssetsProblem, runInputs } from "../../consolidate/src/inputs.ts";
+import { type RunInputs, assetsDigest, generatorSha256, privateAssetsProblem, runInputs } from "../../consolidate/src/inputs.ts";
 import { EMBEDDER_OPTIONS, embedderUsage, parseEmbedder } from "../../consolidate/src/lib.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/sandbox.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type CallRow, type CollectContext, NAME, STRATEGY, callStats, effectiveConfig, haveNight, rawOfNight } from "./collect.ts";
 import { KINDS } from "./items.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { loadNight, nightFiles, planted, selectItems } from "./night.ts";
+import { GENERATOR_CODE, loadNight, nightFiles, planted, selectItems } from "./night.ts";
 import { type Metrics, type Row, makeRow, summarize } from "./score.ts";
 import { pct } from "./lib.ts";
 
@@ -262,7 +262,7 @@ async function main(): Promise<void> {
   const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl", () => assetsDigest(publicAssets, nightFiles(publicAssets))) : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
+    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "items.jsonl", () => assetsDigest(publicAssets, nightFiles(publicAssets)), () => generatorSha256(GENERATOR_CODE)) : existsSync(join(c.folder, "items.jsonl")) ? null : `${c.flag}: ${join(c.folder, "items.jsonl")} is missing. A custom corpus of nightly is a folder with an items.jsonl and a library/, as assets/README.md describes`;
     if (problem) fail(problem);
   }
   const label = values.label ?? slug(model);

@@ -11,6 +11,20 @@ import { type Feedback, type Item, KINDS, applyFix, parseItems, reflectCase, ref
 
 export { AKM_FOLDER, listFiles, readLibrary } from "./library.ts";
 
+/** The code of this eval that decides what its generate makes of the public night and whether it accepts the result: generate.ts, the files it reads the night with and takes its checks from (the consolidate, reflect and distill evals' too), and the rule of negation. lib/rewrite is added to it. */
+export const GENERATOR_CODE = [
+  "evals/nightly/src/generate.ts",
+  "evals/nightly/src/night.ts",
+  "evals/nightly/src/items.ts",
+  "evals/nightly/src/library.ts",
+  "evals/consolidate/src/inputs.ts",
+  "evals/consolidate/src/cases.ts",
+  "evals/distill/src/lib.ts",
+  "evals/reflect/src/lib.ts",
+  "evals/reflect/src/score.ts",
+  "lib/negation.ts",
+];
+
 /** The planted night: the items, and the text of every library file. */
 export interface Night {
   items: Item[];
