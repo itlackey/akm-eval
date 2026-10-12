@@ -125,7 +125,52 @@ Each eval's README says what else it needs. An eval with Python code needs [uv](
 
 An eval that scores akm's semantic search, or has akm judge with embeddings, uses akm's built-in embedding model: `evals/retrieval` and `benchmarks/skillret` in a full run, `evals/promotion`, `benchmarks/longmemeval` with `--semantic`, and `evals/consolidate` and `evals/nightly` with `--embedder real`. akm downloads it (133 MB) the first time, into `.cache/`. `evals/retrieval` and `benchmarks/skillret` also keep the semantic index they build, in `.cache/akm-index/`, for the next run. `benchmarks/longmemeval` embeds the sessions of each question and keeps no index. A kept index is used only by the akm that built it: the same printed version, the same command, the same git build and the same uncommitted changes. Run a different build of akm, such as a branch you checked out, or a checkout with other changes, and a new index is built.
 
-## Test an unreleased akm
+## Corpora
+
+A run reads one of two corpora, or both:
+
+- `public` is the cases committed in this repository (for a benchmark, the dataset it fetches). It is the default.
+- `custom` is any folder of assets in the eval's format that has a corpus config, `corpus.json`. It is how you run your own notes, and it is also the public cases rewritten from a seed (see "Private assets"): that rewrite is one kind of custom corpus.
+
+```
+evals/distill/run                                # public
+evals/distill/run --corpus custom                # the eval's default custom corpus: the seeded rewrite in private/distill/assets
+evals/distill/run --cases ~/notes/distill        # a custom corpus of your own: --cases alone is --corpus custom
+evals/distill/run --corpus all                   # public and the default custom corpus, side by side, never pooled
+```
+
+`--cases DIR` points an eval at your own folder. A relative `DIR` is from the repository root. The folder holds what the eval's README describes under "Run your own set", and a `corpus.json`. `--corpus all --cases DIR` runs `public` and `DIR`. The default custom corpus of an eval is the rewrite `./generate-assets` makes in `private/<eval>/assets`, and of `evals/promotion`, which has no generate, your notes in `private/promotion/own`.
+
+### corpus.json
+
+```
+{ "kind": "own", "private": true }
+{ "kind": "rewrite", "private": false, "seed": "42", "generated": "assets/generated.json" }
+```
+
+- `kind` is `own` (your notes) or `rewrite` (the public cases rewritten from a seed).
+- `private` says whether the corpus may go only to a model and a judge that `models.json` marks `"private": true`. See below.
+- `seed` and `generated` are for a rewrite only: the seed it was made with, written as text, and the path of the `generated.json` that generate wrote, from the folder of `corpus.json`. The seed has to be the one that file holds, so a rewrite made again by hand, with another seed, is refused until `./generate-assets` runs.
+- Any other key is refused, so a typo such as `"privat"` cannot pass for a setting.
+- `corpus.json` sits in the corpus folder, or beside it when the folder is called `assets`. `./generate-assets` writes `private/<eval>/corpus.json` beside `private/<eval>/assets/` and not inside it, because `evals/agent-ab` digests every file of its assets. No other folder is searched, so a `corpus.json` in a parent never applies to a folder next to it.
+- **When there is none.** A folder given with `--cases` (or `--corpus custom` on an eval whose default is `own`) is an own corpus and is private: notes are kept from models you did not mark, not trusted. A rewrite at the place generate puts it, `private/<eval>/assets`, is not private, since it is derived from public cases; if it has no `corpus.json` (made before this file existed), its seed is read from its `generated.json`. To say that a folder of yours holds nothing private, give it a `corpus.json` with `"private": false`. `./generate-assets` keeps a `"private": true` it finds in an existing `corpus.json`.
+
+### The private flag
+
+A run on a corpus flagged private refuses, before anything runs, any model or judge whose line in `models.json` is not `"private": true`, including a gateway model with no line:
+
+```
+--cases ~/notes/distill sends your memories to other-model, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private. Mark the model in models.json if you run it or its provider does not keep or train on what it gets, or choose another with --model.
+```
+
+The same check covers `--judge-model` ("sends your notes to the judge ..."). `--corpus all` refuses the whole run when its custom corpus is private, so no public result is made and then thrown away. Nothing infers privacy from a URL or a name: you say which models may see your notes. The check is `privacyError` in `lib/corpus.ts`, built on `privateModelError` in `lib/models.ts`.
+
+A summary of a custom run records `corpus: "custom"`, `corpus_kind` (`rewrite` or `own`), `corpus_private`, and for a rewrite its `seed`. It never records the folder, whose name can say what is in it. Results of a custom corpus are written under `private/`, which is gitignored.
+
+### Old values
+
+`--corpus private` (the seeded rewrite in `private/<eval>/assets`) and `--corpus own` (`private/<eval>/own`) work for one more release. Each prints one line that names the new form, for example `retrieval: --corpus own is now --corpus custom --cases private/retrieval/own. The old value works for one more release.`, and runs as the custom corpus it is, so a summary records `custom`, not `private` or `own`. An own corpus reached this way is private, as before. Summaries from before this change record `private` or `own`, and are not compared with `custom` ones.
+
 
 To run an eval against a checkout or a worktree of akm, set `AKM_BIN` to the command that runs it, in `.env` or for one run (a variable that is already set wins over `.env`):
 
