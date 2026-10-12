@@ -7,28 +7,38 @@
 
 import { join } from "node:path";
 import { EMPTY_ANSWER, type Answerer, type ChatRequest, type Entry, type Outcome, type RunOptions, type Seen, type Stub, promptOf, readRows, readSummary, runEntry, schemaOf } from "./lib.ts";
-import { valueFor } from "./schema.ts";
+import { type Schema, valueFor } from "./schema.ts";
 
-/** One canned reply, for the requests it matches: those whose schema has exactly these required keys, and/or whose prompt holds this text. */
+/** One canned reply, for the requests it matches: those whose schema has exactly these required keys (`keys`) or at least these (`has`), and/or whose prompt holds this text. */
 export interface Canned {
   keys?: string[];
+  has?: string[];
   prompt?: string;
-  /** The reply: text as it is, anything else as JSON. */
+  /**
+   * The reply: text as it is, anything else as JSON. A function gets the schema that the request sends and returns the reply, so that one
+   * canned reply fits what several releases of akm ask for: akm 0.9.26 asks for a lesson of three texts and 0.9.31 for six keys, and the
+   * judge's first criterion is novelty in one and reusable in the other.
+   */
   reply: unknown;
 }
 
 const sameKeys = (a: string[], b: string[]): boolean => a.length === b.length && [...a].sort().every((k, i) => k === [...b].sort()[i]);
 
-/** Does the canned reply match the request? A canned reply with neither `keys` nor `prompt` matches nothing. */
+/** Does the canned reply match the request? A canned reply with none of `keys`, `has` and `prompt` matches nothing. */
 export function matches(c: Canned, req: ChatRequest): boolean {
-  if (c.keys === undefined && c.prompt === undefined) return false;
-  if (c.keys !== undefined && !sameKeys(c.keys, schemaOf(req)?.required ?? [])) return false;
+  if (c.keys === undefined && c.has === undefined && c.prompt === undefined) return false;
+  const required = schemaOf(req)?.required ?? [];
+  if (c.keys !== undefined && !sameKeys(c.keys, required)) return false;
+  if (c.has !== undefined && !c.has.every((k) => required.includes(k))) return false;
   if (c.prompt !== undefined && !promptOf(req).includes(c.prompt)) return false;
   return true;
 }
 
-/** The text of a canned reply. */
-const textOf = (reply: unknown): string => (typeof reply === "string" ? reply : JSON.stringify(reply));
+/** The text that a canned reply gives to a request that it matches: the reply as it is, or what its function makes of the request's schema. */
+export function replyOf(c: Canned, req: ChatRequest): string {
+  const reply = typeof c.reply === "function" ? (c.reply as (schema: Schema | undefined) => unknown)(schemaOf(req)) : c.reply;
+  return typeof reply === "string" ? reply : JSON.stringify(reply);
+}
 
 /** An answerer that remembers which canned replies it has given. */
 export type Answering = Answerer & { unused(): Canned[] };
@@ -43,7 +53,7 @@ export function answerFrom(canned: Canned[]): Answering {
     const hit = canned.find((c) => matches(c, req));
     if (hit) {
       used.add(hit);
-      return textOf(hit.reply);
+      return replyOf(hit, req);
     }
     const schema = schemaOf(req);
     return schema ? JSON.stringify(valueFor(schema)) : EMPTY_ANSWER;
@@ -52,7 +62,8 @@ export function answerFrom(canned: Canned[]): Answering {
 }
 
 /** What a canned reply is for, in the words of its match. */
-export const describeCanned = (c: Canned): string => [c.keys && `a schema that requires ${c.keys.join(", ") || "nothing"}`, c.prompt && `a prompt with "${c.prompt}"`].filter(Boolean).join(" and ");
+export const describeCanned = (c: Canned): string =>
+  [c.keys && `a schema that requires ${c.keys.join(", ") || "nothing"}`, c.has && `a schema that requires at least ${c.has.join(", ")}`, c.prompt && `a prompt with "${c.prompt}"`].filter(Boolean).join(" and ");
 
 /** The kinds of request the stub has seen, once each: the required keys of its schema, or the start of the prompt when it sent none. */
 const kindsSeen = (seen: Seen[]): string[] => [...new Set(seen.map((s) => (s.keys ? `a schema that requires ${s.keys.join(", ") || "nothing"}` : `no schema, prompt "${s.prompt.slice(0, 40)}"`)))];
@@ -130,19 +141,33 @@ export const CONTRACTS: Record<string, Contract> = {
   },
   // akm takes a patch whose fields fit the schema.
   "evals/reflect": { canned: [], success: { field: "outcome", values: ["proposal"] }, failure: { field: "outcome", values: ["unusable"] } },
-  // The schema asks for a description of 10 characters or more and a when_to_use of 10, and akm queues a lesson with shorter ones for review with a
-  // note that it is invalid; its judge's scores fit from 1, and a lesson scored 1 is rejected. So the lesson and the scores are canned.
+  // akm queues a lesson whose description has under 20 characters or whose when_to_use has under 15 for review with a note that it is invalid,
+  // and the value that fits the schema is shorter (10 characters, from smoke-text); its judge's scores fit from 1, and a lesson scored 1 is
+  // rejected. So the three texts of the lesson and the scores are canned. They are laid over what the schema of the request names, so that one
+  // reply fits every release: the lesson has three keys in akm 0.9.26 and six in 0.9.31, where `reason`, `decision` and `tags` take the value
+  // that fits (`decision` is `lesson`, the first of its enum), and the judge's first criterion is novelty in 0.9.26 and reusable from 0.9.27.
+  // Every criterion that the schema names is scored 5. The lesson judge is found by the end of the first sentence of its prompt, which both
+  // releases share: it begins "You are evaluating a proposed lesson asset" in 0.9.26 and "You are evaluating a lesson an agent wrote" in 0.9.31,
+  // and the reflect judge's does not end so.
   "evals/distill": {
     canned: [
       {
-        keys: ["description", "when_to_use", "body"],
-        reply: {
+        has: ["description", "when_to_use", "body"],
+        reply: (schema: Schema | undefined) => ({
+          ...(schema ? (valueFor(schema) as object) : {}),
           description: "A lesson restates in one sentence what the memory it comes from teaches.",
           when_to_use: "When the task at hand matches the situation the memory describes.",
           body: "Apply what the memory says to the task, and no more than it says.",
-        },
+        }),
       },
-      { keys: ["scores", "reason"], prompt: "proposed lesson asset", reply: { scores: { novelty: 5, nonRedundancy: 5, grounding: 5 }, reason: "The lesson states what the memory says." } },
+      {
+        keys: ["scores", "reason"],
+        prompt: "for an akm knowledge base",
+        reply: (schema: Schema | undefined) => ({
+          scores: Object.fromEntries(Object.keys((schema?.properties?.scores as Schema | undefined)?.properties ?? {}).map((criterion) => [criterion, 5])),
+          reason: "The lesson states what the memory says.",
+        }),
+      },
     ],
     success: { field: "outcome", values: ["lesson", "update"], also: each("status", (v) => v === "pending", "pending: queued for review") },
     failure: { field: "outcome", values: ["invalid"] },
