@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Replays distill's judge routing, with and without grounding in the pass bar, on the results of distill runs. A run is read only
-# against the cases and the code it ran on (assets_sha256 and harness_sha256 in its summary.json), unless --rescore says to use the
-# ones here now. See README.md.
+# against the cases and the scorer it was scored by (the manifest in its summary.json), unless --rescore says to use the ones here now.
+# See README.md.
 #
-#   evals/distill/pass-bar [--rescore] RESULTS_DIR...
+#   evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

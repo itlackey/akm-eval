@@ -30,6 +30,26 @@
         ]
       }
     },
+    "distill": {
+      "collector": {
+        "version": 1,
+        "sha256": "963b9787f3a66a4c479e9f9032637a687d54edc27ff90ed68ff472d3f9e44ce1",
+        "files": [
+          "evals/distill/src/collect.ts",
+          "lib/akm/akm.ts",
+          "lib/akm/overrides.ts",
+          "lib/cli.ts"
+        ]
+      },
+      "scorer": {
+        "version": 1,
+        "sha256": "1ce5a0f58952718121dd421c88c7744ad0c89e68d6895832cdacc3649eecf4c2",
+        "files": [
+          "evals/distill/src/score.ts",
+          "lib/negation.ts"
+        ]
+      }
+    },
     "longmemeval": {
       "collector": {
         "version": 3,

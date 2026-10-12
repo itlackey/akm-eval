@@ -4,31 +4,42 @@
 // are 4 or more, whatever grounding is, and rejects one with a score of 2 or less. The other bar puts grounding into the pass test and
 // the mean too. See ../README.md.
 //
-//   evals/distill/pass-bar [--rescore] RESULTS_DIR...
+//   evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...
 
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { harnessSha256 } from "../../../lib/provenance.ts";
-import { assetsSha256, checkLesson, lessonText, loadCases } from "./lib.ts";
+import { caseDigests, currentDigests, readManifest } from "../../../lib/manifest.ts";
+import { atLeast } from "../../reflect/src/lib.ts";
+import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
+import { MEASUREMENT } from "./measurement.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
-const USAGE = `Usage: evals/distill/pass-bar [--rescore] RESULTS_DIR...
+/** The first akm release that names the judge's first criterion `reusable`. Before it, the criterion is called `novelty`. */
+export const RENAMED_IN = "0.9.27-alpha.2";
+
+const USAGE = `Usage: evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...
 
 Takes the results folders of distill runs (each has a summary.json and a samples.jsonl; --repeat makes one per run, <label>-r1 ...),
 on one corpus, and counts, for each pass bar, the good and the bad lessons that pass, go to review and are rejected.
 A lesson is good when it passes the distill eval's checks for its case; a lesson for a case that expects none is bad.
 
-The checks read the cases, the memories and the checks of the code here now, not the ones the run was given. So the summary.json of a
-run must hold the assets_sha256 of its corpus as it is now and the harness_sha256 of this code, and every case id of the run must be in
-the corpus. Otherwise the run is not read, and the message says what differs.
+The checks read the cases, the memories and the scorer of the code here now, not the ones the run was given. So the manifest in the
+summary.json of a run must hold the scorer digest of this code and, for every case of the run, the input and the label digests of the
+case as it is now, and every case id of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
+A run from before the manifest has none to compare.
 
-  --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a summary.json records
-             other digests, records none, or has a case id that is gone. The report names the stored and the current digests,
-             and the case ids left out.
+The judge's first score is called reusable from akm ${RENAMED_IN}, and novelty before. A run of an older akm is read with novelty as
+reusable. A run whose scores have other names, or whose akm version is not known, is refused, and the message names the release.
 
-Prints JSON, with "inputs": for each run, the corpus folder read and the stored and the current digests.`;
+  --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a run was scored by another
+             scorer, has cases with other inputs or labels, has no manifest, or has a case id that is gone. The report names the stored
+             and the current digests, and the case ids left out.
+  --cases    the folder of the cases of a custom run whose folder was outside the repository, so the summary does not record it.
+
+Prints JSON, with "inputs": for each run, the corpus folder read, the scorer digest stored and current, and what differs.
+Exits 1, with a message, when no lesson of the runs could be judged.`;
 
 export type Bar = "shipped" | "with-grounding";
 export type Verdict = "pass" | "review" | "reject";
@@ -93,32 +104,50 @@ export function report(judged: Judged[]): Report {
   return out;
 }
 
-/** The folder of the cases a run of `corpus` reads, as distill's run reads it. */
-function assetsOf(corpus: unknown, root: string): string {
-  if (corpus === "public") return join(root, "evals", "distill", "assets");
-  if (corpus === "private") return join(root, "private", "distill", "assets");
-  if (corpus === "own" || corpus === "own-feedback") return join(root, "private", "distill", "own", corpus === "own" ? "assets" : "assets-feedback");
-  throw new Error(`summary.json names the corpus ${JSON.stringify(corpus)}, not public, private, own or own-feedback`);
+/** Does the akm of a run name the judge's first criterion `reusable`? Null when the version is not known or is not a version. */
+export function namesReusable(version: string | null): boolean | null {
+  if (version === null) return null;
+  try {
+    return atLeast(version, RENAMED_IN);
+  } catch {
+    return null;
+  }
 }
 
-const DIGEST = /^[0-9a-f]{64}$/;
+/**
+ * The judge's scores of a row as `Scores`, or undefined when the row has none. `reusable` is read as it is, and `novelty` as `reusable` for a
+ * run of an akm before 0.9.27-alpha.2, which is when the criterion was renamed. Anything else is not a score this tool can read: it throws,
+ * naming the release and the keys, so that a run is never reported as empty for want of the name.
+ */
+export function readScores(scores: Record<string, unknown> | null, id: string, version: string | null): Scores | undefined {
+  if (!scores) return undefined;
+  const num = (k: string): number | undefined => (typeof scores[k] === "number" ? (scores[k] as number) : undefined);
+  const first = num("reusable") ?? (namesReusable(version) === false ? num("novelty") : undefined);
+  const [nonRedundancy, grounding] = [num("nonRedundancy"), num("grounding")];
+  if (first !== undefined && nonRedundancy !== undefined && grounding !== undefined) return { reusable: first, nonRedundancy, grounding };
+  const was = version === null ? "an akm whose version the summary does not record" : `akm ${version}`;
+  const rename = namesReusable(version) === true ? `${was} names it reusable` : `before akm ${RENAMED_IN} it is called novelty (this run: ${was})`;
+  throw new Error(`the judge's scores of the case ${id} are ${Object.keys(scores).sort().join(", ") || "empty"}, and this tool reads reusable, nonRedundancy and grounding: the first criterion is called reusable from akm ${RENAMED_IN}, and ${rename}`);
+}
 
-/** A digest a summary.json holds, or null when it holds none or something that is not one. */
-const digestIn = (value: unknown): string | null => (typeof value === "string" && DIGEST.test(value) ? value : null);
-
-/** What a read of a distill run used, for the report: the corpus and the code the run recorded, and the ones the read used. */
+/** What a read of a distill run used, for the report: the corpus and the scorer the run recorded, and the ones the read used. */
 export interface Inputs {
-  /** "stored" when the run read the cases and ran the code that are here now. "rescore" when --rescore was given. */
+  /** "stored" when the run was scored by the scorer and against the cases here now. "rescore" when --rescore was given. */
   mode: "stored" | "rescore";
   corpus: string;
   /** The folder of the cases the read used, from the repository root. */
   assets: string;
-  /** The assets_sha256 of the run (null when it has none) and the digest of that folder now, computed as the run computes it. */
-  assets_sha256: { stored: string | null; current: string };
-  /** The harness_sha256 of the run (null when it has none) and the digest of this code now, which holds the checks that judge a lesson. */
-  harness_sha256: { stored: string | null; current: string };
-  /** What a read without --rescore would have stopped on: a digest that differs or is missing. Empty when nothing does. */
+  /** Whether the summary has a manifest. A run from before harness-v3 has none, and nothing to compare. */
+  manifest: "manifest" | "legacy";
+  /** The akm release of the run, and the name its judge's first criterion had in the rows that were judged (null when none was). */
+  akm_version: string | null;
+  judge_first_criterion: "reusable" | "novelty" | null;
+  /** The digest of the scorer that scored the run (null when it has no manifest), and of the scorer here now. */
+  scorer_sha256: { stored: string | null; current: string };
+  /** What a read without --rescore would have stopped on. Empty when nothing does. */
   differences: string[];
+  /** The cases of the run whose input or labels are not the ones here now. */
+  changed_cases: string[];
   /** The case ids of the run that the cases here now lack. Their rows are left out. */
   missing_cases: string[];
 }
@@ -126,69 +155,94 @@ export interface Inputs {
 export interface ReplayOptions {
   /** The repository the cases are read from. This one, but for tests. */
   root?: string;
-  /** The harness_sha256 of the code here now. The one harnessSha256 gives for this folder, but for tests. */
-  harness?: string;
-  /** Read a run that read other cases or ran other code, and report both. */
+  /** Read a run that was scored by another scorer or against other cases, and report both. */
   rescore?: boolean;
+  /** The folder of the cases, from the repository root or absolute, when the summary does not say where they are. */
+  cases?: string;
 }
 
-type SampleRow = { id: string; class: string; outcome: string; gate: string | null; scores: Record<string, number> | null; lesson: string | null; rejected_lesson: string | null };
+type SampleRow = { id: string; class: string; outcome: string; gate: string | null; scores: Record<string, unknown> | null; lesson: string | null; rejected_lesson: string | null };
+
+const some = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${ids.length > n ? `, and ${ids.length - n} more` : ""}`;
 
 /**
  * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. A lesson is good by
- * the cases, the memories and the checks here now, so the run must have read the same ones. Its summary.json must hold the assets_sha256
- * of the corpus as it is now (the digest distill's run computes) and the harness_sha256 of this code, and each case id of the run must be in
- * the corpus. Otherwise this throws and says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and
- * says both in `inputs`.
+ * the cases, the memories and the scorer here now, so the run must have been scored by the same: its manifest holds the digest of the scorer
+ * (the checks, and lib/negation.ts) and the input and label digests of each case (the input covers the memory), and they must be the ones
+ * here now. A run with no manifest has nothing to compare, and every case id of the run must be in the corpus. Otherwise this throws and
+ * says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and says all of it in `inputs`.
  */
-export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; inputs: Inputs } {
+export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; noScores: number; inputs: Inputs } {
   const root = options.root ?? ROOT;
-  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as { corpus?: unknown; assets_sha256?: unknown; harness_sha256?: unknown };
-  const assets = assetsOf(summary.corpus, root);
-  const corpus = summary.corpus as string;
+  const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
+  if (summary.eval !== NAME) throw new Error(`${resultsDir} is a run of ${JSON.stringify(summary.eval)}, not of ${NAME}`);
+  const reading = readManifest(summary);
+  if (reading.kind === "invalid") throw new Error(`${resultsDir}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
+  const assets = options.cases !== undefined ? resolve(root, options.cases) : corpusFolder(root, summary);
   const where = relative(root, assets);
   const cases = new Map(loadCases(assets).map((c) => [c.id, c]));
 
-  const stored = { assets: digestIn(summary.assets_sha256), harness: digestIn(summary.harness_sha256) };
-  const current = { assets: assetsSha256(assets), harness: options.harness ?? harnessSha256(import.meta.dir) };
-  const differences: string[] = [];
-  const compare = (field: string, was: string | null, now: string, what: string, here: string) => {
-    if (was === null) differences.push(`${field} is missing from summary.json (or is not a sha256 digest), so nothing says ${what}`);
-    else if (was !== now) differences.push(`${field} differs: the run recorded ${was}, ${here} gives ${now}`);
-  };
-  compare("assets_sha256", stored.assets, current.assets, "which cases and memories the run read", `the cases in ${where}`);
-  compare("harness_sha256", stored.harness, current.harness, "which code made the run", "the code here");
-
   const rows = readFileSync(join(resultsDir, "samples.jsonl"), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as SampleRow);
-  const missing = [...new Set(rows.map((r) => r.id).filter((id) => !cases.has(id)))];
+  const ids = [...new Set(rows.map((r) => r.id))];
+  const missing = ids.filter((id) => !cases.has(id));
+  const present = ids.filter((id) => cases.has(id)).map((id) => cases.get(id) as LoadedCase);
+
+  const scorer = currentDigests(MEASUREMENT).scorer;
+  const now = caseDigests(MEASUREMENT, present);
+  const differences: string[] = [];
+  const changed: string[] = [];
+  if (reading.kind === "legacy") {
+    differences.push("the run has no manifest (it was made before harness-v3), so nothing says which scorer and which cases scored it");
+  } else {
+    const m = reading.manifest;
+    if (m.scorer.sha256 !== scorer) differences.push(`scorer.sha256 differs: the run was scored by scorer ${m.scorer.version}, ${m.scorer.sha256}, and the checks here give ${scorer}`);
+    const unknown = present.filter((c) => m.cases[c.id] === undefined).map((c) => c.id);
+    if (unknown.length > 0) differences.push(`the manifest of the run does not hold the case${unknown.length === 1 ? "" : "s"} ${some(unknown)}`);
+    for (const c of present) {
+      const was = m.cases[c.id];
+      if (was !== undefined && (was.input_sha256 !== now[c.id]?.input_sha256 || was.label_sha256 !== now[c.id]?.label_sha256)) changed.push(c.id);
+    }
+    if (changed.length > 0) differences.push(`${changed.length === 1 ? "the case" : "the cases"} ${some(changed)} ${changed.length === 1 ? "has" : "have"} another input or other labels than when the run was made (its memory, its bundle, its feedback, or the facts and claims it is judged by)`);
+  }
   if (!options.rescore && (differences.length > 0 || missing.length > 0)) {
     const lines = [...differences, ...(missing.length > 0 ? [`the run has ${missing.length === 1 ? "a case id" : "case ids"} that ${where}/cases.json lacks: ${missing.join(", ")}`] : [])];
-    throw new Error(`${resultsDir} cannot be judged by the cases and code here now:\n  - ${lines.join("\n  - ")}\nA lesson would be good or bad by cases, memories and checks other than the run's. To judge its stored lessons by what is here now on purpose, add --rescore.`);
+    throw new Error(`${resultsDir} cannot be judged by the cases and the scorer here now:\n  - ${lines.join("\n  - ")}\nA lesson would be good or bad by cases, memories and checks other than the run's. To judge its stored lessons by what is here now on purpose, add --rescore.`);
   }
 
+  const version: string | null = reading.kind === "manifest" ? reading.manifest.akm.version : typeof summary.akm_version === "string" ? summary.akm_version : null;
   const judged: Judged[] = [];
   let skipped = 0;
+  let noScores = 0;
+  let novelty = false;
   for (const row of rows) {
     const c = cases.get(row.id);
     if (!c) continue; // a case that is gone: named in inputs.missing_cases
-    const s = row.scores;
-    const text = row.lesson ?? (row.rejected_lesson === null ? null : lessonText(row.rejected_lesson));
-    if (!s || text === null || c.class === "lesson-update" || typeof s.reusable !== "number" || typeof s.nonRedundancy !== "number" || typeof s.grounding !== "number") {
-      if (s) skipped++;
+    if (!row.scores) {
+      noScores++; // a skip, an error, or a judge that gave no scores
       continue;
     }
-    judged.push({ id: row.id, scores: { reusable: s.reusable, nonRedundancy: s.nonRedundancy, grounding: s.grounding }, actual: actual(row), good: c.expect === "lesson" && checkLesson(c, text, c.memory).good });
+    const text = row.lesson ?? (row.rejected_lesson === null ? null : lessonText(row.rejected_lesson));
+    if (text === null || c.class === "lesson-update") {
+      skipped++;
+      continue;
+    }
+    const scores = readScores(row.scores, row.id, version) as Scores; // throws, naming the release, for scores it cannot read
+    novelty ||= !("reusable" in row.scores);
+    judged.push({ id: row.id, scores, actual: actual(row), good: c.expect === "lesson" && checkLesson(c, text, c.memory).good });
   }
   const inputs: Inputs = {
     mode: options.rescore ? "rescore" : "stored",
-    corpus,
+    corpus: String(summary.corpus),
     assets: where,
-    assets_sha256: { stored: stored.assets, current: current.assets },
-    harness_sha256: { stored: stored.harness, current: current.harness },
+    manifest: reading.kind === "manifest" ? "manifest" : "legacy",
+    akm_version: version,
+    judge_first_criterion: judged.length === 0 ? null : novelty ? "novelty" : "reusable",
+    scorer_sha256: { stored: reading.kind === "manifest" ? reading.manifest.scorer.sha256 : null, current: scorer },
     differences,
+    changed_cases: changed,
     missing_cases: missing,
   };
-  return { judged, skipped, inputs };
+  return { judged, skipped, noScores, inputs };
 }
 
 function main(): void {
@@ -196,10 +250,10 @@ function main(): void {
     console.error(`pass-bar: ${message}\n\n${USAGE}`);
     process.exit(2);
   };
-  let values: { rescore?: boolean; help?: boolean };
+  let values: { rescore?: boolean; cases?: string; help?: boolean };
   let dirs: string[];
   try {
-    ({ values, positionals: dirs } = parseArgs({ args: Bun.argv.slice(2), options: { rescore: { type: "boolean" }, help: { type: "boolean", short: "h" } }, allowPositionals: true, strict: true }));
+    ({ values, positionals: dirs } = parseArgs({ args: Bun.argv.slice(2), options: { rescore: { type: "boolean" }, cases: { type: "string" }, help: { type: "boolean", short: "h" } }, allowPositionals: true, strict: true }));
   } catch (e) {
     return fail((e as Error).message);
   }
@@ -211,18 +265,24 @@ function main(): void {
   const all: Judged[] = [];
   const inputs: (Inputs & { results: string })[] = [];
   let skipped = 0;
+  let noScores = 0;
   for (const dir of dirs) {
     let r: ReturnType<typeof judgedLessons>;
     try {
-      r = judgedLessons(resolve(dir), { rescore: values.rescore });
+      r = judgedLessons(resolve(dir), { rescore: values.rescore, cases: values.cases });
     } catch (e) {
       return fail((e as Error).message);
     }
     all.push(...r.judged.map((j) => ({ ...j, id: `${dir.split("/").pop()}/${j.id}` })));
     inputs.push({ results: dir, ...r.inputs });
     skipped += r.skipped;
+    noScores += r.noScores;
   }
-  console.log(JSON.stringify({ ...report(all), skipped_without_text: skipped, inputs }, null, 2));
+  console.log(JSON.stringify({ ...report(all), skipped_without_text: skipped, without_scores: noScores, inputs }, null, 2));
+  if (all.length === 0) {
+    console.error(`pass-bar: no lesson could be judged, so n is 0. Of the rows, ${noScores} have no judge scores (a skip, an error, a judge that failed) and ${skipped} are a lesson update, or have scores and no lesson text (an akm that does not report a rejected lesson).`);
+    process.exit(1);
+  }
 }
 
 if (import.meta.main) main();
