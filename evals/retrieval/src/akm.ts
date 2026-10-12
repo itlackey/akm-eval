@@ -5,9 +5,34 @@ import { cpSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { type Sandbox, agentDetailArgs, runAkm, writeConfig } from "../../../lib/akm/akm.ts";
 import { digestTree } from "../../../lib/akm/index-cache.ts";
-import { type Asset, DEPTH, foldRefs } from "./lib.ts";
 
 const TYPES = ["skill", "command", "agent", "knowledge", "workflow", "script", "lesson", "fact", "memory"];
+
+/** How many results a call asks akm for. The scorer reads the first 10 of them (DEPTH in score.ts), so this is never fewer. */
+export const LIMIT = 10;
+
+export interface Asset {
+  ref: string;
+  type: string;
+  name: string;
+  description: string;
+  /** The file, relative to the library, or absolute where akm names it so (a bundle that is indexed in place). */
+  path: string;
+}
+
+/** akm names a section of an asset as `ref#section`. The eval scores assets, so the sections fold into one, at the first place. */
+export function foldRefs(refs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const full of refs) {
+    const ref = full.split("#")[0].trim();
+    if (ref && !seen.has(ref)) {
+      seen.add(ref);
+      out.push(ref);
+    }
+  }
+  return out;
+}
 
 const bundleOf = (sb: Sandbox): string => join(sb.dir, "bundle");
 
@@ -98,7 +123,7 @@ export interface Answer {
 }
 
 /** How long one call may take before it is killed. */
-const CALL_TIMEOUT_MS = 120_000;
+export const CALL_TIMEOUT_MS = 120_000;
 
 /**
  * One `akm search` or `akm curate` call. A failed call is an answer with an error and no refs. So is an answer that
@@ -107,7 +132,7 @@ const CALL_TIMEOUT_MS = 120_000;
  * answer that does not say how it searched could be keyword rankings, and is an error as well. A keyword call that
  * does not say is taken as it comes.
  */
-export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = DEPTH, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS): Promise<Answer> {
+export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS): Promise<Answer> {
   const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
   const seconds = () => Number((ms / 1000).toFixed(2));
   const failed = (error: string, extra: { timedOut?: true } = {}): Answer => ({ refs: [], assets: [], mode: null, seconds: seconds(), error, ...extra });

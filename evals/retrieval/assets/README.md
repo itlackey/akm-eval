@@ -168,14 +168,14 @@ Three workflows were written in a workflow format that akm 0.9.26 refuses to rea
 
 ## A set of your own
 
-`evals/retrieval/run --corpus own` runs a labelled set of your own from `private/retrieval/own/`, with the same metrics. It holds the files below, in the same format as above.
+`evals/retrieval/run --cases DIR` runs a labelled set of your own from the folder `DIR` (a custom corpus; `--corpus own` reads `private/retrieval/own/`), with the same metrics. The folder holds the files below, in the same format as above.
 
 - `queries.jsonl`: `id`, `query` and `kind` for each query. A `kind` is free text, apart from `chitchat`, `notification`, `log`, `status` and `nontask`: they mark a non-task input, whose right result is nothing, and it needs no grades. `expected` is optional.
-- `qrels.jsonl`: `id`, `ref`, `grade` (0 to 3) and `reason` for each judged pair. Every task query needs a row. A query with no row of grade 2 or more counts as having no answer. `judge`, `prompt_sha256`, `date` and `asset_sha256` are optional: `evals/retrieval/label --corpus own` writes them, and a pair whose asset changed since is graded again.
+- `qrels.jsonl`: `id`, `ref`, `grade` (0 to 3) and `reason` for each judged pair. Every task query needs a row. A query with no row of grade 2 or more counts as having no answer. `judge`, `prompt_sha256`, `date` and `asset_sha256` are optional: `evals/retrieval/label --cases DIR` writes them, and a pair whose asset changed since is graded again.
 - `library/`: the folder akm indexes, or a link to it. It is copied into the sandbox as one bundle, so the refs in the qrels are the refs `akm search` prints for it.
 - `bundles.json`, only when `library/` is a folder of bundles: a map from each bundle's folder name to its akm adapter, such as `{ "notes": "akm", "site": "website-snapshot" }`. akm indexes each bundle where it is, read only, so `library/` can be a link to a large frozen snapshot, and nothing is copied. akm then prints refs as `<folder>//<path>`, and the qrels use those. Name every adapter: akm can detect one itself, but not always the one that was meant, and then it indexes other assets.
 
-The run stops with an error that says this when the folder holds no set in this format. The results go to `private/retrieval/results/`, and nothing in `own/` is published.
+The run stops with an error that says this when the folder holds no set in this format. The results go to `private/retrieval/results/`, and nothing in the folder is published.
 
 ## Licence
 

@@ -977,6 +977,8 @@ describe("retrieval: the judged results (#71)", () => {
     return dir;
   }
   const condensed = (scores: Record<string, any>) => ({ ...scores, ndcg_10_condensed: Math.min(1, scores.ndcg_10 + 0.1) });
+  // retrieval is on the manifest now, and these fixtures were written before it: the only note a pair of them gets besides the judged results'
+  const LEGACY = "A and B have no manifest (written before harness-v3), so its collector, its scorer and the inputs of its cases are not verified";
 
   test("ndcg_10_condensed and judged_10 are reported beside ndcg_10, with the metrics the matrix judges and without a verdict of their own to judge by", () => {
     const r = comparePair(loadRun(changed("before", condensed)), loadRun(changed("after", condensed)), { treatment: BUILD });
@@ -985,7 +987,7 @@ describe("retrieval: the judged results (#71)", () => {
     expect(search.metrics.length).toBe(1); // what the matrix judges is as it was
     expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.9, delta: 0 });
     expect(metric(r, "search.ndcg_10_condensed", "search")?.a).toBeGreaterThan(metric(r, "search.ndcg_10", "search")?.a as number); // never below ndcg_10
-    expect(r.exploratory).toEqual([]);
+    expect(r.exploratory).toEqual([LEGACY]);
     const md = renderPair(r);
     expect(md).toContain("| search.ndcg_10_condensed ↑ (not judged) |");
     expect(md).toContain("| search.judged_10 ↑ (not judged) | 0.9 | 0.9 | 0 |");
@@ -995,13 +997,13 @@ describe("retrieval: the judged results (#71)", () => {
     const fewerJudged = changed("after", (scores, column) => ({ ...condensed(scores), judged_10: column === "search" ? 0.6 : scores.judged_10 }));
     const r = comparePair(loadRun(changed("before", condensed)), loadRun(fewerJudged), { treatment: BUILD });
     expect(metric(r, "search.judged_10", "search")).toMatchObject({ a: 0.9, b: 0.6, delta: -0.3 });
-    expect(r.exploratory).toEqual(["judged_10 (search) fell from 0.9 to 0.6: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again"]);
+    expect(r.exploratory).toEqual([LEGACY, "judged_10 (search) fell from 0.9 to 0.6: B surfaces results nobody graded for these queries, and ndcg_10 counts them as not relevant. Grade them with evals/retrieval/label --from <B's results folder> and compare again"]);
     expect(renderPair(r)).toContain("> **Exploratory.**");
     // a fall within the tie is noise, and a rise is not a reason to doubt B
     const slight = changed("after", (scores) => ({ ...condensed(scores), judged_10: 0.895 }));
-    expect(comparePair(loadRun(changed("before", condensed)), loadRun(slight), { treatment: BUILD }).exploratory).toEqual([]);
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(slight), { treatment: BUILD }).exploratory).toEqual([LEGACY]);
     const more = changed("after", (scores) => ({ ...condensed(scores), judged_10: 1 }));
-    expect(comparePair(loadRun(changed("before", condensed)), loadRun(more), { treatment: BUILD }).exploratory).toEqual([]);
+    expect(comparePair(loadRun(changed("before", condensed)), loadRun(more), { treatment: BUILD }).exploratory).toEqual([LEGACY]);
   });
 
   test("a run whose rows have neither shows them as missing, and does not guess", () => {
