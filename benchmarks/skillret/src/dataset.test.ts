@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Query, SEED, draw, ensureFiles, mix, privateCorpus, proportional, publicCorpus, readLock, readQueries, readSkills, stratified } from "./dataset.ts";
+import { type Query, SEED, draw, ensureFiles, mix, privateCorpus, proportional, publicCorpus, readCorpusQueries, readLock, readQueries, readSkills, stratified } from "./dataset.ts";
 import { type Split, writeAssets } from "./fakes.ts";
 
 const dirs: string[] = [];
@@ -274,5 +274,24 @@ describe("the private corpus", () => {
     const many: Split = { ...TEST, queries: Array.from({ length: 30 }, (_, i): [string, string, string[]] => [`q${i}`, "a request", ["t1", "t2", "t3"]]) };
     writeAssets(dir, many, TRAIN);
     expect(() => privateCorpus(dir)).toThrow("cannot draw 30 of 20");
+  });
+});
+
+describe("the queries of a corpus, read for a stored run", () => {
+  test("are the queries the corpus draws, for the whole set and for a limit, as a run drew them", () => {
+    const dir = assetsWithData();
+    for (const limit of [undefined, 2, 99]) {
+      expect(readCorpusQueries("public", dir, limit)).toEqual(publicCorpus(dir, limit).queries);
+      expect(readCorpusQueries("private", dir, limit)).toEqual(privateCorpus(dir, limit).queries);
+    }
+  });
+
+  test("name the data files that are not there, and fetch nothing", () => {
+    const dir = assetsWithData();
+    rmSync(join(dir, "test-queries.jsonl"));
+    rmSync(join(dir, "test-qrels.jsonl"));
+    expect(() => readCorpusQueries("public", dir)).toThrow(`test-queries.jsonl, test-qrels.jsonl are not in ${dir}. A run of benchmarks/skillret fetches them.`);
+    expect(existsSync(join(dir, "test-queries.jsonl"))).toBe(false);
+    expect(() => readCorpusQueries("private", dir)).toThrow("test-queries.jsonl, test-qrels.jsonl are not in"); // the custom corpus follows the mix of the test queries
   });
 });

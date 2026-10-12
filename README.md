@@ -24,7 +24,7 @@ This layout replaces the earlier harness. The old content stays under the tag `l
 | `evals/bakeoff` | Which model runs akm's model-backed jobs best, on a frozen set of prompts: valid output, correct facts, real quotes, speed? | `public`, `private` | `--tier` `--model` `--models` `--repeat` `--include-legacy` | none: it never runs akm | for each model `metrics` and `settings`; `prompts_version`, `include_legacy`, `legacy_cases`, `cases_sha256`, `assets_sha256` |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | `public`, `private` | `--sample-seed` `--retrieval-only` `--semantic` `--resume` `--model` `--judge-model` `--akm` | 0.9.26 | `search_mode`, `config`, `assets_sha256`, `seed`, `sample_seed`, `status`, `aborted_reason`, `model_endpoint`, `judge_endpoint`, `temperature`, `max_tokens`, `sessions_over_projection_limit`, `timeouts`, `metrics` for `accuracy`, `retrieval` and `retrieval_abstention` |
 | `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `public`, `private` | `--attempts` `--repeat` `--model` `--akm` `--akm-env` | akm-cli 0.9.26, or what `--akm` names | `status`, `aborted_reason`, `completion`, `assets_sha256`, `engine`, `config`, and otherwise as `evals/agent-ab`, with `dataset` and `library` instead of its digest of the libraries |
-| `benchmarks/skillret` | Given a request, does akm rank the right skills first from a large skill library (SkillRet)? | `public`, `private` | `--akm` | 0.9.26 | `search_mode`, `metrics` for the keyword and the semantic line, `by_size`, `curate_check`, `errored`, `timeouts`, `no_results`, `semantic_index`, `semantic_index_built_by`, `config`, `assets_sha256`, `seed` |
+| `benchmarks/skillret` | Given a request, does akm rank the right skills first from a large skill library (SkillRet)? | `public`, `custom` | `--akm` | 0.9.26 | `search_mode`, `metrics` for the keyword and the semantic line, `by_size`, `curate_check`, `errored`, `timeouts`, `no_results`, `semantic_index`, `semantic_index_built_by`, `config`, `assets_sha256`, `seed`, `corpus_kind`, `manifest` |
 
 Reading the table:
 
@@ -139,6 +139,8 @@ evals/distill/run --corpus custom                # the eval's default custom cor
 evals/distill/run --cases ~/notes/distill        # a custom corpus of your own: --cases alone is --corpus custom
 evals/distill/run --corpus all                   # public and the default custom corpus, side by side, never pooled
 ```
+
+The custom corpus of `benchmarks/skillret` is not a folder: it is the train split of the dataset it fetches, drawn when the run starts, so it has no `corpus.json` and no `--cases`, and it is not private. Its summary records `corpus_kind: "split"`.
 
 `--cases DIR` points an eval at your own folder. A relative `DIR` is from the repository root. The folder holds what the eval's README describes under "Run your own set", and a `corpus.json`. `--corpus all --cases DIR` runs `public` and `DIR`. The default custom corpus of an eval is the rewrite `./generate-assets` makes in `private/<eval>/assets`, and of `evals/promotion`, which has no generate, your notes in `private/promotion/own`.
 
