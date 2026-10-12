@@ -55,6 +55,8 @@ const FOLDERS = ["bundle", "config", "data", "cache", "state", "xdg-config", "xd
 const DEFAULT_TIMEOUT_MS = 15 * 60_000; // a command that calls a model can take minutes
 
 // Keyword search only and no registries: akm needs no model download and never goes to the network.
+// `configVersion` here and the provider kind of the engine in engineConfig are pinned on purpose, not taken from the akm under test: a
+// pinned config is what lets a run on one akm release compare with a run on another (#52). A --config-patch can set another.
 const plainConfig = () => ({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
 
 /** The model of akm's built-in embedder, bge-small-en-v1.5, which runs in the akm process: no model service. It is akm 0.9.26's default. */
