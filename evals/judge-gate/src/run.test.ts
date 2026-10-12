@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { commandLine, completionsUrl, createSandbox, writeConfig } from "../../../lib/akm/akm.ts";
 import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
@@ -298,6 +298,17 @@ describe("runCorpus", () => {
       const own = await quiet(() => runCorpus(corpusOf(folders.assets, { kind: "own", private: true }), ctx, folders.results));
       expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null, corpus_folder: null });
       expect(JSON.stringify(resultsOf(folders).summary)).not.toContain(folders.assets);
+    });
+
+    test("a custom corpus inside the repository records its folder from the repository root, written with /, and the public corpus records none", async () => {
+      const { ctx, folders } = setup([{ word: "PASS", label: "good" }]);
+      const inside = mkdtempSync(join(import.meta.dir, "..", ".custom-run-"));
+      dirs.push(inside);
+      cpSync(folders.assets, join(inside, "assets"), { recursive: true });
+      const own = await quiet(() => runCorpus(corpusOf(join(inside, "assets"), { kind: "own", private: true }), ctx, folders.results));
+      expect(own.corpus_folder).toBe(`evals/judge-gate/${basename(inside)}/assets`);
+      expect(JSON.stringify(own)).not.toContain(inside); // never an absolute path
+      expect((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).corpus_folder).toBeNull();
     });
 
     test("the version of the rubric the labels follow, from the public assets README, for either corpus and for a run that gave up", async () => {

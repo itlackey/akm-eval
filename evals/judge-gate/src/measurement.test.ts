@@ -4,14 +4,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, type Row, judgeConfig, orderFeedback, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
-const PUBLIC = join(import.meta.dir, "..", "assets");
+const EVAL_DIR = join(import.meta.dir, "..");
+const PUBLIC = join(EVAL_DIR, "assets");
 const GOLDEN = join(import.meta.dir, "..", "golden");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const LINES: { case: string; note: string; raw: Record<string, any> }[] = jsonl(join(GOLDEN, "raw.jsonl"));
@@ -31,17 +32,18 @@ afterEach(() => {
 });
 
 /** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
-function stored(options: { legacy?: boolean; without?: string[]; name?: string } = {}): string {
+function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null } } = {}): string {
+  const custom = options.custom;
   const rows = GOLDEN_CASES.map((c) => MEASUREMENT.score(c, FIRST(c)));
   const config = judgeConfig("https://gateway.example/deployment-A/v1", "the-model", true);
   const dir = join(tmp(), options.name ?? "2026-10-12-golden");
   mkdirSync(dir, { recursive: true });
   const summary: Record<string, unknown> = {
     eval: "judge-gate",
-    corpus: "public",
-    corpus_kind: "public",
-    corpus_private: false,
-    corpus_folder: "evals/judge-gate/assets",
+    corpus: custom ? "custom" : "public",
+    corpus_kind: custom ? "own" : "public",
+    corpus_private: custom !== undefined,
+    corpus_folder: custom ? custom.folder : null,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
     harness_sha256: "b".repeat(64),
@@ -66,7 +68,7 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string }
     summary.manifest = buildManifest({
       measurement: MEASUREMENT,
       parts: lockedParts(MEASUREMENT),
-      corpus: "public",
+      corpus: custom ? "custom" : "public",
       cases: caseDigests(MEASUREMENT, GOLDEN_CASES),
       akm: { version: "0.9.99-test", bin: "akm" },
       config,
@@ -122,7 +124,7 @@ describe("the corpus a stored run is scored against again", () => {
   });
 
   test("a custom corpus that recorded no folder says how to name it", () => {
-    expect(() => MEASUREMENT.loadCases(repo(), { corpus: "custom", corpus_folder: null })).toThrow("did not record the folder of its custom corpus (it was outside the repository). Give the folder with --cases DIR");
+    expect(() => MEASUREMENT.loadCases(repo(), { corpus: "custom", corpus_folder: null })).toThrow("did not record the folder of its custom corpus (it was outside the repository). Give the folder to scripts/rescore with --cases DIR");
   });
 
   test("a run from before the manifest can be scored again only when it read the cases that are here now", () => {
@@ -188,6 +190,46 @@ describe("rescoring a stored run", () => {
     const s = summaryOf(out);
     expect(manifestProblems(s.manifest)).toEqual([]);
     expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: 0 }, scorer: lockedParts(MEASUREMENT).scorer });
+  });
+});
+
+describe("rescoring a run on a custom corpus", () => {
+  const CHANGED = (GOLDEN_CASES.find((c) => c.label === "bad" && c.severity === "harmful") as Case).id;
+  /** A folder of your own cases inside the repository, which is where corpus_folder can name it: the public cases with one bad case relabelled churn. */
+  function notes(): string {
+    const inside = mkdtempSync(join(EVAL_DIR, ".custom-test-"));
+    dirs.push(inside);
+    mkdirSync(join(inside, "assets"));
+    const cases = PUBLIC_CASES.map((c) => (c.id === CHANGED ? { ...c, severity: "churn" } : c));
+    writeFileSync(join(inside, "assets", "cases.jsonl"), `${cases.map((c) => JSON.stringify(c)).join("\n")}\n`);
+    return join(inside, "assets");
+  }
+  const relativeFolder = (folder: string): string => `evals/judge-gate/${basename(join(folder, ".."))}/assets`;
+
+  test("reads the cases from the corpus_folder the run recorded, from the repository root, and scores against them", () => {
+    const folder = notes();
+    const dir = stored({ custom: { folder: relativeFolder(folder) } });
+    const { out, result } = rescoreFolder(dir);
+    expect(result.changed).toEqual([CHANGED]); // the stored row says harmful; the folder's case says churn
+    expect(result.relabelled).toEqual([CHANGED]);
+    expect(rowsOf(out).find((r) => r.id === CHANGED).severity).toBe("churn");
+    expect(summaryOf(out)).toMatchObject({ corpus: "custom", corpus_folder: relativeFolder(folder) });
+    expect(summaryOf(out).manifest.corpus).toBe("custom");
+  });
+
+  test("a folder the run could not record is named with --cases, from the root or whole, and the result records where it was read", () => {
+    const folder = notes();
+    const dir = () => stored({ custom: { folder: null } });
+    expect(() => rescoreFolder(dir())).toThrow("was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
+    const whole = rescoreFolder(dir(), { cases: folder });
+    expect(whole.result.changed).toEqual([CHANGED]);
+    expect(summaryOf(whole.out).corpus_folder).toBe(relativeFolder(folder));
+    expect(rescoreFolder(dir(), { cases: relativeFolder(folder) }).result.changed).toEqual([CHANGED]);
+    const outside = tmp();
+    cpSync(folder, join(outside, "my notes"), { recursive: true });
+    const elsewhere = rescoreFolder(dir(), { cases: join(outside, "my notes") });
+    expect(elsewhere.result.changed).toEqual([CHANGED]);
+    expect(summaryOf(elsewhere.out).corpus_folder).toBeNull(); // outside the repository: never recorded
   });
 });
 

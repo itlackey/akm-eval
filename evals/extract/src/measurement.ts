@@ -13,13 +13,14 @@ import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.
 
 /**
  * The folder of the assets a run read. The public ones are in the repository. A custom corpus records its folder when it was inside it
- * (`corpus_folder`, from the repository root). A run from before corpus.json named its corpus `private`: the seeded rewrite generate makes.
+ * (`corpus_folder`, from the repository root: `corpusFolderOf` in lib/manifest.ts; scripts/rescore sets it from `--cases DIR` when it is null).
+ * A run from before corpus.json named its corpus `private`: the seeded rewrite generate makes.
  */
 function assetsOf(root: string, summary: Record<string, any>): string {
   if (summary.corpus === "public") return join(root, "evals", NAME, "assets");
   if (summary.corpus === "private") return join(root, "private", NAME, "assets");
-  if (typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
-  throw new Error(`the run did not record the folder of its ${summary.corpus} corpus (it was outside the repository). Give the folder with --cases DIR`);
+  if (summary.corpus === "custom" && typeof summary.corpus_folder === "string") return resolve(root, summary.corpus_folder);
+  throw new Error(`the run did not record the folder of its ${summary.corpus} corpus (it was outside the repository). Give the folder to scripts/rescore with --cases DIR`);
 }
 
 export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {

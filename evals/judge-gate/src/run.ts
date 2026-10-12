@@ -5,12 +5,12 @@
 //   evals/judge-gate/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
@@ -52,7 +52,7 @@ interface Summary {
   corpus: string;
   corpus_kind: string;
   corpus_private: boolean;
-  /** The folder of the corpus from the repository root, null when it is outside it: what `scripts/rescore` reads the cases from. */
+  /** The folder of a custom corpus from the repository root, null when it is outside it and for the public corpus (see corpusFolderOf in lib/manifest.ts): what `scripts/rescore` reads the cases from. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -140,12 +140,6 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** The folder from the repository root, or null when it is not inside the repository. */
-function insideRepository(folder: string): string | null {
-  const rel = relative(ROOT, folder);
-  return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel;
-}
-
 export async function runCorpus(
   corpus: ResolvedCorpus,
   ctx: Ctx,
@@ -201,7 +195,7 @@ export async function runCorpus(
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(corpus),
-    corpus_folder: insideRepository(corpus.folder),
+    corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),

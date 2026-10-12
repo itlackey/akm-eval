@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
 import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
@@ -347,6 +347,18 @@ describe("what summary.json says about the run", () => {
     expect(pub).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
     for (const stored of [rewrite, own, pub]) expect(JSON.stringify(stored)).not.toContain(folders.assets); // the folder's name can say what is in it; it is recorded only when it is inside the repository, as corpus_folder
     expect(rewrite.corpus_folder).toBeNull(); // the temporary folder is outside the repository
+  });
+
+  test("a custom corpus inside the repository records its folder from the repository root, written with /, and the public corpus records none", async () => {
+    const folders = assetsFor(scenarios.slice(0, 1));
+    const inside = mkdtempSync(join(import.meta.dir, "..", ".custom-run-"));
+    dirs.push(inside);
+    cpSync(folders.assets, join(inside, "assets"), { recursive: true });
+    const own: ResolvedCorpus = { name: "custom", folder: join(inside, "assets"), config: { kind: "own", private: true }, configFile: null, flag: "--cases notes" };
+    const stored = storedIn((await quiet(() => runCorpus(own, ctx, folders.results))).results_dir);
+    expect(stored.corpus_folder).toBe(`evals/extract/${basename(inside)}/assets`);
+    expect(JSON.stringify(stored)).not.toContain(inside); // never an absolute path
+    expect(storedIn((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).results_dir).corpus_folder).toBeNull();
   });
 });
 
