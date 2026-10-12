@@ -164,6 +164,11 @@ function keeps(before: string, after: string): boolean {
   return wordsOf(before).every((w) => kept.has(w));
 }
 
+/** Do `before` and `after` hold the same words in the same order? A stray period is repaired by changing the break only: the marks may change, no word may. */
+function sameWords(before: string, after: string): boolean {
+  return wordsOf(before).join(" ") === wordsOf(after).join(" ");
+}
+
 /** A cut-off description without the hanging words and marks at its end, which are what a repair may drop. */
 function withoutTail(description: string): string {
   const words = collapse(description).replace(/[.,;:+…]+$/, "").split(" ");
@@ -206,6 +211,18 @@ function anchorForms(anchor: string): string[] {
 
 const HISTORICAL = /\b(historical|history|legacy|obsolete|outdated|out of date|deprecated|superseded|former|formerly|previous|previously|past|archived?|older|old|no longer|retired)\b/i;
 
+/** Wording that offers a note for current work: current, recommended, today, for new work, replaces. */
+const OFFERS_CURRENT = /\b(?:current|currently|recommended|today|latest|up[- ]to[- ]date|new (?:work|projects?)|replaces)\b/i;
+
+/** Wording that takes a note out of current work, in the clause where it stands: "not for current work", "superseded by the current release". */
+const WITHDRAWN = /\b(?:not|never|no longer|superseded|obsolete|deprecated|outdated)\b|n't\b/i;
+
+/**
+ * Does a `when_to_use` offer the note for current work? A clause that does, and does not withdraw the note in the same clause, does. Naming
+ * a version the note records, or a word such as "old", does not make an offer a historical note ("replaces the old agent CLI approach").
+ */
+const offersCurrentWork = (text: string): boolean => text.split(/[.;:!?\n]+/).some((clause) => OFFERS_CURRENT.test(clause) && !WITHDRAWN.test(clause));
+
 export type CheckName = "body_kept" | "defect_fixed" | "no_extra_change" | "no_invented" | "not_current";
 export type Checks = Partial<Record<CheckName, boolean>>;
 
@@ -243,7 +260,7 @@ function isFixed(c: Case, before: Note, after: Note, title: string | undefined):
   const ok = now !== undefined && descriptionProblem(now) === undefined;
   switch (c.class) {
     case "description-period":
-      return ok && !hasStrayPeriod(now) && keeps(was, now);
+      return ok && !hasStrayPeriod(now) && sameWords(was, now);
     case "description-quote":
       return ok && !hasEscapedQuote(now) && keeps(was, now);
     case "description-truncated":
@@ -284,7 +301,7 @@ export function score(c: Case, proposal: string | undefined): Scored {
   if (isDefect(c.class)) checks.defect_fixed = isFixed(c, before, after, title);
   if (c.class === "historical") {
     const w = values.when_to_use;
-    checks.not_current = w === undefined || HISTORICAL.test(w) || (c.anchors ?? []).some((a) => anchorForms(a).some((form) => w.includes(form)));
+    checks.not_current = w === undefined || (!offersCurrentWork(w) && (HISTORICAL.test(w) || (c.anchors ?? []).some((a) => anchorForms(a).some((form) => w.includes(form)))));
   }
   return { checks, changed, values };
 }

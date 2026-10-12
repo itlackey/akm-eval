@@ -198,3 +198,31 @@ describe("a run stored before the fix of #58", () => {
     expect(rescoreWithCommand(dir).rows).toEqual(first.rows);
   });
 });
+
+describe("a run stored before the fix of #59", () => {
+  // Wrong edits as the scorer wrote them then, every one of them correct: the golden proposal is the raw output the row was made from.
+  const ok = { body_kept: true, no_extra_change: true, no_invented: true };
+  const before = (id: string, cls: string, note: string, seconds: number, check: string, field: string, value: string) => ({
+    id, class: cls, outcome: "proposal", reason: "", served: "qwen3-27b", seconds, correct: true, checks: { ...ok, [check]: true }, changed: [field], values: { [field]: value }, proposal: (raw(id, note) as { proposal: string }).proposal,
+  });
+  const BASE = "run a read-only repository baseline, architecture review, debt inventory, ranking, and pilot proposal";
+  const REVERSED = before("description-period-01", "description-period", "the model repairs the break and reverses the meaning", 8.8, "defect_fixed", "description", `Do not ${BASE}.`);
+  const ADDED = before("description-period-01", "description-period", "the model repairs the break and adds a clause", 9.1, "defect_fixed", "description", `${BASE[0]?.toUpperCase()}${BASE.slice(1)} for every repository in the organisation.`);
+  const CURRENT = before("historical-05", "historical", "the model offers the note as the current way, naming a version it records", 44, "not_current", "when_to_use", "Use as the current, recommended way to call GPT-4 class models today, for any new work.");
+  const REPLACES = before("historical-05", "historical", "the model says the note replaces the old approach", 45.2, "not_current", "when_to_use", "Use for GPT-4 era delegation; it replaces the old agent CLI approach.");
+
+  test.each([
+    ["reverses the meaning of the description and offers the note as the current way", REVERSED, CURRENT],
+    ["adds words to the description and says the note replaces the old approach", ADDED, REPLACES],
+  ])("an edit that %s scores wrong when it is scored again, through scripts/rescore, and the cases' right answers still score right", (_what, period, historical) => {
+    const dir = runBefore(tmp(), [period, historical]);
+    const stored = readStored(dir).summary;
+    expect(stored.metrics).toMatchObject({ defects: { n: 6, correct: 6, rate: 1 }, controls: { n: 4, correct: 4, rate: 1 } }); // both wrong edits passed
+    const { rows, summary, stdout } = rescoreWithCommand(dir);
+    expect(rows.find((r) => r.id === "description-period-01")).toMatchObject({ correct: false, checks: { ...ok, defect_fixed: false } });
+    expect(rows.find((r) => r.id === "historical-05")).toMatchObject({ correct: false, checks: { ...ok, not_current: false } });
+    expect(rows.filter((r) => r.correct === false).map((r) => r.id).sort()).toEqual(["description-period-01", "historical-05"]); // the others are as they were
+    expect(summary.metrics).toMatchObject({ defects: { n: 6, correct: 5 }, controls: { n: 4, correct: 3 } });
+    expect(stdout).toContain("2 rows differ from the stored ones: description-period-01, historical-05");
+  });
+});

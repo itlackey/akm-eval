@@ -113,7 +113,7 @@ The eval is on the run manifest (see "How results stay comparable" in the root R
 - `src/collect.ts` is the **collector**: the sandbox, the akm config (`reflectConfig`), the commands, the searches it records, and how it reads akm's answer into `outcome`, `reason`, `proposal` and the rest. `lib/akm/akm.ts`, `lib/akm/overrides.ts` and `lib/cli.ts` are listed with it. A change to any of them changes what akm is asked or what is kept of its answer: bump the collector (`scripts/measurement/run bump reflect collector --reason "..."`), and earlier runs are no longer comparable with later ones.
 - `src/score.ts` is the **scorer**: the checks, `makeRow` and `metrics`. A change to it changes what the eval scores: bump the scorer, and update the golden files in the same change. No run is invalidated: `scripts/rescore` scores any stored run again, and `scripts/compare` does so before it compares two runs that were scored differently.
 - `src/measurement.ts` declares both lists, the cases' `input` and `labels` that are digested per case, and how a stored row is read back into its raw output (`rawOf`). `src/lib.ts` re-exports the scorer and the collector, with how a defect is injected and the checks on the cases themselves.
-- `golden/` holds ten cases, one of each class, with 52 raw outputs for them (a realistic answer of a model: the right one, and each way to get it wrong), and the row the scorer must give for each. `src/golden.test.ts` fails when a scorer change alters one. `UPDATE_GOLDEN=1 bun test evals/reflect/src/golden.test.ts` writes the expected rows again, and the files say which scorer version they are for.
+- `golden/` holds ten cases, one of each class, with 59 raw outputs for them (a realistic answer of a model: the right one, and each way to get it wrong), and the row the scorer must give for each. `src/golden.test.ts` fails when a scorer change alters one. `UPDATE_GOLDEN=1 bun test evals/reflect/src/golden.test.ts` writes the expected rows again, and the files say which scorer version they are for.
 
 ```
 scripts/rescore/run evals/reflect/results/<UTC date>-<label>      # writes <UTC date>-<label>-rescored beside it
@@ -137,10 +137,10 @@ No judge model scores a case. Each check looks at the proposal and the note.
 | Check | Applies to | Passes when |
 |---|---|---|
 | `body_kept` | every case | The body is the note's body, byte for byte. The one heading akm adds for a missing title is allowed there. |
-| `defect_fixed` | defects | The defect is repaired and what the note said stays. A split or escaped-quote description keeps every word, because akm tells the model to repair only the break. A cut-off one keeps its names, numbers and paths, and a restatement in other words is fine. The rest of the per-class rules are in `assets/README.md`. |
+| `defect_fixed` | defects | The defect is repaired and what the note said stays. A split description keeps the same words in the same order, so that only the break changes: akm tells the model to repair only the break, and a rewrite that keeps the old words and adds others is not a repair. An escaped-quote one keeps every word. A cut-off one keeps its names, numbers and paths, and a restatement in other words is fine. The rest of the per-class rules are in `assets/README.md`. |
 | `no_extra_change` | every case | No field changes except the one the class allows. A change to any other field is churn. A `type:` line akm adds does not count. |
 | `no_invented` | every case | Each number, name with two capitals, path or dotted name in a new value is in the note, and the new values hold none of the case's forbidden terms. |
-| `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical. Leaving it alone passes. |
+| `not_current` | `historical` | A new `when_to_use` names a version or date the note records, or says the note is historical, and does not offer the note for current work: wording such as current, recommended, today, latest, for new work or replaces fails, unless the clause takes the note back ("not for current work", "superseded by the current release"). Leaving it alone passes. |
 
 A case is correct when reflect gave a usable answer and every check that applies passes, on the note as it ends up: a refused edit leaves the note as it was.
 

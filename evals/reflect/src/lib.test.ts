@@ -39,6 +39,8 @@ import {
 } from "./lib.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
+/** The public cases, for the tests that take an edit from the cases themselves. */
+const PUBLIC: Case[] = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"));
 const LIBRARY = join(EVAL_DIR, "..", "..", "corpus", "library");
 const cleanups: string[] = [];
 afterEach(() => {
@@ -275,6 +277,28 @@ describe("score", () => {
     expect(score(c, c.source).checks.defect_fixed).toBe(false); // still split
   });
 
+  test("a stray period is repaired by changing the break only: a rewrite of the description is not a fix, whatever words it keeps (#59)", () => {
+    const c = PUBLIC.find((x) => x.id === "description-period-01") as Case;
+    const was = (c.source.match(/^description:(.*(?:\n[ \t].*)*)/m)?.[1] ?? "").replace(/\s+/g, " ").trim();
+    const withDescription = (d: string) => c.source.replace(/^description:.*(?:\n[ \t].*)*/m, `description: ${d}`);
+    const fixed = (d: string) => score(c, withDescription(d)).checks.defect_fixed;
+    const joined = was.replace(". ", " ");
+    expect(fixed(joined)).toBe(true); // the period dropped
+    expect(fixed(was.replace(". ", ", "))).toBe(true); // the period turned into a comma
+    expect(fixed(was)).toBe(false); // still split
+    expect(fixed(`Do not ${joined.charAt(0).toLowerCase()}${joined.slice(1)}`)).toBe(false); // reverses the meaning
+    expect(fixed(`${joined.replace(/\.$/, "")} for every repository in the organisation.`)).toBe(false); // adds words
+    expect(fixed(joined.replace("read-only ", ""))).toBe(false); // drops one
+    expect(fixed(joined.replace("repository baseline, architecture review", "architecture review, repository baseline"))).toBe(false); // reorders
+  });
+
+  test("the repair that each public description-period case asks for is a fix", () => {
+    for (const c of PUBLIC.filter((x) => x.class === "description-period")) {
+      const repaired = c.source.replace(/^(description:.*)\.\n[ \t]+/m, "$1 ");
+      expect(score(c, repaired).checks, c.id).toMatchObject({ defect_fixed: true, body_kept: true, no_extra_change: true });
+    }
+  });
+
   test("a description with its escaped quotes still in it is not fixed", () => {
     const c = defect("description-quote");
     expect(score(c, c.source.replace(/\\"/g, "")).checks.defect_fixed).toBe(true);
@@ -398,6 +422,42 @@ describe("score", () => {
       expect(when("Use as a historical reference when a signing key expired.").not_current).toBe(true);
       expect(when("Use when a signing key is about to expire in the current service.").not_current).toBe(false);
       expect(when("Use when a signing key is about to expire in the current service.").no_extra_change).toBe(true);
+    });
+
+    test("historical: a when_to_use that offers the note for current work is wrong, naming a version it records or a word such as old does not save it (#59)", () => {
+      const c = PUBLIC.find((x) => x.id === "historical-05") as Case;
+      const when = (w: string) => score(c, c.source.replace(/^when_to_use:.*$/m, `when_to_use: ${w}`)).checks;
+      for (const offer of [
+        "Use as the current, recommended way to call GPT-4 class models today, for any new work.",
+        "Use for GPT-4 era delegation; it replaces the old agent CLI approach.",
+        "Use to call GPT-3.5 models, the latest and up to date way.",
+        "Use when starting new work on GPT-4 class models.",
+        "Historical, but currently the best way to call GPT-4.",
+      ]) {
+        expect(when(offer).not_current, offer).toBe(false);
+        expect(when(offer).no_extra_change, offer).toBe(true); // the only thing wrong is the offer
+      }
+      // naming what the note records, or saying it is historical, with no offer, still passes, and so does an offer the same clause withdraws
+      for (const kept of [
+        "Use to check what GPT-3.5 and GPT-4 did.",
+        "Historical reference for GPT-3.5 and GPT-4; not for current work.",
+        "Superseded by newer models; kept as a record of the GPT-3.5 generation.",
+        "Use only to look up how this worked in GPT-3.5; it is historical and no longer current.",
+        "The old way to call GPT-4; don't use it today.",
+      ]) {
+        expect(when(kept).not_current, kept).toBe(true);
+      }
+      expect(score(c, undefined).checks.not_current).toBe(true);
+    });
+
+    test("historical: what the public cases call a correct result still passes: no change, or a when_to_use that names what the note records or says it is historical", () => {
+      for (const c of PUBLIC.filter((x) => x.class === "historical")) {
+        const when = (w: string) => score(c, c.source.replace(/^when_to_use:.*$/m, `when_to_use: ${w}`)).checks;
+        expect(score(c, undefined).checks.not_current, c.id).toBe(true);
+        expect(when(`Use to look up what ${(c.anchors ?? []).join(" and ")} did.`), c.id).toMatchObject({ not_current: true, no_invented: true });
+        expect(when("Historical reference only; superseded by newer releases.").not_current, c.id).toBe(true);
+        expect(when(`Use as the current guide to ${(c.anchors ?? [])[0]} today.`).not_current, c.id).toBe(false);
+      }
     });
 
     test("historical: no other field may change", () => {

@@ -14,7 +14,7 @@ body byte for byte and adds a title only as a `# heading` when the body has none
 
 | Class | n | What the case is | A correct result |
 |---|---|---|---|
-| `description-period` | 6 | A stray period splits the description at a line wrap. akm tells the model: "a stray period splits a sentence". | The break is repaired and every word of the description stays. |
+| `description-period` | 6 | A stray period splits the description at a line wrap. akm tells the model: "a stray period splits a sentence". | The break is repaired and the description keeps the same words in the same order. |
 | `description-quote` | 5 | Backslash-escaped quotes wrap two words of the description. akm: "broken by an escaped quote". | The description is written again without the backslashes, with all its words. |
 | `description-truncated` | 5 | The description stops on a hanging word such as `and`. akm's rules reject that, but its list of problems does not name it: the prompt says akm found none. | The description ends as a sentence: the hanging words dropped, or the sentence finished from the note. It keeps the names, numbers and paths it had. Other words may change. |
 | `description-missing` | 5 | The description is removed. akm tells the model to write one. | A valid description the model wrote. akm writes one of its own from the title when the model gives none, and that does not count. |
