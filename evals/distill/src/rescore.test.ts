@@ -2,12 +2,12 @@
 // results folder, and then scored again. A run that an older scorer scored is the same run with the rows that scorer gave and its manifest.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
-import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
+import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { assetsSha256, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import type { LoadedCase, Raw, Row } from "./score.ts";
@@ -152,7 +152,7 @@ describe("rescoring a distill run", () => {
   test("a folder that is not a run, and a run on a custom corpus whose folder was not recorded, are refused with what to do", () => {
     expect(() => rescoreFolder(tmp())).toThrow(RescoreError);
     const custom = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
-    expect(() => rescoreFolder(custom)).toThrow(/the cases .* was scored against cannot be read: .*--cases DIR/);
+    expect(() => rescoreFolder(custom)).toThrow(/custom corpus outside the repository.*--cases DIR/);
   });
 });
 
@@ -188,5 +188,63 @@ describe("the memory pasted back (#55)", () => {
     expect(metrics(again).good_lessons.good).toBe(metrics(stored).good_lessons.good - 1);
     expect(metrics(again).lesson_updates.right).toBe(metrics(stored).lesson_updates.right - 1);
     expect(summaryOf(`${dir}-rescored`).manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
+  });
+});
+
+describe("a run on a custom corpus (#47)", () => {
+  const OWN = join("private", "distill", "own", "assets");
+  const OUTSIDE_FACT = "a fact that no lesson states";
+
+  /** A copy of the code and the public cases, with the custom corpus `private/distill/own/assets` in it: the public cases, but lesson-01 must also state a fact that its lesson does not. */
+  function checkout(): string {
+    const tree = tmp();
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(ROOT, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    cpSync(join(ROOT, "evals", "distill", "src"), join(tree, "evals", "distill", "src"), { recursive: true, filter: keep });
+    cpSync(PUBLIC, join(tree, "evals", "distill", "assets"), { recursive: true });
+    cpSync(join(ROOT, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
+    cpSync(PUBLIC, join(tree, OWN), { recursive: true });
+    const file = join(tree, OWN, "cases.json");
+    const cases = JSON.parse(readFileSync(file, "utf8"));
+    cases.find((c: { id: string }) => c.id === "lesson-01").required.push([OUTSIDE_FACT]);
+    writeFileSync(file, JSON.stringify(cases));
+    return tree;
+  }
+  /** A stored run on the custom corpus, with the folder the summary records. */
+  const stored = (folder: string | null) =>
+    readStored(run({ summary: { corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: folder }, manifest: (m) => ({ ...m, corpus: "custom" }) }));
+  const verdict = (rows: Record<string, any>[], id: string) => rows.find((r) => r.id === id)?.verdict;
+
+  test("is scored against the cases in the corpus_folder the summary records, from the repository root", () => {
+    const tree = checkout();
+    const result = rescoreRun(stored(OWN.split("\\").join("/")), { root: tree });
+    expect(verdict(result.rows, "lesson-01")).toBe("bad"); // the custom cases want a fact it does not state; the public ones do not
+    expect(result.rows.find((r) => r.id === "lesson-01")?.missing).toEqual([OUTSIDE_FACT]);
+    expect(result.relabelled).toEqual(["lesson-01"]);
+    expect(result.summary.corpus_folder).toBe("private/distill/own/assets");
+    expect(result.summary.corpus).toBe("custom");
+    expect(verdict(rescoreRun(readStored(run()), { root: tree }).rows, "lesson-01")).toBe("good"); // the public run is read from the public cases
+  });
+
+  test("a folder outside the repository is not recorded, and --cases names it, absolute or from the repository root", () => {
+    const tree = checkout();
+    const outside = tmp();
+    cpSync(join(tree, OWN), join(outside, "my notes"), { recursive: true });
+    expect(() => rescoreRun(stored(null), { root: tree })).toThrow(/was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts\/rescore with --cases DIR/);
+    const absolute = rescoreRun(stored(null), { root: tree, cases: join(outside, "my notes") });
+    expect(verdict(absolute.rows, "lesson-01")).toBe("bad");
+    expect(absolute.summary.corpus_folder).toBeNull(); // outside the repository: not recorded
+    expect(JSON.stringify(absolute.summary)).not.toContain(outside);
+    const inside = rescoreRun(stored(null), { root: tree, cases: OWN });
+    expect(verdict(inside.rows, "lesson-01")).toBe("bad");
+    expect(inside.summary.corpus_folder).toBe("private/distill/own/assets");
+  });
+
+  test("a run from before custom corpora, on private, own or own-feedback, is read from the folder those names had, or from --cases", () => {
+    const tree = checkout();
+    const old = (corpus: string) => readStored(run({ summary: { corpus, corpus_folder: undefined }, manifest: (m) => ({ ...m, corpus }) }));
+    expect(verdict(rescoreRun(old("own"), { root: tree }).rows, "lesson-01")).toBe("bad"); // private/distill/own/assets
+    expect(() => rescoreRun(old("private"), { root: tree })).toThrow("cannot be read"); // private/distill/assets is not in the copy
+    expect(verdict(rescoreRun(old("private"), { root: tree, cases: OWN }).rows, "lesson-01")).toBe("bad");
   });
 });

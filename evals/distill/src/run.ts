@@ -5,12 +5,12 @@
 //   evals/distill/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -54,7 +54,7 @@ interface Summary {
   corpus_kind: string;
   /** True when the corpus may go only to a model that models.json marks `"private": true`. */
   corpus_private: boolean;
-  /** The corpus folder from the repository root, or null when it is outside it: scripts/rescore reads the cases from here. */
+  /** For a custom corpus, its folder from the repository root, or null when it is outside it; null for the public corpus. scripts/rescore reads the cases from here (--cases DIR when it is null). */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -123,12 +123,6 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** The folder under the repository root, with forward slashes, or null when `folder` is outside it. Its absolute path is never recorded: it can name what is in it. */
-export function folderIn(folder: string, root = ROOT): string | null {
-  const rel = relative(root, folder);
-  return rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) ? null : rel.split(sep).join("/");
-}
-
 /** Where the results of a corpus go: the eval's results/ for the public cases, and private/distill/ for a custom corpus (your notes in own/, the feedback ones apart). */
 export function resultsFolder(c: ResolvedCorpus): string {
   if (c.name === "public") return join(EVAL_DIR, "results");
@@ -190,7 +184,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(corpus),
-    corpus_folder: folderIn(corpus.folder),
+    corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null, // the cases of a public run are where the repository has them
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
@@ -253,10 +247,10 @@ async function main(): Promise<void> {
   for (const c of corpora) {
     if (c.name === "public") continue;
     if (!existsSync(join(c.folder, "cases.json"))) {
-      fail(`${c.flag} has no cases.json in ${folderIn(c.folder) ?? c.folder}.${c.config.kind === "rewrite" ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
+      fail(`${c.flag} has no cases.json in ${corpusFolderOf(c.folder) ?? c.folder}.${c.config.kind === "rewrite" ? ` Make the rewrite with: ./generate-assets --only ${NAME}` : ""}`);
     }
     const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
-    if (stale) fail(`the rewrite in ${folderIn(c.folder) ?? c.folder} cannot be used: ${stale}. Make it again with: ./generate-assets --only ${NAME}`);
+    if (stale) fail(`the rewrite in ${corpusFolderOf(c.folder) ?? c.folder} cannot be used: ${stale}. Make it again with: ./generate-assets --only ${NAME}`);
   }
   useAkm(values, fail);
   const settings = useModel(values, fail);

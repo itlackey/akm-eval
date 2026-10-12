@@ -8,7 +8,7 @@ import { lockedParts, manifestProblems, readManifest } from "../../../lib/manife
 import { endpointRecord, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { folderIn, runCorpus } from "./run.ts";
+import { runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -273,7 +273,7 @@ describe("runCorpus", () => {
     const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
     const folders = [1, 2, 3].map(() => assetsFor(scenarios.slice(0, 1)));
     const publicRun = stored(await quiet(() => runFolders(ctx, folders[0])));
-    expect(publicRun).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null }); // a folder outside the repository is not recorded
+    expect(publicRun).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null }); // a public run records no folder
     const rewrite = stored(await quiet(() => runFolders(ctx, folders[1], { kind: "rewrite", private: false, seed: "42", generated: "generated.json" })));
     expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, corpus_folder: null, seed: "42", manifest: { corpus: "custom", settings: { seed: "42" } } });
     const own = stored(await quiet(() => runFolders(ctx, folders[2], { kind: "own", private: true })));
@@ -489,19 +489,6 @@ describe("the manifest of a run", () => {
       writeFileSync(lock, text);
     }
     expect(calls().length).toBe(before);
-  });
-});
-
-describe("folderIn", () => {
-  const root = join(tmpdir(), "a repo", "key-checkout");
-
-  test("is the folder from the repository root, with forward slashes, when it is inside the repository, and null when it is not", () => {
-    expect(folderIn(join(root, "private", "distill", "own", "assets"), root)).toBe("private/distill/own/assets");
-    expect(folderIn(join(root, "evals", "distill", "assets"), root)).toBe("evals/distill/assets");
-    expect(folderIn(root, root)).toBeNull();
-    expect(folderIn(join(root, ".."), root)).toBeNull();
-    expect(folderIn(join(tmpdir(), "my notes"), root)).toBeNull();
-    expect(folderIn(join(`${root}-other`, "assets"), root)).toBeNull(); // a folder whose name starts with the root's is not inside it
   });
 });
 
