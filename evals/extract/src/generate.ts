@@ -6,13 +6,14 @@
 // The sessions go through the rewrite first, then cases.json with the same map, so a name changes the same way in a
 // session, in a folder name and in what a correct memory must state. Then each case is checked against the public one.
 // Everything is written into a temporary folder and moved into place only when the checks pass, so a generation that
-// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed and the digest of the
-// public assets, and `run --corpus private` refuses assets without it or with a digest that is no longer the public one.
+// fails leaves the earlier assets, map and generated.json as they were. generated.json holds the seed, the digest of the public
+// assets and the digest of this generator's code (`rewrite`), and `run` refuses assets without it, or with a digest that is no longer
+// the public one or the generator's.
 
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { GENERATED, type Generated, type LoadedCase, checkSaved, inputsSha256, loadCases, mentions, sessionText } from "./lib.ts";
+import { GENERATED, type Generated, type LoadedCase, checkSaved, generatorSha256, inputsSha256, loadCases, mentions, sessionText } from "./lib.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -110,7 +111,7 @@ function main(): void {
       refused = `extract: the rewrite changed ${problems.length} thing${problems.length === 1 ? "" : "s"} it must keep, so nothing was written:\n  ${problems.join("\n  ")}`;
     } else {
       const n = loadCases(assets).length;
-      const generated: Generated = { seed: values.seed, inputs_sha256: inputsSha256(publicAssets) };
+      const generated: Generated = { seed: values.seed, inputs_sha256: inputsSha256(publicAssets), rewrite: generatorSha256() };
       writeFileSync(join(staged, GENERATED), `${JSON.stringify(generated, null, 2)}\n`);
       install(staged, out);
       console.log(`extract: ${n} cases written to ${join(values.out, "assets")}`);

@@ -254,7 +254,7 @@ async function main(): Promise<void> {
 
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const where = relative(ROOT, c.folder);
+    const where = corpusFolderOf(c.folder) ?? c.folder; // from the repository root when it is inside, else as it was given
     const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
     if (problem) fail(problem);
   }

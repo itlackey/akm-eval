@@ -6,7 +6,7 @@ import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
 import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
 import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
-import { type LoadedCase, type Raw, assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
+import { type LoadedCase, type Raw, assetsDigest, extractConfig, generatorSha256, loadCases, similarity } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -518,6 +518,26 @@ describe("the command", () => {
     const lifted = run(["--cases", notes], model);
     expect(lifted.err).not.toContain("sends your memories");
     expect(lifted.err).toContain("the custom corpus is missing"); // and the run goes on to look for the cases
+  });
+
+  test("run --corpus private refuses assets whose stored generator digest is zeroed, and takes freshly generated ones (#44)", () => {
+    const out = mkdtempSync(join(tmpdir(), "extract-generated-"));
+    dirs.push(out);
+    const made = Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", "7", "--out", out], { stdout: "pipe", stderr: "pipe" });
+    expect(made.exitCode).toBe(0);
+    writeFileSync(join(out, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "7", generated: "generated.json" }));
+    const generated = join(out, "generated.json");
+    const stored = JSON.parse(readFileSync(generated, "utf8"));
+    expect(stored.rewrite).toBe(generatorSha256()); // a digest of the generator's code
+    const fresh = run(["--cases", join(out, "assets")], model);
+    expect(fresh.err).not.toContain("generator that has changed since");
+    expect(fresh.err).toContain("no-such-akm-in-this-test"); // it went on to the akm check
+    writeFileSync(generated, JSON.stringify({ ...stored, rewrite: "0".repeat(64) }));
+    const zeroed = run(["--cases", join(out, "assets")], model);
+    expect(zeroed.code).toBe(2);
+    expect(zeroed.err).toContain("the private assets cannot be used: they were made by a generator that has changed since");
+    expect(zeroed.err).toContain("Make them again with: ./generate-assets --only extract");
+    expect(zeroed.err).not.toContain("no-such-akm-in-this-test");
   });
 
   test("--corpus private still works for one more release, with a line that names the new form", () => {

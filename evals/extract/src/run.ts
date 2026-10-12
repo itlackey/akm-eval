@@ -241,7 +241,7 @@ async function main(): Promise<void> {
 
   for (const c of corpora) {
     if (c.name === "public") continue;
-    if (!existsSync(join(c.folder, "cases.json"))) fail(`the custom corpus is missing (${relative(ROOT, c.folder)}/cases.json). A rewrite of the public cases is made with: ./generate-assets --only ${NAME}`);
+    if (!existsSync(join(c.folder, "cases.json"))) fail(`the custom corpus is missing (${corpusFolderOf(c.folder) ?? c.folder}/cases.json). A rewrite of the public cases is made with: ./generate-assets --only ${NAME}`);
     const stale = c.config.kind === "rewrite" ? generatedProblem(dirname(c.folder), join(EVAL_DIR, "assets")) : undefined;
     if (stale) fail(`the private assets cannot be used: ${stale}. Make them again with: ./generate-assets --only ${NAME}`);
   }

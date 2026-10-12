@@ -1,9 +1,12 @@
 // What a judge-gate run records of its inputs, and what ties the private cases to the public ones they were made from: the digest
 // of the cases file and the generated.json that generate writes beside the private cases. run.ts, generate.ts and the tests use them.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { sha256Files } from "../../../lib/provenance.ts";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { sha256File, sha256Files, sha256Text } from "../../../lib/provenance.ts";
+
+/** The repository root. The generator's code is read from here, so a copy of the repository digests its own files. */
+const ROOT = resolve(import.meta.dir, "..", "..", "..");
 
 /** The one data file of an assets folder. The labels and their reasons are in it. */
 export const CASES = "cases.jsonl";
@@ -39,12 +42,24 @@ export function inFolder<T>(dir: string, f: () => T): T {
 /** assets_sha256 of summary.json: the digest of the cases file of an assets folder, named by its place in it. It changes when a case or a label does. */
 export const casesSha256 = (assets: string): string => inFolder(assets, () => sha256Files([CASES]));
 
+/**
+ * The code that decides what generate makes of the public cases and whether it accepts the result, by its path from `root`: generate.ts,
+ * this file and lib.ts (how the cases are read and digested), and the code of lib/rewrite with its lexicon, without its tests.
+ */
+export function generatorFiles(root = ROOT): string[] {
+  const inRewrite = readdirSync(join(root, "lib", "rewrite"), { recursive: true }).map(String).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).sort();
+  return ["evals/judge-gate/src/generate.ts", "evals/judge-gate/src/inputs.ts", "evals/judge-gate/src/lib.ts", ...inRewrite.map((f) => `lib/rewrite/${f}`)];
+}
+
+/** One digest over generatorFiles, each named by its path from the root. A change to the generator, to its checks or to the rewrite changes it. */
+export const generatorSha256 = (root = ROOT): string => sha256Text(generatorFiles(root).map((name) => `${name}\0${sha256File(join(root, name))}\n`).join(""));
+
 export interface Generated {
   /** The seed of the rewrite. */
   seed: string;
   /** casesSha256 of the public assets when the private cases were made. */
   inputs_sha256: string;
-  /** What rewrote them. */
+  /** generatorSha256 when they were made: the code that rewrote them. */
   rewrite: string;
 }
 
@@ -60,18 +75,20 @@ export function readGenerated(assets: string): Generated | undefined {
 
 /**
  * Why run --corpus private must not use the private cases in `assets`, in a sentence that says what to do, or undefined when they are the
- * rewrite of the public cases as they are now. `where` is how the folder is named in the message.
+ * rewrite of the public cases as they are now, made by the generator as it is now. `where` is how the folder is named in the message, and
+ * `root` is the repository whose generator code is compared (a test passes a copy).
  */
-export function staleAssets(assets: string, publicAssets: string, where = assets): string | undefined {
+export function staleAssets(assets: string, publicAssets: string, where = assets, root = ROOT): string | undefined {
   const again = "Make them again with: ./generate-assets --only judge-gate";
   const made = readGenerated(assets);
   if (!made) return `the private cases in ${where}/ have no ${GENERATED}, so nothing says what they were made from (an older generate, or a generate that stopped). ${again}`;
   if (made.inputs_sha256 !== casesSha256(publicAssets)) return `the private cases in ${where}/ were made from public cases that have changed since. ${again}`;
+  if (made.rewrite !== generatorSha256(root)) return `the private cases in ${where}/ were made by a generator that has changed since, or before its code was digested: generate.ts, inputs.ts or lib.ts of this eval, or lib/rewrite and its lexicon (rewrite in ${GENERATED} differs). ${again}`;
   return undefined;
 }
 
 /** Why run --corpus private cannot start from `assets`: the cases are missing, or staleAssets says so. Undefined when it can. */
-export function privateAssetsProblem(assets: string, publicAssets: string, where = assets): string | undefined {
+export function privateAssetsProblem(assets: string, publicAssets: string, where = assets, root = ROOT): string | undefined {
   if (!existsSync(join(assets, CASES))) return `the private assets are missing (${where}/${CASES}). Make them with: ./generate-assets --only judge-gate`;
-  return staleAssets(assets, publicAssets, where);
+  return staleAssets(assets, publicAssets, where, root);
 }
