@@ -9,6 +9,7 @@ import { lockedParts, readManifest } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
+import { INDEX_BUILDER, indexSpec } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { collectionsFor, failureOf, insideRepo, runCollection, withSemantic } from "./run.ts";
 
@@ -703,6 +704,23 @@ describe("runCollection", () => {
       rmSync(join(folders.library, "skills"), { recursive: true });
       expect((await quiet(() => runCollection(PUBLIC, "library", ctx, folders))).semantic_index).toBe("cold");
       expect((await quiet(() => runCollection(PUBLIC, "library", ctx, folders))).semantic_index).toBe("warm");
+    });
+
+    test("is keyed on the code that lays the library out, src/akm.ts, so a change to it builds a new index (part of #73)", async () => {
+      const { ctx, folders, root } = setup();
+      // what cachedIndex is given: the builder is akm.ts, from the repository, as an absolute path
+      const contents = akm.libraryFiles(folders.library);
+      expect(indexSpec({ name: "retrieval-public-library", contents }, "1.2.3")).toEqual({ name: "retrieval-public-library", version: "1.2.3", files: contents.files, extra: undefined, builder: [join(ROOT, "evals", "retrieval", "src", "akm.ts")] });
+      expect(INDEX_BUILDER).toEqual([join(import.meta.dir, "akm.ts")]);
+      expect(existsSync(INDEX_BUILDER[0] as string)).toBe(true);
+      // and the index it keeps is for the content of the builder files
+      const builder = join(root, "builder.ts");
+      writeFileSync(builder, "one way to lay a library out\n");
+      const cache = { ...ctx.cache, builder: [builder] };
+      expect((await quiet(() => runCollection(PUBLIC, "library", { ...ctx, cache }, folders))).semantic_index).toBe("cold");
+      expect((await quiet(() => runCollection(PUBLIC, "library", { ...ctx, cache }, folders))).semantic_index).toBe("warm");
+      writeFileSync(builder, "another way\n");
+      expect((await quiet(() => runCollection(PUBLIC, "library", { ...ctx, cache }, folders))).semantic_index).toBe("cold");
     });
 
     test("is built again when akm says that it holds other than what it was built with, and the run says so", async () => {

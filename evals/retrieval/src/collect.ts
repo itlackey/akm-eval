@@ -22,6 +22,9 @@ export type Mode = "keyword" | "semantic";
 export const modeOf = (sys: System): Mode => (sys.startsWith("semantic_") ? "semantic" : "keyword");
 export const commandOf = (sys: System): "search" | "curate" => (sys.endsWith("curate") ? "curate" : "search");
 
+/** The source file of the code that lays a library out for akm (`load`). The key of the kept semantic index covers it, so a change to how a bundle is laid out builds a new index and does not reuse one laid out the old way. */
+export const INDEX_BUILDER = [join(import.meta.dir, "akm.ts")];
+
 /** The columns a run collects: akm's two commands on the keyword index and, in a run that has the semantic index, on that too. */
 export const systemsFor = (semantic: boolean): readonly System[] => (semantic ? SYSTEMS : ["search", "curate"]);
 
@@ -40,8 +43,8 @@ export interface IndexInput {
   probe: string;
   /** Makes the sandbox of the keyword index, for tests. */
   newSandbox?: () => Sandbox;
-  /** Where the cache is, and the akm command to run in it, for tests. */
-  cache?: Pick<IndexSpec, "root" | "cmd">;
+  /** Where the cache is, the akm command to run in it and the builder files, for tests. */
+  cache?: Pick<IndexSpec, "root" | "cmd" | "builder">;
 }
 
 export interface Indexes {
@@ -61,8 +64,8 @@ export interface Indexes {
 /** How a semantic index came to be, in words. */
 export const INDEX_STATE = { cold: "a new index", warm: "kept from an earlier run", rebuilt: "a new index, because the kept one was not what it was built as" } as const;
 
-/** The spec of the kept semantic index: what is indexed and which akm it is for. */
-export const indexSpec = (i: Pick<IndexInput, "name" | "contents" | "cache">, version: string): IndexSpec => ({ name: i.name, version, files: i.contents.files, extra: i.contents.extra, ...i.cache });
+/** The spec of the kept semantic index: what is indexed, which akm it is for, and the code that lays the bundle out (see IndexSpec.builder). */
+export const indexSpec = (i: Pick<IndexInput, "name" | "contents" | "cache">, version: string): IndexSpec => ({ name: i.name, version, files: i.contents.files, extra: i.contents.extra, builder: INDEX_BUILDER, ...i.cache });
 
 /**
  * Indexes the library for keyword search, in a sandbox that is removed by `close()`, and for semantic search when the run has it. Stops the
