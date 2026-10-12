@@ -1,7 +1,7 @@
 // What the agent-ab tests stand in for: a public folder of fictional-tool tasks and the library they seed, a copy of the
 // repository's code that runs the CLI in a folder of its own, and a `uv` and a `docker` that are not Harbor and Docker.
 
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -45,6 +45,7 @@ export function sandboxRepo(): string {
   const fixture = publicFixture();
   cpSync(join(fixture, "tasks"), join(root, "evals", "agent-ab", "tasks"), { recursive: true });
   cpSync(join(fixture, "libraries"), join(root, "evals", "agent-ab", "libraries"), { recursive: true });
+  rmSync(fixture, { recursive: true, force: true }); // copied, so it is not left in the temporary folder
   mkdirSync(join(root, "evals", "agent-ab", "results"), { recursive: true });
   return root;
 }
@@ -53,6 +54,7 @@ export function sandboxRepo(): string {
  * A `uv` that is not Harbor, and a `docker` that says it is up, in `<root>/bin`. Given the job, the `uv` leaves the trial folders Harbor would
  * leave, `n_attempts` of them for each task and arm, records the environment it was started in, and exits as UV_FAKE_EXIT says.
  * UV_FAKE_MISSING leaves out the akm arm's trials of the last task, as a Harbor that stopped before it got there does. UV_FAKE_NOTHING leaves no job at all.
+ * UV_FAKE_EDIT is a JSON list of files that it appends a line to as it starts, as a person who edits a task or a library while the run goes does.
  * Returns the folder of the two, for PATH. The knobs are UV_* variables because those are the ones the runner passes on to Harbor.
  */
 export function writeFakeHarbor(root: string): string {
@@ -61,11 +63,12 @@ export function writeFakeHarbor(root: string): string {
   writeFileSync(
     join(bin, "uv"),
     `#!/usr/bin/env bun
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = Bun.argv.slice(2);
 const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
 writeFileSync(join(job.jobs_dir, "..", "uv-env.json"), JSON.stringify(process.env));
+for (const file of JSON.parse(process.env.UV_FAKE_EDIT ?? "[]")) appendFileSync(file, "\\nEdited while Harbor was running.\\n");
 const tasks = process.env.UV_FAKE_NOTHING ? [] : job.datasets[0].task_names;
 tasks.forEach((task, i) => {
   for (const agent of job.agents) {
@@ -81,7 +84,11 @@ tasks.forEach((task, i) => {
         trial.verifier_result = null;
         writeFileSync(join(dir, "agent", "akm_plugin_status.json"), JSON.stringify({ live: false, problem: "there is no opencode log" }));
       }
-      if (name === "akm-opencode") writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" } }));
+      if (name === "akm-opencode") {
+        // UV_FAKE_TREES=differ: each container installed another dependency tree.
+        const tree = (process.env.UV_FAKE_TREES === "differ" ? String(i * 10 + k).padStart(2, "0") : "ee").repeat(32);
+        writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" }, lockfiles: { akm_cli: "a".repeat(64), plugin: "b".repeat(64) }, dependency_tree_sha256: tree }));
+      }
       writeFileSync(join(dir, "result.json"), JSON.stringify(trial));
     }
   }

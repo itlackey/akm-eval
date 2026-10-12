@@ -42,7 +42,11 @@ if (!process.env.UV_FAKE_NOTHING) {
           trial.verifier_result = null;
           writeFileSync(join(dir, "agent", "akm_plugin_status.json"), JSON.stringify({ live: false, problem: "there is no opencode log" }));
         }
-        if (name === "akm-opencode") writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" } }));
+        if (name === "akm-opencode") {
+          // UV_FAKE_TREES=differ: each container installed another dependency tree.
+          const tree = (process.env.UV_FAKE_TREES === "differ" ? String(i * 10 + k).padStart(2, "0") : "ee").repeat(32);
+          writeFileSync(join(dir, "agent", "akm_install.json"), JSON.stringify({ akm_version: "0.9.99-test", plugin_akm_cli: "0.9.26", assets_indexed: 7, env: { AKM_CURATE_TIMEOUT: "15" }, lockfiles: { akm_cli: "a".repeat(64), plugin: "b".repeat(64) }, dependency_tree_sha256: tree }));
+        }
         writeFileSync(join(dir, "result.json"), JSON.stringify(trial));
       }
     }

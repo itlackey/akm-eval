@@ -5,14 +5,17 @@ import { join, relative } from "node:path";
 import { spreadOf } from "../repeat.ts";
 import {
   FIXED_AKM_ENV,
+  LOCKS_DIR,
   PINS,
   type AkmArm,
+  type Completion,
   type Pack,
   PLUGIN_ERROR,
   akmArm,
   type RunTrial,
   akmSummary,
   assetsSha256,
+  buildFingerprint,
   checkoutBuild,
   completionOf,
   endpointOf,
@@ -22,6 +25,7 @@ import {
   jobConfig,
   jobRecord,
   loadRunTrials,
+  lockFolder,
   metricsOf,
   modelName,
   modelSettings,
@@ -40,7 +44,7 @@ import {
   timeoutsOf,
   withHome,
 } from "./harbor.ts";
-import { buildReport } from "./report.ts";
+import { buildReport, formatReport, loadTrials, sideBySide } from "./report.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -123,18 +127,45 @@ describe("modelSettings", () => {
     expect(both.env).toMatchObject({ OPENAI_API_KEY: "m", OPENAI_BASE_URL: "http://m/v1" });
   });
 
-  test("lets each of the older names stand in for its empty MODEL_* one, whichever URL names the gateway", () => {
-    // MODEL_BASE_URL with only OPENAI_API_KEY: the key of a setup from before models.json, with the gateway under the new name.
-    const urlOnly = modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, none);
-    expect(urlOnly.env).toEqual({ OPENAI_API_KEY: "a", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
-    // OPENAI_BASE_URL with only MODEL_API_KEY, and an empty MODEL_API_KEY that does not hide OPENAI_API_KEY.
+  test("lets each of the older names stand in for its empty MODEL_* one, the key only for the URL it goes with", () => {
+    // OPENAI_BASE_URL with only MODEL_API_KEY: the new key for the older URL.
     expect(modelSettings("gpt-6", { OPENAI_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "m" }, none).env).toEqual({ OPENAI_API_KEY: "m", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
-    expect(modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "  ", OPENAI_API_KEY: "a" }, none).env.OPENAI_API_KEY).toBe("a");
+    // OPENAI_BASE_URL with OPENAI_API_KEY, and an empty MODEL_API_KEY that does not hide it: the pair from before models.json.
+    expect(modelSettings("gpt-6", { OPENAI_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "  ", OPENAI_API_KEY: "a" }, none).env).toEqual({ OPENAI_API_KEY: "a", OPENAI_BASE_URL: "http://192.0.2.5/v1" });
+    // MODEL_BASE_URL set to OpenAI's own endpoint, or to the same URL as OPENAI_BASE_URL, takes OPENAI_API_KEY too.
+    expect(modelSettings("gpt-6", { MODEL_BASE_URL: "https://api.openai.com/v1", OPENAI_API_KEY: "a" }, none).env).toEqual({ OPENAI_API_KEY: "a", OPENAI_BASE_URL: "https://api.openai.com/v1" });
+    expect(modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, none).env.OPENAI_API_KEY).toBe("a");
     // A model with a line in models.json still takes the key of the line, and never the older name of the gateway's.
     const lines = { cloud: { base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
     expect(() => modelSettings("cloud", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, lines)).toThrow("takes its key from CLOUD_KEY");
     // And with no key under either name the run still stops.
     expect(() => modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_BASE_URL: "http://o/v1" }, none)).toThrow("no model key");
+  });
+
+  test("never sends OPENAI_API_KEY to a gateway that is not OpenAI's and not the one OPENAI_BASE_URL names (#72)", () => {
+    const key = "sk-real-openai-key";
+    // The probe: MODEL_API_KEY is empty, and MODEL_BASE_URL is another host. The run stops, as the other evals' do, and says nothing of the key.
+    for (const host of [
+      { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: key },
+      { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "  ", OPENAI_API_KEY: key },
+      { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_BASE_URL: "https://other.example.net/v1", OPENAI_API_KEY: key },
+      { MODEL_BASE_URL: "https://api.openai.com.evil.example/v1", OPENAI_API_KEY: key },
+    ]) {
+      let said = "";
+      try {
+        modelSettings("gpt-6", host, none);
+      } catch (e) {
+        said = (e as Error).message;
+      }
+      expect(said).toContain("no model key for openai/gpt-6");
+      expect(said).not.toContain(key);
+    }
+    // With a key of its own, the gateway gets that key and never OpenAI's.
+    const own = modelSettings("gpt-6", { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "gateway-key", OPENAI_API_KEY: key }, none);
+    expect(own.env).toEqual({ OPENAI_API_KEY: "gateway-key", OPENAI_BASE_URL: "https://gw.example.net/v1" });
+    // OpenAI's key still goes to OpenAI, and to the URL it was set beside.
+    expect(modelSettings("gpt-6", { MODEL_BASE_URL: "https://api.openai.com/v1", OPENAI_API_KEY: key }, none).env.OPENAI_API_KEY).toBe(key);
+    expect(modelSettings("gpt-6", { OPENAI_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: key }, none).env).toEqual({ OPENAI_API_KEY: key, OPENAI_BASE_URL: "https://gw.example.net/v1" });
   });
 
   test("with no gateway and no line, an openai model goes to openai with OPENAI_API_KEY, or MODEL_API_KEY", () => {
@@ -144,11 +175,38 @@ describe("modelSettings", () => {
     expect(modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "b" }, none).env.OPENAI_API_KEY).toBe("b");
   });
 
-  test("refuses a base URL for a model of another provider, which would drop it, and says what to do", () => {
-    const host = { MODEL_NAME: "anthropic/claude-sonnet-4-5", MODEL_API_KEY: "k", MODEL_BASE_URL: "https://gateway.example.com/v1" };
-    expect(() => modelSettings(undefined, host, none)).toThrow(/anthropic\/claude-sonnet-4-5 is sent to gateway\.example\.com, but Harbor passes a base URL on only to an openai model/);
-    const lines = { alias: { model: "groq/llama-4", base_url: "https://api.example.com/v1", api_key_env: "K" } };
-    expect(() => modelSettings("alias", { K: "k" }, lines)).toThrow("groq/llama-4 is sent to api.example.com");
+  test("gives opencode a gateway's model id as the openai provider's, with a slash in it or not (#73)", () => {
+    const gateway = { MODEL_API_KEY: "k", MODEL_BASE_URL: "https://gateway.example.com/v1" };
+    // The id is the gateway's, as in the other evals: a slash is part of the id and not a provider.
+    for (const [id, want] of [
+      ["Qwen/Qwen2.5-7B", "openai/Qwen/Qwen2.5-7B"],
+      ["meta-llama/Llama-3.1-8B-Instruct", "openai/meta-llama/Llama-3.1-8B-Instruct"],
+      ["anthropic/claude-sonnet-4-5", "openai/anthropic/claude-sonnet-4-5"],
+      ["gpt-6-luna", "openai/gpt-6-luna"],
+      ["openai/gpt-6-luna", "openai/gpt-6-luna"],
+    ]) {
+      const r = modelSettings(id, gateway, none);
+      expect(r.model, id).toBe(want);
+      expect(r.env, id).toEqual({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://gateway.example.com/v1" });
+    }
+    expect(modelSettings(undefined, { ...gateway, MODEL_NAME: "Qwen/Qwen2.5-7B" }, none).model).toBe("openai/Qwen/Qwen2.5-7B");
+    // The model of a models.json line, which may have a slash in the name the endpoint expects, goes to opencode the same way.
+    const lines = { alias: { model: "groq/llama-4", base_url: "https://api.example.com/v1", api_key_env: "K" }, plain: { base_url: "https://api.example.com/v1", api_key_env: "K" } };
+    expect(modelSettings("alias", { K: "k" }, lines)).toEqual({ model: "openai/groq/llama-4", env: { OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.example.com/v1" } });
+    expect(modelSettings("plain", { K: "k" }, lines).model).toBe("openai/plain");
+  });
+
+  test("finds the models.json line for --model openai/<line>, as for <line> (#73)", () => {
+    const lines = { "my-cloud-model": { model: "gpt-5.6-terra", base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
+    const host = { MODEL_BASE_URL: "http://192.0.2.5/v1", MODEL_API_KEY: "gateway-key", CLOUD_KEY: "cloud-secret" };
+    const want = { model: "openai/gpt-5.6-terra", env: { OPENAI_API_KEY: "cloud-secret", OPENAI_BASE_URL: "https://api.example.com/v1" } };
+    expect(modelSettings("my-cloud-model", host, lines)).toEqual(want);
+    expect(modelSettings("openai/my-cloud-model", host, lines)).toEqual(want);
+    expect(modelSettings(undefined, { ...host, MODEL_NAME: "openai/my-cloud-model" }, lines)).toEqual(want);
+    // A line named with the prefix is found by that name first, and an openai model that has no line still goes to the gateway.
+    const prefixed = { "openai/my-cloud-model": { base_url: "https://api.example.org/v1", api_key_env: "CLOUD_KEY" } };
+    expect(modelSettings("openai/my-cloud-model", host, prefixed).env.OPENAI_BASE_URL).toBe("https://api.example.org/v1");
+    expect(modelSettings("openai/other", host, lines).env.OPENAI_BASE_URL).toBe("http://192.0.2.5/v1");
   });
 
   test("leaves another provider's key to Harbor, and passes on that provider's variables only", () => {
@@ -252,6 +310,7 @@ describe("packAkm", () => {
     expect(existsSync(join(into, "akm-cli-0.9.27.tgz"))).toBe(true);
     expect(note).toContain(`keeps the pinned plugin ${PINS.akm_plugin}`);
     expect(note).toContain(`carries its own akm-cli ${PINS.akm_cli}`);
+    expect(note).toContain("Its dependencies are not locked");
   });
 
   test("packs the plugin too when the checkout holds it, a few folders down and not in node_modules", () => {
@@ -259,7 +318,8 @@ describe("packAkm", () => {
     expect(findPlugin(dir)).toBe(join(dir, "packages", "opencode"));
     const { arm, note } = packAkm(dir, join(tmp(), "pack"), fakePack);
     expect(arm.plugin).toEqual({ version: "0.9.27-plugin", tarball: "akm-opencode-0.9.27-plugin.tgz" });
-    expect(note).toBeNull();
+    expect(note).toContain("Its dependencies are not locked"); // a checkout has no lockfile, and the run says so
+    expect(note).not.toContain("holds no plugin");
     expect(findPlugin(checkout())).toBeNull();
   });
 
@@ -331,6 +391,7 @@ describe("akmArm", () => {
     expect(arm.build).toBeNull();
     expect(arm.packages).toBeNull();
     expect(note).toContain("only the akm it shells out to is the one under test");
+    expect(note).toContain("Its dependencies are not locked"); // no lockfile is committed for 0.9.27
   });
 
   test("packs a checkout", () => {
@@ -454,6 +515,17 @@ describe("relativePaths and jobRecord", () => {
     expect(record.agents[1].kwargs).toMatchObject({ libraries_dir: "libraries", akm_env: { AKM_X: "1" }, opencode_config: { autoupdate: false } });
     expect(record.agents[1].override_setup_timeout_sec).toBe(2700);
   });
+
+  test("leave out the host's count of the library, which the host's akm would otherwise write into the config that runs are compared by (#73)", () => {
+    const job = (assets: number) => jobConfig({ name: "n", model: "openai/m", jobsDir: "/run/jobs", attempts: 1, librariesDir: "/run/libraries", datasets: [], akm: { env: { AKM_TASK_STASH: "library" }, kwargs: { library_assets: assets } } });
+    expect((job(259) as any).agents[1].kwargs.library_assets).toBe(259); // Harbor is given it
+    const [a, b] = [jobRecord(job(259), "/run", "/repo") as any, jobRecord(job(1), "/run", "/repo") as any];
+    expect(a.agents[1].kwargs).not.toHaveProperty("library_assets");
+    expect(a).toEqual(b); // what the summary keeps does not depend on the akm that counted
+    expect(a.agents[1].env).toEqual({ AKM_TASK_STASH: "library" });
+    expect(a.agents[1].kwargs).toMatchObject({ libraries_dir: "libraries", akm_cli_version: PINS.akm_cli });
+    expect((job(259) as any).agents[1].kwargs.library_assets).toBe(259); // and the job it was made from is not changed
+  });
 });
 
 describe("sha256Dir", () => {
@@ -558,6 +630,30 @@ describe("loadRunTrials", () => {
     expect(report.akm.exceptions).toEqual({ [PLUGIN_ERROR]: 2 }); // the failure shows in the report's exceptions
     expect(report.akm.errored).toBe(2);
     expect(timeoutsOf(trials).akm).toBe(1); // and the timeout is still counted
+    expect(report.akm.timeouts).toBe(1); // in the report's table too, which reads it from the same place
+  });
+
+  test("counts the time-outs once: the report, the summary's count, its metrics and the printed line agree, for a setup time-out and a relabelled one too (#73)", () => {
+    const job = tmp();
+    trialDir(job, "t1__a", "opencode", timeout);
+    trialDir(job, "t1__b", "akm-opencode", { exception_info: { exception_type: "AgentSetupTimeoutError" }, verifier_result: null }); // the install ran out of time
+    trialDir(job, "t2__b", "akm-opencode", { ...timeout, verifier_result: null }, { "akm_plugin_status.json": { live: false, problem: "there is no opencode log" } }); // relabelled
+    trialDir(job, "t3__b", "akm-opencode", { exception_info: { exception_type: "RuntimeError" }, verifier_result: null });
+    trialDir(job, "t4__b", "akm-opencode");
+    const { trials } = loadRunTrials(job);
+    const report = buildReport(trials);
+    const by = timeoutsOf(trials);
+    expect(by).toEqual({ control: 1, akm: 2 });
+    expect([report.control.timeouts, report.akm.timeouts]).toEqual([by.control, by.akm]);
+    expect([metricsOf(report, trials).control.timeouts, metricsOf(report, trials).akm.timeouts]).toEqual([by.control, by.akm]);
+    const lines = formatReport(report);
+    expect(lines.find((l) => l.startsWith("  control"))).toContain(", 1 timed out");
+    expect(lines.find((l) => l.startsWith("  akm"))).toContain(", 2 timed out");
+    expect(lines.find((l) => l.startsWith("  akm"))).not.toContain("AgentSetupTimeoutError"); // a time-out is not also listed among the other exceptions
+    expect(sideBySide("t", { corpus: "public", report }, { corpus: "private", report }).find((l) => l.includes("timed out"))).toContain("1 control trials, 2 akm trials");
+    // Trials read straight from a Harbor folder carry no timed_out, and say it by their exceptions: the same two.
+    const raw = loadTrials(job);
+    expect(buildReport(raw).akm.timeouts).toBe(2);
   });
 
   test("takes the reward away from a trial whose plugin was not live, even when the verifier scored it", () => {
@@ -576,13 +672,21 @@ describe("loadRunTrials", () => {
 
   test("collects what the akm arm's containers reported of themselves, without repeats", () => {
     const job = tmp();
-    const record = (v: string, assets: number) => ({ "akm_install.json": { akm_version: v, plugin_akm_cli: "0.9.26", assets_indexed: assets, env: { AKM_CURATE_TIMEOUT: "30" } } });
+    const locks = { akm_cli: "1".repeat(64), plugin: "2".repeat(64) };
+    const record = (v: string, assets: number, tree = "a".repeat(64)) => ({ "akm_install.json": { akm_version: v, plugin_akm_cli: "0.9.26", assets_indexed: assets, env: { AKM_CURATE_TIMEOUT: "30" }, lockfiles: locks, dependency_tree_sha256: tree } });
     trialDir(job, "a__b", "akm-opencode", {}, record("0.9.27", 259));
     trialDir(job, "b__b", "akm-opencode", {}, record("0.9.27", 259));
-    trialDir(job, "c__b", "akm-opencode", {}, record("0.9.27-dev", 260));
+    trialDir(job, "c__b", "akm-opencode", {}, record("0.9.27-dev", 260, "b".repeat(64)));
     trialDir(job, "d__b", "akm-opencode");
-    expect(loadRunTrials(job).observed).toEqual({ akm_version: ["0.9.27", "0.9.27-dev"], plugin_akm_cli: ["0.9.26"], assets_indexed: [259, 260], env: { AKM_CURATE_TIMEOUT: "30" } });
-    expect(loadRunTrials(tmp()).observed).toEqual({ akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null });
+    expect(loadRunTrials(job).observed).toEqual({
+      akm_version: ["0.9.27", "0.9.27-dev"],
+      plugin_akm_cli: ["0.9.26"],
+      assets_indexed: [259, 260],
+      env: { AKM_CURATE_TIMEOUT: "30" },
+      dependency_trees: ["a".repeat(64), "b".repeat(64)],
+      lockfiles: locks,
+    });
+    expect(loadRunTrials(tmp()).observed).toEqual({ akm_version: [], plugin_akm_cli: [], assets_indexed: [], env: null, dependency_trees: [], lockfiles: null });
   });
 
   test("copes with a record or a verdict that is not JSON", () => {
@@ -647,7 +751,7 @@ describe("akmSummary", () => {
       akm_build: null,
       akm_build_fingerprint: null,
       akm_env: {},
-      akm_install: { from: "release", plugin_from: "release", plugin_version: PINS.akm_plugin, packages: [], observed },
+      akm_install: { from: "release", plugin_from: "release", plugin_version: PINS.akm_plugin, packages: [], dependency_tree_sha256: null, locked: false, observed },
     });
     const arm: AkmArm = { bin: "~/akm", build: "v0.9.27-3-gabc-dirty", build_fingerprint: "f".repeat(64), cli: { version: "0.9.27", tarball: "a.tgz" }, plugin: { version: "0.9.27", tarball: null }, packages: "/p" };
     expect(akmSummary(arm, { AKM_X: "1" }, [{ file: "a.tgz", sha256: "0".repeat(64) }], observed)).toMatchObject({
@@ -659,9 +763,84 @@ describe("akmSummary", () => {
       akm_install: { from: "checkout", plugin_from: "release", packages: [{ file: "a.tgz" }] },
     });
   });
+
+  test("records the digest of the dependency tree the containers installed, in akm_install and in the build identity, and says whether it came from lockfiles (#68)", () => {
+    const tree = "c".repeat(64);
+    const locked = { akm_version: ["0.9.26"], plugin_akm_cli: ["0.9.26"], assets_indexed: [259], env: null, dependency_trees: [tree], lockfiles: { akm_cli: "1".repeat(64), plugin: "2".repeat(64) } };
+    const release = akmSummary(releaseArm(), {}, [], locked);
+    expect(release.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: true });
+    expect(release.akm_build_fingerprint).toBe(buildFingerprint(null, tree));
+    expect(release.akm_build_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    // Another tree is another build identity, and the same tree is the same one.
+    const other = akmSummary(releaseArm(), {}, [], { ...locked, dependency_trees: ["d".repeat(64)] });
+    expect(other.akm_build_fingerprint).not.toBe(release.akm_build_fingerprint);
+    expect(akmSummary(releaseArm(), {}, [], { ...locked }).akm_build_fingerprint).toBe(release.akm_build_fingerprint);
+    // A checkout's uncommitted changes and its tree both count, and an install with no lockfile says so.
+    const arm: AkmArm = { bin: "~/akm", build: "v0.9.27-dirty", build_fingerprint: "f".repeat(64), cli: { version: "0.9.27", tarball: "a.tgz" }, plugin: { version: "0.9.27", tarball: "b.tgz" }, packages: "/p" };
+    const unlocked = akmSummary(arm, {}, [], { ...locked, lockfiles: { akm_cli: null, plugin: null } });
+    expect(unlocked.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: false });
+    expect(unlocked.akm_build_fingerprint).toBe(buildFingerprint("f".repeat(64), tree));
+    expect(unlocked.akm_build_fingerprint).not.toBe("f".repeat(64));
+    expect(akmSummary(arm, {}, [], { ...locked, lockfiles: { akm_cli: "1".repeat(64), plugin: null } }).akm_install.locked).toBe(false); // half locked is not locked
+    // Containers that did not install one tree give none: the build identity falls back to the changes alone, and statusOf aborts the run.
+    const split = akmSummary(arm, {}, [], { ...locked, dependency_trees: [tree, "d".repeat(64)] });
+    expect(split.akm_install.dependency_tree_sha256).toBeNull();
+    expect(split.akm_build_fingerprint).toBe("f".repeat(64));
+  });
 });
 
 // ---- whether the run did what it set out to do -------------------------------------------------------------------------------
+describe("statusOf and the dependency trees", () => {
+  const full: Completion = { expected: 2, completed: 2, failed: 0, missing: 0, unexpected: 0, control: { expected: 1, completed: 1, failed: 0, missing: 0, unexpected: 0 }, akm: { expected: 1, completed: 1, failed: 0, missing: 0, unexpected: 0 } };
+
+  test("aborts a run whose containers installed different dependency trees, and not one whose containers agree or recorded none (#68)", () => {
+    expect(statusOf(0, full, true, { dependency_trees: ["a".repeat(64)] })).toEqual({ status: "complete", aborted_reason: null });
+    expect(statusOf(0, full, true, { dependency_trees: [] })).toEqual({ status: "complete", aborted_reason: null });
+    expect(statusOf(0, full)).toEqual({ status: "complete", aborted_reason: null });
+    const split = statusOf(0, full, true, { dependency_trees: ["a".repeat(64), "b".repeat(64)] });
+    expect(split.status).toBe("aborted");
+    expect(split.aborted_reason).toBe("the akm arm's containers installed 2 different dependency trees (akm_install.observed.dependency_trees), so its trials did not all run the same code");
+  });
+});
+
+describe("the committed lockfiles of the pinned releases (#68)", () => {
+  const read = (folder: string, name: string) => JSON.parse(readFileSync(join(folder, name), "utf8"));
+  const cases = [
+    { pkg: "akm-cli", version: PINS.akm_cli },
+    { pkg: "akm-opencode", version: PINS.akm_plugin },
+  ] as const;
+
+  test("exist for the pinned akm-cli and the pinned plugin, in the folder akm_opencode.py looks in, and for no other release", () => {
+    for (const { pkg, version } of cases) expect(lockFolder(pkg, version), pkg).toBe(join(LOCKS_DIR, `${pkg}-${version}`));
+    expect(lockFolder("akm-cli", "0.0.1")).toBeNull();
+    expect(lockFolder("akm-opencode", "0.0.1")).toBeNull();
+  });
+
+  test("lock the release the pin names and every package under it to a version and a digest, from the npm registry", () => {
+    for (const { pkg, version } of cases) {
+      const folder = lockFolder(pkg, version) as string;
+      const [manifest, lock] = [read(folder, "package.json"), read(folder, "package-lock.json")];
+      // npm ci stops when the two disagree, so a pin moved without a new lockfile stops the install rather than installing the old release.
+      expect(manifest.dependencies).toEqual({ [pkg]: version });
+      expect(lock.lockfileVersion).toBeGreaterThanOrEqual(2);
+      expect(lock.packages[""].dependencies).toEqual(manifest.dependencies);
+      expect(lock.packages[`node_modules/${pkg}`].version).toBe(version);
+      const installed = Object.entries(lock.packages as Record<string, { version?: string; resolved?: string; integrity?: string }>).filter(([path]) => path !== "");
+      expect(installed.length).toBeGreaterThan(10); // the dependencies are in it, not only the package
+      for (const [path, entry] of installed) {
+        expect(entry.version, path).toMatch(/^\d+\.\d+\.\d+/);
+        expect(entry.resolved, path).toMatch(/^https:\/\/registry\.npmjs\.org\//);
+        expect(entry.integrity, path).toMatch(/^sha512-/);
+      }
+    }
+  });
+
+  test("the plugin's lockfile holds the akm-cli the plugin is pinned to", () => {
+    const lock = read(lockFolder("akm-opencode", PINS.akm_plugin) as string, "package-lock.json");
+    expect(lock.packages["node_modules/akm-cli"].version).toBe(PINS.akm_cli);
+  });
+});
+
 describe("completionOf and statusOf", () => {
   const trial = (task: string, arm: "control" | "akm", over: Partial<RunTrial> = {}): RunTrial => ({ task, arm, trial: `${task}__${arm}${Math.random()}`, reward: 1, error: null, akm: null, tools: 1, tokens: null, costUsd: null, seconds: 1, timed_out: false, ...over });
   const grid = (tasks: string[], attempts: number): RunTrial[] => tasks.flatMap((t) => (["control", "akm"] as const).flatMap((arm) => Array.from({ length: attempts }, () => trial(t, arm))));
