@@ -3,7 +3,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LOCK_FILE, type Lock, type LockPart, currentDigests, loadMeasurement, measuredEvals, measuredFiles, readLock } from "../../../lib/manifest.ts";
+import { LOCK_FILE, type Lock, type LockPart, loadMeasurement, measuredEvals, readLock, resolvedParts } from "../../../lib/manifest.ts";
 
 export const CHANGELOG = "MEASUREMENT_CHANGELOG.md";
 
@@ -36,7 +36,7 @@ export function checkLock(root: string): string[] {
   const rows = changelogRows(root);
   for (const name of declared) {
     const entry = lock.evals[name];
-    let now: ReturnType<typeof currentDigests>;
+    let now: ReturnType<typeof resolvedParts>;
     try {
       const m = loadMeasurement(name, root);
       if (!m) continue;
@@ -44,17 +44,21 @@ export function checkLock(root: string): string[] {
         problems.push(`${name} declares a measurement and ${LOCK_FILE} has no entry for it. Add it: scripts/measurement/run bump ${name} collector --reason "first lock entry"`);
         continue;
       }
-      now = currentDigests(m, root);
+      now = resolvedParts(m, root);
     } catch (e) {
-      problems.push(`${name}: ${(e as Error).message}`);
+      const message = (e as Error).message;
+      problems.push(message.startsWith(`${name}: `) ? message : `${name}: ${message}`);
       continue;
     }
-    const files = measuredFiles(loadMeasurement(name, root) as NonNullable<ReturnType<typeof loadMeasurement>>);
     for (const part of PARTS) {
       const locked = entry[part];
-      if (now[part] !== locked.sha256 || files[part].join("\n") !== locked.files.join("\n")) {
+      const files = now[part].files;
+      if (now[part].sha256 !== locked.sha256 || files.join("\n") !== locked.files.join("\n")) {
+        const added = files.filter((f) => !locked.files.includes(f));
+        const dropped = locked.files.filter((f) => !files.includes(f));
+        const covers = [added.length > 0 ? `now also covers ${added.join(", ")}` : "", dropped.length > 0 ? `no longer covers ${dropped.join(", ")}` : ""].filter(Boolean).join("; ");
         problems.push(
-          `${name}: the ${part} changed since ${LOCK_FILE} was written (lock ${locked.sha256.slice(0, 12)}, files now ${now[part].slice(0, 12)}). ` +
+          `${name}: the ${part} changed since ${LOCK_FILE} was written (lock ${locked.sha256.slice(0, 12)}, files now ${now[part].sha256.slice(0, 12)}${covers === "" ? "" : `; ${covers}`}). ` +
             `A change to the ${part} is a measurement change. Bump it with the reason, and write "no score change" if the scores are the same: scripts/measurement/run bump ${name} ${part} --reason "..."`,
         );
       } else if (!rows.some(([e, p, v]) => e === name && p === part && v === locked.version)) {
@@ -102,21 +106,20 @@ export function bump(root: string, name: string, part: Part | "harness", reason:
   }
   const m = loadMeasurement(name, root);
   if (!m) throw new Error(`${name} declares no measurement: it has no src/measurement.ts. See lib/manifest.ts for the contract.`);
-  const now = currentDigests(m, root);
-  const files = measuredFiles(m);
-  const made = (p: Part, version: number): LockPart => ({ version, sha256: now[p], files: files[p] });
+  const now = resolvedParts(m, root);
+  const made = (p: Part, version: number): LockPart => ({ version, sha256: now[p].sha256, files: now[p].files });
   const entry = lock.evals[name];
   if (!entry) {
     lock.evals[name] = { collector: made("collector", 1), scorer: made("scorer", 1) };
     writeLock(root, lock);
-    for (const p of PARTS) appendChangelog(root, { date, name, part: p, version: 1, reason, sha256: now[p] });
+    for (const p of PARTS) appendChangelog(root, { date, name, part: p, version: 1, reason, sha256: now[p].sha256 });
     return `${name}: first lock entry, collector and scorer at version 1`;
   }
-  if (entry[part].sha256 === now[part] && entry[part].files.join("\n") === files[part].join("\n")) throw new Error(`${name}: the ${part} has not changed since the lock was written, so there is nothing to bump`);
+  if (entry[part].sha256 === now[part].sha256 && entry[part].files.join("\n") === now[part].files.join("\n")) throw new Error(`${name}: the ${part} has not changed since the lock was written, so there is nothing to bump`);
   const next = entry[part].version + 1;
   entry[part] = made(part, next);
   writeLock(root, lock);
-  appendChangelog(root, { date, name, part, version: next, reason, sha256: now[part] });
+  appendChangelog(root, { date, name, part, version: next, reason, sha256: now[part].sha256 });
   return `${name}: ${part} is now version ${next}`;
 }
 
@@ -127,8 +130,8 @@ export function listLock(root: string): string[] {
     const m = loadMeasurement(name, root);
     const entry = lock.evals[name];
     if (!m || !entry) return `${name}: not in ${LOCK_FILE}`;
-    const now = currentDigests(m, root);
-    const state = (p: Part) => `${p} v${entry[p].version}${now[p] === entry[p].sha256 ? "" : " (changed, not bumped)"}`;
+    const now = resolvedParts(m, root);
+    const state = (p: Part) => `${p} v${entry[p].version}${now[p].sha256 === entry[p].sha256 ? "" : " (changed, not bumped)"}`;
     return `${name}: ${state("collector")}, ${state("scorer")}`;
   });
 }

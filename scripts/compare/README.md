@@ -2,7 +2,7 @@
 
 Sets two runs of an eval side by side, case by case, and says which cases flipped and whether the change is more than noise. It reads the `summary.json` and `samples.jsonl` of results folders and runs nothing, so it needs no model and no akm.
 
-The matrix (`scripts/matrix/run`) judges a metric better only when its min-max range over three repeats does not overlap the baseline's. With 20 to 60 cases and a model that answers differently each time, that rule sees only large effects. Every eval writes `samples.jsonl` with a stable id per case, so the same cases can be compared in pairs: which ones changed, and by how much the metric moved given that the same cases were asked. That is a much sharper test than two spreads of three numbers.
+The matrix (`scripts/matrix/run`) judges a metric better only when its min-max range over at least three repeats lies wholly on one side of the baseline's, with a gap of at least 1.25 times the wider of the two ranges (`GAP_FACTOR` in `scripts/matrix/src/lib.ts`; see "Run a matrix" in the README). With 20 to 60 cases and a model that answers differently each time, that rule sees only large effects. Every eval writes `samples.jsonl` with a stable id per case, so the same cases can be compared in pairs: which ones changed, and by how much the metric moved given that the same cases were asked. That is a much sharper test than two spreads of three numbers.
 
 ## Use
 
@@ -35,7 +35,7 @@ What two runs may differ in is `src/policy.ts`, which the matrix applies too. Ru
 
 | axis | what it is | recorded as |
 |---|---|---|
-| `build` | the akm | `akm_version`, `akm_build`, `akm_build_fingerprint` (the digest of a checkout's uncommitted changes), `akm_bin` |
+| `build` | the akm | `akm_version`, `akm_build`, `akm_build_fingerprint` (the digest of a checkout's uncommitted changes and, for a Harbor run, of the dependencies its containers installed), `akm_bin` |
 | `config` | the akm config the eval wrote | `strategy`, `config_patch` (its hash), a digest of `config`, `timeout_ms` |
 | `model` | the model and its engine | `model`, and in `engine.engines` the model, the endpoint (its host and `endpoint_id`, a digest of its identity: never its path, which messages and reports never carry), temperature, `enableThinking` and `timeoutMs` of every engine the run used |
 | `inputs` | the cases | `assets_sha256`, and the private `seed`. For runs with a manifest, the `input_sha256` of each case instead: see "Runs with a manifest" |
