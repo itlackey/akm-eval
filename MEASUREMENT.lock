@@ -14,8 +14,8 @@
         ]
       },
       "scorer": {
-        "version": 2,
-        "sha256": "5a5a3bcda5bd1322c859a8908b32328650f6877a42a6474097468466de7660d3",
+        "version": 3,
+        "sha256": "a9b34fc84f62ff3848d2313dca0f2e4866dfd61471c08f11b55532d6dfca1989",
         "files": [
           "evals/reflect/src/score.ts"
         ]

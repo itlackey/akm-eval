@@ -15,3 +15,4 @@ Every change to what an eval measures is a row here. An eval has two parts, and 
 | 2026-10-12 | reflect | scorer | 1 | harness-v3: first lock entry | 1395dfdb42d8 |
 | 2026-10-12 | reflect | collector | 2 | wave 1 merge: lib/akm credential allowlist, completionsUrl, relative AKM_BIN paths; hideEndpoint (no score change; harness-v3 not yet released) | 0cb87ac1f033 |
 | 2026-10-12 | reflect | scorer | 2 | #57: a refused edit is scored by the note as it ends up, as a note left alone: right for a control, a miss for a defect. Scores change: refused controls become correct | 5a5a3bcda5bd |
+| 2026-10-12 | reflect | scorer | 3 | #58: a retrieval check that could not grade (a timeout or a failed model call) is an error, not a refusal, and is not scored; a timeout counts in timeouts. Scores change: those rows leave refused.retrieval and the counts | a9b34fc84f62 |
