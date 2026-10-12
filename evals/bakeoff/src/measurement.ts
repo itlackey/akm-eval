@@ -20,13 +20,15 @@ export const MEASUREMENT: Measurement<LoadedCase, Raw, Row> = {
   // What turns the raw output of a case into a row and the rows into metrics. The labels are the cases (assets/cases.json), digested per case.
   scorer: ["evals/bakeoff/src/score.ts"],
   loadCases: (root, summary) => {
-    // The public cases are in the repository. A custom corpus is where the run recorded it, when that is inside the repository.
+    // The public cases are in the repository. A custom corpus is in the folder the run recorded (`corpus_folder`), or that scripts/rescore was given with --cases.
     if (summary.corpus === "public") return loadCases(join(root, "evals", NAME, "assets"));
-    if (typeof summary.corpus_folder !== "string") throw new Error("the run read a custom corpus from a folder outside the repository, so its cases are not known here");
+    if (summary.corpus !== "custom") throw new Error(`the run read the corpus ${JSON.stringify(summary.corpus)}, which this eval does not have`);
+    if (typeof summary.corpus_folder !== "string") throw new Error("the run read a custom corpus from a folder outside the repository, so its cases are not known here. Give the folder with --cases DIR");
     const folder = resolve(root, summary.corpus_folder);
     if (!existsSync(folder)) throw new Error(`the custom corpus ${summary.corpus_folder} is not here`);
     return loadCases(folder);
   },
+  // Every run of the Python bakeoff (corpus public or private, no manifest) is legacy, and none can be scored here.
   legacyProblem: () => "it is a result of the Python bakeoff, which scored a model's reply to prompts of its own, and nothing here scores that",
   caseId: (c) => c.id,
   // The files of the case go into the bundle (or, for a session, to where akm reads sessions), and the process decides the command.

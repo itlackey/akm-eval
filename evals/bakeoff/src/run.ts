@@ -6,13 +6,13 @@
 //   evals/bakeoff/run [--corpus public|custom|all] [--cases DIR] [--process NAME] [--limit N] [--repeat N] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
@@ -51,7 +51,7 @@ interface Summary {
   corpus: string;
   corpus_kind: string;
   corpus_private: boolean;
-  /** The folder of the corpus from the repository root, so scripts/rescore can read its cases. Null for a folder outside the repository. */
+  /** The folder of a custom corpus from the repository root, so scripts/rescore can read its cases. Null for the public corpus and for a folder outside the repository (then rescore takes --cases DIR). Never an absolute path. */
   corpus_folder: string | null;
   label: string;
   date: string;
@@ -141,12 +141,6 @@ function printSideBySide(a: Summary, b: Summary): void {
 /** The folder a corpus's results go to: the eval's results/ for the public corpus, private/bakeoff/results for a custom one. */
 const resultsFolder = (corpus: ResolvedCorpus): string => (corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The folder from the repository root when it is inside the repository, else null. */
-function insideRepository(folder: string): string | null {
-  const rel = relative(ROOT, folder);
-  return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? null : rel;
-}
-
 /** The generated.json of a rewrite: where its corpus.json says, else beside the assets folder. */
 const generatedFile = (corpus: ResolvedCorpus): string => (corpus.configFile && corpus.config.generated ? resolve(dirname(corpus.configFile), corpus.config.generated) : join(dirname(corpus.folder), GENERATED));
 
@@ -157,7 +151,7 @@ const generatedFile = (corpus: ResolvedCorpus): string => (corpus.configFile && 
  */
 export function corpusProblem(corpus: ResolvedCorpus, publicFolder: string = join(EVAL_DIR, "assets")): string | undefined {
   if (corpus.name === "public") return undefined;
-  const where = insideRepository(corpus.folder) ?? corpus.folder;
+  const where = corpusFolderOf(corpus.folder) ?? corpus.folder;
   const again = corpus.config.kind === "rewrite" ? ". Make it with: ./generate-assets --only bakeoff" : "";
   if (!existsSync(join(corpus.folder, "cases.json"))) return `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
   const stale = corpus.config.kind === "rewrite" ? privateAssetsProblem(corpus.folder, generatedFile(corpus), publicFolder, where) : undefined;
@@ -214,7 +208,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const summary: Summary = {
     eval: NAME,
     ...corpusRecord(corpus),
-    corpus_folder: insideRepository(corpus.folder),
+    corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),

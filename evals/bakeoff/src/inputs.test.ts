@@ -79,7 +79,7 @@ describe("the cases of a corpus folder", () => {
   });
 
   test("parseCases reads the cases without their files", () => {
-    expect(parseCases(JSON.stringify([base]))).toEqual([base]);
+    expect(parseCases(JSON.stringify([base])) as unknown).toEqual([base]);
   });
 });
 
