@@ -83,8 +83,8 @@
         ]
       },
       "scorer": {
-        "version": 2,
-        "sha256": "619613d50814f5f5b07a998b0e0d1e97a8b858140a9f758ce65b125b5f519e16",
+        "version": 3,
+        "sha256": "609dae74ea0b083c625657c5565dfe31475ffdf0e1bb1e1e75f157e328454d61",
         "files": [
           "evals/distill/src/score.ts",
           "lib/negation.ts"
@@ -167,8 +167,8 @@
         ]
       },
       "scorer": {
-        "version": 2,
-        "sha256": "45ac7eeccd4cf2808c20a8e579d0564cba1527c9950e9e278f6214a899fa2afa",
+        "version": 3,
+        "sha256": "1899b9d4adf868cf1b1727ef4de1dd32020574c25c9c72033c2c9795bd3cf61b",
         "files": [
           "evals/consolidate/src/cases.ts",
           "evals/distill/src/score.ts",

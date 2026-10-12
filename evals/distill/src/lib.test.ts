@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readGenerated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
+import { CLASSES, type CaseRun, type Class, type LoadedCase, MAX_COPIED, MAX_RATIO, type Proposal, type Row, type UpdateChecks, assetsSha256, checkLesson, checkUpdate, claims, copiedShare, corpusFolder, diffBody, digestOf, distillConfig, distillOutcome, errorRow, generatedProblem, generatorFiles, generatorSha256, lessonFile, lessonProposals, lessonText, loadCases, memoryBody, memoryRef, mentions, metrics, modelCalls, normalize, readClaims, readGenerated, readStated, scoreCase, selectCases, servedModels, stated, timedOutMessage } from "./lib.ts";
 import { importClosure } from "../../../lib/closure.ts";
 import { measuredFiles } from "../../../lib/manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -502,7 +502,7 @@ describe("checkLesson", () => {
 
   test("good when it states every fact, makes no forbidden claim and is not much longer than the memory", () => {
     const k = checkLesson(c, "The default is 30, so pass a limit.", memory);
-    expect(k).toEqual({ missing: [], forbidden: [], contradicted: [], ratio: 0.2, copied: 0, good: true });
+    expect(k).toEqual({ missing: [], forbidden: [], contradicted: [], ambiguous: [], ratio: 0.2, copied: 0, good: true });
   });
 
   test("names the facts it leaves out and the claims it makes", () => {
@@ -654,7 +654,7 @@ describe("the public cases check themselves", () => {
       });
 
       test("the good lesson passes, and the over-claiming one fails on a forbidden claim", () => {
-        expect(checkLesson(c, c.good as string, c.memory)).toMatchObject({ missing: [], forbidden: [], contradicted: [], good: true });
+        expect(checkLesson(c, c.good as string, c.memory)).toMatchObject({ missing: [], forbidden: [], contradicted: [], ambiguous: [], good: true });
         const bad = checkLesson(c, c.bad as string, c.memory);
         expect(bad.good).toBe(false);
         expect(bad.forbidden.length).toBeGreaterThan(0);
@@ -677,7 +677,7 @@ describe("the public cases check themselves", () => {
       test("correct alternate wordings of the good lesson pass", () => {
         const others = ALTERNATES[c.id] ?? [];
         expect(others.length, "an alternate wording").toBeGreaterThanOrEqual(1);
-        for (const text of others) expect(checkLesson(c, text, c.memory), text).toMatchObject({ missing: [], forbidden: [], contradicted: [], good: true });
+        for (const text of others) expect(checkLesson(c, text, c.memory), text).toMatchObject({ missing: [], forbidden: [], contradicted: [], ambiguous: [], good: true });
       });
     });
   }
@@ -766,7 +766,7 @@ describe("the public update cases check themselves", () => {
       });
 
       test("the good body keeps every line and adds the facts; the bad one adds a forbidden claim", () => {
-        expect(checkUpdate(c, existing, c.good as string, c.memory)).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [] });
+        expect(checkUpdate(c, existing, c.good as string, c.memory)).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [], ambiguous: [] });
         const bad = checkUpdate(c, existing, c.bad as string, c.memory);
         expect(bad.dropped).toEqual([]);
         expect(bad.forbidden.length).toBeGreaterThan(0);
@@ -788,7 +788,7 @@ describe("the public update cases check themselves", () => {
       test("another wording of the lines that are added passes", () => {
         const others = ALTERNATE_LINES[c.id] ?? [];
         expect(others.length, "an alternate wording").toBeGreaterThanOrEqual(1);
-        for (const lines of others) expect(checkUpdate(c, existing, `${existing}\n${lines}`, c.memory), lines).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [] });
+        for (const lines of others) expect(checkUpdate(c, existing, `${existing}\n${lines}`, c.memory), lines).toMatchObject({ dropped: [], missing: [], forbidden: [], contradicted: [], ambiguous: [] });
       });
     });
   }
@@ -1281,7 +1281,7 @@ describe("metrics", () => {
       row("g", "restates-asset", "right"),
       row("h", "duplicate-lesson", "error"),
     ]);
-    expect(m.good_lessons).toEqual({ n: 4, good: 1, rate: 0.25 });
+    expect(m.good_lessons).toEqual({ n: 4, good: 1, rate: 0.25, ambiguous: 0 });
     expect(m.wrong_lessons).toEqual({ n: 3, wrong: 1, rate: 0.3333 });
     expect(m.by_class).toEqual({
       "lesson-worthy": { n: 2, good: 1, rate: 0.5 },
@@ -1309,9 +1309,9 @@ describe("metrics", () => {
       upd("u4", "missed", "skipped", { update_proposed: false, existing_kept: null, new_facts: null, no_extra_claims: null, not_copied: null, no_new_lesson: true }),
       upd("u5", "error", "error", null),
     ]);
-    expect(m.good_lessons).toEqual({ n: 1, good: 1, rate: 1 });
+    expect(m.good_lessons).toEqual({ n: 1, good: 1, rate: 1, ambiguous: 0 });
     expect(m.wrong_lessons).toEqual({ n: 2, wrong: 1, rate: 0.5 });
-    expect(m.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, checks: { update_proposed: 2, existing_kept: 2, new_facts: 1, no_extra_claims: 2, not_copied: 2, no_new_lesson: 3 } });
+    expect(m.lesson_updates).toEqual({ n: 4, right: 1, rate: 0.25, ambiguous: 0, checks: { update_proposed: 2, existing_kept: 2, new_facts: 1, no_extra_claims: 2, not_copied: 2, no_new_lesson: 3 } });
     expect(m.by_class["lesson-update"]).toEqual({ n: 4, right: 1, rate: 0.25 });
     expect(m.outcomes.update).toEqual({ lesson: 1, update: 2, skipped: 1, rejected: 0, invalid: 0, error: 1 });
     expect(m.outcomes.none.update).toBe(1);
@@ -1320,7 +1320,7 @@ describe("metrics", () => {
 
   test("an empty run has no rates", () => {
     const m = metrics([]);
-    expect(m.good_lessons).toEqual({ n: 0, good: 0, rate: null });
+    expect(m.good_lessons).toEqual({ n: 0, good: 0, rate: null, ambiguous: 0 });
     expect(m.by_class).toEqual({});
   });
 });
@@ -1344,7 +1344,7 @@ describe("the baselines of the README's 'For scale'", () => {
       if (c.expect === "update") return [queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.existingBody}\n${memoryBody(c.memory)}\n`, true)];
       return [queued(c, c.memory)];
     });
-    expect(m.good_lessons).toEqual({ n: 14, good: 0, rate: 0 });
+    expect(m.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
     expect(m.lesson_updates).toMatchObject({ n: 8, right: 0, rate: 0, checks: { update_proposed: 8, existing_kept: 8, new_facts: 8, no_extra_claims: 8, not_copied: 0, no_new_lesson: 8 } });
     expect(m.wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
     expect(m.bad_by).toMatchObject({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, copied: 14 }); // the copy states every fact and claims nothing: only the copy check fails it
@@ -1353,7 +1353,7 @@ describe("the baselines of the README's 'For scale'", () => {
   test("a distill that queues a lesson for every memory has wrong_lessons at 16/16, and one that queues nothing has good_lessons at 0/14", () => {
     expect(score((c) => [queued(c, "---\ndescription: d\nwhen_to_use: w\n---\nBody.\n")]).wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
     const nothing = score(() => []);
-    expect(nothing.good_lessons).toEqual({ n: 14, good: 0, rate: 0 });
+    expect(nothing.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
     expect(nothing.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
     expect(nothing.lesson_updates).toMatchObject({ n: 8, right: 0 });
   });
@@ -1363,9 +1363,151 @@ describe("the baselines of the README's 'For scale'", () => {
       if (c.expect === "none") return [];
       return [c.expect === "update" ? queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`, true) : queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`)];
     });
-    expect(m.good_lessons).toEqual({ n: 14, good: 14, rate: 1 });
+    expect(m.good_lessons).toEqual({ n: 14, good: 14, rate: 1, ambiguous: 0 });
     expect(m.lesson_updates).toMatchObject({ n: 8, right: 8 });
     expect(m.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
   });
 });
 
+
+// A negation over a verb the shared rule does not list stands, so it still excuses a claim and denies an action. The row names the phrase
+// under `ambiguous` and the verdict is as it was (#45, as extract does).
+describe("a negation the shared rule cannot read marks the phrase ambiguous (#45)", () => {
+  const skip = [["always skip", "skip * test"]];
+  const wait = [["=wait for networkidle", "wait for networkidle"]];
+  const layouts = [["works * all * layout"]];
+  const heading = ["+wait * heading", "+wait * visible"];
+  const reads = (text: string, groups: string[][], actions = false) => {
+    const { claims: asserted, ambiguous } = readClaims(text, groups, actions);
+    return { text, asserted, ambiguous };
+  };
+
+  test("the three sentences of the issue are not claims, and they are flagged, read as a fact and as an action", () => {
+    const issue: [string, string][] = [
+      ["I do not think we should always skip tests.", "always skip"],
+      ["The agent did not ignore the instruction to always skip tests.", "always skip"],
+      ["Not skipping tests is a mistake.", "skip * test"],
+    ];
+    for (const [text, phrase] of issue) {
+      for (const actions of [false, true]) expect(reads(text, skip, actions)).toEqual({ text, asserted: [], ambiguous: [phrase] });
+    }
+  });
+
+  test("the same forms against a contradiction, a claim and a required action of the public cases", () => {
+    expect(reads("I do not think we should wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("The team did not ignore the advice to wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("Not to wait for networkidle would be a mistake.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+    expect(reads("Not waiting for networkidle is wrong.", [["wait for networkidle"]], true).ambiguous).toEqual(["wait for networkidle"]);
+    for (const text of [
+      "The team did not dispute that the fix works on all layouts.",
+      "There is no doubt that the fix works on all layouts.",
+      "We cannot deny that the fix works on all layouts.",
+      "I do not think the fix works on all layouts.",
+      "The fix works on all layouts, not just one.",
+      "It does not fix the footnote and works on all layouts.",
+    ]) {
+      expect(reads(text, layouts)).toEqual({ text, asserted: [], ambiguous: ["works * all * layout"] });
+    }
+    expect(readStated("I do not think we should wait for the visible heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("It is not wise to wait for the visible heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("Do not rely on networkidle to wait for the heading.", heading)).toEqual({ stated: true, ambiguous: "+wait * heading" });
+    expect(readStated("Not waiting for the visible heading is a mistake.", heading)).toEqual({ stated: false, ambiguous: "+wait * heading" });
+  });
+
+  test("the verdict is as the word order has it: a phrase behind such a negation is not a claim, and a required action under one is still stated", () => {
+    expect(claims("I do not think we should always skip tests.", skip)).toEqual([]);
+    expect(stated("I do not think we should wait for the visible heading.", heading)).toBe(true);
+    expect(stated("Not waiting for the visible heading is a mistake.", heading)).toBe(false);
+  });
+
+  test("the sentences that the other tests of this file assert as denials are not flagged", () => {
+    const plain = (texts: string[], groups: string[][]): [string, string[][]][] => texts.map((t) => [t, groups]);
+    const actions: [string, string[][]][] = [
+      ...plain(
+        ["Never wait for networkidle.", "You should never wait for networkidle.", "Do not wait for networkidle.", "Don't wait for networkidle.", "Try not to wait for networkidle.", "There is no need to wait for networkidle.", "Do not rely on the timeout to wait for networkidle.", "Do not think it is wise to wait for networkidle.", "It is not wise to wait for networkidle.", "Never wait for networkidle and never wait for networkidle.", "Rather than wait for networkidle, wait for the heading."],
+        wait,
+      ),
+      ...plain(
+        ["Avoid waiting for networkidle.", "Try to avoid waiting for networkidle.", "Stop waiting for networkidle.", "Skip waiting for networkidle.", "Instead of waiting for networkidle.", "Rather than waiting for networkidle.", "Finish without waiting for networkidle.", "Avoid having to wait for networkidle.", "Do not forget to avoid waiting for networkidle.", "Never fail to avoid waiting for networkidle.", "Do not hesitate to skip waiting for networkidle.", "Do not hesitate to not wait for networkidle.", "Do not hesitate to never wait for networkidle."],
+        [["wait for networkidle"]],
+      ),
+      ...plain(["Do not skip tests.", "It is not wise to always skip tests.", "The team does not plan to skip tests.", "Do not rush to always skip tests."], skip),
+      ...plain(["Do not set SKIP_TESTS=1 when CI is red."], [["skip_tests"]]),
+    ];
+    for (const [text, groups] of actions) expect(reads(text, groups, true)).toEqual({ text, asserted: [], ambiguous: [] });
+    for (const text of [
+      "It doesn't work on all layouts.",
+      "The fix does not work on all layouts.",
+      "We cannot say that the fix works on all layouts.",
+      "We do not say it works on all layouts.",
+      "We do not know if it works on all layouts.",
+      "It has not been confirmed that the fix works on all layouts.",
+      "It was not verified that the fix works on all layouts.",
+      "The fix works on all layouts, which has not been confirmed.",
+      "The fix works on all layouts, which is not true.",
+      "The fix works on all layouts but I did not test it.",
+    ]) {
+      expect(reads(text, layouts)).toEqual({ text, asserted: [], ambiguous: [] });
+    }
+    expect(reads("Not enough, but it is enough.", [["is enough"]])).toEqual({ text: "Not enough, but it is enough.", asserted: [], ambiguous: [] });
+    for (const text of ["Never wait for the visible heading.", "Avoid waiting for the heading.", "Do not wait for networkidle, wait for the heading.", "Do not hesitate to wait for the heading.", "Do not use networkidle and wait for the heading.", "Wait for the heading. I do not think we should wait for the heading."]) {
+      expect({ text, ambiguous: readStated(text, heading).ambiguous }).toEqual({ text, ambiguous: undefined });
+    }
+  });
+
+  test("a group with a claim is a claim, and a doubt that excuses the phrase is not an ambiguity", () => {
+    const text = "I do not think the fix works on all layouts. The fix works on all layouts.";
+    expect(reads(text, layouts)).toEqual({ text, asserted: ["works * all * layout"], ambiguous: [] });
+    expect(readClaims("We do not think it is known whether the fix works on all layouts.", layouts).ambiguous).toEqual([]);
+    expect(readStated("I do not think we should wait for the heading. Wait for the heading.", heading)).toEqual({ stated: true });
+  });
+
+  test("a plain denial beside one the rule cannot read is flagged, and a negation that something else ends leaves the verdict to the next", () => {
+    expect(reads("The team does not want to stop skipping tests.", skip, true).ambiguous).toEqual(["skip * test"]);
+    expect(reads("A search that finds no references does not prove a function is unused.", [["prove * unused"]], true)).toMatchObject({ asserted: [], ambiguous: [] });
+    expect(reads("Do not use waitForSelector and wait for networkidle.", wait, true).ambiguous).toEqual(["=wait for networkidle"]);
+  });
+
+  test("checkLesson names the phrases, and the good, bad and reversed wording of every public case is flagged only where it hides a claim", () => {
+    const c = loadCases(PUBLIC).find((x) => x.id === "lesson-01") as LoadedCase;
+    const body = (text: string) => `The support chat widget polls every 20 seconds, so the network is never idle. ${text}`;
+    expect(checkLesson(c, body("I do not think we should wait for networkidle on this page. Wait for a specific element instead, such as the page heading being visible."), c.memory)).toMatchObject({ good: true, contradicted: [], ambiguous: ["=wait for networkidle"] });
+    expect(checkLesson(c, body("The team did not ignore the advice to wait for networkidle, and also waits for the page heading to be visible."), c.memory)).toMatchObject({ good: true, contradicted: [], ambiguous: ["=wait for networkidle"] });
+    expect(checkLesson(c, body("I do not think we should wait for the page heading."), c.memory)).toMatchObject({ good: true, missing: [], ambiguous: ["+wait * heading"] });
+    expect(checkLesson(c, body("Not waiting for the page heading is a mistake."), c.memory)).toMatchObject({ good: false, missing: ["+wait * heading"], ambiguous: ["+wait * heading"] });
+    expect(checkLesson(c, body("Do not wait for networkidle. Wait for the page heading to be visible."), c.memory)).toMatchObject({ good: true, ambiguous: [] });
+    // the bad lesson of claim-03 says "no breaking changes, so every service can upgrade": it is bad for the first claim, and the second hides behind the "no"
+    const upgrade = loadCases(PUBLIC).find((x) => x.id === "claim-03") as LoadedCase;
+    expect(checkLesson(upgrade, upgrade.bad as string, upgrade.memory)).toMatchObject({ good: false, ambiguous: ["every service * can upgrade"] });
+    for (const x of loadCases(PUBLIC).filter((y) => y.expect !== "none" && y.id !== "claim-03")) {
+      for (const text of [x.good, x.bad, x.reversed].filter((t): t is string => typeof t === "string")) {
+        const ambiguous = x.expect === "update" ? checkUpdate(x, x.existingBody as string, text, x.memory).ambiguous : checkLesson(x, text, x.memory).ambiguous;
+        expect({ id: x.id, ambiguous }).toEqual({ id: x.id, ambiguous: [] });
+      }
+    }
+  });
+
+  test("an update is read the same way, over the lines it adds", () => {
+    const u = loadCases(PUBLIC).find((x) => x.id === "upd-02") as LoadedCase;
+    const existing = u.existingBody as string;
+    const added = (line: string) => checkUpdate(u, existing, `${existing}\n${line}`, u.memory);
+    expect(added("The runner has sorted the test files by name since version 4.2. I do not think the test order is random.")).toMatchObject({ forbidden: [], ambiguous: [] });
+    expect(added("The runner has sorted the test files by name since version 4.2. The team did not dispute that tests run in parallel.")).toMatchObject({ forbidden: [], ambiguous: ["in parallel"] });
+  });
+
+  test("the metrics count the lessons and the updates to read, apart from the verdicts", () => {
+    const base = (id: string, klass: Class, verdict: Row["verdict"], ambiguous: string[]): Row => ({
+      ...errorRow({ id, class: klass, expect: klass === "lesson-update" ? "update" : "lesson" } as LoadedCase, "", 1),
+      verdict,
+      outcome: klass === "lesson-update" ? "update" : "lesson",
+      error: undefined,
+      ambiguous,
+    });
+    const m = metrics([base("a", "lesson-worthy", "good", ["x"]), base("b", "lesson-worthy", "good", []), base("c", "over-claim", "bad", ["y"]), base("d", "lesson-update", "right", ["z"]), base("e", "lesson-update", "bad", [])]);
+    expect(m.good_lessons).toMatchObject({ n: 3, good: 2, ambiguous: 2 });
+    expect(m.lesson_updates).toMatchObject({ n: 2, right: 1, ambiguous: 1 });
+    // a row stored before the check has no list, and an errored case is left out
+    const old = { ...base("f", "lesson-worthy", "good", []), ambiguous: undefined } as unknown as Row;
+    expect(metrics([old, base("g", "lesson-worthy", "error", ["x"])]).good_lessons).toMatchObject({ n: 1, ambiguous: 0 });
+  });
+});

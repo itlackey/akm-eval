@@ -7,7 +7,7 @@
 // MEASUREMENT.lock (scripts/measurement/run bump distill scorer --reason "...") and update the golden files (golden/) in the same change.
 // evals/nightly scores its lessons with `checkLesson` from here.
 
-import { negations, reaches } from "../../../lib/negation.ts";
+import { FILLERS, type Negation, negations, reaches } from "../../../lib/negation.ts";
 
 // The checks read a lesson's frontmatter with bun's own YAML parser. Without it every lesson would be scored on its body alone.
 if (typeof Bun.YAML?.parse !== "function") throw new Error("distill: this eval needs a bun that has Bun.YAML. Upgrade it with `bun upgrade`. See https://bun.sh");
@@ -181,6 +181,87 @@ function* occurrences(re: RegExp, s: string): Generator<RegExpExecArray> {
 
 const wordsOf = (s: string): string[] => s.split(" ").filter(Boolean);
 
+// ---- A negation the shared rule cannot read ---------------------------------------------------------------------
+
+// lib/negation.ts reads word order, and lists the verbs that cancel a negation. A negation over a verb it does not list stands, whatever the
+// sentence means, so it still excuses a claim and still denies an action: "the team did not dispute that the fix works on all layouts" is read
+// as a denial of the claim, "I do not think we should wait for the heading" as a lesson that does not state the action, and "not waiting for
+// networkidle is a mistake" as one that does not contradict the memory. Failing closed on every unlisted verb would flag honest denials ("it
+// does not work on all layouts"), so a negation is plain when it denies the phrase for certain, and the lesson is scored as it always was.
+// Where it is not plain the verdict is the same, but the phrase goes under `ambiguous` in the row, and a person should read the lesson.
+
+/** Small words that may stand between a negation and the phrase and leave it a plain denial: the shared rule's own, auxiliaries, pronouns and adverbs. */
+const SMALL = new Set([
+  ...FILLERS,
+  ...("also then now already was were is are been being has have had did does do will would should must can could may might i we you they it he she this that these those which who there here yet only " +
+    "fully properly currently necessarily entirely exactly directly quite").split(" "),
+]);
+
+/**
+ * Words that carry a negation straight through to the phrase, so that the negation over them is a plain denial of it: verbs of wanting and
+ * planning ("does not plan to"), of doing ("do not set"), of saying, knowing and finding out, which is how a lesson hedges ("it was not
+ * verified that", "we cannot say that", "the cause was not found"), and words that approve of the act or say it holds ("it is not wise to",
+ * "that is not true"). Any other word between a negation and the phrase is a verb the rule does not list, and what the negation does to the
+ * phrase is not known, unless it is the only one (see `readNegation`).
+ */
+const CARRIES =
+  /^(?:want[a-z]*|wish[a-z]*|plan[a-z]*|intend[a-z]*|aim[a-z]*|mean[a-z]*|propos[a-z]*|choos[a-z]*|decid[a-z]*|prefer[a-z]*|like[sd]?|rush[a-z]*|hurry|dare[a-z]*|say|says|said|set|use|enable|export|add|put|having|wise|safe|good|ok|okay|right|fine|allowed|permitted|advisable|sensible|acceptable|appropriate|necessary|true|correct|accurate|valid|enough|sufficient|case|hold|holds|apply|applies|know[a-z]*|knew|claim[a-z]*|state[sd]?|assert[a-z]*|confirm[a-z]*|verif[a-z]*|test[a-z]*|check[a-z]*|prove[nd]?|proving|show[a-z]*|establish[a-z]*|demonstrat[a-z]*|measur[a-z]*|compar[a-z]*|ask[a-z]*|tried|tries|found|find|finds|identif[a-z]*|determin[a-z]*|investigat[a-z]*|guarantee[a-z]*|certain|sure)$/;
+
+/** Words that turn a negation round when they stand between it and the phrase: "did not ignore the claim that", "cannot deny that", "no doubt that". */
+const REVERSES = /^(?:ignor|disregard|dismiss|overlook|reject|refus|declin|disput|doubt|den(?:y|ie|yi)|question|hesitat|forg[eo]t|forgotten|fail|neglect|omit|avoid|stop|ceas|quit)[a-z]*$/;
+
+/** Words that make what follows an opinion: "I do not think we should", "we do not recommend". The negation is over the opinion, and what it does to the phrase is not known. */
+const OPINIONS = /^(?:think|thinks|thought|believ[a-z]*|suppos[a-z]*|assum[a-z]*|expect[a-z]*|imagin[a-z]*|guess[a-z]*|suggest[a-z]*|recommend[a-z]*|advis[a-z]*|feel|feels|reckon[a-z]*|consider[a-z]*)$/;
+
+/** Words that end the reach of a negation: "do not use networkidle and wait for the heading" does not deny the heading. */
+const ENDS_REACH = new Set("and then instead while because since although though whereas".split(" "));
+
+/** Words that call the act itself bad, in "not waiting for the heading is a mistake". */
+const CALLS_BAD = /^(?:wrong|bad|mistake|harmful|forbidden|prohibited|unsafe)$/;
+/** Small words that may stand between "is" and the word that calls the act bad. */
+const VERDICT_SMALL = new Set("a an the very quite really also just always".split(" "));
+
+/**
+ * What a negation does to the phrase, by `between`, the words from the end of its chain to the phrase. It is `plain`, a denial for certain,
+ * when only small words stand between them, or one verb of CARRIES does, or (`lenient`) when there is just one other word, that is no
+ * opinion: "it does not work on all layouts", "it was not verified on both". It is `ended` when another negation or a word that ends its
+ * reach stands between ("a search that finds no references does not prove", "does not fix the footnote and works on all layouts"): it
+ * governs something else, and the other negation, if there is one, decides. It is `vague` when a word turns it round ("did not ignore the
+ * instruction to"), or when any other stretch of words the rule does not list stands between.
+ */
+function readNegation(between: string[], lenient: boolean): "plain" | "ended" | "vague" {
+  if (between.some((w) => REVERSES.test(w))) return "vague";
+  if (between.some((w) => DENIES.test(w) || ENDS_REACH.has(w))) return "ended";
+  const rest = between.filter((w) => !SMALL.has(w));
+  return rest.some((w) => CARRIES.test(w)) || rest.length === 0 || (lenient && rest.length === 1 && !OPINIONS.test(rest[0])) ? "plain" : "vague";
+}
+
+/** Does the rest of the phrase's clause call the act bad: "is a mistake", "is wrong"? Then a negation before the phrase is the other half of a verdict ("not waiting for the heading is a mistake"). */
+function callsItBad(sentence: Sentence, to: number): boolean {
+  const end = Math.min(sentence.s.length + 1, ...sentence.starts.filter((start) => start > to));
+  const tail = wordsOf(sentence.s.slice(to, end));
+  return tail.some((w, j) => /^(?:is|are|was|were|be)$/.test(w) && CALLS_BAD.test(tail.slice(j + 1).find((x) => !VERDICT_SMALL.has(x)) ?? ""));
+}
+
+/** What the negations around a phrase do to it: `none` excuse nothing, `plain` is a denial of it for certain, `vague` is a negation the rule cannot read, or a plain one with a verdict after the phrase. */
+type Denial = "none" | "plain" | "vague";
+
+/** The negations in the words around the phrase at `from` to `to` of the sentence (see `readClaims` for which), and whether one of them is plain and none is vague. A plain one beside one the rule cannot read is not sure. */
+function denial(sentence: Sentence, from: number, to: number, actions: boolean): Denial {
+  const before = wordsOf(actions ? clauseBefore(sentence, from) : sentence.s.slice(0, from));
+  const after = wordsOf(sentence.s.slice(to));
+  const early = negations(before, actions ? negatesAction : negatesClaim).filter((n) => n.at >= before.length - WORDS_BEFORE);
+  const late = negations(after, negatesClaim).filter((n) => n.at < WORDS_AFTER);
+  if (early.length === 0 && late.length === 0) return "none";
+  const read = [
+    ...early.map((n) => readNegation(before.slice(n.end), true)),
+    ...late.map((n) => (after.slice(0, n.at).every((w) => SMALL.has(w)) ? readNegation(after.slice(n.end, n.end + 4), false) : "vague")),
+  ];
+  return read.includes("plain") && !read.includes("vague") && !callsItBad(sentence, to) ? "plain" : "vague";
+}
+
+// ---- Matching claims and facts --------------------------------------------------------------------------------
+
 /**
  * The phrases of `groups` that `text` asserts: one that a sentence holds, with no denial or doubt just before or after
  * it. A phrase in "it is unconfirmed whether 0.125 is enough" is not a claim. The first phrase of each group that is asserted.
@@ -194,31 +275,39 @@ const wordsOf = (s: string): string[] => s.split(" ").filter(Boolean);
  * (never, avoid, without, stop, skip, instead of, rather than) before the phrase in its own clause, with the same cancelling out.
  * "Wait for networkidle" is not asserted by "never wait for networkidle", and is asserted by "do not hesitate to wait for networkidle"
  * and by "do not worry, wait for networkidle".
+ *
+ * Besides them, the first phrase of each other group that only a negation the rule cannot read excuses (see `denial`): the phrase is not
+ * a claim, and a person should read the sentence. "The team did not dispute that the fix works on all layouts" and "not waiting for
+ * networkidle is a mistake" are such. A phrase that a doubt excuses too is not ambiguous.
  */
-export function claims(text: string, groups: string[][], actions = false): string[] {
+export function readClaims(text: string, groups: string[][], actions = false): { claims: string[]; ambiguous: string[] } {
   const sentences = sentencesOf(text);
   const doubted = (sentence: Sentence, from: number, to: number): boolean =>
     DOUBTS.test(wordsOf(clauseBefore(sentence, from)).slice(-WORDS_BEFORE).join(" ")) || UNCONFIRMED.test(wordsOf(sentence.s.slice(to)).slice(0, WORDS_AFTER).join(" "));
-  const denied = (sentence: Sentence, from: number, to: number): boolean => {
-    const before = wordsOf(actions ? clauseBefore(sentence, from) : sentence.s.slice(0, from));
-    const after = wordsOf(sentence.s.slice(to));
-    return negations(before, actions ? negatesAction : negatesClaim).some((n) => n.at >= before.length - WORDS_BEFORE) || negations(after, negatesClaim).some((n) => n.at < WORDS_AFTER);
-  };
   const found: string[] = [];
+  const ambiguous: string[] = [];
   for (const group of groups) {
+    const unsure: string[] = [];
     const hit = group.find((phrase) => {
       const re = pattern(phrase);
       return sentences.some((sentence) =>
         [...occurrences(re, sentence.s)].some((m) => {
           const to = m.index + m[0].length;
-          return !doubted(sentence, m.index, to) && !denied(sentence, m.index, to);
+          if (doubted(sentence, m.index, to)) return false;
+          const denied = denial(sentence, m.index, to, actions);
+          if (denied === "vague") unsure.push(phrase);
+          return denied === "none";
         }),
       );
     });
     if (hit !== undefined) found.push(hit);
+    else if (unsure.length > 0) ambiguous.push(unsure[0]);
   }
-  return found;
+  return { claims: found, ambiguous };
 }
+
+/** The phrases of `groups` that `text` asserts (see `readClaims`). */
+export const claims = (text: string, groups: string[][], actions = false): string[] => readClaims(text, groups, actions).claims;
 
 /**
  * Does `text` state the fact: does a sentence hold one of its phrases? A phrase that starts with `+` is an action the lesson must
@@ -227,19 +316,41 @@ export function claims(text: string, groups: string[][], actions = false): strin
  * ("do not wait for networkidle, wait for the heading"). A negation that governs a verb that denies in turn is cancelled out, so
  * "do not hesitate to wait for the heading" states it. Any other phrase is a thing the lesson must mention, and a negation does not
  * unstate it: "annotated, not lightweight tags" mentions lightweight tags, and "the invoice-service was not checked" mentions the invoice-service.
+ *
+ * `ambiguous` is the first action phrase of the fact when no sentence states it for certain and one holds it under a negation the rule
+ * cannot read: "I do not think we should wait for the heading" counts as stating it, because the negation does not reach the action, and "not
+ * waiting for the heading is a mistake" as not stating it. A person should read the lesson. A negation that something ends before the
+ * action ("do not use networkidle and wait for the heading") leaves it stated for certain.
  */
-export function stated(text: string, fact: string[]): boolean {
+export function readStated(text: string, fact: string[]): { stated: boolean; ambiguous?: string } {
   const sentences = sentencesOf(text);
-  const denied = (sentence: Sentence, from: number): boolean => {
+  const reading = (sentence: Sentence, from: number, to: number): { stated: boolean; sure: boolean } => {
     const before = wordsOf(clauseBefore(sentence, from));
-    return negations(before, negatesAction).some((n) => reaches(before, n));
+    const standing = negations(before, negatesAction);
+    if (standing.some((n) => reaches(before, n))) return { stated: false, sure: !callsItBad(sentence, to) };
+    const near = standing.filter((n) => n.at >= before.length - WORDS_BEFORE && !before.slice(n.end).some((w) => ENDS_REACH.has(w)));
+    return { stated: true, sure: near.length === 0 };
   };
-  return fact.some((phrase) => {
+  let stated = false;
+  let sure = false;
+  let unsure: string | undefined;
+  for (const phrase of fact) {
     const re = pattern(phrase);
     const action = phrase.startsWith("+");
-    return sentences.some((sentence) => [...occurrences(re, sentence.s)].some((m) => !action || !denied(sentence, m.index)));
-  });
+    for (const sentence of sentences) {
+      for (const m of occurrences(re, sentence.s)) {
+        const r = action ? reading(sentence, m.index, m.index + m[0].length) : { stated: true, sure: true };
+        stated ||= r.stated;
+        sure ||= r.stated && r.sure;
+        if (!r.sure) unsure ??= phrase;
+      }
+    }
+  }
+  return !sure && unsure !== undefined ? { stated, ambiguous: unsure } : { stated };
 }
+
+/** Does `text` state the fact (see `readStated`)? */
+export const stated = (text: string, fact: string[]): boolean => readStated(text, fact).stated;
 
 // ---- Scoring a lesson ------------------------------------------------------------------------------------------
 
@@ -298,6 +409,12 @@ export interface Check {
   forbidden: string[];
   /** The contradicting phrases it asserts, one per group at most: the ones that turn the memory's action round. */
   contradicted: string[];
+  /**
+   * The phrases whose reading rests on a negation the shared rule cannot read, one per group at most: a forbidden or contradicting phrase
+   * that only such a negation excuses, and a required action that is stated, or not stated, only by one (see `readClaims` and `readStated`).
+   * They are scored by word order and the verdict does not change. A person should read the lesson.
+   */
+  ambiguous: string[];
   /** The lesson's words over the memory's. */
   ratio: number;
   /** The share of the memory's words that the lesson repeats word for word (see `copiedShare`). */
@@ -313,12 +430,23 @@ type Checked = Pick<Case, "required" | "forbidden" | "contradicts">;
  * memory, and not a copy of it (more than three quarters of the memory repeated word for word).
  */
 export function checkLesson(c: Checked, lesson: string, memory: string): Check {
-  const missing = c.required.filter((fact) => !stated(lesson, fact)).map((fact) => fact[0]);
-  const forbidden = claims(lesson, c.forbidden);
-  const contradicted = claims(lesson, c.contradicts ?? [], true);
+  const { missing, forbidden, contradicted, ambiguous } = readText(c, lesson);
   const ratio = Number((words(lesson) / Math.max(1, words(memoryBody(memory)))).toFixed(2));
   const copied = copiedShare(lesson, memoryBody(memory));
-  return { missing, forbidden, contradicted, ratio, copied, good: missing.length === 0 && forbidden.length === 0 && contradicted.length === 0 && ratio <= MAX_RATIO && copied <= MAX_COPIED };
+  return { missing, forbidden, contradicted, ambiguous, ratio, copied, good: missing.length === 0 && forbidden.length === 0 && contradicted.length === 0 && ratio <= MAX_RATIO && copied <= MAX_COPIED };
+}
+
+/** The three checks of a case on a text: the facts it leaves out, the claims it makes and the actions it turns round, and the phrases that rest on a negation the rule cannot read. */
+function readText(c: Checked, text: string): { missing: string[]; forbidden: string[]; contradicted: string[]; ambiguous: string[] } {
+  const facts = c.required.map((fact) => readStated(text, fact));
+  const claimed = readClaims(text, c.forbidden);
+  const turned = readClaims(text, c.contradicts ?? [], true);
+  return {
+    missing: c.required.filter((_, i) => !facts[i].stated).map((fact) => fact[0]),
+    forbidden: claimed.claims,
+    contradicted: turned.claims,
+    ambiguous: [...new Set([...facts.flatMap((f) => (f.ambiguous === undefined ? [] : [f.ambiguous])), ...claimed.ambiguous, ...turned.ambiguous])],
+  };
 }
 
 // ---- Scoring an update ------------------------------------------------------------------------------------------
@@ -355,10 +483,10 @@ export function diffBody(existing: string, updated: string): { dropped: string[]
  * Score the body of an updated lesson against a lesson-update case and its memory: the lines it kept, the facts it added, the claims it made,
  * what it contradicts, and how much of the memory the added lines repeat word for word.
  */
-export function checkUpdate(c: Checked, existingBody: string, updatedBody: string, memory: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[]; contradicted: string[]; copied: number } {
+export function checkUpdate(c: Checked, existingBody: string, updatedBody: string, memory: string): { dropped: string[]; added: string[]; missing: string[]; forbidden: string[]; contradicted: string[]; ambiguous: string[]; copied: number } {
   const { dropped, added } = diffBody(existingBody, updatedBody);
   const text = added.join("\n");
-  return { dropped, added, missing: c.required.filter((fact) => !stated(text, fact)).map((fact) => fact[0]), forbidden: claims(text, c.forbidden), contradicted: claims(text, c.contradicts ?? [], true), copied: copiedShare(text, memoryBody(memory)) };
+  return { dropped, added, ...readText(c, text), copied: copiedShare(text, memoryBody(memory)) };
 }
 
 /** The lesson's body, without its frontmatter. */
@@ -450,6 +578,8 @@ export interface Row {
   forbidden: string[];
   /** The contradicting phrases the lesson (or the added lines of an update) asserts: the ones that turn the memory's action round. */
   contradicted: string[];
+  /** The phrases of the case that the lesson (or the added lines of an update) holds only behind a negation the shared rule cannot read, or states only by one. The verdict is as the word order has it: read the lesson (see `Check`). Rows of a run before this check have no list. */
+  ambiguous: string[];
   ratio: number | null;
   /** The share of the memory's words that the lesson (or the added lines of an update) repeats word for word. Absent where the check did not run: a case that expects none, a lesson that was never proposed. */
   copied?: number;
@@ -491,7 +621,7 @@ export interface Raw {
 }
 
 export function errorRow(c: Case, message: string, seconds: number, timedOut = false): Row {
-  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ratio: null, served: [], calls: null, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
+  return { id: c.id, class: c.class, expect: c.expect, verdict: "error", outcome: "error", detail: message, lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ambiguous: [], ratio: null, served: [], calls: null, seconds, error: message, ...(timedOut ? { timed_out: true as const } : {}) };
 }
 
 /** The model names the endpoint reported for the calls in `akm improve`'s result. */
@@ -539,7 +669,7 @@ function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "o
     checks.new_facts = r.missing.length === 0;
     checks.no_extra_claims = r.forbidden.length === 0 && r.contradicted.length === 0;
     checks.not_copied = r.copied <= MAX_COPIED;
-    extra = { missing: r.missing, forbidden: r.forbidden, contradicted: r.contradicted, added: r.added, copied: r.copied };
+    extra = { missing: r.missing, forbidden: r.forbidden, contradicted: r.contradicted, ambiguous: r.ambiguous, added: r.added, copied: r.copied };
   }
   const shown = target ?? updates[0] ?? run.proposals[0];
   const detail = [shown.gate ?? shown.status, shown.reason ?? ""].filter(Boolean).join(": ");
@@ -548,7 +678,7 @@ function scoreUpdate(c: LoadedCase, run: CaseRun, base: Omit<Row, "verdict" | "o
 }
 
 function scoreRun(c: LoadedCase, run: CaseRun): Row {
-  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), calls: modelCalls(run.improve), lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ratio: null };
+  const base = { id: c.id, class: c.class, expect: c.expect, seconds: run.seconds, served: servedModels(run.improve), calls: modelCalls(run.improve), lesson: null, status: null, gate: null, scores: null, checks: null, added: null, rejected_lesson: null, missing: [], forbidden: [], contradicted: [], ambiguous: [], ratio: null };
   const proposal = run.proposals[0];
   if (proposal && c.expect === "update") return scoreUpdate(c, run, base);
   if (proposal) {
@@ -557,7 +687,7 @@ function scoreRun(c: LoadedCase, run: CaseRun): Row {
     const update = run.proposals.some((p) => p.update);
     const check = checkLesson(c, lesson, c.memory);
     const verdict: Verdict = c.expect === "none" ? "wrong" : update ? "missed" : check.good ? "good" : "bad";
-    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, contradicted: check.contradicted, ratio: check.ratio, copied: check.copied } : {};
+    const ours = c.expect === "lesson" && !update ? { missing: check.missing, forbidden: check.forbidden, contradicted: check.contradicted, ambiguous: check.ambiguous, ratio: check.ratio, copied: check.copied } : {};
     const action = distillAction(run.improve)?.result;
     const reason = proposal.reason ?? (action?.outcome === "review_needed" && typeof action.reason === "string" ? action.reason : "");
     const detail = [proposal.gate ?? proposal.status, reason].filter(Boolean).join(": ");
@@ -584,12 +714,12 @@ export function makeRow(c: LoadedCase, raw: Raw): Row {
 const ratio = (n: number, of: number): number | null => (of === 0 ? null : Number((n / of).toFixed(4)));
 
 export interface Metrics {
-  /** Cases that expect a lesson: how many got a good one. */
-  good_lessons: { n: number; good: number; rate: number | null };
+  /** Cases that expect a lesson: how many got a good one, and in how many the lesson rests on a negation the shared rule cannot read (`ambiguous`: read those, they may be good or bad the other way). */
+  good_lessons: { n: number; good: number; rate: number | null; ambiguous: number };
   /** Cases that expect none: how many got a lesson anyway. */
   wrong_lessons: { n: number; wrong: number; rate: number | null };
-  /** Cases that expect an update to a lesson the library holds: how many got the right one, and how many passed each check. */
-  lesson_updates: { n: number; right: number; rate: number | null; checks: Record<keyof UpdateChecks, number> };
+  /** Cases that expect an update to a lesson the library holds: how many got the right one, how many passed each check, and in how many the added lines rest on a negation the shared rule cannot read (`ambiguous`). */
+  lesson_updates: { n: number; right: number; rate: number | null; ambiguous: number; checks: Record<keyof UpdateChecks, number> };
   by_class: Record<string, { n: number; good?: number; wrong?: number; right?: number; rate: number | null }>;
   /** What distill did, for the cases that expect a lesson, those that expect none and those that expect an update. */
   outcomes: Record<Expect, Record<Outcome, number>>;
@@ -597,13 +727,14 @@ export interface Metrics {
   bad_by: { missing_fact: number; forbidden_claim: number; contradiction: number; too_long: number; copied: number };
 }
 
-/** The numbers the eval reports, over the cases that ran without an error. */
+/** The numbers the eval reports, over the cases that ran without an error. A row stored by version 1 of the scorer has no `ambiguous`. */
 export function metrics(rows: Row[]): Metrics {
   const scored = rows.filter((r) => r.verdict !== "error");
   const count = (rs: Row[], v: Verdict) => rs.filter((r) => r.verdict === v).length;
   const lessons = scored.filter((r) => r.expect === "lesson");
   const none = scored.filter((r) => r.expect === "none");
   const updates = scored.filter((r) => r.expect === "update");
+  const unsure = (rs: Row[]) => rs.filter((r) => (r.ambiguous ?? []).length > 0).length;
   const counts = (): Record<Outcome, number> => ({ lesson: 0, update: 0, skipped: 0, rejected: 0, invalid: 0, error: 0 });
   const outcomes: Metrics["outcomes"] = { lesson: counts(), none: counts(), update: counts() };
   for (const r of rows) outcomes[r.expect][r.outcome]++;
@@ -615,12 +746,13 @@ export function metrics(rows: Row[]): Metrics {
   }
   const bad = lessons.filter((r) => r.verdict === "bad");
   return {
-    good_lessons: { n: lessons.length, good: count(lessons, "good"), rate: ratio(count(lessons, "good"), lessons.length) },
+    good_lessons: { n: lessons.length, good: count(lessons, "good"), rate: ratio(count(lessons, "good"), lessons.length), ambiguous: unsure(lessons) },
     wrong_lessons: { n: none.length, wrong: count(none, "wrong"), rate: ratio(count(none, "wrong"), none.length) },
     lesson_updates: {
       n: updates.length,
       right: count(updates, "right"),
       rate: ratio(count(updates, "right"), updates.length),
+      ambiguous: unsure(updates),
       checks: Object.fromEntries(UPDATE_CHECKS.map((k) => [k, updates.filter((r) => r.checks?.[k] === true).length])) as Record<keyof UpdateChecks, number>,
     },
     by_class,
