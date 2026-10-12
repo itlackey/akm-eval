@@ -1,5 +1,7 @@
 // A chat request to any OpenAI-compatible endpoint, with retries for a busy or dropped connection.
 
+import { completionsUrl } from "../../../lib/akm/akm.ts";
+
 export interface Endpoint {
   baseUrl: string;
   apiKey: string;
@@ -33,11 +35,6 @@ export const CHAT_TIMEOUT_MS = 900_000;
 /** The temperature of every request, the benchmark's own for the model and the judge. run.ts records it in summary.json. */
 export const TEMPERATURE = 0;
 
-export function chatUrl(baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
-}
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One user message in, the reply text out. Throws when the request fails for good. */
@@ -58,7 +55,7 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
     let failure: string;
     let retryable: boolean;
     try {
-      const response = await fetch(chatUrl(endpoint.baseUrl), { method: "POST", headers, body, signal: AbortSignal.timeout(timeoutMs) });
+      const response = await fetch(completionsUrl(endpoint.baseUrl), { method: "POST", headers, body, signal: AbortSignal.timeout(timeoutMs) });
       const raw = await response.text();
       if (response.ok) {
         const reply = JSON.parse(raw) as {
