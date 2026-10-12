@@ -41,13 +41,12 @@ a config or to reach a verdict. A summary is a result only when it says status "
                    filters almost nothing. Read X from the noise floor that confirm prints)
   --force          run rows again that a stage already ran, though nothing they were made from has changed. A stage skips a row only when it
                    exited 0, its results are still there, and its arguments, the bytes of its --config-patch and --cases, the corpus it
-                   reads (the folder of a custom corpus with its corpus.json; the cases of an eval with a measurement count by what
-                   they present to akm and not by their labels, so a relabelled case is not run again), the model settings (MODEL_NAME,
+                   reads (the folder of a custom corpus; in most evals the cases count by what they present to akm and not by their
+                   labels, so a relabelled case is not run again), the model settings (MODEL_NAME,
                    MODEL_BASE_URL and JUDGE_BASE_URL each whole with its path, JUDGE_MODEL, models.json,
                    and OPENAI_BASE_URL for a Harbor eval), its akm (the command, its build and uncommitted changes, and the
-                   version it prints) and the eval's code are the same as when it ran. The code of an eval with a measurement is its
-                   collector (a scorer fix does not run it again: results scored by different scorers are scored again when they are
-                   compared), else this repository's code (HEAD and the diff of tracked changes)
+                   version it prints) and the eval's version (src/measurement.ts) are the same as when it ran. A scorer fix does not
+                   run a row again: results are scored again when they are compared
   --dry-run        print what a stage would run`;
 
 function loadState(file: string, m: Matrix): State {

@@ -3,9 +3,8 @@
 // measurement.ts and lib/manifest.ts): the akm config it writes, the commands it runs, the files it plants and what it records of the night. The scoring is
 // score.ts.
 //
-// A change to this file, or to the lib/ files measurement.ts lists with it, changes what akm is asked or what is recorded of its answer. Raw outputs from
-// before the change are no longer comparable with raw outputs after it. It is a measurement change: bump the collector in MEASUREMENT.lock
-// (scripts/measurement/run bump nightly collector --reason "...") in the same change.
+// A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
+// measurement.ts by hand.
 
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

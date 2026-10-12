@@ -1,14 +1,14 @@
-// What the reflect eval declares about its own measurement: which files collect, which files score, and how a stored case is scored
-// again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the reflect eval declares about its own measurement: its version, and how a stored case is scored
+// again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { assetsSha256, parseCases } from "./lib.ts";
+import { parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /** The kind of corpus that the names a run used before the corpora were renamed stand for. reflect never had an own corpus. */
@@ -33,25 +33,11 @@ export function casesFolder(root: string, summary: Record<string, any>): string 
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandbox and the akm config this eval builds, the commands it runs,
-  // and the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/reflect/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns the raw output of a case into a row and the rows into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
-  scorer: ["evals/reflect/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const file = join(casesFolder(root, summary), "cases.jsonl");
     return parseCases(readFileSync(file, "utf8"), file);
-  },
-  legacyProblem: (root, summary) => {
-    let dir: string;
-    try {
-      dir = casesFolder(root, summary);
-    } catch (e) {
-      return (e as Error).message;
-    }
-    if (summary.retrieval_queries != null) return "it recorded searches for the notes (--retrieval-queries), which a row from before the manifest does not keep";
-    if (!existsSync(join(dir, "cases.jsonl")) || summary.assets_sha256 !== assetsSha256(dir)) return `it read other cases than the ones in ${relative(root, dir)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
-    return undefined;
   },
   caseId: (c) => c.id,
   // The note goes into the bundle at its path, the feedback is recorded against it, and the searches the run records (--retrieval-queries) are

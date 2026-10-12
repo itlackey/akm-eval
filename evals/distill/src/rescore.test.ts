@@ -1,11 +1,11 @@
-// scripts/rescore on distill: a run is built from the golden raw outputs (one for each case), scored with the eval's own scorer and written as a
+// scripts/rescore on distill: a run is built from the raw outputs in fixtures/ (one for each case), scored with the eval's own scorer and written as a
 // results folder, and then scored again. A run that an older scorer scored is the same run with the rows that scorer gave and its manifest.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type RunManifest, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, nextVersion, readManifest } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { assetsSha256, distillConfig, loadCases } from "./lib.ts";
@@ -14,25 +14,25 @@ import type { LoadedCase, Raw, Row } from "./score.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const PUBLIC = join(ROOT, "evals", "distill", "assets");
-const GOLDEN = join(ROOT, "evals", "distill", "golden");
+const FIXTURES = join(ROOT, "evals", "distill", "fixtures");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const GOLDEN_RAW: { case: string; note: string; raw: Record<string, unknown> }[] = jsonl(join(GOLDEN, "raw.jsonl"));
-const CASES: LoadedCase[] = loadCases(PUBLIC).filter((c) => GOLDEN_RAW.some((l) => l.case === c.id));
+const FIXTURE_RAW: { case: string; note: string; raw: Record<string, unknown> }[] = jsonl(join(FIXTURES, "raw.jsonl"));
+const CASES: LoadedCase[] = loadCases(PUBLIC).filter((c) => FIXTURE_RAW.some((l) => l.case === c.id));
 /** The scorer that scored a run before a fix: another version than the lock's, and another digest. */
-const STALE = { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "c".repeat(64) };
-const OTHER_COLLECTOR = { version: nextVersion(lockedParts(MEASUREMENT).collector.version), sha256: "d".repeat(64) };
+const STALE = { version: "9.9", sha256: "c".repeat(64) };
+const OTHER_COLLECTOR = { version: "9.9", sha256: "d".repeat(64) };
 const CONFIG = distillConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 /** The raw output the golden file holds for a case under this note, as the collector hands it to the scorer. */
 export function rawFor(id: string, note: string): Raw {
-  const line = GOLDEN_RAW.find((l) => l.case === id && l.note === note);
+  const line = FIXTURE_RAW.find((l) => l.case === id && l.note === note);
   if (!line) throw new Error(`the golden file has no ${JSON.stringify(note)} for ${id}`);
   const read = MEASUREMENT.rawOf({ id, ...line.raw });
   if ("missing" in read) throw new Error(read.missing.join());
   return read.raw;
 }
 /** The first raw output of each case. */
-const FIRST = (c: LoadedCase): Raw => rawFor(c.id, (GOLDEN_RAW.find((l) => l.case === c.id) as { note: string }).note);
+const FIRST = (c: LoadedCase): Raw => rawFor(c.id, (FIXTURE_RAW.find((l) => l.case === c.id) as { note: string }).note);
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -52,12 +52,11 @@ interface Spec {
   summary?: Record<string, unknown>;
 }
 
-/** A results folder of the golden cases as harness-v3 writes it. A `manifest` that returns undefined leaves the summary without one: a legacy run. */
+/** A results folder of the golden cases as harness-v3 writes it. */
 export function run(spec: Spec = {}): string {
   const scored = CASES.map((c) => MEASUREMENT.score(c, (spec.raw ?? FIRST)(c)));
   const base = buildManifest({
     measurement: MEASUREMENT,
-    parts: lockedParts(MEASUREMENT),
     corpus: "public",
     cases: caseDigests(MEASUREMENT, CASES),
     akm: { version: "0.9.99-test", bin: "akm" },
@@ -70,8 +69,6 @@ export function run(spec: Spec = {}): string {
   const summary: Record<string, unknown> = {
     eval: "distill",
     corpus: "public",
-    corpus_kind: "public",
-    corpus_private: false,
     corpus_folder: null,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
@@ -110,12 +107,12 @@ describe("rescoring a distill run", () => {
     expect(out).toBe(`${dir}-rescored`);
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const s = summaryOf(out);
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_run: CASES.length, metrics: o.metrics, served_models: o.served_models, n_errored: o.n_errored, corpus: "public" });
     expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: o.manifest.scorer, dropped: [] });
+    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
     expect(readManifest(s).kind).toBe("manifest");
   });
 
@@ -124,7 +121,6 @@ describe("rescoring a distill run", () => {
     const { out } = rescoreFolder(dir);
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
-    expect(now.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(now.collector).toEqual(OTHER_COLLECTOR);
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
@@ -142,17 +138,16 @@ describe("rescoring a distill run", () => {
     expect((summaryOf(out).manifest as RunManifest).completion.errored).toEqual(["lesson-01", "lesson-02"]);
   });
 
-  test("a run from before the manifest, whose rows hold no raw output, is refused and the rows' missing fields are named", () => {
+  test("a run whose rows hold no raw output is refused and the rows' missing fields are named", () => {
     const rows = (all: Row[]) => all.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "improve" && k !== "proposals")));
-    const legacy = run({ manifest: () => undefined, rows });
-    expect(readManifest(summaryOf(legacy)).kind).toBe("legacy");
-    expect(() => rescoreFolder(legacy)).toThrow(/cannot be scored again: its rows lack the raw output the distill scorer reads: improve \(\d+ rows?: [a-z0-9-]+.*\); proposals \(\d+ rows?:/);
-    expect(readdirSync(join(legacy, ".."))).toEqual(["2026-10-12-golden"]); // and writes nothing
+    const thin = run({ rows });
+    expect(() => rescoreFolder(thin)).toThrow(/cannot be scored again: its rows lack the raw output the distill scorer reads: improve \(\d+ rows?: [a-z0-9-]+.*\); proposals \(\d+ rows?:/);
+    expect(readdirSync(join(thin, ".."))).toEqual(["2026-10-12-golden"]); // and writes nothing
   });
 
   test("a folder that is not a run, and a run on a custom corpus whose folder was not recorded, are refused with what to do", () => {
     expect(() => rescoreFolder(tmp())).toThrow(RescoreError);
-    const custom = run({ summary: { corpus: "custom", corpus_kind: "own", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
+    const custom = run({ summary: { corpus: "custom", corpus_folder: null }, manifest: (m) => ({ ...m, corpus: "custom" }) });
     expect(() => rescoreFolder(custom)).toThrow(/custom corpus outside the repository.*--cases DIR/);
   });
 });
@@ -188,7 +183,6 @@ describe("the memory pasted back (#55)", () => {
     expect(summaryOf(`${dir}-rescored`).metrics).toEqual(metrics(again));
     expect(metrics(again).good_lessons.good).toBe(metrics(stored).good_lessons.good - 1);
     expect(metrics(again).lesson_updates.right).toBe(metrics(stored).lesson_updates.right - 1);
-    expect(summaryOf(`${dir}-rescored`).manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
   });
 });
 
@@ -238,7 +232,6 @@ describe("a run on a custom corpus (#47)", () => {
     cpSync(join(ROOT, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(ROOT, "evals", "distill", "src"), join(tree, "evals", "distill", "src"), { recursive: true, filter: keep });
     cpSync(PUBLIC, join(tree, "evals", "distill", "assets"), { recursive: true });
-    cpSync(join(ROOT, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     cpSync(PUBLIC, join(tree, OWN), { recursive: true });
     const file = join(tree, OWN, "cases.json");
     const cases = JSON.parse(readFileSync(file, "utf8"));
@@ -248,7 +241,7 @@ describe("a run on a custom corpus (#47)", () => {
   }
   /** A stored run on the custom corpus, with the folder the summary records. */
   const stored = (folder: string | null) =>
-    readStored(run({ summary: { corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: folder }, manifest: (m) => ({ ...m, corpus: "custom" }) }));
+    readStored(run({ summary: { corpus: "custom", corpus_folder: folder }, manifest: (m) => ({ ...m, corpus: "custom" }) }));
   const verdict = (rows: Record<string, any>[], id: string) => rows.find((r) => r.id === id)?.verdict;
 
   test("is scored against the cases in the corpus_folder the summary records, from the repository root", () => {
@@ -326,7 +319,6 @@ describe("a negation over a verb the shared rule does not list (#45)", () => {
     expect(after.good_lessons).toEqual({ ...before.good_lessons, ambiguous: 1 });
     expect(after.lesson_updates).toEqual({ ...before.lesson_updates, ambiguous: 0 });
     expect({ ...after, good_lessons: null, lesson_updates: null }).toEqual({ ...before, good_lessons: null, lesson_updates: null });
-    expect(summaryOf(out).manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(summaryOf(out).manifest.rescored_from.scorer).toEqual(STALE);
   });
 

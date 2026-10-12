@@ -1,13 +1,13 @@
-// What the retrieval eval declares about its own measurement: which files collect, which files score, and how a stored query is scored
-// again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the retrieval eval declares about its own measurement: its version, and how a stored query is scored
+// again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
-import { sha256File, sha256Json } from "../../../lib/provenance.ts";
+import { sha256Json } from "../../../lib/provenance.ts";
 import { NAME } from "./collect.ts";
 import { casesOf, parseQrels, parseQueries } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarizeRows } from "./score.ts";
@@ -44,11 +44,8 @@ const inputOf = (c: Case, library?: unknown): unknown => ({ query: c.query, libr
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: how a library is laid out and indexed for akm, the config of the sandbox,
-  // the commands that are run, and the lib/akm files that run akm and keep an index between runs.
-  collector: ["evals/retrieval/src/collect.ts", "evals/retrieval/src/akm.ts", "lib/akm/akm.ts", "lib/akm/index-cache.ts", "lib/cli.ts"],
-  // What turns the results of a query into a row and the rows into metrics. The labels are the qrels, digested per case.
-  scorer: ["evals/retrieval/src/score.ts", "lib/ir.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));
@@ -56,17 +53,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     const made = summary.manifest?.cases;
     if (made === null || typeof made !== "object") return cases;
     return cases.filter((c) => !Object.hasOwn(made, c.id) || made[c.id]?.input_sha256 === sha256Json(inputOf(c, libraryOf(summary))));
-  },
-  legacyProblem: (root, summary) => {
-    let queries: string;
-    try {
-      queries = join(setFolder(root, summary), "queries.jsonl");
-    } catch (e) {
-      return (e as Error).message;
-    }
-    if (!existsSync(queries)) return `${relative(root, queries)} is missing`;
-    if (summary.assets?.queries_sha256 !== sha256File(queries)) return `it read other queries than the ones in ${relative(root, queries)} now (queries_sha256 is ${summary.assets?.queries_sha256 ?? "not recorded"})`;
-    return undefined;
   },
   caseId: (c) => c.id,
   input: inputOf,

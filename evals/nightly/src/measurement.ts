@@ -1,7 +1,7 @@
-// What the nightly eval declares about its own measurement: which files collect, which files score, and how a stored night is scored again.
-// lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the nightly eval declares about its own measurement: its version, and how a stored night is scored again.
+// lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case digests
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case digests
 // of a run, and the scoring itself is in score.ts. The night is one run of many items: each item is a case, scored from its own files, proposals
 // and actions and from the part of the night that is the same for every item.
 
@@ -27,12 +27,8 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<Planted, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the sandbox and the akm config this eval builds, the commands of the night, the
-  // files it plants, and the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/nightly/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns the raw output of an item into a row and the rows into metrics. It reuses the checks of reflect (evals/reflect/src/score.ts, listed so that
-  // the digest says so) and those of distill (evals/distill/src/score.ts). The labels are the items (assets/items.jsonl).
-  scorer: ["evals/nightly/src/score.ts", "evals/reflect/src/score.ts", "evals/distill/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const night = loadNight(assetsOf(root, summary));
     return planted(night.items, night.files);

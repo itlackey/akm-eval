@@ -1,7 +1,7 @@
-// What the longmemeval benchmark declares about its own measurement: which files collect, which files score, and how a stored question is
-// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the longmemeval benchmark declares about its own measurement: its version, and how a stored question is
+// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
 import { existsSync } from "node:fs";
@@ -14,11 +14,8 @@ import { type Case, type Raw, type Row, errored, isAbstention, makeRow, rawOf, s
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm, the model and the judge are asked and what is kept of their answers: the sandbox and the akm config, the commands,
-  // the reader and judge prompts, the chat request, and the lib/ files that run akm.
-  collector: ["benchmarks/longmemeval/src/collect.ts", "lib/akm/akm.ts"],
-  // What turns the raw output of a question into a row and the rows into metrics. The labels are the questions (the dataset), digested per case.
-  scorer: ["benchmarks/longmemeval/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     // The public questions are fetched into the benchmark's assets. A custom corpus is in corpus_folder (scripts/rescore sets it from --cases when the
     // run could not record it), and a run from before the corpora were renamed (`private`) has the rewrite where generate-assets puts it.
@@ -35,7 +32,6 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
     if (!existsSync(file)) throw new Error(`${relative(root, file)} is missing. A public corpus is fetched by a run of benchmarks/${NAME}/run; a custom one is made by ./generate-assets --only ${NAME}`);
     return loadQuestions(file);
   },
-  legacyProblem: () => "its rows name the question as `question_id` and do not keep the raw output in the fields the scorer reads, so they cannot be paired with the questions here",
   caseId: (q) => q.question_id,
   // Everything the collector shows the model, the judge and akm: the question and its date, the sessions (as the reader reads them), and the
   // key the judge compares the answer with. The judge prompt depends on the type, and on the id (an abstention question).

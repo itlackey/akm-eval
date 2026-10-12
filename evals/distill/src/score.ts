@@ -1,10 +1,6 @@
 // The scorer of the distill eval: the checks that turn what distill queued for a memory into a verdict, and the verdicts into metrics. It
-// is the SCORER part of the eval's measurement (see measurement.ts and lib/manifest.ts): pure, deterministic, and it needs no akm. The
-// collector (collect.ts) builds each row by calling `makeRow` with the raw output it got, and scripts/rescore calls the same function with
-// the raw output it reads back from a stored row, so a fix to a check scores every stored run again.
-//
-// A change to this file, or to lib/negation.ts, changes what the eval scores. It is a measurement change: bump the scorer in
-// MEASUREMENT.lock (scripts/measurement/run bump distill scorer --reason "...") and update the golden files (golden/) in the same change.
+// is pure and needs no akm. The collector (collect.ts) builds each row by calling `makeRow` with the raw output it got, and scripts/rescore
+// calls the same function with the raw output it reads back from a stored row, so a fix to a check scores every stored run again.
 // evals/nightly scores its lessons with `checkLesson` from here.
 
 import { FILLERS, type Negation, negations, reaches } from "../../../lib/negation.ts";

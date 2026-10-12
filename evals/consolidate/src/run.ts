@@ -10,8 +10,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
@@ -19,7 +19,7 @@ import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { INPUT_FILES, RELATIONS, parseCases, selectCases } from "./cases.ts";
 import { type CollectContext, NAME, POOL_STRATEGY, type PoolContext, RATE_LIMIT_TRIES, STRATEGY, collectPool, effectiveConfig, runCase } from "./collect.ts";
-import { GENERATOR_CODE, type RunInputs, assetsDigest, generatorSha256, privateAssetsProblem, runInputs } from "./inputs.ts";
+import { type RunInputs, privateAssetsProblem, runInputs } from "./inputs.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { loadPool, poolCases, poolFiles } from "./pool.ts";
 import { type PoolMetrics, type PoolRaw, type PoolRow, makePoolRow, poolSummarize } from "./pool-score.ts";
@@ -42,8 +42,7 @@ Runs akm's consolidate on pairs of notes, with the model in MODEL_BASE_URL, MODE
 engine, and counts the retirements that lose a claim. Settings come from .env at the repository root.
 
 ${corpusUsage}
-            The default custom corpus is private/consolidate/assets, made by ./generate-assets; the run stops if it is missing or was
-            made from other public cases, or by another generator, than the ones in this checkout.
+            The default custom corpus is private/consolidate/assets, made by ./generate-assets; the run stops if it is missing.
   --limit   run N cases, taking the first of each relation in turn
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -59,15 +58,13 @@ ${akmUsage}
 
 Written for akm 0.9.26. akm is on PATH, or in AKM_BIN.`;
 
-/** What the summary of a run records of its corpus: public or custom, the kind, whether it is private, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
+/** What the summary of a run records of its corpus: public or custom, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
 interface CorpusFields {
   corpus: "public" | "custom";
-  corpus_kind: string;
-  corpus_private: boolean;
   corpus_folder: string | null;
 }
 
-export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ ...corpusRecord(c), corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null }) as CorpusFields;
+export const corpusFields = (c: ResolvedCorpus): CorpusFields => ({ corpus: c.name, corpus_folder: c.name === "custom" ? corpusFolderOf(c.folder) : null });
 
 interface Summary extends RunInputs, CorpusFields {
   eval: string;
@@ -104,7 +101,7 @@ interface Summary extends RunInputs, CorpusFields {
   n_paired: number;
   served_models: Record<string, number>; // the model names the endpoint reported, with the calls each answered
   metrics: ReturnType<typeof metrics>;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -160,7 +157,6 @@ function printSideBySide(a: Summary, b: Summary): void {
 type RunContext = CollectContext & { version: string; label: string; limit?: number };
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, resultsParent = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results")): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const all = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"), join(assets, "cases.jsonl"));
   const cases = selectCases(all, ctx.limit);
@@ -209,7 +205,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
         : null;
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const embedder = ctx.embedder ?? "deterministic";
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const build = akmBuild();
   const summary: Summary = {
     eval: NAME,
@@ -231,7 +227,6 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     ...counts,
     manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       cases: caseDigests(MEASUREMENT, cases),
       akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -255,8 +250,6 @@ interface PoolSummary extends RunInputs {
   eval: string;
   mode: "pool";
   corpus: "public";
-  corpus_kind: "public";
-  corpus_private: false;
   /** The pool is the committed one, so there is no folder to record. */
   corpus_folder: null;
   label: string;
@@ -292,7 +285,7 @@ interface PoolSummary extends RunInputs {
   served_models: Record<string, number>;
   metrics: PoolMetrics | null;
   error?: string;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -329,7 +322,6 @@ function printPool(s: PoolSummary): void {
  * sequence, and the calls the endpoint turned away show in `calls.failures`.
  */
 export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), resultsParent = join(EVAL_DIR, "results"), poolDir = POOL_DIR): Promise<PoolSummary> {
-  const parts = lockedParts(MEASUREMENT);
   const config = effectiveConfig(ctx);
   const dir = makeResultsDir(resultsParent, ctx.label);
   console.log(`${NAME} --pool: ${Object.keys(pool.texts).length} notes in ${pool.clusters.length} clusters, one improve run (${ctx.overrides.strategy})`);
@@ -343,8 +335,6 @@ export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), re
     eval: NAME,
     mode: "pool",
     corpus: "public",
-    corpus_kind: "public",
-    corpus_private: false,
     corpus_folder: null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -364,7 +354,6 @@ export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), re
     ...counts,
     manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: "public",
       mode: "pool",
       cases: caseDigests(MEASUREMENT, cases),
@@ -386,7 +375,7 @@ export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), re
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; pool?: boolean; "timeout-ms"?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, pool: { type: "boolean" }, "timeout-ms": { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -398,7 +387,7 @@ async function main(): Promise<void> {
     return;
   }
   const publicAssets = join(EVAL_DIR, "assets");
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: publicAssets, fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
@@ -412,16 +401,15 @@ async function main(): Promise<void> {
 
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   const { baseUrl, name: model, hasKey } = settings;
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl", () => assetsDigest(publicAssets, INPUT_FILES), () => generatorSha256(GENERATOR_CODE)) : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
+    const problem = c.rewrite ? privateAssetsProblem(NAME, dirname(c.folder), "cases.jsonl") : existsSync(join(c.folder, "cases.jsonl")) ? null : `${c.flag}: ${join(c.folder, "cases.jsonl")} is missing. A custom corpus of consolidate is a folder with a cases.jsonl, as assets/README.md describes`;
     if (problem) fail(problem);
   }
   const label = values.label ?? slug(model) + (values.pool ? "-pool" : "");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const newSandbox = () => createSandbox(NAME, sandboxOptions(embedder)); // the config names the model key as $MODEL_API_KEY; the real embedder's model is kept in .cache/
   const probe = newSandbox();

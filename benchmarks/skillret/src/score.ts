@@ -9,8 +9,7 @@
 // places, which moves a mean by a unit in its last place on a small set. score.test.ts checks all four metrics against pytrec_eval on hand-made
 // rankings.
 //
-// A change to this file changes what the benchmark scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump skillret scorer --reason "...") and update the golden files (golden/) in the same change.
+// A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { mean } from "../../../lib/ir.ts";
 import type { Query } from "./dataset.ts";

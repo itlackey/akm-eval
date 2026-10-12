@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the LongMemEval benchmark. See README.md.
 #
-#   benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--label NAME]
+#   benchmarks/longmemeval/run [--corpus public|private|all] [--limit N] [--repeat N] [--label NAME]
 #                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

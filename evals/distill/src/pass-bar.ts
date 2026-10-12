@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { caseDigests, currentDigests, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, readManifest } from "../../../lib/manifest.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -26,19 +26,19 @@ on one corpus, and counts, for each pass bar, the good and the bad lessons that 
 A lesson is good when it passes the distill eval's checks for its case; a lesson for a case that expects none is bad.
 
 The checks read the cases, the memories and the scorer of the code here now, not the ones the run was given. So the manifest in the
-summary.json of a run must hold the scorer digest of this code and, for every case of the run, the input and the label digests of the
-case as it is now, and every case id of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
+summary.json of a run must hold, for every case of the run, the input and the label digests of the case as it is now, and every case id
+of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
 A run from before the manifest has none to compare.
 
 The judge's first score is called reusable from akm ${RENAMED_IN}, and novelty before. A run of an older akm is read with novelty as
 reusable. A run whose scores have other names, or whose akm version is not known, is refused, and the message names the release.
 
-  --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a run was scored by another
-             scorer, has cases with other inputs or labels, has no manifest, or has a case id that is gone. The report names the stored
+  --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a run has cases with other
+             inputs or labels, has no manifest, or has a case id that is gone. The report names the stored
              and the current digests, and the case ids left out.
   --cases    the folder of the cases of a custom run whose folder was outside the repository, so the summary does not record it.
 
-Prints JSON, with "inputs": for each run, the corpus folder read, the scorer digest stored and current, and what differs.
+Prints JSON, with "inputs": for each run, the corpus folder read and what differs.
 Exits 1, with a message, when no lesson of the runs could be judged.`;
 
 export type Bar = "shipped" | "with-grounding";
@@ -142,8 +142,6 @@ export interface Inputs {
   /** The akm release of the run, and the name its judge's first criterion had in the rows that were judged (null when none was). */
   akm_version: string | null;
   judge_first_criterion: "reusable" | "novelty" | null;
-  /** The digest of the scorer that scored the run (null when it has no manifest), and of the scorer here now. */
-  scorer_sha256: { stored: string | null; current: string };
   /** What a read without --rescore would have stopped on. Empty when nothing does. */
   differences: string[];
   /** The cases of the run whose input or labels are not the ones here now. */
@@ -167,9 +165,8 @@ const some = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${i
 
 /**
  * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. A lesson is good by
- * the cases, the memories and the scorer here now, so the run must have been scored by the same: its manifest holds the digest of the scorer
- * (the checks, and lib/negation.ts) and the input and label digests of each case (the input covers the memory), and they must be the ones
- * here now. A run with no manifest has nothing to compare, and every case id of the run must be in the corpus. Otherwise this throws and
+ * the cases, the memories and the checks here now, so its manifest must hold the input and label digests of each case (the input covers
+ * the memory) as they are here now. A run with no manifest has nothing to compare, and every case id of the run must be in the corpus. Otherwise this throws and
  * says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and says all of it in `inputs`.
  */
 export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; noScores: number; inputs: Inputs } {
@@ -187,15 +184,13 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const missing = ids.filter((id) => !cases.has(id));
   const present = ids.filter((id) => cases.has(id)).map((id) => cases.get(id) as LoadedCase);
 
-  const scorer = currentDigests(MEASUREMENT).scorer;
   const now = caseDigests(MEASUREMENT, present);
   const differences: string[] = [];
   const changed: string[] = [];
   if (reading.kind === "legacy") {
-    differences.push("the run has no manifest (it was made before harness-v3), so nothing says which scorer and which cases scored it");
+    differences.push("the run has no manifest (it was made before harness-v3), so nothing says which cases it was scored against");
   } else {
     const m = reading.manifest;
-    if (m.scorer.sha256 !== scorer) differences.push(`scorer.sha256 differs: the run was scored by scorer ${m.scorer.version}, ${m.scorer.sha256}, and the checks here give ${scorer}`);
     const unknown = present.filter((c) => m.cases[c.id] === undefined).map((c) => c.id);
     if (unknown.length > 0) differences.push(`the manifest of the run does not hold the case${unknown.length === 1 ? "" : "s"} ${some(unknown)}`);
     for (const c of present) {
@@ -237,7 +232,6 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     manifest: reading.kind === "manifest" ? "manifest" : "legacy",
     akm_version: version,
     judge_first_criterion: judged.length === 0 ? null : novelty ? "novelty" : "reusable",
-    scorer_sha256: { stored: reading.kind === "manifest" ? reading.manifest.scorer.sha256 : null, current: scorer },
     differences,
     changed_cases: changed,
     missing_cases: missing,

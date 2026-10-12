@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildManifest, caseDigests, completionOf, lockedParts } from "../../../lib/manifest.ts";
+import { type PartRef, buildManifest, caseDigests, completionOf } from "../../../lib/manifest.ts";
 import { engineSettings } from "../../../lib/provenance.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { type Case, type Raw, type Row, assetsSha256, reflectConfig } from "./lib.ts";
@@ -14,11 +14,11 @@ import { MEASUREMENT, casesFolder } from "./measurement.ts";
 const EVAL = join(import.meta.dir, "..");
 const REPO = join(EVAL, "..", "..");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const CASES: Case[] = jsonl(join(EVAL, "golden", "cases.jsonl"));
-const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(EVAL, "golden", "raw.jsonl"));
+const CASES: Case[] = jsonl(join(EVAL, "fixtures", "cases.jsonl"));
+const RAW: { case: string; note: string; raw: Raw }[] = jsonl(join(EVAL, "fixtures", "raw.jsonl"));
 const raw = (id: string, note: string): Raw => (RAW.find((l) => l.case === id && l.note === note) as { raw: Raw }).raw;
 /** The scorer of a run made before a fix: another digest than the one here. */
-const STALE = { version: lockedParts(MEASUREMENT).scorer.version, sha256: "c".repeat(64) };
+const STALE = { version: "0.1", sha256: "c".repeat(64) };
 const CONFIG = reflectConfig("https://gateway.example/deployment-A/v1", "the-model", true);
 
 const dirs: string[] = [];
@@ -32,12 +32,11 @@ afterEach(() => {
 });
 
 /** A results folder of `rows` for `cases`, as a run writes it: a summary with its manifest, and the rows. `summary` adds to or replaces what the summary holds, and `scorer` is the scorer the manifest says scored it. */
-function storedRun(parent: string, name: string, cases: Case[], rows: Record<string, any>[], summary: Record<string, unknown> = {}, scorer = lockedParts(MEASUREMENT).scorer): string {
+function storedRun(parent: string, name: string, cases: Case[], rows: Record<string, any>[], summary: Record<string, unknown> = {}, scorer?: PartRef): string {
   const dir = join(parent, name);
   mkdirSync(dir, { recursive: true });
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts: { ...lockedParts(MEASUREMENT), scorer },
     corpus: String(summary.corpus ?? "public"),
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: "0.9.99-test", bin: "akm" },
@@ -45,6 +44,7 @@ function storedRun(parent: string, name: string, cases: Case[], rows: Record<str
     settings: { strategy: "reflect-only" },
     completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows as Row[]),
   });
+  if (scorer) manifest.scorer = scorer; // a run from before the version was set by hand
   writeFileSync(
     join(dir, "summary.json"),
     `${JSON.stringify({ eval: "reflect", corpus: "public", label: "stored", date: "2026-10-12T09:00:00.000Z", harness_sha256: "b".repeat(64), model: "the-model", akm_version: "0.9.99-test", akm_bin: "akm", akm_build: null, akm_build_fingerprint: null, limit: null, strategy: "reflect-only", config_patch: null, config: JSON.parse(JSON.stringify(CONFIG)), engine: engineSettings(CONFIG), assets_sha256: assetsSha256(join(EVAL, "assets")), seed: null, status: "complete", aborted_reason: null, n_cases: cases.length, ...MEASUREMENT.summarize(rows as Row[]), manifest, ...summary }, null, 2)}\n`,
@@ -53,17 +53,17 @@ function storedRun(parent: string, name: string, cases: Case[], rows: Record<str
   return dir;
 }
 
-/** The golden raw outputs of the ten golden cases, each case's right answer (a defect restored, a control left alone), scored by the scorer here. */
+/** The raw outputs in fixtures/ of the ten golden cases, each case's right answer (a defect restored, a control left alone), scored by the scorer here. */
 const rightRows = (): Row[] => CASES.map((c) => MEASUREMENT.score(c, raw(c.id, c.fix ? "the model restores what the injection took away" : "the model leaves the note alone")));
 
 describe("the folder of the cases of a run", () => {
   const root = join(tmpdir(), "reflect root");
   test("is the eval's assets for the public corpus, the recorded folder for a custom one, and says so when there is none", () => {
     expect(casesFolder(root, { corpus: "public" })).toBe(join(root, "evals", "reflect", "assets"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" })).toBe(join(root, "private", "reflect", "assets"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" })).toBe(join(root, "private", "reflect", "own notes"));
-    expect(casesFolder(root, { corpus: "custom", corpus_kind: "own", corpus_folder: join(tmpdir(), "elsewhere") })).toBe(join(tmpdir(), "elsewhere")); // what --cases DIR gives
-    for (const summary of [{ corpus: "custom", corpus_kind: "own", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite", corpus_folder: null }, { corpus: "custom", corpus_kind: "rewrite" }]) {
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: "private/reflect/assets" })).toBe(join(root, "private", "reflect", "assets"));
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: "private/reflect/own notes" })).toBe(join(root, "private", "reflect", "own notes"));
+    expect(casesFolder(root, { corpus: "custom", corpus_folder: join(tmpdir(), "elsewhere") })).toBe(join(tmpdir(), "elsewhere")); // what --cases DIR gives
+    for (const summary of [{ corpus: "custom", corpus_folder: null }, { corpus: "custom" }]) {
       expect(() => casesFolder(root, summary), JSON.stringify(summary)).toThrow("its summary does not record (outside this repository, a folder is left out). scripts/rescore takes that folder with --cases DIR");
     }
   });
@@ -71,17 +71,6 @@ describe("the folder of the cases of a run", () => {
   test("is the kind's folder for a run from before the corpora were renamed, which called the seeded rewrite private, and refuses a name reflect never had", () => {
     expect(casesFolder(root, { corpus: "private" })).toBe(join(root, "private", "reflect", "assets"));
     for (const corpus of ["own", "own-feedback", "constructor", undefined]) expect(() => casesFolder(root, { corpus }), String(corpus)).toThrow("which is neither public nor custom");
-  });
-
-  test("a run from before the manifest is told apart by the cases it read, where they are", () => {
-    const tree = tmp();
-    mkdirSync(join(tree, "evals", "reflect"), { recursive: true });
-    cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
-    const digest = assetsSha256(join(tree, "evals", "reflect", "assets"));
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: digest })).toBeUndefined();
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "public", assets_sha256: "0".repeat(64) })).toContain("it read other cases than the ones in evals/reflect/assets now");
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "private", assets_sha256: digest })).toContain("it read other cases than the ones in private/reflect/assets now"); // none there
-    expect(MEASUREMENT.legacyProblem?.(tree, { corpus: "custom", corpus_folder: null })).toContain("that its summary does not record");
   });
 });
 
@@ -93,21 +82,20 @@ describe("scripts/rescore on a custom corpus", () => {
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "reflect", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "reflect", "assets"), { recursive: true });
-    cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     mkdirSync(join(tree, folder), { recursive: true });
-    cpSync(join(EVAL, "golden", "cases.jsonl"), join(tree, folder, "cases.jsonl"));
+    cpSync(join(EVAL, "fixtures", "cases.jsonl"), join(tree, folder, "cases.jsonl"));
     return tree;
   }
-  const custom = (over: Record<string, unknown>) => ({ corpus: "custom", corpus_kind: "own", corpus_private: true, ...over });
+  const custom = (over: Record<string, unknown>) => ({ corpus: "custom", ...over });
 
   test("reads the cases from the folder the summary records, from the repository root", () => {
     const tree = checkout("private/reflect/own notes");
     const dir = storedRun(tmp(), "2026-10-12-mine", CASES, rightRows(), custom({ corpus_folder: "private/reflect/own notes" }));
     const { result } = rescoreFolder(dir, { root: tree });
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(result.rows).toHaveLength(CASES.length);
     expect(result.summary.manifest.corpus).toBe("custom");
-    expect(result.summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" });
+    expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: "private/reflect/own notes" });
   });
 
   test("refuses a run whose folder was outside the repository and says to name it with --cases, then reads the cases from the folder --cases names", () => {
@@ -125,7 +113,7 @@ describe("scripts/rescore on a custom corpus", () => {
 
   test("scripts/rescore --cases DIR names a folder outside the repository, and the rescored summary does not record it", () => {
     const notes = tmp();
-    cpSync(join(EVAL, "golden", "cases.jsonl"), join(notes, "cases.jsonl"));
+    cpSync(join(EVAL, "fixtures", "cases.jsonl"), join(notes, "cases.jsonl"));
     const dir = storedRun(tmp(), "2026-10-12-mine", CASES, rightRows(), custom({ corpus_folder: null }));
     const refused = Bun.spawnSync(["bun", join(REPO, "scripts", "rescore", "src", "run.ts"), dir], { stdout: "pipe", stderr: "pipe" });
     expect(refused.exitCode).toBe(2);
@@ -166,7 +154,6 @@ describe("a run stored before the fix of #57", () => {
     expect(summary.metrics.controls).toEqual({ n: 4, correct: 4, rate: 1 });
     expect(summary.metrics.refused).toMatchObject({ judge: 1 });
     expect(stdout).toContain("1 rows differ from the stored ones: retrieval-miss-04");
-    expect(summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(summary.manifest.rescored_from.scorer).toEqual(STALE);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8")).toBe(stored);
   });

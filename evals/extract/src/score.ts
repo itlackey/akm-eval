@@ -2,9 +2,6 @@
 // is the SCORER part of the eval's measurement (see measurement.ts and lib/manifest.ts): pure, deterministic, and it needs no akm. The
 // collector (collect.ts) builds each row by calling `makeRow` with the raw output it got, and scripts/rescore calls the same function with
 // the raw output it reads back from a stored row, so a fix to a check scores every stored run again.
-//
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump extract scorer --reason "...") and update the golden files (golden/) in the same change.
 
 import { FILLERS, type Negation, chains, negations, reaches } from "../../../lib/negation.ts";
 

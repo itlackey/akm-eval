@@ -1,6 +1,6 @@
-// The root README says, eval by eval, which corpora, flags and akm it has and what its summary.json records. These tests check that
-// table against the code, so it cannot drift without a test failing: every run script's --help is run and compared with it. Nothing here
-// needs akm or Docker. bakeoff's help is Python, which only uv runs, so its three help tests are skipped on a machine without uv.
+// The root README says, eval by eval, which flags it takes, and COMPATIBILITY.md which akm it needs. These tests check both against the
+// code, so they cannot drift without a test failing: every run script's --help is run and compared with them. Nothing here needs akm or
+// Docker. A run script that starts uv has its help tests skipped on a machine without uv; none does now.
 
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -14,10 +14,10 @@ const README = read("README.md");
 const COMMON = ["--corpus", "--limit", "--label"];
 const LEFT_OUT = [...COMMON, "--help"];
 
-/** bakeoff's help is Python run by uv, which on a cold machine installs PyYAML first, from the network. */
+/** A help run by uv can install packages first, from the network. */
 const HELP_TIMEOUT_MS = 120_000;
 
-/** Does the run script start uv? Only bakeoff's does. */
+/** Does the run script start uv? */
 const needsUv = (folder: string): boolean => /\buv run\b/.test(read(`${folder}/run`));
 const HAS_UV = Bun.which("uv") !== null;
 /** The test function for a check of --help: skipped for a script that needs uv on a machine that has none. The rest of the table is still checked. */
@@ -32,15 +32,12 @@ const COMMON_RECORDED = ["model", "akm_version", "akm_bin", "akm_build", "limit"
 
 interface Row {
   folder: string;
-  corpora: string[];
   flags: string[];
-  akm: string;
-  records: string[];
 }
 
 const ticks = (cell: string): string[] => [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
 
-/** The rows of the first table of `markdown` whose header starts with `| Folder |`. A cell has no pipe in it. */
+/** The rows of the first table of `markdown` whose header starts with `| Folder |`: folder, question, flags. A cell has no pipe in it. */
 export function tableRows(markdown: string): Row[] {
   const lines = markdown.split("\n");
   const at = lines.findIndex((l) => l.startsWith("| Folder |"));
@@ -49,10 +46,21 @@ export function tableRows(markdown: string): Row[] {
   for (const line of lines.slice(at + 2)) {
     if (!line.startsWith("|")) break;
     const cells = line.split("|").slice(1, -1).map((c) => c.trim());
-    if (cells.length !== 6) throw new Error(`a row of the table has ${cells.length} cells, not 6: ${line.slice(0, 80)}`);
-    rows.push({ folder: ticks(cells[0])[0] ?? cells[0], corpora: ticks(cells[2]), flags: ticks(cells[3]), akm: cells[4], records: ticks(cells[5]) });
+    if (cells.length !== 3) throw new Error(`a row of the table has ${cells.length} cells, not 3: ${line.slice(0, 80)}`);
+    rows.push({ folder: ticks(cells[0])[0] ?? cells[0], flags: ticks(cells[2]) });
   }
   return rows;
+}
+
+/** The akm cell, the second, of each eval's row in COMPATIBILITY.md, by folder. */
+export function compatibilityAkm(markdown: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of markdown.split("\n")) {
+    if (!/^\| `(evals|benchmarks)\//.test(line)) continue;
+    const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+    out.set(ticks(cells[0])[0] ?? cells[0], cells[1] ?? "");
+  }
+  return out;
 }
 
 /** The flags a `--help` text lists: those of its synopsis (up to the first blank line) and those that start an entry of its options. */
@@ -73,6 +81,7 @@ export function helpCorpora(help: string): string[] {
 }
 
 const rows = tableRows(README);
+const AKM = compatibilityAkm(read("COMPATIBILITY.md"));
 
 /** Each run script's --help, started together, except one that needs uv when there is none. A script that prints no help is an error that says why: a uv that cannot fetch PyYAML, for one. */
 const helps = new Map(
@@ -130,28 +139,21 @@ describe("the table in the root README", () => {
         expect(flags.filter((f) => !LEFT_OUT.includes(f))).toEqual([...row.flags].sort());
       }, HELP_TIMEOUT_MS);
 
-      helpTest(row.folder)("lists the corpora that --corpus takes", async () => {
-        expect(helpCorpora(await helps.get(row.folder)!)).toEqual([...row.corpora].sort());
+      helpTest(row.folder)("takes --corpus public|custom, as the README says every run does", async () => {
+        expect(helpCorpora(await helps.get(row.folder)!)).toEqual(["custom", "public"]);
       }, HELP_TIMEOUT_MS);
 
-      helpTest(row.folder)("says 'or later' when the run stops on an older akm, with the version the help names", async () => {
+      helpTest(row.folder)("COMPATIBILITY.md says 'or later' when the run stops on an older akm, with the version the help names", async () => {
+        const akm = AKM.get(row.folder) ?? "";
         const said = /Needs akm (\S+) or later/.exec(await helps.get(row.folder)!);
         if (said) {
-          expect(row.akm).toContain(said[1]);
-          expect(row.akm).toContain("or later");
+          expect(akm).toContain(said[1]);
+          expect(akm).toContain("or later");
         } else {
-          expect(row.akm).not.toContain("or later");
+          expect(akm).not.toContain("or later");
         }
-        expect(row.akm.length).toBeGreaterThan(0);
+        expect(akm.length).toBeGreaterThan(0);
       }, HELP_TIMEOUT_MS);
-
-      test("names only summary keys that the source of the eval writes", () => {
-        const src = sourceOf(row.folder);
-        expect(src.length).toBeGreaterThan(0);
-        // A name with a slash is another eval ("as `evals/agent-ab`"), not a key.
-        const missing = row.records.filter((k) => !k.includes("/") && !writes(src, k));
-        expect(missing).toEqual([]);
-      });
     });
   }
 

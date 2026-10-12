@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
-import { buildManifest, caseDigests, lockedParts, nextVersion } from "../../../lib/manifest.ts";
+import { HARNESS_VERSION, buildManifest, caseDigests } from "../../../lib/manifest.ts";
 import { harnessSha256 } from "../../../lib/provenance.ts";
 import { STRATEGY, reflectConfig } from "./collect.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
@@ -203,13 +203,13 @@ describe("reflectEdits", () => {
     const { root, write } = repo();
     const mine = join(root, "private", "reflect", "own notes");
     write({ a: note("own a"), b: note("own b"), c: note("own c") }, mine);
-    const recorded = { corpus: "custom", corpus_kind: "own", corpus_folder: "private/reflect/own notes" };
+    const recorded = { corpus: "custom", corpus_folder: "private/reflect/own notes" };
     const { edits, inputs } = reflectEdits(runOf(root, mine, recorded), same(root));
     expect(edits.map((e) => e.source)).toEqual([note("own a"), note("own b")]);
     expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes"), differences: [] });
     // the seeded rewrite is in the folder it recorded, which is where generate puts it
     write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
-    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_kind: "rewrite", corpus_folder: "private/reflect/assets" });
+    const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_folder: "private/reflect/assets" });
     expect(reflectEdits(rewrite, same(root)).edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
     // a folder outside the repository is not recorded: the summary cannot say where the cases were
     expect(() => reflectEdits(runOf(root, mine, { ...recorded, corpus_folder: null }), same(root))).toThrow("a folder that its summary does not record");
@@ -287,7 +287,6 @@ describe("reflectEdits with a manifest", () => {
     mkdirSync(dir, { recursive: true });
     const manifest = buildManifest({
       measurement: MEASUREMENT,
-      parts: lockedParts(MEASUREMENT),
       corpus: "public",
       cases: caseDigests(MEASUREMENT, parseCases(cases.map((c) => JSON.stringify(c)).join("\n"))),
       completion: { selected: ["a", "b", "c"], scored: ["a", "b", "c"], errored: [] },
@@ -304,19 +303,18 @@ describe("reflectEdits with a manifest", () => {
     expect(() => reflectEdits(run, { root, rescore: true })).toThrow("was not run with the defect filter off");
   });
 
-  test("replays a run whose cases and scorer are the ones here, with no digest of the cases or the code in its summary", () => {
+  test("replays a run whose cases are the ones here, with no digest of the cases or the code in its summary", () => {
     const { root, cases } = repo();
     const run = runOf(root, cases);
-    const scorer = lockedParts(MEASUREMENT).scorer.sha256;
     const { edits, inputs } = reflectEdits(run, { root });
     expect(edits.map((e) => [e.id, e.label, e.source])).toEqual([["a", "good", note("a")], ["b", "bad", note("b")]]);
-    expect(inputs).toMatchObject({ mode: "stored", differences: [], missing_cases: [], manifest: { scorer: { stored: scorer, current: scorer }, cases_compared_on: "input" } });
+    expect(inputs).toMatchObject({ mode: "stored", differences: [], missing_cases: [], manifest: { cases_compared_on: "input" } });
   });
 
   test("another version of the eval's collector, or of the harness, does not stop it: a replay reads proposals, not what produced them", () => {
     const { root, cases } = repo();
-    const parts = lockedParts(MEASUREMENT);
-    const other = nextVersion(parts.collector.version);
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    const other = "9.9";
     const run = runOf(root, cases, {}, { collector: { version: other, sha256: "7".repeat(64) }, harness_version: 9 });
     expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
     expect(parts.collector.version).not.toBe(other); // the run's version is not the live one, and the replay still went ahead
@@ -331,15 +329,6 @@ describe("reflectEdits with a manifest", () => {
     const rescored = reflectEdits(run, { root, rescore: true });
     expect(rescored.edits[0]?.source).toBe(note("changed source"));
     expect(rescored.inputs).toMatchObject({ mode: "rescore", differences: [said] });
-  });
-
-  test("a run scored by another scorer than the one here stops the replay and is sent to scripts/rescore", () => {
-    const { root, cases } = repo();
-    const run = runOf(root, cases, {}, { scorer: { version: nextVersion(lockedParts(MEASUREMENT).scorer.version), sha256: "5".repeat(64) } });
-    const now = lockedParts(MEASUREMENT).scorer.sha256;
-    expect(() => reflectEdits(run, { root })).toThrow(`the scorer differs: the proposals were labelled good or bad by ${"5".repeat(64)}, the scorer here gives ${now}. Score the run again with scripts/rescore`);
-    expect(reflectEdits(run, { root, rescore: true }).inputs.manifest).toEqual({ scorer: { stored: "5".repeat(64), current: now }, cases_compared_on: "input" });
-    expect(reflectEdits(run, { root, scorer: "5".repeat(64) }).inputs.differences).toEqual([]); // the scorer the run was labelled by, given
   });
 
   test("a run that recorded searches is held to its cases' labels, which the feedback is not part of", () => {

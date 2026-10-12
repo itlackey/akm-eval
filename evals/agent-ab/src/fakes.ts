@@ -42,7 +42,6 @@ export function sandboxRepo(): string {
   const code = (rel: string) => cpSync(join(ROOT, rel), join(root, rel), { recursive: true, filter: (src) => !/\.test\.ts$|node_modules|test_.*\.py$|__pycache__/.test(src) });
   code("lib");
   code(join("evals", "agent-ab", "src"));
-  copyFileSync(join(ROOT, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock")); // a run stops without an entry for the eval
   const fixture = publicFixture();
   cpSync(join(fixture, "tasks"), join(root, "evals", "agent-ab", "tasks"), { recursive: true });
   cpSync(join(fixture, "libraries"), join(root, "evals", "agent-ab", "libraries"), { recursive: true });

@@ -9,8 +9,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { staleAssets } from "../../../evals/retrieval/src/inputs.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
   type AkmArm,
@@ -21,7 +20,6 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
-  endpointOf,
   jobRecord,
   loadRunTrials,
   parseAkm,
@@ -29,15 +27,14 @@ import {
   pinsOf,
   positive,
   preflight,
-  privacyModel,
   releaseArm,
   statusOf,
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
-import { type Parts, type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf, lockedParts } from "../../../lib/manifest.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS } from "../../../lib/models.ts";
-import { harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, collect, jobName, readLock } from "./collect.ts";
@@ -79,9 +76,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom`. */
   corpus: string;
-  /** For a custom corpus, `rewrite` (the public library rewritten from a seed, by evals/retrieval) or `own`; `public` for the public one. */
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the library from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
   corpus_folder: string | null;
   label: string;
@@ -114,8 +108,8 @@ interface Summary {
   completion: Completion;
   /** One digest over the library's digest, the pinned dataset (its digest and the digest of each selected task) and the attempts: the cases the run scored. */
   assets_sha256: string;
-  /** The model and the endpoint it was sent to: its host (scheme, host and port, null for the provider's own) and `endpoint_id`, a digest of its identity. Never the path, never a key. */
-  engine: { model: string; endpoint: string | null; endpoint_id: string | null };
+  /** The model and the host of the endpoint it was sent to (scheme, host and port, null for the provider's own). Never the path, never a key. */
+  engine: { model: string; endpoint: string | null };
   /** The Harbor job as `job` has it, with every apiKey, api_key, token and secret redacted. */
   config: Record<string, unknown>;
   /** Trials that hit a time limit, by arm. They are counted among the errors too when they got no reward. */
@@ -126,7 +120,7 @@ interface Summary {
   /** The Harbor job that ran: attempts, concurrency, setup time, the agents with their options and the datasets. */
   job: Record<string, unknown>;
   report: Report;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -165,8 +159,7 @@ export const sideBySide = (a: Pick<Summary, "corpus" | "report">, b: Pick<Summar
 
 /**
  * What a run says about itself, from the trials Harbor left in `dir`. Writes summary.json and samples.jsonl there. `arm`, `akmEnv`,
- * `packages`, `library` and `job` are what the run was made of, which the caller knows and the trials do not. `parts` are the versions
- * and digests of the collector and the scorer as they were when the run started (lockedParts), else as they are now.
+ * `packages`, `library` and `job` are what the run was made of, which the caller knows and the trials do not.
  */
 export function summarize(o: {
   corpus: ResolvedCorpus;
@@ -182,10 +175,9 @@ export function summarize(o: {
   akmEnv?: Record<string, string>;
   packages?: { file: string; sha256: string }[];
   library?: LibraryCount & { sha256: string | null };
-  /** The endpoint the model was sent to, as endpointOf records it: its host and the digest of its identity. Both null for the provider's own. */
-  endpoint?: ReturnType<typeof endpointOf>;
+  /** The host of the endpoint the model was sent to, null for the provider's own. */
+  endpoint?: string | null;
   job?: Record<string, unknown>;
-  parts?: Parts;
 }): Summary {
   const jobDir = join(o.dir, "jobs", jobName(o.corpus.name));
   const { trials, observed } = loadRunTrials(jobDir); // none when Harbor made no job: every cell is then missing, and the run is aborted
@@ -203,25 +195,24 @@ export function summarize(o: {
   const scored = scoreRows(rows);
 
   const akmFields = akmSummary(arm, akmEnv, o.packages ?? [], observed);
-  const endpoint = o.endpoint ?? { endpoint: null, endpoint_id: null };
+  const endpoint = o.endpoint ?? null;
   const { datasets: _datasets, n_attempts: _attempts, ...jobSettings } = o.job ?? {}; // the tasks and the attempts are the cases and the hint below
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts: o.parts ?? lockedParts(MEASUREMENT),
     corpus: o.corpus.name,
     // what each task presented to the agent: the task as the pinned dataset has it, and the library the akm arm seeded
     cases: caseDigests(MEASUREMENT, o.tasks.map((id) => caseOf(id, o.lock.tasks[id], o.library?.sha256))),
     akm: { version: arm.cli.version, bin: arm.bin, build: arm.build, build_fingerprint: akmFields.akm_build_fingerprint },
     config: jobSettings,
-    engines: { opencode: { model: o.model, ...endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
-    settings: { seed: o.corpus.config.seed ?? null },
+    engines: { opencode: { model: o.model, endpoint, temperature: null, enableThinking: null, timeoutMs: null } },
+    settings: { seed: o.corpus.seed },
     // attempts decide how much a task's pass rate says: a run of three is not compared with a run of one
     treatment_hints: { attempts },
     completion: casesCompletion(MEASUREMENT, o.tasks, rows),
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(o.corpus),
+    corpus: o.corpus.name,
     corpus_folder: o.corpus.name === "custom" ? corpusFolderOf(o.corpus.folder) : null,
     label: o.label,
     date: new Date().toISOString(),
@@ -233,7 +224,7 @@ export function summarize(o: {
     dataset: { name: o.lock.registry, ref: o.lock.ref, source: o.lock.source, licence: o.lock.licence, tasks_in_dataset: Object.keys(o.lock.tasks).length, tasks_run_with_another_digest: otherDigests(trials, o.lock) },
     library: { path: relative(ROOT, libraryOf(o.corpus)), assets: o.library?.assets ?? null, measured_with: o.library?.measured_with ?? null, sha256: o.library?.sha256 ?? null },
     limit: o.limit ?? null,
-    seed: o.corpus.config.seed ?? null,
+    seed: o.corpus.seed,
     n_tasks: o.tasks.length,
     attempts,
     harbor_exit: o.exit,
@@ -241,7 +232,7 @@ export function summarize(o: {
     aborted_reason,
     completion,
     assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
-    engine: { model: o.model, ...endpoint },
+    engine: { model: o.model, endpoint },
     config: redactConfig(o.job ?? {}),
     timeouts: scored.timeouts,
     n_errored: scored.n_errored,
@@ -265,7 +256,6 @@ export async function runCorpus(
   ctx: { model: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the benchmark
   const lock = readLock();
   const tasks = selectTasks(lock, ctx.limit);
   const attempts = ctx.attempts ?? DEFAULT_ATTEMPTS;
@@ -273,7 +263,7 @@ export async function runCorpus(
   const akmEnv = ctx.akmEnv ?? {};
   const dir = makeResultsDir(results, ctx.label);
   const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, env: ctx.env, arm, akmEnv });
-  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointOf(ctx.env), job: jobRecord(got.cfg, dir, ROOT), parts });
+  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
   printSummary(summary);
   if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;
@@ -282,13 +272,11 @@ export async function runCorpus(
 /** Why a corpus cannot be used, in a sentence that says what to do, or undefined when it can. */
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = relative(ROOT, libraryOf(c));
-  if (!existsSync(libraryOf(c))) return `the ${c.name} library is missing (${where}).${c.config.kind === "rewrite" ? " Make it with: ./generate-assets --only retrieval" : ""}`;
-  // The rewritten library is the retrieval eval's: it is used only when its generated.json says it was made from the public inputs as they are now.
-  return c.config.kind === "rewrite" ? staleAssets(c.folder, ROOT, relative(ROOT, c.folder)) : undefined;
+  return existsSync(libraryOf(c)) ? undefined : `the ${c.name} library is missing (${where}).${c.rewrite ? " Make it with: ./generate-assets --only retrieval" : ""}`;
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; help?: boolean };
   try {
     values = parseArgs({
       args: Bun.argv.slice(2),
@@ -304,12 +292,11 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this benchmark: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }
   // The custom library is the retrieval eval's, so it is resolved as retrieval's corpus is: private/retrieval/assets, or --cases DIR.
-  const corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), default: "rewrite", aliases: { private: ALIASES.private }, fail, warn: (line) => console.error(line.replace(/^retrieval:/, `${NAME}:`)) });
+  const corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), fail });
   const limit = positive("--limit", values.limit);
   const attempts = positive("--attempts", values.attempts) ?? DEFAULT_ATTEMPTS;
   const repeat = positive("--repeat", values.repeat);
@@ -319,9 +306,10 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env } = preflight(values, (run) => privacyError(corpora, { model: privacyModel(run) }, "library"));
+  const { model, env } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-")); // where a checkout is packed. Each run keeps a copy of the tarballs
   try {

@@ -20,8 +20,8 @@ afterAll(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-const publicCorpus: ResolvedCorpus = { name: "public", folder: join(EVAL, "assets"), config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" };
-const customCorpus = (folder: string, kind: "rewrite" | "own" = "rewrite"): ResolvedCorpus => ({ name: "custom", folder, config: kind === "rewrite" ? { kind, private: false, seed: "7", generated: "generated.json" } : { kind, private: true }, configFile: null, flag: "--corpus custom" });
+const publicCorpus: ResolvedCorpus = { name: "public", folder: join(EVAL, "assets"), rewrite: false, seed: null, flag: "--corpus public" };
+const customCorpus = (folder: string, kind: "rewrite" | "own" = "rewrite"): ResolvedCorpus => ({ name: "custom", folder, rewrite: kind === "rewrite", seed: kind === "rewrite" ? "7" : null, flag: "--corpus custom" });
 const messageOf = (f: () => unknown): string => {
   try {
     f();

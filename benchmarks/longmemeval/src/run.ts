@@ -3,7 +3,7 @@
 // answered twice by the same model, once with the whole chat history (without akm) and once with only
 // the sessions akm retrieves (with akm), and a judge grades both. See ../README.md.
 //
-//   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
+//   benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
 //                              [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
 
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -11,16 +11,17 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
+import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
-import { type EngineSetting, canonical, endpointDisplay, endpointRecord, harnessSha256, sha256File } from "../../../lib/provenance.ts";
+import { type EngineSetting, canonical, endpointHost, harnessSha256, sha256File } from "../../../lib/provenance.ts";
+import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
 import { type Context, NAME, READER_ORDER, TOP_K, collectQuestion, openSandbox, sampling } from "./collect.ts";
 import { DATA_FILE, ensureDataset, loadQuestions, readLock, sampleQuestions, type Sample } from "./dataset.ts";
 import { CHAT_TIMEOUT_MS, TEMPERATURE, type Endpoint } from "./llm.ts";
-import { digestFiles, readGenerated, treeProblem } from "./manifest.ts";
+import { digestFiles, readGenerated } from "./manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import type { Rate } from "./metrics.ts";
 import { type Row, summarize } from "./score.ts";
@@ -32,7 +33,7 @@ const HARNESS = harnessSha256(import.meta.dir);
 const DEFAULT_SAMPLE_SEED = 42;
 const GIVE_UP_AFTER = 3; // questions in a row that failed the same way, before the first one that did not
 
-const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--label NAME]
+const USAGE = `Usage: benchmarks/longmemeval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME]
                                   [--sample-seed N] [--retrieval-only] [--semantic] [--resume DIR]
                                   [--model ID] [--judge-model ID] [--akm COMMAND]
 
@@ -42,14 +43,17 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
 .env at the repository root.
 
   --corpus          public (default) fetches the pinned dataset into assets/ if it is not there. custom reads
-                    private/longmemeval/assets/, made by ./generate-assets, and refuses them when
-                    private/longmemeval/generated.json is missing or does not match the files, the public
-                    lock or the generator. all runs both and prints the two results side by side.
-  --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format, and a
-                    corpus.json. It is --corpus custom. See "Corpora" in README.md.
+                    private/longmemeval/assets/, made by ./generate-assets. all runs both and prints the two
+                    results side by side.
+  --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
+                    It is --corpus custom. See "Corpora" in README.md. The run says which model and judge it sends the
+                    chats to and asks first.
+  -y, --yes         send the chats of --cases without asking.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.
+  --repeat N        run each corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
+                    <UTC date>-<label>-repeat-summary.json beside them. Every run asks the same questions. It does not go with --resume.
   --retrieval-only  no model and no judge: ingest, search, and score what akm retrieves against the
                     sessions that hold the answer
   --semantic        search with akm's semantic search as well as its keyword index: akm embeds each question's sessions
@@ -57,7 +61,7 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     indexes them, so a question takes longer. A search that does not come back as semantic is an
                     errored call. Default: keyword search only. It is recorded in summary.json as search_mode.
   --label NAME      names the results folder: <UTC date>-<label>. Default: the model name.
-  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, collector, scorer,
+  --resume DIR      carry on a stopped run in its results folder: with the same manifest (corpus, questions, eval version,
                     model, judge and their endpoints, akm version, command, build and uncommitted changes, and config) and
                     code (harness_sha256), it asks only the questions that are not done.
                     Rows made by other code are refused, not carried on: start a new run, without --resume
@@ -71,10 +75,8 @@ type Build = ReturnType<typeof akmBuild>;
 
 interface Summary extends ReturnType<typeof summarize> {
   eval: string;
-  /** `public` or `custom`, and for a custom corpus its kind and whether it is private (see lib/corpus.ts). */
+  /** `public` or `custom` (see lib/corpus.ts). */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of the questions of a custom corpus from the repository root (corpusFolderOf), so that scripts/rescore finds them. Null for the public corpus, and for a folder outside the repository, which is never recorded: rescore takes --cases DIR for it. */
   corpus_folder: string | null;
   label: string;
@@ -89,11 +91,9 @@ interface Summary extends ReturnType<typeof summarize> {
   harness_sha256: string;
   model: string | null;
   judge_model: string | null;
-  /** Where the model and the judge are called: the host, and the digest of the endpoint's identity (see endpointRecord in lib/provenance.ts). Never the path, which can name a deployment or carry a key. Null when the run has no model. */
+  /** The host the model and the judge are called at. Never the path, which can name a deployment or carry a key. Null when the run has no model. */
   model_endpoint: string | null;
-  model_endpoint_id: string | null;
   judge_endpoint: string | null;
-  judge_endpoint_id: string | null;
   /** What every model and judge request sends: the temperature, and the most tokens each may answer with. Null when the run has no model. */
   temperature: number | null;
   max_tokens: { model: number; judge: number } | null;
@@ -121,7 +121,7 @@ interface Summary extends ReturnType<typeof summarize> {
   /** The seed of the draw of the questions (--sample-seed), a different thing from `seed`. Null when no draw was made because every question was asked. The same number is in sample.seed. */
   sample_seed: number | null;
   sample: Omit<Sample, "items">;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -176,26 +176,23 @@ function printSideBySide(a: Summary, b: Summary): void {
   for (const r of rows) console.log(`  ${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}`);
 }
 
-/** The settings of the model or the judge as the manifest keeps them: the host and the digest of the endpoint's identity, never the path. */
-const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, ...endpointRecord(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
+/** The settings of the model or the judge as the manifest keeps them: the host of the endpoint, never the path. */
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
 
 /**
  * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
- * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by the digest of its identity, so two deployments on
- * one host differ, and a key or a trailing slash does not; it is shown as its host and the start of the digest.
+ * (v1, now v2)". A resume is the same run only when none differs. An endpoint is told by its host.
  */
 export function manifestDifferences(prior: RunManifest, now: RunManifest): string[] {
   const out: string[] = [];
   const show = (x: unknown) => (x === null || x === undefined ? "none" : String(x));
-  const part = (p: { version: string; sha256: string }) => `version ${p.version}, ${p.sha256.slice(0, 12)}`;
   const note = (what: string, was: unknown, is: unknown) => {
     if (was !== is) out.push(`a different ${what} (${show(was)}, now ${show(is)})`);
   };
   note("eval", prior.eval, now.eval);
   note("corpus", prior.corpus, now.corpus);
   note("mode", prior.mode, now.mode);
-  note("collector", part(prior.collector), part(now.collector));
-  note("scorer", part(prior.scorer), part(now.scorer));
+  note("version", prior.collector.version, now.collector.version);
   note("harness version", prior.harness_version, now.harness_version);
   note("akm version", prior.akm.version, now.akm.version);
   note("akm command", prior.akm.bin, now.akm.bin);
@@ -207,9 +204,9 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   for (const role of ["model", "judge"]) {
     const was = prior.engines[role];
     const is = now.engines[role];
-    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null, endpoint_id: null }));
+    const rest = (e: EngineSetting | undefined) => (e === undefined ? null : canonical({ ...e, model: null, endpoint: null }));
     note(role, was?.model, is?.model);
-    note(`${role} endpoint`, was === undefined ? null : endpointDisplay(was), is === undefined ? null : endpointDisplay(is));
+    note(`${role} endpoint`, was?.endpoint, is?.endpoint);
     note(`${role} settings`, rest(was), rest(is));
   }
   const ids = [...new Set([...Object.keys(prior.cases), ...Object.keys(now.cases)])];
@@ -220,7 +217,7 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
 
 /**
  * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one, which its manifest says: the same
- * corpus, the questions (each by the digest of what it presents and of what it is judged by), the collector and the scorer, the model, the
+ * corpus, the questions (each by the digest of what it presents and of what it is judged by), the eval's version, the model, the
  * judge and the endpoints they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and config), and
  * harness. A question with an arm that errored is asked again. A run made by other code is refused, not continued: the summary would name
  * this run's code for rows that code did not make, and there is no mixed-version mode. A summary with no manifest or no harness_sha256 is
@@ -251,29 +248,17 @@ export function resumableRows(dir: string, now: { manifest: RunManifest; retriev
   return rows.filter((r) => r.retrieval !== null && (now.retrievalOnly || (r.without_akm?.ok === true && r.with_akm?.ok === true)));
 }
 
-/**
- * Why the custom assets in `tree` (private/longmemeval) may not be used, or undefined when generated.json vouches for them. The
- * public lock is the one in `publicAssets`.
- */
-export const privateProblem = (tree: string, publicAssets = join(EVAL_DIR, "assets"), where = relative(ROOT, tree) || tree): string | undefined => treeProblem(tree, publicAssets, where);
-
 export async function runCorpus(
   corpus: ResolvedCorpus,
   args: { limit?: number; label: string; sampleSeed: number; resume?: string },
   ctx: Context & { version: string; build?: Build },
-  folders: { results?: string; publicAssets?: string } = {},
+  folders: { results?: string } = {},
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const isPublic = corpus.name === "public";
   const parent = folders.results ?? (isPublic ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
-  // The assets of a rewrite are used only when generated.json vouches for them. Its seed is the rewrite's seed, whatever private/seed holds now.
-  let seed: string | null = null;
-  if (corpus.config.kind === "rewrite") {
-    const problem = privateProblem(dirname(assets), folders.publicAssets);
-    if (problem !== undefined) fail(problem);
-    seed = readGenerated(dirname(assets))?.seed ?? null;
-  }
+  // The seed of a rewrite is the one in its generated.json, whatever private/seed holds now.
+  const seed = corpus.rewrite ? readGenerated(dirname(assets))?.seed ?? null : null;
   const searchMode = ctx.akm.mode;
   const retrievalOnly = ctx.model === null;
   const config = ctx.akm.config();
@@ -284,7 +269,7 @@ export async function runCorpus(
     const lock = readLock(assets);
     dataset = { name: lock.dataset, source: lock.source, licence: lock.licence, revision: lock.revision, file: DATA_FILE, sha256: lock.files[DATA_FILE].sha256 };
     datasetFiles = ["ASSETS.lock", DATA_FILE];
-  } else if (corpus.config.kind === "rewrite") {
+  } else if (corpus.rewrite) {
     dataset = { ...JSON.parse(readFileSync(join(assets, "rewrite.json"), "utf8")), file: DATA_FILE };
     datasetFiles = ["rewrite.json", DATA_FILE];
   } else {
@@ -302,7 +287,6 @@ export async function runCorpus(
   const manifestOf = (completion: { selected: string[]; scored: string[]; errored: string[] }): RunManifest =>
     buildManifest({
       measurement: MEASUREMENT,
-      parts,
       corpus: corpus.name,
       mode: retrievalOnly ? "retrieval-only" : null,
       cases: digests,
@@ -329,7 +313,7 @@ export async function runCorpus(
   const save = (complete: boolean, abortedReason?: string) => {
     const summary: Summary = {
       eval: NAME,
-      ...corpusRecord(corpus),
+      corpus: corpus.name,
       corpus_folder: isPublic ? null : corpusFolderOf(assets),
       label: args.label,
       date: new Date().toISOString(),
@@ -340,10 +324,8 @@ export async function runCorpus(
       harness_sha256: HARNESS,
       model: ctx.model?.model ?? null,
       judge_model: ctx.judge?.model ?? null,
-      model_endpoint: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint : null,
-      model_endpoint_id: ctx.model ? endpointRecord(ctx.model.baseUrl).endpoint_id : null,
-      judge_endpoint: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint : null,
-      judge_endpoint_id: ctx.judge ? endpointRecord(ctx.judge.baseUrl).endpoint_id : null,
+      model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,
+      judge_endpoint: ctx.judge ? endpointHost(ctx.judge.baseUrl) : null,
       ...sampling(retrievalOnly),
       akm_version: ctx.version,
       ...build,
@@ -419,19 +401,18 @@ const toEndpoint = (m: ModelSettings): Endpoint => ({ baseUrl: m.baseUrl, model:
 /**
  * The model under test and the judge. The model is resolved first (useModel also writes it to MODEL_* in `env`), and its endpoint and
  * key are the judge's fallback: a judge with no JUDGE_BASE_URL of its own, and no models.json line, goes where the model goes, which
- * for `--model` naming a models.json line is that line's URL and not the gateway in .env. `settings` are the same two as models.json has
- * them, for the private-corpus check.
+ * for `--model` naming a models.json line is that line's URL and not the gateway in .env.
  */
-export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint; settings: { model: ModelSettings; judge: ModelSettings } } {
+export function resolveEndpoints(values: { model?: string; "judge-model"?: string }, failWith: (message: string) => never, env: Record<string, string | undefined> = process.env, entries?: Record<string, ModelEntry>): { model: Endpoint; judge: Endpoint } {
   const model = useModel(values, failWith, env, entries);
   const judge = useJudge(values, failWith, env, entries, { baseUrl: model.baseUrl, apiKey: model.apiKey });
-  return { model: toEndpoint(model), judge: toEndpoint(judge), settings: { model, judge } };
+  return { model: toEndpoint(model), judge: toEndpoint(judge) };
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; limit?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
+  let values: { model?: string; "judge-model"?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; "sample-seed"?: string; "retrieval-only"?: boolean; semantic?: boolean; resume?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...JUDGE_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, "sample-seed": { type: "string" }, "retrieval-only": { type: "boolean" }, semantic: { type: "boolean" }, resume: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`longmemeval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -441,13 +422,15 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
+  const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
+  if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
+  if (repeat !== undefined && values.resume !== undefined) fail("--resume carries on one run, so it does not go with --repeat");
   const sampleSeed = values["sample-seed"] === undefined ? DEFAULT_SAMPLE_SEED : Number(values["sample-seed"]);
   if (!Number.isInteger(sampleSeed) || sampleSeed < 0) fail("--sample-seed must be a non-negative integer");
   if (values.resume !== undefined && corpora.length > 1) fail("--resume carries on one run, so pick one corpus with --corpus public or --corpus custom");
@@ -455,29 +438,31 @@ async function main(): Promise<void> {
   const searchMode: SearchMode = values.semantic === true ? "semantic" : "keyword";
   useAkm(values, fail);
   const endpoints = retrievalOnly ? null : resolveEndpoints(values, fail);
-  // Before any sandbox, and before the first corpus runs: a corpus that is private is not sent to a model or a judge that models.json does not mark private.
-  const refusal = privacyError(corpora, { model: endpoints?.settings.model, judge: endpoints?.settings.judge }, "chats");
-  if (refusal !== undefined) fail(refusal);
   for (const c of corpora) {
     if (c.name === "public") continue;
-    const tree = dirname(c.folder);
     if (!existsSync(join(c.folder, DATA_FILE))) {
-      fail(c.config.kind === "rewrite" ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
+      fail(c.rewrite ? `the custom assets are missing (${relative(ROOT, join(c.folder, DATA_FILE))}). Make them with: ./generate-assets --only ${NAME}` : `${c.flag} needs ${DATA_FILE} in its folder, in the dataset's format`);
     }
-    // Before the first corpus runs: under --corpus all the public run takes hours, and the custom one would refuse after it.
-    const problem = c.config.kind === "rewrite" ? privateProblem(tree) : undefined;
-    if (problem !== undefined) fail(problem);
   }
   const label = values.label ?? slug(endpoints?.model.model ?? "retrieval");
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, endpoints === null ? [] : [{ role: "model", name: endpoints.model.model, baseUrl: endpoints.model.baseUrl }, { role: "judge", name: endpoints.judge.model, baseUrl: endpoints.judge.baseUrl }]);
 
   const sandbox = openSandbox(searchMode);
   try {
     const akm = new Akm(sandbox, searchMode);
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(await runCorpus(c, { limit, label, sampleSeed, resume: values.resume }, { akm, model: endpoints?.model ?? null, judge: endpoints?.judge ?? null, version }));
-    if (summaries.length === 2) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
+    for (const c of corpora) {
+      // Every run of a repeat asks the same questions of the same sandbox, which `load` empties for each question.
+      await repeatRuns(repeat, label, async (runLabel) => {
+        const summary = await runCorpus(c, { limit, label: runLabel, sampleSeed, resume: values.resume }, { akm, model: endpoints?.model ?? null, judge: endpoints?.judge ?? null, version });
+        summaries.push(summary);
+        // The summary names its folder from the repository root, and a repeat summary goes beside the folders: an absolute path says where whatever the working folder. A run with no model has none.
+        return { ...summary, model: summary.model ?? undefined, results_dir: resolve(ROOT, summary.results_dir) };
+      });
+    }
+    if (summaries.length === 2 && repeat === undefined) printSideBySide(summaries[0] as Summary, summaries[1] as Summary);
   } finally {
     removeSandbox(sandbox);
   }

@@ -1,10 +1,7 @@
 // The scorer of `consolidate --pool`: how the retirements akm proposed for a whole pool of notes are judged against the pool's labels, and how
-// the clusters' rows become metrics. It is a SCORER file of the eval's measurement (see measurement.ts), like score.ts: pure, deterministic, and
-// it needs no akm. A pool run is one `akm improve`, scored one cluster at a time: each cluster is a case. The raw output of the run is the
-// same for every cluster (`run`), and each cluster's row holds it beside its own retire proposals, so that a stored run can be scored again.
-//
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock and update the golden
-// files (golden/pool/). Nothing here may import the collector, or anything it imports.
+// the clusters' rows become metrics. It is pure and needs no akm, like score.ts. A pool run is one `akm improve`, scored one cluster at a time:
+// each cluster is a case. The raw output of the run is the same for every cluster (`run`), and each cluster's row holds it beside its own
+// retire proposals, so that a stored run can be scored again. Nothing here may import the collector.
 
 import { type PairPass, type RetireProposal, type UsageRow, nameOfRef, servedModels } from "./score.ts";
 

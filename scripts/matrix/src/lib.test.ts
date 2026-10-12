@@ -1,18 +1,20 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import { scoreQuery, summarize } from "../../../evals/retrieval/src/lib.ts";
-import { endpointOf, jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
-import { redactConfig } from "../../../lib/provenance.ts";
+import { jobConfig, jobRecord, metricsOf, releaseArm } from "../../../lib/harbor/harbor.ts";
+import { endpointHost, redactConfig } from "../../../lib/provenance.ts";
 import { buildReport } from "../../../lib/harbor/report.ts";
 import { spreadOf } from "../../../lib/repeat.ts";
 import { buildDecision, noiseFloors, noiseLine, renderMarkdown } from "./decision.ts";
 import { EVALS, EVAL_METRICS, type Measured, type Matrix, type MetricSpec, type RunRecord, type State, assess, baselineFor, compareAll, confirmJobs, corpusOf, emptyState, findResults, incomparable, incompleteReason, judge, labelOf, loadMeasured, measuredOf, metricSpread, moreErrors, parseMatrix, resultsParents, runnerFolder, runnerPath, schedule, scopeKey, screenDiffers, screenJobs, selectForConfirm, treatmentAxes, unusableReason, verdictOf } from "./lib.ts";
-import { type Axis, identityOf } from "../../compare/src/policy.ts";
+import { manifested } from "../../compare/src/fixtures/make.ts";
+import { type Axis, identityOf as identityOfManifest } from "../../compare/src/policy.ts";
 import { corpusPaths, fingerprintOf, readDotEnv, resumable } from "./fingerprint.ts";
 import { pairedOf } from "./paired.ts";
+import * as rescore from "../../rescore/src/lib.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -22,6 +24,19 @@ const tmp = (): string => {
 };
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+
+// The runs these tests write hold numbers, and rows of no real case or none: scoring them again (scripts/rescore, which a decision does
+// first) has nothing to score, so they are taken as they were scored, unless a test sets `asStored` to false. manifest.test.ts scores real runs again.
+const spies: { mockRestore(): void }[] = [];
+let asStored = true;
+beforeAll(() => {
+  const [read, score] = [rescore.readStored, rescore.rescoreRun];
+  spies.push(spyOn(rescore, "readStored").mockImplementation((dir) => (asStored && !existsSync(join(dir, "samples.jsonl")) ? { dir, summary: JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")), rows: [] } : read(dir))));
+  spies.push(spyOn(rescore, "rescoreRun").mockImplementation((stored, options) => (asStored ? { summary: stored.summary, rows: stored.rows, dropped: [], changed: [], relabelled: [] } : score(stored, options))));
+});
+afterAll(() => {
+  for (const s of spies) s.mockRestore();
 });
 
 const FILE = "/work/sweeps/x/matrix.json";
@@ -87,7 +102,7 @@ describe("parseMatrix", () => {
     const m = parse();
     expect(baselineFor(m, m.configs[0]).name).toBe("base");
     expect(baselineFor(m, m.configs[1]).name).toBe("base-pool");
-    expect(() => parse({ ...withNightly, configs: [{ name: "a", eval: "reflect", args: ["--corpus", "private"] }] })).toThrow(/no baseline/);
+    expect(() => parse({ ...withNightly, configs: [{ name: "a", eval: "reflect", args: ["--corpus", "custom"] }] })).toThrow(/no baseline/);
     expect(() => parse({ ...withNightly, baseline: [...withNightly.baseline, { name: "dup", eval: "reflect" }] })).toThrow(/matches 2 baseline rows/);
   });
 });
@@ -131,6 +146,8 @@ describe("a model and an akm build for the whole file", () => {
 // ---- fixtures: results written the way the evals write them ----------------------------------------------------------------
 
 const fixture = (name: string): any => JSON.parse(readFileSync(join(import.meta.dir, "fixtures", `${name}.json`), "utf8"));
+/** The identity of a summary written as these tests write one, with the manifest its fields stand for. */
+const identityOf = (s: Record<string, any>) => identityOfManifest(manifested(s, []));
 
 /** What a summary records of how its run was made and that it finished, so that two runs of a sweep are fully identified and complete. */
 /** The engine of IDENTIFIED with the settings of its one engine changed. */
@@ -161,7 +178,7 @@ const reflectSummary = (label: string, defects: number, controls: number, touche
 function writeRun(root: string, evalName: string, label: string, s: any): string {
   const dir = join(root, runnerFolder(evalName), evalName, "results", `2026-10-09-${label}`);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "summary.json"), JSON.stringify(s));
+  writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested(s, [])));
   return dir;
 }
 
@@ -171,7 +188,7 @@ function writeRepeat(root: string, evalName: string, label: string, runs: any[],
   const names = runs.map((s, i) => {
     const n = `2026-10-09-${label}-r${i + 1}${collection ? `-${collection}` : ""}`;
     mkdirSync(join(parent, n), { recursive: true });
-    writeFileSync(join(parent, n, "summary.json"), JSON.stringify({ ...s, label: `${label}-r${i + 1}`, ...(collection ? { collection } : {}) }));
+    writeFileSync(join(parent, n, "summary.json"), JSON.stringify(manifested({ ...s, label: `${label}-r${i + 1}`, ...(collection ? { collection } : {}) }, (samples?.[i] ?? []).map((r: any) => String(r.id)))));
     if (samples) writeFileSync(join(parent, n, "samples.jsonl"), samples[i].map((row) => `${JSON.stringify(row)}\n`).join(""));
     return n;
   });
@@ -224,7 +241,7 @@ describe("every eval's metric paths exist in a real summary", () => {
 const meas = (metrics: object, over: Partial<Measured> & { identity?: Record<string, unknown> } = {}): Measured => {
   const { identity = {}, ...rest } = over;
   const m: Measured = { scope: "", n: 3, model: "m1", akm_build: "b1", akm_version: "0.9.30", n_errored: 0, failed: null, calls: null, seconds: null, metrics, repeated: true, runs: [], ...rest };
-  const record = { ...IDENTIFIED, eval: "reflect", corpus: "public", akm_bin: "akm", model: m.model, akm_build: m.akm_build, akm_version: m.akm_version, ...(m.assets_sha256 !== undefined ? { assets_sha256: m.assets_sha256 } : {}), ...(m.seed !== undefined ? { seed: m.seed } : {}), ...identity };
+  const record = { ...IDENTIFIED, eval: "reflect", corpus: "public", akm_bin: "akm", model: m.model, akm_build: m.akm_build, akm_version: m.akm_version, ...identity };
   return { ...m, runs: rest.runs ?? Array.from({ length: m.n }, (_, i) => ({ name: `r${i + 1}`, identity: identityOf(record) })) };
 };
 const sp = (min: number, max: number) => ({ min, max, mean: (min + max) / 2 });
@@ -331,12 +348,12 @@ describe("findResults", () => {
     expect(refs.every((r) => r.kind === "repeat")).toBe(true);
   });
 
-  test("a private corpus is read from private/", () => {
+  test("a custom corpus is read from private/", () => {
     const root = tmp();
     const dir = join(root, "private", "reflect", "results", "2026-10-09-sw-a-s");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(reflectSummary("sw-a-s", 1, 1)));
-    expect(findResults(root, { label: "sw-a-s", repeat: null, args: ["--corpus", "private"], row: { name: "a", eval: "reflect", args: [] } }, 0).length).toBe(1);
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested(reflectSummary("sw-a-s", 1, 1), [])));
+    expect(findResults(root, { label: "sw-a-s", repeat: null, args: ["--corpus", "custom"], row: { name: "a", eval: "reflect", args: [] } }, 0).length).toBe(1);
   });
 });
 
@@ -648,66 +665,34 @@ describe("a build sweep in the decision", () => {
 
 // ---- what the summaries record (C1) and runs cut short (C2) ----------------------------------------------------------------
 
-describe("assets_sha256 and seed", () => {
-  const a = "a".repeat(64);
-  const bb = "b".repeat(64);
-  const withAssets = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(BASE, over);
+describe("the seed", () => {
+  const withSeed = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(BASE, over);
   const better = (over: Partial<Measured> & { identity?: Record<string, unknown> }) => meas(rm([0.92, 0.97], [0.9, 0.95]), over);
 
-  test("two summaries with another digest scored other cases, for either treatment", () => {
-    for (const t of [["config"], ["build"]] as Axis[][]) {
-      expect(incomparable(withAssets({ assets_sha256: a }), withAssets({ assets_sha256: bb }), t)).toBe("the cases (assets_sha256) differs: aaaaaaaaaaaa in the baseline, bbbbbbbbbbbb in the config");
-    }
-    expect(incomparable(withAssets({ assets_sha256: a }), withAssets({ assets_sha256: a }))).toBeNull();
-  });
-
-  test("the cases are the treatment only when the row says so", () => {
-    expect(incomparable(withAssets({ assets_sha256: a }), withAssets({ assets_sha256: bb }), ["inputs"])).toBeNull();
-  });
-
-  test("a digest that a summary does not record is no pass: the verdict is exploratory, whether it is missing on one side or on both", () => {
-    const [x, y] = [withAssets({ assets_sha256: a }), better({ assets_sha256: null })];
-    expect(incomparable(x, y)).toBeNull();
-    const one = judge("reflect", compareAll("reflect", x, y), x, y);
-    expect(one).toMatchObject({ verdict: "exploratory", reading: "better", exploratory: ["the cases (assets_sha256) is not recorded in the config"] });
-    const none = judge("reflect", compareAll("reflect", withAssets({ assets_sha256: null }), y), withAssets({ assets_sha256: null }), y);
-    expect(none).toMatchObject({ verdict: "exploratory", exploratory: ["the cases (assets_sha256) is not recorded in the baseline and the config"] });
-    expect(judge("reflect", compareAll("reflect", x, better({ assets_sha256: a })), x, better({ assets_sha256: a })).verdict).toBe("better");
-  });
-
-  test("two private runs on other seeds scored other cases; a private run without a seed is exploratory", () => {
-    const priv = { identity: { corpus: "private" } };
-    expect(incomparable(withAssets({ seed: 7, ...priv }), withAssets({ seed: "8", ...priv }))).toBe("the seed of the private assets differs: 7 in the baseline, 8 in the config");
-    expect(incomparable(withAssets({ seed: 7, ...priv }), withAssets({ seed: "7", ...priv }))).toBeNull();
-    const [x, y] = [withAssets({ seed: 7, ...priv }), better({ seed: null, ...priv })];
-    expect(incomparable(x, y)).toBeNull();
-    expect(judge("reflect", compareAll("reflect", x, y), x, y)).toMatchObject({ verdict: "exploratory", exploratory: ["the seed of the private assets is not recorded in the config"] });
+  test("two custom runs on other seeds scored other cases, and the verdict is not comparable even when the numbers say better", () => {
+    const seeded = (seed: unknown) => ({ identity: { corpus: "custom", seed } });
+    expect(incomparable(withSeed(seeded(7)), withSeed(seeded("8")))).toBe("the seed of the private assets differs: 7 in the baseline, 8 in the config");
+    expect(incomparable(withSeed(seeded(7)), withSeed(seeded("7")))).toBeNull();
+    expect(verdictOf(compareAll("reflect", withSeed(seeded(7)), better(seeded(8))), withSeed(seeded(7)), better(seeded(8)))).toBe("not comparable");
     // a public run has no seed to record
-    expect(incomparable(withAssets({ seed: null }), withAssets({ seed: null }))).toBeNull();
-    expect(judge("reflect", compareAll("reflect", withAssets({ seed: null }), better({ seed: null })), withAssets({ seed: null }), better({ seed: null })).verdict).toBe("better");
+    expect(incomparable(withSeed({}), withSeed({}))).toBeNull();
+    expect(judge("reflect", compareAll("reflect", withSeed({}), better({})), withSeed({}), better({})).verdict).toBe("better");
   });
 
-  test("the verdict is not comparable even when the numbers say better", () => {
-    const [x, y] = [withAssets({ assets_sha256: a }), meas(rm([0.92, 0.97], [0.9, 0.95]), { assets_sha256: bb })];
-    expect(verdictOf(compareAll("reflect", x, y), x, y)).toBe("not comparable");
-  });
-
-  test("loadMeasured reads the identity of every run of a repeat, and the first run's digest and seed", () => {
+  test("loadMeasured reads the identity of every run of a repeat", () => {
     const root = tmp();
-    writeRun(root, "reflect", "sw-a-s", reflectSummary("sw-a-s", 0.5, 0.5, 0, { assets_sha256: a, seed: 42 }));
+    writeRun(root, "reflect", "sw-a-s", reflectSummary("sw-a-s", 0.5, 0.5, 0, { seed: 42 }));
     const one = loadMeasured(root, findResults(root, { label: "sw-a-s", repeat: null, args: [], row: { name: "a", eval: "reflect", args: [] } }, 0)[0], 5, null)!;
-    expect([one.assets_sha256, one.seed]).toEqual([a, 42]);
-    expect(one.runs.map((r) => r.identity.assets_sha256)).toEqual([a]);
-    writeRepeat(root, "reflect", "sw-b-c", [reflectSummary("x", 0.5, 0.5, 0, { assets_sha256: bb }), reflectSummary("x", 0.6, 0.5, 0, { assets_sha256: a }), reflectSummary("x", 0.6, 0.5, 0, { assets_sha256: bb })]);
+    expect(one.runs.map((r) => r.identity.seed)).toEqual(["42"]);
+    writeRepeat(root, "reflect", "sw-b-c", [reflectSummary("x", 0.5, 0.5, 0, { seed: 7 }), reflectSummary("x", 0.6, 0.5, 0), reflectSummary("x", 0.6, 0.5, 0, { seed: 7 })]);
     const rep = loadMeasured(root, findResults(root, { label: "sw-b-c", repeat: 3, args: [], row: { name: "b", eval: "reflect", args: [] } }, 0)[0], 5, 3)!;
-    expect([rep.assets_sha256, rep.seed]).toEqual([bb, null]);
-    expect(rep.runs.map((r) => r.identity.assets_sha256)).toEqual([bb, a, bb]);
+    expect(rep.runs.map((r) => r.identity.seed)).toEqual(["7", null, "7"]);
   });
 
-  test("a confirm of two sweeps made from other assets is not comparable in the decision, with the digests in the note", () => {
+  test("a confirm of two sweeps made from other private assets is not comparable in the decision, with the seeds in the note", () => {
     const m = oneConfig(["--strategy", "quick"]);
-    const { root, state } = reflectSweep(m, { assets_sha256: bb, seed: 2 }, { assets_sha256: a, seed: 1 });
-    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "not comparable", note: "the cases (assets_sha256) differs: aaaaaaaaaaaa in the baseline, bbbbbbbbbbbb in the config; the seed of the private assets differs: 1 in the baseline, 2 in the config" });
+    const { root, state } = reflectSweep(m, { seed: 2 }, { seed: 1 });
+    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "not comparable", note: "the seed of the private assets differs: 1 in the baseline, 2 in the config" });
   });
 });
 
@@ -800,7 +785,7 @@ describe("a run that was cut short", () => {
 /** What a Harbor eval records of its job, the AKM_* settings of its akm arm and the endpoint of its model (see lib/harbor/harbor.ts), for the policy to read. */
 const harborIdentity = (akmEnv: Record<string, string> = {}, baseUrl = "https://gateway.example/deployment-A/v1", model = "m1") => {
   const cfg = jobConfig({ name: "n", model, jobsDir: "/run/jobs", attempts: 3, librariesDir: "/run/libraries", datasets: [{ path: "/repo/evals/agent-ab/tasks", task_names: ["a", "b"] }], arm: releaseArm(), akmEnv });
-  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, ...endpointOf({ OPENAI_BASE_URL: baseUrl }) } };
+  return { akm_env: akmEnv, config: redactConfig(jobRecord(cfg, "/run", "/repo")), engine: { model, endpoint: endpointHost(baseUrl) } };
 };
 
 describe("the Harbor evals", () => {
@@ -838,19 +823,18 @@ describe("the Harbor evals", () => {
     expect(verdictHarbor(base, called)).toBe("mixed");
   });
 
-  test("a Harbor summary records its job and engine, and an eval that records neither is exploratory (R01)", () => {
+  test("a Harbor summary records its job, and one that does not is exploratory (R01)", () => {
     const [base, better] = [measured([0, 0, 0]), measured([1, 1, 1])];
     expect(judge("agent-ab", compareAll("agent-ab", base, better), base, better).exploratory).toEqual([]);
-    // runs from before the job and the engine were recorded leave those axes unchecked
-    const legacy = (m: Measured): Measured => ({ ...m, runs: m.runs.map((r) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), config: undefined, engine: undefined }) })) });
-    expect(judge("agent-ab", compareAll("agent-ab", base, better), base, legacy(better), ["build"]).exploratory).toEqual(["the akm config is not recorded in the config", "the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the config"]);
-    expect(verdictOf(compareAll("agent-ab", base, better), base, legacy(better), ["build"], "agent-ab")).toBe("exploratory");
+    const bare = (m: Measured): Measured => ({ ...m, runs: m.runs.map((r) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), config: undefined }) })) });
+    expect(judge("agent-ab", compareAll("agent-ab", base, better), base, bare(better), ["build"]).exploratory).toEqual(["the akm config is not recorded in the config"]);
+    expect(verdictOf(compareAll("agent-ab", base, better), base, bare(better), ["build"], "agent-ab")).toBe("exploratory");
   });
 
   test("an undeclared change of the AKM_* settings or of the model's endpoint makes two Harbor results not comparable, declared it is the treatment (R01)", () => {
     const withIdentity = (m: Measured, id: ReturnType<typeof harborIdentity>): Measured => ({ ...m, runs: m.runs.map((r, i) => ({ ...r, identity: identityOf({ ...summaryOf([1, 1, 1]), ...id }) })) });
     const base = measured([0, 0, 0]);
-    const [env, path] = [withIdentity(measured([1, 1, 1]), harborIdentity({ AKM_CURATE_TIMEOUT: "30" })), withIdentity(measured([1, 1, 1]), harborIdentity({}, "https://gateway.example/deployment-B/v1"))];
+    const [env, path] = [withIdentity(measured([1, 1, 1]), harborIdentity({ AKM_CURATE_TIMEOUT: "30" })), withIdentity(measured([1, 1, 1]), harborIdentity({}, "https://other.example/deployment-A/v1"))];
     expect(verdictOf(compareAll("agent-ab", base, env), base, env, ["build"], "agent-ab")).toBe("not comparable");
     expect(incomparable(base, env, ["build"], "agent-ab")).toContain("the akm config differs");
     expect(incomparable(base, path, ["config"], "agent-ab")).toContain("the engine settings");
@@ -899,10 +883,10 @@ describe("a row that names a benchmark", () => {
     expect(jobs[1].args).toEqual(["--model", "cloud/some-model", "--akm-env", "AKM_X=1", "--attempts", "2", "--repeat", "3", "--label", "sw-tb-env-c"]);
   });
 
-  test("its results are looked for in benchmarks/<name>/results, and in private/<name>/ for a private corpus", () => {
+  test("its results are looked for in benchmarks/<name>/results, and in private/<name>/ for a custom corpus", () => {
     expect(resultsParents("/r", "terminal-bench", [])).toEqual(["/r/benchmarks/terminal-bench/results"]);
     expect(resultsParents("/r", "agent-ab", [])).toEqual(["/r/evals/agent-ab/results"]);
-    expect(resultsParents("/r", "terminal-bench", ["--corpus", "private"])[0]).toBe("/r/private/terminal-bench/results");
+    expect(resultsParents("/r", "terminal-bench", ["--corpus", "custom"])[0]).toBe("/r/private/terminal-bench/results");
   });
 
   test("a run and a repeat of a benchmark are found by their label", () => {
@@ -1001,7 +985,7 @@ describe("the paired comparison in the confirm stage", () => {
     const m = nightlyMatrix();
     const { root, state } = nightlySweep(m, BASE_RUNS, CFG_RUNS);
     const md = renderMarkdown(buildDecision(root, m, state, 0));
-    expect(md).toContain("| akm build | model | paired | verdict |");
+    expect(md).toContain("| akm build | model | version | paired | verdict |");
     expect(md).toContain("12 better, 0 worse, 8 agree, p < 0.001<br>items.rate +0.233 (+");
     expect(md).toContain("harm.items 0 (0 to 0)<br>3 → 3 repeats pooled");
     expect(md).toContain("The paired column is scripts/compare on all the repeats");
@@ -1029,7 +1013,9 @@ describe("the paired comparison in the confirm stage", () => {
   test("a run with no samples.jsonl is a note", () => {
     const m = nightlyMatrix();
     const { root, state } = nightlySweep(m, BASE_RUNS, CFG_RUNS, {}, false);
+    asStored = false;
     const row = buildDecision(root, m, state, 0).rows[0];
+    asStored = true;
     expect(row.paired).toBeNull();
     expect(row.note).toContain("no paired comparison: ");
     expect(row.note).toContain("has no samples.jsonl");
@@ -1060,9 +1046,11 @@ describe("the paired comparison in the confirm stage", () => {
       writeRepeat(root, "agent-ab", label, v.map((x) => ({ eval: "agent-ab", corpus: "public", status: "complete", git_commit: "5d1c0de", assets_sha256: "a".repeat(64), model: "m1", akm_version: "0.9.26", akm_build: null, n_errored: 0, completion: { expected: 9, completed: 9, failed: 0, missing: 0 }, ...harborIdentity(n === "cfg" ? { AKM_X: "1" } : {}), metrics: metrics(x) })));
       state.confirm[n] = record("confirm", n, "agent-ab", label, root, "repeat", 3);
     }
+    asStored = false;
     const row = buildDecision(root, m, state, 0).rows[0];
+    asStored = true;
     expect(row).toMatchObject({ verdict: "better", paired: null });
-    expect(row.note).toMatch(/^no paired comparison: .*has no samples\.jsonl$/);
+    expect(row.note).toMatch(/no paired comparison: .*has no samples\.jsonl$/);
   });
 });
 
@@ -1224,24 +1212,22 @@ describe("the identity of every run behind a result", () => {
   const cfg2 = (over: object) => [{}, over, {}];
 
   test("a repeat set with inputs A and inputs B is not represented as inputs A", () => {
-    const { verdict, note } = verdictAndNote(quick(), cfg2({ assets_sha256: "b".repeat(64) }));
+    const { verdict, note } = verdictAndNote(quick(), cfg2({ seed: 7 }));
     expect(verdict).toBe("not comparable");
-    expect(note).toContain(`the cases (assets_sha256) differs: ${"a".repeat(12)} in the baseline and the config 2026-10-09-sw-pr-c-r1 and`);
-    expect(note).toContain(`${"b".repeat(12)} in the config 2026-10-09-sw-pr-c-r2`);
+    expect(note).toContain("the seed of the private assets differs: none in the baseline and the config 2026-10-09-sw-pr-c-r1 and 2026-10-09-sw-pr-c-r3, 7 in the config 2026-10-09-sw-pr-c-r2");
   });
 
   test("the baseline's third repeat is checked as much as its first", () => {
-    const { verdict, note } = verdictAndNote(quick(), {}, [{}, {}, { assets_sha256: "b".repeat(64) }]);
+    const { verdict, note } = verdictAndNote(quick(), {}, [{}, {}, { seed: 7 }]);
     expect(verdict).toBe("not comparable");
-    expect(note).toContain("the cases (assets_sha256) differs");
+    expect(note).toContain("the seed of the private assets differs");
   });
 
-  test("two repeats with another engine and another commit are not repeats of one configuration", () => {
-    const { verdict, note } = verdictAndNote(quick(), cfg2({ engine: engineWith({ temperature: 0.7 }), git_commit: "9999999" }));
+  test("two repeats with another engine are not repeats of one configuration", () => {
+    const { verdict, note } = verdictAndNote(quick(), cfg2({ engine: engineWith({ temperature: 0.7 }) }));
     expect(verdict).toBe("not comparable");
     expect(note).toContain("the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) differs");
     expect(note).toContain("temperature 0.7");
-    expect(note).toContain("the eval's code differs: commit 5d1c0de in");
   });
 
   test("a config row cannot hide a change of the engine, the akm config or the model behind its treatment", () => {
@@ -1279,42 +1265,29 @@ describe("the identity of every run behind a result", () => {
     expect(verdictAndNote(build, [edited(A), edited(B), edited(A)], edited(null)).verdict).toBe("not comparable");
   });
 
-  test("a hash or digest that is missing is exploratory, never a fully comparable decision", () => {
-    const sameMissing = verdictAndNote(quick(), { assets_sha256: undefined }, { assets_sha256: undefined });
-    expect(sameMissing.verdict).toBe("exploratory");
-    expect(sameMissing.note).toContain("exploratory, not a conclusion: the cases (assets_sha256) is not recorded in the baseline and the config (the metrics read: better)");
-    expect(verdictAndNote(quick(), { assets_sha256: undefined }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in the config"]);
-    expect(verdictAndNote(quick(), {}, { assets_sha256: undefined }).exploratory).toEqual(["the cases (assets_sha256) is not recorded in the baseline"]);
+  test("an akm config that a summary does not record is exploratory, never a fully comparable decision", () => {
+    const build = oneConfig(["--akm", "bun ~/akm-pr/src/cli.ts"]);
+    const bare = { akm_build: "b2", config: undefined };
+    const both = verdictAndNote(build, bare, { config: undefined });
+    expect(both.verdict).toBe("exploratory");
+    expect(both.note).toContain("exploratory, not a conclusion: the akm config is not recorded in the baseline and the config (the metrics read: better)");
+    expect(verdictAndNote(build, bare).exploratory).toEqual(["the akm config is not recorded in the config"]);
     // one run of three that lacks it is enough
-    expect(verdictAndNote(quick(), cfg2({ engine: undefined })).exploratory).toEqual(["the engine settings (model, endpoint, temperature, thinking, time limit of each engine used) is not recorded in the config 2026-10-09-sw-pr-c-r2"]);
-    expect(verdictAndNote(quick(), {}).verdict).toBe("better");
-  });
-
-  test("the eval's code is identified by a clean commit or a digest, and a dirty or missing commit is exploratory", () => {
-    const dirty = { git_commit: "5d1c0de-dirty" };
-    expect(verdictAndNote(quick(), dirty, dirty).exploratory[0]).toContain("the eval's code is not identified in the baseline and the config");
-    expect(verdictAndNote(quick(), { git_commit: undefined }, { git_commit: undefined }).verdict).toBe("exploratory");
-    const digest = { git_commit: "5d1c0de-dirty", harness_sha256: "d".repeat(64) };
-    expect(verdictAndNote(quick(), digest, digest)).toMatchObject({ verdict: "better", exploratory: [] });
-    expect(verdictAndNote(quick(), digest, { ...digest, harness_sha256: "e".repeat(64) }).verdict).toBe("not comparable");
-    expect(verdictAndNote(quick(), { git_commit: "9999999" }).verdict).toBe("not comparable");
-  });
-
-  test("the harness is a treatment when the row says so", () => {
-    expect(verdictAndNote(oneConfig([], { treatment: "harness" }), { git_commit: "9999999" }).verdict).toBe("better");
+    expect(verdictAndNote(build, [{ akm_build: "b2" }, bare, { akm_build: "b2" }]).exploratory).toEqual(["the akm config is not recorded in the config 2026-10-09-sw-pr-c-r2"]);
+    expect(verdictAndNote(build, { akm_build: "b2" }).verdict).toBe("better");
   });
 
   test("an exploratory screen is still a screen, and its candidates are still selected", () => {
     const root = tmp();
-    const m = parse({ baseline: { name: "base", eval: "reflect" }, configs: [{ name: "a", eval: "reflect" }], prefix: "sw" });
+    const m = parse({ baseline: { name: "base", eval: "reflect" }, configs: [{ name: "a", eval: "reflect", args: ["--akm", "x"] }], prefix: "sw" });
     const state = emptyState(m);
     for (const [n, d] of [["base", 0.8], ["a", 0.9]] as const) {
       const label = labelOf("sw", n, "screen");
-      writeRun(root, "reflect", label, reflectSummary(label, d, 0.9, 0, { assets_sha256: undefined }));
+      writeRun(root, "reflect", label, reflectSummary(label, d, 0.9, 0, { config: undefined }));
       state.screen[n] = record("screen", n, "reflect", label, root, "run");
     }
     expect(selectForConfirm(root, m, state, { minDelta: 0 }).selected.map((s) => s.config.name)).toEqual(["a"]);
-    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "screen only", exploratory: ["the cases (assets_sha256) is not recorded in the baseline and the config"] });
+    expect(buildDecision(root, m, state, 0).rows[0]).toMatchObject({ verdict: "screen only", exploratory: ["the akm config is not recorded in the baseline and the config"] });
   });
 
   test("a screen of another model or other cases than its baseline's is not selected for confirmation", () => {
@@ -1521,7 +1494,7 @@ const git = (cwd: string, ...args: string[]) => Bun.spawnSync(["git", "-C", cwd,
  */
 function runnerTree() {
   const root = tmp();
-  for (const from of ["lib", "scripts/matrix/src", "scripts/compare/src"]) cpSync(join(REPO, from), join(root, from), { recursive: true, filter: (src) => !/node_modules|fixtures|\.test\.ts$/.test(src) });
+  for (const from of ["lib", "scripts/matrix/src", "scripts/compare/src", "scripts/rescore/src"]) cpSync(join(REPO, from), join(root, from), { recursive: true, filter: (src) => !/node_modules|fixtures|\.test\.ts$/.test(src) });
   mkdirSync(join(root, "evals", "reflect"), { recursive: true });
   writeFileSync(join(root, "evals", "reflect", "run"), FAKE_EVAL, { mode: 0o755 });
   writeFileSync(join(root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 3, baseline: { name: "base", eval: "reflect" }, configs: [{ name: "cfg", eval: "reflect", args: ["--config-patch", "patch.json"] }] }));
@@ -1529,7 +1502,7 @@ function runnerTree() {
   git(root, "init", "-q");
   git(root, "add", "scripts", "lib", "evals");
   git(root, "commit", "-q", "-m", "tree");
-  const summary = { ...fixture("reflect"), ...IDENTIFIED, model: "m1", akm_build: "b1", akm_bin: "akm", akm_version: "0.9.30" };
+  const summary = manifested({ ...fixture("reflect"), ...IDENTIFIED, model: "m1", akm_build: "b1", akm_bin: "akm", akm_version: "0.9.30" }, []);
   // The environment the runner gets is spelled out: nothing of the caller's, and so not its AKM_BIN.
   const baseEnv: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? root, TMPDIR: process.env.TMPDIR ?? tmpdir(), AKM_BIN: "fake-akm", MODEL_NAME: "m1", MODEL_BASE_URL: "https://gateway-a.example.com/v1", MODEL_API_KEY: "synthetic-matrix-secret-one", FAKE_SUMMARY: JSON.stringify(summary) };
   const out = join(root, "matrix-results");
@@ -1818,24 +1791,27 @@ describe("the fingerprint of a job", () => {
     }
   };
 
-  test("every eval of the matrix has a corpus: its public paths exist in this repository, and its private ones are in private/", () => {
+  test("every eval of the matrix has a corpus: its public paths exist in this repository, and its custom ones are in private/", () => {
     for (const name of Object.keys(EVALS)) {
       const publicPaths = corpusPaths(name, []);
       expect(publicPaths.length, name).toBeGreaterThan(0);
       for (const path of publicPaths) expect(existsSync(join(REPO, path)), `${name}: ${path}`).toBe(true);
-      const second = corpusPaths(name, ["--corpus", name === "promotion" ? "own" : "private"]);
+      // promotion has no rewrite: its custom corpus is the folder of --cases
+      const custom = name === "promotion" ? ["--cases", "private/promotion/own"] : ["--corpus", "custom"];
+      const second = corpusPaths(name, custom);
       // skillret's custom corpus is a split of the dataset the public lock pins: it has no folder under private/
       if (name !== "skillret") expect(second.some((p) => p.startsWith("private/")), name).toBe(true);
-      expect(corpusPaths(name, ["--corpus", "custom"]), name).toEqual(second); // the old value names the default custom corpus
       for (const path of [...publicPaths, ...second]) expect(path, name).not.toMatch(/(^|\/)results/); // a run's own output is no input
-      expect(corpusPaths(name, ["--corpus", "all"]).sort(), name).toEqual([...new Set([...publicPaths, ...second])].sort());
+      expect(corpusPaths(name, ["--corpus", "all", ...(name === "promotion" ? custom : [])]).sort(), name).toEqual([...new Set([...publicPaths, ...second])].sort());
     }
-    expect(corpusPaths("not-an-eval", ["--corpus", "private"])).toEqual([]);
+    expect(corpusPaths("not-an-eval", ["--corpus", "custom"])).toEqual([]);
+    // a value the runner refuses reads nothing
+    for (const old of ["private", "own", "own-feedback"]) expect(corpusPaths("distill", ["--corpus", old]), old).toEqual([]);
   });
 
-  test("a private corpus is made from the bytes of its assets and its generated.json: changed bytes and a regeneration with another seed each run the job again, and its own results do not", () => {
+  test("a custom corpus is made from the bytes of its assets and its generated.json: changed bytes and a regeneration with another seed each run the job again, and its own results do not", () => {
     const root = tmp();
-    const args = ["--corpus", "private", "--label", "x"];
+    const args = ["--corpus", "custom", "--label", "x"];
     const of = () => fingerprintOf(root, job(args, "distill"), env);
     lay(root, ["private/distill/assets/cases.json"], '{"cases":[1]}');
     writeFileSync(join(root, "private", "distill", "generated.json"), '{"seed":"11"}');
@@ -1852,7 +1828,7 @@ describe("the fingerprint of a job", () => {
     writeFileSync(join(root, "private", "distill", "assets", "added.json"), "{}");
     expect(of().parts.corpus).not.toBe(edited.parts.corpus);
     expect(new Set([first.sha256, seeded.sha256, edited.sha256]).size).toBe(3);
-    // the same private corpus before it was there at all is another job again
+    // the same custom corpus before it was there at all is another job again
     expect(fingerprintOf(tmp(), job(args, "distill"), env).parts.corpus).not.toBe(first.parts.corpus);
   });
 
@@ -1867,75 +1843,65 @@ describe("the fingerprint of a job", () => {
     expect(fingerprintOf(root, job([], "distill"), env).parts.corpus).toBe(defaults.parts.corpus); // regenerating the private assets leaves a public job as it was
     lay(root, ["evals/distill/assets/cases.json"], "two");
     expect(fingerprintOf(root, job([], "distill"), env).parts.corpus).not.toBe(defaults.parts.corpus);
-    expect(fingerprintOf(root, job(["--corpus=private"], "distill"), env).parts.corpus).toBe(fingerprintOf(root, job(["--corpus", "private"], "distill"), env).parts.corpus);
-    expect(fingerprintOf(root, job(["--corpus=private"], "distill"), env).parts.corpus).not.toBe(defaults.parts.corpus);
+    expect(fingerprintOf(root, job(["--corpus=custom"], "distill"), env).parts.corpus).toBe(fingerprintOf(root, job(["--corpus", "custom"], "distill"), env).parts.corpus);
+    expect(fingerprintOf(root, job(["--corpus=custom"], "distill"), env).parts.corpus).not.toBe(defaults.parts.corpus);
   });
 
-  test("--corpus all is the public corpus and the private one, and for promotion the own one", () => {
+  test("--corpus all is the public corpus and the custom one, which for promotion is the folder of --cases", () => {
     const root = tmp();
-    const of = (name: string, corpus: string) => fingerprintOf(root, job(["--corpus", corpus], name), env).parts.corpus;
-    for (const [name, other] of [["distill", "private"], ["consolidate", "private"], ["promotion", "own"]]) {
+    for (const [name, other] of [["distill", ["--corpus", "all"]], ["consolidate", ["--corpus", "all"]], ["promotion", ["--corpus", "all", "--cases", "private/promotion/own"]]] as [string, string[]][]) {
+      const of = () => fingerprintOf(root, job(other, name), env).parts.corpus;
       lay(root, corpusPaths(name, []), "public one");
-      lay(root, corpusPaths(name, ["--corpus", other]), "other one");
-      const all = of(name, "all");
+      lay(root, corpusPaths(name, other.includes("--cases") ? ["--cases", "private/promotion/own"] : ["--corpus", "custom"]), "other one");
+      const all = of();
       lay(root, corpusPaths(name, []), "public two");
-      const publicChanged = of(name, "all");
-      lay(root, corpusPaths(name, ["--corpus", other]), "other two");
-      const otherChanged = of(name, "all");
+      const publicChanged = of();
+      lay(root, corpusPaths(name, other.includes("--cases") ? ["--cases", "private/promotion/own"] : ["--corpus", "custom"]), "other two");
+      const otherChanged = of();
       expect(new Set([all, publicChanged, otherChanged]).size, name).toBe(3);
     }
   });
 
-  test("an own corpus is its own folder and the seed: distill's own and own-feedback are two, retrieval's own follows a link to a library, and promotion's --cases replaces its own folder", () => {
+  test("your own corpus (--cases DIR) is its folder and the seed: distill's own folder is not its rewrite, retrieval's own follows a link to a library, and the bytes of DIR are in the corpus part", () => {
     const root = tmp();
     const corpus = (name: string, ...args: string[]) => fingerprintOf(root, job(args, name), env).parts.corpus;
     // distill
-    lay(root, ["private/distill/own/assets/cases.json", "private/distill/own/assets-feedback/cases.json", "private/seed", "private/distill/assets/cases.json"], "one");
-    const [own, feedback, priv] = [corpus("distill", "--corpus", "own"), corpus("distill", "--corpus", "own-feedback"), corpus("distill", "--corpus", "private")];
-    expect(new Set([own, feedback, priv]).size).toBe(3);
-    lay(root, ["private/distill/own/assets-feedback/cases.json"], "two");
-    expect([corpus("distill", "--corpus", "own"), corpus("distill", "--corpus", "private")]).toEqual([own, priv]);
-    expect(corpus("distill", "--corpus", "own-feedback")).not.toBe(feedback);
+    lay(root, ["private/distill/own/assets/cases.json", "private/seed", "private/distill/assets/cases.json"], "one");
+    const [own, priv] = [corpus("distill", "--cases", "private/distill/own/assets"), corpus("distill", "--corpus", "custom")];
+    expect(own).not.toBe(priv);
     lay(root, ["private/seed"], "another seed");
-    expect(corpus("distill", "--corpus", "own")).not.toBe(own); // an own corpus records private/seed
-    expect(corpus("distill", "--corpus", "private")).toBe(priv); // a private one records the seed of its generated.json
+    expect(corpus("distill", "--cases", "private/distill/own/assets")).not.toBe(own); // an own corpus records private/seed
+    expect(corpus("distill", "--corpus", "custom")).toBe(priv); // a rewrite records the seed of its generated.json
     // retrieval: the own library may be a link to a folder anywhere
     const library = join(tmp(), "mine");
     lay(library, ["notes"], "a note");
     mkdirSync(join(root, "private", "retrieval", "own"), { recursive: true });
     symlinkSync(library, join(root, "private", "retrieval", "own", "library"));
     lay(root, ["private/retrieval/own/queries.jsonl", "private/retrieval/own/qrels.jsonl"], "{}");
-    const mine = corpus("retrieval", "--corpus", "own");
+    const mine = corpus("retrieval", "--cases", "private/retrieval/own");
     writeFileSync(join(library, "notes", "data.txt"), "an edited note");
-    expect(corpus("retrieval", "--corpus", "own")).not.toBe(mine);
-    // promotion: --cases DIR is read in place of private/promotion/own, and DIR's bytes are in the files part
-    lay(root, ["private/promotion/own/cases.jsonl", "cases-dir/cases.jsonl"], "one");
+    expect(corpus("retrieval", "--cases", "private/retrieval/own")).not.toBe(mine);
+    // promotion: DIR's bytes are in the corpus part
+    lay(root, ["cases-dir/cases.jsonl"], "one");
     const promote = (...args: string[]) => fingerprintOf(root, job(args, "promotion"), env);
-    const byDefault = promote("--corpus", "own");
     const viaCases = promote("--cases", "cases-dir");
-    lay(root, ["private/promotion/own/cases.jsonl"], "two");
-    expect(promote("--corpus", "own").parts.corpus).not.toBe(byDefault.parts.corpus);
-    expect(promote("--cases", "cases-dir")).toEqual(viaCases); // the default own folder is not read
+    expect(promote("--cases", "cases-dir")).toEqual(viaCases);
     lay(root, ["cases-dir/cases.jsonl"], "two");
     expect(promote("--cases", "cases-dir").sha256).not.toBe(viaCases.sha256);
   });
 
-  test("a custom corpus is its folder with the corpus.json and generated.json that go with it, whichever way the row names it (#47)", () => {
+  test("a custom corpus is its folder with the generated.json that goes with it, whichever way the row names it (#47)", () => {
     const root = tmp();
     const corpus = (args: string[], name = "reflect") => fingerprintOf(root, job(args, name), env).parts.corpus;
-    const config = (over: object = {}) => JSON.stringify({ kind: "rewrite", private: false, seed: "42", generated: "assets/generated.json", ...over });
     lay(root, ["evals/reflect/assets/cases.jsonl", "private/reflect/assets/cases.jsonl"], "one");
     writeFileSync(join(root, "private", "reflect", "assets", "generated.json"), '{"seed":"42"}');
-    writeFileSync(join(root, "private", "reflect", "corpus.json"), config());
     const custom = corpus(["--corpus", "custom"]);
-    // the old value, the default and the flag give the same folder
-    expect(corpus(["--corpus", "private"])).toBe(custom);
+    // the default and the flag give the same folder
     expect(corpus(["--corpus=custom"])).toBe(custom);
     expect(corpus(["--cases", "private/reflect/assets"])).not.toBe(corpus([])); // a custom corpus is not the public one
-    // each of the folder, the corpus.json beside it and the generated.json in it is part of what the job read
+    // each of the folder and the generated.json in it is part of what the job read
     const edits: [string, () => void][] = [
       ["the cases", () => lay(root, ["private/reflect/assets/cases.jsonl"], "two")],
-      ["the corpus.json", () => writeFileSync(join(root, "private", "reflect", "corpus.json"), config({ private: true }))],
       ["the generated.json", () => writeFileSync(join(root, "private", "reflect", "assets", "generated.json"), '{"seed":"42","made":"again"}')],
     ];
     for (const [what, edit] of edits) {
@@ -1944,10 +1910,6 @@ describe("the fingerprint of a job", () => {
       expect(corpus(["--corpus", "custom"]), what).not.toBe(before);
     }
     expect(corpus([])).toBe(corpus(["--corpus", "public"])); // the public corpus is none of them
-    // a corpus.json that is not sound stops the run, not the fingerprint: the job is recorded as it ended
-    writeFileSync(join(root, "private", "reflect", "corpus.json"), '{"kind":"rewrite","privat":false}');
-    expect(() => corpus(["--corpus", "custom"])).not.toThrow();
-    writeFileSync(join(root, "private", "reflect", "corpus.json"), config());
     // --corpus all is both
     const all = corpus(["--corpus", "all"]);
     lay(root, ["evals/reflect/assets/cases.jsonl"], "public two");
@@ -1956,14 +1918,13 @@ describe("the fingerprint of a job", () => {
     expect(new Set([all, publicChanged, corpus(["--corpus", "all"])]).size).toBe(3);
   });
 
-  test("--cases DIR is the folder it names, inside the repository or not, with the corpus.json that sits in it", () => {
+  test("--cases DIR is the folder it names, inside the repository or not, with every file in it", () => {
     const root = tmp();
     const corpus = (args: string[], name = "promotion") => fingerprintOf(root, job(args, name), env).parts.corpus;
-    // inside the repository: named by its path from the root, and the corpus.json is one of its files
+    // inside the repository: named by its path from the root, and every file of it counts
     lay(root, ["notes/cases.jsonl"], "one");
-    writeFileSync(join(root, "notes", "corpus.json"), '{"kind":"own","private":true}');
     const inside = corpus(["--cases", "notes"]);
-    writeFileSync(join(root, "notes", "corpus.json"), '{"kind":"own","private":false}');
+    writeFileSync(join(root, "notes", "extra.json"), "{}");
     expect(corpus(["--cases", "notes"])).not.toBe(inside);
     lay(root, ["other/cases.jsonl"], "one");
     expect(corpus(["--cases", "other"])).not.toBe(corpus(["--cases", "notes"])); // another folder is another corpus, with the same bytes or not
@@ -1977,16 +1938,9 @@ describe("the fingerprint of a job", () => {
     expect(corpus(["--cases", folder("there", "my notes", "one")])).toBe(a);
     expect(corpus(["--cases", folder("here", "my notes", "two")])).not.toBe(a);
     expect(corpus(["--cases", folder("here", "other notes", "one")])).not.toBe(a);
-    // the default folder of the eval is not read when the row names another
-    lay(root, ["private/promotion/own/cases.jsonl"], "default one");
-    const named = corpus(["--cases", "notes"]);
-    lay(root, ["private/promotion/own/cases.jsonl"], "default two");
-    expect(corpus(["--cases", "notes"])).toBe(named);
-    // --corpus own is promotion's default folder
-    expect(corpus(["--corpus", "own"])).toBe(corpus(["--corpus", "custom"]));
   });
 
-  test("the Harbor evals: agent-ab reads its tasks and libraries, and terminal-bench its library, which for the private corpus is the retrieval eval's", () => {
+  test("the Harbor evals: agent-ab reads its tasks and libraries, and terminal-bench its library, which for the custom corpus is the retrieval eval's", () => {
     const root = tmp();
     const corpus = (name: string, ...args: string[]) => fingerprintOf(root, job(["--akm", "akm-cli@0.9.26", ...args], name), env).parts.corpus;
     for (const [name, files] of [
@@ -1994,18 +1948,18 @@ describe("the fingerprint of a job", () => {
       ["terminal-bench", ["private/retrieval/assets/library/a.md", "private/retrieval/assets/generated.json"]],
     ] as [string, string[]][]) {
       lay(root, files, "one");
-      const before = corpus(name, "--corpus", "private");
-      expect(corpus(name, "--corpus", "private"), name).toBe(before);
+      const before = corpus(name, "--corpus", "custom");
+      expect(corpus(name, "--corpus", "custom"), name).toBe(before);
       for (const file of files) {
         lay(root, [file], `changed ${file}`);
-        expect(corpus(name, "--corpus", "private"), `${name}: ${file}`).not.toBe(before);
+        expect(corpus(name, "--corpus", "custom"), `${name}: ${file}`).not.toBe(before);
         lay(root, [file], "one");
-        expect(corpus(name, "--corpus", "private"), name).toBe(before);
+        expect(corpus(name, "--corpus", "custom"), name).toBe(before);
       }
     }
-    const agent = corpus("agent-ab", "--corpus", "private");
+    const agent = corpus("agent-ab", "--corpus", "custom");
     lay(root, ["private/retrieval/assets/library/a.md"], "retrieval regenerated");
-    expect(corpus("agent-ab", "--corpus", "private")).toBe(agent); // agent-ab does not read the retrieval eval's library
+    expect(corpus("agent-ab", "--corpus", "custom")).toBe(agent); // agent-ab does not read the retrieval eval's library
     const bench = corpus("terminal-bench");
     lay(root, ["corpus/library/a.md"], "the public library");
     expect(corpus("terminal-bench")).not.toBe(bench);
@@ -2015,13 +1969,13 @@ describe("the fingerprint of a job", () => {
     const root = tmp();
     lay(root, ["evals/reflect/assets/cases.jsonl", "evals/retrieval/assets/queries.jsonl", "evals/retrieval/assets/qrels.jsonl", "private/retrieval/assets/queries.jsonl", "private/retrieval/assets/qrels.jsonl", "private/reflect/assets/cases.jsonl"], "one");
     const corpus = (...args: string[]) => fingerprintOf(root, job(args, "reflect"), env).parts.corpus;
-    const [plain, withQueries, privateWith] = [corpus(), corpus("--retrieval-queries"), corpus("--corpus", "private", "--retrieval-queries")];
+    const [plain, withQueries, privateWith] = [corpus(), corpus("--retrieval-queries"), corpus("--corpus", "custom", "--retrieval-queries")];
     lay(root, ["evals/retrieval/assets/qrels.jsonl"], "two");
     expect(corpus()).toBe(plain);
     expect(corpus("--retrieval-queries")).not.toBe(withQueries);
-    expect(corpus("--corpus", "private", "--retrieval-queries")).toBe(privateWith); // the private corpus takes the private queries
+    expect(corpus("--corpus", "custom", "--retrieval-queries")).toBe(privateWith); // the custom corpus takes the private queries
     lay(root, ["private/retrieval/assets/qrels.jsonl"], "two");
-    expect(corpus("--corpus", "private", "--retrieval-queries")).not.toBe(privateWith);
+    expect(corpus("--corpus", "custom", "--retrieval-queries")).not.toBe(privateWith);
   });
 
   test("the corpus digest holds no content, does not depend on where the checkout is, and a corpus that is not there is another from one that is", () => {
@@ -2029,20 +1983,20 @@ describe("the fingerprint of a job", () => {
     const at = (...parts: string[]) => {
       const root = join(tmp(), ...parts);
       lay(root, ["private/distill/assets/cases.json", "private/distill/generated.json", "evals/distill/assets/cases.json"], secret);
-      return fingerprintOf(root, job(["--corpus", "private", "--label", "x"], "distill"), env);
+      return fingerprintOf(root, job(["--corpus", "custom", "--label", "x"], "distill"), env);
     };
     const [plain, spaced, keyed] = [at(), at("a checkout", "with spaces"), at("key-checkout")];
     expect(spaced).toEqual(plain);
     expect(keyed).toEqual(plain);
     expect(JSON.stringify(plain)).not.toContain(secret);
-    expect(fingerprintOf(tmp(), job(["--corpus", "private"], "distill"), env).parts.corpus).not.toBe(plain.parts.corpus);
-    expect(() => fingerprintOf(tmp(), job(["--corpus", "private"], "retrieval"), env)).not.toThrow();
+    expect(fingerprintOf(tmp(), job(["--corpus", "custom"], "distill"), env).parts.corpus).not.toBe(plain.parts.corpus);
+    expect(() => fingerprintOf(tmp(), job(["--corpus", "custom"], "retrieval"), env)).not.toThrow();
   });
 
   test("a link that points nowhere is a difference in the corpus, not an error", () => {
     const root = tmp();
     lay(root, ["private/retrieval/own/queries.jsonl"], "{}");
-    const of = () => fingerprintOf(root, job(["--corpus", "own"], "retrieval"), env).parts.corpus;
+    const of = () => fingerprintOf(root, job(["--cases", "private/retrieval/own"], "retrieval"), env).parts.corpus;
     const before = of();
     symlinkSync(join(root, "nowhere"), join(root, "private", "retrieval", "own", "library"));
     expect(of()).not.toBe(before);
@@ -2051,12 +2005,12 @@ describe("the fingerprint of a job", () => {
   test("a job that failed stays out of reuse whatever its corpus, and the record of a version without the corpus part cannot vouch for it", () => {
     const root = tmp();
     lay(root, ["private/distill/assets/cases.json", "private/distill/generated.json"], "one");
-    const args = ["--corpus", "private", "--label", "x"];
+    const args = ["--corpus", "custom", "--label", "x"];
     const j = { label: "x", args };
     const fp = fingerprintOf(root, job(args, "distill"), env);
     const dir = join(root, "evals", "distill", "results", "2026-10-11-x");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...IDENTIFIED, eval: "distill", label: "x" }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested({ ...IDENTIFIED, eval: "distill", label: "x" }, [])));
     const rec: RunRecord = { stage: "screen", name: "d", eval: "distill", label: "x", args, repeat: null, started: "", wall_seconds: 1, exit_code: 0, log: "", results: [{ scope: "", kind: "run", file: "evals/distill/results/2026-10-11-x/summary.json" }], fingerprint: fp.sha256, fingerprint_parts: fp.parts };
     expect(resumable(root, rec, j, fp)).toEqual({ skip: true, why: "" });
     expect(resumable(root, { ...rec, exit_code: 1 }, j, fp)).toEqual({ skip: false, why: "its last run exited 1" });
@@ -2066,19 +2020,19 @@ describe("the fingerprint of a job", () => {
     expect(resumable(root, { ...rec, fingerprint_parts: before }, j, fp)).toEqual({ skip: false, why: "its last run did not record what it was made from" });
   });
 
-  test("a stage resumes a private-corpus job only while the private assets, their generated.json and the endpoints are the same (R03)", async () => {
+  test("a stage resumes a custom-corpus job only while the private assets, their generated.json and the endpoints are the same (R03)", async () => {
     const t = runnerTree();
-    // a reflect job on its private corpus, which writes its results to private/reflect/results; private/ is not in the repository
+    // a reflect job on its custom corpus, which writes its results to private/reflect/results; private/ is not in the repository
     const eval_ = FAKE_EVAL.replace('join(root, "evals", "reflect", "results")', 'join(root, "private", "reflect", "results")');
     expect(eval_).not.toBe(FAKE_EVAL);
     writeFileSync(join(t.root, "evals", "reflect", "run"), eval_, { mode: 0o755 });
     git(t.root, "commit", "-q", "-a", "-m", "the private fake");
-    writeFileSync(join(t.root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 3, baseline: { name: "base", eval: "reflect", args: ["--corpus", "private"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus", "private", "--config-patch", "patch.json"] }] }));
+    writeFileSync(join(t.root, "matrix.json"), JSON.stringify({ prefix: "sw", model: "m1", repeats: 3, baseline: { name: "base", eval: "reflect", args: ["--corpus", "custom"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus", "custom", "--config-patch", "patch.json"] }] }));
     const assets = join(t.root, "private", "reflect", "assets", "cases.jsonl");
     mkdirSync(join(t.root, "private", "reflect", "assets"), { recursive: true });
     const regenerate = (seed: string, text: string) => {
       writeFileSync(assets, text);
-      writeFileSync(join(t.root, "private", "reflect", "generated.json"), JSON.stringify({ seed, inputs_sha256: "a".repeat(64) }));
+      writeFileSync(join(t.root, "private", "reflect", "generated.json"), JSON.stringify({ seed }));
     };
     regenerate("11", '{"id":"c1"}\n');
     const A = { MODEL_BASE_URL: "https://gateway.example/deployment-A/v1" };
@@ -2186,13 +2140,13 @@ describe("the fingerprint of a job", () => {
     expect(resumable(root, undefined, j, fp)).toEqual({ skip: false, why: "" });
     const dir = join(root, "evals", "reflect", "results", "2026-10-11-x");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...IDENTIFIED, eval: "reflect", label: "x" }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested({ ...IDENTIFIED, eval: "reflect", label: "x" }, [])));
     const rec: RunRecord = { stage: "screen", name: "r", eval: "reflect", label: "x", args, repeat: null, started: "", wall_seconds: 1, exit_code: 0, log: "", results: [{ scope: "", kind: "run", file: "evals/reflect/results/2026-10-11-x/summary.json" }], fingerprint: fp.sha256, fingerprint_parts: fp.parts };
     expect(resumable(root, rec, j, fp)).toEqual({ skip: true, why: "" });
     expect(resumable(root, { ...rec, exit_code: 2 }, j, fp).why).toBe("its last run exited 2");
     expect(resumable(root, { ...rec, args: [...args, "--limit", "3"] }, j, fp).why).toBe("its arguments changed");
     expect(resumable(root, { ...rec, results: [] }, j, fp).why).toBe("its last run wrote no result");
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...IDENTIFIED, eval: "reflect", label: "x", status: "aborted", aborted_reason: "gave up" }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested({ ...IDENTIFIED, eval: "reflect", label: "x", status: "aborted", aborted_reason: "gave up" }, [])));
     expect(resumable(root, rec, j, fp)).toMatchObject({ skip: false, why: "its last result is no result: the run was cut short: gave up" });
   });
 });
@@ -2449,53 +2403,44 @@ describe("retrieval is exploratory when it returns results nobody graded (#71)",
 
 // ---- small fixes from the review of main (#73, #74) -------------------------------------------------------------------------
 
-describe("the corpus a row names: public, custom, and the old values (#47)", () => {
+describe("the corpus a row names: public or custom (#47)", () => {
   const row = (evalName: string, args: string[]) => ({ name: "r", eval: evalName, args });
 
-  test("is public, custom or all: --cases alone is custom for every eval, and private, own and own-feedback are custom", () => {
+  test("is public, custom or all: --cases alone is custom for every eval, and a value the runner refuses is passed on as it is", () => {
     expect(corpusOf("reflect", [])).toBe("public");
     expect(corpusOf("reflect", ["--corpus", "public"])).toBe("public");
     expect(corpusOf("reflect", ["--corpus=custom"])).toBe("custom");
     expect(corpusOf("reflect", ["--corpus", "all"])).toBe("all");
     for (const evalName of ["promotion", "distill", "reflect"]) expect(corpusOf(evalName, ["--cases", "my cases"]), evalName).toBe("custom");
     expect(corpusOf("promotion", ["--cases=x"])).toBe("custom");
-    for (const old of ["private", "own", "own-feedback"]) expect(corpusOf("distill", ["--corpus", old]), old).toBe("custom");
-    expect(corpusOf("promotion", ["--cases", "x", "--corpus", "own"])).toBe("custom");
-    expect(corpusOf("reflect", ["--corpus", "elsewhere"])).toBe("elsewhere"); // the runner refuses what it does not know
+    for (const old of ["private", "own", "own-feedback", "elsewhere"]) expect(corpusOf("distill", ["--corpus", old]), old).toBe(old); // the runner refuses what it does not know
   });
 
   test("a row's results are looked for where the corpus writes them: the eval's results/ for public, private/<eval>/ for custom, and found", () => {
     const root = tmp();
     const args = ["--cases", "my cases"];
     expect(resultsParents(root, "promotion", [])).toEqual([join(root, "evals", "promotion", "results")]);
-    for (const a of [args, ["--corpus", "custom"], ["--corpus", "own"], ["--corpus", "private"]]) {
+    for (const a of [args, ["--corpus", "custom"]]) {
       expect(resultsParents(root, "promotion", a), a.join(" ")).toEqual([join(root, "private", "promotion", "results"), join(root, "private", "promotion", "own", "results"), join(root, "private", "promotion", "own", "results-feedback")]);
     }
     const dir = join(root, "private", "promotion", "results", "2026-10-09-sw-a-s");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "promotion", corpus: "custom", corpus_kind: "own", label: "sw-a-s" }));
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(manifested({ eval: "promotion", corpus: "custom", label: "sw-a-s" }, [])));
     const job = { label: "sw-a-s", repeat: null, args, row: { name: "a", eval: "promotion", args } };
     expect(findResults(root, job, 0)).toEqual([{ scope: "", kind: "run", file: "private/promotion/results/2026-10-09-sw-a-s/summary.json" }]);
   });
 
-  test("a baseline and a config run the same cases when they name the same folder, however they name it", () => {
-    // reflect's default custom corpus is the rewrite in private/reflect/assets, which --corpus private named before
-    expect(scopeKey(row("reflect", ["--corpus", "private"]))).toBe(scopeKey(row("reflect", ["--corpus", "custom"])));
-    expect(scopeKey(row("reflect", ["--corpus", "custom"]))).toBe("reflect corpus=custom folder=private/reflect/assets");
+  test("a baseline and a config run the same cases when they name the same corpus, however they name it", () => {
+    expect(scopeKey(row("reflect", ["--corpus", "custom"]))).toBe("reflect corpus=custom");
+    expect(scopeKey(row("reflect", ["--corpus=custom"]))).toBe(scopeKey(row("reflect", ["--corpus", "custom"])));
     expect(scopeKey(row("reflect", []))).toBe("reflect corpus=public");
-    // promotion's default is your own notes, which --corpus own named
-    expect(scopeKey(row("promotion", ["--corpus", "own"]))).toBe(scopeKey(row("promotion", ["--corpus", "custom"])));
-    expect(scopeKey(row("promotion", ["--corpus", "custom"]))).toBe("promotion corpus=custom folder=private/promotion/own");
-    // distill's own corpus is not its default one
-    expect(scopeKey(row("distill", ["--corpus", "own"]))).not.toBe(scopeKey(row("distill", ["--corpus", "custom"])));
-    expect(scopeKey(row("distill", ["--corpus", "own-feedback"]))).not.toBe(scopeKey(row("distill", ["--corpus", "own"])));
     // --cases DIR is the folder it names, which another row may name too
     expect(scopeKey(row("promotion", ["--cases", "x"]))).toBe("promotion corpus=custom cases=x");
-    expect(scopeKey(row("promotion", ["--cases", "x"]))).toBe(scopeKey(row("promotion", ["--corpus", "own", "--cases", "x"])));
+    expect(scopeKey(row("promotion", ["--cases", "x"]))).toBe(scopeKey(row("promotion", ["--corpus", "custom", "--cases", "x"])));
     expect(scopeKey(row("promotion", ["--cases", "x"]))).not.toBe(scopeKey(row("promotion", ["--cases", "y"])));
     expect(scopeKey(row("promotion", ["--cases", "x"]))).not.toBe(scopeKey(row("promotion", [])));
-    // a config on the old value finds its baseline on the new one
-    const m = parseMatrix({ prefix: "sw", baseline: { name: "base", eval: "reflect", args: ["--corpus", "custom"] }, configs: [{ name: "old", eval: "reflect", args: ["--corpus", "private", "--strategy", "quick"] }] }, FILE);
+    // a config finds its baseline on the same corpus
+    const m = parseMatrix({ prefix: "sw", baseline: { name: "base", eval: "reflect", args: ["--corpus", "custom"] }, configs: [{ name: "cfg", eval: "reflect", args: ["--corpus=custom", "--strategy", "quick"] }] }, FILE);
     expect(baselineFor(m, m.configs[0]).name).toBe("base");
   });
 });

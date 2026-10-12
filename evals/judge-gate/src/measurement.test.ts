@@ -1,24 +1,24 @@
 // The declaration of the judge-gate eval (measurement.ts): the digests of a case, the corpus a stored run is scored against again, and
-// scripts/rescore on a stored run. The stored runs are built from the golden raw outputs of ../golden, scored with the eval's own scorer.
+// scripts/rescore on a stored run. The stored runs are built from the raw outputs in fixtures/ of ../fixtures, scored with the eval's own scorer.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { UNVERSIONED, buildManifest, caseDigests, completionOf, lockedParts, manifestProblems, measuredFiles, readManifest } from "../../../lib/manifest.ts";
+import { buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { casesSha256 } from "./inputs.ts";
 import { type Case, type Raw, type Row, judgeConfig, orderFeedback, parseCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
 const PUBLIC = join(EVAL_DIR, "assets");
-const GOLDEN = join(import.meta.dir, "..", "golden");
+const FIXTURES = join(import.meta.dir, "..", "fixtures");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const LINES: { case: string; note: string; raw: Record<string, any> }[] = jsonl(join(GOLDEN, "raw.jsonl"));
+const LINES: { case: string; note: string; raw: Record<string, any> }[] = jsonl(join(FIXTURES, "raw.jsonl"));
 const PUBLIC_CASES = parseCases(readFileSync(join(PUBLIC, "cases.jsonl"), "utf8"));
 /** The public cases the golden files cover, each with the first raw output of it. */
-const GOLDEN_CASES = jsonl(join(GOLDEN, "cases.jsonl")).map((g) => PUBLIC_CASES.find((c) => c.id === g.id) as Case);
+const FIXTURE_CASES = jsonl(join(FIXTURES, "cases.jsonl")).map((g) => PUBLIC_CASES.find((c) => c.id === g.id) as Case);
 const FIRST = (c: Case): Raw => (MEASUREMENT.rawOf({ id: c.id, ...(LINES.find((l) => l.case === c.id) as { raw: Record<string, any> }).raw }) as { raw: Raw }).raw;
 
 const dirs: string[] = [];
@@ -31,18 +31,16 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-/** A results folder of the golden cases. Without `legacy` it is as harness-v3 writes it; with it, a summary with no manifest, as an eval wrote it before. */
-function stored(options: { legacy?: boolean; without?: string[]; name?: string; custom?: { folder: string | null } } = {}): string {
+/** A results folder of the golden cases, as harness-v3 writes it. */
+function stored(options: { without?: string[]; name?: string; custom?: { folder: string | null } } = {}): string {
   const custom = options.custom;
-  const rows = GOLDEN_CASES.map((c) => MEASUREMENT.score(c, FIRST(c)));
+  const rows = FIXTURE_CASES.map((c) => MEASUREMENT.score(c, FIRST(c)));
   const config = judgeConfig("https://gateway.example/deployment-A/v1", "the-model", true);
   const dir = join(tmp(), options.name ?? "2026-10-12-golden");
   mkdirSync(dir, { recursive: true });
   const summary: Record<string, unknown> = {
     eval: "judge-gate",
     corpus: custom ? "custom" : "public",
-    corpus_kind: custom ? "own" : "public",
-    corpus_private: custom !== undefined,
     corpus_folder: custom ? custom.folder : null,
     label: "golden",
     date: "2026-10-12T09:00:00.000Z",
@@ -63,19 +61,16 @@ function stored(options: { legacy?: boolean; without?: string[]; name?: string; 
     aborted_reason: null,
     n_cases: PUBLIC_CASES.length,
     ...MEASUREMENT.summarize(rows),
-  };
-  if (!options.legacy) {
-    summary.manifest = buildManifest({
+    manifest: buildManifest({
       measurement: MEASUREMENT,
-      parts: lockedParts(MEASUREMENT),
       corpus: custom ? "custom" : "public",
-      cases: caseDigests(MEASUREMENT, GOLDEN_CASES),
+      cases: caseDigests(MEASUREMENT, FIXTURE_CASES),
       akm: { version: "0.9.99-test", bin: "akm" },
       config,
       settings: { strategy: "default" },
-      completion: completionOf(MEASUREMENT, GOLDEN_CASES.map((c) => c.id), rows),
-    });
-  }
+      completion: completionOf(MEASUREMENT, FIXTURE_CASES.map((c) => c.id), rows),
+    }),
+  };
   writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   const kept = (r: Row) => Object.fromEntries(Object.entries(r).filter(([k]) => !(options.without ?? []).includes(k)));
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(kept(r))}\n`).join(""));
@@ -114,7 +109,7 @@ describe("the corpus a stored run is scored against again", () => {
   }
   const ids = (cases: Case[]) => cases.map((c) => c.id);
 
-  test("public is the committed cases, private (a run from before corpus.json) the seeded rewrite, and a custom corpus the folder it recorded", () => {
+  test("public is the committed cases, private (a run from before the corpora were renamed) the seeded rewrite, and a custom corpus the folder it recorded", () => {
     const root = repo();
     const expected = ids(PUBLIC_CASES);
     expect(ids(MEASUREMENT.loadCases(root, { corpus: "public" }))).toEqual(expected);
@@ -125,17 +120,6 @@ describe("the corpus a stored run is scored against again", () => {
 
   test("a custom corpus that recorded no folder says how to name it", () => {
     expect(() => MEASUREMENT.loadCases(repo(), { corpus: "custom", corpus_folder: null })).toThrow("did not record the folder of its custom corpus (it was outside the repository). Give the folder to scripts/rescore with --cases DIR");
-  });
-
-  test("a run from before the manifest can be scored again only when it read the cases that are here now", () => {
-    const root = repo();
-    const summary = { corpus: "public", assets_sha256: casesSha256(PUBLIC) };
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toBeUndefined();
-    expect(MEASUREMENT.legacyProblem?.(root, { ...summary, assets_sha256: "0".repeat(64) })).toBe(`it read other cases than the ones in ${join("evals", "judge-gate", "assets")} now (assets_sha256 is ${"0".repeat(64)})`);
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "public" })).toContain("assets_sha256 is not recorded");
-    expect(MEASUREMENT.legacyProblem?.(root, { corpus: "custom", corpus_folder: null })).toContain("did not record the folder");
-    rmSync(join(root, "evals", "judge-gate", "assets", "cases.jsonl"));
-    expect(MEASUREMENT.legacyProblem?.(root, summary)).toContain("it read other cases than the ones in");
   });
 });
 
@@ -148,18 +132,17 @@ describe("rescoring a stored run", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8") + readFileSync(join(dir, "summary.json"), "utf8")).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
-    expect(s).toMatchObject({ label: "golden-rescored", n_run: GOLDEN_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 2 });
+    expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 2 });
     expect(manifestProblems(s.manifest)).toEqual([]);
     expect(readManifest(s).kind).toBe("manifest");
-    expect(s.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
-    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", scorer: o.manifest.scorer, dropped: [] });
+    expect(s.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
   });
 
   test("a relabelled case is scored again under its new label: the row, the metrics and the digest follow, and the case is named", () => {
     const dir = stored();
-    const c = GOLDEN_CASES.find((x) => x.label === "bad" && x.severity === "harmful" && rowsOf(dir).some((r) => r.id === x.id)) as Case;
+    const c = FIXTURE_CASES.find((x) => x.label === "bad" && x.severity === "harmful" && rowsOf(dir).some((r) => r.id === x.id)) as Case;
     // the run was made when this case was labelled churn: its row and its digest say so
     const was = { ...c, severity: "churn" as const };
     const manifest = summaryOf(dir).manifest;
@@ -177,24 +160,15 @@ describe("rescoring a stored run", () => {
     expect(summaryOf(out).manifest.cases[c.id].label_sha256).toBe(caseDigests(MEASUREMENT, [c])[c.id].label_sha256);
   });
 
-  test("a run from before the manifest cannot be scored again: its rows lack the verdict, and the field is named", () => {
-    const dir = stored({ legacy: true, without: ["verdict"] });
+  test("a run whose rows lack the verdict cannot be scored again, and the field is named", () => {
+    const dir = stored({ without: ["verdict"] });
     expect(() => rescoreFolder(dir)).toThrow(RescoreError);
     expect(() => rescoreFolder(dir)).toThrow(/rows lack the raw output the judge-gate scorer reads: verdict \(\d+ rows?: /);
-  });
-
-  test("a summary with no manifest is scored again when its rows hold the raw output, with a manifest made from the summary", () => {
-    const dir = stored({ legacy: true });
-    const { out, result } = rescoreFolder(dir);
-    expect(result).toMatchObject({ changed: [], legacy: true });
-    const s = summaryOf(out);
-    expect(manifestProblems(s.manifest)).toEqual([]);
-    expect(s.manifest).toMatchObject({ corpus: "public", collector: { version: UNVERSIONED }, scorer: lockedParts(MEASUREMENT).scorer });
   });
 });
 
 describe("rescoring a run on a custom corpus", () => {
-  const CHANGED = (GOLDEN_CASES.find((c) => c.label === "bad" && c.severity === "harmful") as Case).id;
+  const CHANGED = (FIXTURE_CASES.find((c) => c.label === "bad" && c.severity === "harmful") as Case).id;
   /** A folder of your own cases inside the repository, which is where corpus_folder can name it: the public cases with one bad case relabelled churn. */
   function notes(): string {
     const inside = mkdtempSync(join(EVAL_DIR, ".custom-test-"));
@@ -230,15 +204,5 @@ describe("rescoring a run on a custom corpus", () => {
     const elsewhere = rescoreFolder(dir(), { cases: join(outside, "my notes") });
     expect(elsewhere.result.changed).toEqual([CHANGED]);
     expect(summaryOf(elsewhere.out).corpus_folder).toBeNull(); // outside the repository: never recorded
-  });
-});
-
-describe("the declaration", () => {
-  test("lists the files of the collector and of the scorer, and neither reaches the code of another eval", () => {
-    expect(MEASUREMENT.collector).toEqual(["evals/judge-gate/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"]);
-    expect(MEASUREMENT.scorer).toEqual(["evals/judge-gate/src/score.ts"]);
-    const { collector, scorer } = measuredFiles(MEASUREMENT); // throws when the scorer reaches a file that the collector covers
-    expect(scorer).toEqual(["evals/judge-gate/src/score.ts"]);
-    expect([...collector, ...scorer].filter((f) => /^(evals|benchmarks)\//.test(f) && !f.startsWith("evals/judge-gate/"))).toEqual([]);
   });
 });

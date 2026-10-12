@@ -1,12 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
-import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
-import { caseDigests, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
-import { endpointId, endpointRecord, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
-import { type LoadedCase, type Raw, assetsDigest, extractConfig, generatorSha256, loadCases, similarity } from "./lib.ts";
+import type { ResolvedCorpus } from "../../../lib/corpus.ts";
+import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
+import { endpointHost, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { type LoadedCase, type Raw, assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
@@ -98,7 +98,7 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
 const ctx = { baseUrl: "http://localhost:8080/v1", model: "the-model", hasKey: false, version: "0.9.99-test", label: "t" };
 
 /** The public corpus, read from `assets`. */
-const publicOf = (assets: string): ResolvedCorpus => ({ name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
+const publicOf = (assets: string): ResolvedCorpus => ({ name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" });
 const runPublic = (c: typeof ctx & Record<string, unknown>, folders: { assets: string; results: string }) => runCorpus(publicOf(folders.assets), c, folders.results);
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -294,7 +294,7 @@ describe("what summary.json says about the run", () => {
     expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
     expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
     const written = extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey);
     expect(stored.config).toEqual({ ...written, engines: { model: { ...written.engines.model, endpoint: "<MODEL_BASE_URL>/chat/completions" } } }); // the config the sessions ran with, but for the endpoint
     expect(stored.config.engines.model).toMatchObject({ temperature: 0, enableThinking: false });
@@ -313,7 +313,7 @@ describe("what summary.json says about the run", () => {
     expect(changed.assets_sha256).not.toBe(whole.assets_sha256);
   });
 
-  test("a key is named by variable and never held, and a key written into the config is redacted", async () => {
+  test("a key is never held, and every key in the config is redacted", async () => {
     const withKey = { ...ctx, hasKey: true, overrides: { strategy: "extract-only", configPatch: { path: "p.json", sha256: "a".repeat(64), patch: { engines: { other: { kind: "llm", apiKey: "sk-secret-value" } } } } } };
     const summary = await quiet(() => runPublic(withKey, assetsFor(scenarios.slice(0, 1))));
     const stored = storedIn(summary.results_dir);
@@ -329,22 +329,21 @@ describe("what summary.json says about the run", () => {
     const stored = storedIn(summary.results_dir);
     expect(stored.config.engines.model.endpoint).toBe("<MODEL_BASE_URL>/chat/completions");
     expect(stored.engine.endpoint).toBe("https://gateway.example.com:8443");
-    expect(stored.engine.endpoint_id).toBe(endpointId(completionsUrl("https://gateway.example.com:8443/v1?api_key=another")));
     for (const secret of ["alice", "hunter2", "abc123"]) expect(JSON.stringify(stored)).not.toContain(secret);
     expect(JSON.stringify(stored.config)).not.toContain("https://");
     expect(JSON.stringify(samplesIn(summary.results_dir))).not.toContain("hunter2");
   });
 
-  test("a corpus is recorded as public or custom, with its kind, whether it is private and its seed, and a rewrite's seed is the one in its corpus config", async () => {
+  test("a corpus is recorded as public or custom, with its seed: a rewrite has one, and your own cases and the public ones none", async () => {
     const folders = assetsFor(scenarios.slice(0, 1));
-    const custom = (config: CorpusConfig): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config, configFile: null, flag: "--corpus custom" });
-    const rewrite = storedIn((await quiet(() => runCorpus(custom({ kind: "rewrite", private: false, seed: "18446744073709551615", generated: "generated.json" }), ctx, folders.results))).results_dir);
-    expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, seed: "18446744073709551615" });
+    const custom = (rewrite: boolean, seed: string | null): ResolvedCorpus => ({ name: "custom", folder: folders.assets, rewrite, seed, flag: "--corpus custom" });
+    const rewrite = storedIn((await quiet(() => runCorpus(custom(true, "18446744073709551615"), ctx, folders.results))).results_dir);
+    expect(rewrite).toMatchObject({ corpus: "custom", seed: "18446744073709551615" });
     expect(rewrite.manifest).toMatchObject({ corpus: "custom", settings: { seed: "18446744073709551615" } });
-    const own = storedIn((await quiet(() => runCorpus(custom({ kind: "own", private: true }), { ...ctx, label: "own" }, folders.results))).results_dir);
-    expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, seed: null });
+    const own = storedIn((await quiet(() => runCorpus(custom(false, null), { ...ctx, label: "own" }, folders.results))).results_dir);
+    expect(own).toMatchObject({ corpus: "custom", seed: null });
     const pub = storedIn((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).results_dir);
-    expect(pub).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, seed: null });
+    expect(pub).toMatchObject({ corpus: "public", seed: null });
     for (const stored of [rewrite, own, pub]) expect(JSON.stringify(stored)).not.toContain(folders.assets); // the folder's name can say what is in it; it is recorded only when it is inside the repository, as corpus_folder
     expect(rewrite.corpus_folder).toBeNull(); // the temporary folder is outside the repository
   });
@@ -354,7 +353,7 @@ describe("what summary.json says about the run", () => {
     const inside = mkdtempSync(join(import.meta.dir, "..", ".custom-run-"));
     dirs.push(inside);
     cpSync(folders.assets, join(inside, "assets"), { recursive: true });
-    const own: ResolvedCorpus = { name: "custom", folder: join(inside, "assets"), config: { kind: "own", private: true }, configFile: null, flag: "--cases notes" };
+    const own: ResolvedCorpus = { name: "custom", folder: join(inside, "assets"), rewrite: false, seed: null, flag: "--cases notes" };
     const stored = storedIn((await quiet(() => runCorpus(own, ctx, folders.results))).results_dir);
     expect(stored.corpus_folder).toBe(`evals/extract/${basename(inside)}/assets`);
     expect(JSON.stringify(stored)).not.toContain(inside); // never an absolute path
@@ -371,8 +370,8 @@ describe("the manifest of a run", () => {
     const { manifest } = stored;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "extract-only", config_patch_sha256: null, timeout_ms: null, seed: null });
     const loaded = loadCases(folders.assets);
@@ -403,7 +402,7 @@ describe("the manifest of a run", () => {
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);
-    expect(manifest.engines.model).toEqual({ model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
+    expect(manifest.engines.model).toEqual({ model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 });
   });
 
   test("a run that stops early keeps every selected case in the manifest, with those it never ran in neither list", async () => {
@@ -505,44 +504,22 @@ describe("the command", () => {
     expect(run(["--strategy", "thorough", "--config-patch", join(root, "patch.json")], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
-  test("your own notes go only to a model that models.json marks private, and the refusal comes before anything runs", () => {
+  test("a folder of your own cases that has none is missing, and the run stops before it asks for akm", () => {
     const notes = mkdtempSync(join(tmpdir(), "extract-notes-"));
     dirs.push(notes);
     const done = run(["--cases", notes], model);
     expect(done.code).toBe(2);
-    expect(done.err).toContain(`--cases ${notes} sends your memories to the-model, which is not marked "private": true in models.json.`);
-    expect(done.err).toContain("The corpus is private: it has no corpus.json, and an own corpus without one is private.");
+    expect(done.err).toContain("the custom corpus is missing");
     expect(done.err).not.toContain("no-such-akm-in-this-test"); // the akm was never asked for
-    // a corpus.json that says nothing private is in it lifts the refusal
-    writeFileSync(join(notes, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
-    const lifted = run(["--cases", notes], model);
-    expect(lifted.err).not.toContain("sends your memories");
-    expect(lifted.err).toContain("the custom corpus is missing"); // and the run goes on to look for the cases
   });
 
-  test("run --corpus private refuses assets whose stored generator digest is zeroed, and takes freshly generated ones (#44)", () => {
-    const out = mkdtempSync(join(tmpdir(), "extract-generated-"));
-    dirs.push(out);
-    const made = Bun.spawnSync(["bun", join(import.meta.dir, "generate.ts"), "--seed", "7", "--out", out], { stdout: "pipe", stderr: "pipe" });
-    expect(made.exitCode).toBe(0);
-    writeFileSync(join(out, "corpus.json"), JSON.stringify({ kind: "rewrite", private: false, seed: "7", generated: "generated.json" }));
-    const generated = join(out, "generated.json");
-    const stored = JSON.parse(readFileSync(generated, "utf8"));
-    expect(stored.rewrite).toBe(generatorSha256()); // a digest of the generator's code
-    const fresh = run(["--cases", join(out, "assets")], model);
-    expect(fresh.err).not.toContain("generator that has changed since");
-    expect(fresh.err).toContain("no-such-akm-in-this-test"); // it went on to the akm check
-    writeFileSync(generated, JSON.stringify({ ...stored, rewrite: "0".repeat(64) }));
-    const zeroed = run(["--cases", join(out, "assets")], model);
-    expect(zeroed.code).toBe(2);
-    expect(zeroed.err).toContain("the private assets cannot be used: they were made by a generator that has changed since");
-    expect(zeroed.err).toContain("Make them again with: ./generate-assets --only extract");
-    expect(zeroed.err).not.toContain("no-such-akm-in-this-test");
-  });
-
-  test("--corpus private still works for one more release, with a line that names the new form", () => {
-    const done = run(["--corpus", "private"], model);
-    expect(done.err).toContain("extract: --corpus private is now --corpus custom. The old value works for one more release.");
+  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const done = run(["--corpus", old], model);
+      expect(done.code, old).toBe(2);
+      expect(done.err, old).toContain(`extract: --corpus ${old} was renamed in 0.2: use `);
+      expect(done.err, old).not.toContain("no-such-akm-in-this-test");
+    }
   });
 
   test("--corpus takes public, custom or all, and refuses another value", () => {

@@ -6,19 +6,19 @@
 //   evals/bakeoff/run [--corpus public|custom|all] [--cases DIR] [--process NAME] [--limit N] [--repeat N] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
-import { type CaseContext, GENERATED, NAME, PROCESSES, type Process, type Row, type Metrics, assetsSha256, configFor, loadCases, pct, privateAssetsProblem, runCase, selectCases, summarize } from "./lib.ts";
+import { type CaseContext, NAME, PROCESSES, type Process, type Row, type Metrics, assetsSha256, configFor, loadCases, pct, runCase, selectCases, summarize } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 
 export { runCase };
@@ -49,8 +49,6 @@ Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 interface Summary {
   eval: string;
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, so scripts/rescore can read its cases. Null for the public corpus and for a folder outside the repository (then rescore takes --cases DIR). Never an absolute path. */
   corpus_folder: string | null;
   label: string;
@@ -75,7 +73,7 @@ interface Summary {
   engine: EngineSettings;
   /** The digest of the corpus folder: cases.json and the files the cases name, by path relative to it. */
   assets_sha256: string;
-  /** The seed of the corpus, when it is a rewrite of the public cases (corpus.json). Null for the public corpus and for your own. */
+  /** The seed of the corpus, when it is a rewrite of the public cases. Null for the public corpus and for your own. */
   seed: string | null;
   /** "aborted" when the run gave up (the endpoint down or rate limiting) and so may have run fewer cases than it selected. Then aborted_reason says why. */
   status: "complete" | "aborted";
@@ -89,7 +87,7 @@ interface Summary {
   /** The model names that answered, as the responses give them, with how many cases each answered. */
   served: Record<string, number>;
   metrics: Metrics;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -141,25 +139,15 @@ function printSideBySide(a: Summary, b: Summary): void {
 /** The folder a corpus's results go to: the eval's results/ for the public corpus, private/bakeoff/results for a custom one. */
 const resultsFolder = (corpus: ResolvedCorpus): string => (corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"));
 
-/** The generated.json of a rewrite: where its corpus.json says, else beside the assets folder. */
-const generatedFile = (corpus: ResolvedCorpus): string => (corpus.configFile && corpus.config.generated ? resolve(dirname(corpus.configFile), corpus.config.generated) : join(dirname(corpus.folder), GENERATED));
-
-/**
- * Why a corpus cannot be run, in a sentence that says what to do, or undefined when it can. A custom corpus needs its cases.json. A rewrite of
- * the public cases (the old --corpus private) must have been made from the public assets as they are now, by the generator as it is now, and
- * must be as generate wrote it: see privateAssetsProblem.
- */
-export function corpusProblem(corpus: ResolvedCorpus, publicFolder: string = join(EVAL_DIR, "assets")): string | undefined {
+/** Why a corpus cannot be run, in a sentence that says what to do, or undefined when it can. A custom corpus needs its cases.json. */
+export function corpusProblem(corpus: ResolvedCorpus): string | undefined {
   if (corpus.name === "public") return undefined;
   const where = corpusFolderOf(corpus.folder) ?? corpus.folder;
-  const again = corpus.config.kind === "rewrite" ? ". Make it with: ./generate-assets --only bakeoff" : "";
-  if (!existsSync(join(corpus.folder, "cases.json"))) return `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
-  const stale = corpus.config.kind === "rewrite" ? privateAssetsProblem(corpus.folder, generatedFile(corpus), publicFolder, where) : undefined;
-  return stale ? `the ${corpus.flag} corpus cannot be used: ${stale}` : undefined;
+  const again = corpus.rewrite ? ". Make it with: ./generate-assets --only bakeoff" : "";
+  return existsSync(join(corpus.folder, "cases.json")) ? undefined : `the ${corpus.flag} corpus has no cases.json in ${where}${again}`;
 }
 
 export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent: string = resultsFolder(corpus)): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const all = loadCases(corpus.folder);
   const cases = selectCases(all, ctx.limit, ctx.process);
   if (cases.length === 0) fail(`no case to run: the corpus has none for ${ctx.process}`);
@@ -194,10 +182,9 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   const config = configFor(ctx);
   const build = akmBuild();
   const counts = summarize(rows);
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -207,7 +194,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "custom" ? corpusFolderOf(corpus.folder) : null,
     label: ctx.label,
     date: new Date().toISOString(),
@@ -219,7 +206,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
     limit: ctx.limit ?? null,
     process: ctx.process ?? null,
     config_patch: ctx.configPatch ? { path: ctx.configPatch.path, sha256: ctx.configPatch.sha256 } : null,
-    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host and the digest of its identity
+    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
     engine: engineSettings(config),
     assets_sha256: assetsSha256(corpus.folder),
     seed,
@@ -244,7 +231,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; process?: string; limit?: string; repeat?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; process?: string; limit?: string; repeat?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, process: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, "config-patch": OVERRIDE_OPTIONS["config-patch"], ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -256,7 +243,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }
@@ -267,11 +253,9 @@ async function main(): Promise<void> {
   if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) fail(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
   const configPatch = parseOverrides({ "config-patch": values["config-patch"] }, "", fail).configPatch;
 
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "memories");
-  if (refusal) fail(refusal);
   for (const c of corpora) {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
@@ -279,6 +263,7 @@ async function main(): Promise<void> {
   const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const probe = createSandbox(NAME);
   let version: string;

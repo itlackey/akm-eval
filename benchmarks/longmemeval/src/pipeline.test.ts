@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
+import { basename, dirname, join } from "node:path";
+import { commandLine, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, readManifest } from "../../../lib/manifest.ts";
-import { endpointId, harnessSha256, sha256Files } from "../../../lib/provenance.ts";
+import { readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
+import { harnessSha256, sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
 import { evidence, fakeAkmScript, sandboxRunning, tinyDataset, writePublicAssets } from "./fakes.ts";
-import { GENERATED, basisOf, manifestOf } from "./manifest.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { resolveEndpoints, runCorpus } from "./run.ts";
 import { isAbstentionQuestion } from "./prompts.ts";
@@ -30,8 +29,8 @@ const tmp = () => {
 };
 
 /** The public corpus in a folder of assets, and the rewrite that generate made in one, as lib/corpus.ts resolves them. */
-const publicOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "public", folder: folders.assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" });
-const rewriteOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "custom", folder: folders.assets, config: { kind: "rewrite", private: false }, configFile: null, flag: "--corpus custom" });
+const publicOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "public", folder: folders.assets, rewrite: false, seed: null, flag: "--corpus public" });
+const rewriteOf = (folders: { assets: string }): ResolvedCorpus => ({ name: "custom", folder: folders.assets, rewrite: true, seed: null, flag: "--corpus custom" });
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -236,10 +235,9 @@ describe("runCorpus", () => {
     expect(rows.map((r) => [r.n_sessions, r.sessions_over_projection_limit])).toEqual([[4, 0], [4, 0], [3, 0]]);
 
     // what the run sent, and where: the temperature and the token limits, as the benchmark's evaluate_qa.py has them for the judge
-    const host = `http://127.0.0.1:${server.port}`; // what a summary shows of an endpoint: the host, and the digest of its identity with the path, which it does not show (#65)
-    const id = endpointId(`${host}/v1`);
-    expect(summary).toMatchObject({ model_endpoint: host, model_endpoint_id: id, judge_endpoint: host, judge_endpoint_id: id, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
-    expect(stored).toMatchObject({ model_endpoint: host, model_endpoint_id: id, judge_endpoint: host, judge_endpoint_id: id, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
+    const host = `http://127.0.0.1:${server.port}`; // what a summary shows of an endpoint: the host, never the path (#65)
+    expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
+    expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
     expect(graded).toHaveLength(6);
     expect(graded.every((b) => b.max_tokens === 10 && b.temperature === 0)).toBe(true);
@@ -261,28 +259,26 @@ describe("runCorpus", () => {
     expect(summary.manifest).toEqual(stored.manifest);
     const reading = readManifest(stored);
     expect(reading.kind).toBe("manifest"); // the one validator reads it
-    const lock = lockedParts(MEASUREMENT);
     expect(stored.manifest).toMatchObject({
       eval: "longmemeval",
       corpus: "public",
       mode: null,
-      harness_version: lock.harness_version,
-      collector: { version: lock.collector.version, sha256: lock.collector.sha256 },
-      scorer: { version: lock.scorer.version, sha256: lock.scorer.sha256 },
+      harness_version: HARNESS_VERSION,
+      collector: { version: MEASUREMENT.version },
       akm: { version: "0.9.99-test" },
       completion: { selected: ["q-secret", "q-cats", "q-passport_abs"], scored: ["q-secret", "q-cats", "q-passport_abs"], errored: [] },
     });
     // every question by what it presents and what it is judged by
     expect(Object.keys(stored.manifest.cases)).toEqual(["q-secret", "q-cats", "q-passport_abs"]);
     expect(Object.values(stored.manifest.cases).every((c: any) => /^[0-9a-f]{64}$/.test(c.input_sha256) && /^[0-9a-f]{64}$/.test(c.label_sha256))).toBe(true);
-    // the model and the judge are the engines of the run, each by its host and the digest of its identity
+    // the model and the judge are the engines of the run, each by its host
     const host = `http://127.0.0.1:${server.port}`;
     expect(stored.manifest.engines).toEqual({
-      model: { model: "fake-model", endpoint: host, endpoint_id: endpointId(`${host}/v1`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
-      judge: { model: "fake-judge", endpoint: host, endpoint_id: endpointId(`${host}/v1`), temperature: 0, enableThinking: null, timeoutMs: 900_000 },
+      model: { model: "fake-model", endpoint: host, temperature: 0, enableThinking: null, timeoutMs: 900_000 },
+      judge: { model: "fake-judge", endpoint: host, temperature: 0, enableThinking: null, timeoutMs: 900_000 },
     });
-    // the corpus is recorded by its name and kind, and the folder is not in the summary: the one of this test is in a temporary folder
-    expect(stored).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, mode: null });
+    // the corpus is recorded by its name, and the folder is not in the summary: the one of this test is in a temporary folder
+    expect(stored).toMatchObject({ corpus: "public", corpus_folder: null, mode: null });
     expect(JSON.stringify(stored)).not.toContain(root);
     // a run with no model is another mode and has no engines
     const only = await quiet(() => runCorpus(publicOf(folders), { label: "o", sampleSeed: 1 }, { akm, model: null, judge: null, version: "v" }, folders));
@@ -311,10 +307,10 @@ describe("runCorpus", () => {
 
     // private: rewrite.json and the questions, and the seed generate recorded, as the string it holds
     const { assets } = await privateTree(root, folders.assets, "18446744073709551615");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    const mine = { assets, results: join(root, "private-results") };
     const priv = await quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1 }, retrieval, mine));
     expect(priv.seed).toBe("18446744073709551615");
-    expect(priv).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, manifest: { corpus: "custom", settings: { seed: "18446744073709551615" } } });
+    expect(priv).toMatchObject({ corpus: "custom", manifest: { corpus: "custom", settings: { seed: "18446744073709551615" } } });
     expect(priv.assets_sha256).toBe(digestIn(assets, ["rewrite.json", DATA_FILE]));
     expect(priv.assets_sha256).not.toBe(same.assets_sha256);
     expect(priv.dataset).toMatchObject({ tool: "lib/rewrite", file: DATA_FILE });
@@ -331,7 +327,7 @@ describe("runCorpus", () => {
     const { tree, assets } = await privateTree(root, folders.assets, "222");
     expect(readFileSync(seedFile, "utf8")).toBe("111\n");
     expect(JSON.parse(readFileSync(join(tree, "map.json"), "utf8")).seed).toBe("222");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    const mine = { assets, results: join(root, "private-results") };
 
     const drawn = await quiet(() => runCorpus(rewriteOf(mine), { label: "d", sampleSeed: 7, limit: 2 }, retrieval, mine));
     expect(drawn).toMatchObject({ seed: "222", sample_seed: 7, n_run: 2 });
@@ -344,42 +340,6 @@ describe("runCorpus", () => {
     // the public corpus has no rewrite seed, and its draw has a sample seed
     const pub = await quiet(() => runCorpus(publicOf(folders), { label: "u", sampleSeed: 9, limit: 2 }, retrieval, folders));
     expect(pub).toMatchObject({ seed: null, sample_seed: 9 });
-  });
-
-  test("a private run refuses a tree that generated.json does not vouch for, before it makes a results folder", async () => {
-    const { root, akm, folders } = setup();
-    const retrieval = { akm, model: null, judge: null, version: "v" };
-    const { tree, assets } = await privateTree(root, folders.assets, "222");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
-    const refused = async (message: string) => {
-      const run = () => quiet(() => runCorpus(rewriteOf(mine), { label: "r", sampleSeed: 1 }, retrieval, mine));
-      await expect(run()).rejects.toThrow(message);
-      await expect(run()).rejects.toThrow("Make them again with: ./generate-assets --only longmemeval");
-      expect(existsSync(mine.results)).toBe(false); // nothing ran
-    };
-    const [manifest, data, lock] = [readFileSync(join(tree, GENERATED)), readFileSync(join(assets, DATA_FILE)), readFileSync(join(folders.assets, "ASSETS.lock"), "utf8")];
-
-    rmSync(join(tree, GENERATED));
-    await refused("have no generated.json");
-    writeFileSync(join(tree, GENERATED), manifest);
-
-    // the public dataset moved on since the assets were made
-    writeFileSync(join(folders.assets, "ASSETS.lock"), lock.replace("r".repeat(40), "s".repeat(40)));
-    await refused("another public dataset");
-    writeFileSync(join(folders.assets, "ASSETS.lock"), lock);
-
-    // the generator that made the assets has changed since (#44): the digest of its code in generated.json is another one
-    writeFileSync(join(tree, GENERATED), JSON.stringify({ ...JSON.parse(manifest.toString()), generator_sha256: "0".repeat(64) }));
-    await refused("made by a generator that has changed since");
-    writeFileSync(join(tree, GENERATED), manifest);
-
-    // the questions were edited by hand
-    writeFileSync(join(assets, DATA_FILE), Buffer.concat([data, Buffer.from(" ")]));
-    await refused("not the ones generate wrote");
-    writeFileSync(join(assets, DATA_FILE), data);
-
-    // everything is as generate left it: the run goes ahead
-    expect((await quiet(() => runCorpus(rewriteOf(mine), { label: "ok", sampleSeed: 1 }, retrieval, mine))).seed).toBe("222");
   });
 
   test("the reader gets the sessions akm returns in the order of the haystack, and not by rank", async () => {
@@ -601,53 +561,28 @@ describe("runCorpus", () => {
     expect(done.every((r) => r.without_akm?.ok && r.with_akm?.ok)).toBe(true);
   });
 
-  test("resume takes the same host at another path for another endpoint, and a key, a login in the URL or a trailing slash for the same one, and no summary or message holds a path (#65)", async () => {
+  test("resume takes another path, a key, a login in the URL or a trailing slash on one host for the same endpoint, and no summary holds a path (#65)", async () => {
     const { akm, folders } = setup();
     const counter = { requests: 0 };
     server = fakeEndpoint(counter);
     const host = `http://127.0.0.1:${server.port}`;
-    const at = (path: string) => `${host}${path}`;
-    const A = at("/k-DUMMYSECRET0123/v1");
-    const B = at("/deployment-B/v1");
-    const shown = (url: string) => `${host} (id ${endpointId(url)?.slice(0, 12)})`; // what a message says of an endpoint: the host and the start of the digest
+    const A = `${host}/k-DUMMYSECRET0123/v1`;
     const endpoint = { baseUrl: A, apiKey: "", model: "fake-model" };
     const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
     const first = await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, context, folders));
-    expect(first).toMatchObject({ model_endpoint: host, model_endpoint_id: endpointId(A), judge_endpoint: host, judge_endpoint_id: endpointId(A) });
+    expect(first).toMatchObject({ model_endpoint: host, judge_endpoint: host });
     const dir = join(folders.results, readdirSync(folders.results)[0]);
-    const resume = (c: typeof context) => quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, c, folders));
-    const refusal = async (c: typeof context): Promise<string> => {
-      try {
-        await resume(c);
-      } catch (e) {
-        return (e as Error).message;
-      }
-      throw new Error("the resume went ahead");
-    };
     counter.requests = 0;
-    // two deployments on one host are two endpoints, told by the digest of the identity, and the message shows the host and the start of the digest
-    const [model, judge, other] = [await refusal({ ...context, model: { ...endpoint, baseUrl: B } }), await refusal({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: B } }), await refusal({ ...context, model: { ...endpoint, baseUrl: at("/k-DUMMYSECRET0123/v1/other") } })];
-    expect(model).toContain(`was run with a different model endpoint (${shown(A)}, now ${shown(B)})`);
-    expect(judge).toContain(`was run with a different judge endpoint (${shown(A)}, now ${shown(B)})`);
-    expect(other).toContain("a different model endpoint");
-    for (const message of [model, judge, other]) {
-      expect(message).not.toContain("DUMMYSECRET");
-      expect(message).not.toContain("deployment-B");
-    }
-    expect(counter.requests).toBe(0);
-    // a key, a user name and password in the URL and a trailing slash are not another endpoint, and none of them is written to the summary
-    const login = `http://user:synthetic-pass-3f9a@127.0.0.1:${server.port}/k-DUMMYSECRET0123/v1/`;
-    const same = await resume({ ...context, model: { ...endpoint, baseUrl: login, apiKey: "sk-synthetic-new" }, judge: { ...endpoint, model: "fake-judge", baseUrl: A, apiKey: "sk-synthetic-new" } });
+    // an endpoint is its host: another deployment path, a key, a user name and password in the URL and a trailing slash are the same one, and none of them is written to the summary
+    const login = `http://user:synthetic-pass-3f9a@127.0.0.1:${server.port}/deployment-B/v1/`;
+    const same = await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, { ...context, model: { ...endpoint, baseUrl: login, apiKey: "sk-synthetic-new" }, judge: { ...endpoint, model: "fake-judge", baseUrl: `${host}/deployment-B/v1`, apiKey: "sk-synthetic-new" } }, folders));
     expect(same).toMatchObject({ n_run: 3, complete: true, model_endpoint: host, judge_endpoint: host });
     expect(counter.requests).toBe(0);
-    // what the run wrote, the summary with its manifest and the rows, holds no path of the endpoint, no login and no key
     for (const file of ["summary.json", "samples.jsonl"]) {
       const text = readFileSync(join(dir, file), "utf8");
-      expect(text).not.toContain("DUMMYSECRET");
-      expect(text).not.toContain("synthetic-pass-3f9a");
-      expect(text).not.toContain("sk-synthetic-new");
+      for (const leak of ["DUMMYSECRET", "deployment-B", "synthetic-pass-3f9a", "sk-synthetic-new"]) expect(text).not.toContain(leak);
     }
-    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).manifest.engines.model).toMatchObject({ endpoint: host, endpoint_id: endpointId(A) });
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).manifest.engines.model).toMatchObject({ endpoint: host });
   });
 
   test("with no model it only measures what akm retrieves", async () => {
@@ -774,8 +709,7 @@ describe("runCorpus", () => {
     const other = fakeEndpoint();
     try {
       const elsewhere = `http://127.0.0.1:${other.port}/v1`;
-      const shown = (url: string) => { const u = new URL(url); return `${u.origin} (id ${endpointId(url)?.slice(0, 12)})`; };
-      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (${shown(endpoint.baseUrl)}, now ${shown(elsewhere)})`);
+      await expect(resume({ ...context, model: { ...endpoint, baseUrl: elsewhere } })).rejects.toThrow(`different model endpoint (${new URL(endpoint.baseUrl).origin}, now ${new URL(elsewhere).origin})`);
       await expect(resume({ ...context, judge: { ...endpoint, model: "fake-judge", baseUrl: elsewhere } })).rejects.toThrow("different judge endpoint");
     } finally {
       other.stop(true);
@@ -817,16 +751,14 @@ describe("runCorpus", () => {
     await expect(quiet(() => runCorpus(publicOf(folders), { label: "a", sampleSeed: 1, resume: publicDir }, retrieval, folders))).rejects.toThrow("was run with different questions (1 of 3 differ in what they present or are judged by");
     writePublicAssets(folders.assets);
 
-    // private: generated.json refuses questions that were edited, and where someone made it again to vouch for the edit, the manifest is what notices
-    const { tree, assets } = await privateTree(root, folders.assets, "5");
-    const mine = { assets, results: join(root, "private-results"), publicAssets: folders.assets };
+    // private: questions that were edited are other questions
+    const { assets } = await privateTree(root, folders.assets, "5");
+    const mine = { assets, results: join(root, "private-results") };
     await quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1 }, retrieval, mine));
     const privateDir = join(mine.results, readdirSync(mine.results)[0]);
     const resume = () => quiet(() => runCorpus(rewriteOf(mine), { label: "p", sampleSeed: 1, resume: privateDir }, retrieval, mine));
     expect((await resume()).n_run).toBe(3); // the same files carry on
     writeFileSync(join(assets, DATA_FILE), JSON.stringify(tinyDataset().map((q, i) => (i === 0 ? { ...q, answer: "RED" } : q))));
-    await expect(resume()).rejects.toThrow("not the ones generate wrote");
-    writeFileSync(join(tree, GENERATED), JSON.stringify(manifestOf(tree, "5", basisOf(folders.assets))));
     await expect(resume()).rejects.toThrow("was run with different questions (3 of 3 differ"); // the file is the public tiny dataset, which the rewrite changed in every question
   });
 });
@@ -881,25 +813,104 @@ describe("the command", () => {
     return { code: run.exitCode, out: run.stdout.toString(), err: run.stderr.toString() };
   };
 
-  test("a corpus of your own is private, so a model that models.json does not mark private is refused before anything runs (the private flag, #47)", () => {
+  test("a folder of your own that has no questions file is refused before anything runs", () => {
     const notes = tmp();
     const run = command(["--cases", notes, "--limit", "1"]);
     expect(run.code).toBe(2);
-    expect(run.err).toContain(`longmemeval: --cases ${notes} sends your chats to synthetic-model, which is not marked "private": true in models.json. The corpus is private: it has no corpus.json, and an own corpus without one is private.`);
-    // with no model there is nothing to send, and the folder is checked for the file it needs
-    const retrieval = command(["--cases", notes, "--retrieval-only"]);
-    expect(retrieval.code).toBe(2);
-    expect(retrieval.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
+    expect(run.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
   });
 
-  test("--corpus private still works for one release as the custom rewrite, --corpus own is not a value of this benchmark, and --help names --cases", () => {
-    const refused = command(["--corpus", "own"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--corpus must be public, custom or all, not "own"');
-    expect(command(["--corpus", "private", "--retrieval-only", "--cases", tmp()]).err).toContain("--cases is a custom corpus: it does not go with --corpus private");
+  test("--cases asks before it sends the chats to the model and the judge: with no terminal and no -y it stops before anything runs, and -y goes on", () => {
+    const notes = tmp();
+    writeFileSync(join(notes, DATA_FILE), JSON.stringify(tinyDataset()));
+    const asked = command(["--cases", notes, "--limit", "1"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain(`longmemeval: add -y to send the cases in ${notes} to synthetic-model at http://127.0.0.1:9/v1 and synthetic-judge at http://127.0.0.1:9/v1 without asking`);
+    // --retrieval-only has no model and no judge, so there is nothing to ask about
+    expect(command(["--cases", notes, "--retrieval-only"]).err).not.toContain("add -y");
+    expect(command(["--cases", notes, "--limit", "1", "--yes"]).err).not.toContain("add -y");
+  });
+
+  test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const refused = command(["--corpus", old]);
+      expect(refused.code, old).toBe(2);
+      expect(refused.err, old).toContain(`longmemeval: --corpus ${old} was renamed in 0.2: use `);
+    }
     const help = command(["--help"]);
     expect(help.code).toBe(0);
     expect(help.out).toContain("--corpus public|custom|all");
     expect(help.out).toContain("--cases DIR");
   });
+});
+
+describe("--repeat", () => {
+  /**
+   * The benchmark in a repository root of its own, as a checkout holds it: its code, lib/ and the lock of this checkout around the tiny dataset in
+   * assets/. run.ts reads its assets and writes its results beside itself, so a run of it touches nothing of this checkout. Its akm is the fake one,
+   * and its model and judge, when it has them, are the endpoint of the test. A command that has a model is run without blocking, so that the endpoint answers.
+   */
+  function benchmark() {
+    const here = join(import.meta.dir, "..", "..", "..");
+    const root = tmp();
+    cpSync(join(here, "lib"), join(root, "lib"), { recursive: true, filter: (src) => basename(src) !== "node_modules" });
+    const code = join(root, "benchmarks", "longmemeval", "src");
+    mkdirSync(code, { recursive: true });
+    for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts") && !file.endsWith(".test.ts")) cpSync(join(import.meta.dir, file), join(code, file));
+    writePublicAssets(join(root, "benchmarks", "longmemeval", "assets"));
+    const script = fakeAkmScript(root);
+    const results = join(root, "benchmarks", "longmemeval", "results");
+    const run = async (args: string[], model = false) => {
+      server ??= Bun.serve({ port: 0, fetch: () => Response.json({ model: "fake-model", choices: [{ message: { content: "yes" }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) });
+      const env = { ...process.env, AKM_BIN: commandLine(["bun", script]), MODEL_BASE_URL: `http://127.0.0.1:${server.port}/v1`, MODEL_API_KEY: "", MODEL_NAME: "fake-model", JUDGE_BASE_URL: "", JUDGE_API_KEY: "", JUDGE_MODEL: "fake-judge" };
+      const proc = Bun.spawn(["bun", join(code, "run.ts"), ...args], { env, stdout: "pipe", stderr: "pipe" });
+      const [out, err, exit] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+      return { code: exit, out, err };
+    };
+    /** What the run left in results/, without the date the folders start with. */
+    const names = () => (existsSync(results) ? readdirSync(results).sort().map((n) => n.replace(/^\d{4}-\d{2}-\d{2}-/, "")) : []);
+    const folder = (name: string) => join(results, readdirSync(results).find((n) => n.endsWith(`-${name}`)) as string);
+    return { root, results, run, names, read: (name: string) => JSON.parse(readFileSync(join(folder(name), "summary.json"), "utf8")), spread: (label: string) => JSON.parse(readFileSync(folder(`${label}-repeat-summary.json`), "utf8")) };
+  }
+
+  test("--repeat 2 writes two runs of every question, each a whole run, and the spread of their metrics beside them", async () => {
+    const b = benchmark();
+    const r = await b.run(["--repeat", "2", "--label", "rep"]);
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["rep-r1", "rep-r2", "rep-repeat-summary.json"]);
+    const [one, two] = [b.read("rep-r1"), b.read("rep-r2")];
+    expect([one.label, one.status, one.n_run, two.label, two.status, two.n_run]).toEqual(["rep-r1", "complete", 3, "rep-r2", "complete", 3]);
+    expect([readManifest(one).kind, readManifest(two).kind]).toEqual(["manifest", "manifest"]);
+    for (const dir of readdirSync(b.results).filter((n) => !n.endsWith(".json"))) expect(existsSync(join(b.results, dir, ".running")), dir).toBe(false);
+    const spread = b.spread("rep");
+    expect(spread).toMatchObject({ eval: "longmemeval", corpus: "public", label: "rep", repeat: 2, model: "fake-model", akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 } });
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    // every number of the metrics is a spread over the two runs
+    expect(spread.metrics.accuracy.with_akm.rate).toEqual({ min: one.metrics.accuracy.with_akm.rate, max: two.metrics.accuracy.with_akm.rate, mean: one.metrics.accuracy.with_akm.rate });
+    expect(spread.metrics.retrieval.hit_rate).toEqual({ min: 0.5, max: 0.5, mean: 0.5 });
+    expect(spread.seconds.min).toBeGreaterThanOrEqual(0);
+  }, 120_000);
+
+  test("a run with no model repeats too, and its repeat summary has no model", async () => {
+    const b = benchmark();
+    const r = await b.run(["--repeat", "2", "--retrieval-only"]);
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["retrieval-r1", "retrieval-r2", "retrieval-repeat-summary.json"]);
+    const spread = b.spread("retrieval");
+    expect(spread).toMatchObject({ eval: "longmemeval", repeat: 2, metrics: { accuracy: null, retrieval: { hit_rate: { min: 0.5, max: 0.5, mean: 0.5 } } } });
+    expect("model" in spread).toBe(false);
+    expect(b.read("retrieval-r1").manifest).toMatchObject({ mode: "retrieval-only" });
+    // a run without --repeat is as it was: one folder, no repeat summary
+    const once = benchmark();
+    expect((await once.run(["--retrieval-only", "--label", "once"])).code).toBe(0);
+    expect(once.names()).toEqual(["once"]);
+  }, 120_000);
+
+  test("--repeat must be a positive integer, and does not go with --resume: a refused command runs nothing", async () => {
+    const b = benchmark();
+    for (const value of ["0", "1.5", "two"]) expect(await b.run(["--repeat", value, "--retrieval-only"]), value).toMatchObject({ code: 2, err: expect.stringContaining("--repeat must be a positive integer") });
+    expect(await b.run(["--repeat", "2", "--resume", join(b.root, "somewhere"), "--retrieval-only"])).toMatchObject({ code: 2, err: expect.stringContaining("--resume carries on one run, so it does not go with --repeat") });
+    expect(b.names()).toEqual([]);
+    expect((await b.run(["--help"])).out).toContain("--repeat N        run each corpus N times");
+  }, 60_000);
 });

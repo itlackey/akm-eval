@@ -11,17 +11,15 @@
 // Dates move back by whole calendar years, the sessions' and the ones written in the chats, so month and day agree.
 //
 // Everything is made in a folder beside the result, private/longmemeval/.staging: the questions, rewrite.json, the map and
-// generated.json, the manifest that holds the seed and the digests of the inputs, the generator and the files. Every check runs on
-// that staged tree, and only when all of them pass is it moved into place. A generation that fails, at whatever step, leaves the
-// assets, the map and generated.json of the run before exactly as they were. `run --corpus private` refuses a tree without a
-// manifest, one made from other inputs or by other code, and one whose files the manifest does not match (see manifest.ts).
+// generated.json, which holds the seed. Every check runs on that staged tree, and only when all of them pass is it moved into place.
+// A generation that fails, at whatever step, leaves the assets, the map and generated.json of the run before exactly as they were.
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DATA_FILE, type Question, ensureDataset, loadQuestions, readLock } from "./dataset.ts";
-import { GENERATED, type Generated, OUTPUTS, basisOf, manifestOf, outputsSha256 } from "./manifest.ts";
+import { GENERATED, OUTPUTS } from "./manifest.ts";
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
@@ -206,8 +204,8 @@ const sha256 = (data: string | Uint8Array): string => createHash("sha256").updat
 
 /**
  * What is wrong with the staged tree, as a list of sentences. Empty when every invariant holds: the files are all there and are the
- * bytes this run meant to write, rewrite.json vouches for the questions and for the public data they come from, the map is the one
- * of this seed, and the manifest names the digest of the files as they are on disk.
+ * bytes this run meant to write, rewrite.json vouches for the questions and for the public data they come from, and the map is the one
+ * of this seed.
  */
 export function stagedProblems(tree: string, seed: string, data: string, lockSha256: string): string[] {
   const found: string[] = [];
@@ -228,15 +226,13 @@ export function stagedProblems(tree: string, seed: string, data: string, lockSha
   if (provenance && provenance.derived_from?.sha256 !== lockSha256) found.push("rewrite.json does not name the public dataset that ASSETS.lock pins");
   const map = read<{ seed?: unknown }>("map.json");
   if (map && map.seed !== seed) found.push(`map.json holds seed ${String(map.seed)}, and this run's seed is ${seed}`);
-  const manifest = read<Generated>(GENERATED);
-  if (manifest && (manifest.seed !== seed || manifest.outputs_sha256 !== outputsSha256(tree))) found.push(`${GENERATED} does not describe the staged files`);
   return found;
 }
 
 /**
- * Moves the staged assets, map and manifest into `out`, in place of the earlier ones, and puts the earlier ones back if a move
- * fails. The manifest goes out first and comes in last, so a run that dies in the middle (which nothing here can undo) leaves a tree
- * with no manifest, which `run --corpus private` refuses, and the earlier files in `out/.old`.
+ * Moves the staged assets, map and generated.json into `out`, in place of the earlier ones, and puts the earlier ones back if a move
+ * fails. generated.json goes out first and comes in last, so a run that dies in the middle (which nothing here can undo) leaves a tree
+ * with no generated.json and the earlier files in `out/.old`.
  */
 export function install(staged: string, out: string): void {
   const old = join(out, ".old");
@@ -296,8 +292,6 @@ export async function generate(opts: Options): Promise<Result> {
   const tree = join(staging, "tree");
   const map = join(tree, "map.json");
 
-  // Before anything is read or run: an input or a generator that changes during the run makes the assets stale, not fresh.
-  const basis = basisOf(publicAssets);
   const lock = readLock(publicAssets);
   const questions = loadQuestions(await ensureDataset(publicAssets));
   console.log(`longmemeval: rewriting ${questions.length} questions, dates back ${yearsBack} year(s)`);
@@ -336,7 +330,7 @@ export async function generate(opts: Options): Promise<Result> {
       sha256: sha256(data),
     };
     writeFileSync(join(tree, "assets", "rewrite.json"), `${JSON.stringify(provenance, null, 2)}\n`);
-    writeFileSync(join(tree, GENERATED), `${JSON.stringify(manifestOf(tree, seed, basis), null, 2)}\n`);
+    writeFileSync(join(tree, GENERATED), `${JSON.stringify({ seed }, null, 2)}\n`);
 
     // Every check runs on the staged tree, last, so a failure here has changed nothing outside the staging folder.
     const problems = [

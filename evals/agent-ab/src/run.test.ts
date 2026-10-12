@@ -9,17 +9,17 @@ import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
-import { caseDigests, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
 import { generate } from "./generate.ts";
-import { isFictional, publicInputs } from "./inputs.ts";
+import { isFictional } from "./inputs.ts";
 import { MEASUREMENT, casesIn } from "./measurement.ts";
 import { jobConfig, runCorpus, selectTasks, sideBySide, taskNames } from "./run.ts";
 
 const EVAL_DIR = join(import.meta.dir, "..");
-const PUBLIC = resolveCorpora({ eval: "agent-ab", values: {}, publicFolder: EVAL_DIR, default: "rewrite" })[0] as ResolvedCorpus;
+const PUBLIC = resolveCorpora({ eval: "agent-ab", values: {}, publicFolder: EVAL_DIR })[0] as ResolvedCorpus;
 
 /** The rows of a samples.jsonl: one per task, with all its trials, the control's and the akm arm's. */
 const rowsOf = (dir: string): any[] => readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -60,7 +60,7 @@ describe("sideBySide", () => {
   test("puts the two corpora in columns and pools nothing", () => {
     const pub = buildReport([trial("a", "control", 0), trial("a", "akm", 1), trial("b", "control", 0), trial("b", "akm", 1)]);
     const priv = buildReport([trial("c", "control", 0), trial("c", "akm", 0)]);
-    const lines = sideBySide({ corpus: "public", report: pub }, { corpus: "private", report: priv });
+    const lines = sideBySide({ corpus: "public", report: pub }, { corpus: "custom", report: priv });
     expect(lines[0]).toContain("side by side (not pooled)");
     expect(lines.join("\n")).toContain("public");
     expect(lines.find((l) => l.includes("difference"))).toContain("+1.000 [1.000, 1.000] over 2 tasks");
@@ -70,7 +70,7 @@ describe("sideBySide", () => {
 
   test("copes with a run that scored nothing", () => {
     const empty = buildReport([]);
-    expect(sideBySide({ corpus: "public", report: empty }, { corpus: "private", report: empty }).join("\n")).toContain("n/a");
+    expect(sideBySide({ corpus: "public", report: empty }, { corpus: "custom", report: empty }).join("\n")).toContain("n/a");
   });
 });
 
@@ -123,8 +123,6 @@ describe("the public tasks", () => {
       expect(existsSync(join(EVAL_DIR, "tasks", gone))).toBe(false);
     }
     expect(readdirSync(join(EVAL_DIR, "libraries")).sort()).toEqual(["drillbit", "inkwell"]); // the libraries only the dropped tasks seeded went with them
-    // generate rewrites every public task now, and the private assets made before are the rewrite of these six: dropping the others left no input of theirs changed
-    expect(publicInputs(EVAL_DIR)).toEqual({ tasks, libraries: ["drillbit", "inkwell"] });
   });
 
   test("each has an instruction, a solution, a verifier and a library to seed", () => {
@@ -217,7 +215,7 @@ describe("runCorpus", () => {
     const cells = (n: number) => ({ expected: n, completed: n, failed: 0, missing: 0, unexpected: 0 });
     expect(stored).toMatchObject({ status: "complete", aborted_reason: null, harbor_exit: 0 });
     expect(stored.completion).toEqual({ ...cells(6), control: cells(3), akm: cells(3) });
-    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1") });
+    expect(stored.engine).toEqual({ model: "openai/x", endpoint: "http://192.0.2.5:8080" });
     expect(stored.corpus_folder).toBeNull(); // a public run has no folder to record
     expect(stored.config).toEqual(stored.job);
     expect(JSON.stringify(stored)).not.toMatch(/sk-model-key|hunter2/);
@@ -246,10 +244,10 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const m = stored.manifest;
     const tasks = selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3);
-    const parts = lockedParts(MEASUREMENT);
-    expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(m).toMatchObject({ eval: "agent-ab", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
     expect(m.akm).toEqual({ version: PINS.akm_cli, bin: `akm-cli@${PINS.akm_cli}`, build: null, build_fingerprint: stored.akm_build_fingerprint });
-    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", endpoint_id: sha256Text("http://192.0.2.5:8080/v1"), temperature: null, enableThinking: null, timeoutMs: null } });
+    expect(m.engines).toEqual({ opencode: { model: "openai/x", endpoint: "http://192.0.2.5:8080", temperature: null, enableThinking: null, timeoutMs: null } });
     expect(m.treatment_hints).toEqual({ attempts: 1 }); // a run of three attempts is not compared with a run of one
     expect(m.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(m.config.redacted.datasets).toBeUndefined(); // the tasks are the cases
@@ -291,7 +289,7 @@ describe("runCorpus", () => {
     const again = readJson(join(out, "summary.json"));
     for (const key of ["report", "metrics", "timeouts", "n_errored"]) expect(again[key], key).toEqual(stored[key]);
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(s.results_dir, "samples.jsonl"), "utf8"));
-    expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), scorer: stored.manifest.scorer, dropped: [] });
+    expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), dropped: [] });
     expect(again.manifest.collector).toEqual(stored.manifest.collector);
     expect(again.manifest.cases).toEqual(stored.manifest.cases);
     expect(again.manifest.completion).toEqual(stored.manifest.completion);
@@ -313,13 +311,7 @@ describe("runCorpus", () => {
     expect(result.summary.report.control.passed).toBe(result.summary.metrics.control.passed);
   });
 
-  test("rescore refuses a run from before the manifest, whose samples.jsonl has one line per trial, and names the problem", () => {
-    const legacy = { dir: "2026-10-06-old", summary: { eval: "agent-ab", corpus: "public", assets_sha256: "0".repeat(64) }, rows: [{ task: "drillbit--backup-policy-train", arm: "akm", reward: 1 }] };
-    expect(() => rescoreRun(legacy)).toThrow(RescoreError);
-    expect(() => rescoreRun(legacy)).toThrow("was made before the manifest, and cannot be scored again: its samples.jsonl has one line per trial");
-  });
-
-  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host still compare as different (#65)", async () => {
+  test("a path segment of the model's URL is in no file of the results folder, and two deployments on one host are the same endpoint (#65)", async () => {
     const { root, env } = fakeUv();
     const results = join(root, "results");
     const summaries: Record<string, any>[] = [];
@@ -329,8 +321,7 @@ describe("runCorpus", () => {
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
     expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
-    expect(summaries[0]?.engine.endpoint_id).not.toBe(summaries[1]?.engine.endpoint_id);
-    expect(identityOf(summaries[0] as Record<string, any>).engine).not.toBe(identityOf(summaries[1] as Record<string, any>).engine);
+    expect(identityOf(summaries[0] as Record<string, any>).engine).toBe(identityOf(summaries[1] as Record<string, any>).engine);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {
@@ -626,10 +617,9 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(summary("plain").assets_sha256).toBe(s.assets_sha256);
   }, 60_000);
 
-  test("run --corpus custom refuses a tree with no manifest, one made from other public inputs or by another generator, and one whose files are not what generate wrote, and runs one that is sound", () => {
+  test("run --corpus custom says how to make the assets when there are none, and runs on the ones generate wrote", () => {
     const { root, run, summary } = repo();
     const out = join(root, "private", "agent-ab");
-    const assets = join(out, "assets");
     const refused = (said: string) => {
       const done = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
       expect(done.code).toBe(2);
@@ -639,38 +629,16 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     refused("the private assets are missing (private/agent-ab/assets/tasks)");
     expect(generate({ seed: "7", out, from: join(root, "evals", "agent-ab") }).installed).toBe(true);
 
-    const manifest = readFileSync(join(assets, "generated.json"), "utf8");
-    rmSync(join(assets, "generated.json"));
-    refused("the private assets in private/agent-ab/assets/ have no generated.json in its current format");
-    writeFileSync(join(assets, "generated.json"), manifest);
-
-    const library = join(root, "evals", "agent-ab", "libraries", "drillbit", "skills", "drillbit", "SKILL.md");
-    const libraryText = readFileSync(library, "utf8");
-    writeFileSync(library, `${libraryText}\nChanged after the private tasks were made.\n`);
-    refused("were made from public tasks or libraries that have changed since");
-    writeFileSync(library, libraryText);
-
-    // Made by another generator: the manifest of assets an older generate wrote, with the same public inputs and the same files.
-    writeFileSync(join(assets, "generated.json"), JSON.stringify({ ...JSON.parse(manifest), generator_sha256: "0".repeat(64) }));
-    refused("were made by a generator that has changed since");
-    writeFileSync(join(assets, "generated.json"), manifest);
-
-    const task = join(assets, "tasks", readdirSync(join(assets, "tasks"))[0], "instruction.md");
-    const taskText = readFileSync(task, "utf8");
-    writeFileSync(task, `${taskText}\nEdited by hand.\n`);
-    refused("are not what generate wrote");
-    writeFileSync(task, taskText);
-
     const ran = run(["--corpus", "custom", "--limit", "1", "--label", "p"]);
     expect(ran.code).toBe(0);
-    expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
+    expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
     expect(summary("p", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: "7" } });
 
-    // The old value works for one more release, says what it is now, and is the same corpus.
+    // The old value stops before anything runs.
     const old = run(["--corpus", "private", "--limit", "1", "--label", "old"]);
-    expect(old.code).toBe(0);
-    expect(old.err).toContain("agent-ab: --corpus private is now --corpus custom. The old value works for one more release.");
-    expect(summary("old", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", seed: "7" });
+    expect(old.code).toBe(2);
+    expect(old.err).toContain("agent-ab: --corpus private was renamed in 0.2: use --corpus custom (the rewrite in private/<eval>/assets), or --cases DIR for a folder of your own");
+    expect(readdirSync(join(root, "private", "agent-ab", "results")).some((d) => d.endsWith("-old"))).toBe(false); // it made no results folder
   }, 60_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the cases there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
@@ -678,7 +646,6 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const ownTasks = (to: string) => {
       cpSync(join(root, "evals", "agent-ab", "tasks"), join(to, "tasks"), { recursive: true });
       cpSync(join(root, "evals", "agent-ab", "libraries"), join(to, "libraries"), { recursive: true });
-      writeFileSync(join(to, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
     };
     // the public corpus has no folder to record
     expect(run(["--limit", "2", "--label", "pub"]).code).toBe(0);
@@ -688,8 +655,8 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the cases from it
     const mine = join(root, "notes", "mine");
     ownTasks(mine);
-    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
-    expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_folder: "notes/mine" });
+    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
     expect(inside.result.changed).toEqual([]);
     expect(inside.result.dropped).toEqual([]);
@@ -704,7 +671,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownTasks(outside);
-    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
     const stored = summary("out", "custom");
     expect(stored).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
@@ -718,28 +685,22 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(readFileSync(join(given.out, "summary.json"), "utf8")).not.toContain(outside);
   }, 120_000);
 
-  test("run --cases DIR runs a folder of your own tasks as a custom corpus, and keeps it from a model that models.json does not mark private unless its corpus.json says it holds nothing private", () => {
+  test("run --cases DIR runs a folder of your own tasks as a custom corpus, and refuses one without tasks/ and libraries/", () => {
     const { root, run, summary } = repo();
     const mine = join(root, "mine");
     cpSync(join(root, "evals", "agent-ab", "tasks"), join(mine, "tasks"), { recursive: true });
     cpSync(join(root, "evals", "agent-ab", "libraries"), join(mine, "libraries"), { recursive: true });
-    const refused = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain('--cases mine sends your tasks to openai/x, which is not marked "private": true in models.json.');
-    expect(refused.err).toContain("it has no corpus.json, and an own corpus without one is private");
-    expect(refused.out).not.toContain("tasks x 2 arms"); // nothing ran
-
-    // a model that models.json marks private may see it
-    writeFileSync(join(root, "models.json"), JSON.stringify({ mine: { base_url: "http://192.0.2.9:8080/v1", api_key_env: "MINE_KEY", private: true } }));
-    const ran = run(["--cases", "mine", "--model", "mine", "--limit", "1", "--label", "own"], { MINE_KEY: "k" });
+    // it asks before anything runs: with no terminal and no -y it stops, naming the model and the endpoint the agent will use
+    const asked = run(["--cases", "mine", "--limit", "1", "--label", "asked"]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at its provider's own endpoint without asking");
+    const gateway = run(["--cases", "mine", "--limit", "1", "--label", "asked"], { MODEL_BASE_URL: "https://user:SYNTH-pass@gw.example.net:8443/deployment/v1?api_key=SYNTH-key" });
+    expect(gateway.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at https://gw.example.net:8443/deployment/v1 without asking");
+    expect(gateway.err + gateway.out).not.toContain("SYNTH");
+    expect(existsSync(join(root, "private", "agent-ab", "results"))).toBe(false); // nothing ran
+    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
     expect(ran.code, ran.err).toBe(0);
-    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: "mine", seed: null, status: "complete" });
-    rmSync(join(root, "models.json"));
-
-    // a folder that says it holds nothing private may go to any model
-    writeFileSync(join(mine, "corpus.json"), JSON.stringify({ kind: "own", private: false }));
-    expect(run(["--cases", "mine", "--limit", "1", "--label", "open"]).code).toBe(0);
-    expect(summary("open", "custom")).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: false });
+    expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "mine", seed: null, status: "complete" });
     rmSync(join(mine, "tasks"), { recursive: true });
     const empty = run(["--cases", "mine", "--limit", "1", "--label", "empty"]);
     expect(empty.code).toBe(2);

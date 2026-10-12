@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkRewrite } from "./generate.ts";
-import { type LoadedCase, assetsSha256, generatedProblem, generatorSha256, loadCases } from "./lib.ts";
+import { type LoadedCase, loadCases } from "./lib.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -49,11 +49,10 @@ describe("generate", () => {
     expect(list(join(out, "assets", "bundles")).sort()).toEqual(list(join(PUBLIC, "bundles")).sort());
   });
 
-  test("writes generated.json beside the assets with the seed, the digest of the public assets and the digest of the generator, and leaves no work folder", () => {
+  test("writes generated.json beside the assets with the seed, and leaves no work folder", () => {
     const { out, code } = generate("42");
     expect(code).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42", inputs_sha256: assetsSha256(PUBLIC), rewrite: generatorSha256() });
-    expect(generatedProblem(out, PUBLIC)).toBeUndefined();
+    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toEqual({ seed: "42" });
     expect(readdirSync(out).sort()).toEqual(["assets", "generated.json", "map.json"]);
   });
 
@@ -62,7 +61,7 @@ describe("generate", () => {
     dirs.push(out);
     mkdirSync(join(out, "assets", "bundles", "old-case"), { recursive: true });
     writeFileSync(join(out, "assets", "bundles", "old-case", "left-over.md"), "from an earlier generation\n");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1", inputs_sha256: "old", rewrite: "old" }));
+    writeFileSync(join(out, "generated.json"), JSON.stringify({ seed: "1" }));
     expect(generate("43", out).code).toBe(0);
     expect(existsSync(join(out, "assets", "bundles", "old-case"))).toBe(false);
     expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8")).seed).toBe("43");
@@ -78,7 +77,6 @@ describe("generate", () => {
     expect(failed.stderr).toContain("--seed must be a non-negative integer");
     expect({ cases: before("assets/cases.json"), map: before("map.json"), generated: before("generated.json") }).toEqual(was);
     expect(readdirSync(first.out).sort()).toEqual(["assets", "generated.json", "map.json"]);
-    expect(generatedProblem(first.out, PUBLIC)).toBeUndefined();
   });
 
   test("needs a seed and a folder", () => {

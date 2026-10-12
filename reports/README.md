@@ -1,72 +1,49 @@
 # reports
 
-Published results of the evals, and notes about the evals. Scores only, never private items.
+Published results of the evals, and notes. Scores only, never private items.
 
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
-- [`review-2026-10-11.md`](review-2026-10-11.md): the review of this repository at commit `bacf627`.
-- `<akm version>/`: results worth keeping, one folder per run. None are published yet. The layout is below.
+- `<akm version>/`: results worth keeping. None are published yet.
 
-A results folder in `evals/<name>/results/` is gitignored, so a result lives where the last run was made. A result that other people have to check, or that a later run has to be compared with, is copied here and committed.
+A results folder in `evals/<name>/results/` is gitignored. A result that others have to check, or that a later run will be compared with, is copied here and committed.
 
 ## Layout
 
 ```
 reports/
-  <akm version>/              the version akm printed (akm_version in summary.json), such as 0.9.26
-    <eval>/                   the folder name under evals/ or benchmarks/, such as nightly
-      <label>/                the label of the run, without the date
-        summary.json          as the eval wrote it
-        samples.jsonl         one line per case, for the public corpus only
-    matrix/
-      <sweep>/                the prefix of a matrix sweep
-        decision.json         from scripts/matrix/run
-        decision.md
+  <akm version>/              akm_version of the summary, such as 0.9.26
+    <eval>/                   the folder name under evals/ or benchmarks/
+      <label>/                the run's label, without the date (a --repeat is <label>-r1 to -rN)
+        summary.json
+        samples.jsonl         public corpus only
+    matrix/<prefix>/
+      decision.json
+      decision.md
 ```
 
-The version in the path is the one akm prints, and two builds of one version print the same. Put the build in the label (`pr1071-1`) and read `akm_build` in the summary to tell them apart. A run made with `--repeat N` is N folders, `<label>-r1` to `<label>-rN`, in the same `<eval>/` folder. The repeat summary is not copied: `scripts/compare/run --repeats` works out the spread again from the runs, and the summary lists the folders by the dated names they had when it was written.
+Two builds of one version print the same version: put the build in the label and read `akm_build` in the summary.
 
-### What goes in
+## What goes in
 
 | Corpus | `summary.json` | `samples.jsonl` |
 |---|---|---|
 | `public` | yes | yes |
-| `private` (rewritten) | yes, after reading it (below) | **never**: its rows hold the rewritten items |
-| `own`, `own-feedback` | yes, after reading it (below) | **never**: its rows hold your notes |
+| `custom` (a rewrite, or your own cases) | yes, without its `seed` | never: its rows hold the custom cases |
 
-Nothing else of a results folder goes in: not `logs/`, not `improve.json`, not the `.running` marker, and nothing from `private/`, `.env` or `models.json`. For a matrix sweep, copy `decision.json` and `decision.md` and not `state.json` or `logs/`. Read `decision.json` first: it names the matrix file by its path on your machine, and the note of a row that has no result names a log file. Publish the runs the sweep compared under their evals too, so each row can be checked.
+Nothing else: no `logs/`, no `.running`, nothing from `private/`, `.env` or `models.json`. For a matrix, copy `decision.json` and `decision.md`, and publish the runs it compared under their evals. Read `decision.json` first: it names the matrix file by its path on your machine.
 
-Read a `summary.json` before you commit it:
-
-- A private run records `seed`. The seed makes the private set again from the public one, so a published seed gives the set to anyone and it can no longer be held back. Remove the `seed` key. (`assets_sha256` is a digest and stays.)
-- Every field that names the model's endpoint. The path of a URL can name a deployment or a project, or carry a key (`https://gateway.example/k-…/v1`), so the policy never compares a path and a summary written by harness-v3 never holds one, except in the places below that a later change will close:
-  - `config.engines.<name>.endpoint`: `<MODEL_BASE_URL>` in `judge-gate`, `extract`, `consolidate`, `nightly` and `reflect`, and the whole URL in `distill`, `promotion` and any summary written before harness-v3. Replace a whole URL with `<MODEL_BASE_URL>`. The digest of `config` leaves the engine settings out, so this changes nothing a comparison reads.
-  - `engine.endpoint` and `engine.engines.<name>.endpoint`: the host and port. In a summary written before harness-v3 they hold the endpoint's identity with its path, and in `agent-ab` and `terminal-bench` they still do: replace them with the host.
-  - `engine.endpoint_id`, `engine.engines.<name>.endpoint_id`, and `manifest.engines.<name>.endpoint` and `endpoint_id`: a host, and a sha256 of the identity. They hold no path and are safe to publish. **Keep `endpoint_id`**: it is how a comparison tells two deployments on one host apart. Without it the engine reads as the host alone, which is another deployment than the one the run used, and a comparison with a run of that deployment is refused as "not comparable".
-  - `model_endpoint` and `judge_endpoint` of `longmemeval`: the identity with its path. Replace them with the host.
-- An own run reports counts and rates of your notes. Read the `by_class` and per-case parts for a name of your own.
-
-### A baseline whose endpoint you redacted
-
-A summary written before harness-v3 compares with a run made today for the same deployment, because the policy reads the identity it finds under `engine.engines.<name>.endpoint` as a host and a digest, the way a new run records it. If you redact that field to the host alone, the digest is lost and the baseline reads as another deployment. Put the digest of the identity you removed in `endpoint_id` beside the host, and the comparison is as it was:
-
-```
-printf %s 'https://gateway.example/deployment-A/v1/chat/completions' | sha256sum
-```
-
-That is the identity of the URL of the engine's `endpoint` in the akm config (scheme, host, port and path, no credentials, the query in order). For a summary with a `manifest` there is nothing to do: its `endpoint_id` is already a digest.
+Before you commit a summary, remove `seed` from a custom run (the seed makes the rewrite again) and read the per-case parts of a run of your own cases for anything private. Endpoints are recorded as a host, never a path.
 
 ## Compare with a published run
 
-`scripts/compare/run` takes such a folder as a baseline, as it takes any results folder: it reads `summary.json` and `samples.jsonl`.
+`scripts/compare/run` takes a published folder as it takes any results folder:
 
 ```
 scripts/compare/run --treatment build reports/0.9.26/nightly/base evals/nightly/results/2026-10-12-pr1071-1
 scripts/compare/run --repeats reports/0.9.26/nightly/base
 ```
 
-So only a public-corpus folder, which has both files, can be compared case by case. A private or own folder has a summary only: `compare` refuses it, and the metrics can be read side by side by hand. `compare` refuses a different eval, corpus, collection or embedder. The model, the strategy and the config patch may differ: that difference is what is compared. A new run of another akm than the baseline's needs `--treatment build`, as in the first command above, and then the akm config, the model, the cases and the eval's code must still be the same. Both summaries must carry full identity: `assets_sha256`, `config`, `engine`, `harness_sha256` (a summary from before it needs a `git_commit` that is clean) and `status: complete`. When one of them does not, the comparison is exploratory: `compare` computes it and says what is missing, and it is a lead, not a conclusion.
-
-A baseline with a `manifest` (harness-v3 and later, see "How results stay comparable" in the root README) keeps its value when akm-eval changes. If the scorer changed since the baseline was made, `compare` scores the baseline's `samples.jsonl` again with the current scorer, which a public folder allows because it holds the raw outputs; a baseline without them is refused. If the collector changed, the baseline was collected by other code: compare it only with `--treatment harness`, or run it again. A baseline from before harness-v3 compares as exploratory; `scripts/rescore/run` brings its scores to the current scorer.
+Only a public folder, which has `samples.jsonl`, can be compared case by case. compare scores the baseline again with the current scorer, so a published run keeps its value after a scorer fix. A baseline of another eval version is compared only with `--treatment harness`; one made before akm-eval 0.2 is refused.
 
 ## Index
 

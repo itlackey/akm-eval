@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { akmVersion, writeConfig } from "../../../lib/akm/akm.ts";
-import { UNVERSIONED, lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import { basename, join } from "node:path";
+import { akmVersion, commandLine, writeConfig } from "../../../lib/akm/akm.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -562,14 +562,14 @@ const stored = (dir: string) => ({
 describe("the manifest of a run", () => {
   const folders = (s: ReturnType<typeof setup>) => ({ assets: s.assets, results: s.results });
 
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every query", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every query", async () => {
     const s = setup();
     const { summary } = stored((await logged(() => runCorpus(s.corpus, s.ctx({ label: "m" }), folders(s)))).result.results_dir);
     const { manifest } = summary;
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(summary).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "skillret", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {}, engines: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "skillret", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {}, engines: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(["q1", "q2", "q3", "q4"]);
@@ -580,7 +580,7 @@ describe("the manifest of a run", () => {
     });
     expect(manifest.completion).toEqual({ selected: ["q1", "q2", "q3", "q4"], scored: ["q1", "q2", "q3", "q4"], errored: [] });
     expect(manifest.config.redacted).toEqual({ keyword: summary.config.keyword, semantic: summary.config.semantic });
-    expect(summary).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null });
+    expect(summary).toMatchObject({ corpus: "public", corpus_folder: null, seed: null });
   });
 
   test("a query whose call failed is errored in the completion, and a skill that changed is another input for every query", async () => {
@@ -604,11 +604,11 @@ describe("the manifest of a run", () => {
     for (const [id, digest] of Object.entries<any>(limited.cases)) expect(digest).toEqual(full.cases[id]);
   });
 
-  test("the custom corpus is a split of the dataset: its summary says so, with its seed as text, and it holds nothing private", async () => {
+  test("the custom corpus is a split of the dataset: its summary records no folder, and its seed as text", async () => {
     const s = setup();
     const corpus: Corpus = { ...s.corpus, corpus: "private" };
     const { summary } = stored((await logged(() => runCorpus(corpus, s.ctx({ label: "c", semantic: false }), folders(s)))).result.results_dir);
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42" });
+    expect(summary).toMatchObject({ corpus: "custom", corpus_folder: null, seed: "42" });
     expect(summary.manifest).toMatchObject({ corpus: "custom", settings: { seed: "42" } });
     expect(manifestProblems(summary.manifest)).toEqual([]);
   });
@@ -651,7 +651,6 @@ describe("rescore", () => {
     cpSync(join(here, "lib"), join(root, "lib"), { recursive: true });
     mkdirSync(join(root, "benchmarks", "skillret", "src"), { recursive: true });
     for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts")) cpSync(join(import.meta.dir, file), join(root, "benchmarks", "skillret", "src", file));
-    cpSync(join(here, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
     cpSync(s.assets, join(root, "benchmarks", "skillret", "assets"), { recursive: true });
     return root;
   }
@@ -669,29 +668,11 @@ describe("rescore", () => {
     for (const field of ["metrics", "by_size", "errored", "timeouts", "no_results", "curate_check", "status", "aborted_reason", "n_queries", "call_seconds"]) expect([field, again.summary[field]]).toEqual([field, was.summary[field]]);
     expect(again.summary.status).toBe("aborted"); // a call failed, and it still says so
     expect(manifestProblems(again.summary.manifest)).toEqual([]);
-    expect(again.summary.manifest.scorer).toEqual(lockedParts(MEASUREMENT).scorer);
     expect(again.summary.manifest.collector).toEqual(was.summary.manifest.collector);
     expect(again.summary.manifest.cases).toEqual(was.summary.manifest.cases);
   });
 
-  test("a run from before the manifest, whose rows hold no scores, scores again too, to the rows it would write now", async () => {
-    const s = setup();
-    const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "old", semantic: false }), folders(s)));
-    clearRunning(result.results_dir);
-    const was = stored(result.results_dir);
-    const dir = `${result.results_dir}-before`;
-    mkdirSync(dir);
-    const { manifest: _m, corpus_kind: _k, corpus_private: _p, corpus_folder: _f, ...legacy } = was.summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
-    writeFileSync(join(dir, "samples.jsonl"), was.rows.map(({ search: { scores: _s, ...search }, ...row }) => `${JSON.stringify({ ...row, search })}\n`).join(""));
-    const again = rescoreRun(readStored(dir), { root: repo(s) });
-    expect(again.legacy).toBe(true);
-    expect(again.rows).toEqual(was.rows);
-    expect(again.summary.metrics).toEqual(was.summary.metrics);
-    expect(again.summary.manifest.collector.version).toBe(UNVERSIONED);
-  });
-
-  test("a run that read other data files than the ones here is refused, and so is a run whose rows lack the ranked results", async () => {
+  test("a run whose rows lack the ranked results is refused", async () => {
     const s = setup();
     const { result } = await logged(() => runCorpus(s.corpus, s.ctx({ label: "x", semantic: false }), folders(s)));
     clearRunning(result.results_dir);
@@ -703,9 +684,6 @@ describe("rescore", () => {
       writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
       return dir;
     };
-    const { manifest: _m, ...legacy } = was.summary;
-    const other = copy("other", { ...legacy, assets_sha256: "0".repeat(64) }, was.rows);
-    expect(() => rescoreRun(readStored(other), { root: repo(s) })).toThrow(/was made before the manifest, and cannot be scored again: it read other data files than the ones in benchmarks\/skillret\/assets now/);
     const thin = copy("thin", was.summary, was.rows.map(({ search: { ranked: _r, ...search }, ...row }) => ({ ...row, search })));
     expect(() => rescoreRun(readStored(thin), { root: repo(s) })).toThrow(/its rows lack the raw output the skillret scorer reads: search.ranked \(4 rows: q1, q2, q3, q4\)/);
   });
@@ -720,7 +698,7 @@ describe("rescore", () => {
     const { result } = await logged(() => runCorpus(custom, s.ctx({ label: "split", semantic: false }), { assets: s.assets, results: s.results }));
     clearRunning(result.results_dir);
     const was = stored(result.results_dir);
-    expect(was.summary).toMatchObject({ corpus: "custom", corpus_kind: "split", corpus_private: false, corpus_folder: null, seed: "42", n_queries: 4 });
+    expect(was.summary).toMatchObject({ corpus: "custom", corpus_folder: null, seed: "42", n_queries: 4 });
     const root = repo(s);
     // the split is drawn again from the data files and the sample the summary records, with no folder
     expect(MEASUREMENT.loadCases(root, was.summary)).toEqual(custom.queries);
@@ -762,5 +740,69 @@ describe("the command line", () => {
     expect(run("--limit", "ten")).toMatchObject({ code: 2 });
     expect(run("--label", "a b")).toMatchObject({ code: 2, err: expect.stringContaining("--label may use letters") });
     expect(run("--flag")).toMatchObject({ code: 2, err: expect.stringContaining("Usage: benchmarks/skillret/run") });
+  });
+});
+
+describe("--repeat", () => {
+  /**
+   * The benchmark in a repository root of its own, as a checkout holds it: its code, lib/ and the lock of this checkout around the tiny dataset in assets/.
+   * run.ts reads its assets and writes its results beside itself, so a run of it touches nothing of this checkout. Its akm is the fake one.
+   */
+  function benchmark() {
+    const here = join(import.meta.dir, "..", "..", "..");
+    const root = tmp();
+    cpSync(join(here, "lib"), join(root, "lib"), { recursive: true, filter: (src) => basename(src) !== "node_modules" });
+    const code = join(root, "benchmarks", "skillret", "src");
+    mkdirSync(code, { recursive: true });
+    for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts") && !file.endsWith(".test.ts")) cpSync(join(import.meta.dir, file), join(code, file));
+    writeAssets(join(root, "benchmarks", "skillret", "assets"), TEST, TRAIN);
+    const script = fakeAkmScript(root);
+    const results = join(root, "benchmarks", "skillret", "results");
+    const run = (...args: string[]) => {
+      const r = Bun.spawnSync(["bun", join(code, "run.ts"), ...args], { env: { ...process.env, AKM_BIN: commandLine(["bun", script]) }, stdout: "pipe", stderr: "pipe" });
+      return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+    };
+    /** What the run left in results/, without the date the folders start with. */
+    const names = () => (existsSync(results) ? readdirSync(results).sort().map((n) => n.replace(/^\d{4}-\d{2}-\d{2}-/, "")) : []);
+    const read = (name: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${name}`)) as string, "summary.json"), "utf8"));
+    return { results, run, names, read, spread: (label: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${label}-repeat-summary.json`)) as string), "utf8")) };
+  }
+
+  test("--repeat 2 writes two runs, each a whole run, and the spread of their metrics beside them", () => {
+    const b = benchmark();
+    const r = b.run("--repeat", "2", "--limit", "3", "--label", "rep");
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["rep-r1", "rep-r2", "rep-repeat-summary.json"]);
+    const [one, two] = [b.read("rep-r1"), b.read("rep-r2")];
+    expect([one.label, one.status, two.label, two.status]).toEqual(["rep-r1", "complete", "rep-r2", "complete"]);
+    expect([readManifest(one).kind, readManifest(two).kind]).toEqual(["manifest", "manifest"]);
+    for (const dir of readdirSync(b.results).filter((n) => !n.endsWith(".json"))) expect(existsSync(join(b.results, dir, ".running")), dir).toBe(false);
+    expect(readdirSync(b.results).filter((n) => !n.endsWith(".json")).map((n) => readFileSync(join(b.results, n, "samples.jsonl"), "utf8").trim().split("\n").length)).toEqual([3, 3]);
+    // the spread is of the metrics of the runs: akm answers the same twice, so it has no width
+    const ndcg = one.metrics.search["NDCG@10"];
+    expect(ndcg).toBeGreaterThan(0);
+    expect(two.metrics.search["NDCG@10"]).toBe(ndcg);
+    const spread = b.spread("rep");
+    expect(spread).toMatchObject({ eval: "skillret", corpus: "public", label: "rep", repeat: 2, akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 }, timeouts: { search: { min: 0, max: 0, mean: 0 } }, metrics: { search: { "NDCG@10": { min: ndcg, max: ndcg } } } });
+    expect(spread.metrics.search["NDCG@10"].mean).toBeCloseTo(ndcg, 4);
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    expect("model" in spread).toBe(false); // no model is called
+  }, 120_000);
+
+  test("without --label the runs take the label of a single run, akm-<version>, and a run without --repeat is unchanged", () => {
+    const b = benchmark();
+    const r = b.run("--repeat", "2", "--limit", "3");
+    expect(r.code, r.err).toBe(0);
+    expect(b.names()).toEqual(["akm-0.9.99-test-r1", "akm-0.9.99-test-r2", "akm-0.9.99-test-repeat-summary.json"]);
+    const single = benchmark();
+    expect(single.run("--limit", "3", "--label", "once").code).toBe(0);
+    expect(single.names()).toEqual(["once"]);
+  }, 120_000);
+
+  test("--repeat must be a positive integer, and a refused value runs nothing", () => {
+    const b = benchmark();
+    for (const value of ["0", "1.5", "two"]) expect(b.run("--repeat", value, "--limit", "3")).toMatchObject({ code: 2, err: expect.stringContaining("--repeat must be a positive integer") });
+    expect(b.names()).toEqual([]);
+    expect(b.run("--help").out).toContain("--repeat  run each corpus N times");
   });
 });

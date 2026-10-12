@@ -3,9 +3,8 @@
 // measurement.ts and lib/manifest.ts): the akm config it writes, the sandbox, the commands it runs and what it records of the answer. The
 // scoring is score.ts.
 //
-// A change to this file, or to the lib/ files it imports, changes what akm is asked or what is recorded of its answer. Raw outputs from
-// before the change are no longer comparable with raw outputs after it. It is a measurement change: bump the collector in MEASUREMENT.lock
-// (scripts/measurement/run bump promotion collector --reason "...") in the same change.
+// A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
+// measurement.ts by hand.
 
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";

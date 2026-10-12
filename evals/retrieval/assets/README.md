@@ -168,7 +168,7 @@ Three workflows were written in a workflow format that akm 0.9.26 refuses to rea
 
 ## A set of your own
 
-`evals/retrieval/run --cases DIR` runs a labelled set of your own from the folder `DIR` (a custom corpus; `--corpus own` reads `private/retrieval/own/`), with the same metrics. The folder holds the files below, in the same format as above.
+`evals/retrieval/run --cases DIR` runs a labelled set of your own from the folder `DIR` (a custom corpus), with the same metrics. The folder holds the files below, in the same format as above.
 
 - `queries.jsonl`: `id`, `query` and `kind` for each query. A `kind` is free text, apart from `chitchat`, `notification`, `log`, `status` and `nontask`: they mark a non-task input, whose right result is nothing, and it needs no grades. `expected` is optional.
 - `qrels.jsonl`: `id`, `ref`, `grade` (0 to 3) and `reason` for each judged pair. Every task query needs a row. A query with no row of grade 2 or more counts as having no answer. `judge`, `prompt_sha256`, `date` and `asset_sha256` are optional: `evals/retrieval/label --cases DIR` writes them, and a pair whose asset changed since is graded again.

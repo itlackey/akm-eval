@@ -3,9 +3,8 @@
 // COLLECTOR part of the benchmark's measurement (see measurement.ts and lib/manifest.ts): the job it writes, the library it seeds, the
 // akm arm in lib/harbor, and the akm that counts the library's assets. The scoring is lib/harbor/score.ts.
 //
-// A change to this file, or to the lib/harbor files measurement.ts lists with it, changes what the agent is given or what is recorded of
-// its run. Raw outputs from before the change are no longer comparable with raw outputs after it. It is a measurement change: bump the
-// collector in MEASUREMENT.lock (scripts/measurement/run bump terminal-bench collector --reason "...") in the same change.
+// A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
+// measurement.ts by hand.
 
 import { cpSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";

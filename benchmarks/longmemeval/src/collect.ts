@@ -4,10 +4,8 @@
 // measurement.ts and lib/manifest.ts): the akm config of the sandbox, the commands, the prompts the model and the judge are sent, and
 // what is recorded of their answers. The scoring is score.ts.
 //
-// A change to this file, or to the files it imports (akm.ts, llm.ts, prompts.ts, lib/akm), changes what akm, the model or the judge is
-// asked, or what is recorded of the answer. Raw outputs from before the change are no longer comparable with raw outputs after it. It is a
-// measurement change: bump the collector in MEASUREMENT.lock (scripts/measurement/run bump longmemeval collector --reason "...") in the
-// same change.
+// A change to what this file asks akm, or to what it records of the answer, is a new version of the eval: change `version` in
+// measurement.ts by hand.
 
 import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 import { Akm, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";

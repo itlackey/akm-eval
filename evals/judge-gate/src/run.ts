@@ -9,8 +9,8 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
-import { ALIASES, CORPUS_OPTIONS, type ResolvedCorpus, corpusRecord, corpusUsage, privacyError, resolveCorpora } from "../../../lib/corpus.ts";
-import { buildManifest, caseDigests, completionOf, corpusFolderOf, lockedParts, type RunManifest } from "../../../lib/manifest.ts";
+import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
+import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
@@ -35,7 +35,7 @@ judge, on labelled proposals. Settings come from .env at the repository root.
 
 ${corpusUsage}
             The default custom corpus is private/judge-gate/assets, made by ./generate-assets: a light rewrite of the same
-            cases, not held-out data. It stops when they were made from public cases that have changed since: make them again.
+            cases, not held-out data.
   --limit   run N cases, in the good/bad proportion of the whole set, with at least one of each from 2 cases on
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
@@ -50,8 +50,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom` (see lib/corpus.ts). */
   corpus: string;
-  corpus_kind: string;
-  corpus_private: boolean;
   /** The folder of a custom corpus from the repository root, null when it is outside it and for the public corpus (see corpusFolderOf in lib/manifest.ts): what `scripts/rescore` reads the cases from. */
   corpus_folder: string | null;
   label: string;
@@ -86,10 +84,10 @@ interface Summary {
   assets_sha256: string;
   /** The version of the rubric the labels were adjudicated under (assets/README.md). Scores from other versions do not compare. */
   rubric_version: number;
-  /** The seed that made a rewritten corpus (its corpus.json), null for the public corpus and for your own. */
+  /** The seed that made a rewritten corpus, null for the public corpus and for your own. */
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
-  /** What the run was made of: the parts that decide whether it compares with another run (see lib/manifest.ts). */
+  /** What the run was made of (see lib/manifest.ts). */
   manifest: RunManifest;
   results_dir: string;
 }
@@ -145,7 +143,6 @@ export async function runCorpus(
   ctx: Ctx,
   results = corpus.name === "public" ? join(EVAL_DIR, "results") : join(ROOT, "private", NAME, "results"),
 ): Promise<Summary> {
-  const parts = lockedParts(MEASUREMENT); // stops the run, before it collects anything, when MEASUREMENT.lock has no entry for the eval
   const assets = corpus.folder;
   const rubric = rubricVersion(join(EVAL_DIR, "assets")); // the private cases are a rewrite of the public ones, so their labels are the public rubric's
   const all = parseCases(readFileSync(join(assets, CASES), "utf8"), join(assets, CASES));
@@ -180,11 +177,10 @@ export async function runCorpus(
   const abortedReason = aborted === undefined ? null : `${GIVE_UP_AFTER} cases in a row got no verdict, so the run stopped after ${rows.length} of ${cases.length}. Last: ${aborted}`;
   const overrides = ctx.overrides ?? defaultOverrides(STRATEGY);
   const build = akmBuild();
-  const seed = corpus.config.seed ?? null;
+  const seed = corpus.seed;
   const counts = summarize(rows);
   const manifest = buildManifest({
     measurement: MEASUREMENT,
-    parts,
     corpus: corpus.name,
     cases: caseDigests(MEASUREMENT, cases),
     akm: { version: ctx.version, bin: build.akm_bin, build: build.akm_build, build_fingerprint: build.akm_build_fingerprint },
@@ -194,7 +190,7 @@ export async function runCorpus(
   });
   const summary: Summary = {
     eval: NAME,
-    ...corpusRecord(corpus),
+    corpus: corpus.name,
     corpus_folder: corpus.name === "public" ? null : corpusFolderOf(corpus.folder),
     label: ctx.label,
     date: new Date().toISOString(),
@@ -225,7 +221,7 @@ export async function runCorpus(
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -237,7 +233,6 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    lockedParts(MEASUREMENT); // MEASUREMENT.lock must have an entry for this eval: every run records the versions it was made with
   } catch (e) {
     fail((e as Error).message);
   }
@@ -246,21 +241,20 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   const overrides = parseOverrides(values, STRATEGY, fail);
-  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), default: "rewrite", aliases: { private: ALIASES.private }, fail });
+  const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);
   const settings = useModel(values, fail);
-  const refusal = privacyError(corpora, { model: settings }, "notes");
-  if (refusal) fail(refusal);
 
   for (const c of corpora) {
     if (c.name === "public") continue;
     const where = corpusFolderOf(c.folder) ?? c.folder; // from the repository root when it is inside, else as it was given
-    const problem = c.config.kind === "rewrite" ? privateAssetsProblem(c.folder, join(EVAL_DIR, "assets"), where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
+    const problem = c.rewrite ? privateAssetsProblem(c.folder, where) : existsSync(join(c.folder, CASES)) ? undefined : `the custom corpus is missing (${where}/${CASES})`;
     if (problem) fail(problem);
   }
   const { baseUrl, name: model, hasKey } = settings;
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
+  await confirmCases(values, [{ role: "model", name: model, baseUrl }]);
 
   const sandbox = openSandbox(baseUrl, model, hasKey, overrides);
   try {

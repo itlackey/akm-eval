@@ -1,6 +1,6 @@
 // The scorer of the evals that run an agent in Harbor (evals/agent-ab, benchmarks/terminal-bench): what turns the trials a run recorded into
 // rows and the rows into the summary's report and metrics. It is the SCORER part of their measurement (see lib/manifest.ts and the
-// README's "How results stay comparable"). It is pure and deterministic, needs no Docker and no akm, and imports nothing that collects: a
+// README's "Compare two runs"). It is pure and deterministic, needs no Docker and no akm, and imports nothing that collects: a
 // change to the way trials are read from Harbor's folders is trials.ts, the collector's.
 //
 // The case is a task, and a row is one task with every trial of it, both arms and every attempt. The raw output of a row is its trials,

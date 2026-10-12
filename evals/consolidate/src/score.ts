@@ -1,11 +1,7 @@
 // The scorer of the consolidate eval, for the per-case run: how what akm printed for a pair of notes becomes a row, and the rows become metrics.
-// It is the SCORER part of the eval's measurement (see measurement.ts and lib/manifest.ts): pure, deterministic, and it needs no akm. The
-// collector (collect.ts) builds each row by calling `makeRow` with the raw output it got, and scripts/rescore calls the same function with the
-// raw output it reads back from a stored row, so a fix to a check scores every stored run again. pool-score.ts is the scorer of `--pool`.
-//
-// A change to this file changes what the eval scores. It is a measurement change: bump the scorer in MEASUREMENT.lock
-// (scripts/measurement/run bump consolidate scorer --reason "...") and update the golden files (golden/) in the same change.
-// Nothing here may import the collector, or anything it imports: a scorer that reaches collector code is refused.
+// It is pure and needs no akm. The collector (collect.ts) builds each row by calling `makeRow` with the raw output it got, and scripts/rescore
+// calls the same function with the raw output it reads back from a stored row, so a fix to a check scores every stored run again. pool-score.ts
+// is the scorer of `--pool`. Nothing here may import the collector.
 
 import { type Case, RELATIONS, type Relation, type Side } from "./cases.ts";
 

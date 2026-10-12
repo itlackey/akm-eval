@@ -55,7 +55,6 @@ function checkout(questions: Question[]): string {
   const code = (src: string) => !/(^|[\\/])(node_modules|__pycache__|fixtures)([\\/]|$)|\.test\.ts$/.test(src);
   cpSync(join(REPO, "lib"), join(root, "lib"), { recursive: true, filter: code });
   cpSync(join(REPO, "benchmarks", "longmemeval", "src"), join(root, "benchmarks", "longmemeval", "src"), { recursive: true, filter: code });
-  cpSync(join(REPO, "MEASUREMENT.lock"), join(root, "MEASUREMENT.lock"));
   writePublicAssets(join(root, "benchmarks", "longmemeval", "assets"), questions);
   return root;
 }
@@ -68,7 +67,7 @@ async function stored(on: "public" | "own" = "public"): Promise<{ dir: string; r
   const work = tmp();
   const assets = join(work, "assets");
   writePublicAssets(assets);
-  const corpus: ResolvedCorpus = on === "public" ? { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" } : { name: "custom", folder: assets, config: { kind: "own", private: true }, configFile: null, flag: `--cases ${assets}` };
+  const corpus: ResolvedCorpus = on === "public" ? { name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" } : { name: "custom", folder: assets, rewrite: false, seed: null, flag: `--cases ${assets}` };
   server = fakeEndpoint();
   const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
   const log = console.log;
@@ -88,7 +87,7 @@ describe("scripts/rescore on a run of longmemeval", () => {
     const { out, result } = rescoreFolder(dir, { root, now: new Date("2026-10-12T10:00:00Z") });
     expect(basename(out)).toBe(`${basename(dir)}-rescored`);
     expect([readFileSync(join(dir, "summary.json"), "utf8"), readFileSync(join(dir, "samples.jsonl"), "utf8")]).toEqual(before);
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [], legacy: false });
+    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     const original = JSON.parse(before[0]);
     const again = JSON.parse(readFileSync(join(out, "summary.json"), "utf8"));
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(before[1]);
@@ -158,20 +157,11 @@ describe("scripts/rescore on a run of longmemeval", () => {
     expect(existsSync(join(dir, "..", `${basename(dir)}-rescored`))).toBe(false); // nothing was written
   });
 
-  test("a run from before the manifest cannot be scored again, and says why", async () => {
-    const { dir, root } = await stored();
-    const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    const { manifest: _gone, ...legacy } = summary;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(legacy));
-    expect(() => rescoreFolder(dir, { root })).toThrow("was made before the manifest, and cannot be scored again: its rows name the question as `question_id`");
-    expect(readStored(dir).rows).toHaveLength(3);
-  });
-
   test("a run on a custom corpus is scored again from the folder its summary records, or from the one --cases names", async () => {
     const { dir, root } = await stored("own");
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     // the run recorded the kind and that its folder, which is outside the repository, is not recorded
-    expect(summary).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null });
+    expect(summary).toMatchObject({ corpus: "custom", corpus_folder: null });
     expect(() => rescoreFolder(dir, { root })).toThrow("was made on a custom corpus outside the repository, so the folder of its cases is not known here. Give it to scripts/rescore with --cases DIR");
     // --cases names the folder, and the result says where the cases were read from this time
     cpSync(join(root, "benchmarks", "longmemeval", "assets"), join(root, "private", "longmemeval", "own"), { recursive: true });

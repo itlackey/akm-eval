@@ -3,10 +3,10 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
-import type { CorpusConfig, ResolvedCorpus } from "../../../lib/corpus.ts";
-import { lockedParts, manifestProblems, readManifest } from "../../../lib/manifest.ts";
+import type { ResolvedCorpus } from "../../../lib/corpus.ts";
+import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { checkMembers, identityOf } from "../../../scripts/compare/src/policy.ts";
-import { endpointRecord, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
+import { endpointHost, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
@@ -106,13 +106,14 @@ function assetsFor(scenarios: Scenario[]): { assets: string; results: string } {
   return { assets, results: join(root, "results") };
 }
 
-/** The corpus an assets folder holds: the public one, or a custom one with this config. */
-const corpusOf = (assets: string, config?: CorpusConfig): ResolvedCorpus =>
-  config === undefined
-    ? { name: "public", folder: assets, config: { kind: "public", private: false }, configFile: null, flag: "--corpus public" }
-    : { name: "custom", folder: assets, config, configFile: null, flag: "--corpus custom" };
+/** The corpus an assets folder holds: the public one, or a custom one that is a rewrite (with its seed) or your own. */
+type Custom = { rewrite: boolean; seed: string | null };
+const corpusOf = (assets: string, custom?: Custom): ResolvedCorpus =>
+  custom === undefined
+    ? { name: "public", folder: assets, rewrite: false, seed: null, flag: "--corpus public" }
+    : { name: "custom", folder: assets, ...custom, flag: "--corpus custom" };
 /** runCorpus on an assets folder as made by assetsFor. */
-const runFolders = (c: Parameters<typeof runCorpus>[1], folders: { assets: string; results: string }, config?: CorpusConfig) => runCorpus(corpusOf(folders.assets, config), c, folders.results);
+const runFolders = (c: Parameters<typeof runCorpus>[1], folders: { assets: string; results: string }, custom?: Custom) => runCorpus(corpusOf(folders.assets, custom), c, folders.results);
 
 const ctx = { config: distillConfig("http://localhost:8080/v1", "the-model", false), baseUrl: "http://localhost:8080/v1", version: "0.9.99-test", model: "the-model", label: "t" };
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
@@ -256,7 +257,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(text);
     expect(stored.config.engines.model).toMatchObject({ model: "the-model", temperature: 0, enableThinking: false, apiKey: "<redacted>" });
     expect(stored.config.improve.strategies["distill-only"].engine).toBe("model");
-    expect(stored.engine).toEqual({ engine: "model", model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", ...endpointRecord("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
+    expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000, engines: { model: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600_000 } } });
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });
@@ -270,21 +271,21 @@ describe("runCorpus", () => {
     expect(other.assets_sha256).not.toBe(summary.assets_sha256);
   });
 
-  test("a summary records the kind of its corpus, whether it is private and where it is from the repository root, and a rewrite records its seed", async () => {
+  test("a summary records where its corpus is from the repository root, and a rewrite records its seed", async () => {
     const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
     const folders = [1, 2, 3].map(() => assetsFor(scenarios.slice(0, 1)));
     const publicRun = stored(await quiet(() => runFolders(ctx, folders[0])));
-    expect(publicRun).toMatchObject({ corpus: "public", corpus_kind: "public", corpus_private: false, corpus_folder: null, seed: null }); // a public run records no folder
-    const rewrite = stored(await quiet(() => runFolders(ctx, folders[1], { kind: "rewrite", private: false, seed: "42", generated: "generated.json" })));
-    expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false, corpus_folder: null, seed: "42", manifest: { corpus: "custom", settings: { seed: "42" } } });
-    const own = stored(await quiet(() => runFolders(ctx, folders[2], { kind: "own", private: true })));
-    expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null, seed: null, manifest: { corpus: "custom", settings: { seed: null } } });
+    expect(publicRun).toMatchObject({ corpus: "public", corpus_folder: null, seed: null }); // a public run records no folder
+    const rewrite = stored(await quiet(() => runFolders(ctx, folders[1], { rewrite: true, seed: "42" })));
+    expect(rewrite).toMatchObject({ corpus: "custom", corpus_folder: null, seed: "42", manifest: { corpus: "custom", settings: { seed: "42" } } });
+    const own = stored(await quiet(() => runFolders(ctx, folders[2], { rewrite: false, seed: null })));
+    expect(own).toMatchObject({ corpus: "custom", corpus_folder: null, seed: null, manifest: { corpus: "custom", settings: { seed: null } } });
     for (const run of [publicRun, rewrite, own]) for (const f of folders) expect(JSON.stringify(run)).not.toContain(f.assets); // no summary names the folder it read
   });
 
   test("two runs on identical own assets, made where private/seed holds different seeds, record no seed and compare (#70)", async () => {
     const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
-    const own: CorpusConfig = { kind: "own", private: true };
+    const own: Custom = { rewrite: false, seed: null };
     const [a, b] = ["99", "100"].map((seed) => {
       const folders = assetsFor(scenarios.slice(0, 1));
       writeFileSync(join(folders.assets, "..", "seed"), `${seed}\n`); // the private/seed of that machine, next to the assets
@@ -294,10 +295,9 @@ describe("runCorpus", () => {
     expect(sa.assets_sha256).toBe(sb.assets_sha256);
     expect([sa.seed, sb.seed, sa.manifest.settings.seed, sb.manifest.settings.seed]).toEqual([null, null, null, null]);
     const members = [sa, sb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
-    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare checks summaries, and the matrix when it reads the manifest
-    expect(checkMembers(members, [], { manifest: true })).toMatchObject({ mismatches: [], gaps: [] });
+    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare and the matrix check summaries
     // a rewrite is different: its seed made the assets, so two seeds are two inputs
-    const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { kind: "rewrite", private: false, seed: "1", generated: "generated.json" }))), stored(await quiet(() => runFolders(ctx, b, { kind: "rewrite", private: false, seed: "2", generated: "generated.json" })))];
+    const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { rewrite: true, seed: "1" }))), stored(await quiet(() => runFolders(ctx, b, { rewrite: true, seed: "2" })))];
     const rewrites = [ra, rb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
     expect(checkMembers(rewrites, []).mismatches.map((f) => f.field)).toContain("seed");
   });
@@ -403,14 +403,14 @@ describe("the manifest of a run", () => {
   const stored = (s: { results_dir: string }) => JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
   const samples = (s: { results_dir: string }) => samplesIn(s.results_dir);
 
-  test("is sound, carries the parts MEASUREMENT.lock records, and a digest of the input and the labels of every case it selected", async () => {
+  test("is sound, carries the eval's version, and a digest of the input and the labels of every case it selected", async () => {
     const folders = assetsFor(scenarios);
     const summary = await quiet(() => runFolders(ctx, folders));
     const { manifest } = stored(summary);
     expect(manifestProblems(manifest)).toEqual([]);
     expect(readManifest(stored(summary)).kind).toBe("manifest");
-    const parts = lockedParts(MEASUREMENT);
-    expect(manifest).toMatchObject({ manifest_version: 1, eval: "distill", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, scorer: parts.scorer, treatment_hints: {} });
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
+    expect(manifest).toMatchObject({ manifest_version: 1, eval: "distill", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
     expect(manifest.settings).toEqual({ strategy: "distill-only", config_patch_sha256: null, timeout_ms: 900_000, seed: null });
     expect(Object.keys(manifest.cases)).toEqual(scenarios.map((s) => s.id));
@@ -421,7 +421,6 @@ describe("the manifest of a run", () => {
       label_sha256: sha256Json({ class: "lesson-worthy", expect: "lesson", required: LESSON.required, forbidden: LESSON.forbidden, contradicts: [], existing: null, existing_body: null, memory: first.memory }),
     });
     expect(manifest.completion).toEqual({ selected: scenarios.map((s) => s.id), scored: ["a-good", "b-rejected", "c-skip", "d-update"], errored: ["e-error"] });
-    expect(manifest.collector.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   test("the input of a case is its bundle and its feedback, and its labels are what the scorer reads: a changed memory changes both, a changed phrase only the labels", async () => {
@@ -498,19 +497,6 @@ describe("the manifest of a run", () => {
     expect(manifestProblems(manifest)).toEqual([]);
     expect(manifest.completion).toEqual({ selected: many.map((s) => s.id), scored: [], errored: many.slice(0, 5).map((s) => s.id) });
   });
-
-  test("a run stops before it collects anything when MEASUREMENT.lock has no entry for the eval", async () => {
-    const before = calls().length;
-    const lock = join(import.meta.dir, "..", "..", "..", "MEASUREMENT.lock");
-    const text = readFileSync(lock, "utf8");
-    try {
-      writeFileSync(lock, JSON.stringify({ ...JSON.parse(text), evals: {} }));
-      await expect(quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))))).rejects.toThrow("has no entry for distill");
-    } finally {
-      writeFileSync(lock, text);
-    }
-    expect(calls().length).toBe(before);
-  });
 });
 
 describe("run --corpus custom", () => {
@@ -525,7 +511,6 @@ describe("run --corpus custom", () => {
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "src"), join(tree, "evals", "distill", "src"), { recursive: true, filter: keep });
     cpSync(join(EVAL, "assets"), join(tree, "evals", "distill", "assets"), { recursive: true });
-    cpSync(join(REPO, "MEASUREMENT.lock"), join(tree, "MEASUREMENT.lock"));
     return tree;
   }
   const bun = (tree: string, script: string, args: string[]) => {
@@ -535,69 +520,30 @@ describe("run --corpus custom", () => {
     return { code: p.exitCode, err: p.stderr.toString() };
   };
 
-  test("refuses assets that generated.json does not vouch for, and runs on assets that it does", () => {
+  test("--cases asks before it sends the cases to the model: with no terminal and no -y it stops before akm is asked for, and -y or --yes goes on; --corpus custom never asks", () => {
     const tree = copyOfRepo();
+    const notes = join(tree, "my notes");
+    cpSync(join(EVAL, "assets"), notes, { recursive: true });
+    const asked = bun(tree, "run.ts", ["--cases", notes]);
+    expect(asked.code).toBe(2);
+    expect(asked.err).toContain(`distill: add -y to send the cases in ${notes} to m at http://127.0.0.1:9/v1 without asking`);
+    expect(asked.err).not.toContain("could not run");
+    for (const yes of ["-y", "--yes"]) expect(bun(tree, "run.ts", ["--cases", notes, yes]).err, yes).toContain("could not run"); // past the question, stopped for want of akm
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    const ready = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(ready.err).toContain("could not run"); // past the checks, stopped for want of akm
-    expect(ready.err).not.toContain("cannot be used");
-
-    rmSync(join(tree, "private", "distill", "generated.json"));
-    const missing = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(missing.code).toBe(2);
-    expect(missing.err).toContain("cannot be used: generated.json is missing");
-    expect(missing.err).toContain("./generate-assets --only distill");
-
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    writeFileSync(join(tree, "evals", "distill", "assets", "bundles", "dup-01", "memories", "pdf-fonts-not-embedded-vendor-reject.md"), "A public memory that changed.\n");
-    const stale = bun(tree, "run.ts", ["--corpus", "all"]);
-    expect(stale.code).toBe(2);
-    expect(stale.err).toContain("made from other public assets");
+    const rewrite = bun(tree, "run.ts", ["--corpus", "custom"]);
+    expect(rewrite.err).toContain("could not run"); // the rewrite is the repository's own, derived from public cases: nothing to ask
+    expect(rewrite.err).not.toContain("add -y");
   }, 60_000);
 
-  test("assets whose stored generator digest is zeroed are refused, and freshly generated ones pass (#44), with --corpus custom, --corpus private and --corpus all", () => {
+  test("stops and says how to make the assets when there are none", () => {
+    const missing = bun(copyOfRepo(), "run.ts", ["--corpus", "custom"]);
+    expect(missing.code).toBe(2);
+    expect(missing.err).toContain("./generate-assets --only distill");
+  });
+
+  test("runs on the assets generate wrote, with --corpus custom and --corpus all", () => {
     const tree = copyOfRepo();
-    const out = join(tree, "private", "distill");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    const marker = JSON.parse(readFileSync(join(out, "generated.json"), "utf8"));
-    expect(marker.rewrite).toMatch(/^[0-9a-f]{64}$/);
-    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).not.toContain("cannot be used");
-    expect(bun(tree, "run.ts", ["--corpus", "private"]).err).toContain("distill: --corpus private is now --corpus custom. The old value works for one more release.");
-    writeFileSync(join(out, "generated.json"), JSON.stringify({ ...marker, rewrite: "0".repeat(64) }));
-    for (const flags of [["--corpus", "custom"], ["--corpus", "private"], ["--corpus", "all"]]) {
-      const refused = bun(tree, "run.ts", flags);
-      expect(refused.code, flags.join(" ")).toBe(2);
-      expect(refused.err, flags.join(" ")).toContain("cannot be used: they were made by a generator that has changed since");
-      expect(refused.err, flags.join(" ")).toContain("./generate-assets --only distill");
-    }
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
-  }, 120_000);
-
-  test("refuses assets made by a generator or a rewrite that has changed since, and runs on them again when the code is as it was", () => {
-    const tree = copyOfRepo();
-    const out = join(tree, "private", "distill");
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, "generated.json"), "utf8"))).toMatchObject({ seed: "5", rewrite: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
-
-    // The rewrite, its lexicon, generate itself and the checks generate runs: a change to any of them marks the assets stale.
-    for (const file of [join("lib", "rewrite", "lexicon.ts"), join("lib", "rewrite", "rewrite.ts"), join("evals", "distill", "src", "generate.ts"), join("evals", "distill", "src", "lib.ts"), join("evals", "distill", "src", "score.ts")]) {
-      const path = join(tree, file);
-      const text = readFileSync(path, "utf8");
-      writeFileSync(path, `${text}\n// changed after the private assets were made\n`);
-      const stale = bun(tree, "run.ts", ["--corpus", "custom"]);
-      expect(stale.code, file).toBe(2);
-      expect(stale.err, file).toContain("cannot be used: they were made by a generator that has changed since");
-      expect(stale.err, file).toContain("./generate-assets --only distill");
-      writeFileSync(path, text);
-      expect(bun(tree, "run.ts", ["--corpus", "custom"]).err, file).not.toContain("cannot be used");
-    }
-
-    // Made again by the changed generator, the assets are good for it.
-    writeFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), `${readFileSync(join(tree, "lib", "rewrite", "lexicon.ts"), "utf8")}\n// changed\n`);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).code).toBe(2);
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", out]).code).toBe(0);
-    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).not.toContain("cannot be used");
+    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
+    for (const flags of [["--corpus", "custom"], ["--corpus", "all"]]) expect(bun(tree, "run.ts", flags).err, flags.join(" ")).toContain("could not run"); // past the checks, stopped for want of akm
   }, 120_000);
 });

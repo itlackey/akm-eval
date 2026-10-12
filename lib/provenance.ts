@@ -1,5 +1,5 @@
 // What ties a run to its inputs, for the summary.json every eval writes: digests of the files it read, the config it ran
-// with (secrets redacted), the settings of the model it called, and the code it ran. Pure helpers: they read the files they are given, nothing else.
+// with (secrets redacted), the model it called and the host of its endpoint, and the code it ran. Pure helpers: they read the files they are given, nothing else.
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -74,27 +74,27 @@ export function harnessSha256(evalSrcDir: string, options: { also?: string[]; ro
   return manifestDigest([...paths].map((path) => [relative(base, path).split(sep).join("/"), sha256File(path)]));
 }
 
-/** A `$NAME` or `${NAME}` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
-const VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/;
 const REDACTED = "<redacted>";
 
+/** A `$NAME` or `${NAME}` reference to an environment variable, such as the "$MODEL_API_KEY" of an akm config. It holds no secret. */
+const VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/;
+
 /**
- * Does a name hold a credential: the name of a field of a config, of a header, of a command-line flag or of an environment variable. It
- * does when it ends in key, secret, password, passwd, pwd, passphrase, credential, token, authorization or cookie, in any case
- * (authorization, x-api-key, access_token, client_secret, apiKey, MYSQL_PWD, SESSION_COOKIE), or when its last word is auth, bearer, pat or
- * pass (auth, bearer, GH_PAT, dbPass). maxTokens, tokenizer, author, path and bypass do not. This is the one rule for a credential's name:
- * redactConfig, and whatever else must decide by a name, use it.
+ * Does a name hold a credential, the one rule of redaction: it ends in key, secret, password, passwd, pwd, passphrase, credential, token,
+ * authorization or cookie, in any case (apiKey, x-api-key, access_token, MYSQL_PWD), or its last word is auth, bearer, pat or pass (GH_PAT,
+ * dbPass). maxTokens, keyword, tokenizer, author, path and bypass do not.
  */
 export const credentialField = (name: string): boolean => {
   const spelled = name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase(); // apiKey is api_key, ghPat is gh_pat
   return /(?:key|secret|password|passwd|pwd|passphrase|credential)s?$|(?:token|authorization|cookie)$|(?:^|[^a-z0-9])(?:auth|bearer|pat|pass)$/.test(spelled);
 };
 
-/** Is this text, which is a value, the name of a credential header or field: a single word that credentialField says holds a credential. */
-const credentialName = (text: unknown): boolean => typeof text === "string" && /^[A-Za-z0-9_.-]+$/.test(text) && credentialField(text);
-
-/** Does a query parameter of a URL carry a credential: a field name as above, or auth, sig or signature (such as X-Amz-Signature) in any case. */
-const credentialParameter = (name: string): boolean => credentialField(name) || /(?:auth|sig|signature)$/.test(name.toLowerCase());
+/** A deep copy of the config that is safe to write to a summary.json: the value of every credential field (credentialField), at any depth, is "<redacted>", unless it is a `$NAME` reference. */
+export function redactConfig(config: any): any {
+  if (Array.isArray(config)) return config.map(redactConfig);
+  if (typeof config !== "object" || config === null) return config;
+  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, credentialField(key) && !(typeof value === "string" && VARIABLE.test(value)) ? REDACTED : redactConfig(value)]));
+}
 
 const decoded = (text: string): string => {
   try {
@@ -104,73 +104,20 @@ const decoded = (text: string): string => {
   }
 };
 
-/** The query of a URL with the value of each credential parameter written as <redacted>, except a `$NAME` reference. */
+/** The query of a URL with the value of each credential parameter written as <redacted>. */
 const cleanQuery = (query: string): string =>
   query
     .split("&")
     .map((pair) => {
       const at = pair.indexOf("=");
-      return at < 0 || !credentialParameter(decoded(pair.slice(0, at))) || VARIABLE.test(pair.slice(at + 1)) ? pair : `${pair.slice(0, at + 1)}${REDACTED}`;
+      return at < 0 || !credentialField(decoded(pair.slice(0, at))) ? pair : `${pair.slice(0, at + 1)}${REDACTED}`;
     })
     .join("&");
 
-/** A URI with no user name or password before the host, no fragment, and the value of each credential parameter of its query redacted. Its scheme, host, port and path stay, so two endpoints can still be compared. */
-function cleanUri(uri: string): string {
-  const m = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)([^/?#]*)([^?#]*)(?:\?([^#]*))?/.exec(uri);
-  if (!m) return uri;
-  const [, scheme, authority, path, query] = m;
-  return `${scheme}${authority.slice(authority.lastIndexOf("@") + 1)}${path}${query === undefined ? "" : `?${cleanQuery(query)}`}`;
-}
-
 /**
- * A string of a config with every URI in it cleaned (see cleanUri), and, when the whole string is a header line or an assignment
- * of a credential, such as "Authorization: Bearer abc" or "api_key=abc", its value redacted.
- */
-function cleanText(text: string): string {
-  const withUris = text.replace(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>`]+/g, cleanUri);
-  const line = /^(\s*([A-Za-z0-9_.-]+)\s*[:=]\s*)(\S[^]*)$/.exec(withUris);
-  return line && credentialField(line[2]) && !VARIABLE.test(line[3].trim()) ? `${line[1]}${REDACTED}` : withUris;
-}
-
-/**
- * A deep copy of the config that is safe to write to a summary.json, for every engine and every field:
- *  - the value under a credential field is replaced by "<redacted>", at any depth, in objects and in arrays. A field is a credential
- *    by its name (see credentialField): apiKey, api_key, token, secret, password, authorization, auth, bearer, pat, pass, x-api-key,
- *    client_secret, and the like. A header in a list is covered too, as a "Name: value" line, as a ["Name", "value"] pair or as {name, value},
- *    and so is the word after a credential flag at any place in a list of arguments: ["serve", "--api-key", "sk-...", "--port", "80"].
- *  - in every string that holds a URI, such as an engine's endpoint or a registry's URL, the user name and password before the host
- *    and the fragment are removed, and the value of each credential parameter of the query (api_key, key, token, access_token, auth,
- *    sig, signature, password, secret, in any case) is replaced by "<redacted>". The scheme, host, port and path stay.
- * A `$NAME` or `${NAME}` reference to an environment variable holds no secret, and stays wherever it is: as the value of apiKey or of ?api_key=.
- */
-export function redactConfig(config: any): any {
-  if (typeof config === "string") return cleanText(config);
-  if (Array.isArray(config)) {
-    const pair = config.length === 2 && credentialName(config[0]) && typeof config[1] === "string" && !VARIABLE.test(config[1]);
-    if (pair) return [cleanText(config[0]), REDACTED];
-    return config.map((item, i) => {
-      const flag = config[i - 1];
-      const value = typeof item === "string" && typeof flag === "string" && flag.startsWith("-") && credentialName(flag) && !item.startsWith("-") && !VARIABLE.test(item);
-      return value ? REDACTED : redactConfig(item);
-    });
-  }
-  if (typeof config !== "object" || config === null) return config;
-  const named = ["name", "key", "header"].some((field) => credentialName(config[field])); // {name: "X-Api-Key", value: "..."}
-  const entries = Object.entries(config).map(([key, value]) => {
-    const secret = (credentialField(key) || (named && key === "value")) && !(typeof value === "string" && VARIABLE.test(value));
-    return [key, secret ? REDACTED : redactConfig(value)];
-  });
-  return Object.fromEntries(entries);
-}
-
-/**
- * What identifies an endpoint: the scheme, host, port and path of the URL, in lower case for the scheme and host,
- * without a trailing slash, with no user name, password or fragment, and with the query's parameters in order and the value of each
- * credential parameter replaced by "<redacted>" (see cleanUri). Two deployments on one host, such as /deployment-A/v1 and /deployment-B/v1,
- * are two identities; a change of key alone is not. Null for a value that is missing or is not a URL.
- *
- * It is what is compared, and not what is written: the path can name a deployment or carry a key. A summary or a message records
- * `endpointId` of it (a digest) with `endpointHost`, never the identity itself.
+ * The whole endpoint, for the resume fingerprint of scripts/matrix, which is never written into a result: the scheme, host, port and path of
+ * the URL, in lower case for the scheme and host, without a trailing slash, with no user name, password or fragment, and with the query's
+ * parameters in order and the value of each credential parameter replaced by "<redacted>". Null for a value that is missing or is not a URL.
  */
 export function endpointIdentity(url: unknown): string | null {
   if (typeof url !== "string" || url.trim() === "") return null;
@@ -186,38 +133,14 @@ export function endpointIdentity(url: unknown): string | null {
   return `${u.protocol}//${u.host}${path}${query}`;
 }
 
-/**
- * The host of an endpoint, for a reader: the scheme, host and port, in lower case, and nothing after them. The path and the query can name a
- * deployment, a project or a key, so a summary, a message and a report never carry them (see endpointId). Null for what endpointIdentity
- * says is no URL.
- */
+/** What a summary records of an endpoint: the scheme, host and port, in lower case, and nothing after them. Null for what is no URL. */
 export function endpointHost(url: unknown): string | null {
   const id = endpointIdentity(url);
   return id === null ? null : new URL(id).origin;
 }
 
-/**
- * A digest of the endpoint's identity (see endpointIdentity): what a summary records and a comparison compares in place of the path. Two
- * deployments on one host have two digests, and a change of key alone does not change it. Null for what is no URL.
- */
-export function endpointId(url: unknown): string | null {
-  const id = endpointIdentity(url);
-  return id === null ? null : sha256(id);
-}
-
-/** What a summary records of an endpoint: its host to read, and the digest of its identity to compare. Never the path. */
-export function endpointRecord(url: unknown): { endpoint: string | null; endpoint_id: string | null } {
-  return { endpoint: endpointHost(url), endpoint_id: endpointId(url) };
-}
-
-/** How a message names an endpoint: its host, then the first 12 characters of the digest, such as "https://gateway.example (id 3af2c1d0e9b8)". */
-export function endpointDisplay(e: { endpoint?: string | null; endpoint_id?: string | null }): string {
-  const id = typeof e.endpoint_id === "string" ? e.endpoint_id.slice(0, 12) : null;
-  return `${e.endpoint ?? "unknown host"}${id === null ? "" : ` (id ${id})`}`;
-}
-
 /** The settings of an engine that are the model's, not the akm config's: a summary's `engine` records them, and the config digest of scripts/compare leaves them out. */
-export const ENGINE_KEYS = ["model", "endpoint", "endpoint_id", "temperature", "enableThinking", "timeoutMs"] as const;
+export const ENGINE_KEYS = ["model", "endpoint", "temperature", "enableThinking", "timeoutMs"] as const;
 
 /**
  * An akm config without the settings of its engines that are the model's (ENGINE_KEYS): what the config axis of a comparison digests, and
@@ -236,10 +159,8 @@ export function withoutEngineSettings(x: unknown): unknown {
 
 export interface EngineSetting {
   model: string | null;
-  /** The endpoint's host: scheme, host and port, with no path, no query and no credentials. For a reader. */
+  /** The endpoint's host: scheme, host and port, with no path, no query and no credentials. */
   endpoint: string | null;
-  /** The sha256 of the endpoint's identity (see endpointId). What a comparison compares. */
-  endpoint_id: string | null;
   temperature: number | null;
   enableThinking: boolean | null;
   timeoutMs: number | null;
@@ -252,19 +173,7 @@ export interface EngineSettings extends EngineSetting {
   engines: Record<string, EngineSetting>;
 }
 
-/**
- * An engine as a summary recorded it, in the shape engineSettings writes today. A summary from before #65 holds the endpoint's identity,
- * path included, and no `endpoint_id`: it comes out as a host and the digest of that identity, so the old and the new compare equal for the
- * same deployment and the path is not carried on. An endpoint that is not a URL (`<MODEL_BASE_URL>`) is none.
- */
-export function recordedEngine(e: any): EngineSetting {
-  const url = isRecord(e) && typeof e.endpoint === "string" && e.endpoint.includes("://") ? e.endpoint : null;
-  const hasId = isRecord(e) && typeof e.endpoint_id === "string" && /^[0-9a-f]{64}$/.test(e.endpoint_id);
-  const record = hasId ? { endpoint: endpointHost(url), endpoint_id: e.endpoint_id as string } : endpointRecord(url);
-  return { model: typeof e?.model === "string" ? e.model : null, ...record, temperature: e?.temperature ?? null, enableThinking: e?.enableThinking ?? null, timeoutMs: e?.timeoutMs ?? null };
-}
-
-const settingsOf = (e: any): EngineSetting => ({ model: e?.model ?? null, ...endpointRecord(e?.endpoint), temperature: e?.temperature ?? null, enableThinking: e?.enableThinking ?? null, timeoutMs: e?.timeoutMs ?? null });
+const settingsOf = (e: any): EngineSetting => ({ model: e?.model ?? null, endpoint: endpointHost(e?.endpoint), temperature: e?.temperature ?? null, enableThinking: e?.enableThinking ?? null, timeoutMs: e?.timeoutMs ?? null });
 
 /** The names under a key that ends in "engine" (llmEngine, engine, judgeEngine) anywhere in the config but its `engines` table. */
 function engineNames(x: any, key = "", out = new Set<string>()): Set<string> {

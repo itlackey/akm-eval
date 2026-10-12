@@ -1,8 +1,11 @@
 // Writes the compare tool's fixtures: for each eval, the results folders of a run "before" and a run "after" a change, small enough to read.
 // The summaries' metrics come from each eval's own metrics(), so they are what the eval would have written for these rows.
 // Run it with `bun fixtures/make.ts` from this folder after a row or a metric of an eval changes, and read the diff of the fixtures.
+// The tests of compare and of the matrix make their own runs with `manifested`.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { buildManifest } from "../../../../lib/manifest.ts";
+import { endpointHost, sha256Json } from "../../../../lib/provenance.ts";
 
 const W = resolve(import.meta.dir, "..", "..", "..", "..");
 const OUT = import.meta.dir;
@@ -10,11 +13,37 @@ const lib = (e: string) => import(join(W, "evals", e, "src/lib.ts"));
 
 type Row = Record<string, unknown>;
 
+/**
+ * The summary with the manifest an eval writes, made from the summary's own fields: a case for each id, every one scored, whose digests are
+ * those of the id, so that two runs of the same ids gave their cases the same input.
+ */
+export function manifested(s: Record<string, any>, ids: string[]): Record<string, any> {
+  const engines = s.engine?.engines ?? (s.engine ? { opencode: s.engine } : {});
+  return {
+    ...s,
+    manifest: buildManifest({
+      measurement: { eval: String(s.eval), version: "0.2" },
+      corpus: String(s.corpus ?? "public"),
+      collection: s.collection,
+      mode: s.mode,
+      cases: Object.fromEntries(ids.map((id) => [id, { input_sha256: sha256Json({ id }), label_sha256: sha256Json({ id }) }])),
+      akm: { version: s.akm_version, bin: s.akm_bin, build: s.akm_build, build_fingerprint: s.akm_build_fingerprint },
+      config: s.config,
+      engines: Object.fromEntries(Object.entries<any>(engines).map(([name, e]) => [name, { model: e.model ?? null, endpoint: endpointHost(e.endpoint), temperature: e.temperature ?? null, enableThinking: e.enableThinking ?? null, timeoutMs: e.timeoutMs ?? null }])),
+      settings: { strategy: s.strategy, config_patch_sha256: s.config_patch?.sha256, timeout_ms: s.timeout_ms, seed: s.seed == null ? null : String(s.seed) },
+      treatment_hints: s.embedder ? { embedder: s.embedder } : {},
+      completion: { selected: ids, scored: ids, errored: [] },
+    }),
+  };
+}
+
 function write(path: string, summary: Row, rows: Row[]): void {
   const dir = join(OUT, path);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  const { manifest } = manifested(summary, rows.map((r) => String(r.id)));
+  // the manifest on one line, so that the rest of the summary still reads
+  writeFileSync(join(dir, "summary.json"), `${JSON.stringify(summary, null, 2).replace(/\n}$/, `,\n  "manifest": ${JSON.stringify(manifest)}\n}`)}\n`);
   writeFileSync(join(dir, "samples.jsonl"), rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
 }
 
@@ -28,7 +57,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- nightly --------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("nightly");
   const kinds = ["pair", "pair", "pair", "pair", "pair", "reflect", "reflect", "reflect", "distill", "distill", "fix", "fix", "untouched", "untouched"];
   const item = (i: number, ok: boolean, harm = false, state = ok ? "fixed" : "left alone") => ({
@@ -57,7 +86,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- consolidate ----------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("consolidate");
   type C = [string, string, string[], "retire" | "keep" | "error", "a" | "b" | null];
   const row = ([id, relation, safeSides, outcome, retired]: C) => ({
@@ -113,7 +142,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- consolidate --pool ---------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { poolMetrics, clusterRows } = await import(join(W, "evals/consolidate/src/pool.ts"));
   type P = [string, string, string[], Record<string, string[]>];
   const clusters: P[] = [
@@ -137,7 +166,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- distill --------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("distill");
   type D = [string, string, string, string, string];
   const row = ([id, klass, expect, verdict, outcome]: D) => ({
@@ -193,7 +222,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- reflect --------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("reflect");
   type R = [string, string, "proposal" | "none" | "error", boolean | null, boolean];
   const row = ([id, klass, outcome, correct, touched]: R) => ({
@@ -240,7 +269,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- promotion ------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("promotion");
   type P = [string, "good" | "bad", string, "accept" | "reject" | "defer" | "error"];
   const row = ([id, label, category, outcome]: P) => ({ id, label, category, ref: `knowledge/${id}`, outcome, reason: outcome === "reject" ? "duplicate" : "" });
@@ -276,7 +305,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- judge-gate -----------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("judge-gate");
   type J = [string, string, "good" | "bad", "pass" | "review" | "reject" | "error"];
   // b1 and b2 are harmful revisions (a fact reversed or dropped), b3 and b4 churn (the form changed, every fact kept)
@@ -310,7 +339,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- extract --------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { metrics } = await lib("extract");
   type E = [string, string, "memory" | "none", "saved" | "empty" | "unusable" | "error", boolean | null, string[]];
   const row = ([id, klass, expect, outcome, correct, forbidden]: E) => ({ id, class: klass, expect, outcome, correct, detail: "", saved: outcome === "saved" ? [{ name: "m", text: "t" }] : [], missing: correct === false && forbidden.length === 0 && expect === "memory" ? ["a fact"] : [], forbidden, seconds: 1, ...(outcome === "error" ? { error: "model call failed" } : {}) });
@@ -342,7 +371,7 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
 
 // ---- retrieval ------------------------------------------------------------------------------------------------------------
 
-{
+if (import.meta.main) {
   const { summarize } = await lib("retrieval");
   type Q = [string, string, number];
   const queries: Q[] = [
@@ -399,4 +428,4 @@ const sides = (e: string, corpus: string, extra: Row = {}) => [{ eval: e, corpus
     write(`retrieval/noise-r${i + 1}-library`, { ...drop(sb), label: `noise-r${i + 1}`, ...summaryOf(rs, ["search", "curate"]) }, rs);
   });
 }
-console.log("fixtures written");
+if (import.meta.main) console.log("fixtures written");

@@ -18,14 +18,13 @@
 //
 // Everything is made in a folder beside the private assets and moved into place only when it is all sound: at least one task
 // kept and no renamed word left over. Otherwise the assets and the map of the run before stay exactly as they were.
-// generated.json, in the assets, says what they were made from and what they hold: run --corpus private refuses assets
-// it does not match.
+// generated.json, in the assets, holds the seed they were made with.
 
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { GENERATED, type Generated, generatorSha256, isFictional, libraryOf, outputsSha256, publicInputsSha256, taskNames } from "./inputs.ts";
+import { GENERATED, isFictional, libraryOf, taskNames } from "./inputs.ts";
 import { libraryProblems } from "./lib.ts";
 
 // These live in ./inputs.ts, which run.ts shares. They are exported from here too, for what imported them from here.
@@ -238,9 +237,6 @@ export function generate(opts: Options): Result {
   const needed = [...new Set(names.map((n) => libraryOf(join(from, "tasks", n))))];
   if (needed.some((l) => l === undefined || !existsSync(join(from, "libraries", l)))) throw new Error("a task names a library that does not exist");
 
-  // Before anything is copied or run: an input or a generator that changes during the run makes the assets stale, not fresh.
-  const inputs = publicInputsSha256(from);
-  const generator = generatorSha256();
   rmSync(work, { recursive: true, force: true });
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(join(work, "in", "tasks"), { recursive: true });
@@ -307,8 +303,7 @@ export function generate(opts: Options): Result {
 
     const installed = problems.length === 0 && kept.length > 0;
     if (installed) {
-      const made: Generated = { version: 1, seed: opts.seed, inputs_sha256: inputs, generator_sha256: generator, outputs_sha256: outputsSha256(assets) };
-      writeFileSync(join(assets, GENERATED), `${JSON.stringify(made, null, 2)}\n`);
+      writeFileSync(join(assets, GENERATED), `${JSON.stringify({ seed: opts.seed }, null, 2)}\n`);
       install(staging, out);
     }
     return { kept, leftOut, problems, summary, installed };

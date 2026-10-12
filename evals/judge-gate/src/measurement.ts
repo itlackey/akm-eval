@@ -1,21 +1,21 @@
-// What the judge-gate eval declares about its own measurement: which files collect, which files score, and how a stored case is scored
-// again. lib/manifest.ts has the contract (`Measurement`) and the README's "How results stay comparable" the story.
+// What the judge-gate eval declares about its own measurement: its version, and how a stored case is scored
+// again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
 //
-// This file only wires the parts together. It is in neither digest: what it digests per case (`input` and `labels`) shows in the case
+// This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is in score.ts.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME, orderFeedback } from "./collect.ts";
-import { CASES, casesSha256 } from "./inputs.ts";
+import { CASES } from "./inputs.ts";
 import { parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /**
  * The folder of the cases a run read. The public ones are in the repository. A custom corpus records its folder when it was inside it
  * (`corpus_folder`, from the repository root: `corpusFolderOf` in lib/manifest.ts; scripts/rescore sets it from `--cases DIR` when it is null).
- * A run from before corpus.json named its corpus `private`: the seeded rewrite generate makes.
+ * A run from before the corpora were renamed called its corpus `private`: the seeded rewrite generate makes.
  */
 function assetsOf(root: string, summary: Record<string, any>): string {
   if (summary.corpus === "public") return join(root, "evals", NAME, "assets");
@@ -26,24 +26,11 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
-  // What decides what akm is asked and what is kept of its answer: the config and the sandbox this eval builds, the command it runs, and
-  // the lib/ files that run akm, merge the config patch and hide the endpoint in akm's messages.
-  collector: ["evals/judge-gate/src/collect.ts", "lib/akm/akm.ts", "lib/akm/overrides.ts", "lib/cli.ts"],
-  // What turns akm's verdict into an outcome and the outcomes into metrics. The labels are the cases (assets/cases.jsonl), digested per case.
-  scorer: ["evals/judge-gate/src/score.ts"],
+  // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
+  version: "0.2",
   loadCases: (root, summary) => {
     const file = join(assetsOf(root, summary), CASES);
     return parseCases(readFileSync(file, "utf8"), file);
-  },
-  legacyProblem: (root, summary) => {
-    let dir: string;
-    try {
-      dir = assetsOf(root, summary);
-    } catch (e) {
-      return (e as Error).message;
-    }
-    if (existsSync(join(dir, CASES)) && summary.assets_sha256 === casesSha256(dir)) return undefined;
-    return `it read other cases than the ones in ${relative(root, dir)} now (assets_sha256 is ${summary.assets_sha256 ?? "not recorded"})`;
   },
   caseId: (c) => c.id,
   // What goes to `akm improve judge` on stdin: the source, the candidate and the feedback with its negative lines first.

@@ -1,7 +1,7 @@
 # Publishes a release of akm-eval: the tag v<version> on the commit the workflow runs on, with releases/v<version>.md as its notes.
 # Run it by hand on main once the notes are merged: from the Actions tab, or `gh workflow run release.yml -f version=0.2`.
 # Run it again for a release that exists and it replaces the notes; the tag stays where it is.
-# What a run records as its measurement versions is MEASUREMENT.lock, not the tag (see MEASUREMENT_CHANGELOG.md).
+# What a run records as an eval's version is the version in its src/measurement.ts, not the tag (see MEASUREMENT_CHANGELOG.md).
 name: release
 
 on:

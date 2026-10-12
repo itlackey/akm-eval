@@ -4,8 +4,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandLine, createSandbox, parseCommand, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
-import { endpointId, harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
-import { corpusFolderOf, lockedParts, readManifest } from "../../../lib/manifest.ts";
+import { harnessSha256, sha256File, sha256Json, sha256Text } from "../../../lib/provenance.ts";
+import { corpusFolderOf, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
@@ -14,9 +14,9 @@ import { MEASUREMENT } from "./measurement.ts";
 import { collectionsFor, failureOf, runCollection, withSemantic } from "./run.ts";
 
 /** The corpora of a run, as lib/corpus.ts resolves them: the committed cases, the public cases rewritten from a seed, and a folder of your own. */
-const corpusOf = (name: "public" | "custom", kind: "public" | "rewrite" | "own", config: object = {}, folder = "/nowhere"): ResolvedCorpus => ({ name, folder, config: { kind, private: kind === "own", ...config }, configFile: null, flag: name === "public" ? "--corpus public" : "--corpus custom" });
+const corpusOf = (name: "public" | "custom", kind: "public" | "rewrite" | "own", config: { seed?: string } = {}, folder = "/nowhere"): ResolvedCorpus => ({ name, folder, rewrite: kind === "rewrite", seed: config.seed ?? null, flag: name === "public" ? "--corpus public" : "--corpus custom" });
 const PUBLIC = corpusOf("public", "public");
-const REWRITE = corpusOf("custom", "rewrite", { seed: "123", generated: "assets/generated.json" });
+const REWRITE = corpusOf("custom", "rewrite", { seed: "123" });
 const OWN = corpusOf("custom", "own");
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -153,7 +153,7 @@ describe("runCollection", () => {
   test("scores search and curate on the task queries that have a relevant asset", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
-    expect(s).toMatchObject({ eval: "retrieval", corpus: "public", corpus_kind: "public", corpus_private: false, collection: "library", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 10, relevant_from_grade: 2, limit: null, n_queries: 6, n_assets: 1, n_scored: 3 });
+    expect(s).toMatchObject({ eval: "retrieval", corpus: "public", collection: "library", label: "t", akm_version: "0.9.99-test", search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_model: "Xenova/bge-small-en-v1.5", depth: 10, relevant_from_grade: 2, limit: null, n_queries: 6, n_assets: 1, n_scored: 3 });
     expect(Object.keys(s.index_seconds)).toEqual(["keyword", "semantic"]);
 
     // q1 and q2 are scored for search. q4's search call failed, so it is left out and counted.
@@ -349,7 +349,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
       expect(s.config.keyword).toEqual(plain);
       expect(s.config.semantic).toMatchObject({ configVersion: "0.9.0", semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5", queryTimeoutMs: 600_000 } });
-      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, endpoint_id: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
+      expect(s.engine).toEqual({ engine: null, model: null, endpoint: null, temperature: null, enableThinking: null, timeoutMs: null, engines: {} });
       const stored = JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8"));
       expect(stored.config).toEqual(s.config);
       const keyword = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, semantic: false }, folders));
@@ -367,7 +367,7 @@ describe("runCollection", () => {
       const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, newSandbox }, folders));
       expect((s.config.keyword as typeof withKey).engines.model.apiKey).toBe("<redacted>");
       expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).not.toContain("sk-secret");
-      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com", endpoint_id: endpointId("https://api.example.com/v1/chat/completions"), timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com", endpoint_id: endpointId("https://api.example.com/v1/chat/completions") } } });
+      expect(s.engine).toMatchObject({ engine: "model", model: "m", endpoint: "https://api.example.com", timeoutMs: 1000, engines: { model: { model: "m", endpoint: "https://api.example.com" } } });
     });
 
     test("has a digest of the queries and qrels the run read, the same on another machine and different when a grade is added", async () => {
@@ -409,12 +409,12 @@ describe("runCollection", () => {
       expect(JSON.parse(readFileSync(join(own.results_dir, "summary.json"), "utf8")).seed).toBeNull();
     });
 
-    test("records what kind of corpus it read, whether that was private and where it was, and never a path outside the repository", async () => {
+    test("records which corpus it read and where it was, and never a path outside the repository", async () => {
       const { ctx, folders } = setup();
       const own = await quiet(() => runCollection(OWN, "own", ctx, folders));
-      expect(own).toMatchObject({ corpus: "custom", corpus_kind: "own", corpus_private: true, corpus_folder: null }); // /nowhere is not in the repository
+      expect(own).toMatchObject({ corpus: "custom", corpus_folder: null }); // /nowhere is not in the repository
       const rewrite = await quiet(() => runCollection(REWRITE, "library", ctx, folders));
-      expect(rewrite).toMatchObject({ corpus: "custom", corpus_kind: "rewrite", corpus_private: false });
+      expect(rewrite).toMatchObject({ corpus: "custom", seed: "123" });
       const inside = await quiet(() => runCollection(corpusOf("custom", "own", {}, join(ROOT, "private", "retrieval", "own")), "own", ctx, folders));
       expect(inside.corpus_folder).toBe("private/retrieval/own");
       expect(readFileSync(join(own.results_dir, "summary.json"), "utf8")).not.toContain("/nowhere");
@@ -773,25 +773,24 @@ describe("runCollection", () => {
   });
 
   test("scores the semantic search in a full run of the public and rewrite corpora, and not with --limit or in the own corpus", () => {
-    expect(withSemantic("public")).toBe(true);
-    expect(withSemantic("rewrite")).toBe(true);
-    expect(withSemantic("public", 20)).toBe(false);
-    expect(withSemantic("rewrite", 1)).toBe(false);
-    expect(withSemantic("own")).toBe(false);
-    expect(withSemantic("own", 20)).toBe(false);
+    expect(withSemantic(false)).toBe(true); // the public and the rewrite corpora
+    expect(withSemantic(false, 20)).toBe(false);
+    expect(withSemantic(false, 1)).toBe(false);
+    expect(withSemantic(true)).toBe(false); // your own
+    expect(withSemantic(true, 20)).toBe(false);
   });
 
   test("--semantic on scores it for any corpus and with --limit, off never, and auto is the rule above", () => {
-    for (const [corpus, limit] of [["public", undefined], ["public", 20], ["rewrite", 1], ["own", undefined], ["own", 20]] as const) {
-      expect(withSemantic(corpus, limit, "on")).toBe(true);
-      expect(withSemantic(corpus, limit, "off")).toBe(false);
-      expect(withSemantic(corpus, limit, "auto")).toBe(withSemantic(corpus, limit));
+    for (const [own, limit] of [[false, undefined], [false, 20], [false, 1], [true, undefined], [true, 20]] as const) {
+      expect(withSemantic(own, limit, "on")).toBe(true);
+      expect(withSemantic(own, limit, "off")).toBe(false);
+      expect(withSemantic(own, limit, "auto")).toBe(withSemantic(own, limit));
     }
   });
 
   test("with --semantic on, a run with --limit builds the semantic index and has the four columns", async () => {
     const { ctx, folders } = setup();
-    const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, limit: 3, semantic: withSemantic("public", 3, "on"), semanticFlag: "on" }, folders));
+    const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, limit: 3, semantic: withSemantic(false, 3, "on"), semanticFlag: "on" }, folders));
     expect(s).toMatchObject({ limit: 3, n_queries: 3, semantic_flag: "on", semantic_index: "cold" });
     expect(Object.keys(s.metrics)).toEqual(["search", "curate", "semantic_search", "semantic_curate"]);
   });
@@ -834,10 +833,10 @@ describe("runCollection", () => {
 describe("the manifest", () => {
   const stored = (dir: string) => JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
 
-  test("is in summary.json with the versions MEASUREMENT.lock has, the settings of the run and what was scored", async () => {
+  test("is in summary.json with the eval's version, the settings of the run and what was scored", async () => {
     const { ctx, folders } = setup();
     const s = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
-    const parts = lockedParts(MEASUREMENT);
+    const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(readManifest(stored(s.results_dir)).kind).toBe("manifest");
     expect(s.manifest).toMatchObject({
       manifest_version: 1,
@@ -847,7 +846,6 @@ describe("the manifest", () => {
       mode: null,
       harness_version: parts.harness_version,
       collector: parts.collector,
-      scorer: parts.scorer,
       akm: { version: "0.9.99-test", build: null, build_fingerprint: null },
       settings: { strategy: null, config_patch_sha256: null, timeout_ms: akm.CALL_TIMEOUT_MS, seed: null },
       engines: {},
@@ -937,7 +935,7 @@ describe("a set of your own", () => {
     const bundles = join(root, "bundles.json");
     writeFileSync(bundles, JSON.stringify({ one: "akm", two: "claude" }));
     const s = await quiet(() => runCollection(OWN, "own", ctx, { ...folders, library, bundles }));
-    expect(s).toMatchObject({ corpus: "custom", corpus_kind: "own", collection: "own", n_assets: 2 }); // had the library been copied as well, the fake akm would count 4
+    expect(s).toMatchObject({ corpus: "custom", collection: "own", n_assets: 2 }); // had the library been copied as well, the fake akm would count 4
     expect(s.results_dir).toEndWith("-t-own");
     const seen = JSON.parse(readFileSync(join(root, "seen-config-keyword.json"), "utf8"));
     expect(seen.semanticSearchMode).toBe("off");
@@ -1088,10 +1086,13 @@ describe("the command", () => {
     expect(done.err).toContain("Run it with: evals/retrieval/run --cases DIR");
   });
 
-  test("keeps --corpus private and --corpus own working for one more release, with a line that names the new form", () => {
-    expect(run(["--corpus", "own", "--semantic", "maybe"]).err).toContain("retrieval: --corpus own is now --corpus custom --cases private/retrieval/own. The old value works for one more release.\n");
-    expect(run(["--corpus", "private", "--semantic", "maybe"]).err).toContain("retrieval: --corpus private is now --corpus custom. The old value works for one more release.\n");
-    expect(run(["--corpus", "custom", "--semantic", "maybe"]).err).not.toContain("is now");
+  test("--corpus private, own and own-feedback were renamed: the run stops with the new form", () => {
+    for (const old of ["private", "own", "own-feedback"]) {
+      const done = run(["--corpus", old, "--semantic", "maybe"]);
+      expect(done.code, old).toBe(2);
+      expect(done.err, old).toContain(`retrieval: --corpus ${old} was renamed in 0.2: use `);
+    }
+    expect(run(["--corpus", "custom", "--semantic", "maybe"]).err).not.toContain("renamed");
   });
 
   test("lists --semantic, --akm and the own corpus in its usage, and says that a stale private set is refused", () => {
@@ -1099,7 +1100,7 @@ describe("the command", () => {
     expect(help).toContain("Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]");
     expect(help).toContain("--semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora");
     expect(help).toContain("--akm");
-    expect(help).toContain("made by ./generate-assets --only retrieval. It stops when they were made from public\n            files that have changed since: make them again.");
+    expect(help).toContain("made by ./generate-assets --only retrieval.\n            all runs public and the default custom corpus.");
   });
 });
 
