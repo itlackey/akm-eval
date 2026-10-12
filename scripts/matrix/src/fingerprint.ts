@@ -87,6 +87,8 @@ const LOCK = "benchmarks/terminal-bench/assets/ASSETS.lock";
  * pinned by a lock, so they count by their bytes or their lock. A corpus whose cases cannot be read counts by the bytes of every file.
  */
 const CASE_FILES: Record<string, string[]> = {
+  nightly: ["items.jsonl"],
+  consolidate: ["cases.jsonl"], // --pool reads assets/pool, which counts by its bytes
   reflect: ["cases.jsonl"],
   distill: ["cases.json"],
   extract: ["cases.json"],

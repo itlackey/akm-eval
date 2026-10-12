@@ -44,7 +44,7 @@ describe("an eval that declares a measurement is judged by the matrix", () => {
     for (const name of measuredEvals()) {
       expect(Object.keys(EVALS), name).toContain(name);
       expect(EVALS[name]?.main.length, name).toBeGreaterThan(0);
-      expect(runnerPath("/r", name), name).toBe(`/r/${name === "agent-ab" || name === "bakeoff" || ["distill", "extract", "judge-gate", "promotion", "reflect", "retrieval"].includes(name) ? "evals" : "benchmarks"}/${name}/run`);
+      expect(runnerPath("/r", name), name).toBe(`/r/${name === "agent-ab" || name === "bakeoff" || ["consolidate", "distill", "extract", "judge-gate", "nightly", "promotion", "reflect", "retrieval"].includes(name) ? "evals" : "benchmarks"}/${name}/run`);
     }
     for (const name of NEW) expect(Object.keys(EVALS)).toContain(name);
   });

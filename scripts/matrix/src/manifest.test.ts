@@ -492,12 +492,12 @@ describe("results scored against labels that have changed since are scored again
 
 describe("the cases of the public corpus count by their inputs", () => {
   test("every eval that keeps its cases in files has the digest of the inputs of its public cases, and the labels are not in it", () => {
-    for (const name of ["reflect", "distill", "extract", "judge-gate", "promotion", "retrieval", "bakeoff"]) {
+    for (const name of ["reflect", "distill", "extract", "judge-gate", "promotion", "retrieval", "bakeoff", "nightly", "consolidate"]) {
       expect(inputsDigest(ROOT, name, []), name).toMatch(/^[0-9a-f]{64}$/);
       expect(inputsDigest(ROOT, name, ["--corpus", "public"]), name).toBe(inputsDigest(ROOT, name, []));
     }
-    // an eval that is not in the table, and an eval that declares no measurement yet, have none: they count by their bytes
-    for (const name of ["agent-ab", "terminal-bench", "longmemeval", "skillret", "nightly", "consolidate", "not-an-eval"]) expect(inputsDigest(ROOT, name, []), name).toBeNull();
+    // an eval that is not in the table has none: it counts by its bytes
+    for (const name of ["agent-ab", "terminal-bench", "longmemeval", "skillret", "not-an-eval"]) expect(inputsDigest(ROOT, name, []), name).toBeNull();
     // a custom corpus that is not there has none, and the job counts by the bytes it finds
     expect(inputsDigest(ROOT, "reflect", ["--cases", join(tmp(), "nothing here")])).toBeNull();
   });
