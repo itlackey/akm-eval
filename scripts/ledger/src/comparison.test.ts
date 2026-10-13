@@ -92,6 +92,8 @@ test("model-call telemetry shows means separately from totals, including missing
     calls: 4, errors: 0, prompt_tokens: 120.5, completion_tokens: 15.5, seconds: 2.5, output_tokens_per_second: 6.2,
   } }, [], []);
   expect([fields.run_wall_s, fields.calls, fields.call_failures]).toEqual([24, 4, 0]);
+  expect(fields.run_wall_basis).toBe("Runner elapsed");
+  expect(comparisonFields({ seconds: 9 }, [], []).run_wall_basis).toBe("Legacy collector elapsed");
   expect([fields.model_mean_input_tokens, fields.model_mean_output_tokens, fields.model_mean_request_s, fields.model_output_tokens_per_s]).toEqual([120.5, 15.5, 2.5, 6.2]);
   expect(fields.input_tokens).toBeNull(); // never mean × calls: usage coverage is not recorded
   expect(fields.output_tokens).toBeNull();

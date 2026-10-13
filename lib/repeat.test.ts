@@ -67,6 +67,25 @@ describe("repeatRuns", () => {
     expect(stored.seconds.max).toBeGreaterThanOrEqual(stored.seconds.min);
   });
 
+  test("a resumed run cannot report this invocation as full wall time", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
+    parents.push(parent);
+    const [run] = await repeatRuns(undefined, "resumed", async label => ({ ...await make(parent)(label), resumed: true }));
+    expect(JSON.parse(readFileSync(join(run!.results_dir, "summary.json"), "utf8")).wall_seconds).toBeNull();
+  });
+
+  test("a failed later repeat keeps the first completed run and its timing", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
+    parents.push(parent);
+    await expect(repeatRuns(2, "interrupted", async label => {
+      if (label.endsWith("r2")) throw new Error("stopped");
+      return make(parent)(label);
+    })).rejects.toThrow("stopped");
+    const first = join(parent, `${DAY}-interrupted-r1`);
+    expect(existsSync(join(first, RUNNING))).toBe(false);
+    expect(JSON.parse(readFileSync(join(first, "summary.json"), "utf8")).wall_seconds).toBeGreaterThanOrEqual(0);
+  });
+
   test("carries the fingerprint of the akm build from the first run into the repeat summary, and has none for an eval that runs no akm", async () => {
     const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
     parents.push(parent);

@@ -63,6 +63,7 @@ col("case_p95_s", "Case p95 (s)", "number", "Performance", "95th percentile of e
 col("timed_cases", "Cases timed", "number", "Performance", "Number of cases with an elapsed command time.", 0);
 col("case_work_s", "Case time sum (s)", "number", "Performance", "Sum of recorded case command durations. This is work time, not run wall time.");
 col("run_wall_s", "Run wall time (s)", "number", "Performance", "Total run elapsed time when explicitly recorded by the collector.");
+col("run_wall_basis", "Run wall time basis", "text", "Performance", "Runner elapsed time and older collector timing can cover different phases. Compare the same basis; resumed runs have no known full wall time.");
 col("query_wall_s", "Query wall time (s)", "number", "Performance", "Recorded elapsed time for the complete query phase, excluding index construction.");
 for (const [key, label] of [["index", "Maintenance index"], ["feedback", "Maintenance feedback"], ["improve", "Maintenance improve"], ["drain", "Maintenance drain"]])
   col(`maintenance_${key}_s`, `${label} (s)`, "number", "Performance", "Recorded elapsed time for this stage of a nightly maintenance run.");
@@ -142,6 +143,7 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   fields.case_mean_s = cases.mean; fields.case_p50_s = cases.p50; fields.case_p95_s = cases.p95;
   fields.timed_cases = cases.n || null; fields.case_work_s = cases.total;
   fields.run_wall_s = num(summary.wall_seconds) ?? num(summary.seconds) ?? n(summary, "seconds.total");
+  fields.run_wall_basis = num(summary.wall_seconds) !== null ? "Runner elapsed" : fields.run_wall_s !== null ? "Legacy collector elapsed" : null;
   fields.query_wall_s = n(summary, "query_seconds");
   for (const key of ["index", "feedback", "improve", "drain"]) fields[`maintenance_${key}_s`] = n(summary, `seconds.${key}`);
   fields.keyword_index_s = n(summary, "index_seconds.keyword");

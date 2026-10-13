@@ -95,6 +95,7 @@ export function presentRun(input: RunInput): LedgerRun | null {
   let role: LedgerRun["role"] =
     s.limit || sample.limit || (sampleN !== null && total !== null && sampleN < total) ? "Pilot" : "Full suite";
   const notes: string[] = [];
+  if (s.resumed === true) notes.push("Resumed from saved cases; full run wall time is unknown.");
   if (suite === "agent-ab" && label === "bifrost-gpt120-pilot") {
     role = "Diagnostic";
     notes.push(

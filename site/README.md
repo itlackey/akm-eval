@@ -72,7 +72,10 @@ with-AKM agent/answer timings, in that order. The separate **Latency basis**
 column identifies the source; **Speed & usage** shows it by default. Original
 arm and method distributions remain independent columns. Percentiles use
 linear interpolation and include failed cases where timing exists. Case-time
-sums measure work, not run wall time. Relative median-time change is
+sums measure work, not run wall time. Resumed runs leave full wall time unknown;
+the final invocation alone cannot measure it. **Run wall time basis** distinguishes
+new runner timing from older collector timing that may cover fewer phases.
+Relative median-time change is
 `(with-AKM median / without-AKM median - 1) * 100`; arm timing counts may differ.
 
 **Usage** projects recorded model-call and token fields. Available paired-arm

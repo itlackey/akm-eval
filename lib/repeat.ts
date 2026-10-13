@@ -22,6 +22,8 @@ interface Summarized {
   timeouts?: unknown;
   metrics: unknown;
   results_dir: string;
+  /** Earlier work may have no recorded duration, so this invocation cannot measure full wall time. */
+  resumed?: boolean;
 }
 
 export interface Spread {
@@ -54,10 +56,10 @@ export function spreadOf(runs: unknown[]): unknown {
  * Returns the summaries in order.
  */
 export async function repeatRuns<S extends Summarized>(times: number | undefined, label: string, runOne: (label: string) => Promise<S>): Promise<S[]> {
-  const one = async (name: string): Promise<S & { wall_seconds: number }> => {
+  const one = async (name: string): Promise<S & { wall_seconds: number | null }> => {
     const started = performance.now();
     const run = await runOne(name);
-    const wall_seconds = Number(((performance.now() - started) / 1000).toFixed(3));
+    const wall_seconds = run.resumed ? null : Number(((performance.now() - started) / 1000).toFixed(3));
     const file = join(run.results_dir, "summary.json");
     // Update the collector's saved summary, preserving fields not returned to the caller.
     const stored = JSON.parse(readFileSync(file, "utf8"));
@@ -67,7 +69,7 @@ export async function repeatRuns<S extends Summarized>(times: number | undefined
   };
   if (times === undefined) return [await one(label)];
   const runs: S[] = [];
-  const seconds: number[] = []; // wall time of each run, the same thing for every eval
+  const seconds: (number | null)[] = []; // unknown for a resumed run
   for (let i = 1; i <= times; i++) {
     const run = await one(`${label}-r${i}`);
     seconds.push(run.wall_seconds);

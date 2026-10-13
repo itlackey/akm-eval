@@ -119,7 +119,8 @@ Continue? [Y/n]
 Each eval's `run` command runs once by default. It writes `summary.json` and
 `samples.jsonl` to its results folder, including quality metrics, available timing
 and usage, errors, settings and input identities. Completed runs also record
-`wall_seconds`. A run with errors keeps them visible; a stopped run keeps its
+`wall_seconds` (unknown for resumed runs whose earlier duration is unavailable).
+A run with errors keeps them visible; a stopped run keeps its
 `.running` marker. Existing benchmark-specific resume flags still work.
 
 ```sh

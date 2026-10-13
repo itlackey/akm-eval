@@ -460,7 +460,8 @@ describe("runCorpus", () => {
       counter.requests = 0;
       const summary = await runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, context, folders);
       expect(counter.requests).toBe(8);
-      expect(summary).toMatchObject({ n_run: 3, n_scored: 3, complete: true });
+      expect(summary).toMatchObject({ n_run: 3, n_scored: 3, complete: true, resumed: true });
+      expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).resumed).toBe(true);
       expect(summary.metrics.accuracy?.difference).toMatchObject({ n: 3, value: -0.3333 });
       const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
       expect(rows.map((r) => r.id)).toEqual(["q-secret", "q-cats", "q-passport_abs"]);
