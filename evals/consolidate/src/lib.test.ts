@@ -48,11 +48,12 @@ describe("parseCases", () => {
 describe("the public cases", () => {
   const cases = publicCases();
 
-  test("are 10 for each relation, with a unique id and unique note names", () => {
-    expect(cases).toHaveLength(60);
-    for (const r of RELATIONS) expect(cases.filter((c) => c.relation === r)).toHaveLength(10);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(60);
-    expect(new Set(cases.flatMap((c) => [c.a.name, c.b.name])).size).toBe(120);
+  test("are 13 or 14 for each relation, with a unique id and unique note names", () => {
+    expect(cases).toHaveLength(80);
+    const counts: Record<Relation, number> = { duplicate: 13, subsumed: 14, supersedes: 13, contradicts: 13, overlap: 13, unrelated: 14 };
+    for (const r of RELATIONS) expect(cases.filter((c) => c.relation === r)).toHaveLength(counts[r]);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(80);
+    expect(new Set(cases.flatMap((c) => [c.a.name, c.b.name])).size).toBe(160);
   });
 
   test("have the safe sides their relation gives, and a deciding claim on the side it belongs to", () => {
@@ -82,7 +83,7 @@ describe("the public cases", () => {
     }
     const subsumed = cases.filter((c) => c.relation === "subsumed");
     const safeIsOlder = subsumed.filter((c) => c.safe[0] === c.older).length;
-    expect(safeIsOlder).toBe(5);
+    expect(safeIsOlder).toBe(7);
   });
 
   test("hold nothing private: no home path, no address and no real domain", () => {
@@ -133,8 +134,8 @@ describe("the public cases and akm's embedder", () => {
 
   test("pairs some unrelated cases, which have a shared layout, and not those that share no subject", () => {
     const cosines = publicCases().filter((c) => c.relation === "unrelated").map(cosine);
-    expect(cosines.filter((x) => x > 0.94)).toHaveLength(5);
-    expect(cosines.filter((x) => x < 0.6)).toHaveLength(5);
+    expect(cosines.filter((x) => x > 0.94)).toHaveLength(7);
+    expect(cosines.filter((x) => x < 0.6)).toHaveLength(7);
   });
 });
 
@@ -388,7 +389,7 @@ describe("generate", () => {
       const text = readFileSync(join(dir, "assets", "cases.jsonl"), "utf8");
       const made = parseCases(text);
       const original = publicCases();
-      expect(made).toHaveLength(60);
+      expect(made).toHaveLength(80);
       // the same relations, sides and dates, in a different text
       expect(made.map((c) => [c.id, c.relation, c.older, c.safe, c.canary])).toEqual(original.map((c) => [c.id, c.relation, c.older, c.safe, c.canary]));
       expect(text).not.toMatch(/tarnwick|ostler|pellam|brackwater|sedgemoor|larkspur|quillon/i);
@@ -403,8 +404,8 @@ describe("generate", () => {
       // and the pairs still pair, and the pairs on different subjects still do not
       for (const c of made.filter((x) => x.relation !== "unrelated")) expect(cosine(c)).toBeGreaterThan(0.94);
       const unrelated = made.filter((c) => c.relation === "unrelated").map(cosine);
-      expect(unrelated.filter((x) => x > 0.94)).toHaveLength(5);
-      expect(unrelated.filter((x) => x < 0.6)).toHaveLength(5);
+      expect(unrelated.filter((x) => x > 0.94)).toHaveLength(7);
+      expect(unrelated.filter((x) => x < 0.6)).toHaveLength(7);
       // it says which seed the set was made from, and leaves no temporary folder behind
       expect(JSON.parse(readFileSync(join(dir, "generated.json"), "utf8"))).toEqual({ seed: "42" });
       expect(readdirSync(dir).sort()).toEqual(["assets", "generated.json", "map.json"]);
