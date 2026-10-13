@@ -30,7 +30,8 @@ afterEach(() => {
  */
 const FAKE_AKM = `
 import { Database } from "bun:sqlite";
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 const args = process.argv.slice(2);
 const [cmd, ...rest] = args;
 const plan = JSON.parse(process.env.FAKE_PLAN ?? "{}");
@@ -38,13 +39,28 @@ const stateFile = process.env.AKM_STATE_DIR + "/fake.json";
 const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")) : { fed: [] };
 const save = () => writeFileSync(stateFile, JSON.stringify(state));
 const out = (o) => console.log(JSON.stringify(o));
-const note = (ref) => [ref + ".md", ref + "/SKILL.md"].map((p) => process.env.AKM_BUNDLE_DIR + "/" + p).find((p) => existsSync(p));
+const note = (ref) => {
+  const indexed = plan.__indexedRefs ?? {};
+  const path = Object.keys(indexed).find((path) => indexed[path] === ref);
+  return path ? join(process.env.AKM_BUNDLE_DIR, path) : [ref + ".md", ref + "/SKILL.md"].map((p) => process.env.AKM_BUNDLE_DIR + "/" + p).find((p) => existsSync(p));
+};
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const dbFile = process.env.AKM_DATA_DIR + "/state.db";
 const searches = (ref) => { if (!ref || !existsSync(dbFile)) return []; const db = new Database(dbFile, { readonly: true }); try { return db.prepare("SELECT query FROM usage_events WHERE event_type = 'search' AND source = 'user' AND entry_ref = ?").all("bundle//" + ref).map((r) => r.query); } finally { db.close(); } };
 appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
 if (cmd === "--version") console.log("akm 0.9.99-test");
-else if (cmd === "index") out({ ok: true });
+else if (cmd === "index") {
+  const db = new Database(join(process.env.AKM_DATA_DIR, "index.db"));
+  db.exec("CREATE TABLE entries (file_path TEXT, concept_id TEXT)");
+  const walk = (dir, prefix = "") => { for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = prefix + entry.name;
+    if (entry.isDirectory()) walk(join(dir, entry.name), path + "/");
+    else if (path.endsWith(".md")) db.query("INSERT INTO entries VALUES (?, ?)").run(join(dir, entry.name), plan.__indexedRefs?.[path] ?? path.replace(/\\.md$/, "").replace(/\\/SKILL$/, ""));
+  } };
+  walk(process.env.AKM_BUNDLE_DIR);
+  db.close();
+  out({ ok: true });
+}
 else if (cmd === "feedback") { const db = new Database(dbFile); db.exec("CREATE TABLE IF NOT EXISTS usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, query TEXT, entry_id INTEGER, entry_ref TEXT, signal TEXT, metadata TEXT, source TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL DEFAULT (datetime('now')))"); db.close(); state.fed.push(rest[0]); save(); out({ ok: true, ref: rest[0], signal: "negative" }); }
 else if (cmd === "improve") {
   const ref = rest[0];
@@ -119,6 +135,17 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
 };
 
 describe("runCorpus", () => {
+  test("uses the indexed ref for nested agents, including the recorded retrieval queries", async () => {
+    const c = make("nested-agent", "when-to-use-missing", "knowledge/nested/community-manager.md");
+    const ref = "agents/knowledge/nested/community-manager";
+    const { ctx, calls, folders } = setup([c], { __indexedRefs: { [c.path]: ref }, [ref]: { outcome: "none" } });
+    const summary = await quiet(() => runPublic({ ...ctx, queries: new Map([[refOf(c.path), ["community moderation"]]]) }, folders));
+    expect(summary.n_errored).toBe(0);
+    expect(calls().find((call) => call.args[0] === "feedback").args[1]).toBe(ref);
+    const improve = calls().find((call) => call.args[0] === "improve");
+    expect(improve.args[1]).toBe(ref);
+    expect(improve.searches).toEqual(["community moderation"]);
+  });
   const cases = [
     make("fix-ok", "when-to-use-missing", "knowledge/a.md"),
     make("fix-none", "when-to-use-missing", "knowledge/b.md"),

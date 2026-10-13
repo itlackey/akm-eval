@@ -28,7 +28,7 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 export const MEASUREMENT: Measurement<Planted, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   loadCases: (root, summary) => {
     const night = loadNight(assetsOf(root, summary));
     return planted(night.items, night.files);

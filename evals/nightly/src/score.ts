@@ -103,6 +103,8 @@ export interface WholeNight {
  * the part of it that is the whole night's (`night`), which is the same in every row.
  */
 export interface Raw {
+  /** File identities returned by AKM, before the collector maps refs to case paths. */
+  indexed_refs?: Record<string, string>;
   /** The text of the files the scorer reads for the item (see `watchedPaths`) before the night. A file that was not there is not listed. */
   before: Record<string, string>;
   /** The same after the night and its drain. A file that is gone is not listed. */
@@ -155,6 +157,7 @@ export interface Row {
   proposals: Raw["proposals"];
   actions: Raw["actions"];
   night: WholeNight;
+  indexed_refs?: Raw["indexed_refs"];
 }
 
 /** The night as the checks see it for one item: the text of its files before and after, its proposals and actions, and the proactive lane. */
@@ -342,7 +345,7 @@ export function scoreItem(item: Item, o: Outcome): Scored {
 /** The row for an item and its raw output: the verdict, and the raw output beside it so that the row can be scored again. */
 export function makeRow(item: Item, raw: Raw): Row {
   const outcome: Outcome = { before: new Map(Object.entries(raw.before)), after: new Map(Object.entries(raw.after)), proposals: raw.proposals, actions: raw.actions, lane: raw.night.lane };
-  return { ...scoreItem(item, outcome), before: raw.before, after: raw.after, proposals: raw.proposals, actions: raw.actions, night: raw.night };
+  return { ...scoreItem(item, outcome), before: raw.before, after: raw.after, proposals: raw.proposals, actions: raw.actions, night: raw.night, ...(raw.indexed_refs ? { indexed_refs: raw.indexed_refs } : {}) };
 }
 
 // --- Metrics -----------------------------------------------------------------------------------------------------
@@ -403,7 +406,7 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
   const n = row.night;
   if (!isObject(n) || !Array.isArray(n.outside) || !isObject(n.calls) || !(n.lane === null || isObject(n.lane)) || !Array.isArray(n.proposals)) missing.push("night");
   if (missing.length > 0) return { missing };
-  return { raw: { before: row.before, after: row.after, proposals: row.proposals, actions: row.actions, night: row.night } };
+  return { raw: { before: row.before, after: row.after, proposals: row.proposals, actions: row.actions, night: row.night, ...(isObject(row.indexed_refs) ? { indexed_refs: row.indexed_refs } : {}) } };
 }
 
 /** An item akm reports an error for has no verdict: it was not decided at all. */

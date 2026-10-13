@@ -5,6 +5,11 @@ cases it sends, the akm config it writes, the commands it runs, the engine setti
 is the treatment (`--treatment harness`). A scorer fix or a relabelled case needs no new version: `scripts/compare` and the matrix score
 every stored run again with the current scorer. Add a line here when a version changes, under the release it ships in.
 
+## 0.4
+
+- nightly, reflect: measurement version 0.3. Feedback and improve target the concept ID AKM indexed for the planted file, including embedded agents and commands whose ID differs from their path. The read-only lookup uses `index.db` and records no artificial search usage. Nightly maps proposals, actions and proactive selections back to case file identities and records the actual indexed refs alongside its raw outputs. Runs made with the previous collector require `--treatment harness` when compared with these runs.
+- All other evals remain at measurement version 0.2.
+
 ## 0.3
 
 No eval changed version: every eval is at 0.2, and runs made with akm-eval 0.2 compare with runs made with 0.3.
