@@ -9,10 +9,11 @@
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Sandbox, engineConfig, removeSandbox, runAkm, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
+import { indexedRef, indexedRefs } from "../../../lib/akm/indexed-refs.ts";
 import { Fatal, fail, failureMessage, hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { type Embedder, embedderEnv, noteAges, withEmbedder } from "../../consolidate/src/sandbox.ts";
-import type { Feedback, Item } from "./items.ts";
+import { type Feedback, type Item, refOf } from "./items.ts";
 import { readLibrary } from "./library.ts";
 import { type Action, type Lane, type Proposal, type Raw, conceptId, outsideChanges, watchedPaths, watchedRefs } from "./score.ts";
 
@@ -155,6 +156,8 @@ const seconds = (ms: number): number => Number((ms / 1000).toFixed(1));
 
 /** What the night left: the library before and after, akm's improve result, every proposal in every state, what the drain did and how long each step took. */
 export interface Collected {
+  /** Actual indexed refs of the planted files, before feedback or improve. */
+  refs: Record<string, string>;
   before: Map<string, string>;
   after: Map<string, string>;
   improve: unknown;
@@ -192,8 +195,14 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
   };
 
   const [, index] = await step("index", () => runAkmJson(sandbox, ["index", "--full"], { timeoutMs: embedderOf(ctx) === "real" ? REAL_INDEX_TIMEOUT_MS : STEP_TIMEOUT_MS }));
+  const refs = indexedRefs(sandbox);
+  const plantedRefs = new Map(items.flatMap((item) => item.files).map((path) => [refOf(path), indexedRef(refs, path)]));
   const [, feedback] = await step("feedback", async () => {
-    for (const item of items) for (const f of item.feedback) await runAkmJson(sandbox, feedbackArgs(f), { timeoutMs: STEP_TIMEOUT_MS });
+    for (const item of items) for (const f of item.feedback) {
+      const ref = plantedRefs.get(f.ref);
+      if (!ref) throw new Error(`Feedback ref ${f.ref} does not identify a planted file`);
+      await runAkmJson(sandbox, feedbackArgs({ ...f, ref }), { timeoutMs: STEP_TIMEOUT_MS });
+    }
   });
   const improveArgs = ["improve", "--strategy", overrides.strategy, "--require-engines", "--no-sync", "--timeout-ms", String(IMPROVE_BUDGET_MS), "--json-to-stdout", "--format", "json"];
   const [improved, improveSeconds] = await step("improve", () => runAkm(sandbox, improveArgs, { timeoutMs: improveTimeoutMs }));
@@ -211,6 +220,7 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
   for (const status of STATES) listed.push({ status, ...(await runAkmJson<{ proposals?: unknown[] }>(sandbox, ["proposal", "list", "--status", status, "--detail", "full"], { timeoutMs: STEP_TIMEOUT_MS })) });
   const count = (x: unknown[] | undefined) => (Array.isArray(x) ? x.length : 0);
   return {
+    refs: Object.fromEntries(refs),
     before,
     after: readLibrary(bundle),
     improve,
@@ -225,18 +235,25 @@ async function runNight(sandbox: Sandbox, items: Item[], files: Map<string, stri
  * the proposals and actions on its refs, and the whole night's part (the paths changed outside the items, the model calls, the proactive lane and the
  * proposals that exist), which every row holds. akm names the endpoint in some of its errors, and rows get shared, so no row carries it.
  */
-export function rawOfNight(items: Item[], night: Pick<Collected, "before" | "after" | "improve" | "proposals">, baseUrl: string): Raw[] {
+export function rawOfNight(items: Item[], night: Pick<Collected, "before" | "after" | "improve" | "proposals"> & { refs?: Collected["refs"] }, baseUrl: string): Raw[] {
+  // Scorers identify cases by their file paths. Preserve the actual indexed refs
+  // alongside the raw data and translate only those known planted identities.
+  const logical = new Map(Object.entries(night.refs ?? {}).map(([path, ref]) => [ref, refOf(path)]));
+  const normalize = (ref: string) => logical.get(conceptId(ref)) ?? conceptId(ref);
+  const proposals = night.proposals.map((p) => ({ ...p, ref: normalize(p.ref), retirement: p.retirement ? { ...p.retirement, retired: normalize(p.retirement.retired), successor: normalize(p.retirement.successor) } : null }));
   const calls = callStats(night.improve);
-  const whole = { outside: outsideChanges(night.before, night.after, items), calls: { calls: calls.calls, failures: calls.failures }, lane: proactiveLane(night.improve), proposals: night.proposals.map((p) => ({ ref: p.ref, source: p.source, status: p.status })) };
-  const actions = actionsOf(night.improve);
+  const lane = proactiveLane(night.improve);
+  const whole = { outside: outsideChanges(night.before, night.after, items), calls: { calls: calls.calls, failures: calls.failures }, lane: lane ? { ...lane, refs: lane.refs.map(normalize) } : null, proposals: proposals.map((p) => ({ ref: p.ref, source: p.source, status: p.status })) };
+  const actions = actionsOf(night.improve).map((a) => ({ ...a, ref: normalize(a.ref) }));
   return items.map((item) => {
     const paths = new Set(watchedPaths(item));
     const refs = new Set(watchedRefs(item));
     const pick = (library: Map<string, string>) => Object.fromEntries([...paths].filter((p) => library.has(p)).map((p) => [p, library.get(p) as string]));
     const raw: Raw = {
+      ...(night.refs ? { indexed_refs: Object.fromEntries(Object.entries(night.refs).filter(([path]) => item.files.includes(path))) } : {}),
       before: pick(night.before),
       after: pick(night.after),
-      proposals: night.proposals.filter((p) => refs.has(p.ref) || (p.retirement !== null && (refs.has(p.retirement.retired) || refs.has(p.retirement.successor)))),
+      proposals: proposals.filter((p) => refs.has(p.ref) || (p.retirement !== null && (refs.has(p.retirement.retired) || refs.has(p.retirement.successor)))),
       actions: actions.filter((a) => refs.has(conceptId(a.ref))),
       night: whole,
     };

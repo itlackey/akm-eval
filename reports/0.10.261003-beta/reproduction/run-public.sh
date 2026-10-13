@@ -12,11 +12,9 @@ export AKM_BIN="${AKM_BIN:-akm}"
 scripts/smoke/run --contract
 scripts/smoke/run --strict
 evals/retrieval/run --semantic off --repeat 3 --label akm-0.10-keyword
-for name in judge-gate reflect distill consolidate extract promotion bakeoff; do
+for name in judge-gate reflect distill consolidate extract nightly promotion bakeoff; do
   "evals/$name/run" --repeat 3 --label bifrost-qwen-akm-0.10
 done
-# Nightly currently fails before model calls because the harness derives an unindexed ref.
-# After fixing that lookup, run: evals/nightly/run --repeat 3 --label bifrost-qwen-akm-0.10
 
 benchmarks/longmemeval/run --retrieval-only --label akm-0.10-public
 benchmarks/skillret/run --label akm-0.10-public

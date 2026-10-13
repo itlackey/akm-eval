@@ -12,7 +12,7 @@ import { clearRunning } from "../../../lib/results.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
-import { type Item, applyFix, feedbackArgs, loadNight, nightFiles, nightlyConfig, plant, refOf } from "./lib.ts";
+import { type Item, applyFix, feedbackArgs, loadNight, nightFiles, nightlyConfig, plant, rawOf, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { corpusFields, runCorpus } from "./run.ts";
 
@@ -33,7 +33,8 @@ afterEach(() => {
  * command it is given, and it needs what the real one needs: the deterministic embedder, semantic search, and the arguments of the nightly.
  */
 const FAKE_AKM = `
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const args = process.argv.slice(2);
 const [cmd, sub] = args;
@@ -59,8 +60,21 @@ if (cmd === "index") {
     // the real embedder: no switch for the hash one, akm's model in the config, and the model's folder in the environment
     if (process.env.AKM_EMBED_DETERMINISTIC || config.embedding?.localModel !== "Xenova/bge-small-en-v1.5" || !process.env.HF_HOME) { console.error("the real embedder is not set up"); process.exit(3); }
   } else if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
+  const db = new Database(join(process.env.AKM_DATA_DIR, "index.db"));
+  db.exec("CREATE TABLE entries (file_path TEXT, concept_id TEXT)");
+  const walk = (dir, prefix = "") => { for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = prefix + entry.name;
+    if (entry.isDirectory()) walk(join(dir, entry.name), path + "/");
+    else if (path.endsWith(".md")) db.query("INSERT INTO entries VALUES (?, ?)").run(join(dir, entry.name), scenario.indexedRefs?.[path] ?? path.replace(/\\.md$/, "").replace(/\\/SKILL$/, ""));
+  } };
+  walk(process.env.AKM_BUNDLE_DIR);
+  db.close();
   json({ ok: true });
 } else if (cmd === "feedback") {
+  const db = new Database(join(process.env.AKM_DATA_DIR, "index.db"), { readonly: true });
+  const found = db.query("SELECT concept_id FROM entries WHERE concept_id = ?").get(sub);
+  db.close();
+  if (!found) { console.error("ASSET_NOT_FOUND: " + sub); process.exit(1); }
   json({ ok: true });
 } else if (cmd === "improve") {
   const strategy = args[args.indexOf("--strategy") + 1];
@@ -231,6 +245,31 @@ describe("feedbackArgs", () => {
 });
 
 describe("runCorpus", () => {
+  test("uses indexed refs for feedback and keeps nested actions and proactive proposals attached to their case files", async () => {
+    const nested = item<Extract<Item, { kind: "reflect" | "silent" }>>("title-missing-01");
+    const silent = item<Extract<Item, { kind: "reflect" | "silent" }>>("silent-description-quote-02");
+    const agentRef = `agents/${refOf(nested.path)}`;
+    const commandRef = `commands/${refOf(silent.path)}`;
+    const { ctx, folders, commands } = setup([nested.id, silent.id], {
+      indexedRefs: { [nested.path]: agentRef, [silent.path]: commandRef },
+      improve: {
+        actions: [{ ref: `bundle//${agentRef}`, mode: "reflect-failed", result: { reason: "provider_error", error: "HTTP 500" } }],
+        proactiveMaintenance: { selected: 1, dueTotal: 1, selectedRefs: [`bundle//${commandRef}`] },
+      },
+      proposals: [{ id: "silent", ref: `bundle//${commandRef}`, source: "reflect", payload: { content: textOf(silent.path) } }],
+    });
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
+    expect(commands().find((l) => l.startsWith("feedback "))).toStartWith(`feedback ${agentRef} `);
+    expect(summary.n_errored).toBe(1); // the real action stays attached to the nested agent
+    const rows = resultsOf(folders).rows;
+    expect(rows[0].actions[0].ref).toBe(refOf(nested.path));
+    expect(rows[0].indexed_refs[nested.path]).toBe(agentRef);
+    expect(rows[1].proposals[0].ref).toBe(refOf(silent.path));
+    expect(rows[1].detail.planned).toBe(true);
+    expect(rows[1].night.lane.refs).toEqual([refOf(silent.path)]);
+    const raw = rawOf(rows[1]);
+    expect("raw" in raw && raw.raw.indexed_refs?.[silent.path]).toBe(commandRef);
+  });
   test("runs the night as the nightly does: index, the feedback, improve with the default strategy, then the drain, then the proposals", async () => {
     const { ctx, folders, commands } = setup(IDS, good());
     const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
