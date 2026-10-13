@@ -64,6 +64,9 @@ test("rebuilds from newly published data, skips incomplete/private samples, and 
     const html = readFileSync(join(output, "index.html"), "utf8");
     expect(html).toContain('href="./assets/styles.css?v=revision"');
     expect(html).toContain('src="./assets/ledger.js?v=revision"');
+    expect(html).toContain('src="./assets/vendor/tabulator.min.js?v=revision"');
+    expect(readFileSync(join(output, "assets/vendor/tabulator.min.js"), "utf8")).toContain("Tabulator");
+    expect(readFileSync(join(output, "assets/vendor/tabulator.LICENSE"), "utf8")).toContain("MIT");
     expect(html).toContain('data-revision="revision"');
     expect(html).not.toContain(".lab.");
     expect(readFileSync(join(output, ".nojekyll"), "utf8")).toBe("");

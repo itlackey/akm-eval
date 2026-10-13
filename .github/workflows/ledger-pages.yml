@@ -44,6 +44,12 @@ jobs:
           bunx tsc --noEmit
       - run: bun run test:site
       - run: bun run build:site
+      - name: Install the isolated test browser
+        working-directory: scripts/ledger/src
+        run: bunx playwright install --with-deps chromium
+      - name: Verify the ledger in Chromium
+        working-directory: scripts/ledger/src
+        run: bunx playwright test --config playwright.config.mjs
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: .site-output
