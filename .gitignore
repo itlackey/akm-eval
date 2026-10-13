@@ -2,6 +2,7 @@
 # akm's embedding model, downloaded once and shared by the sandboxes of every semantic run (lib/akm)
 /.cache
 /.site-output
+/.browser-results
 .env
 node_modules
 .venv

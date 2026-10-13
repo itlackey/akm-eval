@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AKM benchmark results: memory quality, maintenance safety, retrieval ranking and agent tasks, with repeat scores and original reports.">
   <title>AKM results / fwdslsh</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M20 5 12 27' stroke='%233fb950' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="./assets/vendor/tabulator.min.css">
   <link rel="stylesheet" href="./assets/styles.css">
+  <script src="./assets/vendor/tabulator.min.js" defer></script>
   <script src="./assets/ledger.js" defer></script>
 </head>
 <body>
@@ -26,67 +29,56 @@
     </div>
   </header>
   <main id="main" class="wrap">
-    <div class="hero">
-      <p class="eyebrow">AKM / evaluation lab</p>
-      <h1>Benchmark ledger</h1>
-      <p>Compare every published run by model, test, quality, performance and settings.</p>
-      <p id="snapshot" class="snapshot" role="status">Loading published results…</p>
+    <div class="page-heading">
+      <div><p class="eyebrow">AKM / evaluation lab</p><h1>Benchmark ledger</h1></div>
+      <p id="snapshot" role="status">Loading results…</p>
     </div>
-    <section aria-labelledby="results-title">
-      <div class="section-heading">
-        <h2 id="results-title">All runs</h2>
-        <a href="./data.json" download="akm-eval-results.json">Download complete data ↗</a>
+    <section class="workspace" aria-label="Benchmark comparison">
+      <div class="filter-bar">
+        <label class="search-field"><span class="sr-only">Search runs</span><input id="search" type="search" placeholder="Search models, runs and notes…"></label>
+        <label><span class="sr-only">Model</span><select id="model"><option value="">All models</option></select></label>
+        <label><span class="sr-only">Test</span><select id="suite"><option value="">All tests</option></select></label>
+        <label><span class="sr-only">Scope</span><select id="role"><option value="">All run scopes</option></select></label>
+        <button id="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Filters <span id="filter-badge"></span></button>
+        <button id="reset" type="button" class="quiet">Reset</button>
       </div>
-      <div class="controls">
-        <label class="search-control">Search all fields<input id="search" type="search" placeholder="Model, run, test, version, notes…"></label>
-        <label>Model<select id="model"><option value="">All models</option></select></label>
-        <label>Test<select id="suite"><option value="">All tests</option></select></label>
-        <label>Collection<select id="collection"><option value="">All collections</option></select></label>
-        <label>Scope<select id="role"><option value="">All scopes</option></select></label>
-        <label>AKM version<select id="akm_version"><option value="">All versions</option></select></label>
-        <label>Scoring version<select id="measurement"><option value="">All versions</option></select></label>
-        <label>Search method<select id="search_method"><option value="">All methods</option></select></label>
-        <label>Strategy<select id="strategy"><option value="">All strategies</option></select></label>
-        <label>Collected from<input id="dateFrom" type="date"></label>
-        <label>Collected through<input id="dateTo" type="date"></label>
+      <div id="advanced-panel" class="advanced-panel" hidden>
+        <div class="extra-filters">
+          <label>Collection<select id="collection"><option value="">All collections</option></select></label>
+          <label>AKM version<select id="akm_version"><option value="">All versions</option></select></label>
+          <label>Scoring version<select id="measurement"><option value="">All versions</option></select></label>
+          <label>Search method<select id="search_method"><option value="">All methods</option></select></label>
+          <label>Strategy<select id="strategy"><option value="">All strategies</option></select></label>
+          <label>From<input id="dateFrom" type="date"></label>
+          <label>Through<input id="dateTo" type="date"></label>
+          <label class="check-label"><input id="errorsOnly" type="checkbox"> Runs with errors</label>
+        </div>
+        <form id="add-filter" class="filter-builder">
+          <label>Column<select id="filter-column"></select></label>
+          <label>Condition<select id="filter-operator"><option value="contains">Contains</option><option value="eq">Equals</option><option value="gte">At least</option><option value="lte">At most</option><option value="between">Between</option><option value="missing">Unrecorded</option><option value="present">Recorded</option></select></label>
+          <label>Value<input id="filter-value" placeholder="Value or range: 1..10"></label>
+          <button type="submit">Add filter</button>
+        </form>
       </div>
-      <div class="toolbar">
-        <p id="count" role="status" aria-live="polite">Loading results…</p>
-        <label class="check-label"><input id="errorsOnly" type="checkbox"> With errors</label>
-        <label class="check-label"><input id="selectedOnly" type="checkbox"> Compare selected (<span id="selectedCount">0</span>)</label>
-        <button id="reset" type="button" class="text-button">Reset filters</button>
-        <button id="selectVisible" type="button" class="text-button">Select filtered runs</button>
-        <button id="clearSelection" type="button" class="text-button">Clear selection</button>
-        <button id="csv" type="button" class="text-button">Export filtered CSV</button>
-        <button id="json" type="button" class="text-button">Export filtered JSON</button>
+      <div id="active-filters" class="filter-chips" aria-label="Active filters"></div>
+      <div class="grid-toolbar">
+        <div class="view-options"><label><span class="sr-only">Column view</span><select id="view"><option value="compare">Compare runs</option><option value="quality">Quality ranking</option><option value="performance">Speed &amp; usage</option><option value="impact">AKM impact</option><option value="settings">Run settings</option><option value="all">All fields</option><option value="custom" disabled>Custom columns</option></select></label>
+          <div class="column-menu"><button id="columns-toggle" type="button" aria-expanded="false" aria-controls="columns-panel">Columns</button>
+            <div id="columns-panel" hidden><div class="menu-heading"><strong>Choose columns</strong><button id="columns-close" type="button" aria-label="Close column chooser">×</button></div>
+              <input id="column-search" type="search" placeholder="Find a column…" aria-label="Find a column">
+              <div id="column-list"></div><button id="reset-columns" type="button" class="quiet">Reset to comparison columns</button></div>
+          </div><label class="check-label"><input id="header-filters" type="checkbox"> Column filters</label>
+        </div>
+
+        <div class="exports"><button id="csv" type="button">CSV ↓</button><button id="json" type="button">JSON ↓</button></div>
       </div>
-      <div class="table-navigation">
-        <span>Jump to columns:</span>
-        <button type="button" data-group="Compare">Compare</button>
-        <button type="button" data-group="Run">Run</button>
-        <button type="button" data-group="Quality">Quality</button>
-        <button type="button" data-group="Performance">Performance</button>
-        <button type="button" data-group="Usage">Tokens &amp; cost</button>
-        <button type="button" data-group="Settings">Settings</button>
-        <button type="button" data-group="Test metrics">Test metrics</button>
-        <button type="button" data-group="Provenance">Sources</button>
-      </div>
-      <p class="help">All columns are shown. Scroll horizontally; model and run stay fixed. Click a heading to sort; Shift-click adds another sort. Filter any column below its heading. Numeric ranges use the displayed units. “—” means unrecorded.</p>
-      <p id="sort-status" class="sort-status" aria-live="polite"></p>
-      <div id="table-scroll" class="table-scroll" role="region" aria-label="Scrollable benchmark ledger" tabindex="0">
-        <table>
-          <caption class="sr-only">Every published AKM evaluation run, with sortable and filterable comparison columns.</caption>
-          <thead>
-            <tr id="groups"></tr>
-            <tr id="head"></tr>
-            <tr id="column-filters"></tr>
-          </thead>
-          <tbody id="body"><tr><td>Loading the benchmark ledger…</td></tr></tbody>
-        </table>
-      </div>
-      <noscript><p>Enable JavaScript to use the table, or read the <a href="https://github.com/itlackey/akm-eval/blob/main/reports/README.md">published reports</a>.</p></noscript>
+      <div class="grid-status"><p id="count" role="status" aria-live="polite">Loading…</p><p id="sort-status" aria-live="polite"></p></div>
+      <p id="view-context" class="view-context" aria-live="polite"></p>
+      <div id="grid" class="hide-header-filters" aria-label="Sortable benchmark results"></div>
+      <p class="table-help">Click headings to sort · Shift-click to sort several columns · Drag column edges to resize · Drag headings to reorder</p>
+      <noscript><p>Enable JavaScript to explore the ledger, or <a href="./data.json">download the results</a>.</p></noscript>
     </section>
-    <p class="help ledger-footnote">Quality % is the named primary test metric scaled to 100, not a score across different tests. Timings include the recorded command, request or agent overhead; case-time sums are not wall time. Token and cost totals use recorded usage only. Filter by the same test, collection and versions for a controlled comparison.</p>
+    <p class="ledger-footnote">Quality uses the named test metric. Compare within the same test and collection. Hover headings for definitions and cells for full values. Latency uses the recorded command, keyword query or with-AKM agent/answer timing; add Latency basis to distinguish them. — means unrecorded.</p>
     <p id="provenance" class="provenance"></p>
   </main>
   <footer class="wrap">

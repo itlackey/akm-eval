@@ -62,13 +62,21 @@ const dataset = {
   columns: comparisonColumns(runs),
 };
 mkdirSync(join(output, "assets"), { recursive: true });
+mkdirSync(join(output, "assets/vendor"), { recursive: true });
+for (const [source, target] of [
+  ["dist/js/tabulator.min.js", "tabulator.min.js"],
+  ["dist/css/tabulator.min.css", "tabulator.min.css"],
+  ["LICENSE", "tabulator.LICENSE"],
+]) writeFileSync(join(output, "assets/vendor", target!), readFileSync(new URL(`./node_modules/tabulator-tables/${source}`, import.meta.url)));
 for (const file of ["index.html", "assets/styles.css", "assets/ledger.js"]) {
   const original = readFileSync(new URL(`../../../site/${file}`, import.meta.url), "utf8");
   const version = encodeURIComponent(sourceRevision);
   const content = file === "index.html" ? original
     .replace('<html lang="en">', `<html lang="en" data-revision="${version}">`)
     .replace('./assets/styles.css"', `./assets/styles.css?v=${version}"`)
-    .replace('./assets/ledger.js"', `./assets/ledger.js?v=${version}"`) : original;
+    .replace('./assets/ledger.js"', `./assets/ledger.js?v=${version}"`)
+    .replace('./assets/vendor/tabulator.min.css"', `./assets/vendor/tabulator.min.css?v=${version}"`)
+    .replace('./assets/vendor/tabulator.min.js"', `./assets/vendor/tabulator.min.js?v=${version}"`) : original;
   writeFileSync(join(output, file), content);
 }
 writeFileSync(join(output, "data.json"), `${JSON.stringify(dataset)}\n`);
