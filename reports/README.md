@@ -16,7 +16,11 @@ scripts/compare/run --repeats reports/0.10.261003-beta/judge-gate/bifrost-qwen-a
 | 0.10.261003-beta | agent-ab | [bifrost-gpt120-compatible-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-compatible-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected case; demonstration |
 | 0.10.261003-beta | agent-ab | [bifrost-gpt120-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-pilot) | public | openai/freellm/gpt-oss:120b | diagnostic: incompatible original plugin; 1 errored |
 | 0.10.261003-beta | consolidate | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/consolidate/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | consolidate | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/consolidate/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r3](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r3) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | extract | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/extract/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r3](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r3) | public | chat/qwen3.8-27b | full public run |

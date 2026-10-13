@@ -6,14 +6,14 @@ Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PAT
 |---|---|---|
 | `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode` |
 | `evals/judge-gate` | 0.9.25-alpha.2 or later | 0.10.261003-beta: three full real-model repeats, no errors |
-| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta: full real-model run with six indexed-ref errors; matrix pilots pass |
-| `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: full real-model run, no errors, including lesson updates |
-| `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: full real-model pair run, no errors; default deterministic embedder |
-| `evals/extract` | 0.9.26 or later | contract smoke only |
-| `evals/nightly` | 0.9.26 or later | contract smoke only |
-| `evals/promotion` | 0.9.26. It writes into akm's `state.db` and stops with a message when the table layout differs | 0.9.26 (2026-10-07) |
+| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta: three full real-model repeats with six indexed-ref errors each; matrix pilots pass |
+| `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: three full real-model repeats, no errors, including lesson updates |
+| `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: two full real-model pair repeats, no errors; third interrupted by host crash; default deterministic embedder |
+| `evals/extract` | 0.9.26 or later | 0.10.261003-beta: one full real-model repeat, no errors; second interrupted by host crash |
+| `evals/nightly` | 0.9.26 or later | 0.10.261003-beta: real attempt fails in setup on indexed ref, before model calls; contract smoke passes |
+| `evals/promotion` | 0.9.26. It writes into akm's `state.db` and stops with a message when the table layout differs | 0.10.261003-beta: contract smoke passes; real-model run had not started before host crash |
 | `evals/agent-ab` | akm-cli 0.9.26 with the akm-opencode plugin 0.9.26202610051302 (`PINS` in `lib/harbor/harbor.ts`), or what `--akm` names. CLI 0.10.261003-beta selects compatible plugin 0.10.261002-beta | 0.10.261003-beta: one-task GPT-120 pilot, no errors; full run stopped after gateway HTTP 429 |
-| `evals/bakeoff` | 0.9.26 or later | a scripted model only |
+| `evals/bakeoff` | 0.9.26 or later | 0.10.261003-beta: contract smoke passes; real-model run had not started before host crash |
 | `benchmarks/longmemeval` | 0.9.26 | 0.10.261003-beta: full retrieval-only run, no errors; five-question GPT-120 pilot with one errored arm |
 | `benchmarks/skillret` | 0.9.26 | 0.10.261003-beta: all 4,392 queries in keyword and semantic modes, no errors; both curate checks pass |
 | `benchmarks/terminal-bench` | as agent-ab | 0.10.261003-beta, opencode 1.18.34, Harbor 0.24.0: one-task GPT-120 pilot, no errors |
