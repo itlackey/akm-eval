@@ -2,7 +2,7 @@
 
 Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims?
 
-`akm improve` has reflect revise an asset after negative feedback. Since akm 0.9.25-alpha.3 it edits frontmatter only: the model proposes a `description`, a `when_to_use` and a title, and akm keeps the body byte for byte. This eval gives reflect 50 notes whose right result is known. The model under test is reflect's engine; the prompt and patch are akm's own. Needs akm 0.9.25-alpha.3 or later; last run on 0.9.26.
+`akm improve` has reflect revise an asset after negative feedback. Since akm 0.9.25-alpha.3 it edits frontmatter only: the model proposes a `description`, a `when_to_use` and a title, and akm keeps the body byte for byte. This eval gives reflect 80 notes whose right result is known. The model under test is reflect's engine; the prompt and patch are akm's own. Needs akm 0.9.25-alpha.3 or later; last run on 0.9.26.
 
 ## Run
 
@@ -27,7 +27,7 @@ akm proposal list
 akm proposal show <id> --detail full
 ```
 
-`reflect-only` runs reflect alone with the quality judge off, so every proposal reaches the checks (judge-gate scores the judge). The model must return one JSON object; akm allows one repair turn. A case is up to about 6k tokens; 16k of context is safe. The eval sets temperature 0 and thinking off. A full run takes under ten minutes on a local 27B.
+`reflect-only` runs reflect alone with the quality judge off, so every proposal reaches the checks (judge-gate scores the judge). The model must return one JSON object; akm allows one repair turn. A case is up to about 6k tokens; 16k of context is safe. The eval sets temperature 0 and thinking off. A full run takes about a quarter of an hour on a local 27B.
 
 ## Run your own set
 
@@ -35,7 +35,7 @@ akm proposal show <id> --detail full
 
 ## The cases
 
-`assets/cases.jsonl`: 50 notes. 32 carry one injected defect of a kind akm names, in six classes; 18 are controls, in four. The rewrite changes each case's note, path, feedback, forbidden terms and anchors with one mapping, and `generate` checks that each rewritten note still holds exactly its defect. Cases keep their ids.
+`assets/cases.jsonl`: 80 notes. 40 carry one injected defect of a kind akm names, in six classes; 40 are controls, in four. The rewrite changes each case's note, path, feedback, forbidden terms and anchors with one mapping, and `generate` checks that each rewritten note still holds exactly its defect. Cases keep their ids.
 
 ## How a case is scored
 
@@ -59,7 +59,7 @@ A case is correct when reflect gave a usable answer and every check passes, on t
 | `classes` | the same per class, with `outcomes` and `failed` checks |
 | `refused` | refused edits by gate: `filter`, `judge`, `retrieval`, `other` |
 
-For scale, with a scripted model on akm 0.9.26: never proposing anything fixes 0 of 32 defects and keeps 18 of 18 controls; rewriting every field fixes none and keeps none. One defect case is 3.1 points, one control 5.6, so a case or two is noise. `historical` is a known weak spot: read it on its own.
+For scale, with a scripted model on akm 0.9.26: never proposing anything fixes 0 of 40 defects and keeps 40 of 40 controls; rewriting every field fixes none and keeps none. One defect case or one control is 2.5 points, so a case or two is noise. `historical` is a known weak spot: read it on its own.
 
 ## What the summary reports
 
