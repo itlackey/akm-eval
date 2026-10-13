@@ -49,6 +49,14 @@ test("paired answers expose per-arm timings and usage coverage including a faile
   expect(fields.cost_usd).toBeNull();
 });
 
+test("paired improvement keeps percentage points and the recorded confidence interval separate from arm accuracy", () => {
+  const fields = comparisonFields({ metrics: { accuracy: { difference: { value: .25, ci95: [-.1744, .6744], n: 4 } } } }, [], []);
+  expect(fields.akm_delta_pp).toBe(25);
+  expect(fields.akm_delta_lo_pp).toBeCloseTo(-17.44);
+  expect(fields.akm_delta_hi_pp).toBeCloseTo(67.44);
+  expect(fields.paired_cases).toBe(4);
+});
+
 test("nightly summary totals and agent trials use their recorded timing and token fields", () => {
   const night = comparisonFields({ seconds: { total: 250 }, calls_by: [
     { calls: 3, failures: 1, prompt_tokens: 100, completion_tokens: 10 },

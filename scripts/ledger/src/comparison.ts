@@ -53,6 +53,10 @@ col("recorded", "Cases recorded", "number", "Quality", "Rows in the published sa
 col("scored", "Cases scored", "number", "Quality", "Scored case count recorded by the collector.", 0);
 col("errors", "Errors", "number", "Quality", "Recorded collection errors. Unknown counts stay blank.", 0);
 col("timeouts", "Timeouts", "number", "Quality", "Recorded timeout count, summed across arms or search methods where the summary provides them.", 0);
+col("akm_delta_pp", "AKM quality gain (pp)", "number", "Quality", "Recorded paired quality difference: with AKM minus without AKM, in percentage points.");
+col("akm_delta_lo_pp", "AKM gain CI low (pp)", "number", "Quality", "Recorded lower confidence bound of the paired quality difference, in percentage points.");
+col("akm_delta_hi_pp", "AKM gain CI high (pp)", "number", "Quality", "Recorded upper confidence bound of the paired quality difference, in percentage points.");
+col("paired_cases", "Paired cases", "number", "Quality", "Cases scored in both arms for the recorded quality difference.", 0);
 col("case_mean_s", "Case mean (s)", "number", "Performance", "Mean elapsed AKM command time over timed cases, including failed cases. This includes command overhead.");
 col("case_p50_s", "Case p50 (s)", "number", "Performance", "Median elapsed AKM command time over timed cases.");
 col("case_p95_s", "Case p95 (s)", "number", "Performance", "95th percentile of elapsed AKM command time, using linear interpolation.");
@@ -121,6 +125,14 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
     ?? (summary.eval === "longmemeval" && summary.retrieval_only === true ? n(m, "retrieval.n") : null);
   const timeout = summary.timeouts;
   fields.timeouts = num(timeout) ?? sum(Object.values(obj(timeout)).map(num));
+  const delta = n(m, "delta.value") ?? n(m, "accuracy.difference.value");
+  const interval = at(m, "accuracy.difference.ci95");
+  const lo = n(m, "delta.lo") ?? (Array.isArray(interval) ? num(interval[0]) : null);
+  const hi = n(m, "delta.hi") ?? (Array.isArray(interval) ? num(interval[1]) : null);
+  fields.akm_delta_pp = delta === null ? null : delta * 100;
+  fields.akm_delta_lo_pp = lo === null ? null : lo * 100;
+  fields.akm_delta_hi_pp = hi === null ? null : hi * 100;
+  fields.paired_cases = n(m, "delta.n") ?? n(m, "accuracy.difference.n");
   const cases = distribution(rows.map(row => row.seconds));
   fields.case_mean_s = cases.mean; fields.case_p50_s = cases.p50; fields.case_p95_s = cases.p95;
   fields.timed_cases = cases.n || null; fields.case_work_s = cases.total;

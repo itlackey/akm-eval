@@ -106,6 +106,25 @@ export function scores(summary: Record<string, unknown>): Score[] {
         metric(`${name} ranking · nDCG@10`, `${key}.${skill ? "NDCG@10" : "ndcg_10"}`, "Relevance-weighted ranking quality in the first 10 results, from 0 to 1; higher is better.", { unit: "decimal" });
         metric(`${name} recall@10`, `${key}.${skill ? "Recall@10" : "recall_10"}`, "Share of known relevant assets found in the first 10 results.");
         if (!skill) metric(`${name} results with judgments`, `${key}.judged_10`, "Share of the first 10 results covered by relevance judgments. Low coverage limits interpretation.");
+        const extras: [string, string, string, Score["unit"]][] = skill ? [
+          ["NDCG@5", "nDCG@5", "Relevance-weighted ranking quality in the first 5 results.", "decimal"],
+          ["NDCG@15", "nDCG@15", "Relevance-weighted ranking quality in the first 15 results.", "decimal"],
+          ["Recall@5", "recall@5", "Share of known relevant skills found in the first 5 results.", "percent"],
+          ["Recall@15", "recall@15", "Share of known relevant skills found in the first 15 results.", "percent"],
+          ...[5, 10, 15].flatMap((k): [string, string, string, Score["unit"]][] => [
+            [`Completeness@${k}`, `completeness@${k}`, `Share of queries with every relevant skill retrieved in the first ${k} results.`, "percent"],
+            [`MAP@${k}`, `MAP@${k}`, `Mean average precision over the first ${k} ranked results.`, "decimal"],
+          ]),
+        ] : [
+          ["ndcg_10_condensed", "judged nDCG@10", "nDCG@10 after removing unjudged results, to assess judgment-coverage bias.", "decimal"],
+          ["p_5", "precision@5", "Share of the first 5 result positions that are relevant.", "percent"],
+          ["success_5", "hit rate@5", "Share of queries with a relevant asset in the first 5 results.", "percent"],
+          ["mrr", "MRR", "Mean reciprocal rank of the first relevant result.", "decimal"],
+          ["banned_above", "banned result above relevant", "Queries where a banned asset outranks at least one relevant asset.", "percent"],
+          ["banned_above_first", "banned result above first relevant", "Queries where a banned asset outranks the first relevant asset.", "percent"],
+        ];
+        for (const [field, label, explanation, unit] of extras) if (read(m, `${key}.${field}`) !== null)
+          metric(`${name} ${label}`, `${key}.${field}`, explanation, { unit });
       }
       break;
     }
@@ -115,6 +134,9 @@ export function scores(summary: Record<string, unknown>): Score[] {
         metric("Evidence recall", "retrieval.recall", "Share of known evidence conversations retrieved in the first 5 results.");
         count("Evidence questions", "retrieval.n", "Questions with an answer in the conversation history.", false);
         count("Abstention questions", "retrieval_abstention.n", "Questions with no answer in the history, excluded from evidence metrics.", false);
+        metric("Evidence precision@5", "retrieval.precision", "Share of retrieved conversation sessions that contain evidence.");
+        metric("Evidence MRR", "retrieval.mrr", "Mean reciprocal rank of the first retrieved evidence session.", { unit: "decimal" });
+        metric("Evidence nDCG@5", "retrieval.ndcg", "Relevance-weighted ranking quality of the first 5 retrieved sessions.", { unit: "decimal" });
       } else {
         ratio("Correct answers without AKM", "accuracy.without_akm.rate", "accuracy.without_akm.correct", "accuracy.without_akm.n", "Answers marked correct by the run's recorded judge without AKM retrieval.");
         ratio("Correct answers with AKM", "accuracy.with_akm.rate", "accuracy.with_akm.correct", "accuracy.with_akm.n", "Answers marked correct with AKM retrieval; failed calls can reduce this denominator.");
