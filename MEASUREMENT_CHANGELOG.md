@@ -13,6 +13,8 @@ No eval changed version.
 - reflect, nightly: the six example agents and commands of llm-delegation-tool now sit in their type's folder (`agents/llm-delegation-tool/`, `commands/llm-delegation-tool/`). akm 0.10 refuses to reflect on an agent or a command outside it, so these cases measured a refusal. Their input changed: comparisons with earlier runs leave them out and name them. A stored night that still has a note at its old path scores that item as an error.
 - retrieval, skillret: a semantic curate that abstains, with no results and no `searchMode`, is an empty answer, not an error. akm 0.10 abstains on a tool envelope such as retrieval's n08; akm 0.9 never does.
 - agent-ab, terminal-bench: the default akm is akm-cli 0.10.261003-beta with plugin 0.10.261002-beta. It is recorded as the run's build, as before.
+- Larger public sets (#50), so one case moves a main metric by at most 2.5 points: judge-gate 135 cases (40 good), extract 64 (40 behind `insights`, 20 routine), distill 96 (40 behind `good_lessons`, 40 behind `lesson_updates`), bakeoff 40 (8 per process), reflect 80 (40 defects, 40 controls), consolidate 80 (40 behind `recall`), promotion 80 (40 good, 40 bad). The old cases are unchanged, so they still compare with earlier runs, except promotion's: its cases share one library, which grew, so every promotion case has a new input and needs a new baseline. promotion also names a README's memory after its folder, so two cases no longer share one. Make the custom corpora again with `./generate-assets` to include the new cases.
+- Every eval that calls a model through akm records `model_calls` in its summary.
 
 ## 0.4
 
