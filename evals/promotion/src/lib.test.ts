@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
+import { memoryOf } from "./collect.ts";
 import { Database } from "bun:sqlite";
 import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
@@ -25,6 +26,14 @@ describe("parseCases", () => {
     expect(() => parseCases(`${line}\n${JSON.stringify({ ...make("b", "stale"), id: "a" })}`)).toThrow('repeats "a"');
     expect(() => parseCases("not json")).toThrow("not valid JSON");
     expect(() => parseCases("\n")).toThrow("no cases");
+  });
+});
+
+describe("memoryOf", () => {
+  test("gives every public case a memory of its own, so no case's note overwrites another's", () => {
+    const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
+    expect(new Set(cases.map(memoryOf)).size).toBe(cases.length);
+    expect(memoryOf({ ref: "knowledge/skills/x/scripts/README" } as Case)).toBe("memories/scripts.md");
   });
 });
 

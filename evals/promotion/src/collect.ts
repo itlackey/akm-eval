@@ -66,8 +66,11 @@ export function openSandbox(ctx: ConfigContext): Sandbox {
   return sandbox;
 }
 
-/** The memory a case's promotion names as its source, `memories/<name>.md` in the bundle. */
-export const memoryOf = (c: Case): string => `memories/${c.ref.split("/").pop()}.md`;
+/** The memory a case's promotion names as its source, `memories/<name>.md` in the bundle: the note's name, or its folder's for a README, so no two cases share one. */
+export const memoryOf = (c: Case): string => {
+  const parts = c.ref.split("/");
+  return `memories/${parts.at(-1) === "README" ? parts.at(-2) : parts.at(-1)}.md`;
+};
 
 /** The columns of akm's `proposals` table that the eval writes, in the order `proposalRow` gives their values. akm's schema is private: see "Depends on akm's private schema" in the README. */
 export const PROPOSAL_COLUMNS = ["id", "stash_dir", "ref", "status", "source", "created_at", "updated_at", "content", "frontmatter_json", "metadata_json"] as const;
