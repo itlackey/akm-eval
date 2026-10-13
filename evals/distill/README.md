@@ -4,7 +4,7 @@ Do distilled lessons say only what the source memory says?
 
 `akm improve` has distill turn a memory into a lesson, which akm queues for a person to review. A good lesson states what the memory says, in fewer words, and nothing more. A memory that is only a dated status, repeats an asset the library holds, or is covered by a lesson already should get no lesson; one that adds a fact to an existing lesson should get an update to it.
 
-This eval gives distill 38 fictional memories and checks what it queues, with deterministic checks and no judge model. The model under test is akm's engine: it writes the lesson and akm's own judge scores it. Built on akm 0.9.26; reads 0.9.31 the same way. The `lesson-update` class needs akm 0.10.0 (#1090): an older akm scores 0 of 8 on it and the other 30 cases as before. Needs a bun with `Bun.YAML`.
+This eval gives distill 96 fictional memories and checks what it queues, with deterministic checks and no judge model. The model under test is akm's engine: it writes the lesson and akm's own judge scores it. Built on akm 0.9.26; reads 0.9.31 the same way. The `lesson-update` class needs akm 0.10.0 (#1090): an older akm scores 0 of 40 on it and the other 56 cases as before. Needs a bun with `Bun.YAML`.
 
 ## Run
 
@@ -15,7 +15,7 @@ evals/distill/run --corpus custom              # the rewrite: ./generate-assets 
 evals/distill/run --cases ~/notes/distill
 ```
 
-`--limit N` takes cases from each class in turn, so a short run covers every class. `--strategy` runs another strategy than `distill-only`; `--config-patch` changes the config. A case takes 10 to 40 seconds on a local 27B (2 when skipped); a run about eight minutes.
+`--limit N` takes cases from each class in turn, so a short run covers every class. `--strategy` runs another strategy than `distill-only`; `--config-patch` changes the config. A case takes 10 to 40 seconds on a local 27B (2 when skipped); a run about twenty minutes.
 
 Each case gets its own akm bundle with the memory and any asset or lesson the case includes, then:
 
@@ -34,12 +34,12 @@ The model must return one JSON object; akm asks with a schema. An endpoint that 
 
 | Class | Cases | The memory | A correct result |
 |---|---:|---|---|
-| `lesson-worthy` | 8 | a failure with a clear cause and a fix that worked | a lesson that states the listed facts, makes no forbidden claim, does not reverse the advice |
-| `over-claim` | 6 | a result with a limit | the same, keeping the limit |
+| `lesson-worthy` | 23 | a failure with a clear cause and a fix that worked | a lesson that states the listed facts, makes no forbidden claim, does not reverse the advice |
+| `over-claim` | 17 | a result with a limit | the same, keeping the limit |
 | `dated-status` | 6 | what was done or pending on a date | no lesson |
 | `restates-asset` | 5 | the rules of a skill the library holds | no lesson |
 | `duplicate-lesson` | 5 | a point a lesson in the case already makes | no lesson and no update |
-| `lesson-update` | 8 | a lesson's rule plus one or two facts it lacks | one update that keeps every line and adds only those facts |
+| `lesson-update` | 40 | a lesson's rule plus one or two facts it lacks | one update that keeps every line and adds only those facts |
 
 The rewrite changes the memories, library files and `cases.json` with one mapping, and `generate` checks every fact, claim and example lesson still scores as in the public case. Cases keep their ids.
 
@@ -65,7 +65,7 @@ A case that expects none is right when nothing is queued (a skip or a rejection 
 | `by_class`, `outcomes` | per class; what distill did (`lesson`, `update`, `skipped`, `rejected`, `invalid`, `error`) |
 | `bad_by` | why lessons failed: `missing_fact`, `forbidden_claim`, `contradiction`, `too_long`, `copied` |
 
-An `error` (timeout, endpoint, empty reply) is left out; five in a row abort the run. For scale: a distill that queues a lesson for every memory has `wrong_lessons` 16/16; one that queues nothing has `good_lessons` 0/14 and `wrong_lessons` 0/16; one that pastes the memory back fails every lesson on `copied`. One lesson case is 7 points, one no-lesson case 6, one update case 12.5: a case or two is noise.
+An `error` (timeout, endpoint, empty reply) is left out; five in a row abort the run. For scale: a distill that queues a lesson for every memory has `wrong_lessons` 16/16; one that queues nothing has `good_lessons` 0/40 and `wrong_lessons` 0/16; one that pastes the memory back fails every lesson on `copied`. One lesson case is 2.5 points, one update case 2.5, one no-lesson case 6: a case or two is noise.
 
 ## What the summary reports
 

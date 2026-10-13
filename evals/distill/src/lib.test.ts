@@ -32,12 +32,12 @@ const updateCase = (extra: Record<string, unknown> = {}) => ({ id: "u1", class: 
 const noneCase = (extra: Record<string, unknown> = {}) => ({ id: "n1", class: "dated-status", expect: "none", note: "n", ...extra });
 
 describe("loadCases", () => {
-  test("reads the public cases: 38, in six classes", () => {
+  test("reads the public cases: 96, in six classes", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(38);
+    expect(cases).toHaveLength(96);
     const count = (k: Class) => cases.filter((c) => c.class === k).length;
-    expect(CLASSES.map(count)).toEqual([8, 6, 6, 5, 5, 8]);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(38);
+    expect(CLASSES.map(count)).toEqual([23, 17, 6, 5, 5, 40]);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(96);
     for (const c of cases) expect(c.memory.startsWith("---\n")).toBe(true);
   });
 
@@ -59,7 +59,7 @@ describe("loadCases", () => {
 
   test("every lesson, over-claim and update case lists what would contradict it, and has a reversed lesson", () => {
     const cases = loadCases(PUBLIC).filter((c) => c.expect !== "none");
-    expect(cases).toHaveLength(22);
+    expect(cases).toHaveLength(80);
     for (const c of cases) {
       expect(c.contradicts.length, `${c.id}: contradicts`).toBeGreaterThanOrEqual(1);
       expect(c.reversed?.trim(), `${c.id}: reversed`).toBeTruthy();
@@ -135,9 +135,9 @@ describe("selectCases", () => {
   });
 
   test("a limit at or above the size runs everything", () => {
-    expect(selectCases(cases, 38)).toHaveLength(38);
-    expect(selectCases(cases, 99)).toHaveLength(38);
-    expect(selectCases(cases)).toHaveLength(38);
+    expect(selectCases(cases, 96)).toHaveLength(96);
+    expect(selectCases(cases, 99)).toHaveLength(96);
+    expect(selectCases(cases)).toHaveLength(96);
   });
 });
 
@@ -594,6 +594,66 @@ const ALTERNATES: Record<string, string[]> = {
     "A lightweight tag created with a plain git tag command is not pushed by git push --follow-tags, which sends annotated tags only, so the tag-triggered release job never ran. Create release tags with git tag -a.",
     "--follow-tags only pushes annotated tags. Tagging the release with git tag v2.4.0 made a lightweight tag that stayed on the laptop, and the release workflow never started. Use git tag -a v2.4.0 -m 'Release' from now on.",
   ],
+  "lesson-09": [
+    "A KeyError for a column the CSV plainly has can come from a UTF-8 byte order mark glued to the first header name: the reader named the supplier's first column \\ufeffsku. Opening the file with encoding='utf-8-sig' removes the mark.",
+    "The stock import raised KeyError on sku because the supplier's spreadsheet program writes a BOM, which csv.DictReader kept in the column name. Opening the CSV with utf-8-sig encoding fixed it.",
+  ],
+  "lesson-10": [
+    "From cron, restic was not found because cron's default PATH is only /usr/bin:/bin and restic is installed in /usr/local/bin. Add a PATH line that includes /usr/local/bin at the top of the crontab.",
+    "The Corbel wiki backup silently skipped nine nights: under cron, the PATH lacked /usr/local/bin, so the call to restic failed with command not found. Putting PATH=/usr/local/bin:/usr/bin:/bin at the top of the crontab made it run.",
+  ],
+  "lesson-11": [
+    "A renewed certificate is not served until nginx reloads, because it loads certificates only when it starts or reloads. The status site showed an expired certificate five days after certbot renew. Add a certbot deploy hook that runs systemctl reload nginx.",
+    "certbot had renewed the certificate, but nginx kept serving the old one because it had not been reloaded since July. A deploy hook now reloads nginx after every successful renewal.",
+  ],
+  "lesson-12": [
+    "Copying the whole source before npm ci meant any file change invalidated the layer cache and reinstalled every dependency. Copy the package files (package.json and the lockfile) first, run npm ci, and copy the rest of the source afterwards.",
+    "To keep Docker's cache for dependencies, copy package.json and package-lock.json and run npm ci before copying the rest of the source. In the Kestrel Dockerfile this cut a code-only rebuild from about six minutes to 40 seconds.",
+  ],
+  "lesson-13": [
+    "CREATE INDEX on a big table locks out writes until it finishes; the orders migration stalled checkout for nine minutes. Build the index with CREATE INDEX CONCURRENTLY, and switch off the migration's transaction for that step, because CONCURRENTLY refuses to run in a transaction.",
+    "A plain CREATE INDEX on the production orders table blocked inserts and updates while it built. CONCURRENTLY keeps writes flowing at the cost of a slower build, and it must run outside a transaction.",
+  ],
+  "lesson-14": [
+    "The due-date test expected 1 October because the laptops run an hour ahead of UTC, but CI runs in UTC and printed 30 September: the function formats in local time. Running the test script with TZ=UTC makes every machine give the same date.",
+    "A date test that formats in local time can pass on a laptop and fail in CI: 23:30 UTC on 30 September is already 1 October in Lisbon. Set TZ=UTC in the package.json test script.",
+  ],
+  "lesson-15": [
+    "Merge fields only fill in when the column name matches exactly: the list column First Name never matched {{first_name}}, so the placeholder went out raw. Renaming the column to first_name fixed it, and the preview, which shows the first contact only, missed it.",
+    "The newsletter's {{first_name}} greeting stayed unfilled for readers imported from a sheet headed First Name, because merge fields must match the column name exactly. Rename the header to first_name; the preview, which only shows one contact, will not show the problem.",
+  ],
+  "lesson-16": [
+    "An EAN-13 barcode shrunk to 70 percent would not scan reliably and failed the printer's check, which asks for at least 80 percent. Put the barcode back at 100 percent and make room by moving other text.",
+    "Keep an ISBN barcode at or above the printer's 80 percent minimum: at 70 percent the atlas cover failed prepress. The fix was to place the barcode at full size, 100 percent.",
+  ],
+  "lesson-17": [
+    "A liveness probe that starts checking before the app is up kills it: the search pods load their index for about 70 seconds and were restarted in a loop. Add a startup probe so the liveness probe only runs once start-up has finished.",
+    "The pods were killed and restarted again and again because index loading took about 70 seconds, longer than the liveness probe allowed. A startupProbe with a two-minute budget fixed it.",
+  ],
+  "lesson-18": [
+    "Appending with RAW kept the booking dates as plain text, so the summary filtered them out. USER_ENTERED makes Sheets parse 2026-09-14 into a real date.",
+    "Values sent with valueInputOption RAW are stored as entered: the dates arrived as strings and dropped out of the date filter. Send USER_ENTERED for values that should be parsed, and convert rows already written.",
+  ],
+  "lesson-19": [
+    "Reset emails went to spam after the switch to a new sending service, because the domain's SPF record still named only the old one. Adding the new service with an include: in the SPF TXT record fixed delivery.",
+    "Before sending from a new sending service, put its include into the SPF record; without it the new servers fail SPF and mail lands in spam, as the Quarry reset emails did.",
+  ],
+  "lesson-20": [
+    "A prompt that asks for bare JSON still got replies in a json code fence about one time in eight, which json.loads cannot parse. Turning on JSON mode with response_format json_object made every reply parse.",
+    "Code fences around the model's JSON broke parsing for one article in eight, and instructions in the prompt did not stop them; the request's response_format setting did.",
+  ],
+  "lesson-21": [
+    "On the Windows agent Git converted the deploy scripts to CRLF at checkout, and bash in the Linux container stopped with bad interpreter. A .gitattributes line, *.sh text eol=lf, keeps shell scripts LF in every checkout.",
+    "Shell scripts need LF line endings: a CRLF checkout gives /bin/bash^M: bad interpreter. Pin them with eol=lf in .gitattributes and leave each machine's Git settings as they are.",
+  ],
+  "lesson-22": [
+    "Without a trailing slash on the source, rsync puts the folder itself inside the destination: the backup came out as /backup/site/site. With /srv/site/ as the source, rsync copies only the contents, which is the layout the restore expects.",
+    "End the rsync source path with a trailing slash when you want the folder's contents copied; /srv/site without it nested the Brindle backup one level too deep, in /backup/site/site.",
+  ],
+  "lesson-23": [
+    "With jest -u in the CI script every changed snapshot was rewritten instead of failing, so the snapshot tests always passed while the header was broken. Take -u out of CI and use jest --ci; update snapshots locally and review them.",
+    "jest -u rewrites mismatching snapshots, so a CI job that runs it can never fail on them; the broken header went unnoticed for three weeks. CI should run jest --ci.",
+  ],
   "claim-01": [
     "Long footnotes on page 14 of the Paged.js rulebook were clipped by a break-inside: avoid rule on the footnote area, and removing it from .footnote-area fixed the page. Only the single-column rulebook was rebuilt; whether the two-column supplement is affected is unknown.",
     "The footnote area's break-inside: avoid rule made Paged.js clip long footnotes in the rulebook (single column). Dropping the rule cured page 14. It has not been tried on the two-column supplement.",
@@ -618,6 +678,50 @@ const ALTERNATES: Record<string, string[]> = {
     "On the staging preview server, lowering PREVIEW_CACHE_TTL from 3600 to 60 seconds fixed stale previews within a minute and raised CPU use from about 5 percent to about 9 percent. Production was not touched and still uses 3600; its CPU cost at ten times the traffic is unknown.",
     "Staging only: with PREVIEW_CACHE_TTL at 60 instead of 3600, stale preview pages disappeared in under a minute, at the price of roughly 4 extra points of CPU. Whether production can afford that load has not been measured.",
   ],
+  "claim-07": [
+    "Indexing orders.customer_id took the customer report from 14 s to 0.9 s, but only on a restored copy of production without live traffic. Its cost on writes has not been measured, the other reports were not tried, and production does not have the index.",
+    "Timing on a copy restored on 2026-08-30: the customer report ran in 0.9 seconds with the new index, against 14 seconds before. The effect on inserts and updates is unmeasured.",
+  ],
+  "claim-08": [
+    "On uncoated 120 gsm paper, Brightmoor's proof matched the old printer for greens and reds, and skin tones came out slightly warmer. Nothing has been proofed on the coated stock the atlas plates use.",
+    "One proof, uncoated paper only: Brightmoor's colours were close to the old printer's, skin tones a little warmer. Whether they hold on coated 150 gsm paper is unknown.",
+  ],
+  "claim-09": [
+    "A scroll listener that moved the header on every event made it jitter; position: sticky (top: 0) fixed that in Chrome and Firefox on desktop. Mobile Safari on iOS and Android browsers are still untested.",
+    "Desktop only: sticky positioning replaced the jittery scroll listener in Chrome and Firefox. iOS and Android were not checked, and the listener code remains behind a flag.",
+  ],
+  "claim-10": [
+    "On 50 invoices from a single supplier, Pellmark, three worked examples in the prompt lifted field accuracy from 71 percent to 84 percent. The examples came from the same supplier, so other layouts are untested.",
+    "Few-shot examples helped on one supplier only: 84 percent of fields right instead of 71 across 50 Pellmark invoices. Whether other suppliers gain is unknown.",
+  ],
+  "claim-11": [
+    "The backup timed out on five of twelve nights at 02:00; at 04:00 it has run four nights in a row. The log rotation at 02:00 is a suspect, and four nights is too few to call it fixed.",
+    "Running the backup at 04:00 instead of 02:00 has avoided the timeouts for four nights so far. Whether the 02:00 log rotation was to blame is unverified.",
+  ],
+  "claim-12": [
+    "Three of the four people who joined in September set up in one day after the guide shrank from 14 to six pages, against about two days before. With only four people, two of whom already knew the stack from a previous job, the guide's share of the gain is unknown.",
+    "Cutting the onboarding guide from 14 pages to 6 coincided with faster setup for four hires, but the group is small and two had worked with the same stack at their last job.",
+  ],
+  "claim-13": [
+    "Auto-accept is on for the Fernhall room: a single booking from an internal staff account was accepted within seconds. Whether external guests or recurring meetings are accepted is unknown.",
+    "Only one booking, made from inside the domain, has tested the room's new automatic acceptance; external and recurring bookings are still untested.",
+  ],
+  "claim-14": [
+    "One month of spot instances for CI: the bill fell 38 percent from August, and two interrupted jobs had to re-run from the start. Spot prices were unusually low that month, so the saving may not last.",
+    "September's CI bill was 38 percent lower on spot runners, but that is a single month with prices unusually low in the region, and reclaimed instances interrupted two jobs.",
+  ],
+  "claim-15": [
+    "With -n 4, pytest-xdist ran the suite in 7 minutes instead of 18, on the 8-core build machine only. Two tests sharing a temp folder had to stay in one worker, and the 2-core pull request runners are untested.",
+    "Parallel tests via pytest-xdist: 18 minutes down to 7 minutes on eight cores. The 2-core runners were not tried, so their suite remains serial.",
+  ],
+  "claim-16": [
+    "Of 860 email-matched customer pairs, only 50 were checked by hand (no false matches there); 810 were merged without a check. Customers without an email address were skipped by the script entirely.",
+    "Matching on email found 860 duplicate pairs; a spot check of 50 was clean, the rest unchecked, and the 4 percent of records lacking an email were left out.",
+  ],
+  "claim-17": [
+    "mini-embed agreed with the large model's top three on 18 of 20 queries at about half the latency, but every query was English; German and Portuguese are untested. Where it differed, it put an older version of the article first.",
+    "In an English-only test of 20 help-centre queries, the small embedding model matched the large one on 18 and was faster, but twice it preferred an older version of an article.",
+  ],
 };
 
 /** The lines an update case could add to the existing lesson, worded differently from the case's `good`. Each body, the existing lesson and these lines, must pass. */
@@ -630,6 +734,38 @@ const ALTERNATE_LINES: Record<string, string[]> = {
   "upd-06": ["The pager sent 41 alerts in 20 minutes.\nAlerts are grouped by the incident label, so a check without a label is still sent on its own."],
   "upd-07": ["The upload step failed with exit code 28 (a timeout) and the script printed done anyway, so the bucket still held yesterday's file."],
   "upd-08": ["In Paged.js 0.4 the property is ignored inside a flex container.\nUse break-after: avoid on headings."],
+  "upd-09": ["When the linter's 16.0 release came out, a rule it switched on by default failed the build on 112 files nobody had touched."],
+  "upd-10": ["Undoing the ledger migration meant restoring a 40 GB dump, which took 25 minutes against a planned 10 minutes: the restore had never been timed."],
+  "upd-11": ["Without alt text, the setup diagram was read out as its file name, img_4471.png.\nThe docs build has been able to fail on missing alt text since 2.1; turning the check on flagged 37 other images."],
+  "upd-12": ["The night the clocks went back, the local 01:00 hour came twice, and the report counted its 214 orders twice."],
+  "upd-13": ["Without a limit the log shipper reached 6 GB in a weekend, and the kernel's OOM killer took down Postgres.\nIt now has a 512 MB limit, so it restarts and Postgres stays up."],
+  "upd-14": ["Enlarged to 200 percent to fill the spread, the 300 ppi map file printed at an effective 150 ppi.\nThe cartographer exported it again at full spread size to meet the vendor's 300 ppi at final size."],
+  "upd-15": ["Adding a month to 31 August with setMonth gives 1 October, so the test failed only on that day.\nvi.setSystemTime now fixes the clock at a mid-June date."],
+  "upd-16": ["Votes and watchers reach the original only through the tracker's duplicate-of field, not a comment: TRK-388 had 3 votes while 31 people had hit the login crash."],
+  "upd-17": ["Left to itself, the model ran only the unit tests and said everything passed, while make test-int failed on 3 tests.\nNaming make test-int as the command fixed that."],
+  "upd-18": ["Because US clocks change three weeks before Europe's, a meeting kept in New York time ran an hour early in Porto for three weeks.\nThe event's own time zone is now Europe/Lisbon."],
+  "upd-19": ["Push notifications on the phone cut the message at 60 characters, so an alert opening with the host name hid the words disk full and went unseen for 40 minutes."],
+  "upd-20": ["SMTP_PORT=587x went unnoticed from the Friday deploy until Sunday's first reset email crashed the mailer, and resets were down for six hours."],
+  "upd-21": ["After a debug flag produced 30 GB of logs in one day, the disk filled before the daily rotation.\nlogrotate now also rotates any log over 500 MB (maxsize 500M)."],
+  "upd-22": ["212 rows went missing while the import still reported success: a quote escaped with a backslash made the importer skip the row and say so only in a debug message."],
+  "upd-23": ["A note reading Refactored the auth module did not tell users they would be logged out after 3.4, and 40 support tickets followed; one line asking them to log in again would have done."],
+  "upd-24": ["With a TTL of 86400, resolvers held the old address for a day after the move, and orders taken by the old server were moved by hand.\nA TTL of 300 set two days early made the next move take effect within minutes."],
+  "upd-25": ["A white hairline showed on three zine pages where the background box ended at the trim and the cut drifted about half a millimetre.\nThe boxes now run 3 mm into the bleed."],
+  "upd-26": ["18 tests broke when the French translation turned Save into Enregistrer, because they selected buttons by English text.\nThey now use the existing data-testid attributes, while the tests of the wording itself keep reading the text on purpose."],
+  "upd-27": ["Deleting the committed .env file did not take it out of the history, and its payment key was still valid.\nThe key was rotated, and the history was kept as it was."],
+  "upd-28": ["An alert at 95 percent gave six minutes of warning before the import filled the volume, too little to act.\nIt now fires at 80 percent."],
+  "upd-29": ["Asked only for a date, the model invented one in 9 of 120 rows, taking the delivery date or the email date.\nWith unknown allowed, those rows came back unknown."],
+  "upd-30": ["The header ended up on row 48 after the owner sorted the sheet with it included, which a protected range would not have prevented.\nRow 1 is now frozen as well, which keeps it out of sorts."],
+  "upd-31": ["An apostrophe in a surname like O'Rourke ended the quoted value in an f-string query, so the export failed for three customers.\nThe name is now a query parameter, as are four more queries that were built the same way."],
+  "upd-32": ["A plan for an engine version change showed forces replacement on the reporting database, which applying would have recreated empty.\nThe resource now has prevent_destroy."],
+  "upd-33": ["With no lockfile, the Docker build picked up a transitive dependency's new minor release that no longer runs on Node 16.\nA committed package-lock.json and npm ci fixed the build."],
+  "upd-34": ["Users on Python 3.8 hit AttributeError because a new helper used str.removeprefix, which arrived in 3.9, and CI tested only 3.12.\n3.8 is in the CI matrix now."],
+  "upd-35": ["Built against staging, the template sent an unsubscribe link to the staging site, and 64 people who used it hit a login page.\nThe test send checked only the article links."],
+  "upd-36": ["41 arrows came out as empty boxes in print because the body font lacks an arrow glyph; the editor had substituted another font, the PDF did not.\nThe exported PDF was never read, and 200 copies had to be printed again."],
+  "upd-37": ["A Redis restart at 23:40 made the worker exit, and with no Restart setting it stayed down seven hours.\nIts unit now has Restart=on-failure and RestartSec=5."],
+  "upd-38": ["Without steps, TRK-517 bounced between support and the developers for nine days; once written down they showed the bug, which needs an invoice edited after its discount was removed.\nThe steps field in the template is optional."],
+  "upd-39": ["Calls made with requests and no timeout argument wait as long as the server lets them: requests has no default, and a stalled payment API tied up all 64 checkout threads.\nThe calls now pass a 3 second connect and 10 second read timeout."],
+  "upd-40": ["The model's fix for test_rounding was to delete the test; the pricing code was untouched, and its summary left the deletion out.\nTasks now say that tests must not be removed or skipped."],
 };
 
 /** A text that mentions the words of a required fact without stating it, and the fact it leaves out. */
@@ -1233,18 +1369,18 @@ describe("the baselines of the README's 'For scale'", () => {
       if (c.expect === "update") return [queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.existingBody}\n${memoryBody(c.memory)}\n`, true)];
       return [queued(c, c.memory)];
     });
-    expect(m.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
-    expect(m.lesson_updates).toMatchObject({ n: 8, right: 0, rate: 0, checks: { update_proposed: 8, existing_kept: 8, new_facts: 8, no_extra_claims: 8, not_copied: 0, no_new_lesson: 8 } });
+    expect(m.good_lessons).toEqual({ n: 40, good: 0, rate: 0, ambiguous: 0 });
+    expect(m.lesson_updates).toMatchObject({ n: 40, right: 0, rate: 0, checks: { update_proposed: 40, existing_kept: 40, new_facts: 40, no_extra_claims: 40, not_copied: 0, no_new_lesson: 40 } });
     expect(m.wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
-    expect(m.bad_by).toMatchObject({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, copied: 14 }); // the copy states every fact and claims nothing: only the copy check fails it
+    expect(m.bad_by).toMatchObject({ missing_fact: 0, forbidden_claim: 0, contradiction: 0, copied: 40 }); // the copy states every fact and claims nothing: only the copy check fails it
   });
 
-  test("a distill that queues a lesson for every memory has wrong_lessons at 16/16, and one that queues nothing has good_lessons at 0/14", () => {
+  test("a distill that queues a lesson for every memory has wrong_lessons at 16/16, and one that queues nothing has good_lessons at 0/40", () => {
     expect(score((c) => [queued(c, "---\ndescription: d\nwhen_to_use: w\n---\nBody.\n")]).wrong_lessons).toEqual({ n: 16, wrong: 16, rate: 1 });
     const nothing = score(() => []);
-    expect(nothing.good_lessons).toEqual({ n: 14, good: 0, rate: 0, ambiguous: 0 });
+    expect(nothing.good_lessons).toEqual({ n: 40, good: 0, rate: 0, ambiguous: 0 });
     expect(nothing.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
-    expect(nothing.lesson_updates).toMatchObject({ n: 8, right: 0 });
+    expect(nothing.lesson_updates).toMatchObject({ n: 40, right: 0 });
   });
 
   test("the good example lessons and updates, queued as they are, score good and right", () => {
@@ -1252,8 +1388,8 @@ describe("the baselines of the README's 'For scale'", () => {
       if (c.expect === "none") return [];
       return [c.expect === "update" ? queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`, true) : queued(c, `---\ndescription: d\nwhen_to_use: w\n---\n${c.good}\n`)];
     });
-    expect(m.good_lessons).toEqual({ n: 14, good: 14, rate: 1, ambiguous: 0 });
-    expect(m.lesson_updates).toMatchObject({ n: 8, right: 8 });
+    expect(m.good_lessons).toEqual({ n: 40, good: 40, rate: 1, ambiguous: 0 });
+    expect(m.lesson_updates).toMatchObject({ n: 40, right: 40 });
     expect(m.wrong_lessons).toEqual({ n: 16, wrong: 0, rate: 0 });
   });
 });
