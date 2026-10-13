@@ -2,92 +2,86 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { presentRun } from "./data";
+import { coreColumns, scoreColumns } from "./comparison";
 
 interface Element {
-  value: string;
-  innerHTML: string;
-  textContent: string;
-  hidden: boolean;
-  attributes: Record<string, string>;
-  listeners: Record<string, () => void>;
-  onclick?: () => void;
-  add: (option: unknown) => void;
-  setAttribute: (key: string, value: string) => void;
-  addEventListener: (type: string, fn: () => void) => void;
+  value: string; checked: boolean; innerHTML: string; textContent: string;
+  listeners: Record<string, () => void>; onclick?: () => void;
+  add: (option: unknown) => void; addEventListener: (type: string, fn: () => void) => void;
 }
 
-test("one results table filters groups, exposes repeats, switches views and exports numeric scores", async () => {
+test("full ledger exposes every run and column, combines filters, sorts numerically and compares selected rows", async () => {
   const html = readFileSync(new URL("../../../site/index.html", import.meta.url), "utf8");
   const script = readFileSync(new URL("../../../site/assets/ledger.js", import.meta.url), "utf8");
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]!);
-  expect(new Set(ids).size).toBe(ids.length);
-  expect(html.match(/<table>/g)).toHaveLength(1);
   const elements = new Map<string, Element>(ids.map(id => [id, {
-    value: "", hidden: false, innerHTML: "", textContent: "", attributes: {} as Record<string, string>,
-    listeners: {} as Record<string, () => void>, add() {},
-    setAttribute(key: string, value: string) { this.attributes[key] = value; },
+    value: "", checked: false, innerHTML: "", textContent: "", listeners: {} as Record<string, () => void>, add() {},
     addEventListener(type: string, fn: () => void) { this.listeners[type] = fn; },
   }]));
   const el = (id: string) => elements.get(id)!;
   const rows = [0, 1, 2].map(index => presentRun({
-    summary: { eval: "reflect", corpus: "public", status: "complete",
+    summary: { eval: "reflect", corpus: "public", status: "complete", model: index ? "model-b" : "model-a",
       label: index === 1 ? '<img src=x onerror="alert(1)">' : `run-${index}`,
-      limit: index === 2 ? 1 : null, model: "chat/qwen3.8-27b",
-      date: `2026-10-13T0${index}:00:00Z`, akm_version: "version", n_scored: 1, n_errored: index === 1 ? 1 : 0,
+      limit: index === 2 ? 1 : null, date: `2026-10-13T0${index}:00:00Z`, n_scored: 1, n_errored: index === 1 ? 1 : 0,
       metrics: { defects: { n: 1, correct: 1, rate: 1 }, controls: { n: 1, correct: 1 } } },
-    samples: [{ id: "a", correct: true }, { id: "b", correct: true }],
-    path: `version/reflect/run-${index}`, sourceRevision: "revision",
+    samples: index === 2 ? [] : [{ seconds: index ? 10 : 2 }], path: `v/reflect/r${index}`, sourceRevision: "revision",
   })!);
-  const dataset = { runs: rows,
-    latest_groups: [{ ids: [rows[1]!.id], all_ids: [rows[0]!.id, rows[1]!.id], variation: null }],
-    latest_collection_date: rows[2]!.date, source_revision: "revision" };
-  let click: (event: unknown) => void = () => {};
+  const columns = [...coreColumns, ...scoreColumns(rows)];
+  const dataset = { runs: rows, columns, source_revision: "revision" };
+  const events: Record<string, (event: unknown) => void> = {};
   const downloads: Blob[] = [];
   const context = vm.createContext({
-    fetch: async (url: string) => { expect(url).toBe("./data.json"); return { ok: true, json: async () => dataset }; },
+    fetch: async (url: string) => { expect(url).toBe("./data.json?v=revision"); return { ok: true, json: async () => dataset }; },
     document: {
+      documentElement: { dataset: { revision: "revision" } },
       getElementById: (id: string) => { expect(elements.has(id)).toBe(true); return el(id); },
-      addEventListener: (_type: string, fn: (event: unknown) => void) => { click = fn; },
+      addEventListener: (type: string, fn: (event: unknown) => void) => { events[type] = fn; },
       querySelector: () => null, querySelectorAll: () => [], createElement: () => ({ click() {} }),
-    },
-    Option: class { constructor(_text: string, _value: string) {} }, Blob,
+    }, Option: class {}, Blob,
     URL: { createObjectURL: (blob: Blob) => { downloads.push(blob); return "blob:fixture"; }, revokeObjectURL() {} },
     setTimeout: (fn: () => void) => fn(),
   });
-  const press = (dataset: Record<string, string>) => click({ target: { closest: () => ({ dataset }) } });
+  const pressSort = (key: string, shiftKey = false) => events.click!({ shiftKey, target: { closest: () => ({ dataset: { sort: String(columns.findIndex(column => column.key === key)) } }) } });
+  const inputFilter = (key: string, bound: string, value: string) => events.input!({ target: {
+    dataset: { filter: String(columns.findIndex(column => column.key === key)), bound }, value,
+  } });
+  const downloadRows = async () => { el("json").onclick!(); return JSON.parse(await downloads.at(-1)!.text()).runs; };
   await vm.runInContext(script, context);
-  expect(el("count").textContent).toBe("1 result · 2 published runs in this selection");
-  expect(el("snapshot").textContent).toContain("2 full runs");
-  expect(el("body").innerHTML).toContain("Correct fixes");
-  expect(el("body").innerHTML).toContain("1 of 2 scored");
-  expect(el("body").innerHTML).toContain("+ 1 earlier");
-  expect(el("body").innerHTML).not.toContain("<img");
-  press({ id: rows[1]!.id });
-  expect(el("body").innerHTML).toContain("Original scores");
-  expect(el("body").innerHTML).toContain("earlier test code or settings");
+  expect(el("count").textContent).toContain("3 of 3 runs");
+  for (const column of columns) expect(el("head").innerHTML).toContain(column.label.replaceAll('&', '&amp;'));
   expect(el("body").innerHTML).toContain("&lt;img");
   expect(el("body").innerHTML).not.toContain("<img");
-  // Search finds an earlier repeat, even though its group shows the latest score.
-  el("search").value = "run-0"; el("search").listeners.input!();
-  expect(el("count").textContent).toContain("1 result");
+  expect(el("column-filters").innerHTML).toContain('aria-label="Minimum Case p50 (s)"');
+  // Numeric sort: 2 precedes 10, while missing timing stays last in both directions.
+  pressSort("case_p50_s");
+  expect((await downloadRows()).map((row: { comparison: { case_p50_s: number } }) => row.comparison.case_p50_s)).toEqual([2, 10, null]);
+  pressSort("case_p50_s");
+  expect((await downloadRows()).map((row: { comparison: { case_p50_s: number } }) => row.comparison.case_p50_s)).toEqual([10, 2, null]);
+  pressSort("model"); pressSort("case_p50_s", true);
+  expect(el("sort-status").textContent).toContain("then Case p50 (s)");
+  el("model").value = "model-b"; el("model").listeners.change!();
+  expect(el("count").textContent).toContain("2 of 3 runs");
+  inputFilter("case_p50_s", "min", "5");
+  expect(el("count").textContent).toContain("1 of 3 runs");
   el("csv").onclick!();
   const csv = await downloads.at(-1)!.text();
-  expect(csv).toContain('"Correct fixes","1","percent","1","1"');
-  expect(csv).toContain('"run-0"');
-  expect(csv).not.toContain('"run-2"');
+  expect(csv.split('\r\n')).toHaveLength(2);
+  expect(csv).toContain('"Case p50 (s)"');
+  expect(csv).toContain('"Quality %"');
   el("reset").onclick!();
-  press({ view: "pilots" });
-  expect(el("count").textContent).toBe("1 run · 1 published run in this selection");
-  expect(el("view-pilots").attributes["aria-pressed"]).toBe("true");
-  expect(el("body").innerHTML).toContain("Small trial");
-  press({ view: "all" });
-  expect(el("count").textContent).toContain("3 runs");
-  el("suite").value = "reflect"; el("suite").listeners.change!();
-  expect(el("test-guide").hidden).toBe(false);
-  expect(el("test-guide").innerHTML).toContain("broken asset metadata");
-  el("model").value = "Unknown"; el("model").listeners.change!();
-  expect(el("body").innerHTML).toContain("No results match");
+  inputFilter("case_p50_s", "presence", "missing");
+  expect((await downloadRows())[0].label).toBe("run-2");
   el("reset").onclick!();
-  press({ sort: "model" });
-  expect(el("head").innerHTML).toContain('aria-sort="ascending"');
+  // Compare selected preserves the source rows rather than replacing them with summaries.
+  events.change!({ target: { dataset: { select: rows[0]!.id }, checked: true } });
+  events.change!({ target: { dataset: { select: rows[2]!.id }, checked: true } });
+  el("selectedOnly").checked = true; el("selectedOnly").listeners.change!();
+  expect(el("count").textContent).toContain("2 of 3 runs");
+  expect((await downloadRows()).map((row: { id: string }) => row.id).sort()).toEqual([rows[0]!.id, rows[2]!.id]);
+  el("clearSelection").onclick!();
+  expect(el("count").textContent).toContain("3 of 3 runs");
+  el("errorsOnly").checked = true; el("errorsOnly").listeners.change!();
+  expect(el("count").textContent).toContain("1 of 3 runs");
+  el("dateFrom").value = '2026-10-14'; el("dateFrom").listeners.change!();
+  expect(el("body").innerHTML).toContain("No runs match");
 });

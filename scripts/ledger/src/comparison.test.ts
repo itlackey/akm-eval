@@ -1,0 +1,80 @@
+import { expect, test } from "bun:test";
+import { comparisonFields, coreColumns, distribution, scoreColumns } from "./comparison";
+import { scores } from "./presentation";
+import { presentRun } from "./data";
+
+test("elapsed command distributions keep work sum separate from wall time and retain error timings", () => {
+  const summary = { eval: "reflect", metrics: { defects: { rate: .75, correct: 3, n: 4 } } };
+  const fields = comparisonFields(summary, [{ seconds: 1 }, { seconds: 2 }, { seconds: 3 }, { seconds: 4, error: "failed" }], scores(summary));
+  expect(fields.case_mean_s).toBe(2.5);
+  expect(fields.case_p50_s).toBe(2.5);
+  expect(fields.case_p95_s).toBeCloseTo(3.85);
+  expect(fields.case_work_s).toBe(10);
+  expect(fields.run_wall_s).toBeNull();
+  expect(fields.quality_percent).toBe(75);
+  expect(fields.quality_cases).toBe(4);
+  expect(distribution([null, undefined]).mean).toBeNull();
+});
+
+test("keyword and semantic search timings remain separate and primary ranking is explicitly named", () => {
+  const summary = { eval: "skillret", n_queries: 2, query_seconds: 10, index_seconds: { keyword: 1, semantic: 8 },
+    metrics: { search: { "NDCG@10": .5 }, semantic_search: { "NDCG@10": .8 } } };
+  const fields = comparisonFields(summary, [
+    { search: { seconds: 1 }, semantic_search: { seconds: 4 } },
+    { search: { seconds: 3 }, semantic_search: { seconds: 8 } },
+  ], scores(summary));
+  expect(fields.keyword_mean_s).toBe(2);
+  expect(fields.semantic_mean_s).toBe(6);
+  expect(fields.query_wall_s).toBe(10);
+  expect(fields.quality_metric).toBe("Keyword ranking · nDCG@10");
+  expect(fields["score:Semantic ranking · nDCG@10"]).toBe(.8);
+  expect(fields.case_mean_s).toBeNull();
+});
+
+test("paired answers expose per-arm timings and usage coverage including a failed call", () => {
+  const summary = { eval: "longmemeval", metrics: { accuracy: {
+    without_akm: { rate: .5, correct: 1, n: 2 }, with_akm: { rate: 1, correct: 1, n: 1 },
+  } } };
+  const fields = comparisonFields(summary, [
+    { without_akm: { seconds: 4, prompt_tokens: 100, completion_tokens: 10 }, with_akm: { seconds: 1, prompt_tokens: 20, completion_tokens: 5 } },
+    { without_akm: { seconds: 8, prompt_tokens: 200, completion_tokens: 20 }, with_akm: { error: "429", prompt_tokens: null, completion_tokens: null } },
+  ], scores(summary));
+  expect(fields.quality_metric).toBe("Correct answers with AKM");
+  expect(fields.quality_percent).toBe(100);
+  expect(fields.control_mean_s).toBe(6);
+  expect(fields.akm_mean_s).toBe(1);
+  expect(fields.input_tokens).toBe(320);
+  expect(fields.akm_usage_cases).toBe(1);
+  expect(fields.control_usage_cases).toBe(2);
+  expect(fields.cost_usd).toBeNull();
+});
+
+test("nightly summary totals and agent trials use their recorded timing and token fields", () => {
+  const night = comparisonFields({ seconds: { total: 250 }, calls_by: [
+    { calls: 3, failures: 1, prompt_tokens: 100, completion_tokens: 10 },
+    { calls: 2, failures: 0, prompt_tokens: 200, completion_tokens: 20 },
+  ] }, [], []);
+  expect([night.run_wall_s, night.calls, night.call_failures, night.input_tokens]).toEqual([250, 5, 1, 300]);
+  const agent = comparisonFields({ eval: "agent-ab" }, [{ trials: [
+    { arm: "control", seconds: 10, agentSeconds: 3, tokens: { input: 100, output: 5, cache: 10 }, costUsd: null },
+    { arm: "akm", seconds: 20, agentSeconds: 4, tokens: { input: 200, output: 10, cache: 20 }, costUsd: null },
+  ] }], []);
+  expect([agent.control_mean_s, agent.akm_mean_s, agent.input_tokens, agent.cache_tokens]).toEqual([10, 20, 300, 30]);
+  expect(agent.akm_agent_s).toBe(4);
+  expect(agent.cost_usd).toBeNull();
+});
+
+test("columns have unique IDs and projected settings cannot leak config credentials or endpoints", () => {
+  const run = presentRun({ path: "v/suite/run", sourceRevision: "revision", samples: [], summary: {
+    eval: "reflect", corpus: "public", status: "complete", model: "model", strategy: "reflect-only",
+    engine: { temperature: 0, apiKey: "SECRET" },
+    manifest: { engines: { model: { temperature: 0, enableThinking: false, endpoint: "https://ai.lab.fwdslsh.dev", apiKey: "SECRET" } } },
+  } })!;
+  expect(run.comparison.temperature).toBe(0);
+  expect(run.comparison.thinking).toBe("Off");
+  expect(JSON.stringify(run.comparison)).not.toContain("SECRET");
+  expect(JSON.stringify(run.comparison)).not.toContain("ai.lab");
+  const columns = [...coreColumns, ...scoreColumns([run])];
+  expect(new Set(columns.map(column => column.key)).size).toBe(columns.length);
+  expect(columns.every(column => column.label && column.description)).toBe(true);
+});

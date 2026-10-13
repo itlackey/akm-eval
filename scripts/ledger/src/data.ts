@@ -1,5 +1,6 @@
 /** Public presentation of published reports; never imports the eval collector or rescores samples. */
 import { type Score, scores, testInfo } from "./presentation";
+import { type Cell, comparisonFields } from "./comparison";
 type ObjectValue = Record<string, unknown>;
 export type Verdict = boolean | string;
 export interface LedgerRun {
@@ -27,6 +28,7 @@ export interface LedgerRun {
   test_description: string;
   test_url: string;
   scores: Score[];
+  comparison: Record<string, Cell>;
 }
 export interface RunInput {
   summary: unknown;
@@ -164,6 +166,7 @@ export function presentRun(input: RunInput): LedgerRun | null {
     test_description: testInfo(suite).description,
     test_url: testInfo(suite).documentation.replace("/tree/main/", `/tree/${encodeURIComponent(input.sourceRevision)}/`),
     scores: scores(s),
+    comparison: object(publicValue(comparisonFields(s, input.samples, scores(s)))) as Record<string, Cell>,
     cohort_key: JSON.stringify([
       suite,
       s.collection,
