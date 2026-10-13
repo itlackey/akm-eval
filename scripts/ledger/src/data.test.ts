@@ -35,7 +35,8 @@ describe("published eval projection", () => {
   test("retains reduced denominators and classifies the actual refusal", () => {
     const run = presentRun(input())!;
     expect([run.recorded, run.scored, run.errors]).toEqual([3, 2, 1]);
-    expect(run.result).toBe("Defects 1/1 · 100.00%");
+    expect(run.scores[0]!.label).toBe("Correct fixes");
+    expect(run.scores[0]!.value).toBe(1);
     expect(run.notes).toContain("1 AKM file-layout refusals");
     expect(run.summary_url).toBe(
       "https://github.com/itlackey/akm-eval/blob/revision/reports/0.10.1/reflect/real-r1/summary.json",
@@ -63,7 +64,7 @@ describe("published eval projection", () => {
     expect(run.scored).toBeNull();
     expect(run.errors).toBeNull();
     expect(run.metrics.new_metric).toBe(0.7);
-    expect(run.result).toBe("See recorded metrics");
+    expect(run.scores).toEqual([]);
   });
   test("whitelists presentation fields and removes private endpoints and credentials", () => {
     const run = presentRun(

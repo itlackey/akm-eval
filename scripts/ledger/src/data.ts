@@ -1,4 +1,5 @@
 /** Public presentation of published reports; never imports the eval collector or rescores samples. */
+import { type Score, scores, testInfo } from "./presentation";
 type ObjectValue = Record<string, unknown>;
 export type Verdict = boolean | string;
 export interface LedgerRun {
@@ -15,8 +16,6 @@ export interface LedgerRun {
   recorded: number | null;
   scored: number | null;
   errors: number | null;
-  result: string;
-  guardrail: string;
   notes: string;
   source_commit: string;
   harness_sha256: string;
@@ -24,6 +23,10 @@ export interface LedgerRun {
   summary_url: string;
   samples_url: string;
   cohort_key: string;
+  test_name: string;
+  test_description: string;
+  test_url: string;
+  scores: Score[];
 }
 export interface RunInput {
   summary: unknown;
@@ -64,90 +67,6 @@ function publicValue(value: unknown): unknown {
   }
   return value;
 }
-function ratio(m: unknown, group: string, numerator: string, denominator = "n"): string {
-  return `${n(m, `${group}.${numerator}`) ?? "—"}/${n(m, `${group}.${denominator}`) ?? "—"}`;
-}
-function percent(value: number | null): string {
-  return value === null ? "—" : `${(value * 100).toFixed(2)}%`;
-}
-function decimal(value: number | null): string {
-  return value === null ? "—" : value.toFixed(4);
-}
-function result(s: ObjectValue): [string, string] {
-  const m = object(s.metrics);
-  switch (s.eval) {
-    case "nightly":
-      return [
-        `Items ${ratio(m, "items", "ok")} · ${percent(n(m, "items.rate"))}`,
-        `Harm ${n(m, "harm.items") ?? "—"}; failed calls ${ratio(m, "calls", "failures")}`,
-      ];
-    case "reflect":
-      return [
-        `Defects ${ratio(m, "defects", "correct")} · ${percent(n(m, "defects.rate"))}`,
-        `Controls ${ratio(m, "controls", "correct")}; body edits ${n(m, "proposals.touched_body") ?? "—"}`,
-      ];
-    case "extract":
-      return [
-        `Insights ${ratio(m, "insights", "correct")} · ${percent(n(m, "insights.rate"))}`,
-        `Routine ${ratio(m, "routine", "correct")}; planted instructions saved ${ratio(m, "planted", "saved_instruction")}`,
-      ];
-    case "consolidate":
-      return [
-        `Recall ${ratio(m, "recall", "retired_safe", "of")} · ${percent(n(m, "recall.value"))}`,
-        `Unsafe ${ratio(m, "unsafe", "n", "of")}; precision ${percent(n(m, "precision.value"))}`,
-      ];
-    case "promotion":
-      return [
-        `Precision ${ratio(m, "precision", "good", "of")} · ${percent(n(m, "precision.value"))}`,
-        `Good accepted ${ratio(m, "recall", "accepted", "of")}; bad accepted ${ratio(m, "bad_accepted", "accepted", "of")}`,
-      ];
-    case "bakeoff":
-      return [
-        `Case pass ${ratio(m, "case_pass", "passed")} · ${percent(n(m, "case_pass.rate"))}`,
-        `Valid output ${ratio(m, "valid_output", "passed")}; checks ${percent(n(m, "checks.rate"))}`,
-      ];
-    case "judge-gate":
-      return [
-        `Precision ${ratio(m, "precision", "passed_good", "passed")} · ${percent(n(m, "precision.value"))}`,
-        `Bad passed ${ratio(m, "bad", "passed")}; harmful passed ${ratio(m, "bad_harmful", "passed")}`,
-      ];
-    case "distill":
-      return [
-        `Good lessons ${ratio(m, "good_lessons", "good")} · ${percent(n(m, "good_lessons.rate"))}`,
-        `Updates ${ratio(m, "lesson_updates", "right")}; wrong lessons ${ratio(m, "wrong_lessons", "wrong")}`,
-      ];
-    case "retrieval":
-      return [
-        `Search nDCG@10 ${decimal(n(m, "search.ndcg_10"))}; recall@10 ${decimal(n(m, "search.recall_10"))}`,
-        `Top 10 judged ${percent(n(m, "search.judged_10"))}; ${n(m, "search.n") ?? "—"} judged task queries`,
-      ];
-    case "skillret":
-      return [
-        `nDCG@10 keyword ${decimal(n(m, "search.NDCG@10"))}; semantic ${decimal(n(m, "semantic_search.NDCG@10"))}`,
-        `Curate same: keyword ${ratio(s, "curate_check.keyword", "same", "compared")}; semantic ${ratio(s, "curate_check.semantic", "same", "compared")}`,
-      ];
-    case "longmemeval":
-      if (s.retrieval_only || s.mode === "retrieval-only") {
-        return [
-          `Top 5 hit ${percent(n(m, "retrieval.hit_rate"))}; recall ${percent(n(m, "retrieval.recall"))}; MRR ${decimal(n(m, "retrieval.mrr"))}`,
-          `Evidence questions ${n(m, "retrieval.n") ?? "—"}; abstention questions ${n(m, "retrieval_abstention.n") ?? "—"}`,
-        ];
-      }
-      return [
-        `Control ${ratio(m, "accuracy.without_akm", "correct")}; AKM ${ratio(m, "accuracy.with_akm", "correct")}`,
-        `Paired questions ${n(m, "accuracy.difference.n") ?? "—"}; cut-offs control ${n(s, "answers_cut_off.without_akm") ?? "—"}, AKM ${n(s, "answers_cut_off.with_akm") ?? "—"}`,
-      ];
-    case "agent-ab":
-    case "terminal-bench":
-      return [
-        `Control ${ratio(m, "control", "passed", "scored")}; AKM ${ratio(m, "akm", "passed", "scored")}`,
-        `AKM engaged ${ratio(m, "engagement", "called", "trials")}`,
-      ];
-    default:
-      return ["See recorded metrics", "Metric definitions are specific to this suite"];
-  }
-}
-
 export function presentRun(input: RunInput): LedgerRun | null {
   const s = object(input.summary);
   if (s.corpus !== "public" || s.status !== "complete") return null;
@@ -179,33 +98,33 @@ export function presentRun(input: RunInput): LedgerRun | null {
   if (suite === "agent-ab" && label === "bifrost-gpt120-pilot") {
     role = "Diagnostic";
     notes.push(
-      "Original plugin was incompatible with CLI 0.10. Diagnostic artifact, excluded from full-run comparisons.",
+      "This trial used a plugin that could not run with AKM CLI 0.10. Use it to inspect the compatibility failure, not to estimate task performance.",
     );
   }
-  if (role === "Pilot") notes.push("Small demonstration; insufficient coverage for a full-suite quality estimate.");
+  if (role === "Pilot") notes.push("Only part of this test was run. The score does not estimate full-test performance.");
   const rows = input.samples?.map(object) ?? [];
   const layout = rows.filter((row) => /Reflect refused: the file for/.test(text(row.error))).length;
   const missing = rows.filter((row) => /ASSET_NOT_FOUND/.test(text(row.error))).length;
   if (layout)
     notes.push(
-      `${layout} AKM file-layout refusals: proposal output differs from the indexed file. These errors are outside correctness.`,
+      `${layout} AKM file-layout refusals: the proposed repair destination did not match the indexed file. These cases could not be scored.`,
     );
   if (missing)
-    notes.push(`${missing} indexed-ref feedback errors in the earlier harness. Lookup repaired in akm-eval v0.4.`);
+    notes.push(`${missing} cases failed because the test runner sent feedback to an asset reference AKM could not find. The lookup was fixed in akm-eval v0.4.`);
   if (suite === "retrieval")
     notes.push(
-      "Metric denominators cover judged task queries; notification observations are separate. Inspect judgment coverage and condensed nDCG.",
+      "Search scores cover task queries with relevance judgments. Notification queries are counted in recorded cases but do not enter these scores.",
     );
-  if (suite === "longmemeval" && role === "Pilot")
+  if (suite === "longmemeval" && role === "Pilot" && label === "bifrost-gpt120-pilot")
     notes.push(
-      "Published pilot used a Qwen judge rather than the benchmark GPT-4o judge. Inspect errored arms and answer cut-offs.",
+      "This trial used a Qwen answer judge. The benchmark normally uses GPT-4o. One AKM answer call failed with HTTP 429 and three control answers reached the token limit.",
     );
   if (suite === "skillret")
     notes.push(
-      "Both ranking modes share one query artifact. Curate checks cover a subset. Embeddings run locally; no answer model.",
+      "Keyword and semantic search use the same query set. These scores measure skill ranking, without generating answers.",
     );
   if (input.samples === null)
-    notes.push("Sample file unavailable; recorded coverage uses summary fields where present.");
+    notes.push("The case-by-case file is missing. Case counts come from the summary where available.");
   let model = text(s.model);
   if (!model) {
     const mode =
@@ -217,9 +136,8 @@ export function presentRun(input: RunInput): LedgerRun | null {
     model = `No LLM · ${mode || text(s.mode) || "retrieval"}`;
   }
   if (model.includes("qwen3.8-27b"))
-    notes.push("Pooled serving; fixed per-run quantization and GPU allocation are not established.");
+    notes.push("The model was served from a pool. The reports do not identify a fixed quantization or GPU allocation for each run.");
   const measurement = text(at(s, "manifest.collector.version")) || "Unspecified";
-  const [score, guardrail] = result(s);
   const reportPath = input.path.split("/").map(encodeURIComponent).join("/");
   const base = `https://github.com/itlackey/akm-eval/blob/${encodeURIComponent(input.sourceRevision)}/reports/${reportPath}`;
   return {
@@ -236,14 +154,16 @@ export function presentRun(input: RunInput): LedgerRun | null {
     recorded,
     scored,
     errors,
-    result: score,
-    guardrail,
     notes: notes.join(" "),
     source_commit: text(s.git_commit),
     harness_sha256: text(s.harness_sha256),
     metrics: object(publicValue(m)),
     summary_url: `${base}/summary.json`,
     samples_url: `${base}/samples.jsonl`,
+    test_name: testInfo(suite).name,
+    test_description: testInfo(suite).description,
+    test_url: testInfo(suite).documentation.replace("/tree/main/", `/tree/${encodeURIComponent(input.sourceRevision)}/`),
+    scores: scores(s),
     cohort_key: JSON.stringify([
       suite,
       s.collection,
@@ -257,6 +177,8 @@ export function presentRun(input: RunInput): LedgerRun | null {
       at(s, "manifest.settings"),
       at(s, "manifest.cases"),
       s.search_mode,
+      at(s, "manifest.engines"),
+      s.semantic_model,
     ]),
   };
 }
@@ -321,6 +243,11 @@ export function latestGroups(runs: LedgerRun[], verdicts: Map<string, ReturnType
   }
   return [...latest.values()].map((group) => ({
     ids: group.map((r) => r.id),
+    all_ids: runs.filter((run) => run.role === "Full suite" &&
+      run.suite === group[0]!.suite && run.collection === group[0]!.collection &&
+      run.mode === group[0]!.mode && run.model === group[0]!.model &&
+      run.akm_version === group[0]!.akm_version && run.measurement === group[0]!.measurement)
+      .sort((a, b) => a.date.localeCompare(b.date)).map((run) => run.id),
     variation: repeatVariation(group.map((r) => verdicts.get(r.id) ?? { kind: "", values: {} })),
   }));
 }

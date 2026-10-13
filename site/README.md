@@ -1,9 +1,13 @@
-# Public evaluation ledger
+# Public AKM results
 
-The [public ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. It presents
-completed public runs, with separate full-suite, pilot and diagnostic labels.
-Private, running and aborted reports are excluded. This build runs no model calls.
+The [public results page](https://itlackey.github.io/akm-eval/) builds from this
+repository's committed `reports/` tree. It includes completed public runs and
+keeps small trials and compatibility checks separate from the default view.
+Private, running and aborted reports are excluded. The build makes no model calls.
+
+The design adapts the palette, typography, grid and slash motif from
+[fwdslsh/website](https://github.com/fwdslsh/website) (CC BY 4.0). The stylesheet
+records that attribution and the page links to the original theme.
 
 ## Build locally
 
@@ -19,56 +23,65 @@ the page fetches its adjacent `data.json`, so opening the HTML as a local file
 does not provide a working preview. Relative asset paths support GitHub Pages'
 `/akm-eval/` project path and a local server root.
 
-An existing results checkout or exported report tree can be used instead:
+To use another published report tree:
 
 ```sh
 scripts/ledger/run --results ../another-checkout/reports --output .site-output
 ```
 
-The build records the results checkout's revision and links each row to its
-original artifacts at that revision. An exported tree without Git metadata
-uses `main`; pass `--source-revision COMMIT` to retain a specific source revision.
-No fixed run counts, version folder, date, or private lab report is baked into
-the site.
+The build records the results checkout's revision and links to original reports
+at that revision. An exported tree without Git metadata uses `main`; pass
+`--source-revision COMMIT` to retain a specific source revision.
+No fixed run count, version folder or collection date is baked into the site.
 
 The builder and tests live under `scripts/ledger/src/`. Their pinned package
-and TypeScript configuration join the normal `scripts/check` typecheck and test lanes.
+and TypeScript configuration join the normal `scripts/check` lanes.
+
+## Using the results
+
+One table has three views:
+
+- **Latest results:** the newest full test run for each model, collection and
+  search method. Details show every repeat at the same AKM and scoring version,
+  with earlier code or settings marked separately.
+- **Every run:** every completed public run, including repeats and small trials.
+- **Small trial runs:** partial tests and compatibility checks.
+
+Test names describe the behavior being measured. Scores have specific labels,
+values and denominators, with explanations and original scoring rules in Details.
+For example, asset repair shows correct fixes and correct assets preserved;
+consolidation shows safe retirements found and unsafe retirements. Search shows
+both keyword and semantic scores where recorded, including judgment coverage.
+Unknown values stay unknown. Original metrics and case output remain available
+through the report links; the site does not rescore them.
+
+The Runs count covers repeats with matching model, AKM and scoring versions,
+harness and input digests, configuration, settings, engine settings and search
+mode. Earlier runs remain visible individually in Details. Scores in the table
+come from the newest run, not an average across different collectors.
+
+Repeat consistency counts shared cases whose recorded correctness, pass decision
+or outcome changed. Cases errored in any matching run are excluded. The display
+names the verdict used; it does not claim all suites share one quality metric.
+Use each eval's compare command for controlled comparisons with its current scorer.
+
+Filters apply to the single displayed table. Search can find an earlier repeat
+inside a latest-result group. The CSV export includes the selected groups' runs,
+one row per numeric metric, with the numerator, denominator and report links.
+The full projected snapshot is downloadable as JSON.
 
 ## Publish and refresh
 
-`.github/workflows/ledger-pages.yml` typechecks and tests the ledger, and builds
-an artifact on pull requests. Deployment runs only from main, through the
-`github-pages` environment. It follows [GitHub's custom Pages workflow](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
-
-Main changes to `reports/`, the site or its builder publish automatically.
-Merge completed public results under `reports/` to refresh the ledger.
-For an immediate manual rebuild:
+`.github/workflows/ledger-pages.yml` typechecks and tests the ledger and builds
+an artifact on pull requests. Main changes to `reports/`, the site or its builder
+publish automatically through the `github-pages` environment.
+For a manual rebuild:
 
 ```sh
 gh workflow run ledger-pages.yml --repo itlackey/akm-eval --ref main
 ```
 
-All Actions are pinned to commits. Build jobs have read access; only the main
-deployment job receives Pages and OIDC write permissions. The uploaded directory
-contains just the public page, styles, browser script, projected data and
-`.nojekyll`. Collector configs, prompts, environment files and host paths are
-not copied into it. Raw samples remain at their existing public artifact links.
-
-## Scores and comparisons
-
-The ledger shows the original recorded metrics without rescoring them. Unknown
-counts stay unknown. Error counts and reduced denominators remain visible.
-New suites retain their raw metric breakdown even before a compact score is added
-to `scripts/ledger/src/data.ts`.
-
-Latest full-run groups share model, AKM and measurement versions, harness and
-input digests, configuration, settings and search mode. A changed fingerprint
-starts another group; earlier rows remain available. Extract and consolidate
-recovery artifacts can therefore form smaller groups than the total collected
-repeat count. Do not pool different collectors to imply improvement.
-
-Variation uses recorded correctness when present, otherwise a recorded pass
-decision or outcome, and names that definition beside the result. Errored cases
-and IDs absent from any repeat are excluded. Groups with one run or incomparable
-verdicts have no flip estimate. Use the eval repository's current scorer and
-compare command for controlled comparisons.
+All Actions are pinned to commits. Only the main deployment job receives Pages
+and OIDC write permissions. The upload contains the public page, stylesheet,
+browser script, projected data and `.nojekyll`. Collector configs, prompts,
+environment files and host paths are not copied into it.
