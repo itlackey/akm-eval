@@ -65,6 +65,15 @@ describe("rescoring a night", () => {
     expect(now.manifest.rescored_from).toMatchObject({ results: "2026-10-12-golden", dropped: [] });
   });
 
+  test("an item whose file moved since the night was stored is an error that names the file, not a verdict on a note that is not there", () => {
+    const at = "commands/llm-delegation-tool/moderate.md";
+    const was = (files: Record<string, string>) => Object.fromEntries(Object.entries(files).map(([path, text]) => [path === at ? "knowledge/skills/ai-skills/llm-delegation-tool/examples/commands/moderate.md" : path, text]));
+    const { dir } = stored(LINES, (rows) => rows.map((r) => (r.before[at] === undefined ? r : { ...r, before: was(r.before), after: was(r.after) })));
+    const moved = rowsOf(rescoreFolder(dir).out).filter((r) => r.state === "not in this night");
+    expect(moved).toHaveLength(1);
+    expect(moved[0]).toMatchObject({ ok: false, error: `the stored night has no ${at}` });
+  });
+
   test("scores the raw output, not the verdict stored beside it: a file put back in a stored row gives another verdict", () => {
     const touched = LINES.find((l) => l.case === "untouched-01");
     expect(touched).toBeDefined();

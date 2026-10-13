@@ -4,7 +4,8 @@
 #   scripts/check [typecheck] [python] [test]
 #
 # With no name it runs all three, the quick ones first:
-#   typecheck  bun install --frozen-lockfile and tsc in every src folder that has a tsconfig.json
+#   typecheck  bun install --frozen-lockfile at the root (and in a src folder with a package.json of its own), then tsc in every src folder
+#              that has a tsconfig.json
 #   python     the tests of the akm arm in lib/harbor, with uv
 #   test       bun test at the root. Every test uses a fake akm, so none needs akm or Docker, and an akm on PATH or an AKM_BIN in the
 #              environment changes nothing. The few tests that run a real akm run only with AKM_EVAL_REAL_AKM=1
@@ -18,12 +19,14 @@ usage() { sed -n '2,${/^#/!q;s/^# \{0,1\}//;p;}' "${BASH_SOURCE[0]}"; }
 
 run_typecheck() {
   local tsconfig dir found=0
+  bun install --frozen-lockfile || { echo "check: bun install failed" >&2; return 1; }
   for tsconfig in evals/*/src/tsconfig.json benchmarks/*/src/tsconfig.json scripts/*/src/tsconfig.json; do
     [ -f "$tsconfig" ] || continue
     dir="$(dirname "$tsconfig")"
     found=1
     echo "-- $dir"
-    (cd "$dir" && bun install --frozen-lockfile && bunx tsc --noEmit -p tsconfig.json) || { echo "check: the typecheck of $dir failed" >&2; return 1; }
+    if [ -f "$dir/package.json" ]; then (cd "$dir" && bun install --frozen-lockfile --ignore-scripts) || { echo "check: bun install in $dir failed" >&2; return 1; }; fi
+    "$root/node_modules/.bin/tsc" --noEmit -p "$tsconfig" || { echo "check: the typecheck of $dir failed" >&2; return 1; }
   done
   [ "$found" = 1 ] || { echo "check: found no src folder with a tsconfig.json" >&2; return 1; }
 }

@@ -9,6 +9,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
+import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -104,6 +105,8 @@ interface Summary extends RunInputs, CorpusFields {
   calls_by: CallRow[];
   metrics: Metrics;
   /** What the run was made of (see lib/manifest.ts). */
+  /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
+  model_calls: ModelCalls | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -211,6 +214,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     pair_pass: pairPass ? { pairs_judged: Number(pairPass.pairsJudged ?? 0), failed_judgments: Number(pairPass.failedJudgments ?? 0), labels: Object.fromEntries(Object.entries(pairPass.labelCounts ?? {}).filter(([, n]) => n > 0)) } : null,
     calls_by: calls.by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
     metrics: counts.metrics,
+    model_calls: takeModelCalls(),
     manifest: buildManifest({
       measurement: MEASUREMENT,
       corpus: corpus.name,

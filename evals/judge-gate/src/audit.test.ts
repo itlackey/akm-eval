@@ -76,6 +76,41 @@ describe("bodyChange", () => {
     expect(bodyChange(source, page("d: a", "\nOne sentence, e.g. this.\n\nSecond one.\n"))).toBe("edited");
     expect(bodyChange(source, page("d: a", "\nOne sentence.\n"))).toBe("edited");
   });
+
+  test("is deduplicated when one run of lines the source holds twice is taken out: a pasted block of its frontmatter, or a repeated passage", () => {
+    const fm = "description: Runs x.\ntags:\n  - ops\nupdated: 2026-05-14";
+    const pasted = page(fm, "\n# T\n\ndescription: Runs x.\ntags: [ops]\nupdated: 2026-05-14\n---\n\nRun `x --fast` on 30000 rows.\n");
+    expect(bodyChange(pasted, page(fm, "\n# T\n\nRun `x --fast` on 30000 rows.\n"))).toBe("deduplicated");
+    expect(bodyChange(page(fm, "\nRun it.\n\nupdated: 2026-05-14\n"), page(fm, "\nRun it.\n"))).toBe("deduplicated");
+    const twice = page("d: a", "\n# T\n\n## Steps\n\n1. Do it.\n\n## Steps\n\n1. Do it.\n\n## Notes\n\nEnd.\n");
+    expect(bodyChange(twice, page("d: a", "\n# T\n\n## Steps\n\n1. Do it.\n\n## Notes\n\nEnd.\n"))).toBe("deduplicated");
+    expect(bodyChange(page("d: a", "\nPara.\n\nPara.\n"), page("d: a", "\n# A title\n\nPara.\n"))).toBe("deduplicated");
+  });
+
+  test("is edited when the lines taken out are not held twice, or something else changed with them", () => {
+    const fm = "description: Runs x.\nupdated: 2026-05-14";
+    expect(bodyChange(page(fm, "\nRun it.\n\nupdated: 2026-06-01\n"), page(fm, "\nRun it.\n"))).toBe("edited");
+    expect(bodyChange(page(fm, "\nRun it.\n\ndescription: Runs x fast.\n"), page(fm, "\nRun it.\n"))).toBe("edited");
+    expect(bodyChange(page(fm, "\nRun it.\n\nRuns x.\n"), page(fm, "\nRun it.\n"))).toBe("edited");
+    const twice = page("d: a", "\n## Steps\n\n1. Do it.\n\n## Steps\n\n1. Do it.\n");
+    expect(bodyChange(twice, page("d: a", "\n## Steps\n\n1. Do it now.\n"))).toBe("edited");
+    expect(bodyChange(page("d: a", "\nKeep it.\n\nDo not delete it.\n"), page("d: a", "\nKeep it.\n\nDo delete it.\n"))).toBe("edited");
+  });
+
+  test("is corrected when a word or two become an identifier the source spells that way elsewhere", () => {
+    const source = page("d: a", "\nThe file is `deploy/prod.yml`.\n\n1. `up -f deploy/production.yml`\n2. `ps -f deploy/prod.yml`\n");
+    expect(bodyChange(source, source.replace("deploy/production.yml", "deploy/prod.yml"))).toBe("corrected");
+    expect(bodyChange(page("d: host port 5433", "\n`psql -p 5432`\n"), page("d: host port 5433", "\n`psql -p 5433`\n"))).toBe("corrected");
+  });
+
+  test("is edited when the new word is prose, markup only, absent from the source, or one of more than two", () => {
+    const source = page("d: a", "\nThis asset documents `--batch-size` and 5433.\n\nRun --batchsize 200 on port 5432.\n");
+    expect(bodyChange(source, source.replace("This asset documents", "This document details"))).toBe("edited");
+    expect(bodyChange(source, source.replace("--batchsize 200", "`--batchsize` 200"))).toBe("edited");
+    expect(bodyChange(source, source.replace("--batchsize", "--batch-limit"))).toBe("edited");
+    expect(bodyChange(source, source.replace("--batchsize 200 on port 5432", "--batch-size 5433 on port 5433"))).toBe("edited");
+    expect(bodyChange(source, source.replace("--batchsize 200", "--batch-size"))).toBe("edited");
+  });
 });
 
 describe("audit", () => {
@@ -105,7 +140,7 @@ describe("audit", () => {
   test("names the good cases whose reason uses a churn word, and those whose candidate edits the body", () => {
     expect(a.reason_disagreements).toEqual([{ id: "id-good-3", terms: ["intro"] }]);
     expect(a.body_disagreements).toEqual(["id-good-3", "id-good-4"]);
-    expect(a.good_body).toEqual({ unchanged: 2, title: 0, edited: 2 });
+    expect(a.good_body).toEqual({ unchanged: 2, title: 0, deduplicated: 0, corrected: 0, edited: 2 });
     expect(disagrees(a)).toBe(true);
   });
 
@@ -115,7 +150,7 @@ describe("audit", () => {
     const text = format(clean);
     expect(text).toContain("judge-gate audit | rubric_version 2 | 5 cases");
     expect(text).toContain("label reason uses a churn word: 0");
-    expect(text).toContain("candidate edits the body beyond a title: 0");
+    expect(text).toContain("candidate edits the body beyond a title and the fixes the rubric names: 0");
     expect(text).toContain("No ADJUDICATION.md beside the cases.");
     expect(format(a)).toContain("id-good-3: intro");
     expect(format(a)).toContain("id-good-4: body edited");
@@ -151,20 +186,20 @@ describe("the public cases", () => {
   const cases = publicCases();
   const a = audit(cases, rubricVersion(ASSETS), readFileSync(join(ASSETS, ADJUDICATION), "utf8"));
 
-  test("are under rubric version 2, with 11 good and 95 bad, 67 of them harmful and 28 churn", () => {
-    expect(a).toMatchObject({ rubric_version: 2, n_cases: 106, severity: { harmful: 67, churn: 28 } });
-    expect(a.labels.good.n).toBe(11);
+  test("are under rubric version 2, with 40 good and 95 bad, 67 of them harmful and 28 churn", () => {
+    expect(a).toMatchObject({ rubric_version: 2, n_cases: 135, severity: { harmful: 67, churn: 28 } });
+    expect(a.labels.good.n).toBe(40);
     expect(a.labels.bad.n).toBe(95);
   });
 
-  test("have the feedback the README states: 2 of the good and 38 of the bad, none of the good with a [negative] line", () => {
-    expect(a.labels.good.feedback).toEqual({ none: 9, positive_only: 2, negative: 0 });
+  test("have the feedback the README states: 14 of the good and 38 of the bad, 5 of the good with a [negative] line", () => {
+    expect(a.labels.good.feedback).toEqual({ none: 26, positive_only: 9, negative: 5 });
     expect(a.labels.bad.feedback).toEqual({ none: 57, positive_only: 23, negative: 15 });
-    expect(a.feedback_shortcuts.refuse_any_feedback).toEqual({ good_passed: 9, bad_passed: 57 });
-    expect(a.feedback_shortcuts.refuse_negative_feedback).toEqual({ good_passed: 11, bad_passed: 80 });
+    expect(a.feedback_shortcuts.refuse_any_feedback).toEqual({ good_passed: 26, bad_passed: 57 });
+    expect(a.feedback_shortcuts.refuse_negative_feedback).toEqual({ good_passed: 35, bad_passed: 80 });
   });
 
-  test("cover the sets the README says: no good case from night-10-01, queue-10-01 or orphans", () => {
+  test("cover the sets the README says: no good case from night-10-01, queue-10-01 or orphans, and the 29 written ones all good", () => {
     expect(a.sets).toEqual({
       "accepted-aug": { good: 4, bad: 27 },
       "accepted-jul": { good: 3, bad: 27 },
@@ -172,13 +207,14 @@ describe("the public cases", () => {
       "night-10-01": { good: 0, bad: 5 },
       "orphans": { good: 0, bad: 4 },
       "queue-10-01": { good: 0, bad: 5 },
+      "written-10-13": { good: 29, bad: 0 },
     });
   });
 
-  test("have no good case that disagrees with the rubric: none uses a churn word, none edits the body beyond a title", () => {
+  test("have no good case that disagrees with the rubric: none uses a churn word, none edits the body beyond a title and the fixes the rubric names", () => {
     expect(a.reason_disagreements).toEqual([]);
     expect(a.body_disagreements).toEqual([]);
-    expect(a.good_body).toEqual({ unchanged: 10, title: 1, edited: 0 });
+    expect(a.good_body).toEqual({ unchanged: 25, title: 5, deduplicated: 7, corrected: 3, edited: 0 });
     expect(disagrees(a)).toBe(false);
   });
 
@@ -192,7 +228,7 @@ describe("the public cases", () => {
       return { ...rest, label: "good", labelReason: c.labelReason.slice(0, c.labelReason.indexOf(marker)) };
     });
     const before = audit(undone, 1);
-    expect(before.labels.good.n).toBe(28);
+    expect(before.labels.good.n).toBe(57); // the 28 of version 1, and the 29 of written-10-13
     expect(before.severity).toEqual({ harmful: 67, churn: 11 });
     expect(before.reason_disagreements).toHaveLength(10);
     expect(before.body_disagreements).toHaveLength(16);
@@ -237,7 +273,7 @@ describe("the seven borderline cases (#43)", () => {
     const cases = publicCases();
     expect(readAdjudication(record).borderline.map((b) => b.id).sort()).toEqual(SEVEN);
     expect(SEVEN.map((id) => cases.find((c) => c.id === id)?.label)).toEqual(SEVEN.map(() => "good"));
-    expect(cases.filter((c) => c.label === "good")).toHaveLength(11);
+    expect(cases.filter((c) => c.label === "good")).toHaveLength(40);
     expect(rubricVersion(ASSETS)).toBe(2);
   });
 
@@ -262,16 +298,16 @@ describe("the command", () => {
   test("prints the audit of the public cases and exits 0", () => {
     const { code, out } = run();
     expect(code).toBe(0);
-    expect(out).toContain("judge-gate audit | rubric_version 2 | 106 cases");
+    expect(out).toContain("judge-gate audit | rubric_version 2 | 135 cases");
     expect(out).toContain("label reason uses a churn word: 0");
-    expect(out).toContain("candidate edits the body beyond a title: 0");
+    expect(out).toContain("candidate edits the body beyond a title and the fixes the rubric names: 0");
     expect(out).toContain("17 labels changed, 7 borderline cases left as they were");
   });
 
   test("prints JSON with --json", () => {
     const { code, out } = run("--json");
     expect(code).toBe(0);
-    expect(JSON.parse(out)).toMatchObject({ rubric_version: 2, n_cases: 106, labels: { good: { n: 11 }, bad: { n: 95 } }, reason_disagreements: [], body_disagreements: [] });
+    expect(JSON.parse(out)).toMatchObject({ rubric_version: 2, n_cases: 135, labels: { good: { n: 40 }, bad: { n: 95 } }, reason_disagreements: [], body_disagreements: [] });
   });
 
   test("exits 1 and names the case when a good case disagrees with the rubric", () => {

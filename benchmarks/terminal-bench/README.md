@@ -18,7 +18,7 @@ benchmarks/terminal-bench/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 - The corpus is the library the akm arm gets; the tasks are always the same. `public` is `corpus/library`; `custom` is `evals/retrieval`'s rewritten library in `private/retrieval/assets/library`, or the `library/` of `--cases DIR` (a folder in the format `evals/retrieval` reads).
 - `--limit N` runs the first N of a fixed order whose first ten are Harbor's `terminal-bench-sample`.
 - `--attempts N` runs each task N times per arm (default 1); a task's pass rate is then its share of passed attempts.
-- `--model`, `--akm` and `--akm-env` work as in `evals/agent-ab` (see its README). The default akm is `akm-cli@0.9.26`; `AKM_BIN` is not read for the arm.
+- `--model`, `--akm` and `--akm-env` work as in `evals/agent-ab` (see its README). The default akm is `akm-cli@0.10.261003-beta`; `AKM_BIN` is not read for the arm.
 
 A run that did not finish everything writes its summary with `status: "aborted"`, exits 1, and is no result.
 

@@ -40,7 +40,7 @@ Results go to `private/promotion/results/`.
 
 ## The cases
 
-`assets/cases.jsonl`: 20 proposals made by `src/build.ts` from `corpus/library`: 6 good, 6 duplicate, 4 stale and 4 ephemeral, judged among the 30 notes of `assets/library/knowledge/`. A proposal's input digest includes the notes it was planted among, so a `--limit` run and a full run share no inputs.
+`assets/cases.jsonl`: 80 proposals made by `src/build.ts` from `corpus/library`: 40 good, 13 duplicate, 13 stale and 14 ephemeral, judged among the 83 notes of `assets/library/knowledge/`. A proposal's input digest includes the notes it was planted among, so a `--limit` run and a full run share no inputs.
 
 ## How a case is scored
 
@@ -53,7 +53,7 @@ Results go to `private/promotion/results/`.
 | `bad_accepted` | bad proposals accepted; `by_category` for `duplicate`, `stale`, `ephemeral` |
 | `outcomes` | per label: `accept`, `reject`, `defer`, `error` |
 
-An unreadable reply is a defer, so the eval cannot tell the two apart. One good proposal is 17 points of recall on the public set: a case or two is noise.
+An unreadable reply is a defer, so the eval cannot tell the two apart. One good proposal is 2.5 points of recall on the public set: a case or two is noise.
 
 ## What the summary reports
 
@@ -65,7 +65,7 @@ No command queues a proposal without a model, so the eval writes rows into the `
 
 ## Results so far
 
-`chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
+The public runs on akm 0.10.261003-beta, three repeats, are in [`reports/0.10.261003-beta/promotion/`](../../reports/0.10.261003-beta/promotion/). The table below is older: `chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
 
 | | 0.9.26 | #1067 (judge shown the 5 nearest notes) |
 |---|---:|---:|

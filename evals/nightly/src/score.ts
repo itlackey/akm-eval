@@ -345,7 +345,10 @@ export function scoreItem(item: Item, o: Outcome): Scored {
 /** The row for an item and its raw output: the verdict, and the raw output beside it so that the row can be scored again. */
 export function makeRow(item: Item, raw: Raw): Row {
   const outcome: Outcome = { before: new Map(Object.entries(raw.before)), after: new Map(Object.entries(raw.after)), proposals: raw.proposals, actions: raw.actions, lane: raw.night.lane };
-  return { ...scoreItem(item, outcome), before: raw.before, after: raw.after, proposals: raw.proposals, actions: raw.actions, night: raw.night, ...(raw.indexed_refs ? { indexed_refs: raw.indexed_refs } : {}) };
+  // A night stored before the item's files moved has none of them, so there is nothing of this item to score in it.
+  const missing = item.files.filter((f) => !outcome.before.has(f));
+  const scored = missing.length > 0 ? row(item, item.kind, {}, "not in this night", {}, `the stored night has no ${missing.join(", ")}`) : scoreItem(item, outcome);
+  return { ...scored, before: raw.before, after: raw.after, proposals: raw.proposals, actions: raw.actions, night: raw.night, ...(raw.indexed_refs ? { indexed_refs: raw.indexed_refs } : {}) };
 }
 
 // --- Metrics -----------------------------------------------------------------------------------------------------

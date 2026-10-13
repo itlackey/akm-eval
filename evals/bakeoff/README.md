@@ -8,11 +8,11 @@ Five of akm's model-backed jobs are scored by no other eval. This eval runs thos
 
 | Process | Cases | The command | What akm writes, and the eval reads |
 |---|---:|---|---|
-| `memory-inference` | 4 | `akm improve --strategy bakeoff-memory-inference` | `memories/<name>.derived.md`: title, description, tags, search hints, content |
-| `remember-enrich` | 4 | `akm remember --enrich --name <name>`, the memory on stdin | `memories/<name>.md` with the tags, description and date the model gave |
-| `schema-repair` | 4 | `akm improve <lesson> --strategy bakeoff-schema-repair` | a pending `schema-repair` proposal: the lesson with a `description` and a `when_to_use` |
-| `session-summary` | 1 | `akm proposal extract --type claude --session-id <id> --strategy bakeoff-session-summary` | `sessions/claude/<id>.md`: the summary and a `## Key topics` list |
-| `consolidate-promote` | 2 | `akm improve --strategy bakeoff-consolidate-promote` | the promotions in consolidate's plan, `consolidation.planned` |
+| `memory-inference` | 8 | `akm improve --strategy bakeoff-memory-inference` | `memories/<name>.derived.md`: title, description, tags, search hints, content |
+| `remember-enrich` | 8 | `akm remember --enrich --name <name>`, the memory on stdin | `memories/<name>.md` with the tags, description and date the model gave |
+| `schema-repair` | 8 | `akm improve <lesson> --strategy bakeoff-schema-repair` | a pending `schema-repair` proposal: the lesson with a `description` and a `when_to_use` |
+| `session-summary` | 8 | `akm proposal extract --type claude --session-id <id> --strategy bakeoff-session-summary` | `sessions/claude/<id>.md`: the summary and a `## Key topics` list |
+| `consolidate-promote` | 8 | `akm improve --strategy bakeoff-consolidate-promote` | the promotions in consolidate's plan, `consolidation.planned` |
 
 Each strategy runs its one process. Memory inference is behind `experimental.improveAutonomy`, which the config sets. Semantic search is off, so consolidate's pair pass finds no pairs.
 
@@ -25,7 +25,7 @@ evals/bakeoff/run --corpus custom              # the rewrite: ./generate-assets 
 evals/bakeoff/run --cases ~/notes/bakeoff
 ```
 
-`--process NAME` runs one process. `--limit N` takes the first case of each process in turn. `--config-patch FILE` changes the config; there is no `--strategy`, since each process has its own. A full run is 15 cases and about 30 calls, one at a time; 16k of context is safe. The eval sets temperature 0 and thinking off.
+`--process NAME` runs one process. `--limit N` takes the first case of each process in turn. `--config-patch FILE` changes the config; there is no `--strategy`, since each process has its own. A full run is 40 cases and about 75 calls, one at a time; 16k of context is safe. The eval sets temperature 0 and thinking off.
 
 ## Run your own set
 
@@ -33,7 +33,7 @@ evals/bakeoff/run --cases ~/notes/bakeoff
 
 ## The cases
 
-`assets/cases.json`: 15 cases, each with its `id`, `process`, the `files` it reads and what it `expected`, over a fictional library of 37 memories, 4 lessons lacking `description` and `when_to_use`, and one Claude Code session. The rewrite changes files and `cases.json` with one mapping, and `generate` checks every expected term and ref still holds.
+`assets/cases.json`: 40 cases, 8 of each process, each with its `id`, `process`, the `files` it reads and what it `expected`, over a fictional library of 66 memories, 8 lessons lacking `description` and `when_to_use`, and 8 Claude Code sessions. The rewrite changes files and `cases.json` with one mapping, and `generate` checks every expected term and ref still holds.
 
 ## How a case is scored
 
@@ -57,7 +57,7 @@ Terms match with case and spacing ignored; a one-word term ending in `y` also fi
 | `median_seconds` | median time per case, which depends on the server |
 | `by_process` | per process: `n`, `valid_output`, `passed`, `checks`, `outcomes`, `failed` |
 
-One case is 6.7 points of `case_pass`, and a process has 1 to 4 cases: compare by `checks` and rerun with `--repeat`.
+One case is 2.5 points of `case_pass`, and 12.5 points of its process, which has 8 cases: compare by `checks` and rerun with `--repeat`.
 
 ## What the summary reports
 

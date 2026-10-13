@@ -34,7 +34,7 @@ export function parseCases(text: string, where = "cases"): Case[] {
 /**
  * The cases a run uses. Without a limit, all of them. With one, N cases in the same good/bad
  * proportion as the whole set, each kind taken in file order, so a quick run still holds both: from
- * two cases on there is at least one good case, though good cases are a tenth of the set.
+ * two cases on there is at least one good case, though good cases are under a third of the set.
  */
 export function selectCases(cases: Case[], limit?: number): Case[] {
   if (limit === undefined || limit >= cases.length) return cases;

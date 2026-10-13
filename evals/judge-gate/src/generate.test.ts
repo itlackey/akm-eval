@@ -218,9 +218,9 @@ describe("generate", () => {
     const out = tmp();
     const made = generate({ seed: "20261011", out });
     expect(made.problems).toEqual([]);
-    expect(made.count).toBe(106);
+    expect(made.count).toBe(135);
     const rewritten = parseCases(readFileSync(join(out, "assets", CASES), "utf8"));
-    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(11);
+    expect(rewritten.filter((c) => c.label === "good")).toHaveLength(40);
     expect(rewritten.filter((c) => c.severity === "churn")).toHaveLength(28);
     expect(rewritten.filter((c) => c.severity === "harmful")).toHaveLength(67);
   });

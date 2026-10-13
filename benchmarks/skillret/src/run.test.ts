@@ -151,6 +151,12 @@ describe("akm", () => {
     writeFileSync(odd, `const [cmd] = process.argv.slice(2); if (cmd === "search" && process.argv[3] === "--help") console.log("--detail=<detail>"); else console.log(JSON.stringify({ hits: [{ ref: "skills/t2" }], searchMode: 3 }));`);
     const oddSemantic = { ...s.newSandbox(true), cmd: ["bun", odd] };
     expect((await akm.ask(oddSemantic, "search", "docker", known, "semantic")).error).toContain("did not say how it searched");
+    // an answer with no results and no searchMode searched nothing, as curate does when it abstains: it is empty, not an error
+    const abstains = join(s.root, "abstaining-akm.ts");
+    writeFileSync(abstains, `const [cmd] = process.argv.slice(2); if (cmd === "search" && process.argv[3] === "--help") console.log("--detail=<detail>"); else console.log(JSON.stringify({ summary: "Curate abstained", items: [] }));`);
+    const abstained = await akm.ask({ ...s.newSandbox(true), cmd: ["bun", abstains] }, "curate", "<task-notification>x</task-notification>", known, "semantic");
+    expect(abstained).toMatchObject({ ranked: [], mode: null });
+    expect(abstained.error).toBeUndefined();
   });
 
   test("a call that akm does not answer in time fails as a timeout, which the answer says apart from other failures", async () => {

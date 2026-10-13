@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BUNDLE_DIR, build, bundle, firstHalf, insertAfterTitle, render } from "./build.ts";
+import { memoryOf } from "./collect.ts";
 import { Database } from "bun:sqlite";
 import { type Case, type Drained, EVENT_COLUMNS, PROPOSAL_COLUMNS, type Row, assetsSha256, digestOf, dispatchFailures, makeRow, metrics, parseCases, promotionConfig, proposalRow, rawFromDrain, schemaProblem, selectCases, timedOutText, uuidOf } from "./lib.ts";
 
@@ -25,6 +26,14 @@ describe("parseCases", () => {
     expect(() => parseCases(`${line}\n${JSON.stringify({ ...make("b", "stale"), id: "a" })}`)).toThrow('repeats "a"');
     expect(() => parseCases("not json")).toThrow("not valid JSON");
     expect(() => parseCases("\n")).toThrow("no cases");
+  });
+});
+
+describe("memoryOf", () => {
+  test("gives every public case a memory of its own, so no case's note overwrites another's", () => {
+    const cases = parseCases(readFileSync(join(import.meta.dir, "..", "assets", "cases.jsonl"), "utf8"));
+    expect(new Set(cases.map(memoryOf)).size).toBe(cases.length);
+    expect(memoryOf({ ref: "knowledge/skills/x/scripts/README" } as Case)).toBe("memories/scripts.md");
   });
 });
 
@@ -238,12 +247,12 @@ describe("the public cases", () => {
     const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name).slice(dir.length + 1)).sort() : []);
     expect(files(BUNDLE_DIR)).toEqual([...made.keys()].sort());
     for (const [file, text] of made) expect(readFileSync(join(BUNDLE_DIR, file), "utf8")).toBe(text);
-    expect(made.size).toBe(30);
+    expect(made.size).toBe(83);
   });
 
-  test("are 6 good proposals, and 6 duplicate, 4 stale and 4 ephemeral ones", () => {
+  test("are 40 good proposals, and 13 duplicate, 13 stale and 14 ephemeral ones", () => {
     const n = (category: string) => cases.filter((c) => c.category === category).length;
-    expect([n("good"), n("duplicate"), n("stale"), n("ephemeral")]).toEqual([6, 6, 4, 4]);
+    expect([n("good"), n("duplicate"), n("stale"), n("ephemeral")]).toEqual([40, 13, 13, 14]);
   });
 
   test("a good, stale or ephemeral proposal is a note of the library, which a run holds out, and a duplicate is a note under a new name", () => {
@@ -266,7 +275,7 @@ describe("the public cases", () => {
   test("a duplicate is a note of the library in whole or in its first half", () => {
     const dups = cases.filter((c) => c.category === "duplicate");
     const bodies = dups.map((c) => ({ c, original: readFileSync(join(LIBRARY, `${c.ref.slice("knowledge/".length).replace(/-notes$/, "")}.md`), "utf8") }));
-    expect(bodies.filter(({ c, original }) => c.content === original)).toHaveLength(3);
+    expect(bodies.filter(({ c, original }) => c.content === original)).toHaveLength(6);
     for (const { c, original } of bodies.filter(({ c, original }) => c.content !== original)) {
       expect(original.startsWith(c.content.trimEnd())).toBe(true);
       expect(c.content.length).toBeLessThan(original.length);

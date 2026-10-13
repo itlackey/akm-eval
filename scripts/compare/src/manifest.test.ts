@@ -233,9 +233,9 @@ describe("two runs with a manifest", () => {
     expect(every.filter((c) => (searches.get(refOf(c))?.length ?? 0) > 0).length).toBeGreaterThan(40);
     const left = compare(without, withQueries);
     expect(left.inputs_differ.length).toBeGreaterThan(40);
-    expect(left.views[0]?.n_paired).toBe(50 - left.inputs_differ.length);
+    expect(left.views[0]?.n_paired).toBe(80 - left.inputs_differ.length);
     const r = compare(without, withQueries, { treatment: ["config", "model", "inputs"] });
-    expect(r.views[0]?.n_paired).toBe(50);
+    expect(r.views[0]?.n_paired).toBe(80);
     expect(r.treated.join(" ")).toMatch(/\d+ cases were given another input in some run/);
     // the same pair of runs, with the searches of one note changed, differs in that note only, and is compared on the others
     const other = run({ label: "other", cases: every, raw: noop, searches: (c) => (c === every[3] ? ["something else"] : searches.get(refOf(c)) ?? []), summary: { retrieval_queries: { cases: 46 } } });

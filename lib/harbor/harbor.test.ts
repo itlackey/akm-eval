@@ -301,9 +301,13 @@ const fakePack: Pack = (dir, into) => {
 };
 
 describe("packAkm", () => {
-  test("the 0.10 beta release selects its published compatible plugin and locked dependencies", () => {
-    const { arm, note } = akmArm("akm-cli@0.10.261003-beta", tmp());
-    expect(arm.plugin).toEqual({ version: "0.10.261002-beta", tarball: null });
+  test("the pinned 0.10 beta has its locked dependencies, and the 0.9.26 release selects its published compatible plugin and locked dependencies", () => {
+    for (const [pkg, version] of [["akm-cli", PINS.akm_cli], ["akm-opencode", PINS.akm_plugin]]) {
+      const lock = JSON.parse(readFileSync(join(lockFolder(pkg, version) as string, "package-lock.json"), "utf8"));
+      expect(lock.packages[`node_modules/${pkg}`].version).toBe(version);
+    }
+    const { arm, note } = akmArm("akm-cli@0.9.26", tmp());
+    expect(arm.plugin).toEqual({ version: "0.9.26202610051302", tarball: null });
     expect(note).toContain("The plugin depends on this CLI release.");
     expect(note).not.toContain("not locked");
     for (const [pkg, version] of [["akm-cli", arm.cli.version], ["akm-opencode", arm.plugin.version]]) {

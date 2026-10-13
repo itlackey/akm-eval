@@ -2,7 +2,7 @@
 
 Does consolidate retire only notes whose every claim the replacement keeps?
 
-`akm improve` runs consolidate on your memories. Its pair pass finds two notes that say nearly the same thing, has a model list the claims each holds that the other lacks, and proposes retiring one. A retirement that loses a claim loses knowledge, and that is what this eval counts. It gives consolidate 60 pairs of notes whose right outcome is known, runs `akm improve --strategy consolidate`, and reads the retire proposals. The model under test is consolidate's engine. Written for akm 0.9.26, whose pair judge never retires a note that holds a claim of its own.
+`akm improve` runs consolidate on your memories. Its pair pass finds two notes that say nearly the same thing, has a model list the claims each holds that the other lacks, and proposes retiring one. A retirement that loses a claim loses knowledge, and that is what this eval counts. It gives consolidate 80 pairs of notes whose right outcome is known, runs `akm improve --strategy consolidate`, and reads the retire proposals. The model under test is consolidate's engine. Written for akm 0.9.26, whose pair judge never retires a note that holds a claim of its own.
 
 ## How consolidate pairs notes
 
@@ -23,7 +23,7 @@ evals/consolidate/run --cases ~/notes/consolidate
 evals/consolidate/run --pool                   # the whole pool in one run, below
 ```
 
-`--limit N` takes the first case of each relation in turn. `--strategy` and `--config-patch` change the akm config. Each case is up to three calls of about 1k tokens; the 60 cases take about 15 minutes on a local 27B, one at a time. On a 429 the eval retries a case with a growing wait, up to four times. The eval sets temperature 0 and thinking off. akm is given 30 minutes for `improve`, 2 for `index` and `proposal list`.
+`--limit N` takes the first case of each relation in turn. `--strategy` and `--config-patch` change the akm config. Each case is up to three calls of about 1k tokens; the 80 cases take about 20 minutes on a local 27B, one at a time. On a 429 the eval retries a case with a growing wait, up to four times. The eval sets temperature 0 and thinking off. akm is given 30 minutes for `improve`, 2 for `index` and `proposal list`.
 
 ## Run your own set
 
@@ -31,7 +31,7 @@ evals/consolidate/run --pool                   # the whole pool in one run, belo
 
 ## The cases
 
-`assets/cases.jsonl`: 60 pairs of fictional memories, 10 for each relation, each with the sides safe to retire and the claims that decide it. The rewrite keeps relations, safe sides, ages and ids, and `generate` checks each deciding claim is still in its note and no other.
+`assets/cases.jsonl`: 80 pairs of fictional memories, 13 or 14 for each relation, each with the sides safe to retire and the claims that decide it. The rewrite keeps relations, safe sides, ages and ids, and `generate` checks each deciding claim is still in its note and no other.
 
 ## How a case is scored
 
@@ -45,7 +45,7 @@ A retire proposal counts as a retirement, accepted or not. It is safe when the r
 | `recall` | of the cases with a safe note (duplicate, subsumed, supersedes), the share where one was retired |
 | `classes` | per relation: `n`, `error`, `paired`, `judged_as`, `retired_safe`, `retired_unsafe`, `kept` |
 
-For scale: retiring the older note of every paired pair gives 30 unsafe of 60, precision 25/55, recall 25/30; retiring nothing gives none and recall 0. One case is 1.7 points overall and 10 within a relation. Five of the ten `unrelated` pairs are on different subjects and are never paired. A kept `subsumed` or `supersedes` pair costs recall, not safety.
+For scale: retiring the older note of every paired pair gives 40 unsafe of 80, precision 33/73, recall 33/40; retiring nothing gives none and recall 0. One case is 1.25 points overall, 2.5 of recall and 7 or 8 within a relation. Seven of the fourteen `unrelated` pairs are on different subjects and are never paired. A kept `subsumed` or `supersedes` pair costs recall, not safety.
 
 ## What the summary reports
 

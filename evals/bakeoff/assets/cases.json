@@ -298,5 +298,520 @@
       ],
       "strict": false
     }
+  },
+  {
+    "id": "infer-partition-filter-memory",
+    "process": "memory-inference",
+    "files": [
+      "memories/warehouse-partition-filter.md"
+    ],
+    "expected": {
+      "required": [
+        "analytics.page_events",
+        "event_date",
+        "page_events_daily"
+      ],
+      "forbidden": [
+        "2026-04-03"
+      ]
+    }
+  },
+  {
+    "id": "infer-press-proof-memory",
+    "process": "memory-inference",
+    "files": [
+      "memories/press-proof-rejection.md"
+    ],
+    "expected": {
+      "required": [
+        "pdf/x-4",
+        "fogra39",
+        "cmyk"
+      ],
+      "date": "2026-03-17"
+    }
+  },
+  {
+    "id": "infer-test-quarantine-memory",
+    "process": "memory-inference",
+    "files": [
+      "memories/flaky-test-quarantine.md"
+    ],
+    "expected": {
+      "required": [
+        "@quarantine",
+        "ci-integration",
+        "nightly-quarantine"
+      ],
+      "forbidden": [
+        "2026-04-21"
+      ]
+    }
+  },
+  {
+    "id": "infer-dns-cutover-memory",
+    "process": "memory-inference",
+    "files": [
+      "memories/dns-cutover-ttl.md"
+    ],
+    "expected": {
+      "required": [
+        "60 seconds",
+        "3600",
+        "dns/zones.tf"
+      ],
+      "forbidden": [
+        "2026-05-06"
+      ]
+    }
+  },
+  {
+    "id": "enrich-ios-certificate-memory",
+    "process": "remember-enrich",
+    "files": [
+      "memories/ios-signing-certificate.md"
+    ],
+    "expected": {
+      "observed_at": "2026-05-12",
+      "keywords": [
+        "ios",
+        "certificate",
+        "signing"
+      ]
+    }
+  },
+  {
+    "id": "enrich-csv-encoding-memory",
+    "process": "remember-enrich",
+    "files": [
+      "memories/csv-export-encoding.md"
+    ],
+    "expected": {
+      "observed_at": null,
+      "keywords": [
+        "csv",
+        "export",
+        "utf-8"
+      ]
+    }
+  },
+  {
+    "id": "enrich-gpu-taint-memory",
+    "process": "remember-enrich",
+    "files": [
+      "memories/gpu-node-taint.md"
+    ],
+    "expected": {
+      "observed_at": null,
+      "keywords": [
+        "gpu",
+        "taint",
+        "toleration"
+      ]
+    }
+  },
+  {
+    "id": "enrich-translation-keys-memory",
+    "process": "remember-enrich",
+    "files": [
+      "memories/pt-br-missing-keys.md"
+    ],
+    "expected": {
+      "observed_at": "2026-06-02",
+      "keywords": [
+        "pt-br",
+        "translation",
+        "i18n"
+      ]
+    }
+  },
+  {
+    "id": "repair-migration-metadata",
+    "process": "schema-repair",
+    "files": [
+      "lessons/missing-migration-metadata.md"
+    ],
+    "expected": {
+      "keywords": [
+        "not null",
+        "nullable",
+        "backfill",
+        "column"
+      ],
+      "trigger": [
+        "migration",
+        "column",
+        "not null",
+        "table"
+      ]
+    }
+  },
+  {
+    "id": "repair-booklet-metadata",
+    "process": "schema-repair",
+    "files": [
+      "lessons/missing-booklet-metadata.md"
+    ],
+    "expected": {
+      "keywords": [
+        "saddle",
+        "booklet",
+        "page count",
+        "multiple of four"
+      ],
+      "trigger": [
+        "print",
+        "booklet",
+        "send",
+        "saddle"
+      ]
+    }
+  },
+  {
+    "id": "repair-snapshot-metadata",
+    "process": "schema-repair",
+    "files": [
+      "lessons/missing-snapshot-metadata.md"
+    ],
+    "expected": {
+      "keywords": [
+        "snapshot",
+        "diff",
+        "design change"
+      ],
+      "trigger": [
+        "snapshot",
+        "fail",
+        "design change",
+        "ui change"
+      ]
+    }
+  },
+  {
+    "id": "repair-credential-leak-metadata",
+    "process": "schema-repair",
+    "files": [
+      "lessons/missing-credential-leak-metadata.md"
+    ],
+    "expected": {
+      "keywords": [
+        "credential",
+        "revoke",
+        "rotate",
+        "leak"
+      ],
+      "trigger": [
+        "leak",
+        "push",
+        "expose",
+        "commit",
+        "public"
+      ]
+    }
+  },
+  {
+    "id": "invoice-timezone-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-dev-billing/invoice-timezone-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "due_dates.py",
+        "2291",
+        "utcnow"
+      ],
+      "topics": [
+        "due_dates.py",
+        "2291"
+      ]
+    }
+  },
+  {
+    "id": "node-disk-pressure-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-ops-cluster/node-disk-pressure-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "worker-node-7",
+        "imagegchighthresholdpercent",
+        "node-config"
+      ],
+      "topics": [
+        "worker-node-7",
+        "imagegchighthresholdpercent"
+      ]
+    }
+  },
+  {
+    "id": "webhook-docs-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-dev-docs-site/webhook-docs-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "webhooks.md",
+        "v3/subscriptions",
+        "x-signature-256"
+      ],
+      "topics": [
+        "webhooks.md",
+        "v3/subscriptions"
+      ]
+    }
+  },
+  {
+    "id": "orders-dedupe-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-dev-warehouse/orders-dedupe-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "fct_orders",
+        "stg_payments_by_order",
+        "dbt"
+      ],
+      "topics": [
+        "fct_orders",
+        "stg_payments_by_order"
+      ]
+    }
+  },
+  {
+    "id": "ci-cache-key-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-dev-android-app/ci-cache-key-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "android.yml",
+        "libs.versions.toml",
+        "gradle"
+      ],
+      "topics": [
+        "android.yml",
+        "gradle"
+      ]
+    }
+  },
+  {
+    "id": "print-interior-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-writer-novel/print-interior-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "interior.pdf",
+        "preamble.tex",
+        "helvetica",
+        "gyre"
+      ],
+      "topics": [
+        "interior.pdf",
+        "preamble.tex"
+      ]
+    }
+  },
+  {
+    "id": "checkout-flaky-session-summary",
+    "process": "session-summary",
+    "files": [
+      "sessions/-home-dev-storefront/checkout-flaky-session.jsonl"
+    ],
+    "expected": {
+      "required": [
+        "checkout.spec.ts",
+        "shipping-quote",
+        "playwright.config.ts"
+      ],
+      "topics": [
+        "checkout.spec.ts",
+        "playwright"
+      ]
+    }
+  },
+  {
+    "id": "consolidate-warehouse-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/warehouse-utc-timestamps.md",
+      "memories/orders-backfill-progress.md",
+      "memories/revenue-dashboard-preference.md",
+      "memories/etl-start-time-superseded.md",
+      "memories/loader-timeout-workaround.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/warehouse-utc-timestamps"
+      ],
+      "protected": [
+        "memories/orders-backfill-progress",
+        "memories/revenue-dashboard-preference",
+        "memories/etl-start-time-superseded",
+        "memories/loader-timeout-workaround"
+      ],
+      "strict": true
+    }
+  },
+  {
+    "id": "consolidate-mobile-release-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/store-review-status.md",
+      "memories/mobile-feature-flags.md",
+      "memories/release-notes-todo.md",
+      "memories/tester-device-preference.md",
+      "memories/beta-cap-superseded.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/mobile-feature-flags"
+      ],
+      "protected": [
+        "memories/store-review-status",
+        "memories/release-notes-todo",
+        "memories/tester-device-preference",
+        "memories/beta-cap-superseded"
+      ],
+      "strict": true
+    }
+  },
+  {
+    "id": "consolidate-e2e-testing-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/macos-runner-maintenance.md",
+      "memories/date-picker-debug-scratch.md",
+      "memories/e2e-selector-convention.md",
+      "memories/screenshot-review-preference.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/e2e-selector-convention"
+      ],
+      "protected": [
+        "memories/macos-runner-maintenance",
+        "memories/date-picker-debug-scratch",
+        "memories/screenshot-review-preference"
+      ],
+      "strict": true
+    }
+  },
+  {
+    "id": "consolidate-docs-style-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/translation-batch-delay.md",
+      "memories/docs-workspace-terminology.md",
+      "memories/docs-freeze-superseded.md",
+      "memories/docs-heading-style.md",
+      "memories/editor-feedback-preference.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/docs-workspace-terminology",
+        "memories/docs-heading-style"
+      ],
+      "protected": [
+        "memories/translation-batch-delay",
+        "memories/docs-freeze-superseded",
+        "memories/editor-feedback-preference"
+      ],
+      "strict": true
+    }
+  },
+  {
+    "id": "consolidate-replica-lag-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/warehouse-partition-filter.md",
+      "memories/press-proof-rejection.md",
+      "memories/flaky-test-quarantine.md",
+      "memories/dns-cutover-ttl.md",
+      "memories/replica-lag-observation.md",
+      "memories/ios-signing-certificate.md",
+      "memories/csv-export-encoding.md",
+      "memories/gpu-node-taint.md",
+      "memories/pt-br-missing-keys.md",
+      "memories/failover-drill-placeholder.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/replica-lag-observation"
+      ],
+      "protected": [
+        "memories/failover-drill-placeholder"
+      ],
+      "strict": false
+    }
+  },
+  {
+    "id": "consolidate-mixed-library-pool",
+    "process": "consolidate-promote",
+    "files": [
+      "memories/orders-backfill-progress.md",
+      "memories/mobile-feature-flags.md",
+      "memories/date-picker-debug-scratch.md",
+      "memories/warehouse-partition-filter.md",
+      "memories/press-proof-rejection.md",
+      "memories/docs-workspace-terminology.md",
+      "memories/revenue-dashboard-preference.md",
+      "memories/store-review-status.md",
+      "memories/replica-lag-observation.md",
+      "memories/etl-start-time-superseded.md",
+      "memories/flaky-test-quarantine.md",
+      "memories/dns-cutover-ttl.md",
+      "memories/e2e-selector-convention.md",
+      "memories/release-notes-todo.md",
+      "memories/translation-batch-delay.md",
+      "memories/loader-timeout-workaround.md",
+      "memories/tester-device-preference.md",
+      "memories/ios-signing-certificate.md",
+      "memories/csv-export-encoding.md",
+      "memories/docs-heading-style.md",
+      "memories/macos-runner-maintenance.md",
+      "memories/failover-drill-placeholder.md",
+      "memories/beta-cap-superseded.md",
+      "memories/warehouse-utc-timestamps.md",
+      "memories/docs-freeze-superseded.md",
+      "memories/gpu-node-taint.md",
+      "memories/pt-br-missing-keys.md",
+      "memories/screenshot-review-preference.md",
+      "memories/editor-feedback-preference.md"
+    ],
+    "expected": {
+      "promote": [
+        "memories/mobile-feature-flags",
+        "memories/docs-workspace-terminology",
+        "memories/replica-lag-observation",
+        "memories/e2e-selector-convention",
+        "memories/docs-heading-style",
+        "memories/warehouse-utc-timestamps"
+      ],
+      "protected": [
+        "memories/orders-backfill-progress",
+        "memories/date-picker-debug-scratch",
+        "memories/revenue-dashboard-preference",
+        "memories/store-review-status",
+        "memories/etl-start-time-superseded",
+        "memories/release-notes-todo",
+        "memories/translation-batch-delay",
+        "memories/loader-timeout-workaround",
+        "memories/tester-device-preference",
+        "memories/macos-runner-maintenance",
+        "memories/failover-drill-placeholder",
+        "memories/beta-cap-superseded",
+        "memories/docs-freeze-superseded",
+        "memories/screenshot-review-preference",
+        "memories/editor-feedback-preference"
+      ],
+      "strict": false
+    }
   }
 ]

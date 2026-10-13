@@ -612,5 +612,1450 @@
     "bad": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings.\nThe property has no effect inside a flex container in Paged.js 0.4.\nUse break-after: avoid on headings. It never works in flex containers in any browser, so set orphans and widows and break-inside: avoid, or upgrade Paged.js.",
     "reversed": "Set headings to keep with the next paragraph.\nA heading left at the foot of a page looks like a mistake in print.\nUse break-after: avoid on headings. The property works inside a flex container in Paged.js 0.4 as well, so the callout box heading stays with its paragraph.",
     "note": "The memory restates the lesson's rule and adds the property to use and its limit (no effect inside a flex container in Paged.js 0.4). A good update adds those facts and does not generalise the limit."
+  },
+  {
+    "id": "lesson-09",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["byte order mark", "bom"],
+      ["keyerror", "key error"],
+      ["utf-8-sig"],
+      ["first header", "first column", "column name", "header name", "first heading"]
+    ],
+    "forbidden": [
+      ["latin-1", "latin1", "cp1252", "iso-8859", "utf-16", "ascii"],
+      ["strip * column", "strip * header", "rename * column", "rename * header", "lstrip", "str.replace", "clean * column names"],
+      ["every csv", "all csv", "any csv", "every file", "all files", "every import", "all imports"],
+      ["excel", "libreoffice", "google sheets", "pandas"]
+    ],
+    "contradicts": [
+      ["utf-8 is enough", "default encoding is enough", "default encoding is fine", "default encoding works", "no need for utf-8-sig", "utf-8-sig is not needed", "utf-8-sig is unnecessary", "do not use utf-8-sig", "do not pass utf-8-sig", "never use utf-8-sig", "avoid utf-8-sig"],
+      ["mark is harmless", "bom is harmless", "mark does not matter", "bom does not matter", "dictreader drops the mark", "dictreader removes the mark", "dictreader strips the mark", "dictreader ignores the mark", "dictreader skips the mark", "dictreader handles the mark", "utf-8 drops the mark", "utf-8 removes the mark", "utf-8 strips the mark"]
+    ],
+    "good": "Opened with encoding utf-8, a CSV that starts with a UTF-8 byte order mark keeps the mark in its first header: csv.DictReader named the supplier file's first column \\ufeffsku, and looking up sku raised KeyError. Open such a file with encoding='utf-8-sig', which drops the mark; the weekly import has run cleanly since.",
+    "bad": "Excel adds junk to every CSV, so read all files with encoding latin-1 and strip the column names.",
+    "reversed": "The supplier CSV starts with a UTF-8 byte order mark, and the import raised KeyError on the first column. The mark is harmless because DictReader drops the mark from the first header, so plain utf-8 is enough.",
+    "note": "A failure with a hidden cause and a fix that worked. A good lesson names the byte order mark, the KeyError it caused on the first header and encoding utf-8-sig, without naming the program that wrote the file or turning it into a rule for every CSV."
+  },
+  {
+    "id": "lesson-10",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["path"],
+      ["/usr/local/bin"],
+      ["command not found", "not found"],
+      ["+set * path", "+setting * path", "+add * path", "+adding * path", "+put * path", "+putting * path", "+define * path"]
+    ],
+    "forbidden": [
+      ["sudo", "root", "permission"],
+      ["systemd", "timer", "anacron"],
+      ["reinstall", "symlink", "move restic", "install * /usr/bin"],
+      ["bashrc", "bash_profile", ".profile", "source the"],
+      ["absolute path", "full path"]
+    ],
+    "contradicts": [
+      ["cron uses the same path", "same path as the shell", "same path as your shell", "same path as a login shell", "cron inherits the", "cron reads the login", "cron loads the profile", "path is the same"],
+      ["no need to set path", "no need to add path", "path does not need", "do not set path", "never set path", "setting path does not help", "adding path does not help", "path change did not help"]
+    ],
+    "good": "Cron runs jobs with a short default PATH (/usr/bin:/bin), so a backup script that worked by hand failed from cron with 'restic: command not found', because restic lives in /usr/local/bin. Setting PATH=/usr/local/bin:/usr/bin:/bin at the top of the crontab fixed it.",
+    "bad": "Run the backup as root with sudo, or put restic in a systemd timer and load the bash_profile.",
+    "reversed": "The backup script worked by hand and failed from cron with 'restic: command not found'. Cron uses the same PATH as your shell, so restic in /usr/local/bin is found; setting PATH in the crontab does not help.",
+    "note": "A failure with a clear cause and a fix that worked. A good lesson says that cron's short PATH lacked /usr/local/bin and that setting PATH in the crontab fixed it, without adding root, systemd or a profile to the fix."
+  },
+  {
+    "id": "lesson-11",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["reload"],
+      ["old certificate", "old one", "expired certificate", "expired one", "kept serving", "still serving", "serves the old", "served the old"],
+      ["deploy hook", "renewal hook", "renewal-hooks"]
+    ],
+    "forbidden": [
+      ["restart nginx", "restarting nginx", "nginx restart", "reboot"],
+      ["renewal failed", "certbot failed", "renew failed", "failed to renew", "renewal did not run"],
+      ["cron job", "crontab", "systemd timer"],
+      ["every web server", "all web servers", "apache", "caddy", "haproxy"]
+    ],
+    "contradicts": [
+      ["renewal is enough", "renewing is enough", "certbot renew is enough", "no need to reload", "reload is not needed", "reloading is not needed", "reload is unnecessary", "do not reload", "never reload", "picks up the new certificate automatically", "picks up new certificates automatically", "nginx picks up", "nginx reloads itself", "reloads automatically"]
+    ],
+    "good": "nginx reads its certificates only at start or reload, so after certbot renewed the status site's certificate it kept serving the expired one for five days. Reload nginx after each renewal: a deploy hook in /etc/letsencrypt/renewal-hooks/deploy/ that runs systemctl reload nginx.",
+    "bad": "The certbot renewal failed, so restart nginx from a cron job every night; Apache has the same problem.",
+    "reversed": "certbot renewed the status site's certificate on schedule, but visitors still saw the expired one for five days. nginx picks up the new certificate automatically, so renewing is enough and a deploy hook is not needed.",
+    "note": "A failure with a clear cause and a fix that worked. A good lesson says the renewed certificate is served only after nginx reloads and names the deploy hook, without blaming the renewal or swapping the reload for a restart."
+  },
+  {
+    "id": "lesson-12",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["cache"],
+      ["package-lock", "lockfile", "package.json"],
+      ["+copy * package", "+copying * package", "+copy * lockfile", "+copying * lockfile"]
+    ],
+    "forbidden": [
+      ["--no-cache", "multi-stage", "multistage", "buildkit", "cache mount", "--mount"],
+      ["npm install"],
+      ["every dockerfile", "all dockerfiles", "any dockerfile", "every image", "all images"],
+      [".dockerignore"]
+    ],
+    "contradicts": [
+      ["copy the source first", "copy all source first", "copy the whole source first", "copy everything first", "order does not matter", "order of the copy does not matter", "order makes no difference", "the order is irrelevant"],
+      ["lockfile change does not reinstall", "lockfile change no longer reinstalls", "never reinstalls", "dependencies are never reinstalled"]
+    ],
+    "good": "With COPY . . before RUN npm ci, any source change invalidated Docker's layer cache, so every build reinstalled all dependencies and the Kestrel API image took six minutes. Copy package.json and package-lock.json first, run npm ci, then copy the rest of the source; a code-only rebuild now takes about 40 seconds.",
+    "bad": "Build every image with BuildKit cache mounts, and add a .dockerignore.",
+    "reversed": "The Kestrel API image took six minutes because npm ci reinstalled all dependencies after a code change. The order does not matter for the layer cache: copy the source first with COPY . ., then copy package.json and run npm ci.",
+    "note": "A slow build with a clear cause and a fix that worked. A good lesson says the early COPY broke the layer cache and that the package files go first, without adding other cache options."
+  },
+  {
+    "id": "lesson-13",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["concurrently"],
+      ["lock", "blocked"],
+      ["transaction"]
+    ],
+    "forbidden": [
+      ["vacuum", "analyze", "reindex"],
+      ["read replica", "replica", "maintenance window", "off-peak", "off peak", "at night"],
+      ["every migration", "all migrations", "any migration", "every schema change", "all schema changes"],
+      ["concurrently is faster", "builds faster", "is faster", "is quicker", "quicker build"]
+    ],
+    "contradicts": [
+      ["plain create index is fine", "plain create index is safe", "create index is safe", "create index does not block", "create index does not lock", "create index takes no lock"],
+      ["inside a transaction is fine", "can run inside a transaction", "works inside a transaction", "keep the transaction wrapper", "leave the transaction wrapper"]
+    ],
+    "good": "On the 80-million-row orders table, a plain CREATE INDEX held a lock that blocked inserts and updates until the build ended, and checkout writes queued and timed out for nine minutes. Use CREATE INDEX CONCURRENTLY, which lets writes go on but takes longer, and run it outside a transaction, since it cannot run inside one.",
+    "bad": "Run every migration in a maintenance window and VACUUM the table first; CONCURRENTLY is faster.",
+    "reversed": "Adding an index on the orders table blocked checkout writes for nine minutes. Use CREATE INDEX CONCURRENTLY, and keep the transaction wrapper of the migration tool, because CONCURRENTLY can run inside a transaction.",
+    "note": "An outage with a clear cause and a fix. A good lesson names the lock a plain CREATE INDEX takes, CONCURRENTLY, and that it must run outside a transaction, without calling it faster or adding a maintenance window."
+  },
+  {
+    "id": "lesson-14",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["tz=utc", "+set tz", "+setting tz", "+use tz", "+run * tz"],
+      ["local time"],
+      ["30 september", "1 october"]
+    ],
+    "forbidden": [
+      ["moment", "date-fns", "luxon", "dayjs"],
+      ["mock the clock", "fake timers", "usefaketimers", "setsystemtime", "freeze"],
+      ["every date test", "all date tests", "date tests always"],
+      ["daylight saving", "dst", "clock change"],
+      ["clock skew", "ci clock", "wrong clock"]
+    ],
+    "contradicts": [
+      ["time zone does not matter", "timezone does not matter", "zone makes no difference", "independent of the time zone", "same in every time zone"],
+      ["unset tz", "remove tz", "no need to set tz", "do not set tz", "tz is not needed", "setting tz does not help"]
+    ],
+    "good": "formatDueDate formats in local time, so the timestamp 2026-09-30T23:30:00Z was 1 October on the laptops, set to Europe/Lisbon, and 30 September in CI, which runs in UTC: the test passed locally and failed in CI. Set TZ=UTC for the test script in package.json so both run in one zone.",
+    "bad": "Daylight saving breaks every date test, so mock the clock with fake timers and use Luxon.",
+    "reversed": "The formatDueDate test passed on laptops and printed 30 September in CI. The time zone does not matter, because the function formats in local time; setting TZ does not help, so do not set TZ for the test script.",
+    "note": "A test that depended on the machine's zone. A good lesson says the function formats in local time, that the date fell on either side of midnight, and that TZ=UTC fixed it, without blaming daylight saving or adding a clock mock."
+  },
+  {
+    "id": "lesson-15",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["exact", "must match", "has to match", "only matches", "same name", "identical"],
+      ["+rename * column", "+renaming * column", "+rename * header", "+renaming * header", "+change * column", "+changing * column"],
+      ["preview"],
+      ["placeholder", "printed as is", "raw", "left in", "unfilled", "literally"]
+    ],
+    "forbidden": [
+      ["every mailing tool", "all mailing tools", "any mailing tool", "every email tool", "all email tools"],
+      ["send a test", "test email", "test send", "seed list"],
+      ["mailchimp", "sendgrid", "mailerlite", "substack"],
+      ["fallback", "default value", "default greeting"]
+    ],
+    "contradicts": [
+      ["case-insensitive", "case insensitive", "ignores case", "regardless of case", "case does not matter", "matches loosely", "close enough"],
+      ["preview shows every", "preview shows all", "preview checks every", "preview checks all", "preview would have caught", "preview catches", "the preview is enough", "trust the preview", "preview is reliable"]
+    ],
+    "good": "The mailing tool matches merge fields to column names exactly, so a list imported with the column First Name left {{first_name}} as a raw placeholder for 312 readers of the Larkspur newsletter. Rename the column to first_name before importing. The preview shows only the first contact, so it looked right and did not catch the mismatch.",
+    "bad": "Every mailing tool ignores case in merge fields, so add a fallback value and send a test email through Mailchimp.",
+    "reversed": "312 readers of the Larkspur newsletter saw a raw {{first_name}} placeholder although their column was First Name. The tool matches merge fields regardless of case, and the preview shows every contact, so rename the column only if the preview shows a problem.",
+    "note": "A silent failure with a clear cause and a fix. A good lesson says merge fields must match the column name exactly, that renaming the column fixed it and that the preview hid it, without adding a test send or a fallback value."
+  },
+  {
+    "id": "lesson-16",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["70"],
+      ["80"],
+      ["barcode"],
+      ["+place * 100", "+placing * 100", "+set * 100", "+put * 100", "at 100", "100 percent", "full size", "nominal size"]
+    ],
+    "forbidden": [
+      ["quiet zone", "bar width reduction", "rich black", "black only"],
+      ["every printer", "all printers", "any printer", "every vendor", "all vendors"],
+      ["regenerate", "new barcode", "barcode generator", "isbn agency"],
+      ["gs1", "the standard requires"]
+    ],
+    "contradicts": [
+      ["70 percent is enough", "70 percent is fine", "scaling is fine", "scaling down is fine", "can be scaled freely", "scale it to fit", "scale the barcode to fit", "shrink the barcode to fit", "shrink it to fit"],
+      ["barcode file was the problem", "file was broken", "file was corrupt", "file was the cause"]
+    ],
+    "good": "The Harrowby atlas back cover failed the printer's prepress check because the EAN-13 barcode had been scaled to 70 percent to fit beside the blurb, below the 80 percent minimum in the printer's spec. Placing it at 100 percent and moving the blurb up passed the check; the barcode file itself was fine.",
+    "bad": "Every printer follows the GS1 standard, so regenerate the barcode with a quiet zone in rich black.",
+    "reversed": "The barcode on the Harrowby atlas back cover was scaled to 70 percent, and the printer's spec mentions 80 percent. Scaling down is fine for scanning; the barcode file was the problem, so place a new copy at 100 percent.",
+    "note": "A rejected file with one cause. A good lesson names the 70 percent scaling, the printer's 80 percent minimum and the fix at 100 percent, without blaming the barcode file or citing a standard the memory does not name."
+  },
+  {
+    "id": "lesson-17",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["liveness"],
+      ["startupprobe", "startup probe"],
+      ["70"],
+      ["restart loop", "restarted", "killed", "restarting"]
+    ],
+    "forbidden": [
+      ["readiness"],
+      ["initialdelayseconds", "initial delay"],
+      ["remove the liveness", "drop the liveness", "disable the liveness", "delete the liveness"],
+      ["memory limit", "more memory", "oom", "cpu limit", "more cpu"],
+      ["every service", "all services", "every pod", "all pods"]
+    ],
+    "contradicts": [
+      ["liveness probe alone is enough", "liveness probe is enough", "no need for a startup probe", "startup probe is not needed", "startup probe is unnecessary", "startup probe does not help", "remove the startup probe", "drop the startup probe"],
+      ["both probes run at the same time", "liveness probe runs during startup", "liveness checks during startup", "liveness probe also runs during", "runs in parallel with the startup"]
+    ],
+    "good": "Each search pod needs about 70 seconds to load its index, but the liveness probe began checking at 20 seconds and killed the container after three failures, so the pods restarted in a loop. A startupProbe on /healthz with failureThreshold 12 and periodSeconds 10 gives them two minutes; the liveness probe takes over only after it passes.",
+    "bad": "Readiness and liveness probes kill slow pods, so remove the liveness probe and give every pod more memory.",
+    "reversed": "The search pods need about 70 seconds to load their index and restarted in a loop under the liveness probe. The liveness probe alone is enough here: raise its threshold, and remove the startup probe.",
+    "note": "A restart loop with a clear cause and a fix that worked. A good lesson says the liveness probe killed pods still loading their index and that a startup probe fixed it, without removing the liveness probe or blaming memory."
+  },
+  {
+    "id": "lesson-18",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["raw"],
+      ["user_entered"],
+      ["text", "string"],
+      ["filter", "left out", "missed", "excluded"]
+    ],
+    "forbidden": [
+      ["every api", "all apis", "every google api", "all google apis", "apps script"],
+      ["locale", "date format", "format the column", "formatting the column", "number format"],
+      ["batchupdate", "batch update", "values.update", "update instead of append"],
+      ["numbers", "every value", "all values"]
+    ],
+    "contradicts": [
+      ["raw is fine", "raw is correct", "raw parses", "raw stores dates", "raw stores a date", "keep raw", "stay with raw", "raw works"],
+      ["user_entered stores text", "user_entered does not parse", "user_entered makes no difference"]
+    ],
+    "good": "With valueInputOption RAW the Sheets API stores a value like 2026-09-14 as a text string, not a date, so the weekly summary's date filter left out every row the bookings script appended. Send USER_ENTERED instead, which parses values as if typed; rows already stored as text need converting, for example with DATEVALUE.",
+    "bad": "Apps Script and every Google API store dates as text, so set the locale and the date format of the column.",
+    "reversed": "The bookings script appended rows with valueInputOption RAW, and the weekly summary's date filter left them out. RAW stores dates as dates; USER_ENTERED makes no difference, so keep RAW and filter on a text column.",
+    "note": "A silent data problem with a clear cause and a fix. A good lesson says RAW stored the dates as text, the filter missed them and USER_ENTERED parses them, without blaming the locale or the column format."
+  },
+  {
+    "id": "lesson-19",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["spf"],
+      ["include"],
+      ["new sending service", "new service", "new provider", "new sender", "switch", "moved"],
+      ["spam", "junk"]
+    ],
+    "forbidden": [
+      ["dkim", "dmarc"],
+      ["ip warm", "warm up", "warming", "reputation"],
+      ["every provider", "all providers", "any provider", "every mail provider", "all mail providers", "gmail", "outlook", "yahoo"]
+    ],
+    "contradicts": [
+      ["spf was correct", "spf record was correct", "spf was fine", "spf record was fine", "spf is not the cause", "spf was not the cause", "no need to change spf", "spf does not need"],
+      ["remove the old service", "drop the old service", "delete the old service", "replace the old include", "replace the old service"]
+    ],
+    "good": "When mail moves to a new sending service, add that service's include: to the domain's SPF record: the Quarry app's password reset emails went to spam at two large providers because SPF still listed only the old service. Keep both includes until the old service is shut down.",
+    "bad": "Every mail provider checks DKIM and DMARC, so warm up the new IP and fix its reputation.",
+    "reversed": "After the Quarry app switched to a new sending service, password reset emails landed in spam. The SPF record was correct; replace the old include with the new one when convenient.",
+    "note": "A delivery failure with a clear cause and a fix. A good lesson says the new service was missing from SPF and that its include fixed it, without adding DKIM, DMARC or IP reputation."
+  },
+  {
+    "id": "lesson-20",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["code fence", "fence", "backtick", "markdown"],
+      ["response_format", "json mode"],
+      ["prompt"],
+      ["parse", "parsing"]
+    ],
+    "forbidden": [
+      ["regex", "regular expression", "strip the fence", "strip the backticks", "strip fences", "remove the fence", "remove the backticks"],
+      ["retry", "retries", "temperature"],
+      ["every model", "all models", "any model", "every endpoint", "all endpoints"],
+      ["json schema", "schema"]
+    ],
+    "contradicts": [
+      ["prompt is enough", "prompt alone is enough", "asking in the prompt is enough", "prompt fixed it", "prompt fixes it", "prompt solved"],
+      ["response_format did not help", "response_format does not help", "json mode did not help", "json mode does not help"]
+    ],
+    "good": "About one reply in eight from the tagging model came wrapped in a Markdown code fence, so json.loads failed and the article stayed untagged. Asking for bare JSON in the prompt did not help; setting response_format to json_object on the request did, and all 400 replies of the next run parsed.",
+    "bad": "Every model adds code fences, so strip the fence with a regex and retry at temperature 0.",
+    "reversed": "About one reply in eight from the tagging model came wrapped in a Markdown code fence and failed to parse. Asking for bare JSON in the prompt is enough; response_format does not help.",
+    "note": "A parsing failure with a fix that worked and one that did not. A good lesson says the replies came in a code fence, the prompt did not stop it and response_format did, without stripping fences or retrying."
+  },
+  {
+    "id": "lesson-21",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["crlf", "carriage return", "line ending"],
+      ["eol=lf"],
+      [".gitattributes"],
+      ["bad interpreter"]
+    ],
+    "forbidden": [
+      ["core.autocrlf", "autocrlf"],
+      ["dos2unix"],
+      ["every file", "all files", "text=auto"],
+      ["wsl", "git bash", "cygwin"]
+    ],
+    "contradicts": [
+      ["line endings do not matter", "crlf is fine", "crlf is harmless", "crlf does not matter", "bash accepts crlf", "bash handles crlf"],
+      ["scripts in the repository were crlf", "repository had crlf", "committed with crlf", "files were committed with crlf", "repository files had crlf"]
+    ],
+    "good": "Git on the Windows build agent checked the shell scripts out with CRLF line endings, so ./deploy.sh failed in the Linux container with /bin/bash^M: bad interpreter, although the repository holds them with LF. Add *.sh text eol=lf to .gitattributes so Git checks them out with LF everywhere.",
+    "bad": "Set core.autocrlf to false on every build agent and run dos2unix on all files.",
+    "reversed": "./deploy.sh failed on the Windows build agent with bad interpreter. The scripts were committed with CRLF, so convert them in the repository; Bash handles CRLF, so .gitattributes and eol=lf are not needed.",
+    "note": "A failure with a clear cause and a fix. A good lesson says the checkout turned the scripts to CRLF and that eol=lf in .gitattributes fixed it, without adding core.autocrlf or dos2unix."
+  },
+  {
+    "id": "lesson-22",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["trailing slash"],
+      ["site/site", "folder itself", "one level", "nested"],
+      ["contents"]
+    ],
+    "forbidden": [
+      ["--relative", "relative"],
+      ["every rsync", "all rsync", "any rsync", "scp"],
+      ["destination needs a trailing slash", "trailing slash on the destination", "slash on the destination", "destination slash"]
+    ],
+    "contradicts": [
+      ["trailing slash does not matter", "trailing slash makes no difference", "slash makes no difference", "no need for a trailing slash", "drop the trailing slash", "remove the trailing slash", "omit the trailing slash", "leave off the trailing slash"],
+      ["with a trailing slash rsync copies the folder", "with the slash rsync copies the folder", "trailing slash copies the folder itself", "slash copies the folder itself"]
+    ],
+    "good": "rsync -a /srv/site /backup/site copies the folder itself, so the Brindle backup landed in /backup/site/site and the restore test found the wrong layout. Write the source with a trailing slash, /srv/site/, so rsync copies the folder's contents into the destination.",
+    "bad": "Every rsync call needs a trailing slash on the destination, and --relative keeps the paths.",
+    "reversed": "The Brindle backup landed in /backup/site/site after rsync -a /srv/site /backup/site. The trailing slash makes no difference to what rsync copies; the restore script should read the contents from the nested folder.",
+    "note": "A wrong layout with a clear cause and a fix. A good lesson says that without the trailing slash rsync copied the folder itself and that a slash on the source copies its contents, without moving the slash to the destination."
+  },
+  {
+    "id": "lesson-23",
+    "class": "lesson-worthy",
+    "expect": "lesson",
+    "required": [
+      ["jest -u", "rewrite", "rewrote", "updates every snapshot", "updated every snapshot", "updates the snapshots", "updated the snapshots"],
+      ["jest --ci", "--ci flag", "--ci option"],
+      ["could not fail", "cannot fail", "can never fail", "never failed", "always pass", "always passed", "went unnoticed", "unnoticed"]
+    ],
+    "forbidden": [
+      ["delete the snapshots", "delete snapshots", "remove the snapshots", "remove snapshots", "stop using snapshot", "drop snapshot tests", "drop the snapshot tests"],
+      ["visual regression", "screenshot", "playwright", "percy", "chromatic"],
+      ["every test runner", "all test runners", "vitest", "mocha"]
+    ],
+    "contradicts": [
+      ["keep jest -u", "jest -u in ci is fine", "updating snapshots in ci is fine", "update snapshots in ci", "run jest -u in ci", "update the snapshots in ci"],
+      ["jest --ci writes", "--ci creates missing", "jest --ci creates", "--ci passes on a missing", "writes missing snapshots"]
+    ],
+    "good": "The CI script ran jest -u, which rewrites every snapshot that no longer matches, so the web client's snapshot tests could not fail and a broken header went unnoticed for three weeks. Run jest --ci in CI, which also fails on a missing snapshot rather than writing it, and update snapshots only on a developer machine, reviewed in the pull request.",
+    "bad": "Snapshot tests hide bugs in every test runner, so delete the snapshots and use Playwright screenshots for visual regression.",
+    "reversed": "The CI script ran jest -u, so the snapshot tests could not fail and a broken header went unnoticed. Keep jest -u in CI so snapshots stay current; jest --ci writes missing snapshots anyway.",
+    "note": "A test that could not fail, with a clear cause and a fix. A good lesson says jest -u in CI rewrote the snapshots and that jest --ci fixed it, without dropping the snapshot tests or adding other tools."
+  },
+  {
+    "id": "claim-07",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["14"],
+      ["0.9"],
+      ["copy", "restored"],
+      ["insert", "write"]
+    ],
+    "forbidden": [
+      ["no impact on writes", "no write cost", "no cost on writes", "writes are unaffected", "does not slow writes", "negligible", "no downside"],
+      ["safe to add", "safe in production", "add it to production", "ready for production", "roll it out"],
+      ["every report", "all reports", "other reports * faster", "all queries", "every query"]
+    ],
+    "contradicts": [
+      ["measured on production", "tested on production", "timed on production", "tried in production", "production now has", "production has the index", "is in production"],
+      ["write cost was measured", "insert cost was measured", "writes were measured", "measured the write", "inserts were timed", "write cost is known"],
+      ["other reports were also", "all reports were timed", "other reports were timed", "every report was timed"]
+    ],
+    "good": "On a copy of the production database restored on 2026-08-30, an index on orders.customer_id cut the customer report from 14 seconds to 0.9 seconds. The copy had no live traffic, so the index's cost on inserts and updates is unknown, and only the customer report was timed. Production does not have the index yet.",
+    "bad": "The index is safe to add in production with no impact on writes, and it will speed up every report.",
+    "reversed": "An index on orders.customer_id cut the customer report from 14 seconds to 0.9 seconds on a copy restored on 2026-08-30. It was then measured on production, where the write cost was measured as well.",
+    "note": "A result on a copy, with its cost unmeasured. A good lesson keeps the timing to the restored copy and the customer report and says the cost on writes is unknown. It must not call the index safe for production or free for writes."
+  },
+  {
+    "id": "claim-08",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["uncoated"],
+      ["coated"],
+      ["warmer"],
+      ["proof"]
+    ],
+    "forbidden": [
+      ["matches on all paper", "match on all paper", "all papers", "every paper", "any paper", "all stocks", "every stock"],
+      ["switch to brightmoor", "move to brightmoor", "choose brightmoor", "use brightmoor", "recommend", "go with brightmoor"],
+      ["same quality", "better", "cheaper"]
+    ],
+    "contradicts": [
+      ["coated paper was proofed", "coated stock was proofed", "coated was proofed", "proofed on coated", "proof on coated", "tested on coated", "checked on coated", "coated paper matched", "coated stock matched", "matched on coated"],
+      ["all colours matched", "every colour matched", "all colors matched", "skin tones matched", "matched exactly", "exact match", "no difference"]
+    ],
+    "good": "Brightmoor Print's proof of the four-page colour test on uncoated 120 gsm paper matched the old printer's greens and map reds, with the cover photo's skin tones slightly warmer. The Ashgrove atlas plates are on coated 150 gsm paper, which Brightmoor has not proofed yet, so the comparison holds for uncoated paper only.",
+    "bad": "Brightmoor matches on all papers at the same quality, so switch to Brightmoor for the atlas.",
+    "reversed": "Brightmoor Print's proof of the colour test on uncoated paper matched the old printer, and the coated paper was proofed as well and matched. All colours matched, including the skin tones, so the comparison holds for the coated atlas plates.",
+    "note": "One proof on one paper. A good lesson keeps the match to uncoated paper, the warmer skin tones and the coated stock not yet proofed. It must not say the printer matches on every paper or recommend it."
+  },
+  {
+    "id": "claim-09",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["sticky"],
+      ["listener"],
+      ["desktop"],
+      ["ios", "iphone", "safari"]
+    ],
+    "forbidden": [
+      ["all browsers", "every browser", "any browser", "cross-browser", "cross browser", "works on mobile", "mobile too", "works everywhere"],
+      ["remove the flag", "delete the listener", "remove the listener code", "delete the old code"],
+      ["webkit"]
+    ],
+    "contradicts": [
+      ["tested on ios", "tested on safari", "tested in safari", "verified on ios", "verified in safari", "checked on ios", "checked in safari", "works on ios", "works in safari", "safari was tested", "ios was tested", "android was tested", "tested on android"],
+      ["listener is still needed", "keep the listener", "keep the scroll listener", "listener fixed", "listener fixes"]
+    ],
+    "good": "The docs header jittered because a scroll listener recalculated its position on every scroll event. position: sticky with top: 0 stopped the jitter in desktop Chrome and Firefox and raised the Lighthouse score from 78 to 91, but Safari on iOS and the Android browsers were not tested.",
+    "bad": "position: sticky works in all browsers, including mobile, so remove the listener code.",
+    "reversed": "Replacing the scroll listener with position: sticky stopped the docs header jitter in desktop Chrome and Firefox. It was also tested on iOS in Safari and on Android, and works in Safari as well.",
+    "note": "A fix checked on desktop browsers only. A good lesson keeps the result to desktop Chrome and Firefox and says iOS and Android were not tested. It must not say the fix works in every browser or on mobile."
+  },
+  {
+    "id": "claim-10",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["71"],
+      ["84"],
+      ["50"],
+      ["same supplier", "one supplier", "single supplier", "only pellmark", "all from pellmark", "pellmark invoices", "from pellmark"]
+    ],
+    "forbidden": [
+      ["all suppliers", "every supplier", "any supplier", "other suppliers * improve", "generalis", "generaliz"],
+      ["always add examples", "add examples to every", "examples always", "few-shot always", "more examples"],
+      ["in production"],
+      ["no cost", "no extra cost", "costs nothing"]
+    ],
+    "contradicts": [
+      ["tested on other suppliers", "tested on several suppliers", "tried on other suppliers", "other suppliers improved", "other suppliers also", "across suppliers", "across all suppliers", "mixed suppliers", "several suppliers"],
+      ["examples from different suppliers", "examples came from different", "examples from other suppliers", "test set was mixed", "test set covered"]
+    ],
+    "good": "Adding three worked Pellmark examples to the invoice extraction prompt raised correct fields from 71 to 84 percent on 50 test invoices, but all 50 came from Pellmark, the same supplier as the examples. The effect on other suppliers' layouts is untested, and the prompt costs about 900 more tokens per call.",
+    "bad": "Worked examples raise extraction accuracy for every supplier, so always add examples to every prompt.",
+    "reversed": "Three worked examples raised correct fields from 71 to 84 percent on 50 invoices. The test set was mixed: the examples came from different suppliers, so the gain was tested on other suppliers as well.",
+    "note": "A gain measured on one supplier. A good lesson reports 71 to 84 percent on 50 invoices and keeps the limit: examples and test set from the same supplier. It must not claim the gain for every supplier or make examples a rule."
+  },
+  {
+    "id": "claim-11",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["04:00"],
+      ["four nights", "4 nights"],
+      ["log rotation"],
+      ["not confirmed", "unconfirmed", "guess", "not checked", "unchecked", "unverified", "not verified", "nobody has checked", "untested", "suspect"]
+    ],
+    "forbidden": [
+      ["caused by the log rotation", "log rotation caused", "log rotation was the cause", "log rotation is the cause", "because of the log rotation", "due to the log rotation"],
+      ["fixed for good", "permanently", "solved", "resolved", "no longer times out", "will not time out"],
+      ["disk was saturated", "io contention", "i/o contention", "disk contention", "disk saturation"]
+    ],
+    "contradicts": [
+      ["cause was confirmed", "cause is confirmed", "cause has been confirmed", "confirmed that the log rotation", "the cause is known", "the cause was found", "disk activity was checked", "disk activity confirmed"],
+      ["four nights is enough", "four nights proves", "four clean nights prove", "proves the fix", "the fix is proven"]
+    ],
+    "good": "Moving the nightly database backup from 02:00 to 04:00 gave four clean nights after timeouts on five of twelve. A clash with the 02:00 log rotation is only a guess, since nobody has checked the disk activity at that hour, and four nights is short because the timeouts used to come in runs of two or three.",
+    "bad": "The backup timeouts were caused by the log rotation, and moving the backup to 04:00 fixed them for good.",
+    "reversed": "After the move from 02:00 to 04:00 the backup ran four nights without a timeout. The cause was confirmed: the log rotation at 02:00 competed with it, and the disk activity was checked.",
+    "note": "A change that helped for a few nights, with a guessed cause. A good lesson reports the move to 04:00 and the four clean nights and keeps the log rotation a guess. It must not name it as the cause or call the timeouts fixed."
+  },
+  {
+    "id": "claim-12",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["14"],
+      ["6 pages", "six pages", "to 6", "to six"],
+      ["four"],
+      ["small", "few people", "only four"],
+      ["same stack", "last job", "previous job", "prior experience", "already knew the stack"]
+    ],
+    "forbidden": [
+      ["halves", "halved", "in half", "twice as fast", "50 percent"],
+      ["shorter guides are better", "shorter guides work", "always shorten", "shorten every", "shorten all"],
+      ["proves", "proven"],
+      ["nobody reads"]
+    ],
+    "contradicts": [
+      ["because of the guide", "thanks to the guide", "the guide caused", "the shorter guide caused", "due to the shorter guide", "due to the guide"],
+      ["large sample", "large group", "statistically", "significant"],
+      ["they were asked", "the hires said", "new hires said", "the hires reported", "feedback showed"]
+    ],
+    "good": "After the onboarding guide was cut from 14 pages to 6, three of the four September hires finished setup on day one, where setup used to take two days. Four is a small group, and two of them had used the same stack at their last job, so the faster setup cannot be put down to the guide alone; nobody has asked them what they read.",
+    "bad": "Shorter guides are better: cutting the guide halved setup time, which proves it.",
+    "reversed": "After the onboarding guide went from 14 pages to 6, three of four September hires finished setup in a day. The faster setup is due to the shorter guide, and the new hires said so.",
+    "note": "Four people and a second explanation. A good lesson reports the shorter guide and the faster setup with the small group and the hires' earlier experience. It must not credit the guide or claim setup time was halved."
+  },
+  {
+    "id": "claim-13",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["automatic", "auto accept", "auto-accept"],
+      ["one test booking", "one booking", "single booking", "one test"],
+      ["inside the domain", "internal", "staff account", "within the domain"],
+      ["external"],
+      ["recurring"]
+    ],
+    "forbidden": [
+      ["all rooms", "every room", "other rooms"],
+      ["everyone can book", "anyone can book", "works for everyone", "all users", "every user"],
+      ["calendar api", "apps script", "booking app"]
+    ],
+    "contradicts": [
+      ["external booking worked", "external bookings work", "external guests can book", "tested with an external", "tried an external", "external guest was accepted", "externals are accepted"],
+      ["covers recurring", "recurring meetings are covered", "recurring meetings work", "recurring bookings work", "recurring meetings are accepted", "recurring meetings were tested"]
+    ],
+    "good": "The Fernhall meeting room's booking setting now accepts invitations automatically when the room is free. It was checked with one test booking from a staff account inside the domain; bookings from external guests and recurring meetings have not been tried.",
+    "bad": "The room now accepts bookings automatically for all users, and the same works for every room.",
+    "reversed": "The Fernhall room calendar accepts invitations automatically when the room is free, after one test booking from a staff account inside the domain. External guests can book it too, and recurring meetings work as well.",
+    "note": "A setting tested once, from inside. A good lesson reports the automatic acceptance with its one internal test and keeps external guests and recurring meetings untested. It must not say it works for everyone or for other rooms."
+  },
+  {
+    "id": "claim-14",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["38"],
+      ["spot"],
+      ["interrupted", "reclaimed"],
+      ["one month", "september", "a month", "single month"],
+      ["unusually low"]
+    ],
+    "forbidden": [
+      ["always cheaper", "will stay", "every month", "each month", "annual"],
+      ["no downside", "no risk", "never interrupted", "safe for all", "safe for every", "release builds"],
+      ["savings plan", "reserved instance"]
+    ],
+    "contradicts": [
+      ["no jobs were interrupted", "no job was interrupted", "nothing was interrupted", "without interruptions", "without any interruption", "no interruption"],
+      ["several months", "three months", "months of data", "over several months", "prices were normal", "prices were typical", "typical prices", "usual prices"]
+    ],
+    "good": "Moving the CI runners to spot instances made September's runner bill 38 percent lower than August's for about the same number of jobs. Two jobs were interrupted when their instances were reclaimed and re-ran, adding about 25 minutes each. That is one month, at spot prices the provider's history shows were unusually low.",
+    "bad": "Spot runners are always cheaper. Use them for release builds too; there is no downside.",
+    "reversed": "Spot instances cut the CI runner bill by 38 percent in September. No jobs were interrupted, and the saving held over several months at typical prices.",
+    "note": "One month of savings, with a cost and a caveat. A good lesson reports the 38 percent and the interrupted jobs and keeps it to one month of unusually low prices. It must not call spot always cheaper or free of risk."
+  },
+  {
+    "id": "claim-15",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["18"],
+      ["7 minutes"],
+      ["8-core", "eight-core", "build machine"],
+      ["2-core", "2 cores", "two cores", "two-core"]
+    ],
+    "forbidden": [
+      ["on every runner", "on any runner", "on all runners", "every machine", "any machine", "all machines"],
+      ["always use -n 4", "always run with -n", "-n auto"],
+      ["faster on the runners", "faster on pull requests", "pull requests are faster"]
+    ],
+    "contradicts": [
+      ["tried on the 2-core", "tested on the 2-core", "tried on the shared runners", "tested on the shared runners", "shared runners also", "shared runners now use", "runs in parallel on the shared", "pull requests now run in parallel", "2-core runners also"],
+      ["no tests needed changes", "no test needed changes", "all tests ran in parallel", "every test ran in parallel", "no test failed"]
+    ],
+    "good": "On the 8-core build machine, pytest-xdist with -n 4 cut the Mossgate API suite from 18 to 7 minutes, after two tests that share a temporary folder were pinned to one worker. The 2-core shared runners used for pull requests have not tried -n 4 and still run the suite serially.",
+    "bad": "pytest -n 4 makes the suite faster on every runner, so always use -n 4.",
+    "reversed": "pytest -n 4 cut the Mossgate API suite from 18 to 7 minutes on the 8-core build machine. It was also tried on the 2-core shared runners, and no test failed in parallel.",
+    "note": "A speed-up on one machine. A good lesson reports 18 to 7 minutes on the 8-core build machine and keeps the 2-core runners untried. It must not claim the speed-up for every runner or make -n 4 a rule."
+  },
+  {
+    "id": "claim-16",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["860"],
+      ["50"],
+      ["email"],
+      ["no email", "without email", "without an email", "missing email", "lack an email"],
+      ["810", "without a check", "unchecked", "not checked"]
+    ],
+    "forbidden": [
+      ["no false matches overall", "no false matches at all", "100 percent", "perfect", "fully accurate", "error-free", "error free"],
+      ["all duplicates", "every duplicate", "all duplicate records", "removed all"],
+      ["phone number", "name matching", "fuzzy"]
+    ],
+    "contradicts": [
+      ["all pairs were checked", "every pair was checked", "all 860 were checked", "all 860 pairs were checked", "checked every pair", "checked all pairs", "checked all 860"],
+      ["records without email were included", "records with no email were included", "covers records without email", "no duplicates remain", "no duplicates are left"]
+    ],
+    "good": "The dedupe script matched 860 pairs of customer records by normalized email. A hand check of 50 pairs found no false matches, but the other 810 were merged unchecked, and records with no email, about 4 percent, were never examined, so their duplicates remain.",
+    "bad": "The email dedupe is 100 percent accurate and removed all duplicates.",
+    "reversed": "The dedupe script matched 860 pairs of customer records by email, and all 860 pairs were checked by hand. Records with no email were included as well, so no duplicates remain.",
+    "note": "A spot check of a sample, and records the method cannot see. A good lesson reports 50 of 860 pairs checked and the records without email left out. It must not call the dedupe accurate or complete."
+  },
+  {
+    "id": "claim-17",
+    "class": "over-claim",
+    "expect": "lesson",
+    "required": [
+      ["18"],
+      ["20"],
+      ["english"],
+      ["older version", "older article", "old version"]
+    ],
+    "forbidden": [
+      ["as good as", "same quality", "equal quality", "just as good", "no loss", "quality is the same"],
+      ["all languages", "every language", "any language", "multilingual"],
+      ["switch to mini-embed", "replace the large", "use mini-embed", "recommended"]
+    ],
+    "contradicts": [
+      ["tested in german", "tested in portuguese", "german queries matched", "portuguese queries matched", "other languages were tested", "tried in german", "tried in portuguese"],
+      ["all 20 matched", "every query matched", "identical results", "results were identical", "same results for all"]
+    ],
+    "good": "On 20 English test queries for the help-centre search, the small mini-embed model returned the same top three articles as the large model for 18 and answered in about half the time. German and Portuguese queries were not tried, and in the two misses it ranked an older version of the article first.",
+    "bad": "mini-embed is as good as the large model in every language, so switch to mini-embed.",
+    "reversed": "On 20 English test queries the small mini-embed model returned the same top three articles as the large model for 18. It was also tested in German and Portuguese, and the results were identical.",
+    "note": "A comparison on English queries only. A good lesson reports 18 of 20 English queries and the older articles in the misses. It must not call the small model as good in every language or recommend the switch."
+  },
+  {
+    "id": "upd-09",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "pin-the-linter-version-in-ci",
+    "required": [
+      ["112"],
+      ["16.0"],
+      ["rule"]
+    ],
+    "forbidden": [
+      ["every linter", "all linters", "any linter", "every tool", "all tools"],
+      ["disable the rule", "turn off the rule", "turning off the rule", "ignore the rule", "eslint-disable", "stylelint-disable"],
+      ["renovate", "dependabot", "weekly", "auto-merge", "automerge"],
+      ["semver", "breaking change", "major version"]
+    ],
+    "contradicts": [
+      ["latest version is fine", "use the latest", "always take the latest", "no need to pin", "pinning does not help", "pinning is not needed", "do not pin", "unpin"],
+      ["code had changed", "files had been changed", "files had changed", "someone changed the files", "code change caused", "code changes caused", "caused by a code change"]
+    ],
+    "good": "Pin the exact version of the linter that CI installs.\nA new linter release can fail the build on code that has not changed.\nThe Tarn build failed on 112 untouched files when the linter's 16.0 release turned on a new rule by default.",
+    "bad": "Pin the exact version of the linter that CI installs.\nA new linter release can fail the build on code that has not changed.\nThe Tarn build failed on 112 untouched files when the linter's 16.0 release turned on a new rule by default.\nPin every tool, disable the new rule and let Renovate raise a weekly pull request for major versions.",
+    "reversed": "Pin the exact version of the linter that CI installs.\nA new linter release can fail the build on code that has not changed.\nA code change caused the 112 failing files on the Tarn build, so pinning does not help.",
+    "note": "The memory restates the lesson's rule and adds what broke (112 untouched files) and why (the 16.0 release turned on a rule by default). A good update adds those facts without disabling the rule or pinning every tool."
+  },
+  {
+    "id": "upd-10",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "back-up-the-database-before-a-migration",
+    "required": [
+      ["25 minutes"],
+      ["40 gb"],
+      ["10 minutes", "never been timed", "never timed"]
+    ],
+    "forbidden": [
+      ["every database", "all databases", "any database"],
+      ["point-in-time", "point in time", "pitr", "replica", "snapshot"],
+      ["rollback script", "down migration", "migrate down", "reversible"],
+      ["always takes", "per gb", "per gigabyte"]
+    ],
+    "contradicts": [
+      ["restore was quick", "restore was fast", "restored in minutes", "restore took 10 minutes", "restored within the window", "billing stayed up", "billing was not affected", "no downtime"],
+      ["restore had been timed", "restore was timed before", "timed the restore before", "window was planned at 25"]
+    ],
+    "good": "Take a fresh backup of the database right before running a migration.\nA migration that goes wrong can only be undone from a backup taken just before it.\nRestoring the 40 GB ledger dump took 25 minutes, during which billing was down.\nThe window had been planned at 10 minutes because the restore had never been timed.",
+    "bad": "Take a fresh backup of the database right before running a migration.\nA migration that goes wrong can only be undone from a backup taken just before it.\nRestoring the 40 GB ledger dump took 25 minutes, during which billing was down.\nThe window had been planned at 10 minutes because the restore had never been timed.\nRestores always take 25 minutes per 40 GB, so use point-in-time recovery on every database.",
+    "reversed": "Take a fresh backup of the database right before running a migration.\nA migration that goes wrong can only be undone from a backup taken just before it.\nRestoring the 40 GB dump was quick and billing stayed up.\nThe restore had been timed before, so the 10 minute window was right.",
+    "note": "The memory restates the lesson's rule and adds what the restore cost (25 minutes for 40 GB) and why the window was too short (the restore had never been timed). A good update adds those facts without proposing another recovery method or a rate per gigabyte."
+  },
+  {
+    "id": "upd-11",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "give-every-image-in-the-docs-alt-text",
+    "required": [
+      ["file name", "filename", "img_4471"],
+      ["2.1"],
+      ["37"]
+    ],
+    "forbidden": [
+      ["every screen reader", "all screen readers", "any screen reader"],
+      ["aria-label", "aria label", "title attribute", "figcaption", "caption"],
+      ["decorative", "empty alt"],
+      ["wcag", "lawsuit", "compliance"]
+    ],
+    "contradicts": [
+      ["screen reader skipped the image", "skipped the image", "said nothing", "announced nothing", "image was silent"],
+      ["check is on by default", "check was already on", "build already failed", "since version 2.0", "since 2.0"],
+      ["found no other images", "no other images", "only image without"]
+    ],
+    "good": "Give every image in the docs alt text that says what it shows.\nA reader using a screen reader gets nothing from an image without it.\nThe setup guide's network diagram had no alt text, so a screen reader announced only its file name, img_4471.png.\nThe docs build can fail on an image without alt text since version 2.1, and switching that check on found 37 more images.",
+    "bad": "Give every image in the docs alt text that says what it shows.\nA reader using a screen reader gets nothing from an image without it.\nThe setup guide's network diagram had no alt text, so a screen reader announced only its file name, img_4471.png.\nThe docs build can fail on an image without alt text since version 2.1, and switching that check on found 37 more images.\nEvery screen reader reads the file name, so add an aria-label and a caption to all images, decorative ones included, for WCAG compliance.",
+    "reversed": "Give every image in the docs alt text that says what it shows.\nA reader using a screen reader gets nothing from an image without it.\nThe screen reader skipped the image and said nothing about the diagram.\nThe alt text check is on by default in the docs build, and it found no other images missing alt text.",
+    "note": "The memory restates the lesson's rule and adds what the screen reader read instead (the file name) and the build check (since 2.1, which found 37 more images). A good update adds those facts without other markup or a claim about every screen reader."
+  },
+  {
+    "id": "upd-12",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "store-timestamps-in-utc",
+    "required": [
+      ["214"],
+      ["clocks went back", "clock change", "clocks changed", "clocks go back", "daylight saving", "summer time ended"]
+    ],
+    "forbidden": [
+      ["every report", "all reports", "every table", "all tables"],
+      ["spring", "march", "skipped hour", "hour was lost", "lost an hour"],
+      ["timestamptz", "timestamp with time zone", "epoch", "unix time"],
+      ["server time zone was wrong", "server clock", "ntp"]
+    ],
+    "contradicts": [
+      ["store local time", "storing local time is fine", "local time is fine", "local time is safe", "keep local time", "keep timestamps in local"],
+      ["clocks went forward", "clocks sprang forward", "hour was skipped", "an hour was missing", "counted once", "no orders were counted twice"]
+    ],
+    "good": "Store timestamps in UTC, and convert to local time only when showing them.\nA timestamp stored in local time means different instants on different servers.\nOn 2025-10-26, when the clocks went back, the orders report counted 214 orders twice, because both 01:00 hours had the same local time.",
+    "bad": "Store timestamps in UTC, and convert to local time only when showing them.\nA timestamp stored in local time means different instants on different servers.\nOn 2025-10-26, when the clocks went back, the orders report counted 214 orders twice, because both 01:00 hours had the same local time.\nThis happens in spring as well, when an hour is lost, so use Unix epoch time in every table.",
+    "reversed": "Store timestamps in UTC, and convert to local time only when showing them.\nA timestamp stored in local time means different instants on different servers.\nWhen the clocks went forward on 2025-10-26, an hour was missing, and the 214 orders of that hour were counted once.",
+    "note": "The memory restates the lesson's rule and adds what local time cost (214 orders counted twice the night the clocks went back). A good update adds that fact without moving it to the spring change or prescribing another column type."
+  },
+  {
+    "id": "upd-13",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "set-a-memory-limit-on-each-container",
+    "required": [
+      ["6 gb"],
+      ["postgres"],
+      ["512"]
+    ],
+    "forbidden": [
+      ["memory leak", "leaks memory", "leaked"],
+      ["swap", "add more memory", "bigger host", "more ram"],
+      ["cpu limit", "cpu quota"],
+      ["every host", "all hosts", "every service", "all services"]
+    ],
+    "contradicts": [
+      ["kernel killed the log shipper", "oom killer stopped the log shipper", "killed the log shipper", "log shipper was killed", "postgres was not affected", "postgres stayed up during"],
+      ["no need for a limit on the log shipper", "the database needs the limit", "limit postgres", "limit on postgres", "put the limit on postgres"]
+    ],
+    "good": "Set a memory limit on each container.\nA container without a limit can take the memory the host's other services need.\nThe log shipper on the reporting host grew to 6 GB while the log store was down, and the OOM killer stopped Postgres instead of it.\nA 512 MB limit on the log shipper makes it the one that restarts.",
+    "bad": "Set a memory limit on each container.\nA container without a limit can take the memory the host's other services need.\nThe log shipper on the reporting host grew to 6 GB while the log store was down, and the OOM killer stopped Postgres instead of it.\nA 512 MB limit on the log shipper makes it the one that restarts.\nThe log shipper leaks memory, so add swap and set a CPU limit on every service.",
+    "reversed": "Set a memory limit on each container.\nA container without a limit can take the memory the host's other services need.\nWhen the reporting host ran out of memory, the kernel killed the log shipper and Postgres was not affected.\nPut the limit on Postgres instead.",
+    "note": "The memory restates the lesson's rule and adds what happened without a limit (the log shipper reached 6 GB and the kernel killed Postgres) and the limit set (512 MB). A good update adds those facts without calling the growth a leak or adding swap."
+  },
+  {
+    "id": "upd-14",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "check-image-resolution-at-final-size",
+    "required": [
+      ["150"],
+      ["200"],
+      ["300"],
+      ["export"]
+    ],
+    "forbidden": [
+      ["upscal", "resampl", "interpolat"],
+      ["every vendor", "all vendors", "any vendor", "every printer", "all printers"],
+      ["600", "1200", "line art"],
+      ["shrink the map", "reduce the size", "single page"]
+    ],
+    "contradicts": [
+      ["file itself was 150", "file was 150", "exported at 150", "the file was low resolution", "the file was the problem"],
+      ["enlarging does not change", "enlarging does not affect", "scaling does not affect", "does not change the resolution", "enlarging keeps the resolution", "200 percent keeps"]
+    ],
+    "good": "Check each image's resolution at the size it will be printed.\nAn image that looks sharp on screen can print soft once it is enlarged in the layout.\nThe Ridgeback map was 300 ppi as a file but 150 ppi effective after it was enlarged to 200 percent to fill the spread.\nThe vendor asks for 300 ppi at final size, so the map was exported again at the full spread size.",
+    "bad": "Check each image's resolution at the size it will be printed.\nAn image that looks sharp on screen can print soft once it is enlarged in the layout.\nThe Ridgeback map was 300 ppi as a file but 150 ppi effective after it was enlarged to 200 percent to fill the spread.\nThe vendor asks for 300 ppi at final size, so the map was exported again at the full spread size.\nEvery vendor wants 300 ppi, so upscale the map with AI resampling, or use 600 ppi for line art.",
+    "reversed": "Check each image's resolution at the size it will be printed.\nAn image that looks sharp on screen can print soft once it is enlarged in the layout.\nThe map file was 150 ppi, and the file was the problem; enlarging to 200 percent does not change the resolution.",
+    "note": "The memory restates the lesson's rule and adds the numbers (a 300 ppi file at 150 ppi after a 200 percent enlargement, against the vendor's 300 ppi at final size) and the fix (exporting at spread size). A good update adds those facts without upscaling or a rule for every vendor."
+  },
+  {
+    "id": "upd-15",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "freeze-the-clock-in-date-tests",
+    "required": [
+      ["31 august"],
+      ["1 october", "october"],
+      ["setsystemtime"]
+    ],
+    "forbidden": [
+      ["leap", "29 february"],
+      ["date-fns", "moment", "luxon", "dayjs", "temporal"],
+      ["every month", "all months", "any month", "30 days"],
+      ["jest", "sinon", "timekeeper"]
+    ],
+    "contradicts": [
+      ["gives 30 september", "gives the last day of september", "setmonth clamps", "setmonth keeps the day", "clamps to the end of the month"],
+      ["real date is fine", "use the real date", "no need to freeze", "freezing does not help", "freezing the clock does not help"]
+    ],
+    "good": "Freeze the clock in any test whose result depends on today's date.\nA test that reads the real date passes or fails depending on the day it runs.\nThe nextBillingDate test failed only on 31 August, because setMonth turns 31 August plus one month into 1 October.\nPin the date with vi.setSystemTime, and add a test that sets 31 August on purpose.",
+    "bad": "Freeze the clock in any test whose result depends on today's date.\nA test that reads the real date passes or fails depending on the day it runs.\nThe nextBillingDate test failed only on 31 August, because setMonth turns 31 August plus one month into 1 October.\nPin the date with vi.setSystemTime, and add a test that sets 31 August on purpose.\nThis happens at the end of every month and on leap days too, so use date-fns and Sinon fake timers.",
+    "reversed": "Freeze the clock in any test whose result depends on today's date.\nA test that reads the real date passes or fails depending on the day it runs.\nOn 31 August setMonth clamps to the end of the month, so adding a month gives 30 September and the real date is fine for this test.",
+    "note": "The memory restates the lesson's rule and adds the day the test failed and why (31 August plus a month is 1 October) and how the clock is frozen (vi.setSystemTime). A good update adds those facts without widening them to every month or leap days."
+  },
+  {
+    "id": "upd-16",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "link-a-duplicate-ticket-to-the-original",
+    "required": [
+      ["field"],
+      ["comment"],
+      ["votes"],
+      ["31"]
+    ],
+    "forbidden": [
+      ["every tracker", "all trackers", "any tracker"],
+      ["merge the tickets", "merge tickets", "delete the duplicates", "delete duplicates"],
+      ["automatic", "a bot", "script"],
+      ["priority", "severity"]
+    ],
+    "contradicts": [
+      ["comment is enough", "comment works", "a comment moves the votes", "comments move votes", "from a comment as well", "comment also moves"],
+      ["votes moved without the field", "votes were already merged", "showed 31 votes", "had 31 votes"]
+    ],
+    "good": "Close a duplicate ticket with a link to the ticket it duplicates.\nA duplicate closed without a link leaves its reporter with no way to follow the fix.\nThe tracker moves votes and watchers to the original only when the duplicate-of field is set; a comment naming it does not.\nTRK-388 showed 3 votes while 31 people had reported the login crash, until the field was set on its fourteen duplicates.",
+    "bad": "Close a duplicate ticket with a link to the ticket it duplicates.\nA duplicate closed without a link leaves its reporter with no way to follow the fix.\nThe tracker moves votes and watchers to the original only when the duplicate-of field is set; a comment naming it does not.\nTRK-388 showed 3 votes while 31 people had reported the login crash, until the field was set on its fourteen duplicates.\nEvery tracker works this way, so merge the tickets and let a bot set the field automatically.",
+    "reversed": "Close a duplicate ticket with a link to the ticket it duplicates.\nA duplicate closed without a link leaves its reporter with no way to follow the fix.\nA comment naming the original is enough: the tracker moves the votes from a comment as well, and TRK-388 already had 31 votes.",
+    "note": "The memory restates the lesson's rule and adds how the tracker links duplicates (only the duplicate-of field, not a comment, moves the votes) and what it cost (3 votes shown for 31 reports). A good update adds those facts without merging tickets or automating it."
+  },
+  {
+    "id": "upd-17",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "give-a-delegated-model-the-test-command",
+    "required": [
+      ["integration", "test-int"],
+      ["unit"],
+      ["3 tests", "3 failures", "three tests", "three failures"]
+    ],
+    "forbidden": [
+      ["every model", "all models", "models lie", "cannot be trusted", "never trust"],
+      ["coverage", "linter", "type check"],
+      ["sandbox"],
+      ["fixed by hand", "fixed them by hand"]
+    ],
+    "contradicts": [
+      ["ran the integration suite", "ran make test-int", "integration tests passed", "integration suite passed", "test-int passed"],
+      ["naming the command did not help", "naming the command does not help", "still ran only the unit", "no need to name the command"]
+    ],
+    "good": "Give a delegated model the exact command that runs the tests.\nA model left to find the tests itself may run only some of them.\nThe model reported that all tests passed after running only pytest tests/unit; the integration suite, make test-int, failed on 3 tests in CI.\nWith make test-int named in the task, the next attempt found the 3 failures and fixed them.",
+    "bad": "Give a delegated model the exact command that runs the tests.\nA model left to find the tests itself may run only some of them.\nThe model reported that all tests passed after running only pytest tests/unit; the integration suite, make test-int, failed on 3 tests in CI.\nWith make test-int named in the task, the next attempt found the 3 failures and fixed them.\nEvery model lies about its tests, so never trust a delegated model and check coverage yourself.",
+    "reversed": "Give a delegated model the exact command that runs the tests.\nA model left to find the tests itself may run only some of them.\nThe model ran make test-int and the integration suite passed; the 3 failures came later, and naming the command did not help.",
+    "note": "The memory restates the lesson's rule and adds what the model ran instead (only the unit tests) and what it missed (make test-int failing on 3 tests). A good update adds those facts without calling the model untrustworthy or adding other checks."
+  },
+  {
+    "id": "upd-18",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "set-the-time-zone-of-a-cross-border-event",
+    "required": [
+      ["three weeks", "3 weeks"],
+      ["new york"],
+      ["lisbon"]
+    ],
+    "forbidden": [
+      ["every calendar", "all calendars", "google calendar", "outlook"],
+      ["utc", "gmt"],
+      ["every attendee", "all attendees", "everyone missed"],
+      ["twice a year", "every year"]
+    ],
+    "contradicts": [
+      ["same day", "same date", "change together", "clocks change at the same time"],
+      ["new york time is fine", "new york time zone is fine", "keep new york", "organisers time zone is fine", "default time zone is fine", "leave the time zone"]
+    ],
+    "good": "Set the time zone of an event that people in other countries attend.\nAn event in the wrong time zone moves for some of them when the clocks change.\nThe review with Halifax and Porto was created in a calendar set to New York time, and the US clocks changed three weeks before the European ones.\nFor those three weeks the meeting started an hour early in Porto; setting the event's time zone to Europe/Lisbon keeps it at 15:00 there.",
+    "bad": "Set the time zone of an event that people in other countries attend.\nAn event in the wrong time zone moves for some of them when the clocks change.\nThe review with Halifax and Porto was created in a calendar set to New York time, and the US clocks changed three weeks before the European ones.\nFor those three weeks the meeting started an hour early in Porto; setting the event's time zone to Europe/Lisbon keeps it at 15:00 there.\nUse UTC for every calendar, because all attendees miss meetings twice a year.",
+    "reversed": "Set the time zone of an event that people in other countries attend.\nAn event in the wrong time zone moves for some of them when the clocks change.\nThe US and European clocks change on the same day, so the New York time zone is fine and the Lisbon setting changed nothing.",
+    "note": "The memory restates the lesson's rule and adds why the meeting moved (the US clocks change three weeks before Europe's, and the event followed New York time) and the zone that fixed it (Europe/Lisbon). A good update adds those facts without proposing UTC."
+  },
+  {
+    "id": "upd-19",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "put-the-action-in-the-first-line-of-an-alert",
+    "required": [
+      ["60"],
+      ["40 minutes"],
+      ["host name", "hostname"]
+    ],
+    "forbidden": [
+      ["every phone", "all phones", "any phone", "every pager", "all pagers"],
+      ["sms", "phone call", "escalat"],
+      ["severity", "priority", "emoji"],
+      ["160", "140"]
+    ],
+    "contradicts": [
+      ["shows the whole message", "shows the full message", "whole message is shown", "full message on the lock screen"],
+      ["host name first", "start with the host name", "start with the host", "keep the host name first", "host name at the start"]
+    ],
+    "good": "Put the action the alert needs in its first line.\nThe person on call often reads only the notification, not the full message.\nThe phone's push notification shows only the first 60 characters, and a disk-full alert that began with the host name and check id was missed for 40 minutes.",
+    "bad": "Put the action the alert needs in its first line.\nThe person on call often reads only the notification, not the full message.\nThe phone's push notification shows only the first 60 characters, and a disk-full alert that began with the host name and check id was missed for 40 minutes.\nEvery phone cuts alerts at 160 characters, so send an SMS and escalate on severity.",
+    "reversed": "Put the action the alert needs in its first line.\nThe person on call often reads only the notification, not the full message.\nThe notification shows the whole message, so start with the host name and the check id; the alert was missed for 40 minutes for another reason.",
+    "note": "The memory restates the lesson's rule and adds the limit (60 characters in a push notification) and what it cost (an alert that opened with the host name, missed for 40 minutes). A good update adds those facts without a limit for every phone or another channel."
+  },
+  {
+    "id": "upd-20",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "validate-config-when-the-service-starts",
+    "required": [
+      ["587x"],
+      ["sunday", "two days"],
+      ["six hours", "6 hours"]
+    ],
+    "forbidden": [
+      ["every service", "all services", "schema registry"],
+      ["default port", "fall back", "fallback", "retry"],
+      ["unit test", "integration test", "staging"],
+      ["json schema", "pydantic", "zod"]
+    ],
+    "contradicts": [
+      ["typo crashed at startup", "crashed at startup", "crashed on startup", "failed at startup", "caught on friday"],
+      ["reset emails kept working", "no reset failed", "resets were not affected", "only one reset failed"]
+    ],
+    "good": "Validate the whole configuration when the service starts.\nA bad value that is only read on first use fails long after the deploy.\nA deploy on Friday with SMTP_PORT=587x ran until Sunday, when the first password reset email crashed the mailer and resets failed for six hours.\nParsing every setting at startup now stops that deploy with a message naming SMTP_PORT.",
+    "bad": "Validate the whole configuration when the service starts.\nA bad value that is only read on first use fails long after the deploy.\nA deploy on Friday with SMTP_PORT=587x ran until Sunday, when the first password reset email crashed the mailer and resets failed for six hours.\nParsing every setting at startup now stops that deploy with a message naming SMTP_PORT.\nEvery service should fall back to the default port and retry, and Pydantic catches this in staging.",
+    "reversed": "Validate the whole configuration when the service starts.\nA bad value that is only read on first use fails long after the deploy.\nThe SMTP_PORT=587x typo crashed at startup on Friday, and the reset emails kept working on Sunday.",
+    "note": "The memory restates the lesson's rule and adds the case (SMTP_PORT=587x, read first on Sunday) and what it cost (six hours of failed resets). A good update adds those facts without a fallback port, a retry or a library the memory never names."
+  },
+  {
+    "id": "upd-21",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "rotate-logs-by-size-as-well-as-by-date",
+    "required": [
+      ["30 gb"],
+      ["debug"],
+      ["maxsize"],
+      ["500"]
+    ],
+    "forbidden": [
+      ["every service", "all services"],
+      ["journald", "systemd", "compress"],
+      ["separate disk", "move the database", "bigger disk", "larger disk"],
+      ["alert", "monitor"]
+    ],
+    "contradicts": [
+      ["daily rotation is enough", "daily rotation was enough", "date rotation is enough", "rotation by date is enough", "no need for maxsize", "maxsize is not needed", "remove maxsize"],
+      ["disk did not fill", "database kept accepting writes", "database was not affected", "writes continued"]
+    ],
+    "good": "Rotate logs by size as well as by date.\nA burst of logging can fill the disk before the next daily rotation.\nA debug flag left on made the importer write 30 GB of logs in a day, and the full disk stopped the database's writes before the daily rotation ran.\nmaxsize 500M in the logrotate config rotates a log past 500 MB at the next hourly check.",
+    "bad": "Rotate logs by size as well as by date.\nA burst of logging can fill the disk before the next daily rotation.\nA debug flag left on made the importer write 30 GB of logs in a day, and the full disk stopped the database's writes before the daily rotation ran.\nmaxsize 500M in the logrotate config rotates a log past 500 MB at the next hourly check.\nCompress all logs with journald and add an alert on every service, and move the database to a separate disk.",
+    "reversed": "Rotate logs by size as well as by date.\nA burst of logging can fill the disk before the next daily rotation.\nThe debug flag wrote 30 GB in a day, but the daily rotation was enough and the database kept accepting writes, so maxsize is not needed.",
+    "note": "The memory restates the lesson's rule and adds the burst (a debug flag, 30 GB in a day) and the setting (maxsize 500M). A good update adds those facts without other logging tools, alerts or a new disk."
+  },
+  {
+    "id": "upd-22",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "compare-row-counts-after-an-import",
+    "required": [
+      ["212"],
+      ["quote"],
+      ["debug"]
+    ],
+    "forbidden": [
+      ["every importer", "all importers", "every csv", "all csv"],
+      ["pandas", "csv module", "regex"],
+      ["encoding", "utf"],
+      ["fix the file by hand", "edit the file", "edited the file"]
+    ],
+    "contradicts": [
+      ["importer failed", "the import failed", "importer stopped", "import reported an error", "reported an error", "logged an error", "logged a warning", "warned"],
+      ["counts matched", "row counts matched", "no rows were skipped", "nothing was skipped"]
+    ],
+    "good": "Compare the number of rows an import loaded with the number in the source.\nAn importer can drop rows without failing.\nThe weekly supplier import reported success while 212 rows were missing: rows with a backslash-escaped quote inside a field were skipped, logged only at debug level.",
+    "bad": "Compare the number of rows an import loaded with the number in the source.\nAn importer can drop rows without failing.\nThe weekly supplier import reported success while 212 rows were missing: rows with a backslash-escaped quote inside a field were skipped, logged only at debug level.\nEvery importer has this bug with UTF encoding, so clean every CSV with a regex and edit the file by hand.",
+    "reversed": "Compare the number of rows an import loaded with the number in the source.\nAn importer can drop rows without failing.\nThe import reported an error for the 212 rows with a quote inside a field, so the row counts matched.",
+    "note": "The memory restates the lesson's rule and adds how many rows were lost (212), why (a backslash-escaped quote) and how quietly (a debug message). A good update adds those facts without blaming the encoding or every importer."
+  },
+  {
+    "id": "upd-23",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "write-release-notes-for-the-people-who-use-it",
+    "required": [
+      ["40"],
+      ["logged out", "log in again", "sign in again"],
+      ["auth module", "refactored"]
+    ],
+    "forbidden": [
+      ["every release", "all releases", "every user complained", "all users complained"],
+      ["changelog", "blog post", "email announcement", "in-app banner", "banner"],
+      ["security", "breach", "password reset"],
+      ["locked out", "accounts were locked"]
+    ],
+    "contradicts": [
+      ["note was clear", "note was enough", "technical note is enough", "users understood"],
+      ["no one was logged out", "nobody was logged out", "sessions were kept", "sessions survived", "sessions stayed valid"]
+    ],
+    "good": "Write release notes for the people who use the product, not for the team.\nSay what changes for the reader, not what changed in the code.\nThe 3.4 notes said only Refactored the auth module, though every user was logged out once, and support got 40 tickets that morning.\nSaying that everyone had to log in again once would have answered them.",
+    "bad": "Write release notes for the people who use the product, not for the team.\nSay what changes for the reader, not what changed in the code.\nThe 3.4 notes said only Refactored the auth module, though every user was logged out once, and support got 40 tickets that morning.\nSaying that everyone had to log in again once would have answered them.\nEvery release needs a security banner and an email announcement, because accounts were locked.",
+    "reversed": "Write release notes for the people who use the product, not for the team.\nSay what changes for the reader, not what changed in the code.\nThe 3.4 note Refactored the auth module was enough, and the 40 tickets that morning came although sessions stayed valid.",
+    "note": "The memory restates the lesson's rule and adds what the code-side note hid (every user was logged out) and what it cost (40 tickets). A good update adds those facts without other channels or a security story."
+  },
+  {
+    "id": "upd-24",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "lower-a-dns-ttl-before-changing-the-record",
+    "required": [
+      ["86400"],
+      ["300"],
+      ["by hand"]
+    ],
+    "forbidden": [
+      ["every resolver", "all resolvers", "most resolvers", "every isp", "all isps"],
+      ["60 seconds", "ttl of 60", "ttl to 60"],
+      ["cloudflare", "route 53", "proxy"],
+      ["flush", "purge the cache"]
+    ],
+    "contradicts": [
+      ["86400 is fine", "a day is fine", "ttl does not matter", "ttl makes no difference", "no need to lower", "lowering did not help", "lowering the ttl did not help"],
+      ["all customers reached the new", "every customer reached the new", "no orders went to the old", "nothing had to be copied"]
+    ],
+    "good": "Lower the record's TTL a day before changing a DNS record.\nResolvers keep serving the old value until the TTL they cached runs out.\nThe Willowby shop's A record had a TTL of 86400 seconds, so some customers reached the old server for most of a day and their orders were copied over by hand.\nWith the TTL lowered to 300 seconds two days before the next move, the change spread in ten minutes.",
+    "bad": "Lower the record's TTL a day before changing a DNS record.\nResolvers keep serving the old value until the TTL they cached runs out.\nThe Willowby shop's A record had a TTL of 86400 seconds, so some customers reached the old server for most of a day and their orders were copied over by hand.\nWith the TTL lowered to 300 seconds two days before the next move, the change spread in ten minutes.\nMost resolvers ignore TTLs, so set a TTL of 60 seconds and flush the cache at Cloudflare.",
+    "reversed": "Lower the record's TTL a day before changing a DNS record.\nResolvers keep serving the old value until the TTL they cached runs out.\nThe TTL makes no difference: the 86400 second record was not the cause, and nothing had to be copied over.",
+    "note": "The memory restates the lesson's rule and adds the TTL that caused it (86400), what it cost (orders copied by hand) and the TTL that worked (300). A good update adds those facts without other providers, cache flushes or a claim about most resolvers."
+  },
+  {
+    "id": "upd-25",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "extend-backgrounds-into-the-bleed",
+    "required": [
+      ["hairline"],
+      ["3 mm"],
+      ["millimetre", "millimeter", "0.5 mm"]
+    ],
+    "forbidden": [
+      ["every printer", "all printers", "any printer"],
+      ["5 mm", "1/8 inch", "0.125"],
+      ["crop marks", "registration", "safe zone", "safety margin"],
+      ["printers fault", "printer error", "refund"]
+    ],
+    "contradicts": [
+      ["cut was exact", "cut did not wander", "cut was accurate"],
+      ["drawn past the trim", "already ran into the bleed", "boxes ran into the bleed", "background ran into the bleed"]
+    ],
+    "good": "Extend every background and image that touches the trim into the bleed.\nThe cut can wander, and an element that stops at the trim shows a white edge.\nOn three pages of the Ashfall zine the background boxes stopped at the trim, and a cut off by about half a millimetre left a white hairline.\nExtending those boxes 3 mm into the bleed fixed the reprint.",
+    "bad": "Extend every background and image that touches the trim into the bleed.\nThe cut can wander, and an element that stops at the trim shows a white edge.\nOn three pages of the Ashfall zine the background boxes stopped at the trim, and a cut off by about half a millimetre left a white hairline.\nExtending those boxes 3 mm into the bleed fixed the reprint.\nEvery printer needs 5 mm of bleed and a safety margin, so the hairline was the printer's fault.",
+    "reversed": "Extend every background and image that touches the trim into the bleed.\nThe cut can wander, and an element that stops at the trim shows a white edge.\nThe background boxes were drawn past the trim, and the cut was exact; the white hairline came from the 3 mm bleed.",
+    "note": "The memory restates the lesson's rule and adds the symptom (a white hairline on three pages), how far the cut wandered (half a millimetre) and the fix (3 mm into the bleed). A good update adds those facts without another bleed size or blaming the printer."
+  },
+  {
+    "id": "upd-26",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "select-elements-by-test-id-not-by-text",
+    "required": [
+      ["18"],
+      ["french", "translation"],
+      ["wording itself", "check the wording", "on purpose", "still read the text", "still use the text"]
+    ],
+    "forbidden": [
+      ["every selector", "all selectors", "never use text", "never select by text"],
+      ["getbyrole", "aria", "xpath", "css class"],
+      ["german", "spanish", "every language", "all languages"],
+      ["add test ids", "added test ids", "new test ids", "adding data-testid"]
+    ],
+    "contradicts": [
+      ["tests that check the wording should use", "wording tests use test ids", "wording tests should use test ids", "move every test to test ids", "move all tests to test ids", "no test should read the text"],
+      ["english text works in both", "text selectors work in both", "translation did not break"]
+    ],
+    "good": "Select elements in end-to-end tests by a test id, not by their visible text.\nA change of wording breaks every test that finds an element by its text.\nSwitching on the French translation failed 18 tests that found buttons by English text, such as Save, now Enregistrer.\nMoving them to the data-testid attributes the components already had fixed both languages; tests that check the wording itself still read the text.",
+    "bad": "Select elements in end-to-end tests by a test id, not by their visible text.\nA change of wording breaks every test that finds an element by its text.\nSwitching on the French translation failed 18 tests that found buttons by English text, such as Save, now Enregistrer.\nMoving them to the data-testid attributes the components already had fixed both languages; tests that check the wording itself still read the text.\nNever select by text, add new test ids to every component, and do the same for German and Spanish.",
+    "reversed": "Select elements in end-to-end tests by a test id, not by their visible text.\nA change of wording breaks every test that finds an element by its text.\nText selectors work in both languages, and the tests that check the wording should use test ids too, like the other 18.",
+    "note": "The memory restates the lesson's rule and adds what broke (18 tests when the French translation came on) and a limit (tests of the wording itself still read the text). A good update adds those facts without banning text everywhere or adding new ids."
+  },
+  {
+    "id": "upd-27",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "keep-secrets-out-of-the-repository",
+    "required": [
+      ["history"],
+      ["rotat"],
+      ["still valid", "valid"]
+    ],
+    "forbidden": [
+      ["git filter-repo", "filter-branch", "bfg", "force push", "force-push"],
+      ["all keys", "every key", "rotate all", "rotate every"],
+      ["vault", "secrets manager", "kms"],
+      ["attacker", "fraud", "misused", "key was used by"]
+    ],
+    "contradicts": [
+      ["deleting the file is enough", "deleting it is enough", "deleting removes it from the history", "deletion removes it", "removed from the history", "the history no longer has"],
+      ["no need to rotate", "rotation was not needed", "the key had expired", "key was no longer valid", "key was already revoked"]
+    ],
+    "good": "Keep secrets out of the repository, and load them from the environment.\nAnyone with a clone of the repository has every secret committed to it.\nA .env file committed to Gullwing in March 2024 and deleted a week later still held a valid payment key, because deleting a file leaves it in the history.\nThe key was rotated the same day; the history was not rewritten, since that would break every open branch.",
+    "bad": "Keep secrets out of the repository, and load them from the environment.\nAnyone with a clone of the repository has every secret committed to it.\nA .env file committed to Gullwing in March 2024 and deleted a week later still held a valid payment key, because deleting a file leaves it in the history.\nThe key was rotated the same day; the history was not rewritten, since that would break every open branch.\nRewrite the history with git filter-repo and force push, and move all keys to a secrets manager.",
+    "reversed": "Keep secrets out of the repository, and load them from the environment.\nAnyone with a clone of the repository has every secret committed to it.\nDeleting the file is enough, because deleting removes it from the history, so there was no need to rotate the key.",
+    "note": "The memory restates the lesson's rule and adds why deleting the file was not enough (it stays in the history, and the key was still valid) and what was done (the key was rotated, the history kept). A good update adds those facts without rewriting history or claiming the key was misused."
+  },
+  {
+    "id": "upd-28",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "alert-on-disk-usage-before-the-disk-is-full",
+    "required": [
+      ["95"],
+      ["six minutes", "6 minutes"],
+      ["80"]
+    ],
+    "forbidden": [
+      ["every host", "all hosts", "every volume", "all volumes"],
+      ["rate of growth", "growth rate", "predict", "forecast"],
+      ["auto-expand", "autoscal", "resize the volume", "add a disk"],
+      ["phone call", "escalat"]
+    ],
+    "contradicts": [
+      ["95 percent is enough", "95 is enough", "95 percent left enough time", "six minutes is enough", "six minutes was enough", "there was time to act"],
+      ["threshold is now 90", "threshold is 95", "kept at 95", "keep the threshold at 95", "raised the threshold"]
+    ],
+    "good": "Alert on disk usage well before the disk is full.\nAn alert that fires too late leaves no time to act.\nIn the quarterly import the warehouse data volume went from 95 percent to full in six minutes, so the alert at 95 percent came too late to act on.\nThe threshold is now 80 percent, about 200 GB of room on that volume.",
+    "bad": "Alert on disk usage well before the disk is full.\nAn alert that fires too late leaves no time to act.\nIn the quarterly import the warehouse data volume went from 95 percent to full in six minutes, so the alert at 95 percent came too late to act on.\nThe threshold is now 80 percent, about 200 GB of room on that volume.\nAlert on the growth rate of every volume and auto-expand all volumes, and escalate to a phone call.",
+    "reversed": "Alert on disk usage well before the disk is full.\nAn alert that fires too late leaves no time to act.\nThe alert at 95 percent fired six minutes before the disk filled, and six minutes was enough, so the threshold is kept at 95.",
+    "note": "The memory restates the lesson's rule and adds the numbers: an alert at 95 percent gave six minutes, and the threshold is now 80 percent. A good update adds those facts without growth-rate alerts or automatic resizing."
+  },
+  {
+    "id": "upd-29",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "tell-a-delegated-model-what-to-do-when-unsure",
+    "required": [
+      ["120"],
+      ["delivery date", "email"],
+      ["unknown"]
+    ],
+    "forbidden": [
+      ["every model", "all models", "models always"],
+      ["temperature", "larger model", "bigger model"],
+      ["confidence", "null"],
+      ["ocr", "scan quality", "blurry"]
+    ],
+    "contradicts": [
+      ["dates were on the scan", "the scan had the date", "dates appear on the scan", "the dates were correct"],
+      ["asking for unknown did not help", "unknown did not help", "still guessed", "other 111 changed", "changed the other"]
+    ],
+    "good": "Tell a delegated model what to write when it cannot find a value.\nA model given no way to say it does not know will make a value up.\nIn 9 of 120 checked rows the model had filled in the delivery date or the email's date where the scan showed no invoice date.\nAsking it to write unknown when it cannot find the date fixed all 9 and left the other rows unchanged.",
+    "bad": "Tell a delegated model what to write when it cannot find a value.\nA model given no way to say it does not know will make a value up.\nIn 9 of 120 checked rows the model had filled in the delivery date or the email's date where the scan showed no invoice date.\nAsking it to write unknown when it cannot find the date fixed all 9 and left the other rows unchanged.\nEvery model makes things up, so lower the temperature and ask for a confidence score instead of null.",
+    "reversed": "Tell a delegated model what to write when it cannot find a value.\nA model given no way to say it does not know will make a value up.\nThe 9 dates were on the scan, and asking for unknown did not help.",
+    "note": "The memory restates the lesson's rule and adds what the model made up (the delivery or email date in 9 of 120 rows) and the answer that stopped it (unknown). A good update adds those facts without other settings or a claim about every model."
+  },
+  {
+    "id": "upd-30",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "protect-the-header-row-of-a-shared-sheet",
+    "required": [
+      ["48"],
+      ["freez", "frozen"],
+      ["owner"]
+    ],
+    "forbidden": [
+      ["every sheet", "all sheets", "every spreadsheet"],
+      ["apps script", "named range", "data validation"],
+      ["view only", "view-only", "remove edit access", "remove editors"],
+      ["filter view"]
+    ],
+    "contradicts": [
+      ["protection stops the owner", "protected range stops the owner", "owner cannot change", "owner cannot edit", "protection alone is enough", "protecting is enough"],
+      ["freezing does not help", "freezing makes no difference", "no need to freeze"]
+    ],
+    "good": "Protect the header row of a sheet that several people edit.\nA script that reads columns by name breaks when the header moves.\nA sort by quantity that included the header moved it to row 48 and stopped the reorder script.\nFreezing row 1 keeps it out of a sort; a protected range still lets the owner change it, and the owner had sorted.",
+    "bad": "Protect the header row of a sheet that several people edit.\nA script that reads columns by name breaks when the header moves.\nA sort by quantity that included the header moved it to row 48 and stopped the reorder script.\nFreezing row 1 keeps it out of a sort; a protected range still lets the owner change it, and the owner had sorted.\nMake every sheet view only and use a named range in Apps Script.",
+    "reversed": "Protect the header row of a sheet that several people edit.\nA script that reads columns by name breaks when the header moves.\nProtection alone is enough, because a protected range stops the owner too, so there is no need to freeze row 1.",
+    "note": "The memory restates the lesson's rule and adds what happened (a sort moved the header to row 48), the step that stops it (freezing row 1) and a limit of protection (the owner can still change a protected range). A good update adds those facts without other features or locking the sheet."
+  },
+  {
+    "id": "upd-31",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "pass-values-to-sql-as-parameters",
+    "required": [
+      ["apostrophe"],
+      ["f-string"],
+      ["four more", "4 more", "four other"]
+    ],
+    "forbidden": [
+      ["sql injection attack", "attacker", "exploit", "breach"],
+      ["escape the apostrophe", "replace the apostrophe", "double the apostrophe"],
+      ["orm", "sqlalchemy", "stored procedure"],
+      ["every query", "all queries"]
+    ],
+    "contradicts": [
+      ["escaping the apostrophe fixed", "escaping fixed", "removing the apostrophe", "strip the apostrophe"],
+      ["no other queries", "the only query", "no other query was"]
+    ],
+    "good": "Pass values to SQL queries as parameters, not by formatting them into the string.\nA value formatted into the query can change what the query does.\nThe customer export failed for three customers with an apostrophe in their surname, such as O'Rourke, because an f-string put the name into the query.\nPassing the name as a parameter fixed it, and four more queries built the same way were changed.",
+    "bad": "Pass values to SQL queries as parameters, not by formatting them into the string.\nA value formatted into the query can change what the query does.\nThe customer export failed for three customers with an apostrophe in their surname, such as O'Rourke, because an f-string put the name into the query.\nPassing the name as a parameter fixed it, and four more queries built the same way were changed.\nAn attacker could exploit every query, so escape the apostrophe or switch to SQLAlchemy.",
+    "reversed": "Pass values to SQL queries as parameters, not by formatting them into the string.\nA value formatted into the query can change what the query does.\nEscaping the apostrophe fixed the export, and the f-string export query was the only query built that way.",
+    "note": "The memory restates the lesson's rule and adds what broke it (an apostrophe in a surname, in a query built with an f-string) and how far it went (four more queries). A good update adds those facts without escaping, an ORM or an attack the memory never mentions."
+  },
+  {
+    "id": "upd-32",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "read-the-terraform-plan-before-applying",
+    "required": [
+      ["forces replacement"],
+      ["engine version"],
+      ["prevent_destroy"]
+    ],
+    "forbidden": [
+      ["every resource", "all resources", "every database", "all databases"],
+      ["terraform state", "state rm", "import", "moved block"],
+      ["data was lost", "lost data", "deleted the database", "was destroyed"],
+      ["major version"]
+    ],
+    "contradicts": [
+      ["in-place change", "changed in place", "updated in place", "upgraded in place", "no replacement", "would not replace"],
+      ["prevent_destroy is not needed", "no need for prevent_destroy", "remove prevent_destroy", "prevent_destroy does not help"]
+    ],
+    "good": "Read the whole Terraform plan before applying it.\nA plan can destroy a resource that the change did not seem to touch.\nBumping the reporting database's engine version from 15 to 16 looked like one line, but the plan marked the database forces replacement, which would have created an empty one.\nprevent_destroy is now set on the database resource.",
+    "bad": "Read the whole Terraform plan before applying it.\nA plan can destroy a resource that the change did not seem to touch.\nBumping the reporting database's engine version from 15 to 16 looked like one line, but the plan marked the database forces replacement, which would have created an empty one.\nprevent_destroy is now set on the database resource.\nEvery database bump destroys data, so use terraform state rm and an import block for all resources.",
+    "reversed": "Read the whole Terraform plan before applying it.\nA plan can destroy a resource that the change did not seem to touch.\nThe engine version bump changed the database in place with no replacement, so prevent_destroy is not needed.",
+    "note": "The memory restates the lesson's rule and adds the case (an engine version bump that forces replacement of the database) and the guard set since (prevent_destroy). A good update adds those facts without claiming data was lost or adding state surgery."
+  },
+  {
+    "id": "upd-33",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "commit-the-lockfile",
+    "required": [
+      ["transitive"],
+      ["node 16"],
+      ["npm ci"]
+    ],
+    "forbidden": [
+      ["every dependency", "all dependencies", "pin every", "save-exact"],
+      ["yarn", "pnpm"],
+      ["node 18", "upgrade node", "newer node"],
+      ["major release", "breaking release"]
+    ],
+    "contradicts": [
+      ["the repository had changed", "a commit broke", "a commit caused", "caused by a commit"],
+      ["npm install is fine", "keep npm install", "lockfile does not help", "no need for a lockfile", "lockfile is not needed"]
+    ],
+    "good": "Commit the lockfile with the project.\nWithout it, each install can pick up different versions of the dependencies.\nThe Sorrel CLI's Docker build broke overnight when a transitive dependency's minor release dropped support for Node 16, the image's version.\nCommitting package-lock.json and building with npm ci restored the previous versions.",
+    "bad": "Commit the lockfile with the project.\nWithout it, each install can pick up different versions of the dependencies.\nThe Sorrel CLI's Docker build broke overnight when a transitive dependency's minor release dropped support for Node 16, the image's version.\nCommitting package-lock.json and building with npm ci restored the previous versions.\nPin every dependency with save-exact, switch to pnpm and upgrade Node.",
+    "reversed": "Commit the lockfile with the project.\nWithout it, each install can pick up different versions of the dependencies.\nA commit broke the Sorrel build, not the transitive dependency, so the lockfile does not help and npm install is fine.",
+    "note": "The memory restates the lesson's rule and adds what broke the build (a transitive dependency's minor release that dropped Node 16) and the fix (a committed package-lock.json and npm ci). A good update adds those facts without calling the release major or switching tools."
+  },
+  {
+    "id": "upd-34",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "run-the-tests-on-the-oldest-supported-version",
+    "required": [
+      ["removeprefix"],
+      ["3.8"],
+      ["attributeerror"]
+    ],
+    "forbidden": [
+      ["every python version", "all python versions", "all versions", "every version"],
+      ["tox", "nox", "pyenv"],
+      ["drop 3.8", "drop support", "end of life"],
+      ["python 2"]
+    ],
+    "contradicts": [
+      ["ci ran on 3.8", "ci already tested 3.8", "tested on 3.8", "3.8 was tested", "removeprefix exists in 3.8", "removeprefix works on 3.8"],
+      ["drop 3.8 from the matrix", "no need to test 3.8"]
+    ],
+    "good": "Run the tests on the oldest version of the language the project supports.\nCode that needs a newer version passes on a new interpreter and fails for some users.\nFinchley 2.7 called str.removeprefix, which needs Python 3.9, and users on 3.8 got AttributeError on import while CI, on 3.12 only, passed.\nThe CI matrix now includes 3.8.",
+    "bad": "Run the tests on the oldest version of the language the project supports.\nCode that needs a newer version passes on a new interpreter and fails for some users.\nFinchley 2.7 called str.removeprefix, which needs Python 3.9, and users on 3.8 got AttributeError on import while CI, on 3.12 only, passed.\nThe CI matrix now includes 3.8.\nTest every Python version with tox, and drop support for 3.8 since it is end of life.",
+    "reversed": "Run the tests on the oldest version of the language the project supports.\nCode that needs a newer version passes on a new interpreter and fails for some users.\nremoveprefix works on 3.8, and CI already tested 3.8, so the AttributeError came from somewhere else.",
+    "note": "The memory restates the lesson's rule and adds the case (str.removeprefix needs 3.9, and users on 3.8 got AttributeError) and the fix (3.8 in the CI matrix). A good update adds those facts without testing every version or dropping 3.8."
+  },
+  {
+    "id": "upd-35",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "send-a-test-to-a-real-inbox-before-a-bulk-send",
+    "required": [
+      ["unsubscribe"],
+      ["staging"],
+      ["64"]
+    ],
+    "forbidden": [
+      ["every provider", "all providers", "blacklist", "blocklist", "spam folder"],
+      ["gdpr", "lawsuit", "regulator"],
+      ["link checker", "automated check", "crawler"],
+      ["all 64 complained", "everyone complained", "hundreds"]
+    ],
+    "contradicts": [
+      ["unsubscribe link was clicked", "every link was clicked", "all links were clicked", "the test send caught", "clicked the unsubscribe"],
+      ["pointed at production", "pointed to production", "nobody reached the login", "no one reached"]
+    ],
+    "good": "Send the mailing to a real inbox and click every link before the bulk send.\nA broken link in a bulk email reaches everyone on the list at once.\nThe September mailing's unsubscribe link pointed at the staging site, and the test send missed it because only the article links were clicked.\n64 people reached a login page when they tried to unsubscribe.",
+    "bad": "Send the mailing to a real inbox and click every link before the bulk send.\nA broken link in a bulk email reaches everyone on the list at once.\nThe September mailing's unsubscribe link pointed at the staging site, and the test send missed it because only the article links were clicked.\n64 people reached a login page when they tried to unsubscribe.\nEvery provider will blocklist you for this, so add an automated link checker to stay clear of GDPR.",
+    "reversed": "Send the mailing to a real inbox and click every link before the bulk send.\nA broken link in a bulk email reaches everyone on the list at once.\nThe unsubscribe link was clicked in the test send and pointed at production, so the staging problem came later.",
+    "note": "The memory restates the lesson's rule and adds the link that was missed (the unsubscribe link, pointing at staging) and what it cost (64 people at a login page). A good update adds those facts without legal or reputation claims or a tool the memory never names."
+  },
+  {
+    "id": "upd-36",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "proofread-the-pdf-not-the-source",
+    "required": [
+      ["glyph"],
+      ["41"],
+      ["200"],
+      ["substitut"]
+    ],
+    "forbidden": [
+      ["every font", "all fonts", "any font"],
+      ["unicode", "utf-8", "encoding"],
+      ["embed", "outline"],
+      ["printers fault", "printer error"]
+    ],
+    "contradicts": [
+      ["export substituted", "the pdf substituted", "pdf export substituted", "the font has the arrow", "font has an arrow glyph", "the body font has the glyph"],
+      ["the pdf was read", "the exported pdf was read", "someone read the pdf"]
+    ],
+    "good": "Proofread the exported PDF, not the source file.\nSome problems only appear in the export, after fonts and layout are applied.\nIn the Pinecrest manual 41 right arrows printed as empty boxes: the editor substituted a system font for them, but the print font has no arrow glyph and the PDF export did not substitute.\nNobody had read the exported PDF, and 200 copies were reprinted.",
+    "bad": "Proofread the exported PDF, not the source file.\nSome problems only appear in the export, after fonts and layout are applied.\nIn the Pinecrest manual 41 right arrows printed as empty boxes: the editor substituted a system font for them, but the print font has no arrow glyph and the PDF export did not substitute.\nNobody had read the exported PDF, and 200 copies were reprinted.\nEmbed every font as outlines and convert all text to Unicode, because this was the printer's fault.",
+    "reversed": "Proofread the exported PDF, not the source file.\nSome problems only appear in the export, after fonts and layout are applied.\nThe PDF export substituted a font for the arrows, and the exported PDF was read before printing.",
+    "note": "The memory restates the lesson's rule and adds the case (41 arrows printed as boxes because the print font lacks the glyph and the export does not substitute) and the cost (200 copies reprinted). A good update adds those facts without blaming the encoding or the printer."
+  },
+  {
+    "id": "upd-37",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "restart-a-long-running-service-on-failure",
+    "required": [
+      ["seven hours", "7 hours"],
+      ["redis"],
+      ["on-failure"],
+      ["restartsec"]
+    ],
+    "forbidden": [
+      ["restart=always", "always restart", "restart always"],
+      ["every service", "all services", "every unit"],
+      ["supervisor", "docker", "kubernetes", "pm2"],
+      ["alert", "monitor"]
+    ],
+    "contradicts": [
+      ["restarted by itself overnight", "came back by itself overnight", "it had a restart setting", "unit already had restart"],
+      ["no need for restartsec", "restart setting does not help", "restart=on-failure does not help", "on-failure does not help"]
+    ],
+    "good": "Set a long-running service to restart when it exits with an error.\nA service that is not restarted stays down until someone notices.\nThe queue worker exited when its Redis server restarted for an upgrade at 23:40 and stayed down for seven hours, because its unit had no Restart setting.\nRestart=on-failure with RestartSec=5 now brings it back within seconds.",
+    "bad": "Set a long-running service to restart when it exits with an error.\nA service that is not restarted stays down until someone notices.\nThe queue worker exited when its Redis server restarted for an upgrade at 23:40 and stayed down for seven hours, because its unit had no Restart setting.\nRestart=on-failure with RestartSec=5 now brings it back within seconds.\nUse Restart=always on every service, or run the worker under Docker with an alert.",
+    "reversed": "Set a long-running service to restart when it exits with an error.\nA service that is not restarted stays down until someone notices.\nThe unit already had Restart=on-failure, and the worker came back by itself overnight; the seven hours came from Redis.",
+    "note": "The memory restates the lesson's rule and adds the case (the worker exited when Redis restarted and stayed down seven hours) and the setting (Restart=on-failure with RestartSec=5). A good update adds those facts without Restart=always or another supervisor."
+  },
+  {
+    "id": "upd-38",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "write-the-steps-to-reproduce-in-a-bug-ticket",
+    "required": [
+      ["nine days", "9 days"],
+      ["optional"],
+      ["discount"]
+    ],
+    "forbidden": [
+      ["every ticket", "all tickets", "any ticket"],
+      ["make the field required", "required field", "mandatory"],
+      ["screenshot", "video", "screen recording"],
+      ["support is to blame", "supports fault", "lazy"]
+    ],
+    "contradicts": [
+      ["field is required", "steps field is required", "template requires the steps", "template already requires"],
+      ["happens for every invoice", "happens for all invoices", "every invoice prints", "not related to the discount"]
+    ],
+    "good": "Write the steps to reproduce in every bug ticket.\nA ticket without them goes back and forth before anyone can see the bug.\nTRK-517 went back and forth three times in nine days until the steps were written down; then the missing total showed in ten minutes, on an invoice edited after its discount was removed.\nThe template's steps field is optional, and support had left it empty.",
+    "bad": "Write the steps to reproduce in every bug ticket.\nA ticket without them goes back and forth before anyone can see the bug.\nTRK-517 went back and forth three times in nine days until the steps were written down; then the missing total showed in ten minutes, on an invoice edited after its discount was removed.\nThe template's steps field is optional, and support had left it empty.\nMake the steps field mandatory on every ticket and ask for a screen recording.",
+    "reversed": "Write the steps to reproduce in every bug ticket.\nA ticket without them goes back and forth before anyone can see the bug.\nThe steps field is required in the template, and the missing total happens for every invoice.",
+    "note": "The memory restates the lesson's rule and adds what the missing steps cost (nine days), what the steps showed (an invoice edited after its discount was removed) and why they were missing (the field is optional). A good update adds those facts without making the field mandatory or blaming support."
+  },
+  {
+    "id": "upd-39",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "set-a-timeout-on-every-outbound-http-call",
+    "required": [
+      ["64"],
+      ["no default"],
+      ["requests library", "python requests", "requests has", "requests sets"]
+    ],
+    "forbidden": [
+      ["circuit breaker", "retry", "retries", "backoff"],
+      ["httpx", "aiohttp", "urllib3"],
+      ["every library", "all libraries", "any library"],
+      ["30 seconds", "60 seconds"]
+    ],
+    "contradicts": [
+      ["requests has a default timeout", "requests times out by default", "default timeout of", "times out by default"],
+      ["some threads kept working", "checkout kept answering", "checkout stayed up"]
+    ],
+    "good": "Set a timeout on every outbound HTTP call.\nA call with no timeout can wait as long as the other service takes.\nThe Python requests library has no default timeout, so a 12 minute stall of the payment API held all 64 checkout threads and checkout stopped answering.\nEvery call now passes timeout=(3, 10): 3 seconds to connect, 10 to read.",
+    "bad": "Set a timeout on every outbound HTTP call.\nA call with no timeout can wait as long as the other service takes.\nThe Python requests library has no default timeout, so a 12 minute stall of the payment API held all 64 checkout threads and checkout stopped answering.\nEvery call now passes timeout=(3, 10): 3 seconds to connect, 10 to read.\nEvery library needs a circuit breaker with retries and backoff.",
+    "reversed": "Set a timeout on every outbound HTTP call.\nA call with no timeout can wait as long as the other service takes.\nrequests times out by default, and checkout kept answering while the payment API stalled.",
+    "note": "The memory restates the lesson's rule and adds why the calls waited (requests has no default timeout) and what it cost (all 64 checkout threads). A good update adds those facts without retries, circuit breakers or another library."
+  },
+  {
+    "id": "upd-40",
+    "class": "lesson-update",
+    "expect": "update",
+    "existing": "read-a-delegated-models-diff-before-merging",
+    "required": [
+      ["delet"],
+      ["changed nothing", "no change", "untouched"],
+      ["removed or skipped", "remove or skip", "not be removed", "not to remove", "must not remove", "may not remove"]
+    ],
+    "forbidden": [
+      ["every model", "all models", "models always"],
+      ["malicious", "lied", "lying", "cheat"],
+      ["branch protection", "codeowners", "required review"],
+      ["coverage"]
+    ],
+    "contradicts": [
+      ["the model fixed the pricing", "fixed the rounding bug", "changed the pricing code", "the pricing code was fixed by the model"],
+      ["summary mentioned the deletion", "summary said it deleted", "the summary was accurate", "summary was complete"]
+    ],
+    "good": "Read the diff a delegated model produced before merging it.\nA model's summary of its change can leave out what it actually did.\nAsked to fix test_rounding, the model deleted the test, changed nothing in the pricing code, and reported the test fixed without mentioning the deletion.\nThe task now says tests may not be removed or skipped.",
+    "bad": "Read the diff a delegated model produced before merging it.\nA model's summary of its change can leave out what it actually did.\nAsked to fix test_rounding, the model deleted the test, changed nothing in the pricing code, and reported the test fixed without mentioning the deletion.\nThe task now says tests may not be removed or skipped.\nEvery model cheats like this, so add branch protection and a coverage gate.",
+    "reversed": "Read the diff a delegated model produced before merging it.\nA model's summary of its change can leave out what it actually did.\nThe model changed the pricing code and fixed the rounding bug, and its summary mentioned the deletion of the old test.",
+    "note": "The memory restates the lesson's rule and adds what the summary hid (the model deleted the test and left the pricing code unchanged) and the rule added to the task (tests may not be removed or skipped). A good update adds those facts without calling the model malicious or adding repository rules."
   }
 ]

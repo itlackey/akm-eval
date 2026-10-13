@@ -4,15 +4,15 @@ Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PAT
 
 | Eval | akm | Last run on |
 |---|---|---|
-| `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode` |
+| `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode`, which is fixed since: a curate that abstains, with no results and no `searchMode`, is an empty answer |
 | `evals/judge-gate` | 0.9.25-alpha.2 or later | 0.10.261003-beta: three full real-model repeats, no errors |
-| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta on v0.4: three full real-model repeats; indexed-ref errors repaired, six AKM file-layout refusals each, 44/50 cases scored; matrix pilots pass |
+| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta on v0.4: three full real-model repeats; indexed-ref errors repaired, six AKM file-layout refusals each, 44/50 cases scored; matrix pilots pass. The six notes have since moved into their type's folder, where akm reflects on them |
 | `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: three full real-model repeats, no errors, including lesson updates |
 | `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: three full real-model pair repeats, no errors, including crash recovery; default deterministic embedder |
 | `evals/extract` | 0.9.26 or later | 0.10.261003-beta: three full real-model repeats, no errors, including two replacement runs after the crash |
 | `evals/nightly` | 0.9.26 or later | 0.10.261003-beta on v0.4: three full 35-case real-model repeats, no collection errors or failed model calls; earlier setup failure repaired |
 | `evals/promotion` | 0.9.26. It writes into akm's `state.db` and stops with a message when the table layout differs | 0.10.261003-beta on v0.4: three full 20-case real-model repeats, no errors |
-| `evals/agent-ab` | akm-cli 0.9.26 with the akm-opencode plugin 0.9.26202610051302 (`PINS` in `lib/harbor/harbor.ts`), or what `--akm` names. CLI 0.10.261003-beta selects compatible plugin 0.10.261002-beta | 0.10.261003-beta: one-task GPT-120 pilot, no errors; full run stopped after gateway HTTP 429 |
+| `evals/agent-ab` | akm-cli 0.10.261003-beta with the akm-opencode plugin 0.10.261002-beta (`PINS` in `lib/harbor/harbor.ts`), or what `--akm` names. CLI 0.9.26 selects its compatible plugin 0.9.26202610051302 | 0.10.261003-beta: one-task GPT-120 pilot, no errors; full run stopped after gateway HTTP 429 |
 | `evals/bakeoff` | 0.9.26 or later | 0.10.261003-beta on v0.4: three full 15-case real-model repeats, no errors; all outputs valid, 12/15 cases pass each time |
 | `benchmarks/longmemeval` | 0.9.26 | 0.10.261003-beta: full retrieval-only run, no errors; five-question GPT-120 pilot with one errored arm |
 | `benchmarks/skillret` | 0.9.26 | 0.10.261003-beta: all 4,392 queries in keyword and semantic modes, no errors; both curate checks pass |

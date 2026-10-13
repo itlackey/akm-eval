@@ -47,7 +47,8 @@ function model(mode: "oracle" | "prose" | "down") {
         const c = cases.find((x) => x.process === "schema-repair" && prompt.includes(bodyOf(x.texts[x.files[0] as string] as string).slice(0, 40)));
         reply = { description: `This lesson covers ${(c?.expected.keywords ?? []).join(" and ")} in some detail.`, when_to_use: `Use when you ${(c?.expected.trigger ?? ["act"])[0]} something in a release.` };
       } else if (/summarizing an agent coding session/.test(prompt)) {
-        const e = cases.find((x) => x.process === "session-summary")?.expected ?? {};
+        const opening = (x: LoadedCase): string => String((JSON.parse((x.texts[x.files[0] as string] as string).split("\n")[0] as string) as { message: { content: unknown } }).message.content).slice(0, 60);
+        const e = cases.find((x) => x.process === "session-summary" && prompt.includes(opening(x)))?.expected ?? {};
         reply = { summary: `The session covered ${(e.required ?? []).join(", ")} and ended well, with the canary and the health checks green.`, key_topics: e.topics, tags: ["release"] };
       } else if (/extracting durable engineering insights/.test(prompt)) reply = { candidates: [], rationale_if_empty: "Nothing durable in this session." };
       else if (/consolidate assistant/.test(prompt)) {

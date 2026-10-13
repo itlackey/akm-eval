@@ -18,15 +18,43 @@ export const BUNDLE_DIR = join(EVAL_DIR, "assets", "library", "knowledge");
 const STATUS_DATE = "2026-10-03";
 
 // A note of a skill is named by its path in corpus/library (skills/<x>/references/a, without .md). akm gives it the ref
-// knowledge/<that path>, and the library keeps it once, in the skill.
+// knowledge/<that path>, and the library keeps it once, in the skill. A note of the library's own knowledge/ folder is named by its
+// path in corpus/library too (knowledge/playwright/a), and its ref is that path: refOf drops the folder's name.
 const AI = "skills/ai-skills";
 const PRINT = "skills/print";
+const TRACKER = "skills/administrative/tracker";
+const CODING = "skills/coding";
+
+/** Where a note named by its path in corpus/library sits under knowledge/ in the bundle, and so its ref without knowledge/. */
+const refOf = (path: string): string => path.replace(/^knowledge\//, "");
 
 /** Notes held out of the library and proposed as they are: a new note nothing in the library says. */
-const GOOD = [`${AI}/opencode-extensions/references/network`, `${AI}/opencode-extensions/references/config`, `${AI}/opencode-troubleshoot/references/log-analysis`, `${PRINT}/pdf-layout-reviewer/references/print-standards`, `${AI}/opencode-extensions/references/permissions`, `${PRINT}/pdf-layout-reviewer/references/vlm-prompts`];
+const GOOD = [
+  `${AI}/opencode-extensions/references/network`, `${AI}/opencode-extensions/references/config`, `${AI}/opencode-troubleshoot/references/log-analysis`, `${PRINT}/pdf-layout-reviewer/references/print-standards`, `${AI}/opencode-extensions/references/permissions`, `${PRINT}/pdf-layout-reviewer/references/vlm-prompts`,
+  `${TRACKER}/references/azure-devops-cli-first`, `${AI}/agent-cli-tools/references/gemini-cli`, `${AI}/opencode-extensions/references/mcp-servers`, `${CODING}/fta-code-quality/references/fta-reference`, `${AI}/llm-delegation-tool/references/QUICKSTART`, `${AI}/opencode-troubleshoot/references/fixes`,
+  `${AI}/opencode-extensions/references/agents-docs`, `${AI}/agent-cli-tools/references/goose`, `${AI}/opencode-extensions/references/formatters`, `${CODING}/cli-workflow-creator/references/examples`, `${AI}/llm-delegation-tool/references/implementation-guide`, `${AI}/opencode-troubleshoot/references/symptom-map`,
+  `${TRACKER}/references/authentication`, `${AI}/agent-cli-tools/references/amazon-q-cli`, `${AI}/opencode-extensions/references/share`, `${AI}/opencode-extensions/references/acp`, `${AI}/llm-delegation-tool/references/configuration-examples`, `${AI}/opencode-troubleshoot/references/config-diagnostics`,
+  `${TRACKER}/references/AZURE_DEVOPS_WORKITEM_CHEATSHEET`, `${AI}/agent-cli-tools/references/github-copilot-cli`, `${AI}/opencode-extensions/references/rules`, `${AI}/opencode-extensions/references/sdk`, `${AI}/llm-delegation-tool/references/troubleshooting`, `${AI}/opencode-troubleshoot/references/filesystem-map`,
+  `${AI}/agent-cli-tools/references/pi`, `${AI}/opencode-extensions/references/skills`, `${AI}/opencode-extensions/references/tui`, `${AI}/agent-cli-tools/references/env-setup`, `${AI}/opencode-extensions/references/server`, `${AI}/agent-cli-tools/references/opencode`,
+  `${AI}/opencode-extensions/references/tools`, `${AI}/opencode-extensions/references/agents`, `${AI}/opencode-extensions/references/cli`, `${AI}/opencode-extensions/references/sdk-docs`,
+];
 
-/** Notes that stay in the library and are proposed again under a new name: three whole, three as their first half. */
-const DUPLICATE = [`${AI}/agent-cli-tools/references/codex`, `${AI}/agent-cli-tools/references/claude-code`, `${AI}/agent-cli-tools/references/image-input`, `${PRINT}/pdf-review/references/print-quality-checklist`, `${AI}/agent-cli-tools/references/qwen-code`, `${AI}/opencode-extensions/references/plugins`];
+/** Notes that stay in the library and are proposed again under a new name, whole or as their first half. */
+const DUPLICATE: [string, "whole" | "half"][] = [
+  [`${AI}/agent-cli-tools/references/codex`, "whole"],
+  [`${AI}/agent-cli-tools/references/claude-code`, "whole"],
+  [`${AI}/agent-cli-tools/references/image-input`, "whole"],
+  [`${PRINT}/pdf-review/references/print-quality-checklist`, "half"],
+  [`${AI}/agent-cli-tools/references/qwen-code`, "half"],
+  [`${AI}/opencode-extensions/references/plugins`, "half"],
+  ["knowledge/playwright/best-practices", "half"],
+  [`${PRINT}/pdf-review/references/ttrpg-standards`, "whole"],
+  ["knowledge/print/measurable-design-and-css-rubric", "half"],
+  [`${PRINT}/pdf-review/README`, "whole"],
+  ["knowledge/playwright/test-coverage-rubric", "half"],
+  ["knowledge/print/fix-team-dispatch-template", "whole"],
+  ["knowledge/print/visual-review/designer-eye-method", "half"],
+];
 
 /** Held-out notes that say a note of the library replaced them. */
 const STALE: [string, string][] = [
@@ -34,13 +62,26 @@ const STALE: [string, string][] = [
   [`${AI}/opencode-extensions/references/plugins-docs`, `${AI}/opencode-extensions/references/plugins`],
   [`${AI}/llm-delegation-tool/README`, `${AI}/agent-cli-tools/references/codex`],
   [`${AI}/llm-delegation-tool/scripts/README`, `${AI}/agent-cli-tools/references/claude-code`],
+  [`${AI}/opencode-extensions/references/custom-tools`, `${AI}/opencode-extensions/references/plugins`],
+  [`${AI}/llm-delegation-tool/references/MODEL-ROUTING-GUIDE`, `${AI}/agent-cli-tools/references/codex`],
+  [`${AI}/agent-cli-tools/references/akm-env-setup`, `${AI}/agent-cli-tools/references/claude-code`],
+  [`${AI}/llm-delegation-tool/examples/agents/community-manager`, `${AI}/agent-cli-tools/references/claude-code`],
+  [`${AI}/llm-delegation-tool/examples/commands/embed`, `${AI}/agent-cli-tools/references/codex`],
+  [`${AI}/llm-delegation-tool/examples/claude-md-example`, `${AI}/agent-cli-tools/references/claude-code`],
+  [`${AI}/llm-delegation-tool/examples/agents/auto-routing-example`, `${AI}/agent-cli-tools/references/codex`],
+  [`${AI}/llm-delegation-tool/examples/agents/semantic-search`, `${AI}/agent-cli-tools/references/claude-code`],
+  [`${AI}/llm-delegation-tool/examples/commands/moderate`, `${AI}/agent-cli-tools/references/codex`],
 ];
 
 /** Held-out notes that are a status snapshot: a date, a commit, a branch and what is left to do. */
-const EPHEMERAL = [`${PRINT}/pdf-layout-reviewer/references/common-issues`, `${PRINT}/pdf-layout-reviewer/assets/report-template`, `${AI}/llm-delegation-tool/examples/claude-md-section`, `${AI}/agent-cli-tools/references/aider`];
+const EPHEMERAL = [
+  `${PRINT}/pdf-layout-reviewer/references/common-issues`, `${PRINT}/pdf-layout-reviewer/assets/report-template`, `${AI}/llm-delegation-tool/examples/claude-md-section`, `${AI}/agent-cli-tools/references/aider`,
+  `${TRACKER}/AZURE_DEVOPS_BEST_PRACTICES`, `${AI}/opencode-extensions/references/models`, `${AI}/llm-delegation-tool/examples/agents/lore-writer`, `${AI}/opencode-extensions/references/config-docs`, `${AI}/opencode-extensions/references/ecosystem`,
+  `${AI}/llm-delegation-tool/examples/commands/search`, `${TRACKER}/references/platform-comparison`, `${AI}/opencode-extensions/references/commands`, `${AI}/llm-delegation-tool/examples/agents/content-moderator`, `${AI}/opencode-extensions/references/providers`,
+];
 
 /** Notes of skills that no case uses. They stay in the bundle beside the others, which are the library's knowledge/ folder and the notes the cases use. */
-const OTHER = [`${PRINT}/pdf-review/README`, `${PRINT}/pdf-review/references/ttrpg-standards`, `${PRINT}/pdfx-print-pipeline/references/DRIVETHRURPG`, `${PRINT}/pdfx-print-pipeline/references/CSS_PRINT`, `${AI}/agent-cli-tools/assets/README`];
+const OTHER = [`${PRINT}/pdfx-print-pipeline/references/DRIVETHRURPG`, `${PRINT}/pdfx-print-pipeline/references/CSS_PRINT`, `${AI}/agent-cli-tools/assets/README`];
 
 const read = (path: string): string => readFileSync(join(LIBRARY, `${path}.md`), "utf8");
 
@@ -67,16 +108,16 @@ const sha7 = (path: string): string => createHash("sha1").update(path).digest("h
 export function build(): Case[] {
   const cases: Case[] = [];
   const add = (category: Case["category"], n: number, ref: string, content: string, labelReason: string) =>
-    cases.push({ id: `${category}-${String(n).padStart(2, "0")}`, label: category === "good" ? "good" : "bad", category, ref: `knowledge/${ref}`, content, labelReason });
+    cases.push({ id: `${category}-${String(n).padStart(2, "0")}`, label: category === "good" ? "good" : "bad", category, ref: `knowledge/${refOf(ref)}`, content, labelReason });
 
   GOOD.forEach((path, i) => add("good", i + 1, path, read(path), "A reference note that no note of the library repeats, with nothing in it that is out of date."));
-  DUPLICATE.forEach((path, i) => {
-    const whole = i < 3;
-    add("duplicate", i + 1, `${path}-notes`, whole ? read(path) : firstHalf(read(path)), `${whole ? "A copy of" : "The first half of"} knowledge/${path}, which is in the library: every claim is already there.`);
+  DUPLICATE.forEach(([path, part], i) => {
+    const whole = part === "whole";
+    add("duplicate", i + 1, `${path}-notes`, whole ? read(path) : firstHalf(read(path)), `${whole ? "A copy of" : "The first half of"} knowledge/${refOf(path)}, which is in the library: every claim is already there.`);
   });
   STALE.forEach(([path, by], i) => {
-    const text = insertAfterTitle(read(path).replace(/^---\n/, "---\nbeliefState: deprecated\n"), `> Status: superseded. The setup this note describes was retired on 2026-09-18 and replaced by [[${by}]]. Do not follow the steps below.`);
-    add("stale", i + 1, path, text, `Says it was retired and replaced by knowledge/${by}, which is in the library.`);
+    const text = insertAfterTitle(read(path).replace(/^---\n/, "---\nbeliefState: deprecated\n"), `> Status: superseded. The setup this note describes was retired on 2026-09-18 and replaced by [[${refOf(by)}]]. Do not follow the steps below.`);
+    add("stale", i + 1, path, text, `Says it was retired and replaced by knowledge/${refOf(by)}, which is in the library.`);
   });
   EPHEMERAL.forEach((path, i) =>
     add("ephemeral", i + 1, path, insertAfterTitle(read(path), `> Status snapshot as of ${STATUS_DATE} (commit ${sha7(path)}, branch feature/${path.split("/").pop()?.toLowerCase()}-wave-2): 14 of 20 items done, rollout awaiting review. Check again on 2026-10-06 before relying on any of it.`), "A status snapshot with a date, a commit and a branch, which is out of date within days."),
@@ -99,8 +140,8 @@ function filesUnder(dir: string, below = ""): string[] {
 export function bundle(): Map<string, string> {
   const notes = new Map<string, string>();
   for (const file of filesUnder(join(LIBRARY, "knowledge")).sort()) notes.set(file, readFileSync(join(LIBRARY, "knowledge", file), "utf8"));
-  const named = [...GOOD, ...DUPLICATE, ...STALE.flat(), ...EPHEMERAL, ...OTHER];
-  for (const path of [...new Set(named)].sort()) notes.set(`${path}.md`, read(path));
+  const named = [...GOOD, ...DUPLICATE.map(([path]) => path), ...STALE.flat(), ...EPHEMERAL, ...OTHER];
+  for (const path of [...new Set(named)].sort()) notes.set(`${refOf(path)}.md`, read(path));
   return notes;
 }
 

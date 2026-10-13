@@ -2,9 +2,9 @@ DISTILL CANARY: do not train on this data. canary GUID 45154013-f7c3-4546-b3ad-3
 
 # Distill cases
 
-38 fictional memories, for testing a model as akm's distill: the step of `akm improve` that turns a memory into a lesson. 14 memories deserve a lesson, 16 do not and 8 repeat a lesson the library holds and add a fact to it. A good distill writes a lesson that says only what its memory says for the first 14, queues nothing for the next 16, and proposes an update to the existing lesson for the last 8.
+96 fictional memories, for testing a model as akm's distill: the step of `akm improve` that turns a memory into a lesson. 40 memories deserve a lesson, 16 do not and 40 repeat a lesson the library holds and add a fact to it. A good distill writes a lesson that says only what its memory says for the 40 that deserve one, queues nothing for the 16, and proposes an update to the existing lesson for the 40 that repeat one.
 
-The memories are written for this eval. They are in the style and the domains of `corpus/library/`: print layout, end-to-end tests, a tracker, delegating to models, Google Workspace, notifications and coding practice. The projects, the events and the numbers are made up, and no real person or host is named. The tools they use, such as Playwright, Paged.js and Ghostscript, are real. The library assets in the `restates-asset` cases are copies of files in `corpus/library/`.
+The memories are written for this eval. They are in the style and the domains of `corpus/library/`: print layout, end-to-end tests, a tracker, delegating to models, Google Workspace, notifications and coding practice, and, in the later cases, operations, infrastructure, data and writing too. The projects, the events and the numbers are made up, and no real person or host is named. The tools they use, such as Playwright, Paged.js and Ghostscript, are real. The library assets in the `restates-asset` cases are copies of files in `corpus/library/`.
 
 ## Fields
 

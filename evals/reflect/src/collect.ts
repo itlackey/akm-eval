@@ -12,6 +12,7 @@ import { createSandbox, engineConfig, removeSandbox, runAkmJson, writeConfig } f
 import { indexedRef, indexedRefs } from "../../../lib/akm/indexed-refs.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import { type Overrides, defaultOverrides, patchedConfig } from "../../../lib/akm/overrides.ts";
+import { libraryFileOf } from "./build.ts";
 import { type Case, type Outcome, type Row, makeRow } from "./score.ts";
 
 export const NAME = "reflect";
@@ -99,7 +100,9 @@ export function searchesFor(cases: Case[], publicCases: Case[], labelled: Map<st
   const found = new Map<string, string[]>();
   for (const c of cases) {
     const publicPath = publicOf.get(c.id)?.path;
-    const queries = publicPath === undefined ? undefined : labelled.get(refOf(publicPath));
+    // The retrieval eval labels a note of a skill by its library file under knowledge/, wherever the case puts it.
+    const file = publicPath === undefined ? undefined : libraryFileOf(publicPath);
+    const queries = publicPath === undefined ? undefined : labelled.get(refOf(file === publicPath ? publicPath : `knowledge/${file}`));
     if (queries && queries.length > 0) found.set(refOf(c.path), queries.map(rewrite));
   }
   return found;

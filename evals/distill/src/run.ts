@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -87,6 +88,8 @@ interface Summary {
   timeouts: number;
   metrics: Metrics;
   /** What the run was made of (see lib/manifest.ts). */
+  /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
+  model_calls: ModelCalls | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -203,6 +206,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
     n_errored: counts.n_errored,
     timeouts: counts.timeouts,
     metrics: counts.metrics,
+    model_calls: takeModelCalls(),
     manifest,
     results_dir: dir,
   };

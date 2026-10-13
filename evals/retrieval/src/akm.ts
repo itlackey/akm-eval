@@ -129,8 +129,9 @@ export const CALL_TIMEOUT_MS = 120_000;
  * One `akm search` or `akm curate` call. A failed call is an answer with an error and no refs. So is an answer that
  * says it searched another way than `mode` (keyword or semantic): when akm cannot embed a query it answers with keyword
  * search, `fts-fallback`, and that is not the semantic result. A semantic call has to say `searchMode: "semantic"`: an
- * answer that does not say how it searched could be keyword rankings, and is an error as well. A keyword call that
- * does not say is taken as it comes.
+ * answer with results that does not say how it searched could be keyword rankings, and is an error as well. One with no
+ * results and no searchMode searched nothing (curate's abstention), and is taken as empty. A keyword call that does not
+ * say is taken as it comes.
  */
 export async function ask(sb: Sandbox, system: "search" | "curate", query: string, limit = LIMIT, mode: "keyword" | "semantic" = "keyword", timeoutMs = CALL_TIMEOUT_MS): Promise<Answer> {
   const { stdout, stderr, code, ms, timedOut } = await runAkm(sb, [system, "--limit", String(limit), ...(await agentDetailArgs(sb)), "--format", "json", "--", query], { timeoutMs }).catch((e: Error) => ({ stdout: "", stderr: e.message, code: 127, ms: 0, timedOut: false }));
@@ -146,13 +147,15 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
     return failed(`akm ${system} printed no JSON: ${stdout.slice(0, 200)}`);
   }
   const said = typeof out.searchMode === "string" ? out.searchMode : null;
-  if (said !== null ? said !== mode : mode === "semantic") {
+  const results = (system === "search" ? out.hits : out.items) ?? [];
+  // No searchMode and no results is an answer that searched nothing: curate abstains on purpose when the input is not a task, such as a tool envelope.
+  if (said !== null ? said !== mode : mode === "semantic" && results.length > 0) {
     const what = said !== null ? `searched with ${said}, not ${mode}` : "did not say how it searched (no searchMode), and a semantic call has to say semantic";
     return failed(`akm ${system} ${what}: ${JSON.stringify(out.warnings ?? null).slice(0, 300)}`);
   }
   const refs: string[] = [];
   const assets = new Map<string, Asset>();
-  for (const h of (system === "search" ? out.hits : out.items) ?? []) {
+  for (const h of results) {
     if (typeof h.ref !== "string") return failed(`akm ${system} returned a result with no ref`);
     refs.push(h.ref);
     const [ref] = foldRefs([h.ref]);
