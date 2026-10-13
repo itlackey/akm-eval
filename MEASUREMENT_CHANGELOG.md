@@ -1,9 +1,18 @@
 # Measurement changelog
 
-Each eval's `version` is set by hand in its `src/measurement.ts`, as `MAJOR.MINOR`. Change it when you change what the eval asks akm: the
-cases it sends, the akm config it writes, the commands it runs, the engine settings. Runs of two versions are not compared unless the version
-is the treatment (`--treatment harness`). A scorer fix or a relabelled case needs no new version: `scripts/compare` and the matrix score
-every stored run again with the current scorer. Add a line here when a version changes, under the release it ships in.
+Each eval's `version` is set by hand in its `src/measurement.ts`, as `MAJOR.MINOR`. Change it when you change how the eval asks akm: the
+akm config it writes, the commands it runs, the engine settings. Runs of two versions are not compared unless the version is the treatment
+(`--treatment harness`). A scorer fix or a relabelled case needs no new version: `scripts/compare` and the matrix score every stored run
+again with the current scorer. Nor does a changed case: a comparison leaves out, and names, each case whose input differs between the runs.
+Add a line here when a version changes, under the release it ships in.
+
+## Next
+
+No eval changed version.
+
+- reflect, nightly: the six example agents and commands of llm-delegation-tool now sit in their type's folder (`agents/llm-delegation-tool/`, `commands/llm-delegation-tool/`). akm 0.10 refuses to reflect on an agent or a command outside it, so these cases measured a refusal. Their input changed: comparisons with earlier runs leave them out and name them. A stored night that still has a note at its old path scores that item as an error.
+- retrieval, skillret: a semantic curate that abstains, with no results and no `searchMode`, is an empty answer, not an error. akm 0.10 abstains on a tool envelope such as retrieval's n08; akm 0.9 never does.
+- agent-ab, terminal-bench: the default akm is akm-cli 0.10.261003-beta with plugin 0.10.261002-beta. It is recorded as the run's build, as before.
 
 ## 0.4
 
