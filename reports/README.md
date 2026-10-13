@@ -70,3 +70,4 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 | 0.10.261003-beta | extract | [bifrost-fast35b-v06-20261013](0.10.261003-beta/extract/bifrost-fast35b-v06-20261013) | public | fast/qwen3.6-35b-a3b | full public run; 64 recorded, 64 scored, 0 errors |
 | 0.10.261003-beta | nightly | [bifrost-fast35b-v06-20261013](0.10.261003-beta/nightly/bifrost-fast35b-v06-20261013) | public | fast/qwen3.6-35b-a3b | full public run; 35 recorded, 35 scored, 0 errors |
 | 0.10.261003-beta | promotion | [bifrost-fast35b-v06-20261013](0.10.261003-beta/promotion/bifrost-fast35b-v06-20261013) | public | fast/qwen3.6-35b-a3b | full public run; 80 recorded, 80 scored, 0 errors |
+| 0.10.261003-beta | bakeoff | [bifrost-fast35b-v06-20261013](0.10.261003-beta/bakeoff/bifrost-fast35b-v06-20261013) | public | fast/qwen3.6-35b-a3b | full public run; 40 recorded, 40 scored, 0 errors |
