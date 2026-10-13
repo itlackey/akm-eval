@@ -15,20 +15,35 @@ scripts/compare/run --repeats reports/0.10.261003-beta/judge-gate/bifrost-qwen-a
 |---|---|---|---|---|---|
 | 0.10.261003-beta | agent-ab | [bifrost-gpt120-compatible-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-compatible-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected case; demonstration |
 | 0.10.261003-beta | agent-ab | [bifrost-gpt120-pilot](0.10.261003-beta/agent-ab/bifrost-gpt120-pilot) | public | openai/freellm/gpt-oss:120b | diagnostic: incompatible original plugin; 1 errored |
+| 0.10.261003-beta | bakeoff | [bifrost-qwen-akm-0.10-v04-r1](0.10.261003-beta/bakeoff/bifrost-qwen-akm-0.10-v04-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | bakeoff | [bifrost-qwen-akm-0.10-v04-r2](0.10.261003-beta/bakeoff/bifrost-qwen-akm-0.10-v04-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | bakeoff | [bifrost-qwen-akm-0.10-v04-r3](0.10.261003-beta/bakeoff/bifrost-qwen-akm-0.10-v04-r3) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | consolidate | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/consolidate/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | consolidate | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/consolidate/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | consolidate | [bifrost-qwen-akm-0.10-recovery](0.10.261003-beta/consolidate/bifrost-qwen-akm-0.10-recovery) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | distill | [bifrost-qwen-akm-0.10-r3](0.10.261003-beta/distill/bifrost-qwen-akm-0.10-r3) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | extract | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/extract/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | extract | [bifrost-qwen-akm-0.10-recovery-r1](0.10.261003-beta/extract/bifrost-qwen-akm-0.10-recovery-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | extract | [bifrost-qwen-akm-0.10-recovery-r2](0.10.261003-beta/extract/bifrost-qwen-akm-0.10-recovery-r2) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | judge-gate | [bifrost-qwen-akm-0.10-r3](0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10-r3) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | longmemeval | [akm-0.10-public](0.10.261003-beta/longmemeval/akm-0.10-public) | public | none | full retrieval-only run |
 | 0.10.261003-beta | longmemeval | [bifrost-gpt120-pilot](0.10.261003-beta/longmemeval/bifrost-gpt120-pilot) | public | freellm/gpt-oss:120b | 5 selected questions; demonstration; 1 errored |
+| 0.10.261003-beta | nightly | [bifrost-qwen-akm-0.10-v04-r1](0.10.261003-beta/nightly/bifrost-qwen-akm-0.10-v04-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | nightly | [bifrost-qwen-akm-0.10-v04-r2](0.10.261003-beta/nightly/bifrost-qwen-akm-0.10-v04-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | nightly | [bifrost-qwen-akm-0.10-v04-r3](0.10.261003-beta/nightly/bifrost-qwen-akm-0.10-v04-r3) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | promotion | [bifrost-qwen-akm-0.10-v04-r1](0.10.261003-beta/promotion/bifrost-qwen-akm-0.10-v04-r1) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | promotion | [bifrost-qwen-akm-0.10-v04-r2](0.10.261003-beta/promotion/bifrost-qwen-akm-0.10-v04-r2) | public | chat/qwen3.8-27b | full public run |
+| 0.10.261003-beta | promotion | [bifrost-qwen-akm-0.10-v04-r3](0.10.261003-beta/promotion/bifrost-qwen-akm-0.10-v04-r3) | public | chat/qwen3.8-27b | full public run |
 | 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-r1](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-r1) | public | chat/qwen3.8-27b | full public run; 6 errored |
 | 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-r2](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-r2) | public | chat/qwen3.8-27b | full public run; 6 errored |
 | 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-r3](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-r3) | public | chat/qwen3.8-27b | full public run; 6 errored |
+| 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-v04-r1](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-v04-r1) | public | chat/qwen3.8-27b | full public run; 6 errored |
+| 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-v04-r2](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-v04-r2) | public | chat/qwen3.8-27b | full public run; 6 errored |
+| 0.10.261003-beta | reflect | [bifrost-qwen-akm-0.10-v04-r3](0.10.261003-beta/reflect/bifrost-qwen-akm-0.10-v04-r3) | public | chat/qwen3.8-27b | full public run; 6 errored |
 | 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r1](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r1) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
 | 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r2](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r2) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
 | 0.10.261003-beta | reflect | [bifrost-reflect-example-base-c-r3](0.10.261003-beta/reflect/bifrost-reflect-example-base-c-r3) | public | chat/qwen3.8-27b | 3 selected cases; demonstration |
