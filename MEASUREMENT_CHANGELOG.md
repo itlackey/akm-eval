@@ -6,7 +6,7 @@ akm config it writes, the commands it runs, the engine settings. Runs of two ver
 again with the current scorer. Nor does a changed case: a comparison leaves out, and names, each case whose input differs between the runs.
 Add a line here when a version changes, under the release it ships in.
 
-## Next
+## 0.5
 
 No eval changed version.
 
