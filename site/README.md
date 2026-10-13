@@ -1,99 +1,135 @@
 # Public comparison ledger
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. Every completed public artifact has its
-own row, including every repeat, pilot and compatibility diagnostic. Private,
-running and aborted reports are excluded. The build makes no model calls.
+repository's committed `reports/` tree. Every completed public artifact has a
+row, including repeats, pilots and compatibility diagnostics. Private, running
+and aborted reports are excluded. The build makes no model calls.
 
 The design adapts [fwdslsh/website](https://github.com/fwdslsh/website)'s palette,
-typography, grid and slash motif, with CC BY 4.0 attribution.
+typography, grid and slash motif, with CC BY 4.0 attribution. The grid uses pinned
+Tabulator 6.5.0, bundled locally with its MIT license.
 
-## Use the table
+## Answer questions with the table
 
-All comparison columns are visible by default in a horizontally scrolling table.
-Model and run stay fixed on desktop. Jump buttons move to quality, performance,
-usage, settings and individual test metrics without hiding columns. The table
-remains a table on mobile.
+Choose a test and collection, then choose a view:
 
-- Click any data-column heading to sort. Shift-click adds or changes another
-  sort key. Numeric sorting uses numbers; unrecorded values stay last in either
-  direction. The sort order is stated above the table.
-- Filter with the model, test, collection, scope, version, method, strategy and
-  date controls. Search covers every displayed field.
-- Every column also has its own filter. Numeric columns accept minimum and
-  maximum bounds in the displayed units. Text columns accept words or `|` for
-  alternatives. Every column can show only recorded or unrecorded values.
-- Select individual runs or select all filtered runs, then enable **Compare
-  selected** to inspect their complete rows together. Clear selection restores
-  the current filtered view.
-- CSV and JSON exports contain exactly the filtered rows in the current sort
-  order, with all columns and original report links.
+- **Quality ranking:** highest primary quality first, with the named metric,
+  score-case count, errors, scope and additional test-specific scores. If only
+  one answer model is published for that test, the page says so. Ranking runs
+  cannot establish a model winner without comparable runs from other models.
+- **Speed & usage:** fastest recorded median first, with p95, the timing basis,
+  number of timed cases, calls, input/output tokens, costs and usage coverage.
+  Compare the same test and timing basis. Command/query/agent elapsed times
+  include overhead; the current artifacts do not record token throughput or
+  time to first token.
+- **AKM impact:** scored with/without-AKM runs, ordered by paired quality gain.
+  Both arm scores, gain in percentage points, its recorded confidence interval,
+  paired cases, both medians and relative median-time change appear together.
+  Positive gain means better quality; negative time change means faster.
+  Pilot scope stays visible. Unscored diagnostics cannot produce an impact claim.
 
-Core columns cover run identity, model route, test, collection, dates, scope,
-quality, case counts, errors, timeouts, timing distributions, model calls, token
-usage, costs, engine settings, versions and source fingerprints. Every supported
-test score also has a dedicated numeric column and its recorded denominator.
-Column-heading tooltips describe units and measurement meaning.
+**Compare runs** provides the common quality and latency fields together.
+**Run settings** exposes recorded model routes, engine settings, versions and
+provenance. **All fields** exposes every field, including original timing
+measures and individual test metrics. No row selection is needed.
+
+- Use **Columns** to search, show or hide any field. Drag headings to reorder
+  columns and column edges to resize them. Model and test stay fixed on wide
+  screens; mobile allows the entire grid to scroll.
+- Click headings to sort; Shift-click combines sort keys. Numeric sorting uses
+  numbers, with missing values last in either direction. The current sort is
+  stated above the table.
+- Model, test and scope filters are always available. **Filters** opens
+  collection, versions, search methods, strategy and inclusive date bounds,
+  plus conditions on any column. Conditions combine with AND. Filter chips
+  can be removed individually; **Reset** clears all filters.
+- Enable **Column filters** to filter directly in headings. Numeric inputs
+  accept `>=80`, `<=5`, `80..95` or an exact number in displayed units. Text
+  inputs accept words and `|` alternatives. `blank` and `recorded` distinguish
+  unavailable measurements from zero. Pasted values apply immediately.
+- Hover headings for definitions and cells for full values. Short run labels
+  link to the exact original summary; test names link to scoring documentation.
+- CSV and JSON exports include all matching rows in sort order, all fields and
+  original report links, regardless of pagination or column visibility.
 
 ## Data meanings
 
-**Quality %** is the named primary metric scaled from 0–1 to 0–100. It is not an
-overall score across tests. Paired task/answer benchmarks use the AKM arm; search
-uses keyword nDCG@10. Both arms and both ranking methods also have their own
-metric columns. Compare quality within the same test, collection and scoring
-version. Unknown values remain unrecorded, not zero.
+**Quality %** scales the named primary metric from 0–1 to 0–100. It is not an
+aggregate score across tests. Paired task/answer benchmarks use the AKM arm;
+search uses keyword nDCG@10. Original scores and denominators remain available
+independently. Compare the same test, collection, scope and scoring version.
+Unknown measurements display —, distinct from recorded zeroes.
 
-**Performance** comes from original summaries and samples. Case mean, p50 and
-p95 use recorded elapsed command durations, including failed cases. Percentiles
-use linear interpolation. Case-time sums measure work, not run wall time.
-Wall time is shown only where the collector records it. Keyword, semantic,
-control and AKM-arm timings stay separate. These durations include request or
-agent overhead and do not claim to measure token decode speed or first-token
-latency.
+**Paired gain** comes from the recorded shared-case comparison. It need not
+match the subtraction of overall arm scores: LongMemEval's published pilot has
+60% and 75% marginal accuracy but a 25-point paired gain on four shared cases.
+The recorded confidence bounds and pilot sample sizes are shown without
+inventing stronger evidence.
 
-**Usage** uses recorded model-call and token fields. Available paired-arm token
-records are summed with separate usage-coverage counts; failed calls may have no
-usage record. Cached input tokens remain part of input-token totals. Costs are
-never inferred from a provider's price or from free/local serving.
+**Latency p50/p95** select recorded command timings, keyword-query timings, or
+with-AKM agent/answer timings, in that order. The separate **Latency basis**
+column identifies the source; **Speed & usage** shows it by default. Original
+arm and method distributions remain independent columns. Percentiles use
+linear interpolation and include failed cases where timing exists. Case-time
+sums measure work, not run wall time. Relative median-time change is
+`(with-AKM median / without-AKM median - 1) * 100`; arm timing counts may differ.
+
+**Usage** projects recorded model-call and token fields. Available paired-arm
+records are summed with coverage counts; failed calls may have no usage record.
+Cached tokens remain part of input-token totals. Costs are never inferred from
+provider prices or from free/local serving.
 
 Raw configs, prompts, credentials, private endpoints and host paths are not
-copied into the public dataset. Only explicitly projected scalar settings and
-performance fields are added. Original public scores and case output are linked
-from each row. The ledger does not rescore cases.
+copied into the public dataset. Only explicitly projected settings and
+performance fields are added. The ledger does not rescore cases.
 
-## Build and publish
+## Build, verify and publish
 
 From the repository root, with Bun 1.4.2:
 
 ```sh
+cd scripts/ledger/src
+bun install --frozen-lockfile --ignore-scripts
+cd ../../..
 bun run test:site
 bun run build:site
 ```
 
-Serve `.site-output/` with a static server. The page fetches adjacent data; opening
-the HTML as a local file is not a working preview. Relative paths support GitHub
-Pages' `/akm-eval/` project path and a local server root. Assets and data requests
-include the source revision to keep deployments from mixing cached generations.
+For real browser verification (Node 20+ and Chromium):
 
-To build another published report tree:
+```sh
+cd scripts/ledger/src
+bunx playwright install chromium
+bunx playwright test --config playwright.config.mjs
+```
+
+The browser suite starts an isolated local static server, checks the actual
+published dataset through UI interactions, and saves screenshots under
+`.browser-results/`. It covers the three question workflows, numeric/missing
+filters, sorting, resizing, column controls, pagination, exports and mobile
+scrolling. Unit tests cover projection, rounding boundaries and unequal paired
+sample sizes. GitHub Pages CI runs both suites before deployment.
+
+Serve `.site-output/` with a static server. Relative paths support GitHub Pages'
+`/akm-eval/` project path and a local server root. Assets and data requests
+include the source revision to avoid mixing cached deployments. To build a
+different published tree:
 
 ```sh
 scripts/ledger/run --results ../another-checkout/reports --output .site-output
 ```
 
 The build records the results checkout's revision. An exported tree without Git
-metadata uses `main`; pass `--source-revision COMMIT` to retain a pinned revision.
+metadata uses `main`; pass `--source-revision COMMIT` for a pinned revision.
 There are no fixed run counts, version folders or collection dates in the site.
 
-`scripts/ledger/src/` joins the regular `scripts/check` typecheck and test lanes.
 `.github/workflows/ledger-pages.yml` validates pull requests and publishes main
-changes to `reports/`, the site or its builder through GitHub Pages.
-To rebuild manually:
+changes to the reports, site or builder. To rebuild manually:
 
 ```sh
 gh workflow run ledger-pages.yml --repo itlackey/akm-eval --ref main
 ```
 
-All Actions are pinned. Only the deployment job receives Pages and OIDC write
-permissions. The upload contains the public HTML, stylesheet, script, projected
-JSON and `.nojekyll`.
+Actions are pinned. Only the deployment job receives Pages and OIDC write
+permissions. The upload contains only the public page, local grid assets and
+license, projected JSON and `.nojekyll`.

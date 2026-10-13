@@ -1,0 +1,17 @@
+{
+  "name": "akm-eval-ledger",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "tabulator-tables": "6.5.0"
+  }
+}
