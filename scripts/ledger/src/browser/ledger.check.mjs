@@ -10,9 +10,9 @@ async function exportRows(page) {
   return JSON.parse(text).runs;
 }
 async function open(page) {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('#count')).toHaveText(/\d+ of \d+ runs/);
-  return await page.request.get('/data.json').then(response => response.json());
+  return await page.request.get('./data.json').then(response => response.json());
 }
 
 test('desktop gives useful comparisons, distinct run labels, sorting, resizing and column controls', async ({ page }, info) => {
@@ -166,14 +166,14 @@ test('facets, date bounds, missing-value conditions, CSV and reordering work thr
 
 test('quality ranking chooses the stronger model when comparable models are supplied', async ({ page, request }) => {
   // A two-model fixture tests functionality the current one-model-per-test publication cannot demonstrate.
-  const data=await request.get('/data.json').then(response=>response.json());
+  const data=await request.get('./data.json').then(response=>response.json());
   const source=data.runs.find(row=>row.suite==='reflect' && row.role==='Full suite');
   const other=structuredClone(source);other.id+='-model-b';other.model='chat/test-model-b';other.label='model-b-run';
   other.comparison.quality_percent=26/27*100;other.comparison.quality_passed=26;other.comparison.quality_cases=27;
   other.comparison['score:'+other.comparison.quality_metric]=26/27*100;
   other.scores=other.scores.map(score=>score.label===other.comparison.quality_metric?{...score,value:26/27,numerator:26,denominator:27}:score);
   await page.route('**/data.json*',route=>route.fulfill({json:{...data,runs:[source,other]}}));
-  await page.goto('/');await expect(page.locator('#count')).toHaveText('2 of 2 runs');
+  await page.goto('./');await expect(page.locator('#count')).toHaveText('2 of 2 runs');
   await page.locator('#suite').selectOption('reflect');await page.locator('#view').selectOption('quality');
   await expect(cells(page,'model').first()).toHaveText('test-model-b');
   expect((await exportRows(page))[0].id).toBe(other.id);
