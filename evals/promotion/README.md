@@ -65,7 +65,7 @@ No command queues a proposal without a model, so the eval writes rows into the `
 
 ## Results so far
 
-`chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
+The public runs on akm 0.10.261003-beta, three repeats, are in [`reports/0.10.261003-beta/promotion/`](../../reports/0.10.261003-beta/promotion/). The table below is older: `chat/qwen3.8-27b`, thinking off, 2026-10-07. The lab's own set has 65 real promotions (4 good, 61 bad).
 
 | | 0.9.26 | #1067 (judge shown the 5 nearest notes) |
 |---|---:|---:|
