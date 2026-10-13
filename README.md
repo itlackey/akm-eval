@@ -62,7 +62,7 @@ Copy `.env.example` to `.env` and fill it in:
 - `JUDGE_MODEL`, and `JUDGE_BASE_URL` with `JUDGE_API_KEY` if the judge is elsewhere: the judge, for `benchmarks/longmemeval` and `evals/retrieval/label`.
 - `AKM_BIN`: the akm to run, if not the one on `PATH`.
 
-A variable already set in your shell wins over `.env`. `.env` is gitignored.
+A value set in `.env` wins over the same variable set in your shell; an empty one (`KEY=`) leaves the shell's. `.env` is gitignored.
 
 akm runs in a sandbox of temp folders per run and never touches your own akm bundle. It gets only a short list of your environment (`ALLOWED_ENV` in `lib/akm/akm.ts`) plus the variables its config names as `$NAME`, such as `$MODEL_API_KEY`.
 

@@ -50,9 +50,14 @@ describe("lib/env.sh, the .env loader of the bash scripts", () => {
     expect(loadEnv('FIRST=1\r\nSECOND="2"\r\nLAST=3', ["FIRST", "SECOND", "LAST"])).toEqual({ FIRST: "1", SECOND: "2", LAST: "3" });
   });
 
-  test("a variable that is already set wins, even an empty one", () => {
-    const env = loadEnv("SET=from-file\nEMPTY=from-file\nNEW=from-file\n", ["SET", "EMPTY", "NEW"], { SET: "from-caller", EMPTY: "" });
-    expect(env).toEqual({ SET: "from-caller", EMPTY: "", NEW: "from-file" });
+  test("a value in .env wins over a variable the shell already set, and an empty one in .env leaves the shell's", () => {
+    const env = loadEnv("SET=from-file\nEMPTY=from-file\nNEW=from-file\nBLANK=\nUNSET_BLANK=\n", ["SET", "EMPTY", "NEW", "BLANK", "UNSET_BLANK"], { SET: "from-caller", EMPTY: "", BLANK: "from-caller" });
+    expect(env).toEqual({ SET: "from-file", EMPTY: "from-file", NEW: "from-file", BLANK: "from-caller", UNSET_BLANK: "" });
+  });
+
+  test("is read once: a script started by one that read it keeps the environment it was given", () => {
+    expect(loadEnv("SET=from-file\nNEW=from-file\n", ["SET", "NEW", "AKM_EVAL_ENV_LOADED"])).toEqual({ SET: "from-file", NEW: "from-file", AKM_EVAL_ENV_LOADED: "1" });
+    expect(loadEnv("SET=from-file\nNEW=from-file\n", ["SET", "NEW"], { SET: "from-parent", AKM_EVAL_ENV_LOADED: "1" })).toEqual({ SET: "from-parent", NEW: undefined });
   });
 
   test("takes a line that starts with spaces or a tab, also with export, and skips an indented comment", () => {
@@ -142,7 +147,7 @@ describe("lib/env.sh, the .env loader of the bash scripts", () => {
     const shell = loadEnv(text, names);
     const parsed = readDotEnv(join(fakeRoot(text), ".env"));
     expect(Object.fromEntries(names.map((n) => [n, parsed[n]]))).toEqual(shell);
-    expect([shell.K1, shell.K2, shell.K5, shell.DUP, shell.INDENTED]).toEqual(["small", "two words", "a # b", "first", " spaced"]);
+    expect([shell.K1, shell.K2, shell.K5, shell.DUP, shell.INDENTED]).toEqual(["small", "two words", "a # b", "second", " spaced"]);
   });
 
   test("does nothing when there is no .env", () => {

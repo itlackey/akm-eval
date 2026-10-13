@@ -6,7 +6,9 @@
 # quotes loses its quotes and is otherwise taken as it is, # included. After the closing quote, a space and a # start a comment, so
 # `MODEL_NAME="small" # the local one` is `small`.
 # An unquoted value ends at a # that has a space before it, so `MODEL_NAME=small # the local one` is `small`.
-# A variable that is already set wins, so a setting given on the command line beats .env.
+# A value in .env wins over the same variable already set in the shell. An empty one (`KEY=`) leaves a variable that is set alone.
+# .env is read once: a script that another starts, as the matrix and the smoke start runs, keeps the environment the first one made.
+# AKM_EVAL_ENV_LOADED marks it, and a caller that sets it keeps .env out altogether.
 
 # Exports the settings of the file `$1`, if it exists. Its locals start with _env_, so a setting never hides behind one.
 load_env() {
@@ -30,8 +32,11 @@ load_env() {
       _env_stripped="${_env_val%%[[:space:]]#*}"
       if [ "$_env_stripped" != "$_env_val" ]; then _env_val="${_env_stripped%"${_env_stripped##*[![:space:]]}"}"; fi
     fi
-    if [ -z "${!_env_key+x}" ]; then export "$_env_key=$_env_val"; fi
+    if [ -n "$_env_val" ] || [ -z "${!_env_key+x}" ]; then export "$_env_key=$_env_val"; fi
   done < "$_env_file"
 }
 
-load_env "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+if [ -z "${AKM_EVAL_ENV_LOADED:-}" ]; then
+  load_env "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+  export AKM_EVAL_ENV_LOADED=1
+fi

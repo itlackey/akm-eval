@@ -181,7 +181,7 @@ const corpusDigest = (root: string, evalName: string, args: string[], inputs: st
       .join("") + (inputs === null ? "" : `inputs\0${inputs}\n`),
   );
 
-/** The settings of a `.env` the way lib/env.sh reads them: KEY=value lines, `export ` allowed, quotes dropped, an unquoted value ends at ` #`, a quoted one at its closing quote and a ` #` comment after it; the first line of a key wins. */
+/** The settings of a `.env` the way lib/env.sh reads them: KEY=value lines, `export ` allowed, quotes dropped, an unquoted value ends at ` #`, a quoted one at its closing quote and a ` #` comment after it; a later line with a value wins over an earlier one, and an empty one does not. */
 export function readDotEnv(file: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!existsSync(file)) return out;
@@ -200,15 +200,20 @@ export function readDotEnv(file: string): Record<string, string> {
       const stripped = value.replace(/\s#[^]*$/, "");// env.sh trims the space before a comment, and leaves the end of a value that has none
       if (stripped !== value) value = stripped.trimEnd();
     }
-    if (!(key in out)) out[key] = value;
+    if (value !== "" || !(key in out)) out[key] = value;
   }
   return out;
 }
 
 type Env = Record<string, string | undefined>;
 
-/** The environment an eval's `run` script sees: the caller's, then the repository's .env for what the caller did not set. */
-const effectiveEnv = (root: string, env: Env): Env => ({ ...readDotEnv(join(root, ".env")), ...Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined)) });
+/** The environment an eval's `run` script sees: the caller's, with the repository's .env over it as lib/env.sh reads it (a value wins, an empty one fills only what is unset), unless the caller read .env already. */
+function effectiveEnv(root: string, env: Env): Env {
+  const out: Env = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined));
+  if (out.AKM_EVAL_ENV_LOADED) return out;
+  for (const [key, value] of Object.entries(readDotEnv(join(root, ".env")))) if (value !== "" || out[key] === undefined) out[key] = value;
+  return out;
+}
 
 /** The endpoint a run calls, as lib/provenance.ts identifies it: scheme, host, port and path, with no credentials. A value that is no URL is told apart by a digest of it. */
 const endpointOf = (url: string | undefined): string | null => endpointIdentity(url) ?? (url?.trim() ? `unreadable ${sha256(url).slice(0, 12)}` : null);

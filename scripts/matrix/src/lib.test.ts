@@ -2129,7 +2129,7 @@ describe("the fingerprint of a job", () => {
   test("reads a .env the way lib/env.sh does", () => {
     const root = tmp();
     writeFileSync(join(root, ".env"), ['# comment', 'MODEL_NAME=small # the local one', 'export MODEL_BASE_URL="https://x.example.com/v1#frag"', "JUDGE_MODEL='j 1'", "  SPACED = value", "1BAD=no", "MODEL_NAME=second", "novalue"].join("\n"));
-    expect(readDotEnv(join(root, ".env"))).toEqual({ MODEL_NAME: "small", MODEL_BASE_URL: "https://x.example.com/v1#frag", JUDGE_MODEL: "j 1", SPACED: " value" });
+    expect(readDotEnv(join(root, ".env"))).toEqual({ MODEL_NAME: "second", MODEL_BASE_URL: "https://x.example.com/v1#frag", JUDGE_MODEL: "j 1", SPACED: " value" });
     expect(readDotEnv(join(root, "missing"))).toEqual({});
   });
 

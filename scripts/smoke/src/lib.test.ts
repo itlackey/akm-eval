@@ -120,14 +120,18 @@ describe("the stub model", () => {
 describe("stubEnv", () => {
   test("points the model and the judge at the stub, with a key of its own, and keeps the rest of the environment", () => {
     const env = stubEnv({ PATH: "/bin", AKM_BIN: "akm", MODEL_BASE_URL: "https://real.example/v1", MODEL_API_KEY: "real-key", JUDGE_API_KEY: "real-judge-key", OPENAI_API_KEY: "x", GONE: undefined }, "http://127.0.0.1:1/v1");
-    expect(env).toMatchObject({ PATH: "/bin", AKM_BIN: "akm", OPENAI_API_KEY: "x", MODEL_BASE_URL: "http://127.0.0.1:1/v1", JUDGE_BASE_URL: "http://127.0.0.1:1/v1", MODEL_API_KEY: "smoke-key", JUDGE_API_KEY: "smoke-key", MODEL_NAME: "smoke-model", JUDGE_MODEL: "smoke-model" });
+    expect(env).toMatchObject({ PATH: "/bin", AKM_BIN: "akm", OPENAI_API_KEY: "x", AKM_EVAL_ENV_LOADED: "1", MODEL_BASE_URL: "http://127.0.0.1:1/v1", JUDGE_BASE_URL: "http://127.0.0.1:1/v1", MODEL_API_KEY: "smoke-key", JUDGE_API_KEY: "smoke-key", MODEL_NAME: "smoke-model", JUDGE_MODEL: "smoke-model" });
     expect(Object.values(env).join(" ")).not.toContain("real-key");
     expect("GONE" in env).toBe(false);
   });
 
-  test("beats .env in a real run script: lib/env.sh leaves a variable that is set alone", () => {
-    const out = Bun.spawnSync(["bash", "-c", 'source lib/env.sh; echo "$MODEL_BASE_URL"'], { cwd: ROOT, env: stubEnv({ PATH: process.env.PATH }, "http://127.0.0.1:7/v1") });
-    expect(out.stdout.toString().trim()).toBe("http://127.0.0.1:7/v1");
+  test("beats .env in a real run script: lib/env.sh does not read .env over the stub", () => {
+    const root = tmp();
+    mkdirSync(join(root, "lib"));
+    writeFileSync(join(root, "lib", "env.sh"), readFileSync(join(ROOT, "lib", "env.sh")));
+    writeFileSync(join(root, ".env"), "MODEL_BASE_URL=https://real.example/v1\nMODEL_API_KEY=real-key\n");
+    const out = Bun.spawnSync(["bash", "-c", 'source lib/env.sh; echo "$MODEL_BASE_URL $MODEL_API_KEY"'], { cwd: root, env: stubEnv({ PATH: process.env.PATH }, "http://127.0.0.1:7/v1") });
+    expect(out.stdout.toString().trim()).toBe("http://127.0.0.1:7/v1 smoke-key");
   });
 });
 

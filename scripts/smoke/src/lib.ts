@@ -110,8 +110,9 @@ export function startStub(answerer: Answerer = () => EMPTY_ANSWER): Stub {
 export function stubEnv(base: Record<string, string | undefined>, url: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(base)) if (v !== undefined) env[k] = v;
-  // Model and judge both: nothing in .env, a key included, is sent anywhere.
-  return { ...env, MODEL_BASE_URL: url, MODEL_API_KEY: "smoke-key", MODEL_NAME: "smoke-model", JUDGE_BASE_URL: url, JUDGE_API_KEY: "smoke-key", JUDGE_MODEL: "smoke-model" };
+  // Model and judge both: nothing in .env, a key included, is sent anywhere. AKM_EVAL_ENV_LOADED keeps the runs' lib/env.sh from
+  // reading .env over the stub.
+  return { ...env, AKM_EVAL_ENV_LOADED: "1", MODEL_BASE_URL: url, MODEL_API_KEY: "smoke-key", MODEL_NAME: "smoke-model", JUDGE_BASE_URL: url, JUDGE_API_KEY: "smoke-key", JUDGE_MODEL: "smoke-model" };
 }
 
 export interface Entry {
