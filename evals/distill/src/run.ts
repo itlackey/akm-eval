@@ -191,7 +191,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, results: strin
     served_models: counts.served_models,
     limit: ctx.limit ?? null,
     ...overrideSummary(overrides),
-    config: hideEndpoint(redactConfig(ctx.config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
+    config: redactConfig(hideEndpoint(ctx.config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
     engine: engineSettings(ctx.config),
     assets_sha256: assetsDigest,
     seed,

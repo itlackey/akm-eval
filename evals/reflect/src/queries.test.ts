@@ -46,12 +46,12 @@ function rewrite(): string {
 const privateCases = (): Case[] => parseCases(readFileSync(join(rewrite(), "assets", "cases.jsonl"), "utf8"));
 
 describe("retrievalSearches", () => {
-  test("the public corpus gets the labelled queries of 46 of its 50 notes, as the retrieval eval labels them", () => {
+  test("the public corpus gets the labelled queries of 49 of its 50 notes, as the retrieval eval labels them", () => {
     const searches = retrievalSearches(publicCorpus, REPO);
     const withQueries = PUBLIC.filter((c) => searches.has(refOf(c.path)));
     expect(PUBLIC).toHaveLength(50);
-    expect(withQueries).toHaveLength(46); // the README said 48
-    expect(PUBLIC.filter((c) => !searches.has(refOf(c.path))).map((c) => c.id).sort()).toEqual(["description-quote-05", "historical-02", "retrieval-miss-04", "when-to-use-missing-05"]);
+    expect(withQueries).toHaveLength(49); // q018 now labels three previously ungraded notes
+    expect(PUBLIC.filter((c) => !searches.has(refOf(c.path))).map((c) => c.id).sort()).toEqual(["historical-02"]);
     expect(searches.get("skills/akm-migrate")).toEqual(["upgrade akm-cli across several 0.9 releases safely"]);
     for (const queries of searches.values()) expect(queries.length).toBeLessThanOrEqual(5);
   });
@@ -62,7 +62,7 @@ describe("retrievalSearches", () => {
     const pub = retrievalSearches(publicCorpus, REPO);
     const ids = (cases: Case[], s: Map<string, string[]>) => cases.filter((c) => s.has(refOf(c.path))).map((c) => c.id);
     expect(ids(privateCases(), searches)).toEqual(ids(PUBLIC, pub));
-    expect(ids(privateCases(), searches)).toHaveLength(46);
+    expect(ids(privateCases(), searches)).toHaveLength(49);
     // the notes are renamed (akm becomes another word, and so does a tool name in a path), and so are the queries
     const was = PUBLIC.find((c) => c.id === "historical-01") as Case;
     const now = privateCases().find((c) => c.id === "historical-01") as Case;

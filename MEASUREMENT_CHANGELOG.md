@@ -13,7 +13,7 @@ No eval changed version: every eval is at 0.2, and runs made with akm-eval 0.2 c
 
 The first release. Every eval is at version 0.2.
 
-What harness-v3 changed, against results from before it (which compare only as exploratory, see the README):
+What harness-v3 changed, against results from before it (which are now refused because they have no manifest; run them again):
 
 - every eval: the manifest, stored raw outputs and rescore (#40); `--corpus public|custom` with a `private` flag in corpus.json, `private` and `own` kept as aliases for one release (#47); endpoints recorded as a host and an id, never a path (#65); a generator digest in private assets (#44); akm runs with an allowlisted environment (#72).
 - reflect: a refused edit is scored as the note left alone (#57); a retrieval check that could not grade is an error, not a refusal (#58); `not_current` fails wording that offers the note for current work, and description-period needs the same words in the same order (#59); `--retrieval-queries` on a rewrite records the corpus's own queries (#60).

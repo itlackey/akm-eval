@@ -158,9 +158,9 @@ describe("judgedLessons", () => {
   test("a run of akm 0.9.26, whose judge names the first criterion novelty, is judged with novelty as reusable, and says so (#61)", () => {
     const { root, assets, cases } = repo();
     const rows = rowsOf(cases, { novelty: 4, nonRedundancy: 2, grounding: 5 });
-    for (const manifest of [manifestOf(assets, "0.9.26"), null]) {
+    for (const manifest of [manifestOf(assets, "0.9.26")]) {
       const run = runOf(root, assets, { akm_version: "0.9.26" }, rows, manifest);
-      const r = judgedLessons(run, { root, rescore: manifest === null });
+      const r = judgedLessons(run, { root, rescore: false });
       expect(goodness(r)).toEqual([["lesson-01", true], ["lesson-02", false], ["status-01", false]]);
       expect(r.judged.map((j) => j.scores)).toEqual([s(4, 2, 5), s(4, 2, 5), s(4, 2, 5)]);
       expect(r.inputs).toMatchObject({ akm_version: "0.9.26", judge_first_criterion: "novelty" });
@@ -181,7 +181,7 @@ describe("judgedLessons", () => {
 
   test("a run whose akm version is not recorded cannot be read with novelty, and is read with reusable", () => {
     const { root, assets, cases } = repo();
-    const legacy = (rows: object[]) => runOf(root, assets, { akm_version: undefined }, rows, null);
+    const legacy = (rows: object[]) => runOf(root, assets, { akm_version: undefined }, rows, { ...manifestOf(assets), akm: { ...manifestOf(assets).akm, version: null } });
     expect(() => judgedLessons(legacy(rowsOf(cases, OLD)), { root, rescore: true })).toThrow(/an akm whose version the summary does not record/);
     expect(judgedLessons(legacy(rowsOf(cases, NEW)), { root, rescore: true }).judged).toHaveLength(3);
   });
@@ -238,14 +238,10 @@ describe("judgedLessons", () => {
     expect(judgedLessons(run, { root, rescore: true }).inputs.changed_cases).toEqual(["lesson-01"]);
   });
 
-  test("a run with no manifest has nothing to compare, and needs --rescore, which says so", () => {
+  test("a run without a manifest is refused even with --rescore", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, {}, rowsOf(realCases(), OLD), null);
-    expect(() => judgedLessons(run, { root })).toThrow("the run has no manifest (it was made before harness-v3), so nothing says which cases it was scored against");
-    expect(() => judgedLessons(run, { root })).toThrow("add --rescore");
-    const rescored = judgedLessons(run, { root, rescore: true });
-    expect(rescored.judged).toHaveLength(3);
-    expect(rescored.inputs).toMatchObject({ mode: "rescore", manifest: "legacy", akm_version: "0.9.26", judge_first_criterion: "novelty" });
+    for (const rescore of [false, true]) expect(() => judgedLessons(run, { root, rescore })).toThrow("was made before akm-eval 0.2");
   });
 
   test("a manifest that is not sound, a manifest without the case, and a run of another eval are refused", () => {
@@ -294,7 +290,7 @@ describe("judgedLessons", () => {
     const outside = runOf(root, own, { corpus: "custom", corpus_folder: null }, undefined, { ...manifestOf(own), corpus: "custom" });
     expect(() => judgedLessons(outside, { root })).toThrow("Name the folder with --cases DIR");
     expect(judgedLessons(outside, { root, cases: join("private", "distill", "own", "assets") }).inputs).toMatchObject({ assets: join("private", "distill", "own", "assets"), differences: [] });
-    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow('read the corpus "somewhere-else"');
+    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow("was made before akm-eval 0.2");
     expect(() => judgedLessons(runOf(root, assets, { corpus: undefined }), { root })).toThrow("read the corpus undefined");
   });
 });
@@ -367,14 +363,15 @@ describe("the command line", () => {
     expect(done.err).toContain("2 have no judge scores");
   });
 
-  test("stops with exit 2 on a run with no manifest, naming it, and runs with --rescore, which the report says", () => {
+  test("stops with exit 2 on a run without a manifest, also with --rescore", () => {
     const { results, tamper } = setup();
     tamper({ manifest: undefined });
-    const refused = run([results]);
-    expect(refused.code).toBe(2);
-    expect(refused.err).toContain("the run has no manifest");
-    expect(refused.err).toContain("add --rescore");
-    expect(JSON.parse(run(["--rescore", results]).out).inputs[0]).toMatchObject({ mode: "rescore", manifest: "legacy" });
+    for (const args of [[results], ["--rescore", results]]) {
+      const refused = run(args);
+      expect(refused.code).toBe(2);
+      expect(refused.out).toBe("");
+      expect(refused.err).toContain("was made before akm-eval 0.2");
+    }
   });
 
   test("asks for a folder, and says what it takes with --help", () => {

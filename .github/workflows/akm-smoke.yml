@@ -1,10 +1,10 @@
 # Runs each eval that drives akm once, on one case, against a stub model and a real akm (scripts/smoke). Every night, on demand, and on a
-# pull request that changes the evals or what they share (the pinned leg only). Two legs:
+# pull request (the pinned leg only). Bakeoff runs five cases, one per process. Two legs:
 #
 #   pinned  the akm release this repository pins, in the contract mode: the stub answers each model call with a reply that is valid, and the
 #           leg fails unless every eval reaches the outcome it counts as its work (a proposal, a lesson, a memory, a verdict, a retirement,
 #           an accepted promotion), and the outcome it has for a reply akm cannot read. This leg is required: when it fails, the workflow fails.
-#           It is the leg a pull request runs; make "smoke (pinned)" a required status check to gate merges on it.
+#           It is the leg every pull request runs; make "smoke (pinned)" a required status check to gate merges on it.
 #   latest  the latest release, in the startup mode: the stub answers {}, and the leg shows that akm still takes the commands and that the
 #           JSON the evals read before the model is readable. It is advisory (continue-on-error), a warning that a change to akm that the evals
 #           cannot read shipped the day before. When it goes red, run `scripts/smoke/run --contract` by hand against that release. A pull
@@ -18,13 +18,6 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch:
   pull_request:
-    paths:
-      - "lib/**"
-      - "evals/**"
-      - "benchmarks/**"
-      - "corpus/**"
-      - "scripts/smoke/**"
-      - ".github/workflows/akm-smoke.yml"
 
 permissions:
   contents: read

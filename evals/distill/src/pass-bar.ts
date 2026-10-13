@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { caseDigests, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, noManifest, readManifest } from "../../../lib/manifest.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -28,13 +28,13 @@ A lesson is good when it passes the distill eval's checks for its case; a lesson
 The checks read the cases, the memories and the scorer of the code here now, not the ones the run was given. So the manifest in the
 summary.json of a run must hold, for every case of the run, the input and the label digests of the case as it is now, and every case id
 of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
-A run from before the manifest has none to compare.
+A run without a manifest is refused, also with --rescore.
 
 The judge's first score is called reusable from akm ${RENAMED_IN}, and novelty before. A run of an older akm is read with novelty as
 reusable. A run whose scores have other names, or whose akm version is not known, is refused, and the message names the release.
 
   --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a run has cases with other
-             inputs or labels, has no manifest, or has a case id that is gone. The report names the stored
+             inputs or labels, or has a case id that is gone. The report names the stored
              and the current digests, and the case ids left out.
   --cases    the folder of the cases of a custom run whose folder was outside the repository, so the summary does not record it.
 
@@ -137,8 +137,8 @@ export interface Inputs {
   corpus: string;
   /** The folder of the cases the read used, from the repository root. */
   assets: string;
-  /** Whether the summary has a manifest. A run from before harness-v3 has none, and nothing to compare. */
-  manifest: "manifest" | "legacy";
+  /** Every accepted run has a manifest. */
+  manifest: "manifest";
   /** The akm release of the run, and the name its judge's first criterion had in the rows that were judged (null when none was). */
   akm_version: string | null;
   judge_first_criterion: "reusable" | "novelty" | null;
@@ -166,7 +166,7 @@ const some = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${i
 /**
  * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. A lesson is good by
  * the cases, the memories and the checks here now, so its manifest must hold the input and label digests of each case (the input covers
- * the memory) as they are here now. A run with no manifest has nothing to compare, and every case id of the run must be in the corpus. Otherwise this throws and
+ * the memory) as they are here now. A run with no manifest is refused, also with `rescore`, and every case id of the run must be in the corpus. Otherwise this throws and
  * says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and says all of it in `inputs`.
  */
 export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; noScores: number; inputs: Inputs } {
@@ -174,6 +174,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   if (summary.eval !== NAME) throw new Error(`${resultsDir} is a run of ${JSON.stringify(summary.eval)}, not of ${NAME}`);
   const reading = readManifest(summary);
+  if (reading.kind === "legacy") throw new Error(noManifest(resultsDir));
   if (reading.kind === "invalid") throw new Error(`${resultsDir}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
   const assets = options.cases !== undefined ? resolve(root, options.cases) : corpusFolder(root, summary);
   const where = relative(root, assets);
@@ -187,9 +188,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const now = caseDigests(MEASUREMENT, present);
   const differences: string[] = [];
   const changed: string[] = [];
-  if (reading.kind === "legacy") {
-    differences.push("the run has no manifest (it was made before harness-v3), so nothing says which cases it was scored against");
-  } else {
+  {
     const m = reading.manifest;
     const unknown = present.filter((c) => m.cases[c.id] === undefined).map((c) => c.id);
     if (unknown.length > 0) differences.push(`the manifest of the run does not hold the case${unknown.length === 1 ? "" : "s"} ${some(unknown)}`);
@@ -204,7 +203,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     throw new Error(`${resultsDir} cannot be judged by the cases and the scorer here now:\n  - ${lines.join("\n  - ")}\nA lesson would be good or bad by cases, memories and checks other than the run's. To judge its stored lessons by what is here now on purpose, add --rescore.`);
   }
 
-  const version: string | null = reading.kind === "manifest" ? reading.manifest.akm.version : typeof summary.akm_version === "string" ? summary.akm_version : null;
+  const version = reading.manifest.akm.version;
   const judged: Judged[] = [];
   let skipped = 0;
   let noScores = 0;
@@ -229,7 +228,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     mode: options.rescore ? "rescore" : "stored",
     corpus: String(summary.corpus),
     assets: where,
-    manifest: reading.kind === "manifest" ? "manifest" : "legacy",
+    manifest: "manifest",
     akm_version: version,
     judge_first_criterion: judged.length === 0 ? null : novelty ? "novelty" : "reusable",
     differences,

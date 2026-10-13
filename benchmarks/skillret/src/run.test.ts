@@ -785,7 +785,7 @@ describe("--repeat", () => {
     const spread = b.spread("rep");
     expect(spread).toMatchObject({ eval: "skillret", corpus: "public", label: "rep", repeat: 2, akm_version: "0.9.99-test", n_errored: { min: 0, max: 0, mean: 0 }, timeouts: { search: { min: 0, max: 0, mean: 0 } }, metrics: { search: { "NDCG@10": { min: ndcg, max: ndcg } } } });
     expect(spread.metrics.search["NDCG@10"].mean).toBeCloseTo(ndcg, 4);
-    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)));
+    expect(spread.runs).toEqual(readdirSync(b.results).filter((n) => /-rep-r\d$/.test(n)).sort());
     expect("model" in spread).toBe(false); // no model is called
   }, 120_000);
 

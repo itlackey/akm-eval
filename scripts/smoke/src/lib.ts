@@ -123,6 +123,8 @@ export interface Entry {
   needs?: string;
   /** False for an eval that calls no model, such as retrieval. Left out for one that does. */
   model?: false;
+  /** Cases to run; bakeoff needs five to exercise each process. */
+  limit?: number;
   /**
    * For an eval that calls no model, so that nothing else shows akm answered: the columns of its samples.jsonl rows (each an object with
    * the `refs` akm returned) that must hold a ref in at least one row. Left out for an eval that calls a model.
@@ -144,7 +146,7 @@ export const ENTRIES: Entry[] = [
   { dir: "evals/nightly" },
   { dir: "evals/promotion", needs: "akm's embedding model, which akm downloads into .cache/models the first time (133 MB, from huggingface.co)" },
   { dir: "evals/agent-ab", skip: "needs Docker" },
-  { dir: "evals/bakeoff", skip: "the smoke has no canned replies for its five commands yet" },
+  { dir: "evals/bakeoff", limit: 5 },
   { dir: "benchmarks/terminal-bench", skip: "needs Docker" },
   { dir: "benchmarks/longmemeval", skip: "downloads the LongMemEval dataset" },
   { dir: "benchmarks/skillret", skip: "downloads the SkillRet dataset" },
@@ -262,7 +264,7 @@ export async function runEntry(entry: Entry, opts: RunOptions): Promise<Outcome>
   const results = join(opts.root, entry.dir, "results");
   const before = listDirs(results);
   opts.stub?.reset();
-  const args = ["bash", join(opts.root, entry.dir, "run"), "--corpus", "public", "--limit", "1", "--label", LABEL, ...(opts.akm ? ["--akm", opts.akm] : [])];
+  const args = ["bash", join(opts.root, entry.dir, "run"), "--corpus", "public", "--limit", String(entry.limit ?? 1), "--label", LABEL, ...(opts.akm ? ["--akm", opts.akm] : [])];
   const t0 = performance.now();
   const proc = Bun.spawn(args, { cwd: opts.root, env: opts.env, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: opts.timeoutMs, killSignal: "SIGKILL" });
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);

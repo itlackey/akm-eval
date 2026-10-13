@@ -22,7 +22,7 @@ scripts/smoke/run --list                            # what it runs and skips
 | `--keep` | keep the results folders the runs made |
 | `--list` | print what it runs and skips, and why |
 
-Each eval runs as `<eval>/run --corpus public --limit 1 --label smoke`, with a local stub as `MODEL_BASE_URL` and `JUDGE_BASE_URL`, so no key of yours is sent anywhere.
+Each eval runs as `<eval>/run --corpus public --limit 1 --label smoke` (bakeoff uses `--limit 5`, one case per process), with a local stub as `MODEL_BASE_URL` and `JUDGE_BASE_URL`, so no key of yours is sent anywhere.
 
 ## Startup mode
 
@@ -44,16 +44,17 @@ Each eval runs twice. The first run answers every call with the smallest value t
 | `evals/extract` | `outcome: saved` | `unusable` |
 | `evals/nightly` | the item is `ok`, one pair judged, none failed | the item is not `ok`, a judgment failed |
 | `evals/promotion` | `outcome: accept` | `defer` |
+| `evals/bakeoff` | `outcome: output` for all five processes | `unusable` |
 
-The first run must also have no row error, no `aborted`, exit 0, and use every canned reply: an unused one means akm sent requests the table was not written for. The canned replies fit akm-cli 0.9.26 and 0.9.31. One case per eval and one reply for all cases: it shows that an eval can reach and read a success, not that it tells a good model from a bad one. `evals/promotion` needs akm's embedding model (133 MB from huggingface.co, kept in `.cache/models`).
+The first run must also have no row error, no `aborted`, exit 0, and use every canned reply: an unused one means akm sent requests the table was not written for. The canned replies are checked against the pinned release and `0.10.261003-beta`. Bakeoff uses five cases, one per process; the others use one case and one reply for all cases: it shows that an eval can reach and read a success, not that it tells a good model from a bad one. `evals/promotion` needs akm's embedding model (133 MB from huggingface.co, kept in `.cache/models`).
 
 ## What it skips
 
-`evals/agent-ab` and `benchmarks/terminal-bench` (Docker), `benchmarks/longmemeval` and `benchmarks/skillret` (they download a dataset), and `evals/bakeoff` (no canned replies yet).
+`evals/agent-ab` and `benchmarks/terminal-bench` (Docker), `benchmarks/longmemeval` and `benchmarks/skillret` (they download a dataset).
 
 ## CI
 
-`.github/workflows/akm-smoke.yml` runs every night and on demand: `--contract` on the akm-cli release pinned in `lib/harbor/harbor.ts` (must pass), and `--strict` on the latest release (advisory). A pull request that changes `lib/`, `evals/`, `benchmarks/`, `corpus/` or `scripts/smoke/` runs the pinned leg as the check `smoke (pinned)`.
+`.github/workflows/akm-smoke.yml` runs every night and on demand: `--contract` on the akm-cli release pinned in `lib/harbor/harbor.ts` (must pass), and `--strict` on the latest release (advisory). Every pull request runs the pinned leg as the check `smoke (pinned)`.
 
 ## Code and tests
 

@@ -206,7 +206,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
     limit: ctx.limit ?? null,
     process: ctx.process ?? null,
     config_patch: ctx.configPatch ? { path: ctx.configPatch.path, sha256: ctx.configPatch.sha256 } : null,
-    config: hideEndpoint(redactConfig(config), ctx.baseUrl), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
+    config: redactConfig(hideEndpoint(config, ctx.baseUrl)), // the endpoint is written as <MODEL_BASE_URL>; engine and manifest hold its host
     engine: engineSettings(config),
     assets_sha256: assetsSha256(corpus.folder),
     seed,

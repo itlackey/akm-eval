@@ -89,9 +89,10 @@ export const credentialField = (name: string): boolean => {
   return /(?:key|secret|password|passwd|pwd|passphrase|credential)s?$|(?:token|authorization|cookie)$|(?:^|[^a-z0-9])(?:auth|bearer|pat|pass)$/.test(spelled);
 };
 
-/** A deep copy of the config that is safe to write to a summary.json: the value of every credential field (credentialField), at any depth, is "<redacted>", unless it is a `$NAME` reference. */
+/** A deep copy for summary.json: credential fields are redacted, and URL userinfo and credential query values are removed at any depth. `$NAME` references stay. */
 export function redactConfig(config: any): any {
   if (Array.isArray(config)) return config.map(redactConfig);
+  if (typeof config === "string") return redactUrl(config);
   if (typeof config !== "object" || config === null) return config;
   return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, credentialField(key) && !(typeof value === "string" && VARIABLE.test(value)) ? REDACTED : redactConfig(value)]));
 }
@@ -113,6 +114,21 @@ const cleanQuery = (query: string): string =>
       return at < 0 || !credentialField(decoded(pair.slice(0, at))) ? pair : `${pair.slice(0, at + 1)}${REDACTED}`;
     })
     .join("&");
+
+/** Preserve a config URL's path and noncredential parameters without recording its login or credential query values. */
+function redactUrl(value: string): string {
+  try {
+    if (!new URL(value).host) return value;
+  } catch {
+    return value;
+  }
+  const safe = value.replace(/^(\s*[a-z][a-z0-9+.-]*:\/\/)[^/?#]*@/i, "$1");
+  const at = safe.indexOf("?");
+  const hash = safe.indexOf("#");
+  if (at < 0 || (hash >= 0 && hash < at)) return safe;
+  const end = hash < 0 ? safe.length : hash;
+  return `${safe.slice(0, at + 1)}${cleanQuery(safe.slice(at + 1, end))}${safe.slice(end)}`;
+}
 
 /**
  * The whole endpoint, for the resume fingerprint of scripts/matrix, which is never written into a result: the scheme, host, port and path of

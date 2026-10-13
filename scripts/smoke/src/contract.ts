@@ -207,6 +207,21 @@ export const CONTRACTS: Record<string, Contract> = {
     success: { field: "outcome", values: ["accept"] },
     failure: { field: "outcome", values: ["defer"] },
   },
+  "evals/bakeoff": {
+    canned: [
+      { prompt: "Compress the memory", reply: { title: "Queue checkpoint recovery", description: "Keep the checkpoint manifest and blob before resuming from the prior offset.", tags: ["queue", "checkpoint", "recovery"], searchHints: ["checkpoint manifest", "blob recovery", "prior offset"], content: "On 2026-02-14, recovery used the checkpoint manifest and blob to resume from the prior offset." } },
+      { prompt: "memory tagger", reply: { tags: ["queue", "checkpoint", "recovery"], description: "Queue checkpoint recovery from the manifest and blob.", observed_at: "2026-02-14" } },
+      { prompt: "Generate the missing frontmatter", reply: { description: "The publisher drains the worker before a deployment and checks its health.", when_to_use: "When you deploy or replace a publisher worker in a release." } },
+      { prompt: "summarizing an agent coding session", reply: { summary: "The session deployed relay-worker:7.4 with relay-canary-184, checked the object store and postgresql, and kept worker-stable as the rollback alias.", key_topics: ["relay-worker:7.4", "relay-canary-184", "worker-stable"], tags: ["release"] } },
+      { prompt: "extracting durable engineering insights", reply: { candidates: [], rationale_if_empty: "The session holds no further durable insight." } },
+      { keys: ["operations"], reply: { operations: [{ op: "promote", ref: "memories/signed-artifacts", knowledgeRef: "knowledge/signed-artifacts", reason: "A stable fact.", description: "The worker verifies artifact signatures before a release.", confidence: 0.95 }] } },
+    ],
+    success: { field: "outcome", values: ["output"], also: (rows) => {
+      const processes = new Set(rows.map((r) => r.process));
+      return rows.length === 5 && processes.size === 5 ? [] : ["bakeoff must reach all five processes"];
+    } },
+    failure: { field: "outcome", values: ["unusable"] },
+  },
 };
 
 /** One run of an eval in the contract mode. */
