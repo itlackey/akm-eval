@@ -1,0 +1,280 @@
+{
+  "eval": "longmemeval",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-gpt120-pilot",
+  "date": "2026-10-12T20:22:58.786Z",
+  "complete": true,
+  "status": "complete",
+  "aborted_reason": null,
+  "git_commit": "dd34863-dirty",
+  "harness_sha256": "40f9017e5a105233883ec43172d7b460a0298743141fb71fb0e19a7eb7f66dbd",
+  "model": "freellm/gpt-oss:120b",
+  "judge_model": "chat/qwen3.8-27b",
+  "model_endpoint": "https://ai.lab.fwdslsh.dev",
+  "judge_endpoint": "https://ai.lab.fwdslsh.dev",
+  "temperature": 0,
+  "max_tokens": {
+    "model": 512,
+    "judge": 10
+  },
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "~/.bun/bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "top_k": 5,
+  "search_mode": "keyword",
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": []
+  },
+  "reader_order": "haystack",
+  "retrieval_only": false,
+  "mode": null,
+  "dataset": {
+    "name": "LongMemEval, cleaned release, S variant",
+    "source": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+    "licence": "MIT",
+    "revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+    "file": "longmemeval_s_cleaned.json",
+    "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442"
+  },
+  "assets_sha256": "d8df44100e3548af92cdf2ce125a40d7b193827c1a0a633ab3ebc0b79521d274",
+  "seed": null,
+  "sample_seed": 42,
+  "sample": {
+    "order": "stratified-seeded",
+    "seed": 42,
+    "n": 5,
+    "total": 500,
+    "per_type": {
+      "single-session-user": 1,
+      "single-session-assistant": 1,
+      "multi-session": 1,
+      "temporal-reasoning": 1,
+      "knowledge-update": 1
+    }
+  },
+  "observed_models": [
+    "gpt-oss:120b"
+  ],
+  "observed_judge_models": [
+    "qwen3.8-27b"
+  ],
+  "sessions_loaded": 249,
+  "sessions_over_projection_limit": 35,
+  "n_run": 5,
+  "n_scored": 4,
+  "n_errored": 1,
+  "timeouts": 0,
+  "answers_cut_off": {
+    "without_akm": 3,
+    "with_akm": 0
+  },
+  "answers_empty": {
+    "without_akm": 0,
+    "with_akm": 0
+  },
+  "metrics": {
+    "accuracy": {
+      "without_akm": {
+        "n": 5,
+        "correct": 3,
+        "rate": 0.6,
+        "n_errored": 0
+      },
+      "with_akm": {
+        "n": 4,
+        "correct": 3,
+        "rate": 0.75,
+        "n_errored": 1
+      },
+      "difference": {
+        "n": 4,
+        "value": 0.25,
+        "ci95": [
+          -0.1744,
+          0.6744
+        ],
+        "both_correct": 2,
+        "only_with_akm": 1,
+        "only_without_akm": 0,
+        "neither": 1
+      }
+    },
+    "by_type": {
+      "knowledge-update": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        },
+        "with_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        }
+      },
+      "multi-session": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 0,
+          "rate": 0
+        },
+        "with_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        }
+      },
+      "single-session-assistant": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        },
+        "with_akm": {
+          "n": 0,
+          "correct": 0,
+          "rate": null
+        }
+      },
+      "single-session-user": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        },
+        "with_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        }
+      },
+      "temporal-reasoning": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 0,
+          "rate": 0
+        },
+        "with_akm": {
+          "n": 1,
+          "correct": 0,
+          "rate": 0
+        }
+      }
+    },
+    "retrieval": {
+      "k": 5,
+      "n": 5,
+      "zero_hit_rate": 0,
+      "hit_rate": 0.8,
+      "recall": 0.8,
+      "precision": 0.24,
+      "mrr": 0.8,
+      "ndcg": 0.8
+    },
+    "retrieval_abstention": {
+      "n": 0
+    }
+  },
+  "judge_undecidable": 0,
+  "notes": [
+    "The judge is not gpt-4o-2024-08-06, the judge the benchmark specifies (it answered as qwen3.8-27b). These scores are not comparable to published LongMemEval numbers.",
+    "3 of 9 answers stopped at the token limit (finish_reason length), and 0 had no text left for the judge, because the reader gave none or wrote only reasoning, which is removed before the judge sees an answer. An empty answer is scored wrong. A model that thinks before it answers can use its tokens on the thinking: use one that answers directly, or turn its thinking off."
+  ],
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "longmemeval",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "dccbc061": {
+        "input_sha256": "cae907c68e36611e627a7a13578df708c46f157c863e9dd2b10cbdad604f86bd",
+        "label_sha256": "6d162609a77b734a856bd82d8c22931590497e08bdaefb962436e3278561ddf2"
+      },
+      "55241a1f": {
+        "input_sha256": "956207d4eecb95670dd6d3696a21cb14db6f3586a170926efa5fec0e6aa0bc26",
+        "label_sha256": "c8f75b0d780924805c1d7f1a43c40966e74be66d730af3376538ca3727775ee8"
+      },
+      "gpt4_4929293b": {
+        "input_sha256": "d592a90880b61723242975cd511c91664bed03739ca959bc9625cb781471d0a7",
+        "label_sha256": "05c8ba7ea32cecdf87e685c587dabdc0acb983a4050d75bf2eb04140dfed18be"
+      },
+      "2698e78f": {
+        "input_sha256": "2a7035016b55b164dc3a8f652b79a456d2050760af18f3caf0a06dec633711fa",
+        "label_sha256": "048b2b8b555c689a93bcb59e2788785cd95c515742f6b9c336e475abc4e515c6"
+      },
+      "e982271f": {
+        "input_sha256": "53be80ecea27b07b9e01ca22ec128cfc5d8106116184d2a8dc8f6392c9a88cce",
+        "label_sha256": "264d2eed848972c6d76b379a574aeb1f03b2499f00c0184827cc7c97cb6d4071"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "~/.bun/bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "0c876ab62a45c39e4bf8f2f4e9664256da4bd01244237bd5798188cb5ce16ccc",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": []
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "freellm/gpt-oss:120b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": null,
+        "timeoutMs": 900000
+      },
+      "judge": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": null,
+        "timeoutMs": 900000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "dccbc061",
+        "55241a1f",
+        "gpt4_4929293b",
+        "2698e78f",
+        "e982271f"
+      ],
+      "scored": [
+        "dccbc061",
+        "55241a1f",
+        "gpt4_4929293b",
+        "2698e78f"
+      ],
+      "errored": [
+        "e982271f"
+      ]
+    }
+  }
+}

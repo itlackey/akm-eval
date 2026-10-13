@@ -1,0 +1,301 @@
+{
+  "eval": "reflect",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-reflect-example-filter-off-c-r2",
+  "date": "2026-10-12T20:31:07.189Z",
+  "git_commit": "dd34863-dirty",
+  "harness_sha256": "9d43821e7c103bda9efc26352a96b1927e6764c66f502001863859ee3d4f9f60",
+  "model": "chat/qwen3.8-27b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": 3,
+  "strategy": "reflect-only",
+  "config_patch": {
+    "path": "evals/reflect/patches/defect-filter-off.json",
+    "sha256": "3be971e8bd69d876b55c11fecdf1d76e9e258a9892f4a2be9710488f9fed2004"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "reflect": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "chat/qwen3.8-27b",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "reflect",
+      "improveStrategy": "reflect-only"
+    },
+    "improve": {
+      "strategies": {
+        "reflect-only": {
+          "engine": "reflect",
+          "processes": {
+            "reflect": {
+              "enabled": true,
+              "qualityGate": {
+                "enabled": false
+              },
+              "defectFilter": {
+                "placeholders": [],
+                "metaCommentary": [],
+                "frontmatterKeys": "<redacted>"
+              }
+            },
+            "distill": {
+              "enabled": false
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false,
+            "push": false
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "reflect",
+    "model": "chat/qwen3.8-27b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "reflect": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "e65d606527c343839ae4b2b03f8b2f10acb628ddd9ffd8d9598b892fa70b50d3",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 50,
+  "n_run": 3,
+  "n_scored": 3,
+  "n_errored": 0,
+  "timeouts": 0,
+  "retrieval_queries": null,
+  "served": {
+    "qwen3.8-27b": 3
+  },
+  "metrics": {
+    "defects": {
+      "n": 2,
+      "correct": 2,
+      "rate": 1
+    },
+    "controls": {
+      "n": 1,
+      "correct": 1,
+      "rate": 1
+    },
+    "classes": {
+      "description-period": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 1,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "when-to-use-missing": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 1,
+          "none": 0,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      },
+      "retrieval-miss": {
+        "n": 1,
+        "correct": 1,
+        "rate": 1,
+        "outcomes": {
+          "proposal": 0,
+          "none": 1,
+          "refused": 0,
+          "unusable": 0,
+          "error": 0
+        },
+        "failed": {}
+      }
+    },
+    "proposals": {
+      "n": 2,
+      "touched_body": 0
+    },
+    "refused": {
+      "filter": 0,
+      "judge": 0,
+      "retrieval": 0,
+      "other": 0
+    }
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "reflect",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "description-period-01": {
+        "input_sha256": "7a689e1aa23ff541f5fdbdf6abfdb67e34a23e1e856f40764b5327700a90404e",
+        "label_sha256": "c142a1a4c27a86609d9ae0fe2b0ee8a7c62011bf987e2a55823800efba06ff0b"
+      },
+      "retrieval-miss-01": {
+        "input_sha256": "40af64532f7783af2b69934524e9d74e49e367c638b658e21f8a2c177a8276dc",
+        "label_sha256": "8c82143c513b27dabb399708859896f056095d549dec7aea257cc4a8e5667d83"
+      },
+      "when-to-use-missing-01": {
+        "input_sha256": "7ac6235af9ee9c338c97e39825fa0a51c610653881c1b136021b85444d83f3f7",
+        "label_sha256": "15bab1cc01aa4f86e55b6e5a1de312b84550352ca6ba18215757b343281bc1f3"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "92c342b467754bbf35904fe372f410b814edf86eaea2208475b326a3561bde10",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "reflect": {
+            "kind": "llm",
+            "provider": "openai"
+          }
+        },
+        "defaults": {
+          "llmEngine": "reflect",
+          "improveStrategy": "reflect-only"
+        },
+        "improve": {
+          "strategies": {
+            "reflect-only": {
+              "engine": "reflect",
+              "processes": {
+                "reflect": {
+                  "enabled": true,
+                  "qualityGate": {
+                    "enabled": false
+                  },
+                  "defectFilter": {
+                    "placeholders": [],
+                    "metaCommentary": [],
+                    "frontmatterKeys": "<redacted>"
+                  }
+                },
+                "distill": {
+                  "enabled": false
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false,
+                "push": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "reflect-only",
+      "config_patch_sha256": "3be971e8bd69d876b55c11fecdf1d76e9e258a9892f4a2be9710488f9fed2004",
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "reflect": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01"
+      ],
+      "scored": [
+        "description-period-01",
+        "retrieval-miss-01",
+        "when-to-use-missing-01"
+      ],
+      "errored": []
+    }
+  }
+}

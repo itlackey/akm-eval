@@ -1,0 +1,166 @@
+{
+  "matrix": "reports/0.10.261003-beta/reproduction/reflect-matrix.json",
+  "prefix": "bifrost-reflect-example",
+  "generated": "2026-10-12T20:31:20.976Z",
+  "min_delta": 0,
+  "rows": [
+    {
+      "eval": "reflect",
+      "scope": "",
+      "config": "filter-off",
+      "baseline": "base",
+      "stage": "confirm",
+      "n": 3,
+      "verdict": "no difference",
+      "note": "",
+      "metrics": [
+        {
+          "path": "defects.rate",
+          "role": "main",
+          "dir": "up",
+          "signal": "same",
+          "baseline": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "config": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          }
+        },
+        {
+          "path": "controls.rate",
+          "role": "harm",
+          "dir": "up",
+          "signal": "same",
+          "baseline": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          },
+          "config": {
+            "min": 1,
+            "max": 1,
+            "mean": 1
+          }
+        },
+        {
+          "path": "proposals.touched_body",
+          "role": "harm",
+          "dir": "down",
+          "signal": "same",
+          "baseline": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          },
+          "config": {
+            "min": 0,
+            "max": 0,
+            "mean": 0
+          }
+        }
+      ],
+      "calls": {
+        "baseline": null,
+        "config": null
+      },
+      "seconds": {
+        "baseline": 17.3,
+        "config": 27.5
+      },
+      "n_errored": {
+        "baseline": 0,
+        "config": 0
+      },
+      "treatment": [
+        "config"
+      ],
+      "akm_build": null,
+      "akm_version": "0.10.261003-beta",
+      "akm_build_fingerprint": null,
+      "baseline_akm_build": null,
+      "baseline_akm_version": "0.10.261003-beta",
+      "baseline_akm_build_fingerprint": null,
+      "model": "chat/qwen3.8-27b",
+      "collector": {
+        "baseline": "v0.2",
+        "config": "v0.2"
+      },
+      "rescored": true,
+      "exploratory": [],
+      "paired": {
+        "repeats": {
+          "baseline": 3,
+          "config": 3
+        },
+        "view": "",
+        "n_paired": 3,
+        "better": 0,
+        "worse": 0,
+        "agree": 3,
+        "p": null,
+        "ci": [
+          {
+            "view": "",
+            "path": "defects.rate",
+            "role": "main",
+            "dir": "up",
+            "delta": 0,
+            "ci": [
+              0,
+              0
+            ],
+            "signal": "same"
+          },
+          {
+            "view": "",
+            "path": "controls.rate",
+            "role": "harm",
+            "dir": "up",
+            "delta": 0,
+            "ci": [
+              0,
+              0
+            ],
+            "signal": "same"
+          },
+          {
+            "view": "",
+            "path": "proposals.touched_body",
+            "role": "harm",
+            "dir": "down",
+            "delta": 0,
+            "ci": [
+              0,
+              0
+            ],
+            "signal": "same"
+          }
+        ],
+        "warnings": [
+          "only 3 cases were scored in both runs: an interval over so few is crude"
+        ]
+      },
+      "coverage": {
+        "baseline": {
+          "selected": 3,
+          "scored": 3,
+          "errored": 0
+        },
+        "config": {
+          "selected": 3,
+          "scored": 3,
+          "errored": 0
+        }
+      },
+      "cases": {
+        "baseline_only": [],
+        "config_only": []
+      },
+      "context": []
+    }
+  ]
+}

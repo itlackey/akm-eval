@@ -1,0 +1,427 @@
+{
+  "eval": "agent-ab",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-gpt120-pilot",
+  "date": "2026-10-12T20:15:14.489Z",
+  "git_commit": "dd34863-dirty",
+  "harness_sha256": "37e8fef552af5432f2c9df814c4d117784d140c3d28b35d03208b962fe9ad0b9",
+  "model": "openai/freellm/gpt-oss:120b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "akm-cli@0.10.261003-beta",
+  "akm_build": null,
+  "akm_build_fingerprint": "4dda1536c4abc93df3aeffc9d4315de95433aed9f60041b994913f3c1ed834b9",
+  "akm_env": {},
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.9.26202610051302",
+    "packages": [],
+    "dependency_tree_sha256": "abd357df4dee591ea88ac0c849f0c28652df24a261be4ff3754d90e8b3a8b37e",
+    "locked": true,
+    "observed": {
+      "akm_version": [
+        "0.10.261003-beta"
+      ],
+      "plugin_akm_cli": [
+        "0.9.26"
+      ],
+      "assets_indexed": [
+        1
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_OPENCODE_CLI": "/usr/local/bin/akm",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0",
+        "AKM_CURATE_TIMEOUT": "15",
+        "AKM_PENDING_PROPOSAL_TIMEOUT": "5"
+      },
+      "dependency_trees": [
+        "abd357df4dee591ea88ac0c849f0c28652df24a261be4ff3754d90e8b3a8b37e"
+      ],
+      "lockfiles": {
+        "akm_cli": "668db4bb22d9fc1d2942e35df7a2a0dc60907175ab2ce304deaf07aa1cb31647",
+        "plugin": "ff3f828b955e70646c67a772e9479798a6f0519596ca5eee10ac0eebdd9ae5ba"
+      }
+    }
+  },
+  "pins": {
+    "akm_cli": "0.10.261003-beta",
+    "akm_plugin": "0.9.26202610051302",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "limit": 1,
+  "seed": null,
+  "n_tasks": 1,
+  "attempts": 1,
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "completion": {
+    "expected": 2,
+    "completed": 1,
+    "failed": 1,
+    "missing": 0,
+    "unexpected": 0,
+    "control": {
+      "expected": 1,
+      "completed": 1,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "akm": {
+      "expected": 1,
+      "completed": 0,
+      "failed": 1,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "libraries_sha256": "e1dec4e71c88b79918af1cb32e4b1a3301edb7556639b3e09198b213de720d89",
+  "tasks_sha256": {
+    "drillbit--backup-policy-train": "a87696582d02bd7d08d4d2325eafad42d3919a979544415f92df1fb58ef98343"
+  },
+  "assets_sha256": "368f338a322b2dd0d65d0e8b4cf9ba6de4f031f174fc2871ce5ffce87a502d73",
+  "engine": {
+    "model": "openai/freellm/gpt-oss:120b",
+    "endpoint": "https://ai.lab.fwdslsh.dev"
+  },
+  "config": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "name": "opencode",
+        "model_name": "openai/freellm/gpt-oss:120b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/freellm/gpt-oss:120b"
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/freellm/gpt-oss:120b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/freellm/gpt-oss:120b"
+          },
+          "akm_cli_version": "0.10.261003-beta",
+          "akm_plugin_version": "0.9.26202610051302",
+          "libraries_dir": "libraries"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "drillbit--backup-policy-train"
+        ]
+      }
+    ]
+  },
+  "timeouts": {
+    "control": 0,
+    "akm": 0
+  },
+  "n_errored": 1,
+  "metrics": {
+    "control": {
+      "pass_rate": 0,
+      "passed": 0,
+      "scored": 1,
+      "errored": 0,
+      "timeouts": 0,
+      "minutes": 1.6,
+      "agent_minutes": 0.1,
+      "cost_usd": null
+    },
+    "akm": {
+      "pass_rate": null,
+      "passed": 0,
+      "scored": 0,
+      "errored": 1,
+      "timeouts": 0,
+      "minutes": null,
+      "agent_minutes": null,
+      "cost_usd": null
+    },
+    "delta": {
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "n": null
+    },
+    "better": {
+      "akm": 0,
+      "control": 0,
+      "same": 0
+    },
+    "engagement": {
+      "rate": null,
+      "called": 0,
+      "trials": 0,
+      "curated_read": 0,
+      "control_calls": 0
+    }
+  },
+  "job": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 4,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "name": "opencode",
+        "model_name": "openai/freellm/gpt-oss:120b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/freellm/gpt-oss:120b"
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/freellm/gpt-oss:120b",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/freellm/gpt-oss:120b"
+          },
+          "akm_cli_version": "0.10.261003-beta",
+          "akm_plugin_version": "0.9.26202610051302",
+          "libraries_dir": "libraries"
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "path": "tasks",
+        "task_names": [
+          "drillbit--backup-policy-train"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "control": {
+      "trials": 1,
+      "scored": 1,
+      "errored": 0,
+      "passed": 0,
+      "tasks": 1,
+      "pass_rate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0,
+        "n": 1
+      },
+      "exceptions": {},
+      "timeouts": 0,
+      "per_trial": {
+        "minutes": 1.6,
+        "agent_minutes": 0.1,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 19230,
+        "cache": 9424,
+        "output": 368,
+        "cost_usd": null
+      }
+    },
+    "akm": {
+      "trials": 1,
+      "scored": 0,
+      "errored": 1,
+      "passed": 0,
+      "tasks": 0,
+      "pass_rate": null,
+      "exceptions": {
+        "AkmPluginNotLoadedError": 1
+      },
+      "timeouts": 0,
+      "per_trial": {
+        "minutes": null,
+        "agent_minutes": null,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 353413,
+        "cache": 301744,
+        "output": 1352,
+        "cost_usd": null
+      }
+    },
+    "delta": null,
+    "better": {
+      "akm": 0,
+      "control": 0,
+      "same": 0
+    },
+    "sign_test": null,
+    "flips": {
+      "control": {
+        "tasks": 0,
+        "of": 0
+      },
+      "akm": {
+        "tasks": 0,
+        "of": 0
+      }
+    },
+    "engagement": {
+      "trials": 0,
+      "called": 0,
+      "rate": null,
+      "calls": {},
+      "curated_read": 0,
+      "called_split": {
+        "trials": 0,
+        "passed": 0,
+        "delta": null
+      },
+      "not_called_split": {
+        "trials": 0,
+        "passed": 0,
+        "delta": null
+      },
+      "control_calls": 0
+    },
+    "tasks": [
+      {
+        "task": "drillbit--backup-policy-train",
+        "control": "0/1",
+        "akm": "0/0",
+        "called": "0/0",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "agent-ab",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "drillbit--backup-policy-train": {
+        "input_sha256": "e1eee8ec59ac2db0053efaace9034f14c616e482608607bf6bf780b40e84f97e",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "akm-cli@0.10.261003-beta",
+      "build": null,
+      "build_fingerprint": "4dda1536c4abc93df3aeffc9d4315de95433aed9f60041b994913f3c1ed834b9"
+    },
+    "config": {
+      "sha256": "f985c9dbd68b47c1c8129235dc5cdcf579b606554db802b177d52ed0c008d256",
+      "redacted": {
+        "n_concurrent_trials": 4,
+        "environment": {
+          "type": "docker",
+          "delete": true
+        },
+        "agents": [
+          {
+            "name": "opencode",
+            "model_name": "openai/freellm/gpt-oss:120b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/freellm/gpt-oss:120b"
+              }
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/freellm/gpt-oss:120b",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/freellm/gpt-oss:120b"
+              },
+              "akm_cli_version": "0.10.261003-beta",
+              "akm_plugin_version": "0.9.26202610051302",
+              "libraries_dir": "libraries"
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/freellm/gpt-oss:120b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "treatment_hints": {
+      "attempts": 1
+    },
+    "completion": {
+      "selected": [
+        "drillbit--backup-policy-train"
+      ],
+      "scored": [],
+      "errored": [
+        "drillbit--backup-policy-train"
+      ]
+    }
+  }
+}

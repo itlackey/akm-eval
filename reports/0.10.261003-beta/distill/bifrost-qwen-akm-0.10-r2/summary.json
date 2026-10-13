@@ -1,0 +1,524 @@
+{
+  "eval": "distill",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-qwen-akm-0.10-r2",
+  "date": "2026-10-12T21:17:39.767Z",
+  "git_commit": "c628b0d",
+  "harness_sha256": "59cfabed1cc1a8c3978d2f7094f571ae7a1d444e017da40bfbdb4315af914656",
+  "model": "chat/qwen3.8-27b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "~/.bun/bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "served_models": [
+    "qwen3.8-27b"
+  ],
+  "limit": null,
+  "strategy": "distill-only",
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "chat/qwen3.8-27b",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "distill-only"
+    },
+    "improve": {
+      "strategies": {
+        "distill-only": {
+          "engine": "model",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": true,
+              "allowedTypes": [
+                "memory"
+              ]
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "chat/qwen3.8-27b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "model": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "6dc1abf5afe32ff2090bcf285d03e64335ef2497ccc4b743560a41679b4192f4",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 38,
+  "n_run": 38,
+  "n_scored": 38,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "good_lessons": {
+      "n": 14,
+      "good": 7,
+      "rate": 0.5,
+      "ambiguous": 0
+    },
+    "wrong_lessons": {
+      "n": 16,
+      "wrong": 1,
+      "rate": 0.0625
+    },
+    "lesson_updates": {
+      "n": 8,
+      "right": 2,
+      "rate": 0.25,
+      "ambiguous": 0,
+      "checks": {
+        "update_proposed": 3,
+        "existing_kept": 3,
+        "new_facts": 2,
+        "no_extra_claims": 2,
+        "not_copied": 3,
+        "no_new_lesson": 8
+      }
+    },
+    "by_class": {
+      "lesson-worthy": {
+        "n": 8,
+        "good": 6,
+        "rate": 0.75
+      },
+      "over-claim": {
+        "n": 6,
+        "good": 1,
+        "rate": 0.1667
+      },
+      "dated-status": {
+        "n": 6,
+        "wrong": 0,
+        "rate": 0
+      },
+      "restates-asset": {
+        "n": 5,
+        "wrong": 1,
+        "rate": 0.2
+      },
+      "duplicate-lesson": {
+        "n": 5,
+        "wrong": 0,
+        "rate": 0
+      },
+      "lesson-update": {
+        "n": 8,
+        "right": 2,
+        "rate": 0.25
+      }
+    },
+    "outcomes": {
+      "lesson": {
+        "lesson": 9,
+        "update": 0,
+        "skipped": 5,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "none": {
+        "lesson": 1,
+        "update": 0,
+        "skipped": 15,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "update": {
+        "lesson": 0,
+        "update": 3,
+        "skipped": 4,
+        "rejected": 1,
+        "invalid": 0,
+        "error": 0
+      }
+    },
+    "bad_by": {
+      "missing_fact": 0,
+      "forbidden_claim": 1,
+      "contradiction": 0,
+      "too_long": 1,
+      "copied": 0
+    }
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "distill",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "lesson-01": {
+        "input_sha256": "e5cc6119f318ba510fa94a665c7208a502ea013f3717a75b8977255f3c9f01f4",
+        "label_sha256": "f9752c3063a14ba8fbbcbc26931653566dcbdc134c742e456f1b327a17fa8a2d"
+      },
+      "lesson-02": {
+        "input_sha256": "09a81c8fc131021b2ee5e5b6b2364e3c086adfc8a630c3b11e7ae9b0ca1ae877",
+        "label_sha256": "30b8f764aed4417e40294cf6136f32bc7801adc67d3993dc70d02ae2ec7c414a"
+      },
+      "lesson-03": {
+        "input_sha256": "0e45fbcc8f807f7398c77f9ec04163efcd33a0889bd90135407addffd264c674",
+        "label_sha256": "2b016e559ab1510ee5d5a63ade03892ee7d99e7ce5f00c8a14c28bb30b3f7f88"
+      },
+      "lesson-04": {
+        "input_sha256": "353ef93ad684f086f8c4a799d0f85e52bc596f4c406ea952642c5414ee241e56",
+        "label_sha256": "c0d2d771d24b4b128308f93e370b2f5a0b7ae0141f1b38a604ba7ff499df3959"
+      },
+      "lesson-05": {
+        "input_sha256": "dd10983ac5e735d98a7af107bf82ab01c3d26376b0d09c49d683b2e679137432",
+        "label_sha256": "dc59d886f129631f471ab0edf990d0870a9016db7c9a8dd565ec58b96793d463"
+      },
+      "lesson-06": {
+        "input_sha256": "736880511416913e209440120463e1715341a2a2ffb674d20a03619dc8d5041f",
+        "label_sha256": "5447d55aef6cf9dc9c2238736eeab6f445fefac52525f625bfd404ad4224ccfa"
+      },
+      "lesson-07": {
+        "input_sha256": "66a48123dccfd7a4cb19c0acd94263987e6c491eebc0f0d8d7de30f6c0b4f225",
+        "label_sha256": "32b4cc5fc1a8042fb9891f5f97f8adc23088cf29b519b0e360a10d33e65c12a7"
+      },
+      "lesson-08": {
+        "input_sha256": "007e16e7799e1245ce60d5bd2ea3a9d747232a4a430ce10ba984fdfeb3d994a4",
+        "label_sha256": "3c7ab395accf25f5c726d8627fa9ba15c86350f5a2a997ef2900ef5f3b29c670"
+      },
+      "claim-01": {
+        "input_sha256": "e4e6f13dcf62c735e81f70882d0258de28e19009bc53d2b6b3ab7e57f2251f5f",
+        "label_sha256": "3e0408d8fe3c456a837e271060184bde743e105a2c14c5e94f266220107dbd4a"
+      },
+      "claim-02": {
+        "input_sha256": "111cc66bb52943438cc1bb636891c6994eec738b3353bbc1706ff8dae5408d8b",
+        "label_sha256": "5e94df2117d68a903d859f5e8b642278e909dc3075bbeacf0d4d41284184db0b"
+      },
+      "claim-03": {
+        "input_sha256": "6311da2cbba1f78190d51ebac0f8f0f01e97282ffc975671d9d4d152ac1bf840",
+        "label_sha256": "941aa401a7721999ddb6d3673eadb5cdf57093d27c8889d73b16f4be8631d45f"
+      },
+      "claim-04": {
+        "input_sha256": "4968ba3db4266b37be7f059880f98fc52ebc18c81618b22a9585819b7e695f2c",
+        "label_sha256": "f772af32adea52f4ac808f5da2c75554cf6d27e06c3408e156ef3c9fd3d17774"
+      },
+      "claim-05": {
+        "input_sha256": "15317c9e171d6e61af0b871e7ea2818ef5dd214740dfddc55f1098aab707b231",
+        "label_sha256": "3ffd3900054bd5f20cfe5ad484c0191f746d478cca7be72d9a4c58913fdf719a"
+      },
+      "claim-06": {
+        "input_sha256": "2a1a8b4e7e5cc9a920498d76fac4f78c0113b721c87eb044d5c016bc003ed741",
+        "label_sha256": "bd2f610fbce3fa5f27edbdbadcd85e136fdfb188e1d84a72f1167a4aab0f295d"
+      },
+      "status-01": {
+        "input_sha256": "47bf6e1cef1b2fa4b54fa987e5eef7e207033bc034a0de23c60a34321d534caa",
+        "label_sha256": "0de47d528a4c13539a459e6f207f906f449a09dfecf5cf94baf4dc2f8395962b"
+      },
+      "status-02": {
+        "input_sha256": "f5df6c6d9d6130654c8cddbc185466b23e65637a12bf7ff63f0659b5518ca465",
+        "label_sha256": "177c78e5b5cd6988566f4a375b01506571c6af0bd73b37f6e56ec7e20ef45808"
+      },
+      "status-03": {
+        "input_sha256": "55a2fd07a34dd4ed7fcda402438e69dc4a523f2c538dee21c9065c3ab1be73c0",
+        "label_sha256": "97bc4a1a5d46333ddc4b6c2801d7ade1d1a70c9d12991509568442883eb2f182"
+      },
+      "status-04": {
+        "input_sha256": "b30a4454e814f276475950f366d937f473b1505635d6c52567001e4fa7966087",
+        "label_sha256": "6c4f332ec8d2b32b5cac75916754ec9eb13dc53d7ad7930de52b4366c6b8d416"
+      },
+      "status-05": {
+        "input_sha256": "e026f3fe9d15ca5fd6cc024684b2866862113889490e481e20fa6cb68f3a637e",
+        "label_sha256": "22891de5fb2608d0b242d170e1100100cbc1c75bd275e242437958a3a258fef9"
+      },
+      "status-06": {
+        "input_sha256": "25d4ff514c6dc76060242195b91fe1275f971620b1c9845bdff6fd7c71c409ed",
+        "label_sha256": "b6390f76204ad1b2e22bba7074bdab51490f809178eeab26062252adbbf9ece7"
+      },
+      "asset-01": {
+        "input_sha256": "f8f0da15bd7a49301b5ed855dc7c9a7df76da27351a15c5cc446c5a7046ef229",
+        "label_sha256": "87e6a7140f51b609797ee65f1cbb7d2dafd159d364bf17ed0b54544f92ca5bb2"
+      },
+      "asset-02": {
+        "input_sha256": "64b189df642d618247cee6f281f32a0663492a03ed0a8e36f608df86e97f3fee",
+        "label_sha256": "b664367b46c18fc7921f02c19bf5b8734b86ed1d468f267681d9aee1f461ec8f"
+      },
+      "asset-03": {
+        "input_sha256": "59d05ff03a896a4280cc1bf7a28eceb31d52081bb77b140d0fd97068e723596b",
+        "label_sha256": "d18381d8e069488732e2a7ab8b4948bd58dd7e3f151f419077c537f6552ba5a8"
+      },
+      "asset-04": {
+        "input_sha256": "fcc7fdd433962f6dcbdece60b41a96809d65ae6936e015f49011c8e9d0da164b",
+        "label_sha256": "98ac167c70f0d6d43901f004d59e49070b5a233be3fb621d6de41b80509fda37"
+      },
+      "asset-05": {
+        "input_sha256": "8d41c4636e68c5e42be0748957a1b27d1c49f8f96ed30219c1e37c67a72ad5df",
+        "label_sha256": "ee48663eb69e48277d91d0709bb56a1142d8fefb797fcbe186d3efb943938641"
+      },
+      "dup-01": {
+        "input_sha256": "b5d960d404021fc1bab3f2a6cc6f05e2aba2baeb84151c9549e57df0ce474199",
+        "label_sha256": "6f017479aa55a71b4b096d78c968d6d597b84745e71834b70559cf5c77dab306"
+      },
+      "dup-02": {
+        "input_sha256": "a3de10740790dd80ff8476ab9e1d5fedbd8e8e4fdb0de73c8395997c6acab5dd",
+        "label_sha256": "0da917c01414acc3894c86b25d93d7fc709282c0afd3b8d86da2f424b7fb7e92"
+      },
+      "dup-03": {
+        "input_sha256": "745877d709e0e28e647c4ea43cc621b3868a558ea8919c23f7e6313948cfb75d",
+        "label_sha256": "9c21b3918d506f48a217b8d5c8b3b1c14d51f0e149f5c7976c7d3682ccb34635"
+      },
+      "dup-04": {
+        "input_sha256": "b5c920e7600e9d3cc42a4ac1089f4b80b2c685bc3ff8c6c5bc09941a99dc4442",
+        "label_sha256": "058f87db8a6a5b47d8d5b04252e5f3a332a7ef6843122c9e6b6a31af7158a5e9"
+      },
+      "dup-05": {
+        "input_sha256": "cee4f5de729178c846629f70580f2cd4036c041ace5e25d20f54326d1e2e3dc0",
+        "label_sha256": "991f9f235e5dd82a13d584020d3e5e959c2a29eebf04d105fc149420db7e6784"
+      },
+      "upd-01": {
+        "input_sha256": "20c1185cc395d057fe28962036e9aa7324969216fdd33e544093ba1b397d1567",
+        "label_sha256": "f4c9326504518e350773363b620b47a410c0f8c5696d1fb4f16fa811aa3522c2"
+      },
+      "upd-02": {
+        "input_sha256": "ee1bc2add3d2ceb265aecb244635a1faa89c5bf42844b7b5d613eb07171a48d7",
+        "label_sha256": "c4daac12affa4167b1d66662282b199a5fe4f3da8e448e8355c9fa88dca51bef"
+      },
+      "upd-03": {
+        "input_sha256": "600dbc300950bb0d4a5ef7d4391273bdc91d67b68cb6c33512f74844ee3f5249",
+        "label_sha256": "973b85ac895768048e18f46bfb279ae33d5dfc5cd86328d58aa16b60581a425d"
+      },
+      "upd-04": {
+        "input_sha256": "02f82bf78be55da24ff2ad753592cc9d94f639c67ba5e0d88145002f70e17dd9",
+        "label_sha256": "1168aef0e53dbc12ec1b746947ebb823eb05fa3a6091361a2d82f01f7c49544a"
+      },
+      "upd-05": {
+        "input_sha256": "b676d8f1bdd06a6c09d334abd22f1ebd06f6bca0e4f967c294d1b4ef762c4b86",
+        "label_sha256": "811f0648d2291dbe35493599aee3ecad876b1bb361d0a9629683d4f79b98cda1"
+      },
+      "upd-06": {
+        "input_sha256": "baa6e4c5de4ea5b31597184325f23ec1d4bf9348ffc1eac0ec5fbb6bc2a34a71",
+        "label_sha256": "28acd844d59aede15a115aee7ea327c43ffa070ac132abeceb6368ad8c47a435"
+      },
+      "upd-07": {
+        "input_sha256": "3357b9720ee574597dfd1259f9b1c64fffbf750658320fc9f922d9284bd12a83",
+        "label_sha256": "edc4cc91efb54cab733d53a7914ae8d61ae6d359070622beb453615f99a69012"
+      },
+      "upd-08": {
+        "input_sha256": "c97b214b6b856b35eb4559ab13ba05f0201f8d83bf42d6d2b542f09f9dad5ab2",
+        "label_sha256": "12e8481bb9850ebcc7e95576bf5d685f0b351c3af58972e228b3852323957621"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "~/.bun/bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "8784d01c1bbcb651137bd8af23c2ff1f95df9c6cb76b8ef89083c524592185f0",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "model": {
+            "kind": "llm",
+            "provider": "openai"
+          }
+        },
+        "defaults": {
+          "llmEngine": "model",
+          "improveStrategy": "distill-only"
+        },
+        "improve": {
+          "strategies": {
+            "distill-only": {
+              "engine": "model",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": true,
+                  "allowedTypes": [
+                    "memory"
+                  ]
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "distill-only",
+      "config_patch_sha256": null,
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "lesson-01",
+        "lesson-02",
+        "lesson-03",
+        "lesson-04",
+        "lesson-05",
+        "lesson-06",
+        "lesson-07",
+        "lesson-08",
+        "claim-01",
+        "claim-02",
+        "claim-03",
+        "claim-04",
+        "claim-05",
+        "claim-06",
+        "status-01",
+        "status-02",
+        "status-03",
+        "status-04",
+        "status-05",
+        "status-06",
+        "asset-01",
+        "asset-02",
+        "asset-03",
+        "asset-04",
+        "asset-05",
+        "dup-01",
+        "dup-02",
+        "dup-03",
+        "dup-04",
+        "dup-05",
+        "upd-01",
+        "upd-02",
+        "upd-03",
+        "upd-04",
+        "upd-05",
+        "upd-06",
+        "upd-07",
+        "upd-08"
+      ],
+      "scored": [
+        "lesson-01",
+        "lesson-02",
+        "lesson-03",
+        "lesson-04",
+        "lesson-05",
+        "lesson-06",
+        "lesson-07",
+        "lesson-08",
+        "claim-01",
+        "claim-02",
+        "claim-03",
+        "claim-04",
+        "claim-05",
+        "claim-06",
+        "status-01",
+        "status-02",
+        "status-03",
+        "status-04",
+        "status-05",
+        "status-06",
+        "asset-01",
+        "asset-02",
+        "asset-03",
+        "asset-04",
+        "asset-05",
+        "dup-01",
+        "dup-02",
+        "dup-03",
+        "dup-04",
+        "dup-05",
+        "upd-01",
+        "upd-02",
+        "upd-03",
+        "upd-04",
+        "upd-05",
+        "upd-06",
+        "upd-07",
+        "upd-08"
+      ],
+      "errored": []
+    }
+  }
+}
