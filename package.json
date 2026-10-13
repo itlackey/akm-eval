@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "scripts/check",
+    "build:site": "scripts/ledger/run",
+    "test:site": "bun test scripts/ledger/src/",
     "test": "bun test",
     "typecheck": "scripts/check typecheck"
   }
