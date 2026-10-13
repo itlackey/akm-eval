@@ -63,3 +63,4 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 | 0.10.261003-beta | retrieval | [akm-0.10-public-r3-books](0.10.261003-beta/retrieval/akm-0.10-public-r3-books) | public | none | full public run |
 | 0.10.261003-beta | skillret | [akm-0.10-public](0.10.261003-beta/skillret/akm-0.10-public) | public | none | full public run |
 | 0.10.261003-beta | terminal-bench | [bifrost-gpt120-pilot](0.10.261003-beta/terminal-bench/bifrost-gpt120-pilot) | public | openai/freellm/gpt-oss:120b | 1 selected case; demonstration |
+| 0.10.261003-beta | judge-gate | [bifrost-fast35b-v06-20261013](0.10.261003-beta/judge-gate/bifrost-fast35b-v06-20261013) | public | fast/qwen3.6-35b-a3b | full public run; 135 recorded, 135 scored, 0 errors |
