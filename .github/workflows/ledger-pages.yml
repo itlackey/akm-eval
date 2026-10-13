@@ -1,0 +1,65 @@
+name: Public eval ledger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/ledger/**"
+      - "reports/**"
+      - "package.json"
+      - ".github/workflows/ledger-pages.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/ledger/**"
+      - "reports/**"
+      - "package.json"
+      - ".github/workflows/ledger-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-ledger-${{ github.event.pull_request.number || 'pages' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: Check the ledger types
+        working-directory: scripts/ledger/src
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bunx tsc --noEmit
+      - run: bun run test:site
+      - run: bun run build:site
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: .site-output
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Publish the public ledger
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
