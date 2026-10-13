@@ -238,12 +238,12 @@ describe("the public cases", () => {
     const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name).slice(dir.length + 1)).sort() : []);
     expect(files(BUNDLE_DIR)).toEqual([...made.keys()].sort());
     for (const [file, text] of made) expect(readFileSync(join(BUNDLE_DIR, file), "utf8")).toBe(text);
-    expect(made.size).toBe(30);
+    expect(made.size).toBe(83);
   });
 
-  test("are 6 good proposals, and 6 duplicate, 4 stale and 4 ephemeral ones", () => {
+  test("are 40 good proposals, and 13 duplicate, 13 stale and 14 ephemeral ones", () => {
     const n = (category: string) => cases.filter((c) => c.category === category).length;
-    expect([n("good"), n("duplicate"), n("stale"), n("ephemeral")]).toEqual([6, 6, 4, 4]);
+    expect([n("good"), n("duplicate"), n("stale"), n("ephemeral")]).toEqual([40, 13, 13, 14]);
   });
 
   test("a good, stale or ephemeral proposal is a note of the library, which a run holds out, and a duplicate is a note under a new name", () => {
@@ -266,7 +266,7 @@ describe("the public cases", () => {
   test("a duplicate is a note of the library in whole or in its first half", () => {
     const dups = cases.filter((c) => c.category === "duplicate");
     const bodies = dups.map((c) => ({ c, original: readFileSync(join(LIBRARY, `${c.ref.slice("knowledge/".length).replace(/-notes$/, "")}.md`), "utf8") }));
-    expect(bodies.filter(({ c, original }) => c.content === original)).toHaveLength(3);
+    expect(bodies.filter(({ c, original }) => c.content === original)).toHaveLength(6);
     for (const { c, original } of bodies.filter(({ c, original }) => c.content !== original)) {
       expect(original.startsWith(c.content.trimEnd())).toBe(true);
       expect(c.content.length).toBeLessThan(original.length);

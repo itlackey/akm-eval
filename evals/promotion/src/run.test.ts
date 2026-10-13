@@ -430,7 +430,7 @@ describe("rescore", () => {
 
   test("scores a run of the public cases again from the raw outputs its samples.jsonl holds, to the rows and metrics it wrote", async () => {
     const { summary } = await publicRun();
-    expect(summary).toMatchObject({ n_cases: 20, n_run: 20, n_errored: 6, timeouts: 3 });
+    expect(summary).toMatchObject({ n_cases: 80, n_run: 80, n_errored: 26, timeouts: 13 });
     const { out, result } = rescoreFolder(summary.results_dir);
     expect(out).toBe(`${summary.results_dir}-rescored`);
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
@@ -438,7 +438,7 @@ describe("rescore", () => {
     const now = stored(out);
     expect(now.rows).toEqual(was.rows);
     expect(now.summary.metrics).toEqual(was.summary.metrics);
-    expect(now.summary).toMatchObject({ n_run: 20, n_errored: 6, timeouts: 3 });
+    expect(now.summary).toMatchObject({ n_run: 80, n_errored: 26, timeouts: 13 });
     expect(manifestProblems(now.summary.manifest)).toEqual([]);
     expect(now.summary.manifest.collector).toEqual(was.summary.manifest.collector);
     expect(now.summary.manifest.rescored_from).toMatchObject({ results: basename(summary.results_dir), dropped: [] });
@@ -453,7 +453,7 @@ describe("rescore", () => {
     const { out, result } = rescoreFolder(dir);
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(stored(out).rows).toEqual(stored(dir).rows);
-    expect(stored(out).summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets", n_run: 20, n_errored: 6 });
+    expect(stored(out).summary).toMatchObject({ corpus: "custom", corpus_folder: "evals/promotion/assets", n_run: 80, n_errored: 26 });
     expect(MEASUREMENT.loadCases(REPO, stored(dir).summary).map((c) => c.id)).toEqual(parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8")).map((c) => c.id));
     expect((await publicRun()).summary.corpus_folder).toBeNull(); // the public cases record none
   });
