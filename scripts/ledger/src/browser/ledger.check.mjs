@@ -50,6 +50,9 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2); await page.mouse.down();
   await page.mouse.move(box.x+box.width/2+60,box.y+box.height/2,{steps:8}); await page.mouse.up();
   expect((await header(page, 'label').boundingBox()).width).toBeGreaterThan(before.width+30);
+  await page.locator('#search').fill('reflect');
+  expect((await header(page, 'label').boundingBox()).width).toBeGreaterThan(before.width+30);
+  await page.locator('#search').fill('');
   await page.locator('#columns-toggle').click(); await page.locator('#column-search').fill('temperature');
   await page.locator('[data-column="temperature"]').check();
   await expect(header(page,'temperature')).toBeVisible(); await page.locator('#columns-close').click();

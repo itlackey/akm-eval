@@ -102,7 +102,7 @@ async function startLedger() {
   const columnByKey = new Map(columns.map(column => [column.key, column]));
   const facets = ['model', 'suite', 'role', 'collection', 'akm_version', 'measurement', 'search_method', 'strategy'];
   const state = { search: '', facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
-  let grid, ready = false, visibleKeys = new Set();
+  let grid, ready = false, visibleKeys = new Set(), layoutSignature = '';
   const widths = { model: 164, suite: 118, label: 196, quality_percent: 100, quality_metric: 205,
     scored: 100, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
@@ -205,8 +205,13 @@ async function startLedger() {
     else extras = columns.filter(column => ['Settings', 'Provenance'].includes(column.group) && recorded(column));
     return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'date'])];
   }
-  function applyView(view) {
+  function applyView(view, force = false) {
     const keys = viewKeys(view);
+    const signature = JSON.stringify([view, keys]);
+    if (!force && signature === layoutSignature && keys.length === visibleKeys.size && keys.every(key => visibleKeys.has(key))) {
+      updateCount(); return;
+    }
+    layoutSignature = signature;
     visibleKeys = new Set(keys);
     const sizing = view === 'impact' ? { model: 148, suite: 118, label: 138, role: 88,
       control_quality_percent: 105, akm_quality_percent: 105, akm_delta_pp: 110,
@@ -296,7 +301,7 @@ async function startLedger() {
       }, tooltip: 'Original published summary and sample output for this run.' }],
   });
   grid.on('tableBuilt', () => {
-    ready = true; visibleKeys = new Set(compareKeys); renderColumnChooser(); updateCount();
+    ready = true; visibleKeys = new Set(compareKeys); layoutSignature = JSON.stringify(['compare', compareKeys]); renderColumnChooser(); updateCount();
     for (const input of document.querySelectorAll('.tabulator-header-filter input')) {
       const field = input.closest('[tabulator-field]')?.getAttribute('tabulator-field');
       input.setAttribute('aria-label', 'Filter ' + (columnByKey.get(field)?.label ?? field));
@@ -321,7 +326,7 @@ async function startLedger() {
   $('columns-toggle').onclick = () => openChooser($('columns-panel').hidden);
   $('columns-close').onclick = () => { openChooser(false); $('columns-toggle').focus(); };
   $('column-search').oninput = renderColumnChooser;
-  $('reset-columns').onclick = () => { $('view').value = 'compare'; state.analysisView = 'compare'; applyFilters(); applyView('compare'); };
+  $('reset-columns').onclick = () => { $('view').value = 'compare'; state.analysisView = 'compare'; applyFilters(); applyView('compare', true); };
   document.addEventListener('click', event => { if (!event.target.closest('.column-menu')) openChooser(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') openChooser(false); });
   $('header-filters').onchange = () => {
