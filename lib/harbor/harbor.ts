@@ -19,13 +19,13 @@ export { erroredOf, metricsOf, timeoutsOf } from "./score.ts";
 export type { RunTrial } from "./score.ts";
 
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
-export const PINS = { akm_cli: "0.9.26", akm_plugin: "0.9.26202610051302", opencode: "1.18.34", harbor: "0.24.0" } as const;
+export const PINS = { akm_cli: "0.10.261003-beta", akm_plugin: "0.10.261002-beta", opencode: "1.18.34", harbor: "0.24.0" } as const;
 
 /** The pins of one run, as it was made: the akm under test replaces the pinned akm-cli, and a checkout that holds the plugin replaces the plugin. */
 export type Pins = Record<keyof typeof PINS, string>;
 
 /** Compatible published plugins: each depends on the CLI release named here. Other releases retain the default plugin. */
-export const RELEASE_PLUGINS: Record<string, string> = { [PINS.akm_cli]: PINS.akm_plugin, "0.10.261003-beta": "0.10.261002-beta" };
+export const RELEASE_PLUGINS: Record<string, string> = { [PINS.akm_cli]: PINS.akm_plugin, "0.9.26": "0.9.26202610051302" };
 
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
