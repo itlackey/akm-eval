@@ -10,6 +10,18 @@ interface Element {
   add: (option: unknown) => void; addEventListener: (type: string, fn: () => void) => void;
 }
 
+test("numeric bounds include values at their displayed rounding boundary", () => {
+  const script = readFileSync(new URL("../../../site/assets/ledger.js", import.meta.url), "utf8");
+  const helpers = script.slice(0, script.indexOf("async function startLedger"));
+  const result = vm.runInNewContext(helpers + `
+    filterRows([{ id: 'exact', quality_percent: 92.58999999999999 }, { id: 'above', quality_percent: 93 }],
+      [{ key: 'quality_percent', decimals: 2 }],
+      { search: '', facets: {}, filters: { quality_percent: { min: '92.59', max: '92.59' } } })
+      .map(row => row.id).join(',');
+  `);
+  expect(result).toBe("exact");
+});
+
 test("full ledger exposes every run and column, combines filters, sorts numerically and compares selected rows", async () => {
   const html = readFileSync(new URL("../../../site/index.html", import.meta.url), "utf8");
   const script = readFileSync(new URL("../../../site/assets/ledger.js", import.meta.url), "utf8");

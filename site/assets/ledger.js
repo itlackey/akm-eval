@@ -21,7 +21,9 @@ function filterRows(rows, columns, state) {
     if (state.dateTo && (!row.date || row.date.slice(0, 10) > state.dateTo)) return false;
     for (const [key, value] of Object.entries(state.facets)) if (value && row[key] !== value) return false;
     for (const [key, filter] of Object.entries(state.filters)) {
-      const value = row[key];
+      const raw = row[key];
+      const column = columns.find(column => column.key === key);
+      const value = typeof raw === 'number' ? Number(raw.toFixed(column?.decimals ?? 2)) : raw;
       const missing = value == null || value === '';
       if (filter.presence === 'missing' && !missing || filter.presence === 'present' && missing) return false;
       if (filter.text && !matchesText(value, filter.text)) return false;
