@@ -1,0 +1,538 @@
+{
+  "eval": "retrieval",
+  "corpus": "public",
+  "corpus_folder": null,
+  "collection": "books",
+  "label": "bifrost-fast35b-v06-20261013",
+  "date": "2026-10-13T20:13:33.599Z",
+  "git_commit": "32da9c5",
+  "harness_sha256": "09b83f8e1d1cafdc54dadd424e6e414a3ce8c3a16a5b78650c3f34f1fda22106",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "/tmp/akm-eval-smoke-0.10/node_modules/.bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "semantic_index_built_by": {
+    "version": "0.10.261003-beta",
+    "akm_bin": "/tmp/akm-eval-smoke-0.10/node_modules/.bin/akm",
+    "akm_build": null,
+    "builtAt": "2026-10-13T20:12:00.986Z"
+  },
+  "semantic_flag": "auto",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": null,
+  "n_assets": 93,
+  "index_seconds": {
+    "keyword": 0.3,
+    "semantic": 4.7
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 51,
+  "n_scored": 51,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 51,
+      "ndcg_10": 0.8768,
+      "ndcg_10_condensed": 0.9028,
+      "p_5": 0.2784,
+      "success_5": 0.9804,
+      "mrr": 0.8791,
+      "recall_10": 0.9542,
+      "judged_10": 0.2427,
+      "banned_above": 0.2353,
+      "banned_above_first": 0.1765
+    },
+    "curate": {
+      "n": 51,
+      "ndcg_10": 0.8768,
+      "ndcg_10_condensed": 0.9028,
+      "p_5": 0.2784,
+      "success_5": 0.9804,
+      "mrr": 0.8791,
+      "recall_10": 0.9542,
+      "judged_10": 0.2427,
+      "banned_above": 0.2353,
+      "banned_above_first": 0.1765
+    },
+    "semantic_search": {
+      "n": 51,
+      "ndcg_10": 0.9214,
+      "ndcg_10_condensed": 0.942,
+      "p_5": 0.2863,
+      "success_5": 0.9804,
+      "mrr": 0.9314,
+      "recall_10": 0.9706,
+      "judged_10": 0.2137,
+      "banned_above": 0.1373,
+      "banned_above_first": 0.098
+    },
+    "semantic_curate": {
+      "n": 51,
+      "ndcg_10": 0.9214,
+      "ndcg_10_condensed": 0.942,
+      "p_5": 0.2863,
+      "success_5": 0.9804,
+      "mrr": 0.9314,
+      "recall_10": 0.9706,
+      "judged_10": 0.2137,
+      "banned_above": 0.1373,
+      "banned_above_first": 0.098
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_search": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      },
+      "semantic_curate": {
+        "n": 0,
+        "abstained": 0,
+        "rate": null
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    },
+    "semantic": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "auto",
+      "registries": [],
+      "embedding": {
+        "localModel": "Xenova/bge-small-en-v1.5",
+        "queryTimeoutMs": 600000
+      }
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "621103e7306706313720d1b6cefdd5b2d650756742f1b56a75aac0158bbd51a1",
+  "assets": {
+    "library_sha256": "097131eefcd4f795b8cbfcbc22585efea45070b5396877f6f545c6d042833d65",
+    "bundles_sha256": null,
+    "queries_sha256": "839ece655d544c1594c65771c8ae69c4cfe8dd68c1601b964ab39b38ab2ff0c1",
+    "qrels_sha256": "236910b6a5d627a299c75790c7cacb18ddd1cbbf4719144873c26491309d3a39"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "public",
+    "collection": "books",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "culinary-sear-steaming-not-browning": {
+        "input_sha256": "848c4b8574a56f7ddbd74afc965fc5b65076216a174501fc0b7fa79f96fda714",
+        "label_sha256": "77ab2a7c3faa11bff6af4377d718cc250518958eca5cee8c7c87dd0328b2786a"
+      },
+      "legal-standard-deduction-current": {
+        "input_sha256": "477e9af46d5b262151c80547e21f8e8e3a4b8beb8847cccf27c577ef3a2c969e",
+        "label_sha256": "355f9c8f775a86335e470b44088ffbac755cec6382164536f51c1c3f0cf6e4f3"
+      },
+      "medical-cardiac-cycle-heart-sounds": {
+        "input_sha256": "ff9d89f22f6c20f2e929802df74efd930223f14664c20725d1fa48fcd719c128",
+        "label_sha256": "1686b1819e16145e70d55e0971772e7c296af20583818e337b872981efb543f7"
+      },
+      "culinary-chicken-safe-temp": {
+        "input_sha256": "50e5d11f5fbc87288127f07e7f578dcf143d43ba12eeffab16ac9be20ed4024a",
+        "label_sha256": "d9d111faea14bf8056b2755358f84b6854c229e9d2ea80a0ac605ca28e964298"
+      },
+      "legal-extension-payment-deadline": {
+        "input_sha256": "d6d0400ef562fdb6582ca760b25a55f1f6c41c33564260881434011f5e574d14",
+        "label_sha256": "bf3db7ba1401638e1dc6d8730a88719ac63a6bd136219b9fb9877e7860772003"
+      },
+      "medical-cpr-compression-rate-memory-gate": {
+        "input_sha256": "d2d488078fa4e60b9ff9b5cabe2eebd88fe6910e16fc1114f6ff3a4744059a05",
+        "label_sha256": "f91ecc2f5cab30e8ca248163108db822e3b0a956ec92a0db8c002e8fc65df934"
+      },
+      "culinary-steak-searing-best-method": {
+        "input_sha256": "689c5c17865be41621962bd7e67c59274a9e3062d590bdd56c4d1b43e7e200b3",
+        "label_sha256": "d54e975b34008d5e26a08e716c5737d186445e02a2626ab492c5a1a7aed9bc0e"
+      },
+      "legal-counteroffer-effect": {
+        "input_sha256": "45bf1a12e5aaedc9ae7079b1a3ea0bb4411fc18a105972ac9e7038f7b0e7a146",
+        "label_sha256": "219e8b9c02bec326b96db42e7f413628f978fccb242ae4d2d6aa287e64fc0245"
+      },
+      "medical-scene-safety-lesson": {
+        "input_sha256": "04efce3a5bdba15b922fd37156610b987408919757d5224f89f57f0a1e38e662",
+        "label_sha256": "7d43508234e42f607a8157cb25762494b7c86a82a45bb65d165fc2727761b66a"
+      },
+      "culinary-mise-en-place-exact-name": {
+        "input_sha256": "5ec1f766b992c467a13f78f59db7f512fb424ec55ff7764c5d4fae33e2082b9a",
+        "label_sha256": "71efc866df6f1653c8bab70725b21e40f125c822f911eeb4dad86cb231b40102"
+      },
+      "legal-citation-convention": {
+        "input_sha256": "567008adb31d7e58f23d3c4f49418850d7bf5507e44cc2af0b74641d922438b2",
+        "label_sha256": "e90536939caa5e69b13ca502712a8b893b47e0d9c8482e208e5e657fe48fed1b"
+      },
+      "medical-normal-vital-signs-fact": {
+        "input_sha256": "f7a49f576d4a909f79b8f02497e6c6aa976db94d0f739ffbc5248594b4079ae7",
+        "label_sha256": "fb2c4185bbadde0f2d20e5b545eabef44b67d25eb610ef6ed68171d1b9230700"
+      },
+      "culinary-pasta-from-scratch-dispatch": {
+        "input_sha256": "3db62ccca97ee244c1ae156c79f3f8b94ad9623c305dc81730de5752a56455d2",
+        "label_sha256": "fbf15e4b03f9b21a0a5c6671807aafa37fc5623baa436d9081737b69ed274517"
+      },
+      "legal-practice-scope": {
+        "input_sha256": "c3da69d6c7e975b4559632a69f91e289a0a00a1f4058e248a67717373ae43d00",
+        "label_sha256": "4b5efa1540d8dbce81800cc68257b98bf78fce9f5afb3cd0323d71e459b322f9"
+      },
+      "medical-blood-type-compatibility-fact": {
+        "input_sha256": "330cef2fb859fe2fd3e53c074207d9ba1020ef252013c3b4100c7dd5b92fa9c6",
+        "label_sha256": "65115cb366e4a86c68fc48babee55f507bd0f7eef2e537fa0d619f9dcc67a83c"
+      },
+      "culinary-plate-dessert-dispatch": {
+        "input_sha256": "48da2cafcc1d2e7bb7834489ae02b75795cf23fd0faba8ca760b84c2e315be41",
+        "label_sha256": "bd6f3857ddf8f746d3d7da8361f17660406bb3a9e2870d96a695595a7096e363"
+      },
+      "legal-tax-filing-checklist-exact": {
+        "input_sha256": "9fbdc0248bc2b7f5e12c5e5ab81b36d9373f08640179951c836ed03526627679",
+        "label_sha256": "a2b43f71711bf8018ead14800249126443e8f6f4a03bd865e7f43c1c98473bc4"
+      },
+      "medical-exact-name-renal-nephron": {
+        "input_sha256": "3f4ad129dc1863a239205e54e1230ab581cffe4b6f6b76affd6ea04aff8644f4",
+        "label_sha256": "090ec385529da539c7643d7f2b1d215c9636eefeba03d5bb0fb23dbbc840cc84"
+      },
+      "culinary-sous-chef-service-timing": {
+        "input_sha256": "9e69b96c1efbbc8f35e1c5436c3580063cbc1e55e94242024008bf6a518e81d7",
+        "label_sha256": "9c1cd2fb06335a8ad44df5c2d17117fb20b84c195bd79b8fd2f02a711e883859"
+      },
+      "legal-estimate-tax-liability": {
+        "input_sha256": "2edfb7f9216494ca2d0508719963cb796515a7657220ef0646d081708ea7c320",
+        "label_sha256": "4d0d7e2574e9767495416346e1b512446483a520130223512ae3a2e4e2bb75f2"
+      },
+      "medical-exact-name-first-aid-response-skill": {
+        "input_sha256": "01167722325678ac1d8ffed903fcdb28428304e76444f2f20936275c5daac45e",
+        "label_sha256": "b9017ee48ca3af997f8eb02fa9736456f2dbc25d67bcea1a563723a0170754c6"
+      },
+      "culinary-dinner-party-menu-planning": {
+        "input_sha256": "a2ee0ccd6a3bc3e7cdfad01a2f49e4a3139b0f7e4ace1fe607189f2c1ff5e77d",
+        "label_sha256": "41995c85638ba135faa07d53ed04a9c9b8a0527be26f9a4f9df858c98bdd3541"
+      },
+      "legal-tax-compliance-review": {
+        "input_sha256": "9052e17acc252bc26b682b8d655832655d22dcbb33a30ee8ccdf836eedc25ffa",
+        "label_sha256": "a259326aa7090505a76e996a3e451116066077c6278bd1bf3f14096274518e6e"
+      },
+      "medical-patient-vitals-charting-skill": {
+        "input_sha256": "74c4656c3d12494a47beda0e09771f047f5cff9043fc2b0485bbf346f0c457c2",
+        "label_sha256": "cfd529b38f90b9e20ded3900a4ddbcfa0bb6df5a068dec76e703e7f8cc3b5247"
+      },
+      "culinary-knife-sharpening-maintenance": {
+        "input_sha256": "8d1e3a045b592c54ed1056060ba9c9c2b3d62611c812454160621b31fcd0e472",
+        "label_sha256": "1829de6ccfe37ed259c83a847b5023313fbc6b6e44636fa20705de3079e8d076"
+      },
+      "legal-return-intake-workflow": {
+        "input_sha256": "83762d2483225e5052464deac6830c1dfae635586add6551580d88b7bf338b38",
+        "label_sha256": "d4492a2c8c6ef409154f8a6aa53aba7121b98e6ab11caf19027e63f173ea429f"
+      },
+      "medical-triage-symptoms-command": {
+        "input_sha256": "ccb42a4319c52622d8ef4b2d1c5f06115042b56b5f9197176286cfc9cde4adfb",
+        "label_sha256": "ea3a19def74a428adaaf5144d3a9fe577d2a69d2540e383cde410b745bea4328"
+      },
+      "culinary-mother-sauces-five": {
+        "input_sha256": "fb18219ce9728ae852d1cdf7331fdd8815b90e97586e622929855cf0468f815d",
+        "label_sha256": "4e26e14cd5d4a280cbb83d0418367f927b52a789bf4d2d1ac641f5ebc34a252a"
+      },
+      "legal-nexus-general-rule": {
+        "input_sha256": "643f81cab66a014a0d71371d5e5e17effc47a3653a4e20c5049ae08face4b6ac",
+        "label_sha256": "668ec18bd511e00789de5e59976ee3c33cde288ec13c460f72773ee83e5b66b3"
+      },
+      "medical-clinical-educator-agent": {
+        "input_sha256": "d0926b4ac0d311687a8b0b33550b6ca9d4ec1a4b924c258959126d77ad6f620c",
+        "label_sha256": "e312b801822c8555855e9d24420a51a937e543263f83354efe554aa2b7cb28be"
+      },
+      "culinary-convert-units-script": {
+        "input_sha256": "b4682169a81677f70b377b4094d0b26a89957766474aaeae30fe11e954373b24",
+        "label_sha256": "9dd43352d2b0d0688e4f66e676aaec9f9ffaf3b75797f280beab97390c7c4bf6"
+      },
+      "legal-demand-letter-draft": {
+        "input_sha256": "caa43959dd17a302691052e04ace63346ec3e2032b03e29c8fcbd058b41b6cf9",
+        "label_sha256": "1dbeefb7c4fc307337fef7dcfccae6e22aa2e76deef38e9c4e18f5155554035f"
+      },
+      "medical-first-aid-incident-response-workflow": {
+        "input_sha256": "a095c921a1658656682b75c0f2b9c8cf1e523879eecfa5840d1cdddb2202eace",
+        "label_sha256": "f8c6307e9d5d91d6017cbac8b3bf64690b9a91c9a466dfef82d1a867db6c2236"
+      },
+      "culinary-brine-salt-percentage": {
+        "input_sha256": "78eb48ac814a54dace33242eae85da5654eec6a6329076639b29c1b3a38241f0",
+        "label_sha256": "bf564c445a120477158e26679789012acc38edb599cd4f5bd3287e430d97dbba"
+      },
+      "legal-privilege-investigation-memos": {
+        "input_sha256": "65416eca2cd9ab42d76679ec9ee6a2b4dec135055c8e4407b32a020c7e1b67d7",
+        "label_sha256": "1c68fdcecc614848a9237270e91f087d17d953767e74dcfe27be792eaf1aa55f"
+      },
+      "medical-wound-care-general-principle": {
+        "input_sha256": "9d694d02f653035960369abbaa092c3a6ec850aac9c9d3335b1ff99752c57f4e",
+        "label_sha256": "6b0811b684158bb886e492d8d75b0d8540af9d21dbe23192a9d6bfe239d93de3"
+      },
+      "culinary-knife-skills-cutting-technique": {
+        "input_sha256": "4892c73d4c4cafd9066985bd31c78b53b8458996b64df16473f72036099af9cb",
+        "label_sha256": "dbb60b80406ed339e72fa68ac2458895452d68ec7e7c8a949ee7dd07af65563e"
+      },
+      "legal-rmd-start-age-adversarial": {
+        "input_sha256": "3f6acc53e0ec1a7b44067b4c326caeec6f3095b1935c26bc6687b3d6741d0fea",
+        "label_sha256": "081dcb5d06a7f958d25d8e330c8fb1407abfbfe60ce4be3f08e19709bc7ed68e"
+      },
+      "medical-hydration-guidance-query": {
+        "input_sha256": "8c0d920a7d9be9b85505b18fd1b098fac9fd7e9f6be6ca15b5e082998acc1fc1",
+        "label_sha256": "54378623a8d7a6713a09a9da9d5af864fd76cebbfb9b13f9b338689856c6c0bb"
+      },
+      "culinary-bone-stock-from-scratch": {
+        "input_sha256": "7c8fd62e7f95535c87b12ac0e9d0b46e034aff6ee7227f6a313cff8e7541b0bc",
+        "label_sha256": "4a68552bd859922d35feed8888a52df8fb5d59068375bea8f99ed88b9af70bf1"
+      },
+      "legal-mailbox-rule-adversarial": {
+        "input_sha256": "8e7b5418f4d21ff0fa79c295c44fe425edd5ec840e27fc54736c912dec360b5d",
+        "label_sha256": "764cb05e308125f66fa69d1323ddda17c30ad197f0a0df7f92bdbce7e0a1afdf"
+      },
+      "medical-adv-belief-state-bp-threshold": {
+        "input_sha256": "6cb308842b589b612012dcaf3e63df79d1f163de972bab22299cb48cae2570aa",
+        "label_sha256": "c7e0044d28f1c2b993618d701ee18a0d979d59ec47ee851aa693559f11b58c2e"
+      },
+      "culinary-onion-caramelization-belief-state": {
+        "input_sha256": "d3c0ca56f61dbd28790c5da575386007fb456260349ab9eb6b7e2934ced5ff31",
+        "label_sha256": "e723b5c7f2716f6aed5be2f295e264c7e1d6bf10999e810259020d5fa105c65f"
+      },
+      "legal-statute-overview-exact-adversarial": {
+        "input_sha256": "2428a7ae3d5c2397a1622cd02ef08b48b78cca1588d4f342e518c288b2ef7865",
+        "label_sha256": "997483cedecc876d6b5477b45a36539fc8cc38f714b5bee96eadadc4e6b14b04"
+      },
+      "medical-adv-lesson-strength-delayed-head-injury": {
+        "input_sha256": "0f0cff0b577f52187ab10f5642115c4724755374fecc4630a2b002963b87a532",
+        "label_sha256": "5347cda77a4615266db9ec82579e93704ea8e78b0337eac5ba582dc79fae88d3"
+      },
+      "culinary-spice-toasting-lesson-strength": {
+        "input_sha256": "06a87f3e9542585811bfaba15e677086ecea0477c8bf1423d284a1c18ddf6b83",
+        "label_sha256": "5d056ee8229e520be6b3598cb84f16a47bb09d5dc91eb3f35a090fc6573dbc58"
+      },
+      "legal-conflict-check-adversarial": {
+        "input_sha256": "c1fb2bcfb6ddf51f1c67db48954151e43a76b572c3a3effb1566a4bc7e514b40",
+        "label_sha256": "427c68bb579d20e6e8981d626e8ed213cdcf6ac1234821c598441ba81f083a8b"
+      },
+      "medical-adv-exact-name-renal-nephron-vs-stuffed-distractor": {
+        "input_sha256": "3f4ad129dc1863a239205e54e1230ab581cffe4b6f6b76affd6ea04aff8644f4",
+        "label_sha256": "f0b9f46cfa730cfbe039a43a72c5d60a69864a7d0d48cbd0329734c565031c39"
+      },
+      "culinary-beurre-noisette-exact-name": {
+        "input_sha256": "ba4c43a279bc16d995c7bbda977f347bbb9df9d6614ac617a5a83ddd6f174f13",
+        "label_sha256": "36091e1184a3bad29040e4acf7abbb22f0d643a5c773109b332cb79637ceced0"
+      },
+      "medical-adv-pinned-fact-cpr-ratio": {
+        "input_sha256": "70bb6ca1363a7b8172b5892bfe2fc84f118fa4aa78f48dda2d43cbcd5715bb6c",
+        "label_sha256": "cfd3fb7590bb6d069785711bf5bdd44f38b7cf355454cdbb53a14d9ed0a5745f"
+      },
+      "culinary-kitchen-fire-pinned-fact": {
+        "input_sha256": "d84d5b882c6f8f5178761e38ee60acaeb45049777984db9e169464911a8ef995",
+        "label_sha256": "2f7bd9281aa7ee1e2c2aae69727b999a693b74561ba85562f857a85a2c651938"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "/tmp/akm-eval-smoke-0.10/node_modules/.bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "c566a4169735f3c958e1c3d6bab06f9c5e3601d80e3c9ff6efff4895bec89e88",
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        },
+        "semantic": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "auto",
+          "registries": [],
+          "embedding": {
+            "localModel": "Xenova/bge-small-en-v1.5",
+            "queryTimeoutMs": 600000
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "culinary-sear-steaming-not-browning",
+        "legal-standard-deduction-current",
+        "medical-cardiac-cycle-heart-sounds",
+        "culinary-chicken-safe-temp",
+        "legal-extension-payment-deadline",
+        "medical-cpr-compression-rate-memory-gate",
+        "culinary-steak-searing-best-method",
+        "legal-counteroffer-effect",
+        "medical-scene-safety-lesson",
+        "culinary-mise-en-place-exact-name",
+        "legal-citation-convention",
+        "medical-normal-vital-signs-fact",
+        "culinary-pasta-from-scratch-dispatch",
+        "legal-practice-scope",
+        "medical-blood-type-compatibility-fact",
+        "culinary-plate-dessert-dispatch",
+        "legal-tax-filing-checklist-exact",
+        "medical-exact-name-renal-nephron",
+        "culinary-sous-chef-service-timing",
+        "legal-estimate-tax-liability",
+        "medical-exact-name-first-aid-response-skill",
+        "culinary-dinner-party-menu-planning",
+        "legal-tax-compliance-review",
+        "medical-patient-vitals-charting-skill",
+        "culinary-knife-sharpening-maintenance",
+        "legal-return-intake-workflow",
+        "medical-triage-symptoms-command",
+        "culinary-mother-sauces-five",
+        "legal-nexus-general-rule",
+        "medical-clinical-educator-agent",
+        "culinary-convert-units-script",
+        "legal-demand-letter-draft",
+        "medical-first-aid-incident-response-workflow",
+        "culinary-brine-salt-percentage",
+        "legal-privilege-investigation-memos",
+        "medical-wound-care-general-principle",
+        "culinary-knife-skills-cutting-technique",
+        "legal-rmd-start-age-adversarial",
+        "medical-hydration-guidance-query",
+        "culinary-bone-stock-from-scratch",
+        "legal-mailbox-rule-adversarial",
+        "medical-adv-belief-state-bp-threshold",
+        "culinary-onion-caramelization-belief-state",
+        "legal-statute-overview-exact-adversarial",
+        "medical-adv-lesson-strength-delayed-head-injury",
+        "culinary-spice-toasting-lesson-strength",
+        "legal-conflict-check-adversarial",
+        "medical-adv-exact-name-renal-nephron-vs-stuffed-distractor",
+        "culinary-beurre-noisette-exact-name",
+        "medical-adv-pinned-fact-cpr-ratio",
+        "culinary-kitchen-fire-pinned-fact"
+      ],
+      "scored": [
+        "culinary-sear-steaming-not-browning",
+        "legal-standard-deduction-current",
+        "medical-cardiac-cycle-heart-sounds",
+        "culinary-chicken-safe-temp",
+        "legal-extension-payment-deadline",
+        "medical-cpr-compression-rate-memory-gate",
+        "culinary-steak-searing-best-method",
+        "legal-counteroffer-effect",
+        "medical-scene-safety-lesson",
+        "culinary-mise-en-place-exact-name",
+        "legal-citation-convention",
+        "medical-normal-vital-signs-fact",
+        "culinary-pasta-from-scratch-dispatch",
+        "legal-practice-scope",
+        "medical-blood-type-compatibility-fact",
+        "culinary-plate-dessert-dispatch",
+        "legal-tax-filing-checklist-exact",
+        "medical-exact-name-renal-nephron",
+        "culinary-sous-chef-service-timing",
+        "legal-estimate-tax-liability",
+        "medical-exact-name-first-aid-response-skill",
+        "culinary-dinner-party-menu-planning",
+        "legal-tax-compliance-review",
+        "medical-patient-vitals-charting-skill",
+        "culinary-knife-sharpening-maintenance",
+        "legal-return-intake-workflow",
+        "medical-triage-symptoms-command",
+        "culinary-mother-sauces-five",
+        "legal-nexus-general-rule",
+        "medical-clinical-educator-agent",
+        "culinary-convert-units-script",
+        "legal-demand-letter-draft",
+        "medical-first-aid-incident-response-workflow",
+        "culinary-brine-salt-percentage",
+        "legal-privilege-investigation-memos",
+        "medical-wound-care-general-principle",
+        "culinary-knife-skills-cutting-technique",
+        "legal-rmd-start-age-adversarial",
+        "medical-hydration-guidance-query",
+        "culinary-bone-stock-from-scratch",
+        "legal-mailbox-rule-adversarial",
+        "medical-adv-belief-state-bp-threshold",
+        "culinary-onion-caramelization-belief-state",
+        "legal-statute-overview-exact-adversarial",
+        "medical-adv-lesson-strength-delayed-head-injury",
+        "culinary-spice-toasting-lesson-strength",
+        "legal-conflict-check-adversarial",
+        "medical-adv-exact-name-renal-nephron-vs-stuffed-distractor",
+        "culinary-beurre-noisette-exact-name",
+        "medical-adv-pinned-fact-cpr-ratio",
+        "culinary-kitchen-fire-pinned-fact"
+      ],
+      "errored": []
+    }
+  }
+}
