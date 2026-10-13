@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { tallyCalls } from "./usage.ts";
 
 export interface Sandbox {
   dir: string; // the temp folder, and the working folder of every akm run
@@ -260,6 +261,7 @@ export function createSandbox(name: string, opts: { keepModelKey?: boolean; sema
 }
 
 export function removeSandbox(sandbox: Sandbox): void {
+  tallyCalls(sandbox.env.AKM_DATA_DIR); // its model calls, for the run's summary (see usage.ts)
   rmSync(sandbox.dir, { recursive: true, force: true });
 }
 

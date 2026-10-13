@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Sandbox, akmBuild, akmVersion, removeSandbox, AKM_OPTIONS, akmUsage, useAkm } from "../../../lib/akm/akm.ts";
+import { type ModelCalls, takeModelCalls, tallyCalls } from "../../../lib/akm/usage.ts";
 import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -88,6 +89,8 @@ interface Summary {
   seed: string | null;
   metrics: ReturnType<typeof metrics>;
   /** What the run was made of (see lib/manifest.ts). */
+  /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
+  model_calls: ModelCalls | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -188,6 +191,7 @@ export async function runCorpus(
     settings: { strategy: overrides.strategy, config_patch_sha256: overrides.configPatch?.sha256 ?? null, timeout_ms: ctx.timeoutMs ?? null, seed },
     completion: completionOf(MEASUREMENT, cases.map((c) => c.id), rows),
   });
+  tallyCalls(ctx.sandbox.env.AKM_DATA_DIR); // the sandbox outlives the run, so its calls are read now
   const summary: Summary = {
     eval: NAME,
     corpus: corpus.name,
@@ -210,6 +214,7 @@ export async function runCorpus(
     assets_sha256: casesSha256(assets),
     rubric_version: rubric,
     seed,
+    model_calls: takeModelCalls(),
     manifest,
     results_dir: dir,
   };
