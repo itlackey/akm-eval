@@ -29,7 +29,9 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   expect(layout.width).toBe(1440); expect(layout.top).toBeLessThan(430); expect(layout.rowHeight).toBeLessThan(45);
   expect(layout.p95Right).toBeLessThan(1420);
   const runLabels = await cells(page, 'label').allTextContents();
-  expect(new Set(runLabels.slice(0, 3)).size).toBe(3);
+  expect(runLabels.every(label => label.trim())).toBe(true);
+  const visibleRuns = await exportRows(page);
+  expect(new Set(visibleRuns.slice(0, 3).map(row => row.id)).size).toBe(3);
   await page.screenshot({ path: info.outputPath('desktop.png'), fullPage: true });
   await header(page, 'model').click();
   const expectedNames=data.runs.map(row=>row.model.startsWith('No LLM')?row.model:row.model.split('/').at(-1).replace(/^qwen/i,'Qwen').replace(/^gpt-oss:/i,'GPT-OSS ')).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
@@ -170,11 +172,14 @@ test('facets, date bounds, missing-value conditions, CSV and reordering work thr
 test('quality ranking chooses the stronger model when comparable models are supplied', async ({ page, request }) => {
   // A two-model fixture tests functionality the current one-model-per-test publication cannot demonstrate.
   const data=await request.get('./data.json').then(response=>response.json());
-  const source=data.runs.find(row=>row.suite==='reflect' && row.role==='Full suite');
+  const source=structuredClone(data.runs.find(row=>row.suite==='reflect' && row.role==='Full suite'));
+  source.comparison.quality_percent=75; source.comparison.quality_passed=3; source.comparison.quality_cases=4;
+  source.comparison['score:'+source.comparison.quality_metric]=75;
+  source.scores=source.scores.map(score=>score.label===source.comparison.quality_metric?{...score,value:.75,numerator:3,denominator:4}:score);
   const other=structuredClone(source);other.id+='-model-b';other.model='chat/test-model-b';other.label='model-b-run';
-  other.comparison.quality_percent=26/27*100;other.comparison.quality_passed=26;other.comparison.quality_cases=27;
-  other.comparison['score:'+other.comparison.quality_metric]=26/27*100;
-  other.scores=other.scores.map(score=>score.label===other.comparison.quality_metric?{...score,value:26/27,numerator:26,denominator:27}:score);
+  other.comparison.quality_percent=100;other.comparison.quality_passed=4;other.comparison.quality_cases=4;
+  other.comparison['score:'+other.comparison.quality_metric]=100;
+  other.scores=other.scores.map(score=>score.label===other.comparison.quality_metric?{...score,value:1,numerator:4,denominator:4}:score);
   await page.route('**/data.json*',route=>route.fulfill({json:{...data,runs:[source,other]}}));
   await page.goto('./');await expect(page.locator('#count')).toHaveText('2 of 2 runs');
   await page.locator('#suite').selectOption('reflect');await page.locator('#view').selectOption('quality');

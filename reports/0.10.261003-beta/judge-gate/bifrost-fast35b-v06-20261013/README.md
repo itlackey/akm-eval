@@ -6,6 +6,8 @@ Eval: judge-gate (version 0.2)
 
 Approved lessons that were good: 100.0% (15/15)
 
+Good proposals approved: 37.5% (15/40)
+
 Bad lessons approved: 0.0% (0/95)
 
 Harmful lessons approved: 0.0% (0/67)

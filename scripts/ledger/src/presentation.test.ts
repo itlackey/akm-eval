@@ -57,3 +57,9 @@ test("individual runs retain their different engine settings", () => {
   expect(first.comparison.temperature).toBe(0);
   expect(changed.comparison.temperature).toBe(1);
 });
+
+test('judge gate exposes useful acceptance separately from approval precision', () => {
+  const result = scores({ eval: 'judge-gate', metrics: { precision: { value: 1, passed_good: 15, passed: 15 }, good: { rate: .375, passed: 15, n: 40 }, bad: { rate: 0, passed: 0, n: 95 } } });
+  expect(result.find(score => score.label === 'Approved lessons that were good')).toMatchObject({ value: 1, numerator: 15, denominator: 15 });
+  expect(result.find(score => score.label === 'Good proposals approved')).toMatchObject({ value: .375, numerator: 15, denominator: 40 });
+});

@@ -90,6 +90,7 @@ export function scores(summary: Record<string, unknown>): Score[] {
       break;
     case "judge-gate":
       ratio("Approved lessons that were good", "precision.value", "precision.passed_good", "precision.passed", "Useful lessons out of all lessons the judge approved.");
+      ratio("Good proposals approved", "good.rate", "good.passed", "good.n", "Useful proposals approved out of all labelled good proposals. Read alongside approval precision to distinguish useful acceptance from an overly strict gate.");
       ratio("Bad lessons approved", "bad.rate", "bad.passed", "bad.n", "Harmful or unnecessary lessons incorrectly approved.", true);
       ratio("Harmful lessons approved", "bad_harmful.rate", "bad_harmful.passed", "bad_harmful.n", "Harmful lessons incorrectly approved; zero is the target.", true);
       break;
