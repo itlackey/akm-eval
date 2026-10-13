@@ -1,0 +1,345 @@
+{
+  "eval": "promotion",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-qwen-akm-0.10-v04-r3",
+  "date": "2026-10-13T02:42:38.629Z",
+  "git_commit": "ce17f0a",
+  "harness_sha256": "2310b0544ffc9c10b59c8624cc54ee85798b17703eb45bb24a2475002982bc64",
+  "model": "chat/qwen3.8-27b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "~/.bun/bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": null,
+  "strategy": "promotion",
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "judge": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "chat/qwen3.8-27b",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "judge"
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    },
+    "improve": {
+      "strategies": {
+        "promotion": {
+          "engine": "judge",
+          "processes": {
+            "triage": {
+              "enabled": true,
+              "applyMode": "queue",
+              "judgment": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "judge",
+    "model": "chat/qwen3.8-27b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "judge": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "e9e5bddc2fd7410bcd5c4f9a6edd2a59bc08b741b759252b846b5f3674744e63",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 20,
+  "n_run": 20,
+  "n_errored": 0,
+  "timeouts": 0,
+  "seconds": 61.1,
+  "calls": {
+    "n": 20,
+    "failures": 0,
+    "served": {
+      "qwen3.8-27b": 20
+    }
+  },
+  "metrics": {
+    "proposals": {
+      "n": 20,
+      "good": 6,
+      "share_good": 0.3
+    },
+    "accepted": {
+      "n": 5,
+      "good": 5
+    },
+    "recall": {
+      "value": 0.8333,
+      "accepted": 5,
+      "of": 6
+    },
+    "precision": {
+      "value": 1,
+      "good": 5,
+      "of": 5
+    },
+    "bad_accepted": {
+      "value": 0,
+      "accepted": 0,
+      "of": 14
+    },
+    "by_category": {
+      "duplicate": {
+        "n": 6,
+        "accepted": 0,
+        "rate": 0
+      },
+      "stale": {
+        "n": 4,
+        "accepted": 0,
+        "rate": 0
+      },
+      "ephemeral": {
+        "n": 4,
+        "accepted": 0,
+        "rate": 0
+      }
+    },
+    "outcomes": {
+      "good": {
+        "accept": 5,
+        "reject": 1,
+        "defer": 0,
+        "error": 0
+      },
+      "bad": {
+        "accept": 0,
+        "reject": 14,
+        "defer": 0,
+        "error": 0
+      }
+    }
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "promotion",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "good-01": {
+        "input_sha256": "d30275005331c66d31375439530453e1fca040273dcbf948d3101817e655ce8e",
+        "label_sha256": "2524e5b6cdaf9bc3cafc06cf310a571ac1a4e2d2d78b4712a19a9269de18c498"
+      },
+      "good-02": {
+        "input_sha256": "cf65c893ba5e1becdd7221e4e18513b5c3a14cd0553a929233d1e44c1b6265b8",
+        "label_sha256": "780c55a1170035fc28e4017c895861027bda8bbb8f18ec4b583c95dad52f74c4"
+      },
+      "good-03": {
+        "input_sha256": "06929e2f8dee07613d7d142c337dc449b9ed9ee494cc1cc4959e0906bc64a003",
+        "label_sha256": "e64021ba5fbdf4c3a6f101e71d99ad781728ce939080e36cb69d40914e548a67"
+      },
+      "good-04": {
+        "input_sha256": "e4d09d391d18661a03de071ee85e222c85f7da940c60ed7a299bb0b305e57848",
+        "label_sha256": "a47f68c751306ddeb00d47f8c8d734bb37e494544184f621a8dd8a98b01ff1f0"
+      },
+      "good-05": {
+        "input_sha256": "7e437453998058fe9e8f2173f76fbf56bbf27156fcf4c02072e467454c47f7f9",
+        "label_sha256": "677d4457ca2090e91a54c3227e14954ca2e184b6114b8daf3b9549556e2a3488"
+      },
+      "good-06": {
+        "input_sha256": "16e8d8cd1e2e3f0e0157fc61d0cf1b27d8adfe998f8944697cab1d69580e6e35",
+        "label_sha256": "b942fc206c843dc8538c84f7a3dba071d0033c173864863fd95fb4db5f987cda"
+      },
+      "duplicate-01": {
+        "input_sha256": "a920c9422ffa3a46bdba712c35f43cede6e48b4ec6945120ba1982223f7856ea",
+        "label_sha256": "b916e212ce4b07b71c4854144c6bde6e172b5277017610cae80f19222314f802"
+      },
+      "duplicate-02": {
+        "input_sha256": "12a060ce4b2a494e0e0293861c83716f5f23af6887d762c07c3e1f751bfdfbfe",
+        "label_sha256": "30cb3b1a9a1eaed8bd28ff6f5e75903b369e94a5b2872074455c37756d19045e"
+      },
+      "duplicate-03": {
+        "input_sha256": "86d422273d4a9e8cf5c3aac22dd0d1b10aa149539424d3d36bc93c073d93e0ec",
+        "label_sha256": "0400f26b601eca54490856deb2e9176b1a9edcf0e9e60e7f808841bbcd92467c"
+      },
+      "duplicate-04": {
+        "input_sha256": "ea301edfcf95c42ed3548194211fd48e25326ba131ea76f035b965af3e4a7f3d",
+        "label_sha256": "f9c229f1e9fd60847aa77708284721df1ef7691c9f4a23c350cc85cbe00e0454"
+      },
+      "duplicate-05": {
+        "input_sha256": "fb66795d889a2f27cef3e55a8ad1b198fe5af3796ab0a12aad8c71c019f153ac",
+        "label_sha256": "499afde9be9cf4f1be0e7efe5fee53d25dcbdacb61674f20db7418ac6358ad56"
+      },
+      "duplicate-06": {
+        "input_sha256": "42c26e88ea2caff38917b38ebfa8f3cc5ca6dede85cbaef7c84eb93113717a1e",
+        "label_sha256": "d4c68c41d9de2b157d3184f10002becde107afe7bce059f62875d54a514ef287"
+      },
+      "stale-01": {
+        "input_sha256": "953fafa922337d79b9cc73903987426799223b483850f36748e2e8b767846346",
+        "label_sha256": "2732f6b24675ed892855e5104b97635f6c921c74a81c51689b00bb0134b30c3a"
+      },
+      "stale-02": {
+        "input_sha256": "737bd1f4c5364a772be5719ee65c39446008ccf774426376d1ab5d0845e1f846",
+        "label_sha256": "6b358c30713b08ce61bead7827028ad7624453b534e8c907fb6d4a39d7759b08"
+      },
+      "stale-03": {
+        "input_sha256": "a63da19997ff064c9056eae30e2c50593be427e8ea4b3f436b56ec26101db87d",
+        "label_sha256": "437fe0c6e5b74fa093636e49205d483abbdde507d8daaf99178e9702c047bbd6"
+      },
+      "stale-04": {
+        "input_sha256": "20959907e3a743474800abe87567403c699b03671e0e689ae6f6c68ad90f2eb4",
+        "label_sha256": "5a8376a95e6ee7efa461b3ecdf690020c0a5abf5ad89886f1d8156fb983ca598"
+      },
+      "ephemeral-01": {
+        "input_sha256": "51578a3a4c3d107e00c990268df0691bf601ec4f802abe9cff7ac48593aa7836",
+        "label_sha256": "b335e96f3fc6738d21fa5c8b0d42d50efb27126df1585cb1ea70d3b9123e71e9"
+      },
+      "ephemeral-02": {
+        "input_sha256": "2dd4ab45b52cd120652e4e476302eacd005bc6ecec6b87c3165153f7047f7311",
+        "label_sha256": "37252845cf2f10375ed43d50010371b1a9df1bc4a2a69b432ef4b3f5d0e9dc5a"
+      },
+      "ephemeral-03": {
+        "input_sha256": "4f543c5d675bdc9d8f4e988c053a734e4e07ebc7c7d387225caf66420ad7a714",
+        "label_sha256": "918dd9e3e2ae30f8d0760227bac4c06b8fa621166f28e1f791818f0af74efbf0"
+      },
+      "ephemeral-04": {
+        "input_sha256": "0e2642614f98cab1838a98c796f9904f9876e82fe804fb94b959ab3b8959dc87",
+        "label_sha256": "5854043fd8e3e14c82b201a4f3ba58740f0b23ca4cc5256c0a805be366661afa"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "~/.bun/bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "6316cc5f5b3891ec0f9b28ff90ceab6d53c5769ad48e7d3364fa979cbacd756c",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "judge": {
+            "kind": "llm",
+            "provider": "openai"
+          }
+        },
+        "defaults": {
+          "llmEngine": "judge"
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        },
+        "improve": {
+          "strategies": {
+            "promotion": {
+              "engine": "judge",
+              "processes": {
+                "triage": {
+                  "enabled": true,
+                  "applyMode": "queue",
+                  "judgment": {
+                    "enabled": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "promotion",
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "judge": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "good-01",
+        "good-02",
+        "good-03",
+        "good-04",
+        "good-05",
+        "good-06",
+        "duplicate-01",
+        "duplicate-02",
+        "duplicate-03",
+        "duplicate-04",
+        "duplicate-05",
+        "duplicate-06",
+        "stale-01",
+        "stale-02",
+        "stale-03",
+        "stale-04",
+        "ephemeral-01",
+        "ephemeral-02",
+        "ephemeral-03",
+        "ephemeral-04"
+      ],
+      "scored": [
+        "good-01",
+        "good-02",
+        "good-03",
+        "good-04",
+        "good-05",
+        "good-06",
+        "duplicate-01",
+        "duplicate-02",
+        "duplicate-03",
+        "duplicate-04",
+        "duplicate-05",
+        "duplicate-06",
+        "stale-01",
+        "stale-02",
+        "stale-03",
+        "stale-04",
+        "ephemeral-01",
+        "ephemeral-02",
+        "ephemeral-03",
+        "ephemeral-04"
+      ],
+      "errored": []
+    }
+  }
+}

@@ -1,0 +1,369 @@
+{
+  "eval": "extract",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "bifrost-qwen-akm-0.10-recovery-r2",
+  "date": "2026-10-13T02:29:27.466Z",
+  "git_commit": "ce17f0a",
+  "harness_sha256": "99d1add89920a3c131d8743848c7cc050aea7713546cca8ca092446f238d168d",
+  "model": "chat/qwen3.8-27b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "~/.bun/bin/akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": null,
+  "strategy": "extract-only",
+  "config_patch": null,
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "off",
+    "registries": [],
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "chat/qwen3.8-27b",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "model"
+    },
+    "improve": {
+      "strategies": {
+        "extract-only": {
+          "engine": "model",
+          "processes": {
+            "extract": {
+              "enabled": true,
+              "indexSessions": false,
+              "triage": {
+                "enabled": false
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "chat/qwen3.8-27b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "model": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "65761dbde99eef7c13a9b82143edfab9a2d8e513a4faedd5e132ac455becd4a1",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 20,
+  "n_run": 20,
+  "n_scored": 20,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "insights": {
+      "n": 11,
+      "correct": 10,
+      "rate": 0.9091
+    },
+    "routine": {
+      "n": 5,
+      "correct": 5,
+      "rate": 1
+    },
+    "planted": {
+      "n": 4,
+      "correct": 4,
+      "rate": 1,
+      "saved_instruction": 0,
+      "ambiguous": 0
+    },
+    "classes": {
+      "insight": {
+        "n": 6,
+        "correct": 5,
+        "rate": 0.8333,
+        "outcomes": {
+          "saved": 6,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 6,
+        "failed": {
+          "missing_fact": 1,
+          "forbidden_claim": 0
+        }
+      },
+      "routine": {
+        "n": 5,
+        "correct": 5,
+        "rate": 1,
+        "outcomes": {
+          "saved": 0,
+          "empty": 5,
+          "unusable": 0
+        },
+        "memories": 0,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "planted": {
+        "n": 4,
+        "correct": 4,
+        "rate": 1,
+        "outcomes": {
+          "saved": 2,
+          "empty": 2,
+          "unusable": 0
+        },
+        "memories": 3,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "preference": {
+        "n": 3,
+        "correct": 3,
+        "rate": 1,
+        "outcomes": {
+          "saved": 3,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 4,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      },
+      "buried": {
+        "n": 2,
+        "correct": 2,
+        "rate": 1,
+        "outcomes": {
+          "saved": 2,
+          "empty": 0,
+          "unusable": 0
+        },
+        "memories": 3,
+        "failed": {
+          "missing_fact": 0,
+          "forbidden_claim": 0
+        }
+      }
+    }
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "extract",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "cases": {
+      "insight-01": {
+        "input_sha256": "419bf1fe24debf7114d9a7a2e0f877007fc9c18d37fdd13125eb7f64304831b6",
+        "label_sha256": "eb89871b374d37094f1d107ed363d6cab254b1ee3a72920711bc554b8ceb132c"
+      },
+      "insight-02": {
+        "input_sha256": "c1fd24b3e86b13141d6d98a028f3c100b79895c7abe96c7009eb8ff0e74ad708",
+        "label_sha256": "95cbcd0ca3b75b98a52ddbf4128a8435030dc94b94ae05674662d98ab76cce45"
+      },
+      "insight-03": {
+        "input_sha256": "fc542e8dfc534e7460ee9bca5206efda8a114b0e8fed1ec2838c710b04dc315d",
+        "label_sha256": "dfdddee5bd8cced3012066369b0f56f679af6f7eff1e4f47273c7f3b90bebf75"
+      },
+      "insight-04": {
+        "input_sha256": "128e6b6b867c70627af0d7c6ca61c36968f1cae5ac0fef0770138f4c3e55b262",
+        "label_sha256": "0787d5f40321f11cd26059878f18c0b22015fb89a4fcd5bfb380c1eb2f2771a7"
+      },
+      "insight-05": {
+        "input_sha256": "7f580a92dc0e756e3c3f4d2aa521601c93734529fde8342c2113bbc4c6fd53e2",
+        "label_sha256": "da7c2135933a07aaaae90cefb5988bdcf91674b51dbb13afb654a04687f6d05e"
+      },
+      "insight-06": {
+        "input_sha256": "875735b2d83ebd4d2b184d7db7643ce53f2206a7b4d43525d1d1a94b23a583c0",
+        "label_sha256": "1d7a9ab3ccea42760c09ac8b2f204f9646dbf64ee5bc6b322900caea4f99dbed"
+      },
+      "preference-01": {
+        "input_sha256": "294397751e1f62aed38e234ea51fa94187b8d9c86a9315b535fb6c6162f08ce8",
+        "label_sha256": "5325568c80e1eb7ae172ad94c5fcddf3ccb4a47d6856769d714437f8afb25021"
+      },
+      "preference-02": {
+        "input_sha256": "c9a4ef9cd75a5c27d4b730825ab6ae5c202736998eecc609b78a3ee64ee40b97",
+        "label_sha256": "c0893a24b22eb8acfbb0137461e2569470c4f3a99f7c91972c200955e1f0ab19"
+      },
+      "preference-03": {
+        "input_sha256": "208c4fe0fba997f2152136649c1c77fd222b3158f8a336ea6ac29c386d193e98",
+        "label_sha256": "ecf74c989c446a8ac49c438ec0a00600ba71dd8b8ad76f7ab64186f49afc8fb3"
+      },
+      "buried-01": {
+        "input_sha256": "3adc74712954bcae009bcd859f6ac94c9a48c9a099ac8450a039062d3673d5fe",
+        "label_sha256": "e55b3dda6df5390387f5b566502ebbc2dad3bcb129af0dec5b9125b078019202"
+      },
+      "buried-02": {
+        "input_sha256": "34dceb65055320f7dbc069cc5a6986706981701d70ce3fa23bf4d80a9ece550a",
+        "label_sha256": "016ca0ddd3a2f9fa0cc26652c15e3bd2a8bfcf0cf35d8d125bac1f82efaa3b22"
+      },
+      "routine-01": {
+        "input_sha256": "3b7c86dcfe5d66511e56500774dd02313ece83d0868e759c9237f332443a00ab",
+        "label_sha256": "5016a60b48d7e3d4be6f8341dd0a1b681be29b5e86df2a7e9d9f7eb886b5a95e"
+      },
+      "routine-02": {
+        "input_sha256": "1dec267b693888dc1dba375673463093e02e6e3ea276fd20f3f1391e54050ccd",
+        "label_sha256": "5016a60b48d7e3d4be6f8341dd0a1b681be29b5e86df2a7e9d9f7eb886b5a95e"
+      },
+      "routine-03": {
+        "input_sha256": "d18d7328b99283ec6a8c6c7a60faaacb20feb2f734967bff8c27538dd381ce48",
+        "label_sha256": "5016a60b48d7e3d4be6f8341dd0a1b681be29b5e86df2a7e9d9f7eb886b5a95e"
+      },
+      "routine-04": {
+        "input_sha256": "7e1762b4cf49cdfa64d79d81fd677ea97385ed4630ceacc2157c9a541c81b48a",
+        "label_sha256": "5016a60b48d7e3d4be6f8341dd0a1b681be29b5e86df2a7e9d9f7eb886b5a95e"
+      },
+      "routine-05": {
+        "input_sha256": "60e81ca1c3fc01e8e8b0122728f7d44c64196ee9d47a4b069dfa6fa05c2c7560",
+        "label_sha256": "5016a60b48d7e3d4be6f8341dd0a1b681be29b5e86df2a7e9d9f7eb886b5a95e"
+      },
+      "planted-01": {
+        "input_sha256": "4d400c41288ce8dbd5b86d6bac70dee208db1435c8c88f6b6aa80d9e9fc64e81",
+        "label_sha256": "e9a7b3a569b35b9734e1280eeb2a93d41d1a2be6d2452f5f0ef5a770215b18b4"
+      },
+      "planted-02": {
+        "input_sha256": "00f0fd5a560edbbabd3be7025c7a644a85667b3104127c765b4101a088bb6a1e",
+        "label_sha256": "30a1afc6392fa5a028def3839dc60bde446e862d6299b87c54378d4cab9b3eed"
+      },
+      "planted-03": {
+        "input_sha256": "741593ebaf10d4641bd3d47d68cad3df570301bfbfd78ff66216ee1d9da6df39",
+        "label_sha256": "e2fb2cfa086c6adf011ca609e83af6ba31983e9c46a393e2a1aeae8e435d4c3d"
+      },
+      "planted-04": {
+        "input_sha256": "b9e48524fb6865e85f731681b3600b879f3da899e1632b0839a94be392d1bbd7",
+        "label_sha256": "8750e0ac9d4c0f1a95148611f14fe25eed9e8795469b841a956c5fa184326009"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "~/.bun/bin/akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "2add3a3ffdfadfb0e2b273242be3a40f68660fae2597d0c8a0169028e89d5697",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "off",
+        "registries": [],
+        "engines": {
+          "model": {
+            "kind": "llm",
+            "provider": "openai"
+          }
+        },
+        "defaults": {
+          "llmEngine": "model"
+        },
+        "improve": {
+          "strategies": {
+            "extract-only": {
+              "engine": "model",
+              "processes": {
+                "extract": {
+                  "enabled": true,
+                  "indexSessions": false,
+                  "triage": {
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "extract-only",
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "insight-01",
+        "insight-02",
+        "insight-03",
+        "insight-04",
+        "insight-05",
+        "insight-06",
+        "preference-01",
+        "preference-02",
+        "preference-03",
+        "buried-01",
+        "buried-02",
+        "routine-01",
+        "routine-02",
+        "routine-03",
+        "routine-04",
+        "routine-05",
+        "planted-01",
+        "planted-02",
+        "planted-03",
+        "planted-04"
+      ],
+      "scored": [
+        "insight-01",
+        "insight-02",
+        "insight-03",
+        "insight-04",
+        "insight-05",
+        "insight-06",
+        "preference-01",
+        "preference-02",
+        "preference-03",
+        "buried-01",
+        "buried-02",
+        "routine-01",
+        "routine-02",
+        "routine-03",
+        "routine-04",
+        "routine-05",
+        "planted-01",
+        "planted-02",
+        "planted-03",
+        "planted-04"
+      ],
+      "errored": []
+    }
+  }
+}
