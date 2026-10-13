@@ -38,12 +38,12 @@ const loadError = (dir: string): string => {
 };
 
 describe("the cases of a corpus folder", () => {
-  test("the public corpus is sound: 15 cases, in 5 processes, with the files they name", () => {
+  test("the public corpus is sound: 40 cases, in 5 processes, with the files they name", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(15);
+    expect(cases).toHaveLength(40);
     expect(cases.every((c) => c.files.every((f) => (c.texts[f] ?? "").trim() !== ""))).toBe(true);
     const ids = cases.map((c) => c.id);
-    expect(new Set(ids).size).toBe(15);
+    expect(new Set(ids).size).toBe(40);
   });
 
   test("a folder with no cases.json, or one that is not a list of cases, is refused with the file named", () => {

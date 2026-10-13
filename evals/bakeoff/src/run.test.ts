@@ -277,7 +277,7 @@ describe("selection", () => {
 describe("the public corpus", () => {
   test("loads, and every case has the files and the refs it names", () => {
     const cases = loadCases(join(import.meta.dir, "..", "assets"));
-    expect(cases.length).toBe(15);
+    expect(cases.length).toBe(40);
     expect(new Set(cases.map((c) => c.process))).toEqual(new Set(["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"]));
   });
 });
