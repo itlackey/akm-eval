@@ -20,8 +20,8 @@ Choose a test and collection, then choose a view:
 - **Speed & usage:** fastest recorded median first, with p95, the timing basis,
   number of timed cases, calls, input/output tokens, costs and usage coverage.
   Compare the same test and timing basis. Command/query/agent elapsed times
-  include overhead; the current artifacts do not record token throughput or
-  time to first token.
+  include overhead; new summaries expose model request duration and output tokens per second
+  when recorded. Time to first token is not collected.
 - **AKM impact:** scored with/without-AKM runs, ordered by paired quality gain.
   Both arm scores, gain in percentage points, its recorded confidence interval,
   paired cases, both medians and relative median-time change appear together.
@@ -57,7 +57,8 @@ measures and individual test metrics. No row selection is needed.
 **Quality %** scales the named primary metric from 0–1 to 0–100. It is not an
 aggregate score across tests. Paired task/answer benchmarks use the AKM arm;
 search uses keyword nDCG@10. Original scores and denominators remain available
-independently. Compare the same test, collection, scope and scoring version.
+independently. Compare the same test, collection, mode, eval/scoring versions and
+selected input set. Use the saved-run CLI to verify exact input compatibility.
 Unknown measurements display —, distinct from recorded zeroes.
 
 **Paired gain** comes from the recorded shared-case comparison. It need not
@@ -71,11 +72,18 @@ with-AKM agent/answer timings, in that order. The separate **Latency basis**
 column identifies the source; **Speed & usage** shows it by default. Original
 arm and method distributions remain independent columns. Percentiles use
 linear interpolation and include failed cases where timing exists. Case-time
-sums measure work, not run wall time. Relative median-time change is
+sums measure work, not run wall time. Resumed runs leave full wall time unknown;
+the final invocation alone cannot measure it. **Run wall time basis** distinguishes
+new runner timing from older collector timing that may cover fewer phases.
+Relative median-time change is
 `(with-AKM median / without-AKM median - 1) * 100`; arm timing counts may differ.
 
 **Usage** projects recorded model-call and token fields. Available paired-arm
 records are summed with coverage counts; failed calls may have no usage record.
+`model_calls.prompt_tokens` and `completion_tokens` are per-call means, shown
+separately from totals. `model_calls.seconds` is mean request duration and includes
+prefill, reasoning and overhead; output tokens per second is not decode-only
+speed. These means are never multiplied by call counts to invent totals.
 Cached tokens remain part of input-token totals. Costs are never inferred from
 provider prices or from free/local serving.
 

@@ -17,7 +17,7 @@ For each note, akm takes the nearest neighbours by embedding (at most 5) with a 
 
 ```
 evals/consolidate/run
-evals/consolidate/run --model qwen3-27b --repeat 3
+evals/consolidate/run --model qwen3-27b
 evals/consolidate/run --corpus custom          # the rewrite: ./generate-assets --only consolidate
 evals/consolidate/run --cases ~/notes/consolidate
 evals/consolidate/run --pool                   # the whole pool in one run, below
@@ -58,7 +58,7 @@ A real night gives consolidate a whole pool: the pair pass finds pairs among all
 ```
 evals/consolidate/run --pool
 evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
-evals/consolidate/run --pool --config-patch private/patches/anti-collapse-off.json --repeat 3
+evals/consolidate/run --pool --config-patch private/patches/anti-collapse-off.json
 ```
 
 For the last, save `{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }` as that file. `--timeout-ms N` is akm's own budget (default 2 hours); a short one makes akm cut the pool for the promote pass. `--pool` reads the public pool only, so it refuses `--corpus custom`, `--cases` and `--limit`.

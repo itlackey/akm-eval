@@ -10,7 +10,7 @@ This eval gives extract 64 fictional Claude Code sessions and checks what it que
 
 ```
 evals/extract/run
-evals/extract/run --model qwen3-27b --repeat 3
+evals/extract/run --model qwen3-27b
 evals/extract/run --corpus custom              # the rewrite: ./generate-assets --only extract
 evals/extract/run --cases ~/notes/extract
 ```

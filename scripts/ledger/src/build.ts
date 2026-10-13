@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { type LedgerRun, latestGroups, object, presentRun, sampleVerdicts } from "./data";
+import { type LedgerRun, object, presentRun } from "./data";
 import { comparisonColumns } from "./comparison";
 
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
@@ -22,7 +22,6 @@ function* summaries(folder: string): Generator<string> {
   }
 }
 const runs: LedgerRun[] = [];
-const verdicts = new Map<string, ReturnType<typeof sampleVerdicts>>();
 let excluded = 0;
 for (const file of summaries(reports)) {
   const summary: unknown = JSON.parse(readFileSync(file, "utf8"));
@@ -46,19 +45,16 @@ for (const file of summaries(reports)) {
     continue;
   }
   runs.push(run);
-  verdicts.set(run.id, sampleVerdicts(samples));
 }
 if (!runs.length)
   throw new Error("No completed public reports found. Point --results at akm-eval's published reports directory.");
 runs.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
-const groups = latestGroups(runs, verdicts);
 const dataset = {
   source_revision: sourceRevision,
   source_repository: "itlackey/akm-eval",
   latest_collection_date: runs[0]!.date,
   excluded_reports: excluded,
-  runs: runs.map(({ cohort_key: _cohort, ...run }) => run),
-  latest_groups: groups,
+  runs,
   columns: comparisonColumns(runs),
 };
 mkdirSync(join(output, "assets"), { recursive: true });

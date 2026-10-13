@@ -1,7 +1,7 @@
 // Writes the compare tool's fixtures: for each eval, the results folders of a run "before" and a run "after" a change, small enough to read.
 // The summaries' metrics come from each eval's own metrics(), so they are what the eval would have written for these rows.
 // Run it with `bun fixtures/make.ts` from this folder after a row or a metric of an eval changes, and read the diff of the fixtures.
-// The tests of compare and of the matrix make their own runs with `manifested`.
+// The tests of compare make their own runs with `manifested`.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildManifest } from "../../../../lib/manifest.ts";
@@ -48,7 +48,7 @@ function write(path: string, summary: Row, rows: Row[]): void {
 }
 
 // What every summary the evals write records of how the run was made, so that two of these fixtures are fully identified: they differ in the
-// akm build (the treatment of the report tests) and in nothing the policy checks. The config and the engine are what the evals write.
+// akm build (the subject of the comparison) and in no measured input. The config and the engine are what the evals write.
 const CONFIG = { configVersion: "0.9.0", semanticSearchMode: "off", registries: [], defaults: { llmEngine: "model", improveStrategy: "night" }, engines: { model: { kind: "llm", provider: "openai", endpoint: "<MODEL_BASE_URL>", model: "test-model", apiKey: "$MODEL_API_KEY", timeoutMs: 120000, temperature: 0, enableThinking: false } } };
 const IDENTIFIED = { status: "complete", aborted_reason: null, assets_sha256: "a".repeat(64), seed: null, config: CONFIG, engine: { engine: "model", model: "test-model", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000, engines: { model: { model: "test-model", endpoint: "https://gateway.example.com/v1", temperature: 0, enableThinking: false, timeoutMs: 120000 } } } };
 const BEFORE = { label: "before", date: "2026-10-11T09:00:00.000Z", git_commit: "5d1c0de", model: "test-model", akm_version: "0.9.99-test", akm_bin: "akm", akm_build: null, ...IDENTIFIED };

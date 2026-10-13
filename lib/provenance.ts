@@ -131,7 +131,7 @@ function redactUrl(value: string): string {
 }
 
 /**
- * The whole endpoint, for the resume fingerprint of scripts/matrix, which is never written into a result: the scheme, host, port and path of
+ * The sanitized endpoint used for local corpus consent, never written into a result: the scheme, host, port and path of
  * the URL, in lower case for the scheme and host, without a trailing slash, with no user name, password or fragment, and with the query's
  * parameters in order and the value of each credential parameter replaced by "<redacted>". Null for a value that is missing or is not a URL.
  */

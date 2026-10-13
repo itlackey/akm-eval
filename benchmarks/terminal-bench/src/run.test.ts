@@ -5,12 +5,12 @@ import { basename, join, resolve } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { type AkmArm, PINS, buildFingerprint, modelSettings, pinsOf, releaseArm, sha256Dir } from "../../../lib/harbor/harbor.ts";
-import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { endpointHost, harnessSha256, sha256Json, sha256Text } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
 import { caseDigests, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
+import { comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
@@ -570,7 +570,7 @@ describe("runCorpus", () => {
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
     expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
-    expect(identityOf(summaries[0] as Record<string, any>).engine).toBe(identityOf(summaries[1] as Record<string, any>).engine);
+    expect((summaries[0] as any).manifest.engines).toEqual((summaries[1] as any).manifest.engines);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {
@@ -661,7 +661,7 @@ describe("runCorpus", () => {
     expect(readJson(join(s.results_dir, "summary.json")).library).toMatchObject({ assets: null, measured_with: null });
   });
 
-  test("the host's akm does not change the config that runs are compared by: library_assets is 1, or the host's count, and the config digest is the same (#73)", async () => {
+  test("the host count remains recorded and different install settings do not block comparison (#73)", async () => {
     fakeAkm(true); // counts with 0.9.99-test
     const { root, env } = fakeUv();
     const results = join(root, "results");
@@ -671,9 +671,9 @@ describe("runCorpus", () => {
     const assets = (dir: string) => readJson(join(dir, "job.json")).agents[1].kwargs.library_assets;
     expect([assets(other.results_dir), assets(same.results_dir)]).toEqual([1, fakeCount(libraryOf(PUBLIC))]);
     const [a, b] = [other, same].map((r) => readJson(join(r.results_dir, "summary.json")));
-    const digest = identityOf(a).config;
-    expect(digest).toMatch(/^[0-9a-f]{64}$/);
-    expect(identityOf(b).config).toBe(digest);
+    for (const summary of [a, b]) expect(summary.manifest.config.sha256).toMatch(/^[0-9a-f]{64}$/);
+    for (const run of [other, same]) clearRunning(run.results_dir);
+    expect(() => comparePair(loadRun(other.results_dir), loadRun(same.results_dir))).not.toThrow();
   });
 
   test("records the digest of the dependency tree the akm containers installed, in akm_install and in the build identity, and aborts a run whose containers differ (#68)", async () => {
@@ -685,7 +685,7 @@ describe("runCorpus", () => {
     expect(stored.akm_install).toMatchObject({ dependency_tree_sha256: tree, locked: true });
     expect(stored.akm_install.observed).toMatchObject({ dependency_trees: [tree], lockfiles: { akm_cli: "a".repeat(64), plugin: "b".repeat(64) } });
     expect(stored.akm_build_fingerprint).toBe(buildFingerprint(null, tree));
-    expect(identityOf(stored).akm_build_fingerprint).toBe(stored.akm_build_fingerprint); // what the comparison reads
+    expect(stored.manifest.akm.build_fingerprint).toBe(stored.akm_build_fingerprint); // what the comparison reads
     await expect(quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_TREES: "differ" } }, join(root, "results")))).rejects.toThrow("the akm arm's containers installed 2 different dependency trees");
     const [run] = readdirSync(join(root, "results")).filter((n) => n.endsWith("-d"));
     expect(readJson(join(root, "results", run, "summary.json"))).toMatchObject({ status: "aborted", akm_install: { dependency_tree_sha256: null } });

@@ -48,7 +48,7 @@ Metrics, for each of four columns (`search` and `curate` on the keyword index, `
 
 `abstention.non_task` counts the non-task inputs that got no result, per column. A failed call is counted in `errored` and left out; one killed at its 120-second limit also in `timeouts`. A failed semantic call makes the run `aborted`.
 
-The judgments cover what akm 0.9.26's keyword search and a plain BM25 returned, so semantic search and any change that surfaces new assets score lower on `ndcg_10` until those results are graded. When `judged_10` falls, grade the new results with `label --from` (below) and score the run again with `scripts/rescore`. The matrix and `scripts/compare` mark such a comparison exploratory.
+The judgments cover what akm 0.9.26's keyword search and a plain BM25 returned, so semantic search and any change that surfaces new assets score lower on `ndcg_10` until those results are graded. When `judged_10` falls, grade the new results with `label --from` (below) and score the run again with `scripts/rescore`. Review `judged_10` alongside ranking quality; incomplete relevance judgments can bias comparisons. After updating labels, explicitly rescore both saved runs before comparing them.
 
 ## What the summary reports
 

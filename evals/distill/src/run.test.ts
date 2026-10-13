@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { checkMembers, identityOf } from "../../../scripts/compare/src/policy.ts";
+import { compatible } from "../../../scripts/compare/src/lib.ts";
 import { endpointHost, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -294,12 +294,11 @@ describe("runCorpus", () => {
     const [sa, sb] = [stored(await quiet(() => runFolders(ctx, a, own))), stored(await quiet(() => runFolders(ctx, b, own)))];
     expect(sa.assets_sha256).toBe(sb.assets_sha256);
     expect([sa.seed, sb.seed, sa.manifest.settings.seed, sb.manifest.settings.seed]).toEqual([null, null, null, null]);
-    const members = [sa, sb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
-    expect(checkMembers(members, [])).toMatchObject({ mismatches: [], gaps: [] }); // as compare and the matrix check summaries
+    const saved = (summary: any) => ({ dir: "test", summary, rows: summary.manifest.completion.selected.map((id: string) => ({ id })) });
+    expect(() => compatible(saved(sa), saved(sb))).not.toThrow();
     // a rewrite is different: its seed made the assets, so two seeds are two inputs
     const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { rewrite: true, seed: "1" }))), stored(await quiet(() => runFolders(ctx, b, { rewrite: true, seed: "2" })))];
-    const rewrites = [ra, rb].map((s, i) => ({ side: i === 0 ? "A" : "B", name: `r${i}`, identity: identityOf(s) }));
-    expect(checkMembers(rewrites, []).mismatches.map((f) => f.field)).toContain("seed");
+    expect(() => compatible(saved(ra), saved(rb))).toThrow("seed");
   });
 
   test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {

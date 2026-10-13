@@ -108,7 +108,7 @@ async function startLedger() {
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
     akm_version: 162, date: 155, recorded: 110 };
   const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
-  const compareKeys = ['model', 'suite', 'label', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'akm_version', 'date'];
+  const compareKeys = ['model', 'suite', 'label', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'measurement', 'scoring_version', 'mode', 'akm_version', 'date'];
 
   for (const key of facets) {
     const values = [...new Set(rows.map(row => key === 'model' ? modelName(row.model) : row[key]))].filter(Boolean).sort();
@@ -161,7 +161,7 @@ async function startLedger() {
       else if (models.length === 0) text = 'Retrieval quality compares search configurations; these runs use no answer model.';
       else text = `${models.length} models in these runs. Sort Quality % descending to find the highest recorded score; compare scope, score cases and scoring version before choosing a model.`;
     } else if (view === 'performance') {
-      text = 'Compare medians within the same test and timing basis. These are elapsed command/query/agent times; token throughput and first-token timing were not recorded.';
+      text = 'Compare medians within the same test and timing basis. New runs include model request duration and output tokens per second when usage is available. Missing values stay blank; first-token timing is not recorded.';
       if (test && models.length === 1) text += ` Only ${models[0]} is published for this test.`;
     } else text = 'Choose a test, then use Quality ranking, Speed & usage or AKM impact. Each row is a published run; hover a run to see its full label.';
     $('view-context').textContent = text;
@@ -198,7 +198,7 @@ async function startLedger() {
     if (view === 'all') return columns.map(column => column.key);
     if (view === 'compare') return compareKeys;
     if (view === 'impact') return ['model', 'suite', 'label', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'date'];
-    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'usage_cases', 'run_wall_s', 'collection', 'date'];
+    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'usage_cases', 'run_wall_s', 'collection', 'date'];
     const base = ['model', 'suite', 'label', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
     let extras;
     if (view === 'quality') extras = columns.filter(column => (column.group === 'Quality' || (state.facets.suite && column.key.startsWith('score:'))) && recorded(column));

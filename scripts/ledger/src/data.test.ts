@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { latestGroups, presentRun, publicText, repeatVariation, sampleVerdicts } from "./data";
+import { presentRun, publicText } from "./data";
 
 function report(overrides: Record<string, unknown> = {}) {
   return {
@@ -88,57 +88,17 @@ describe("published eval projection", () => {
   });
 });
 
-describe("compatible recorded repeat groups", () => {
+describe("independent saved runs", () => {
   test("unknown per-mode error counts remain unknown", () => {
-    const run = presentRun(input(report({ n_errored: undefined, errored: { search: "unavailable", semantic: 0 } })))!;
-    expect(run.errors).toBeNull();
+    expect(presentRun(input(report({ n_errored: undefined, errored: { search: "unknown", semantic: 0 } })))!.errors).toBeNull();
   });
-  test("accepts arbitrary case IDs and preserves groups with unspecified dates", () => {
-    const verdicts = sampleVerdicts([{ id: "__proto__", correct: true }, { id: "constructor", correct: false }]);
-    expect(Object.keys(verdicts.values)).toEqual(["__proto__", "constructor"]);
-    const run = presentRun(input(report({ date: undefined })))!;
-    expect(latestGroups([run], new Map())).toHaveLength(1);
-  });
-  test("counts pairwise flips and excludes a case errored in any repeat", () => {
-    const variation = repeatVariation([
-      sampleVerdicts([
-        { id: "a", correct: true },
-        { id: "b", correct: true },
-        { id: "c", correct: true },
-      ]),
-      sampleVerdicts([
-        { id: "a", correct: false },
-        { id: "b", correct: true },
-        { id: "c", outcome: "error" },
-      ]),
-      sampleVerdicts([
-        { id: "a", correct: true },
-        { id: "b", correct: true },
-        { id: "c", correct: false },
-      ]),
-    ])!;
-    expect(variation.n).toBe(2);
-    expect(variation.unstable).toBe(1);
-    expect(variation.flip_rate).toBeCloseTo(1 / 3);
-    expect(variation.kind).toBe("correctness");
-  });
-  test("labels outcome flips and refuses mismatched or single-run verdict sets", () => {
-    const outcome = sampleVerdicts([{ id: "a", outcome: "accept" }]);
-    expect(outcome.kind).toBe("outcome");
-    expect(repeatVariation([outcome])).toBeNull();
-    expect(repeatVariation([outcome, sampleVerdicts([{ id: "a", correct: true }])])).toBeNull();
-  });
-  test("separates changed collectors, inputs and harnesses; selects the newest group", () => {
-    const old = presentRun(input(report({ date: "2026-10-12T01:00:00Z", harness_sha256: "old" }), "v/suite/old"))!;
-    const fresh = presentRun(input())!;
-    const next = presentRun(input(report({ date: "2026-10-13T02:00:00Z", label: "real-r2" }), "v/suite/next"))!;
-    const pilot = presentRun(input(report({ date: "2026-10-14T01:00:00Z", limit: 1 }), "v/suite/pilot"))!;
-    const groups = latestGroups([old, fresh, next, pilot], new Map());
-    expect(groups).toHaveLength(1);
-    expect(groups[0]!.ids).toEqual([fresh.id, next.id]);
-    expect(presentRun(input(report({ assets_sha256: "changed" })))!.cohort_key).not.toBe(fresh.cohort_key);
-    expect(presentRun(input(report({ manifest: { collector: { version: "0.4" } } })))!.cohort_key).not.toBe(
-      fresh.cohort_key,
-    );
+  test("retains each repeat and pilot, including missing dates and arbitrary IDs", () => {
+    const runs = [report({ date: undefined }), report({ label: "r2" }), report({ limit: 1 })]
+      .map((summary, i) => presentRun(input(summary, `run-${i}`, [{ id: "__proto__", correct: true }]))!);
+    expect(runs).toHaveLength(3);
+    expect(runs.map(r => r.id)).toEqual(["run-0", "run-1", "run-2"]);
+    expect(runs[0]!.date).toBe("");
+    expect(runs[2]!.role).toBe("Pilot");
+    expect(runs.every(r => !("cohort_key" in r))).toBe(true);
   });
 });

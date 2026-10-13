@@ -24,7 +24,7 @@ The contract smoke (`scripts/smoke/run --contract`) has passed for retrieval, ju
 
 1. Run `scripts/smoke/run --contract`, then `scripts/smoke/run --strict`, with `--akm` naming the new akm. A canned reply that was never used means akm sent a request the smoke was not written for.
 2. Read akm's `STABILITY.md` and CHANGELOG. The evals rely on a few surfaces akm marks Experimental or Internal: the `improve.strategies.*` config, `AKM_EMBED_DETERMINISTIC`, `AKM_CLAUDE_PROJECTS_DIR`, the `entries` table of `index.db` for nightly and reflect, and the tables of `state.db` for promotion.
-3. Run each eval you track with `--repeat 3` on the old and the new akm, with the same model and config, and compare: `scripts/compare/run --repeats <old> --against <new> --treatment build`.
+3. Reuse a compatible saved run of the old AKM, run the eval once on the new AKM with the same cases and model, then compare: `scripts/compare/run <old-results-folder> <new-results-folder>`. Repeat only when variability needs investigation.
 4. Update this table.
 
 `.github/workflows/akm-smoke.yml` runs the contract smoke every night on the release pinned in `lib/harbor/harbor.ts`, and the startup smoke with `--strict` on the latest release (advisory).

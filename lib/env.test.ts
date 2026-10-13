@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { readDotEnv } from "../scripts/matrix/src/fingerprint.ts";
 import { type Sandbox, createSandbox, removeSandbox } from "./akm/akm.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -114,7 +113,7 @@ describe("lib/env.sh, the .env loader of the bash scripts", () => {
     });
   });
 
-  test("the matrix reads a .env the way the loader does, line for line: scripts/matrix/src/fingerprint.ts readDotEnv", () => {
+  test("handles mixed quoting, comments and duplicate keys", () => {
     const values = [
       "small # the local one",
       '"small" # the local one',
@@ -145,8 +144,11 @@ describe("lib/env.sh, the .env loader of the bash scripts", () => {
     const names = [...values.map((_, i) => `K${i}`), "EXPORTED", "INDENTED", "DUP", "NOVALUE", "1BAD", "COMMENTED", "TAB", "LAST"];
     const text = lines.join("\n");
     const shell = loadEnv(text, names);
-    const parsed = readDotEnv(join(fakeRoot(text), ".env"));
-    expect(Object.fromEntries(names.map((n) => [n, parsed[n]]))).toEqual(shell);
+    expect(Object.values(shell).slice(0, values.length)).toEqual([
+      "small", "small", "two words", "a # b", "a # b", "a # b", "v", "v   ", "  v", 'a "b" c',
+      "v", '"v"#x', "a#b", "x", "", " ", "# only a comment", "", "", "'unclosed", '"unclosed # note',
+      "http://h/v1?a=b#frag", "a=b=c", "\\",
+    ]);
     expect([shell.K1, shell.K2, shell.K5, shell.DUP, shell.INDENTED]).toEqual(["small", "two words", "a # b", "second", " spaced"]);
   });
 

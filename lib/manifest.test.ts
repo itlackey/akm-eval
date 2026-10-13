@@ -103,7 +103,7 @@ describe("the manifest", () => {
     expect(manifestProblems(m)).toEqual([]);
     expect(m).toMatchObject({ manifest_version: 1, eval: "toy", corpus: "public", collection: null, mode: null, harness_version: HARNESS_VERSION, akm: { version: "0.9.26", bin: "akm", build: null, build_fingerprint: null }, settings: { strategy: "s", config_patch_sha256: sha256Text("p"), timeout_ms: 5000, seed: "42" }, treatment_hints: { embedder: "real" } });
     expect(m.collector).toEqual({ version: "0.2" });
-    expect(m.scorer).toBeUndefined();
+    expect(m.scorer).toEqual({ version: "0.2" });
   });
 
   test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and no path (#65)", () => {

@@ -216,8 +216,7 @@ describe("runCorpus", () => {
     }
     expect(runs.map((r) => [r.summary.seed, r.summary.manifest.settings.seed])).toEqual([[null, null], [null, null]]);
     const report = comparePair(runs[0] as Run, runs[1] as Run);
-    expect(report.exploratory).toEqual([]);
-    expect(report.views.length).toBeGreaterThan(0);
+    expect(report.rows.length).toBeGreaterThan(0);
     // what the fix is for: a run that recorded the seed file, as these did before, is refused against one that recorded another
     const was = (run: Run, seed: string): Run => ({ ...run, summary: { ...run.summary, seed, manifest: { ...run.summary.manifest, settings: { ...run.summary.manifest.settings, seed } } } });
     expect(() => comparePair(was(runs[0] as Run, "99"), was(runs[1] as Run, "123456789012345678"))).toThrow("the seed of the private assets differs");

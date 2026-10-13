@@ -70,7 +70,7 @@ test("rebuilds from newly published data, skips incomplete/private samples, and 
     expect(html).toContain('data-revision="revision"');
     expect(html).not.toContain(".lab.");
     expect(readFileSync(join(output, ".nojekyll"), "utf8")).toBe("");
-    expect(dataset.latest_groups).toHaveLength(1);
+    expect(dataset.latest_groups).toBeUndefined();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

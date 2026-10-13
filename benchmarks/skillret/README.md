@@ -13,7 +13,7 @@ benchmarks/skillret/run --limit 200         # keyword only, about a minute: to c
 ```
 
 - `--limit N` draws N queries at random under seed 42, in proportion to how many skills a query needs; the library stays whole. Keyword search only.
-- `--repeat N`: akm answers the same each run, so the spread has no width; repeats let the matrix confirm the benchmark.
+- `--repeat N`: optional repeated collection. Deterministic search usually does not need repeats; each run is saved independently.
 - There is no `--cases`: the custom corpus is a split of the dataset, not a folder.
 
 A full public run took 53 minutes the first time (16 to embed the skills) and about 37 with the semantic index kept. The semantic index is kept in `.cache/akm-index/skillret-public/` (`skillret-private/` for custom) and reused until a skill, akm, the embedding model or `src/akm.ts` changes. A semantic call loads the model in its own akm process (450 MB each, eight at once).

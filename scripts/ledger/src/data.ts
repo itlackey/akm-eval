@@ -2,7 +2,6 @@
 import { type Score, scores, testInfo } from "./presentation";
 import { type Cell, comparisonFields } from "./comparison";
 type ObjectValue = Record<string, unknown>;
-export type Verdict = boolean | string;
 export interface LedgerRun {
   id: string;
   suite: string;
@@ -23,7 +22,6 @@ export interface LedgerRun {
   metrics: ObjectValue;
   summary_url: string;
   samples_url: string;
-  cohort_key: string;
   test_name: string;
   test_description: string;
   test_url: string;
@@ -97,6 +95,7 @@ export function presentRun(input: RunInput): LedgerRun | null {
   let role: LedgerRun["role"] =
     s.limit || sample.limit || (sampleN !== null && total !== null && sampleN < total) ? "Pilot" : "Full suite";
   const notes: string[] = [];
+  if (s.resumed === true) notes.push("Resumed from saved cases; full run wall time is unknown.");
   if (suite === "agent-ab" && label === "bifrost-gpt120-pilot") {
     role = "Diagnostic";
     notes.push(
@@ -167,90 +166,5 @@ export function presentRun(input: RunInput): LedgerRun | null {
     test_url: testInfo(suite).documentation.replace("/tree/main/", `/tree/${encodeURIComponent(input.sourceRevision)}/`),
     scores: scores(s),
     comparison: object(publicValue(comparisonFields(s, input.samples, scores(s)))) as Record<string, Cell>,
-    cohort_key: JSON.stringify([
-      suite,
-      s.collection,
-      s.mode,
-      model,
-      s.akm_version,
-      measurement,
-      s.harness_sha256,
-      s.assets_sha256,
-      at(s, "manifest.config.sha256"),
-      at(s, "manifest.settings"),
-      at(s, "manifest.cases"),
-      s.search_mode,
-      at(s, "manifest.engines"),
-      s.semantic_model,
-    ]),
   };
-}
-
-export function sampleVerdicts(samples: unknown[] | null): { kind: string; values: Record<string, Verdict> } {
-  const values: Record<string, Verdict> = Object.create(null);
-  const kinds = new Set<string>();
-  for (const value of samples ?? []) {
-    const row = object(value),
-      id = text(row.id);
-    if (!id || row.error || row.outcome === "error") continue;
-    if (typeof row.correct === "boolean") {
-      values[id] = row.correct;
-      kinds.add("correctness");
-    } else if (typeof row.ok === "boolean") {
-      values[id] = row.ok;
-      kinds.add("correctness");
-    } else if (typeof at(row, "verdict.pass") === "boolean") {
-      values[id] = at(row, "verdict.pass") as boolean;
-      kinds.add("pass decision");
-    } else if (typeof row.outcome === "string") {
-      values[id] = row.outcome;
-      kinds.add("outcome");
-    }
-  }
-  return { kind: [...kinds].join(" + "), values };
-}
-
-export function repeatVariation(
-  verdicts: ReturnType<typeof sampleVerdicts>[],
-): { kind: string; n: number; unstable: number; flip_rate: number } | null {
-  if (verdicts.length < 2 || !verdicts[0]?.kind || verdicts.some((v) => v.kind !== verdicts[0]?.kind)) return null;
-  const ids = Object.keys(verdicts[0].values).filter((id) => verdicts.every((v) => Object.hasOwn(v.values, id)));
-  if (!ids.length) return null;
-  let flips = 0,
-    pairs = 0,
-    unstable = 0;
-  for (const id of ids) {
-    if (new Set(verdicts.map((v) => v.values[id])).size > 1) unstable++;
-    for (let i = 0; i < verdicts.length; i++)
-      for (let j = i + 1; j < verdicts.length; j++) {
-        pairs++;
-        if (verdicts[i]?.values[id] !== verdicts[j]?.values[id]) flips++;
-      }
-  }
-  return { kind: verdicts[0].kind, n: ids.length, unstable, flip_rate: flips / pairs };
-}
-
-export function latestGroups(runs: LedgerRun[], verdicts: Map<string, ReturnType<typeof sampleVerdicts>>) {
-  const cohorts = new Map<string, LedgerRun[]>();
-  for (const run of runs.filter((r) => r.role === "Full suite")) {
-    const group = cohorts.get(run.cohort_key) ?? [];
-    group.push(run);
-    cohorts.set(run.cohort_key, group);
-  }
-  const latest = new Map<string, LedgerRun[]>();
-  for (const cohort of cohorts.values()) {
-    cohort.sort((a, b) => a.date.localeCompare(b.date));
-    const last = cohort.at(-1)!;
-    const key = JSON.stringify([last.suite, last.collection, last.mode, last.model]);
-    if (!latest.has(key) || last.date > (latest.get(key)?.at(-1)?.date ?? "")) latest.set(key, cohort);
-  }
-  return [...latest.values()].map((group) => ({
-    ids: group.map((r) => r.id),
-    all_ids: runs.filter((run) => run.role === "Full suite" &&
-      run.suite === group[0]!.suite && run.collection === group[0]!.collection &&
-      run.mode === group[0]!.mode && run.model === group[0]!.model &&
-      run.akm_version === group[0]!.akm_version && run.measurement === group[0]!.measurement)
-      .sort((a, b) => a.date.localeCompare(b.date)).map((run) => run.id),
-    variation: repeatVariation(group.map((r) => verdicts.get(r.id) ?? { kind: "", values: {} })),
-  }));
 }

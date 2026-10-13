@@ -23,7 +23,7 @@ The index uses akm's embedding model (133 MB, downloaded once into `.cache/model
 
 ```
 evals/promotion/run
-evals/promotion/run --model qwen3-27b --repeat 3
+evals/promotion/run --model qwen3-27b
 evals/promotion/run --cases ~/notes/night-2026-10-07
 ```
 

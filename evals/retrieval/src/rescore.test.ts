@@ -170,20 +170,15 @@ describe("rescoring a retrieval run", () => {
     expect(m.rescored_from?.scorer).toEqual(stale);
   });
 
-  test("a query that was reworded since the run is another case: it is left out, and named", () => {
+  test("a reworded query is refused without dropping cases", () => {
     const dir = run({ manifest: (m) => ({ ...m, cases: { ...m.cases, q010: { ...(m.cases.q010 as object), input_sha256: "e".repeat(64) } as never } }) });
-    const { out, result } = rescoreFolder(dir);
-    expect(result.dropped).toEqual(["q010"]);
-    expect(rowsOf(out).map((r) => r.id)).not.toContain("q010");
-    expect(summaryOf(out)).toMatchObject({ n_queries: 8 });
-    expect(summaryOf(out).manifest.rescored_from.dropped).toEqual(["q010"]);
-    expect(summaryOf(out).manifest.completion.selected).not.toContain("q010");
+    expect(() => rescoreFolder(dir)).toThrow("case input changed: q010");
   });
 
   test("a run that was asked of another library is not rescored against its digests", () => {
     // The input of every query includes the library: a summary whose assets name another library than the manifest's has no case in common with it.
     const dir = run({ summary: { assets: { library_sha256: "9".repeat(64), bundles_sha256: null, queries_sha256: sha256File(join(ASSETS, "queries.jsonl")), qrels_sha256: "2".repeat(64) } } });
-    expect(() => rescoreFolder(dir)).toThrow("has no case that the retrieval corpus here still holds, so there is nothing to score again");
+    expect(() => rescoreFolder(dir)).toThrow("case input changed");
   });
 
   test("a run whose rows lack the results the scorer reads is refused, and the fields are named", () => {

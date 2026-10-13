@@ -1,6 +1,6 @@
 # akm-eval
 
-Evals and benchmarks for [akm](https://github.com/itlackey/akm), as a set of scripts. Each one runs akm on a set of cases, scores what akm returns, and writes the result to a folder. Run the same eval on two akm builds and `scripts/compare` tells you which cases changed and whether the change is more than noise.
+Evals and benchmarks for [akm](https://github.com/itlackey/akm), as a set of scripts. Each one runs akm on a set of cases, scores what akm returns, and saves the results. Compare compatible saved runs with `scripts/compare` or explore published quality and performance in the ledger. Runs are single by default; repeats are optional.
 
 Most evals run against any OpenAI-compatible model, local or cloud. `evals/retrieval` and `benchmarks/skillret` call no model. `evals/agent-ab` and `benchmarks/terminal-bench` run opencode in Docker through Harbor.
 
@@ -43,7 +43,7 @@ See [site/README.md](site/README.md) for publishing and refreshes.
 evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
 corpus/library/       the shared akm library the evals use, also usable as an akm bundle
 lib/                  what the evals share: the akm sandbox, models, corpora, manifest, --repeat, the rewrite
-scripts/              check, compare, ledger, matrix, rescore, smoke
+scripts/              check, compare, ledger, rescore, smoke
 site/                 source of the public GitHub Pages results ledger
 generate-assets       makes the custom corpus of every eval in private/
 reports/              published results and notes (see reports/README.md)
@@ -71,7 +71,7 @@ akm runs in a sandbox of temp folders per run and never touches your own akm bun
 ```
 evals/retrieval/run                     # the public corpus
 evals/reflect/run --limit 5             # five cases, to check a setup
-evals/reflect/run --label baseline      # results in evals/reflect/results/<UTC date>-baseline/
+evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
 ```
 
 A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write under `private/<name>/results/`). The default label is the model name (`akm-<version>` for the two that call no model). While a run is alive its folder holds a `.running` file with its pid. A run that gives up (the endpoint down, too many errors) writes its summary with `status: "aborted"` and exits non-zero: do not compare it.
@@ -112,61 +112,66 @@ The cases in ~/notes/distill will be sent to:
 Continue? [Y/n]
 ```
 
-`-y` or `--yes` skips the question. With no terminal and no `-y` the run stops, so a script or a matrix row with `--cases` needs `-y` in its args. A public or rewrite run never asks. `evals/retrieval` calls no model, and takes `-y` without needing it.
+`-y` or `--yes` skips the question. With no terminal and no `-y` the run stops, so a script with `--cases` needs `-y`. A public or rewrite run never asks. `evals/retrieval` calls no model, and takes `-y` without needing it.
 
-## Repeat a run
+## Run, save, compare
 
-A model's answers differ by a case or two from one run to the next, so one run cannot tell a change from noise. `--repeat N`, on every eval and benchmark, runs the corpus N times into `<UTC date>-<label>-r1` to `-rN`, and writes the min, max and mean of each metric to `<UTC date>-<label>-repeat-summary.json`.
+Each eval's `run` command runs once by default. It writes `summary.json` and
+`samples.jsonl` to its results folder, including quality metrics, available timing
+and usage, errors, settings and input identities. Completed runs also record
+`wall_seconds` (unknown for resumed runs whose earlier duration is unavailable).
+A run with errors keeps them visible; a stopped run keeps its
+`.running` marker. Existing benchmark-specific resume flags still work.
 
-```
-evals/promotion/run --repeat 3 --label base
-scripts/compare/run --repeats evals/promotion/results/<UTC date>-base
-```
-
-The second command reads the repeats case by case and reports the noise floor: how many cases change verdict between two runs with nothing changed. A comparison of two sets of 3 repeats flips about 1.4 to 2.3 times as many cases with nothing changed, so read its sign test and interval, not the raw flip count.
-
-## Compare two runs
-
-```
-scripts/compare/run evals/nightly/results/<A> evals/nightly/results/<B> --treatment build
-scripts/compare/run --repeats evals/nightly/results/<UTC date>-main --against evals/nightly/results/<UTC date>-pr --treatment build
+```sh
+evals/reflect/run --model model-a --label model-a
+evals/reflect/run --model model-b --label model-b
+scripts/compare/run evals/reflect/results/<A> evals/reflect/results/<B>
 ```
 
-It pairs the cases of the two runs by id and lists those that agree, flipped to better and flipped to worse, with a sign test and a bootstrap 95% interval on each main and harm metric. See [`scripts/compare/README.md`](scripts/compare/README.md).
+There is no special baseline, mandatory repeat count or saved scheduling state.
+Any two compatible saved runs can be compared whenever needed. Comparison makes
+no model calls and never changes results. It shows stored quality, performance,
+usage, settings and B-minus-A differences. It does not declare a statistical
+winner. The [public ledger](https://itlackey.github.io/akm-eval/) offers filtering,
+sorting and export of each published run; [site documentation](site/README.md)
+explains the fields and question-focused views.
 
-- **The treatment.** Runs differ along five axes: `build` (the akm), `config`, `model`, `inputs` (the cases) and `harness` (the eval's version). `--treatment` names the ones B changes (default `config,model`); any other difference is refused. To compare two akm builds, say `--treatment build`.
-- **The version.** Each eval's `version` is set by hand in its `src/measurement.ts`, and changed when what the eval asks akm changes. Runs of two versions are compared only with `--treatment harness`. [`MEASUREMENT_CHANGELOG.md`](MEASUREMENT_CHANGELOG.md) lists the changes.
-- **Rescoring.** Every run stores each case's raw output, so `scripts/compare` and the matrix score every run again with the current scorer and labels before comparing. A scorer fix or a relabelled case needs no new run. A run that cannot be scored again (raw outputs missing, or a custom corpus outside the repository) is compared as it was scored, with a warning. `scripts/rescore/run RESULTS_DIR` does the same by hand and writes `<folder>-rescored` beside the original; it takes `--cases DIR` for a run whose cases are outside the repository.
-- **Cases.** The comparison uses the cases both runs gave the same input and names the ones it left out.
-- **Old results.** Results made before 0.2 have no manifest and are refused: run them again.
+Comparisons require the same eval version, scoring version, corpus, collection,
+mode, selected case IDs, input digests and labels. Model, AKM and configuration
+changes are shown as the things being compared. No cases are silently dropped.
+Unequal scored or timing coverage leaves the affected deltas blank. A new full
+run cannot be compared with an old smaller set merely because some IDs match.
+Results before 0.2 have no manifest and must be collected again.
 
-A comparison whose runs lack evidence for an axis, or did not complete, is labelled exploratory: shown, but not a conclusion.
+### Optional repeats
 
-## Run a matrix
+Use `--repeat N` when a small difference or an unstable result warrants more
+observations. Each repeat is an independent saved run; the optional repeat
+summary contains descriptive min/max/mean values. It is not a significance test.
+Benchmark-native attempts and paired with/without-AKM controls remain available.
+Repeated deterministic retrieval normally adds little information.
 
-`scripts/matrix/run` runs a baseline and a list of configurations, and says which configurations beat the baseline. Keep the matrix file wherever you like:
-
-```json
-{
-  "prefix": "sweep",
-  "model": "my-cloud-model",
-  "baseline": [{ "name": "base", "eval": "reflect" }],
-  "configs": [
-    { "name": "low-value", "eval": "reflect", "args": ["--config-patch", "patches/low-value.json"] },
-    { "name": "pr", "eval": "reflect", "args": ["--akm", "bun ~/code/akm-pr/src/cli.ts"] }
-  ],
-  "screen": { "limit": 20 },
-  "repeats": 3
-}
+```sh
+evals/reflect/run --model model-a --repeat 2 --label check-variation
 ```
 
-```
-scripts/matrix/run sweep.json --stage screen     # every row once, with screen.limit
-scripts/matrix/run sweep.json --stage confirm    # --repeat 3 for the baseline and each config the screen found different
-scripts/matrix/run sweep.json --stage report     # the decision from the results so far
-```
+### Explicit rescoring
 
-`args` are the eval's own flags (leave out `--label` and `--repeat`). A row whose `--akm` differs from its baseline's compares builds; any other axis a row changes goes in `"treatment"`, such as `"treatment": "model"`. Each stage writes `decision.md` and `decision.json` to `sweep-results/` beside the matrix file (or `--out DIR`): one row per config with its metrics against the baseline, a paired comparison of the repeats, and a verdict (better, worse, mixed, no difference, incomplete, screen only, no result, not comparable or exploratory). A metric is better or worse only when its min-max range over the repeats lies wholly on one side of the baseline's, with a gap of at least 1.25 times the wider range. A stage skips a row whose inputs have not changed, so a stopped sweep resumes. `scripts/matrix/run --help` has the rest; the metrics each eval is judged on are `EVALS` in `scripts/matrix/src/lib.ts`.
+For a scoring fix or updated labels, `scripts/rescore/run RESULTS_DIR` reads saved
+raw output and writes a new `-rescored` folder. Supply `--cases DIR` when a custom
+corpus is outside the repository or has moved. It preserves the original
+collection identity and records the current scoring version. Changed or missing
+inputs are refused: those require a new collection. The original stays intact.
+Rescoring is never part of a comparison or ledger build.
+
+Bump the eval's `version` in `src/measurement.ts` when inputs, case selection,
+collection protocol, labels or scoring rules change. Record the reason in
+[MEASUREMENT_CHANGELOG.md](MEASUREMENT_CHANGELOG.md). Existing results retain their
+versions. Do not recollect for documentation, UI or reporting-only changes.
+
+See [comparison commands](scripts/compare/README.md) and the
+[v0.6 migration notes](releases/v0.6.md) for old matrix users.
 
 ## Check the repository
 

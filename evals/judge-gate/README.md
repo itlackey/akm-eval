@@ -8,7 +8,7 @@ Does the quality judge pass good improve proposals and refuse bad ones?
 
 ```
 evals/judge-gate/run
-evals/judge-gate/run --model qwen3-27b --repeat 3
+evals/judge-gate/run --model qwen3-27b
 evals/judge-gate/run --corpus custom          # the rewrite: ./generate-assets --only judge-gate
 evals/judge-gate/run --cases ~/notes/judge-gate
 ```

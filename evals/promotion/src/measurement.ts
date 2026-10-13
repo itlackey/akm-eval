@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { parseCases } from "./lib.ts";
+import { bundleSha256, parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /**
@@ -37,6 +37,10 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   // The judge reads the proposal, and compares it with the notes of the bundle (`context`: the digest of the notes the run planted it among).
   input: (c, bundle) => ({ ref: c.ref, content: c.content, bundle: bundle ?? null }),
   // Everything makeRow reads of the case: the label and category it scores by, and the ref it copies into the row.
+  rescoreContexts: (root, summary, cases) => {
+    const digest = bundleSha256(join(folderOf(root, summary), "library"), cases);
+    return new Map(cases.map(c => [c.id, digest]));
+  },
   labels: (c) => ({ label: c.label, category: c.category, ref: c.ref }),
   rawOf,
   score: makeRow,

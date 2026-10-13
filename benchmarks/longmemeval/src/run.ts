@@ -83,6 +83,8 @@ interface Summary extends ReturnType<typeof summarize> {
   date: string;
   /** True when the run asked every question it set out to. A summary written after each question says false until the last one. */
   complete: boolean;
+  /** The rows include earlier work whose full wall time is not recorded. */
+  resumed: boolean;
   /** "aborted" for a run that did not finish what it set out to do, and then aborted_reason says why. A run still going, or killed, has not finished either. */
   status: "complete" | "aborted";
   aborted_reason: string | null;
@@ -318,6 +320,7 @@ export async function runCorpus(
       label: args.label,
       date: new Date().toISOString(),
       complete,
+      resumed: args.resume !== undefined,
       status: complete ? "complete" : "aborted",
       aborted_reason: complete ? null : (abortedReason ?? UNFINISHED),
       git_commit: gitCommit(),

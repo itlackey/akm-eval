@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repeatRuns, spreadOf } from "./repeat.ts";
@@ -37,7 +37,9 @@ describe("spreadOf", () => {
 describe("repeatRuns", () => {
   const make = (parent: string) => async (label: string) => {
     const results_dir = makeResultsDir(parent, label);
-    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, timeouts: label.endsWith("r1") ? 1 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    const summary = { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, timeouts: label.endsWith("r1") ? 1 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    writeFileSync(join(results_dir, "summary.json"), JSON.stringify({ ...summary, preserved: true }));
+    return summary;
   };
 
   test("without --repeat runs once under the label and writes nothing else", async () => {
@@ -45,6 +47,10 @@ describe("repeatRuns", () => {
     parents.push(parent);
     const runs = await repeatRuns(undefined, "base", make(parent));
     expect(runs).toHaveLength(1);
+    const saved = JSON.parse(readFileSync(join(runs[0].results_dir, "summary.json"), "utf8"));
+    expect(saved.wall_seconds).toBeGreaterThanOrEqual(0);
+    expect(saved.preserved).toBe(true);
+    expect(existsSync(join(runs[0].results_dir, RUNNING))).toBe(false);
     expect(readdirSync(parent)).toEqual([`${DAY}-base`]);
   });
 
@@ -59,6 +65,25 @@ describe("repeatRuns", () => {
     expect(stored).toMatchObject({ eval: "t", corpus: "public", label: "base", repeat: 2, model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, runs: [`${DAY}-base-r1`, `${DAY}-base-r2`], n_errored: { min: 0, max: 2, mean: 1 }, timeouts: { min: 0, max: 1, mean: 0.5 }, metrics: { score: { min: 1, max: 3, mean: 2 } } });
     expect(stored.seconds.min).toBeGreaterThanOrEqual(0); // wall time of each run
     expect(stored.seconds.max).toBeGreaterThanOrEqual(stored.seconds.min);
+  });
+
+  test("a resumed run cannot report this invocation as full wall time", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
+    parents.push(parent);
+    const [run] = await repeatRuns(undefined, "resumed", async label => ({ ...await make(parent)(label), resumed: true }));
+    expect(JSON.parse(readFileSync(join(run!.results_dir, "summary.json"), "utf8")).wall_seconds).toBeNull();
+  });
+
+  test("a failed later repeat keeps the first completed run and its timing", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "repeat-test-"));
+    parents.push(parent);
+    await expect(repeatRuns(2, "interrupted", async label => {
+      if (label.endsWith("r2")) throw new Error("stopped");
+      return make(parent)(label);
+    })).rejects.toThrow("stopped");
+    const first = join(parent, `${DAY}-interrupted-r1`);
+    expect(existsSync(join(first, RUNNING))).toBe(false);
+    expect(JSON.parse(readFileSync(join(first, "summary.json"), "utf8")).wall_seconds).toBeGreaterThanOrEqual(0);
   });
 
   test("carries the fingerprint of the akm build from the first run into the repeat summary, and has none for an eval that runs no akm", async () => {

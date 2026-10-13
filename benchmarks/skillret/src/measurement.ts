@@ -6,9 +6,11 @@
 // so its digest is the context of each query's input.
 
 import { join } from "node:path";
+import { skillFiles } from "./akm.ts";
+import { sha256Json } from "../../../lib/provenance.ts";
 import type { Measurement } from "../../../lib/manifest.ts";
 import { NAME } from "./collect.ts";
-import { readCorpusQueries, type Query } from "./dataset.ts";
+import { publicCorpus, privateCorpus, readCorpusQueries, type Query } from "./dataset.ts";
 import { type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
 /** The split a summary's corpus drew from: the test split for the public corpus, and the train split for the custom corpus (of kind "split"), which the first summaries called private. */
@@ -29,6 +31,11 @@ export const MEASUREMENT: Measurement<Query, Raw, Row> = {
   // akm is asked the request as the dataset has it, of a library that is the same for every query (`library`: the digest of its skills).
   input: (q, library) => ({ query: q.query, library: library ?? null }),
   // Everything makeRow reads of the query: the skills it needs.
+  rescoreContexts: (root, summary, cases) => {
+    const corpus = (summary.corpus === "public" ? publicCorpus : privateCorpus)(assetsOf(root), summary.sample?.limit ?? undefined);
+    const digest = sha256Json(skillFiles(corpus.skills));
+    return new Map(cases.map(c => [c.id, digest]));
+  },
   labels: (q) => ({ relevant: q.relevant }),
   rawOf,
   score: makeRow,
