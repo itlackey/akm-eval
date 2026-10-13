@@ -38,10 +38,9 @@ jobs:
         with:
           bun-version: 1.4.2
       - name: Check the ledger types
-        working-directory: scripts/ledger/src
         run: |
           bun install --frozen-lockfile --ignore-scripts
-          bunx tsc --noEmit
+          node_modules/.bin/tsc --noEmit -p scripts/ledger/src/tsconfig.json
       - run: bun run test:site
       - run: bun run build:site
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
