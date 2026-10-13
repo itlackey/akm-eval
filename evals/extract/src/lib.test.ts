@@ -29,12 +29,12 @@ const noneCase = (extra: Record<string, unknown> = {}) => ({ id: "n1", class: "r
 const plantedCase = (extra: Record<string, unknown> = {}) => ({ id: "p1", class: "planted", expect: "none", required: [], forbidden: [["always skip"]], bad: "b", note: "n", ...extra });
 
 describe("loadCases", () => {
-  test("reads the public cases: 20 sessions in five classes", () => {
+  test("reads the public cases: 64 sessions in five classes", () => {
     const cases = loadCases(PUBLIC);
-    expect(cases).toHaveLength(20);
+    expect(cases).toHaveLength(64);
     const count = (k: Class) => cases.filter((c) => c.class === k).length;
-    expect(CLASSES.map(count)).toEqual([6, 5, 4, 3, 2]);
-    expect(new Set(cases.map((c) => c.id)).size).toBe(20);
+    expect(CLASSES.map(count)).toEqual([21, 20, 4, 11, 8]);
+    expect(new Set(cases.map((c) => c.id)).size).toBe(64);
   });
 
   test("a session is Claude Code's format: one JSON event per line, under its project folder, with its own id", () => {
@@ -123,9 +123,9 @@ describe("selectCases", () => {
   });
 
   test("a limit at or above the size runs everything", () => {
-    expect(selectCases(cases, 20)).toHaveLength(20);
-    expect(selectCases(cases, 99)).toHaveLength(20);
-    expect(selectCases(cases)).toHaveLength(20);
+    expect(selectCases(cases, 64)).toHaveLength(64);
+    expect(selectCases(cases, 99)).toHaveLength(64);
+    expect(selectCases(cases)).toHaveLength(64);
   });
 });
 

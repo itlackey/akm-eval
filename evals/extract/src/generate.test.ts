@@ -18,12 +18,12 @@ function generate(seed: string, out = mkdtempSync(join(tmpdir(), "extract-genera
 }
 
 describe("generate", () => {
-  test("writes the 20 cases and the map, with names changed and every check kept", () => {
+  test("writes the 64 cases and the map, with names changed and every check kept", () => {
     const { out, code, stdout } = generate("42");
     expect(code).toBe(0);
-    expect(stdout).toContain("20 cases written");
+    expect(stdout).toContain("64 cases written");
     const cases = loadCases(join(out, "assets"));
-    expect(cases).toHaveLength(20);
+    expect(cases).toHaveLength(64);
     expect(checkRewrite(loadCases(PUBLIC), cases)).toEqual([]);
     const words = JSON.parse(readFileSync(join(out, "map.json"), "utf8")).words as Record<string, string>;
     expect(Object.keys(words)).toEqual(expect.arrayContaining(["ledgerline", "harborlight", "quillmark", "rowpack", "pelican", "docker", "pytest"]));
@@ -117,6 +117,6 @@ describe("checkRewrite", () => {
 
   test("a case that came back changed, and a different number of cases", () => {
     expect(checkRewrite(before, copy("insight-01", () => ({ id: "insight-99" })))).toEqual(["insight-01: came back as insight-99, insight, memory"]);
-    expect(checkRewrite(before, before.slice(1))).toEqual(["19 cases were written, and there are 20"]);
+    expect(checkRewrite(before, before.slice(1))).toEqual(["63 cases were written, and there are 64"]);
   });
 });
