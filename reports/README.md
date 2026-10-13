@@ -74,3 +74,4 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 | 0.10.261003-beta | consolidate | [bifrost-fast35b-v06-20261013-pool](0.10.261003-beta/consolidate/bifrost-fast35b-v06-20261013-pool) | public | fast/qwen3.6-35b-a3b | full public run; pool; 47 recorded, 47 scored, 0 errors |
 | 0.10.261003-beta | retrieval | [bifrost-fast35b-v06-20261013-library](0.10.261003-beta/retrieval/bifrost-fast35b-v06-20261013-library) | public | none | full public run; 136 recorded, 136 scored, 0 errors |
 | 0.10.261003-beta | retrieval | [bifrost-fast35b-v06-20261013-books](0.10.261003-beta/retrieval/bifrost-fast35b-v06-20261013-books) | public | none | full public run; 51 recorded, 51 scored, 0 errors |
+| 0.10.261003-beta | skillret | [bifrost-fast35b-v06-20261013](0.10.261003-beta/skillret/bifrost-fast35b-v06-20261013) | public | none | full public run; 4392 recorded, 4392 scored, 0 errors |
