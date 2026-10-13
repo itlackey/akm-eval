@@ -49,18 +49,78 @@ export function feedbackKind(feedback: string): FeedbackKind {
 
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
 const bodyOf = (text: string): string => text.replace(FRONTMATTER, "");
+const frontmatterOf = (text: string): string => FRONTMATTER.exec(text)?.[0] ?? "";
 const squash = (text: string): string => text.split(/\s+/).filter(Boolean).join(" ");
+/** The lines of a text that are not blank, trimmed. */
+const linesOf = (text: string): string[] => text.split("\n").map((l) => l.trim()).filter(Boolean);
+/** A word without the quotes, brackets and punctuation around it. */
+const trimMarks = (word: string): string => word.replace(/^[`*"'([{<]+|[`*"',.;:!?)\]}>]+$/g, "");
+const wordSet = (text: string): Set<string> => new Set(text.split(/\s+/).map(trimMarks).filter(Boolean));
+/** A path, command, flag, name or number rather than a word of prose: it has a digit, a / _ @ # ~ = or :, a dot inside it, a leading --, or camelCase. */
+const identifier = (word: string): boolean => /[0-9/_@#~=:]|\w\.\w|^--|[a-z][A-Z]/.test(word);
+
+export type BodyChange = "unchanged" | "title" | "deduplicated" | "corrected" | "edited";
 
 /**
- * What a revision does to the body of the asset, the markdown after its frontmatter, apart from whitespace: `unchanged`; `title`, which
- * is a first-line `# ` heading and nothing else added (the rubric's "missing title" defect); or `edited`, anything more, such as an intro,
- * headings, reworded prose, or a duplicated block removed. A good case is allowed the first two. A reflow that only moves whitespace is
- * `unchanged` here, and the label reason is the only check that sees it.
+ * One run of lines of `before` taken out, and nothing else changed: the source holds that run twice when the rest of the body still
+ * holds it, or when it is fields of the frontmatter pasted into the body (each line `---` or made of the frontmatter's own words, and
+ * at least one a `key:` line of a field the frontmatter has).
  */
-export function bodyChange(source: string, candidate: string): "unchanged" | "title" | "edited" {
+function duplicateRemoved(before: string[], after: string[], frontmatter: string): boolean {
+  if (after.length >= before.length) return false;
+  let p = 0;
+  while (p < after.length && before[p] === after[p]) p++;
+  let s = 0;
+  while (s < after.length - p && before[before.length - 1 - s] === after[after.length - 1 - s]) s++;
+  if (p + s !== after.length) return false;
+  const removed = before.slice(p, before.length - s);
+  for (let i = 0; i + removed.length <= after.length; i++) if (removed.every((line, k) => after[i + k] === line)) return true;
+  const keys = new Set([...frontmatter.matchAll(/^([A-Za-z_][\w-]*):/gm)].map((m) => m[1]));
+  const words = wordSet(frontmatter);
+  return removed.some((line) => keys.has(/^([A-Za-z_][\w-]*):/.exec(line)?.[1] ?? "")) && removed.every((line) => line === "---" || line.split(/\s+/).every((w) => !trimMarks(w) || words.has(trimMarks(w))));
+}
+
+/** At most two words of the body replaced, line for line, each by an identifier that the source already has somewhere else: a path, flag or number the asset itself spells the other way. */
+function identifierCorrected(before: string[], after: string[], sourceWords: Set<string>): boolean {
+  if (before.length !== after.length) return false;
+  let changed = 0;
+  for (let i = 0; i < before.length; i++) {
+    const [was, now] = [before[i].split(/\s+/), after[i].split(/\s+/)];
+    if (was.length !== now.length) return false;
+    for (let k = 0; k < was.length; k++) {
+      if (was[k] === now[k]) continue;
+      const [w, n] = [trimMarks(was[k]), trimMarks(now[k])];
+      if (w === n || !identifier(n) || !sourceWords.has(n)) return false;
+      changed++;
+    }
+  }
+  return changed > 0 && changed <= 2;
+}
+
+/**
+ * What a revision does to the body of the asset, the markdown after its frontmatter, apart from whitespace:
+ * - `unchanged`;
+ * - `title`: a first-line `# ` heading and nothing else added (the rubric's "missing title" defect);
+ * - `deduplicated`: one run of lines that the source holds twice taken out, a block of frontmatter fields pasted into the body or a
+ *   passage repeated in it with one copy kept, and nothing else changed but a title added (the rubric's "frontmatter duplicated in the
+ *   body, or a duplicated section");
+ * - `corrected`: one or two words replaced by an identifier the source already uses elsewhere, such as a path or a flag it spells right in
+ *   another line, and nothing else changed but a title added (the rubric's "an error the source itself shows");
+ * - `edited`: anything more, such as an intro, headings, reworded prose, or a passage removed that the source holds once.
+ * A good case is allowed all but the last. These are tripwires and no proof: a word replaced by another of the source's identifiers is
+ * `corrected` here whether or not the source shows it was an error, and the label reason says why it was. A reflow that only moves
+ * whitespace is `unchanged` here, and the label reason is the only check that sees it.
+ */
+export function bodyChange(source: string, candidate: string): BodyChange {
   const before = squash(bodyOf(source));
   if (squash(bodyOf(candidate)) === before) return "unchanged";
-  return squash(bodyOf(candidate).replace(/^\s*# .*\n/, "")) === before ? "title" : "edited";
+  if (squash(bodyOf(candidate).replace(/^\s*# .*\n/, "")) === before) return "title";
+  const was = linesOf(bodyOf(source));
+  let now = linesOf(bodyOf(candidate));
+  if (now[0]?.startsWith("# ") && !was.includes(now[0])) now = now.slice(1);
+  if (duplicateRemoved(was, now, frontmatterOf(source))) return "deduplicated";
+  if (identifierCorrected(was, now, wordSet(source))) return "corrected";
+  return "edited";
 }
 
 export interface Coverage {
@@ -84,10 +144,10 @@ export interface Audit {
   /** The cases of each set, by label. */
   sets: Record<string, { good: number; bad: number }>;
   /** The body of the good cases against their source. Only `edited` disagrees with the rubric. */
-  good_body: Record<"unchanged" | "title" | "edited", number>;
+  good_body: Record<BodyChange, number>;
   /** Good cases whose label reason uses a word the rubric names as churn. Must be empty. */
   reason_disagreements: { id: string; terms: string[] }[];
-  /** Good cases whose candidate edits the body beyond a title. Must be empty. */
+  /** Good cases whose candidate edits the body beyond a title and the fixes the rubric names. Must be empty. */
   body_disagreements: string[];
   /** What a judge that decided on the feedback alone would pass, without judging anything. */
   feedback_shortcuts: Record<"refuse_any_feedback" | "refuse_negative_feedback", { good_passed: number; bad_passed: number }>;
@@ -133,7 +193,7 @@ export function audit(cases: Case[], rubric: number, adjudication?: string): Aud
     labels: { good: g, bad: b },
     severity: { harmful: bad.filter((c) => c.severity === "harmful").length, churn: bad.filter((c) => c.severity === "churn").length },
     sets,
-    good_body: count(["unchanged", "title", "edited"], bodies.map((x) => x.change)),
+    good_body: count(["unchanged", "title", "deduplicated", "corrected", "edited"], bodies.map((x) => x.change)),
     reason_disagreements: good.map((c) => ({ id: c.id, terms: churnTerms(c.labelReason ?? "") })).filter((x) => x.terms.length > 0),
     body_disagreements: bodies.filter((x) => x.change === "edited").map((x) => x.id),
     feedback_shortcuts: {
@@ -169,7 +229,7 @@ export function format(a: Audit): string {
     "",
     "Good cases against the rubric (each must be 0)",
     `  label reason uses a churn word: ${a.reason_disagreements.length}`,
-    `  candidate edits the body beyond a title: ${a.body_disagreements.length}   (body of the good cases: ${a.good_body.unchanged} unchanged, ${a.good_body.title} title only, ${a.good_body.edited} edited)`,
+    `  candidate edits the body beyond a title and the fixes the rubric names: ${a.body_disagreements.length}   (body of the good cases: ${a.good_body.unchanged} unchanged, ${a.good_body.title} title only, ${a.good_body.deduplicated} duplicate removed, ${a.good_body.corrected} identifier corrected, ${a.good_body.edited} edited)`,
   );
   for (const d of a.reason_disagreements) out.push(`    ${d.id}: ${d.terms.join(", ")}`);
   for (const id of a.body_disagreements) out.push(`    ${id}: body edited`);
