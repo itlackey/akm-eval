@@ -190,20 +190,20 @@ describe("the public cases", () => {
     expect(cases).toEqual(buildCases());
   });
 
-  test("have fifty notes, and the mix of defects and controls", () => {
-    expect(cases).toHaveLength(50);
+  test("have eighty notes, and the mix of defects and controls", () => {
+    expect(cases).toHaveLength(80);
     const count = (cls: CaseClass) => cases.filter((c) => c.class === cls).length;
     expect(Object.fromEntries(CLASSES.map((c) => [c, count(c)]))).toEqual({
-      "description-period": 6,
-      "description-quote": 5,
-      "description-truncated": 5,
-      "description-missing": 5,
+      "description-period": 7,
+      "description-quote": 7,
+      "description-truncated": 7,
+      "description-missing": 7,
       "when-to-use-missing": 6,
-      "title-missing": 5,
-      "retrieval-miss": 5,
-      "unsupported-ask": 5,
-      historical: 5,
-      "body-defect": 3,
+      "title-missing": 6,
+      "retrieval-miss": 10,
+      "unsupported-ask": 10,
+      historical: 10,
+      "body-defect": 10,
     });
   });
 
@@ -712,8 +712,8 @@ describe("selectCases", () => {
   test("takes the first N, or all", () => {
     const cases = parseCases(readFileSync(join(EVAL_DIR, "assets", "cases.jsonl"), "utf8"));
     expect(selectCases(cases, 3).map((c) => c.id)).toEqual(cases.slice(0, 3).map((c) => c.id));
-    expect(selectCases(cases)).toHaveLength(50);
-    expect(selectCases(cases, 500)).toHaveLength(50);
+    expect(selectCases(cases)).toHaveLength(80);
+    expect(selectCases(cases, 500)).toHaveLength(80);
   });
 });
 
