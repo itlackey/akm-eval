@@ -738,8 +738,9 @@ describe("refOf", () => {
       const file = libraryFileOf(c.path);
       expect(existsSync(join(LIBRARY, file))).toBe(true);
       expect(c.path).toMatch(/^(knowledge|agents|commands|workflows)\/.+\.md$|^skills\/.+\/SKILL\.md$/);
-      // The ref the run gives the note is the ref akm gives the file of the library it is made from.
-      expect(refOfFile(file, () => readFileSync(join(LIBRARY, file), "utf8"))).toBe(refOf(c.path));
+      // The ref the run gives the note is the ref akm gives the file of the library it is made from, but for an example agent or
+      // command of llm-delegation-tool, which the run puts in its type's folder.
+      if (file === c.path || c.path.startsWith("knowledge/")) expect(refOfFile(file, () => readFileSync(join(LIBRARY, file), "utf8"))).toBe(refOf(c.path));
     }
   });
 
@@ -747,6 +748,8 @@ describe("refOf", () => {
     expect(libraryFileOf("knowledge/skills/ai-skills/agent-cli-tools/references/codex.md")).toBe("skills/ai-skills/agent-cli-tools/references/codex.md");
     expect(libraryFileOf("knowledge/print/fix-team-dispatch-template.md")).toBe("knowledge/print/fix-team-dispatch-template.md");
     expect(libraryFileOf("skills/akm-migrate/SKILL.md")).toBe("skills/akm-migrate/SKILL.md");
+    expect(libraryFileOf("agents/llm-delegation-tool/lore-writer.md")).toBe("skills/ai-skills/llm-delegation-tool/examples/agents/lore-writer.md");
+    expect(libraryFileOf("commands/llm-delegation-tool/moderate.md")).toBe("skills/ai-skills/llm-delegation-tool/examples/commands/moderate.md");
   });
 });
 
