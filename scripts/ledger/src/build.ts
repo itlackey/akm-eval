@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { type LedgerRun, latestGroups, object, presentRun, sampleVerdicts } from "./data";
+import { comparisonColumns } from "./comparison";
 
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 function option(name: string, fallback: string): string {
@@ -58,10 +59,17 @@ const dataset = {
   excluded_reports: excluded,
   runs: runs.map(({ cohort_key: _cohort, ...run }) => run),
   latest_groups: groups,
+  columns: comparisonColumns(runs),
 };
 mkdirSync(join(output, "assets"), { recursive: true });
 for (const file of ["index.html", "assets/styles.css", "assets/ledger.js"]) {
-  writeFileSync(join(output, file), readFileSync(new URL(`../../../site/${file}`, import.meta.url)));
+  const original = readFileSync(new URL(`../../../site/${file}`, import.meta.url), "utf8");
+  const version = encodeURIComponent(sourceRevision);
+  const content = file === "index.html" ? original
+    .replace('<html lang="en">', `<html lang="en" data-revision="${version}">`)
+    .replace('./assets/styles.css"', `./assets/styles.css?v=${version}"`)
+    .replace('./assets/ledger.js"', `./assets/ledger.js?v=${version}"`) : original;
+  writeFileSync(join(output, file), content);
 }
 writeFileSync(join(output, "data.json"), `${JSON.stringify(dataset)}\n`);
 writeFileSync(join(output, ".nojekyll"), "");

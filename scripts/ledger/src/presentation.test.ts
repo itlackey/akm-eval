@@ -39,6 +39,15 @@ test("friendly test names retain a link to each test's scoring rules", () => {
   expect(testInfo("skillret").documentation).toContain("/benchmarks/skillret");
 });
 
+test("additional ranking cutoffs, judgment-adjusted ranking and completeness are retained as independent columns", () => {
+  const result = scores({ eval: "skillret", metrics: { search: { "NDCG@10": .5, "NDCG@5": .4, "Completeness@15": .7, "MAP@15": .6 } } });
+  expect(result.find(score => score.label === "Keyword nDCG@5")?.value).toBe(.4);
+  expect(result.find(score => score.label === "Keyword completeness@15")?.value).toBe(.7);
+  expect(result.find(score => score.label === "Keyword MAP@15")?.value).toBe(.6);
+  const judged = scores({ eval: "retrieval", metrics: { search: { ndcg_10: .8, ndcg_10_condensed: .9 } } });
+  expect(judged.find(score => score.label === "Keyword judged nDCG@10")?.value).toBe(.9);
+});
+
 test("repeat comparisons separate changed engine settings while retaining all individual run scores", () => {
   const summary = { eval: "reflect", corpus: "public", status: "complete", model: "model",
     manifest: { engines: { model: { temperature: 0 } } } };

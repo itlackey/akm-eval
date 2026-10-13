@@ -33,8 +33,8 @@ Retired evals are summarised in [`reports/retired-evals.md`](reports/retired-eva
 ## Layout
 
 The [public results ledger](https://itlackey.github.io/akm-eval/) presents the
-committed runs in `reports/`, with metric denominators, collection errors,
-repeat variation, filters and artifact links. Run `bun run build:site` (or
+every committed run in `reports/`, with sortable quality, performance and settings
+columns, full filtering, row comparison and artifact links. Run `bun run build:site` (or
 `scripts/ledger/run`) to build it locally. `.github/workflows/ledger-pages.yml`
 builds pull requests and publishes main changes to the reports or site.
 See [site/README.md](site/README.md) for publishing and refreshes.

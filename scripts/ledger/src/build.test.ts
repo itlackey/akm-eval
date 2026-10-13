@@ -62,8 +62,9 @@ test("rebuilds from newly published data, skips incomplete/private samples, and 
     expect(dataset.excluded_reports).toBe(2);
     expect(readFileSync(join(output, "data.json"), "utf8")).not.toContain("PRIVATE_CONFIG_TOKEN");
     const html = readFileSync(join(output, "index.html"), "utf8");
-    expect(html).toContain('href="./assets/styles.css"');
-    expect(html).toContain('src="./assets/ledger.js"');
+    expect(html).toContain('href="./assets/styles.css?v=revision"');
+    expect(html).toContain('src="./assets/ledger.js?v=revision"');
+    expect(html).toContain('data-revision="revision"');
     expect(html).not.toContain(".lab.");
     expect(readFileSync(join(output, ".nojekyll"), "utf8")).toBe("");
     expect(dataset.latest_groups).toHaveLength(1);

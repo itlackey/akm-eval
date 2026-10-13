@@ -28,51 +28,65 @@
   <main id="main" class="wrap">
     <div class="hero">
       <p class="eyebrow">AKM / evaluation lab</p>
-      <h1>AKM results</h1>
-      <p>Measured results for AKM’s memory, learning, search and maintenance tools. See what passed, what failed and how the results changed across repeated runs.</p>
+      <h1>Benchmark ledger</h1>
+      <p>Compare every published run by model, test, quality, performance and settings.</p>
       <p id="snapshot" class="snapshot" role="status">Loading published results…</p>
     </div>
     <section aria-labelledby="results-title">
       <div class="section-heading">
-        <h2 id="results-title">Results</h2>
-        <a href="./data.json" download="akm-eval-results.json">Download all results ↗</a>
-      </div>
-      <div class="view-switch" role="group" aria-label="Result view">
-        <button id="view-latest" type="button" data-view="latest" aria-pressed="true">Latest results</button>
-        <button id="view-all" type="button" data-view="all" aria-pressed="false">Every run</button>
-        <button id="view-pilots" type="button" data-view="pilots" aria-pressed="false">Small trial runs</button>
+        <h2 id="results-title">All runs</h2>
+        <a href="./data.json" download="akm-eval-results.json">Download complete data ↗</a>
       </div>
       <div class="controls">
+        <label class="search-control">Search all fields<input id="search" type="search" placeholder="Model, run, test, version, notes…"></label>
+        <label>Model<select id="model"><option value="">All models</option></select></label>
         <label>Test<select id="suite"><option value="">All tests</option></select></label>
-        <label>Model or search method<select id="model"><option value="">All models and methods</option></select></label>
-        <label>Search<input id="search" type="search" placeholder="Test, model or run name"></label>
+        <label>Collection<select id="collection"><option value="">All collections</option></select></label>
+        <label>Scope<select id="role"><option value="">All scopes</option></select></label>
+        <label>AKM version<select id="akm_version"><option value="">All versions</option></select></label>
+        <label>Scoring version<select id="measurement"><option value="">All versions</option></select></label>
+        <label>Search method<select id="search_method"><option value="">All methods</option></select></label>
+        <label>Strategy<select id="strategy"><option value="">All strategies</option></select></label>
+        <label>Collected from<input id="dateFrom" type="date"></label>
+        <label>Collected through<input id="dateTo" type="date"></label>
       </div>
-      <div id="test-guide" class="test-guide" hidden></div>
       <div class="toolbar">
         <p id="count" role="status" aria-live="polite">Loading results…</p>
-        <button id="reset" type="button" class="text-button">Clear filters</button>
-        <button id="csv" type="button" class="text-button">Export CSV</button>
+        <label class="check-label"><input id="errorsOnly" type="checkbox"> With errors</label>
+        <label class="check-label"><input id="selectedOnly" type="checkbox"> Compare selected (<span id="selectedCount">0</span>)</label>
+        <button id="reset" type="button" class="text-button">Reset filters</button>
+        <button id="selectVisible" type="button" class="text-button">Select filtered runs</button>
+        <button id="clearSelection" type="button" class="text-button">Clear selection</button>
+        <button id="csv" type="button" class="text-button">Export filtered CSV</button>
+        <button id="json" type="button" class="text-button">Export filtered JSON</button>
       </div>
-      <p id="view-help" class="help">The newest full test run is shown for each model and search method. Open “Details” to see repeats and failed checks.</p>
-      <div class="table-scroll" role="region" aria-label="Evaluation results" tabindex="0">
+      <div class="table-navigation">
+        <span>Jump to columns:</span>
+        <button type="button" data-group="Compare">Compare</button>
+        <button type="button" data-group="Run">Run</button>
+        <button type="button" data-group="Quality">Quality</button>
+        <button type="button" data-group="Performance">Performance</button>
+        <button type="button" data-group="Usage">Tokens &amp; cost</button>
+        <button type="button" data-group="Settings">Settings</button>
+        <button type="button" data-group="Test metrics">Test metrics</button>
+        <button type="button" data-group="Provenance">Sources</button>
+      </div>
+      <p class="help">All columns are shown. Scroll horizontally; model and run stay fixed. Click a heading to sort; Shift-click adds another sort. Filter any column below its heading. Numeric ranges use the displayed units. “—” means unrecorded.</p>
+      <p id="sort-status" class="sort-status" aria-live="polite"></p>
+      <div id="table-scroll" class="table-scroll" role="region" aria-label="Scrollable benchmark ledger" tabindex="0">
         <table>
-          <caption class="sr-only">AKM evaluation results. Scores have different meanings for different tests.</caption>
-          <thead><tr id="head"></tr></thead>
-          <tbody id="body"><tr><td>Loading the results table…</td></tr></tbody>
+          <caption class="sr-only">Every published AKM evaluation run, with sortable and filterable comparison columns.</caption>
+          <thead>
+            <tr id="groups"></tr>
+            <tr id="head"></tr>
+            <tr id="column-filters"></tr>
+          </thead>
+          <tbody id="body"><tr><td>Loading the benchmark ledger…</td></tr></tbody>
         </table>
       </div>
-      <noscript><p>Enable JavaScript to explore the table, or read the <a href="https://github.com/itlackey/akm-eval/blob/main/reports/README.md">published reports</a>.</p></noscript>
+      <noscript><p>Enable JavaScript to use the table, or read the <a href="https://github.com/itlackey/akm-eval/blob/main/reports/README.md">published reports</a>.</p></noscript>
     </section>
-    <section class="reading" aria-labelledby="reading-title">
-      <h2 id="reading-title">What the numbers mean</h2>
-      <div class="reading-grid">
-        <div><h3>Score and case count</h3><p>A result such as 25 / 27 means 25 cases passed out of 27 scored. “44 of 50 scored” means six cases could not be scored. Errors stay visible beside the score.</p></div>
-        <div><h3>Repeated runs</h3><p>Details show each published repeat. A comparison uses runs with matching test inputs, code, model settings and AKM version. Changed test code is marked separately.</p></div>
-        <div><h3>Search scores</h3><p>nDCG measures how well relevant results rank, from 0 to 1. Recall measures how much relevant material was found. Higher is better for both; judgment coverage shows how much was graded.</p></div>
-        <div><h3>Small trials</h3><p>A few cases show whether a benchmark can run. They are listed separately from full tests, with compatibility problems and failed model calls shown in the details.</p></div>
-      </div>
-      <p class="help">Compare results within the same test. There is no overall score across these different tasks.</p>
-    </section>
+    <p class="help ledger-footnote">Quality % is the named primary test metric scaled to 100, not a score across different tests. Timings include the recorded command, request or agent overhead; case-time sums are not wall time. Token and cost totals use recorded usage only. Filter by the same test, collection and versions for a controlled comparison.</p>
     <p id="provenance" class="provenance"></p>
   </main>
   <footer class="wrap">
