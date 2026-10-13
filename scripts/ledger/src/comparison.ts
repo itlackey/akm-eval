@@ -218,3 +218,12 @@ export function scoreColumns(runs: { scores: Score[] }[]): Column[] {
   }
   return [...columns.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
+
+export function comparisonColumns(runs: { scores: Score[] }[]): Column[] {
+  const leading = ["model", "label", "suite", "quality_percent", "quality_metric", "case_p50_s", "scored", "errors"];
+  return [
+    ...leading.map(key => ({ ...coreColumns.find(column => column.key === key)!, group: "Compare" })),
+    ...coreColumns.filter(column => !leading.includes(column.key)),
+    ...scoreColumns(runs),
+  ];
+}

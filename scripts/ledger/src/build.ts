@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { type LedgerRun, latestGroups, object, presentRun, sampleVerdicts } from "./data";
-import { coreColumns, scoreColumns } from "./comparison";
+import { comparisonColumns } from "./comparison";
 
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 function option(name: string, fallback: string): string {
@@ -59,7 +59,7 @@ const dataset = {
   excluded_reports: excluded,
   runs: runs.map(({ cohort_key: _cohort, ...run }) => run),
   latest_groups: groups,
-  columns: [...coreColumns, ...scoreColumns(runs)],
+  columns: comparisonColumns(runs),
 };
 mkdirSync(join(output, "assets"), { recursive: true });
 for (const file of ["index.html", "assets/styles.css", "assets/ledger.js"]) {

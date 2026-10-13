@@ -189,7 +189,7 @@ th { min-width: 150px; text-align: left; font-size: .7rem; }
 #head button { min-height: 32px; font: inherit; width: 100%; }
 #column-filters input { width: 100%; min-height: 30px; padding: .3rem .4rem; font-size: .7rem; }
 .range-filter { display: flex; gap: .3rem; }
-.range-filter input { min-width: 64px; }
+.range-filter input { min-width: 40px; }
 .numeric { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .text-cell { max-width: 250px; min-width: 150px; overflow-wrap: anywhere; }
 .notes-cell { min-width: 350px; max-width: 350px; white-space: normal; }
@@ -215,3 +215,6 @@ thead .sticky-model, thead .sticky-run, thead .sticky-select { z-index: 5; }
   .sticky-select { position: sticky; }
 }
 #column-filters .presence-filter { min-height: 26px; font-size: .65rem; padding: .2rem .3rem; margin-top: .3rem; }
+#head th:has([data-sort]), #column-filters th { min-width: 110px; }
+#head th.sticky-model, #column-filters th.sticky-model { min-width: 200px; }
+#head th.sticky-run, #column-filters th.sticky-run { min-width: 250px; }
