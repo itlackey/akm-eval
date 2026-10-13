@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Published AKM evaluation results, with metric denominators, repeat variation, filters and original artifacts.">
+  <title>AKM-eval results</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script src="./assets/ledger.js" defer></script>
+</head>
+<body>
+<header><a class="brand" href="./">AKM-eval</a><nav aria-label="Project"><a href="https://github.com/itlackey/akm-eval">Source</a><a href="https://github.com/itlackey/akm-eval/blob/main/README.md">Run evaluations</a><a href="https://github.com/itlackey/akm-eval/blob/main/reports/README.md">Published reports</a></nav></header>
+<main>
+  <p class="eyebrow">Published evaluation results</p>
+  <h1>AKM evaluation ledger</h1>
+  <p class="intro">Explore the public runs collected by the real AKM CLI. Compare each suite using its own score and denominator, inspect collection errors and variation, and follow the original artifacts. There is no combined quality score across suites.</p>
+  <div class="stats" aria-label="Published coverage">
+    <div><strong id="total">—</strong><span>completed run artifacts</span></div>
+    <div><strong id="samples">—</strong><span>case / query rows, including repeats</span></div>
+    <div><strong id="suites">—</strong><span>evaluation suites</span></div>
+    <div><strong id="latest">—</strong><span>latest collection date, UTC</span></div>
+  </div>
+  <p class="provenance" id="provenance">Loading the published result snapshot…</p>
+  <h2>Latest full-run groups</h2>
+  <p class="help">Groups share the model, AKM version, measurement version and recorded harness, input and configuration fingerprints. Earlier groups remain in the ledger below. A small group can complete successfully while still containing scored failures or collection errors.</p>
+  <div class="table-scroll overview"><table aria-label="Latest compatible full-run groups"><thead><tr><th>Suite / collection</th><th>Model / mode</th><th>Runs</th><th>Scored / recorded per run</th><th>Recorded results, oldest to newest</th><th>Variation</th></tr></thead><tbody id="latestBody"><tr><td colspan="6">Loading results…</td></tr></tbody></table></div>
+  <h2 id="run-table">All published runs</h2>
+  <div class="controls">
+    <label>Search run metadata<input id="search" type="search" placeholder="Suite, model, label, failure notes…"></label>
+    <label>Evaluation suite<select id="suite"><option value="">All suites</option></select></label>
+    <label>Model / retrieval mode<select id="model"><option value="">All models and modes</option></select></label>
+    <label>Run scope<select id="role"><option value="">Full suites, pilots and diagnostics</option></select></label>
+    <label>AKM CLI version<select id="akm_version"><option value="">All versions</option></select></label>
+    <label>Measurement version<select id="measurement"><option value="">All versions</option></select></label>
+  </div>
+  <div class="toolbar"><span id="count" aria-live="polite">Loading results…</span><label><input id="errorsOnly" type="checkbox">With collection errors</label><button id="reset" type="button">Reset filters</button><button id="csv" type="button">Export filtered CSV</button><button id="json" type="button">Export filtered JSON</button></div>
+  <p class="help">Column headings sort the ledger. Expand a row for its group metrics, versions and original files. Unknown counts display as —. Scored / recorded counts follow the artifact; individual metrics can use smaller subsets.</p>
+  <div class="table-scroll ledger"><table aria-label="All published AKM-eval runs"><thead><tr id="head"></tr></thead><tbody id="body"><tr><td>Loading results…</td></tr></tbody></table></div>
+  <noscript><p>Filters require JavaScript. The <a href="https://github.com/itlackey/akm-eval/blob/main/reports/README.md">published reports index</a> is also available.</p></noscript>
+  <section class="notes"><h2>Reading the results</h2><ul>
+    <li><b>Coverage:</b> completed artifacts include pilots and diagnostics. Small samples do not estimate full-suite performance. Collection errors remain visible and can reduce a metric's denominator.</li>
+    <li><b>Repeat variation:</b> the displayed flip rate compares recorded correctness, pass decisions or outcomes, as labelled. Only case IDs present and scorable in every run of the group are included. This display does not rescore artifacts. For controlled comparisons use the eval harness's compare command.</li>
+    <li><b>Versions:</b> measurement versions are separate from AKM CLI and harness release versions. Changed collectors or fingerprints form separate groups. A higher score across different groups alone does not establish improvement.</li>
+    <li><b>Reflect:</b> file-layout refusals and indexed-ref errors remain outside correctness when the original scorer excludes them. A high score over the remaining cases does not establish full compatibility.</li>
+    <li><b>Retrieval:</b> inspect relevance-judgment coverage and condensed metrics. Notification and abstention observations are separate from judged task or evidence questions. Retrieval-only runs measure evidence ranking without an answer model.</li>
+    <li><b>Models:</b> pooled serving does not establish a fixed quantization or hardware allocation. GPT-120 pilots affected by rate limits or answer cut-offs remain demonstrations; see their original report before comparing.</li>
+  </ul><p><a href="https://github.com/itlackey/akm-eval/blob/main/README.md">Run the evaluations</a> · <a href="https://github.com/itlackey/akm-eval/blob/main/COMPATIBILITY.md">Compatibility</a> · <a href="https://github.com/itlackey/akm-eval/blob/main/MEASUREMENT_CHANGELOG.md">Measurement changes</a></p></section>
+</main><footer>Built from the committed public reports in AKM-eval. Collection dates describe the runs, not live model services.</footer>
+</body></html>
