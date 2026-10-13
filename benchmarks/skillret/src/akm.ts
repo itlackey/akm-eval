@@ -81,11 +81,12 @@ export async function ask(sb: Sandbox, system: "search" | "curate", query: strin
     }
     const said = typeof out.searchMode === "string" ? out.searchMode : null;
     const warnings = JSON.stringify(out.warnings ?? null).slice(0, 300);
-    if (said !== null ? said !== mode : mode === "semantic") {
+    const hits = (system === "search" ? out.hits : out.items) ?? [];
+    // No searchMode and no results is an answer that searched nothing: curate abstains on purpose when the input is not a task.
+    if (said !== null ? said !== mode : mode === "semantic" && hits.length > 0) {
       error = said !== null ? `akm ${system} searched with ${said}, not ${mode}: ${warnings}` : `akm ${system} did not say how it searched (no searchMode), and a semantic answer has to say semantic: ${warnings}`;
       continue;
     }
-    const hits = (system === "search" ? out.hits : out.items) ?? [];
     const ranked = hits.map((hit) => (typeof hit.ref === "string" ? hit.ref.replace(/^skills\//, "") : ""));
     const stray = hits.find((_, i) => !known.has(ranked[i]));
     if (stray) {

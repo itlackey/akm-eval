@@ -1021,6 +1021,12 @@ console.log(${JSON.stringify(JSON.stringify(json))});
     expect(other.error).toContain("searched with keyword, not semantic");
   });
 
+  test("a semantic curate that abstains, with no results and no searchMode, is an empty answer and not an error", async () => {
+    const abstained = await akm.ask(boxFor({ summary: "Curate abstained: the input is a harness or tool envelope, not a task.", items: [] }), "curate", "<task-notification>x</task-notification>", 10, "semantic");
+    expect(abstained).toMatchObject({ refs: [], assets: [], mode: null });
+    expect(abstained.error).toBeUndefined();
+  });
+
   test("a keyword call is taken as it comes when it does not say, and fails when it says semantic", async () => {
     const hits = [{ ref: "a/x" }];
     expect(await akm.ask(boxFor({ hits }), "search", "q", 10, "keyword")).toMatchObject({ refs: ["a/x"], mode: null });
