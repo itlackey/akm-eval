@@ -1,9 +1,6 @@
-// The run manifest: what a run was made of, written into every summary.json as `manifest`, and the declaration (`Measurement`)
-// through which each eval says how a stored case is scored again. compare, the matrix and scripts/rescore read a manifest through
-// readManifest. See README.md, "Compare two runs".
-//
-// Runs are compared by the eval's `version` (in its src/measurement.ts), changed by hand when what the eval asks akm changes. A scorer
-// fix or a relabelled case needs no new version: every run stores each case's raw output, and scripts/rescore scores it again.
+// Saved run identity and each eval's explicit-rescoring contract.
+// Compare reads stored metrics and validates versions and exact selected inputs.
+// A scoring or label change requires a version bump; rescoring is always explicit.
 
 import { createRequire } from "node:module";
 import { existsSync, readdirSync } from "node:fs";
@@ -42,6 +39,8 @@ export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
    * case (reflect: the searches it records for the note). Whatever changes what akm sees must be in here.
    */
   input(c: Case, context?: unknown): unknown;
+  /** Reconstruct additional input context for explicit rescoring, without collecting new output. */
+  rescoreContexts?(root: string, summary: Obj, cases: Case[]): Map<string, unknown>;
   /** Everything the scorer judges the case by, as a JSON value that is digested. The scorer must read nothing of the case that is not in here. */
   labels(c: Case): unknown;
   /** The raw output recovered from a stored row, or the names of the fields it lacks. A run that lacks one cannot be scored again. */
@@ -109,7 +108,7 @@ export interface RunManifest {
   harness_version: number;
   /** The eval's version. */
   collector: PartRef;
-  /** Only in manifests written before the version was set by hand. */
+  /** Scoring rules used. Older results without this field use collector.version. */
   scorer?: PartRef;
   /** Every case the run selected, by id. */
   cases: Record<string, CaseDigest>;
@@ -154,6 +153,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
     mode: input.mode ?? null,
     harness_version: HARNESS_VERSION,
     collector: { version: input.measurement.version },
+    scorer: { version: input.measurement.version },
     cases: input.cases,
     akm: { version: input.akm?.version ?? null, bin: input.akm?.bin ?? null, build: input.akm?.build ?? null, build_fingerprint: input.akm?.build_fingerprint ?? null },
     config: { sha256: redacted === null ? null : sha256Json(redacted), redacted },
@@ -233,7 +233,7 @@ export function manifestProblems(x: unknown): string[] {
 
 export type ManifestReading = { kind: "manifest"; manifest: RunManifest } | { kind: "legacy" } | { kind: "invalid"; problems: string[] };
 
-/** What compare, the matrix and scripts/rescore say of a run whose summary has no manifest. */
+/** What compare and scripts/rescore say of a run whose summary has no manifest. */
 export const noManifest = (folder: string): string => `${folder} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`;
 
 /**

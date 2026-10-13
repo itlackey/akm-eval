@@ -6,7 +6,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
-import { engineSettings } from "../../../lib/provenance.ts";
+import { engineSettings, sha256Json } from "../../../lib/provenance.ts";
 import { type Case, type Raw, type Row, assetsSha256, isDefect, reflectConfig } from "../../../evals/reflect/src/lib.ts";
 import { MEASUREMENT } from "../../../evals/reflect/src/measurement.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun, rescoredName } from "./lib.ts";
@@ -114,6 +114,7 @@ describe("rescoreFolder", () => {
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
     expect(now.collector).toEqual(OTHER_COLLECTOR);
+    expect(now.scorer).toEqual({ version: MEASUREMENT.version });
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
     expect({ ...now, scorer: null, rescored_from: null }).toEqual({ ...was, scorer: null, rescored_from: null });
@@ -165,13 +166,16 @@ describe("what a rescore refuses", () => {
 });
 
 describe("the cases of the corpus now", () => {
-  test("a case the corpus no longer has is left out and named, in the result and in the manifest", () => {
+  test("an unselected row is refused without changing the original", () => {
     const dir = run({ rows: (rows) => [...rows, { ...rows[0], id: "dropped-case-01" }] });
-    const { out, result } = rescoreFolder(dir);
-    expect(result.dropped).toEqual(["dropped-case-01"]);
-    expect(rowsOf(out).map((r) => r.id)).toEqual(CASES.map((c) => c.id));
-    expect(summaryOf(out).manifest.rescored_from.dropped).toEqual(["dropped-case-01"]);
-    expect(summaryOf(out)).toMatchObject({ n_run: 10 });
+    const before = text(dir);
+    expect(() => rescoreFolder(dir)).toThrow("was not selected");
+    expect(text(dir)).toBe(before);
+  });
+  test("changed inputs are refused instead of copying their old input digest", () => {
+    const dir = run({ manifest: m => ({ ...m, cases: { ...m.cases,
+      [CASES[0]!.id]: { ...m.cases[CASES[0]!.id]!, input_sha256: "f".repeat(64) } } }) });
+    expect(() => rescoreFolder(dir)).toThrow("case input changed");
   });
 
   test("a case whose labels changed since the run is named, and its label digest in the new manifest is the current one", () => {
@@ -286,7 +290,7 @@ describe("the cases of a run on a custom corpus", () => {
     const dir = join(tmp(), "2026-10-12-notes");
     mkdirSync(dir, { recursive: true });
     const digest = { input_sha256: "1".repeat(64), label_sha256: "2".repeat(64) };
-    const manifest = buildManifest({ measurement: { eval: "tiny", version: "0.1" }, corpus: String(summary.corpus), cases: { a: digest, b: digest }, completion: { selected: ["a", "b"], scored: ["a", "b"], errored: [] } });
+    const manifest = buildManifest({ measurement: { eval: "tiny", version: "0.1" }, corpus: String(summary.corpus), cases: Object.fromEntries(["a", "b"].map(id => [id, { ...digest, input_sha256: sha256Json({ q: `q${id}` }) }])), completion: { selected: ["a", "b"], scored: ["a", "b"], errored: [] } });
     writeFileSync(join(dir, "summary.json"), JSON.stringify({ eval: "tiny", status: "complete", n_cases: 2, ...summary, manifest }));
     writeFileSync(join(dir, "samples.jsonl"), ["a", "b"].map((id) => `${JSON.stringify({ id, answer: "mine" })}\n`).join(""));
     return readStored(dir);
@@ -384,7 +388,7 @@ describe("the custom corpus of skillret, a split of its dataset (no folder)", ()
     const raws = cases.map((q: any) => ({ search: { ranked: [...q.relevant, "x"], seconds: 1 }, semantic_search: { ranked: [...q.relevant, "x"], seconds: 2 } }));
     const rows = cases.map((q: any, i: number) => M.score(q, raws[i]));
     const written = wrongScores ? rows.map((r: any) => ({ ...r, search: { ...r.search, scores: { ...r.search.scores, "NDCG@10": 0.123 } } })) : rows;
-    const manifest = buildManifest({ measurement: M, corpus: "custom", cases: caseDigests(M, cases), akm: { version: "0.9.99-test", bin: "akm" }, settings: { seed: "42" }, completion: completionOf(M, cases.map((q: any) => q.id), rows) });
+    const manifest = buildManifest({ measurement: M, corpus: "custom", cases: caseDigests(M, cases, (c: any) => M.rescoreContexts(root, summary0, cases).get(c.id)), akm: { version: "0.9.99-test", bin: "akm" }, settings: { seed: "42" }, completion: completionOf(M, cases.map((q: any) => q.id), rows) });
     if (scorer) manifest.scorer = scorer; // a run from before the version was set by hand
     const dir = join(tmp(), "2026-10-12-split");
     mkdirSync(dir, { recursive: true });

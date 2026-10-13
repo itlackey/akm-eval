@@ -20,7 +20,7 @@ Each strategy runs its one process. Memory inference is behind `experimental.imp
 
 ```
 evals/bakeoff/run
-evals/bakeoff/run --model qwen3-27b --process schema-repair --repeat 3
+evals/bakeoff/run --model qwen3-27b --process schema-repair
 evals/bakeoff/run --corpus custom              # the rewrite: ./generate-assets --only bakeoff
 evals/bakeoff/run --cases ~/notes/bakeoff
 ```

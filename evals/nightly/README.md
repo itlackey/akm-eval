@@ -30,7 +30,7 @@ The drain accepts what the gates allowed: a staged duplicate retirement and a re
 
 ```
 evals/nightly/run
-evals/nightly/run --model qwen3-27b --repeat 3
+evals/nightly/run --model qwen3-27b
 evals/nightly/run --corpus custom              # the rewrite: ./generate-assets --only nightly
 evals/nightly/run --cases ~/notes/nightly
 ```

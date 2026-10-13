@@ -5,10 +5,10 @@ Published public results of the evals, and notes. Raw benchmark datasets and Har
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
 - [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): Bifrost runs, limitations, and reproduction commands.
 
-Each public run contains its original `summary.json` and `samples.jsonl`. Compare rescoring reads the current repository's public cases; it does not rewrite the published artifacts. Custom cases and private outputs are never included.
+Each public run contains its original `summary.json` and `samples.jsonl`. Comparison reads stored scores. Explicit rescoring can use current labels for unchanged inputs and writes a new folder; it never rewrites published artifacts. Custom cases and private outputs are never included.
 
 ```sh
-scripts/compare/run --repeats reports/0.10.261003-beta/judge-gate/bifrost-qwen-akm-0.10
+scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<run-B>
 ```
 
 | akm | eval | label | corpus | model | what it is |

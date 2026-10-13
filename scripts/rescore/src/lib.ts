@@ -1,6 +1,5 @@
 // The logic of scripts/rescore, without the command line: scoring a stored run again with the current scorer and the current labels, from
-// the raw output each case's row holds. It never modifies the folder it reads; scripts/compare uses `rescoreRun` to bring two runs to one
-// scorer before it compares them. See the README's "Compare two runs".
+// the raw output each case's row holds. Explicit only: it never modifies the original or runs a model.
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -107,16 +106,29 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
     throw new RescoreError(`the cases ${stored.dir} was scored against cannot be read: ${(e as Error).message}`);
   }
   const byId = new Map(cases.map((c) => [m.caseId(c), c]));
+  const selectedCases = reading.manifest.completion.selected.map(id => byId.get(id));
+  const missing = reading.manifest.completion.selected.filter(id => !byId.has(id));
+  if (missing.length) throw new RescoreError(`${stored.dir}: selected cases are missing or changed: ${short(missing)}. Recollect this eval; rescore does not drop cases.`);
+  let contexts: Map<string, unknown> | undefined;
+  try { contexts = m.rescoreContexts?.(root, seen, selectedCases); }
+  catch (error) { throw new RescoreError(`${stored.dir}: cannot verify case input context: ${(error as Error).message}`); }
+  for (const c of selectedCases) {
+    const id = m.caseId(c);
+    if (sha256Json(m.input(c, contexts?.get(id))) !== reading.manifest.cases[id]?.input_sha256)
+      throw new RescoreError(`${stored.dir}: case input changed: ${id}. Recollect this eval; old output cannot answer changed inputs.`);
+  }
+  const rowIds = new Set<string>();
+  for (const row of stored.rows) {
+    if (!isObject(row) || typeof row.id !== "string" || !row.id || rowIds.has(row.id)) throw new RescoreError(`${stored.dir}: invalid or duplicate sample id`);
+    if (!reading.manifest.completion.selected.includes(row.id)) throw new RescoreError(`${stored.dir}: row ${row.id} was not selected`);
+    rowIds.add(row.id);
+  }
 
   const lacks = new Map<string, string[]>();
   const dropped: string[] = [];
   const kept: { row: Obj; raw: any; c: any }[] = [];
   for (const row of stored.rows) {
     const c = byId.get(String(row.id));
-    if (c === undefined) {
-      dropped.push(String(row.id));
-      continue;
-    }
     const read = m.rawOf(row);
     if ("missing" in read) for (const field of read.missing) lacks.set(field, [...(lacks.get(field) ?? []), String(row.id)]);
     else kept.push({ row, raw: read.raw, c });
@@ -134,11 +146,11 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
   const old = reading.manifest;
   const stray = scoredIds.filter((id) => old.cases[id] === undefined);
   if (stray.length > 0) throw new RescoreError(`${stored.dir} has rows for cases its manifest does not hold: ${short(stray)}`);
-  const selected = old.completion.selected.filter((id) => byId.has(id));
+  const selected = old.completion.selected;
   const digests: Record<string, CaseDigest> = Object.fromEntries(selected.map((id) => [id, { input_sha256: (old.cases[id] as CaseDigest).input_sha256, label_sha256: labelOf(id) }]));
   const relabelled = selected.filter((id) => (old.cases[id] as CaseDigest).label_sha256 !== digests[id]?.label_sha256);
   const manifest: RunManifest = { ...old, cases: digests, completion: completionOf(m, selected, rows), rescored_from: { results: basename(stored.dir), scorer: old.scorer, at: now.toISOString(), dropped } };
-  delete manifest.scorer; // the version is what runs are compared by; a scorer digest no longer says anything
+  manifest.scorer = { version: m.version };
 
   const out: Obj = { ...summary, ...m.summarize(rows), manifest };
   if (options.cases !== undefined && !isSplit(summary)) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time

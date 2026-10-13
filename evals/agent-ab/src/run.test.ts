@@ -5,7 +5,6 @@ import { basename, dirname, join } from "node:path";
 import { type AkmArm, PINS, buildFingerprint, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { harnessSha256, sha256Json, sha256Text } from "../../../lib/provenance.ts";
-import { identityOf } from "../../../scripts/compare/src/policy.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -321,7 +320,7 @@ describe("runCorpus", () => {
       for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(s.results_dir, file), "utf8"), file).not.toMatch(/DUMMYSECRET0123|OTHERDEPLOYMENT456/);
     }
     expect(summaries.map((s) => s.engine.endpoint)).toEqual(["https://gateway.example", "https://gateway.example"]);
-    expect(identityOf(summaries[0] as Record<string, any>).engine).toBe(identityOf(summaries[1] as Record<string, any>).engine);
+    expect((summaries[0] as any).manifest.engines).toEqual((summaries[1] as any).manifest.engines);
   });
 
   test("a Harbor that leaves one cell missing and exits 1 leaves an aborted summary with the counts and all its artifacts, and the run ends with an error", async () => {

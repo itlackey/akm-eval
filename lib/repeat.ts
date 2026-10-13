@@ -1,9 +1,9 @@
 // `--repeat N`: runs a corpus N times, each into its own results folder `<UTC date>-<label>-r1` to `-rN`, and writes the spread of
-// the metrics next to them, in `<UTC date>-<label>-repeat-summary.json` (and of `timeouts`, for an eval that counts them). A run of a model differs by a case or two from the next,
-// so a change smaller than that spread is not a change. Each run is a whole run of the eval, with the same summary.json as one
+// the metrics next to them, in `<UTC date>-<label>-repeat-summary.json` (and of `timeouts`, for an eval that counts them).
+// The spread is descriptive, not a significance test. Each run is a whole run of the eval, with the same summary.json as one
 // made without --repeat. A run's `.running` file is removed when that run is done, so a script that waits for r1 sees it end.
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { clearRunning } from "./results.ts";
 
@@ -54,14 +54,23 @@ export function spreadOf(runs: unknown[]): unknown {
  * Returns the summaries in order.
  */
 export async function repeatRuns<S extends Summarized>(times: number | undefined, label: string, runOne: (label: string) => Promise<S>): Promise<S[]> {
-  if (times === undefined) return [await runOne(label)];
+  const one = async (name: string): Promise<S & { wall_seconds: number }> => {
+    const started = performance.now();
+    const run = await runOne(name);
+    const wall_seconds = Number(((performance.now() - started) / 1000).toFixed(3));
+    const file = join(run.results_dir, "summary.json");
+    // Update the collector's saved summary, preserving fields not returned to the caller.
+    const stored = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(file, `${JSON.stringify({ ...stored, wall_seconds }, null, 2)}\n`);
+    clearRunning(run.results_dir);
+    return { ...run, wall_seconds };
+  };
+  if (times === undefined) return [await one(label)];
   const runs: S[] = [];
   const seconds: number[] = []; // wall time of each run, the same thing for every eval
   for (let i = 1; i <= times; i++) {
-    const t0 = performance.now();
-    const run = await runOne(`${label}-r${i}`);
-    seconds.push(Number(((performance.now() - t0) / 1000).toFixed(1)));
-    clearRunning(run.results_dir);
+    const run = await one(`${label}-r${i}`);
+    seconds.push(run.wall_seconds);
     runs.push(run);
   }
   const first = runs[0];

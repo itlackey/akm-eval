@@ -7,7 +7,6 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
-import { sha256Json } from "../../../lib/provenance.ts";
 import { NAME } from "./collect.ts";
 import { casesOf, parseQrels, parseQueries } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarizeRows } from "./score.ts";
@@ -49,14 +48,11 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));
-    // A query that was reworded since the run, or asked of another library, is another case: the results the run stored were not made for it.
-    const made = summary.manifest?.cases;
-    // Matrix fingerprints also load the live corpus, before any run or manifest exists.
-    if (made === null || typeof made !== "object") return cases;
-    return cases.filter((c) => !Object.hasOwn(made, c.id) || made[c.id]?.input_sha256 === sha256Json(inputOf(c, libraryOf(summary))));
+    return cases;
   },
   caseId: (c) => c.id,
   input: inputOf,
+  rescoreContexts: (_root, summary, cases) => new Map(cases.map(c => [c.id, libraryOf(summary)])),
   // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans.
   labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort() }),
   rawOf,

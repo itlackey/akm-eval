@@ -10,7 +10,7 @@ This eval gives distill 96 fictional memories and checks what it queues, with de
 
 ```
 evals/distill/run
-evals/distill/run --model qwen3-27b --repeat 3
+evals/distill/run --model qwen3-27b
 evals/distill/run --corpus custom              # the rewrite: ./generate-assets --only distill
 evals/distill/run --cases ~/notes/distill
 ```

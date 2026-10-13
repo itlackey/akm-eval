@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Historical v0.4 reproduction: use a v0.4 checkout (matrix was removed in v0.6).
+# For current direct commands, see the root README.
 # Run from the repository root with MODEL_BASE_URL and JUDGE_BASE_URL set to your Bifrost /v1 endpoint.
 set -euo pipefail
 source lib/env.sh

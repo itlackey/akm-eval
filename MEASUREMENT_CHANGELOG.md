@@ -1,10 +1,30 @@
 # Measurement changelog
 
-Each eval's `version` is set by hand in its `src/measurement.ts`, as `MAJOR.MINOR`. Change it when you change how the eval asks akm: the
-akm config it writes, the commands it runs, the engine settings. Runs of two versions are not compared unless the version is the treatment
-(`--treatment harness`). A scorer fix or a relabelled case needs no new version: `scripts/compare` and the matrix score every stored run
-again with the current scorer. Nor does a changed case: a comparison leaves out, and names, each case whose input differs between the runs.
-Add a line here when a version changes, under the release it ships in.
+Each eval's `version` in `src/measurement.ts` identifies its measurement. Bump it
+when the selected inputs, collection protocol, labels or scoring rules change.
+Model/AKM/configuration experiments remain recorded settings within that version.
+Documentation, ledger and reporting changes alone do not require a new version.
+
+Compare saved runs only when eval/scoring versions and exact selected inputs and
+labels match. A comparison never rescores or silently intersects cases. Explicit
+rescoring can apply current scoring rules to unchanged inputs: it records the
+current scoring version while retaining the original collector version. New
+inputs require collection. Add a release entry here when a version changes.
+
+## 0.6
+
+No eval's cases, modes or scoring rules changed. Eval versions remain as in 0.5.
+All 13 evals, tests and fixture data remain available. New manifests explicitly
+record the scoring version; old ones without it use their collector version.
+Each completed run records wall time. Comparison now reads saved results directly;
+matrix stages, treatment axes, automatic rescoring and statistical verdicts are
+removed. Repeats are optional. See [migration notes](releases/v0.6.md).
+
+The entries below describe behavior at those releases. Historical references to
+matrix stages, implicit rescoring, input intersection or baseline reruns do not
+apply to 0.6. In particular, the expanded 0.5 sets cannot be directly compared to
+the smaller full sets from 0.4; input identity checks enforce that even though
+0.5 retained the same measurement versions.
 
 ## 0.5
 

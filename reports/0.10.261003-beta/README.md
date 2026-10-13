@@ -8,6 +8,12 @@ The initial source is the readiness change in [PR #79](https://github.com/itlack
 
 ## Reproduce
 
+The recorded matrix experiments and their reproduction script are historical.
+Run that script from the v0.4 checkout to reproduce the old orchestration.
+On current main, use direct eval commands from the [current run guide](../../README.md#run-save-compare).
+All published summaries and samples below remain unchanged.
+
+
 Install Bun 1.4.2 and `akm-cli@0.10.261003-beta`. Set `MODEL_BASE_URL` to your Bifrost `/v1` endpoint and `JUDGE_BASE_URL` to the same endpoint. Set credentials in your local environment only if your gateway requires them. Docker and uv are needed for the agent benchmarks. Dataset files and model caches are fetched at runtime and are not published here.
 
 ```sh

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Compares two results folders of an eval case by case, or two sets of repeats, or the repeats of one run. See README.md.
-#
-#   scripts/compare/run A B [--treatment AXES] [--json FILE] [--md FILE] [--seed N] [--resamples N] [--tie X]
-#   scripts/compare/run --repeats PREFIX --against PREFIX [--treatment AXES] [--collection NAME] [--json FILE] [--md FILE] [--seed N] [--resamples N] [--tie X]
-#   scripts/compare/run --repeats PREFIX [--collection NAME] [--json FILE] [--md FILE] [--tie X]
+# Compare two saved runs: scripts/compare/run A B [--json FILE] [--md FILE]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v bun > /dev/null || { echo "compare: bun is needed. See https://bun.sh" >&2; exit 2; }

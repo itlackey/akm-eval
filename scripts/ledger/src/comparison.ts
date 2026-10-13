@@ -75,6 +75,10 @@ col("keyword_index_s", "Keyword index (s)", "number", "Performance", "Recorded k
 col("semantic_index_s", "Semantic index (s)", "number", "Performance", "Recorded semantic index build duration.");
 col("calls", "Model calls", "number", "Usage", "Sum of recorded model calls. Partial usage coverage is shown in Usage cases.", 0);
 col("call_failures", "Failed model calls", "number", "Usage", "Recorded failed model calls.", 0);
+col("model_mean_input_tokens", "Mean input tokens / call", "number", "Usage", "Recorded mean over successful calls with token usage. This is not a run token total.");
+col("model_mean_output_tokens", "Mean output tokens / call", "number", "Usage", "Recorded mean over successful calls with token usage. Missing usage stays blank.");
+col("model_mean_request_s", "Mean model request (s)", "number", "Performance", "Recorded mean duration of successful requests, including request overhead, prefill and reasoning.");
+col("model_output_tokens_per_s", "Model output tokens / s", "number", "Performance", "Recorded output tokens divided by request duration for calls with usage. Not decode-only speed or time to first token.");
 col("input_tokens", "Recorded input tokens", "number", "Usage", "Sum of available input-token records. For paired benchmarks this includes both arms. Failed calls may have no usage record.", 0);
 col("output_tokens", "Recorded output tokens", "number", "Usage", "Sum of available output-token records. For paired benchmarks this includes both arms. Failed calls may have no usage record.", 0);
 col("cache_tokens", "Cached input tokens", "number", "Usage", "Recorded cached input tokens; not subtracted from the input-token total.", 0);
@@ -88,7 +92,8 @@ for (const [key, label] of [["control", "Without AKM"], ["akm", "With AKM"]]) {
   col(`${key}_agent_s`, `${label} agent time (s)`, "number", "Usage", "Sum of recorded agent execution durations, excluding environment setup when separately measured.");
 }
 col("akm_version", "AKM version", "text", "Settings", "AKM CLI version used by this run.");
-col("measurement", "Scoring version", "text", "Settings", "Collector measurement version, independent of the AKM version.");
+col("measurement", "Eval version", "text", "Settings", "Collector measurement version, independent of the AKM version.");
+col("scoring_version", "Scoring version", "text", "Settings", "Version of the scoring rules. Explicit rescoring preserves the original eval version separately.");
 col("strategy", "Strategy", "text", "Settings", "Recorded AKM improve strategy.");
 col("mode", "Run mode", "text", "Settings", "Recorded benchmark mode, such as retrieval-only.");
 col("search_method", "Search methods", "text", "Settings", "Recorded keyword and/or semantic search modes.");
@@ -136,7 +141,7 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   const cases = distribution(rows.map(row => row.seconds));
   fields.case_mean_s = cases.mean; fields.case_p50_s = cases.p50; fields.case_p95_s = cases.p95;
   fields.timed_cases = cases.n || null; fields.case_work_s = cases.total;
-  fields.run_wall_s = num(summary.seconds) ?? n(summary, "seconds.total");
+  fields.run_wall_s = num(summary.wall_seconds) ?? num(summary.seconds) ?? n(summary, "seconds.total");
   fields.query_wall_s = n(summary, "query_seconds");
   for (const key of ["index", "feedback", "improve", "drain"]) fields[`maintenance_${key}_s`] = n(summary, `seconds.${key}`);
   fields.keyword_index_s = n(summary, "index_seconds.keyword");
@@ -154,15 +159,20 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   const callRows = Array.isArray(summary.calls_by) ? summary.calls_by.map(obj) : [];
   fields.usage_cases = usageRows.length ? rows.filter(row => Array.isArray(row.usage) && row.usage.length).length
     : rows.some(row => typeof row.calls === "number") ? rows.filter(row => typeof row.calls === "number").length : null;
-  fields.calls = n(m, "calls.n") ?? (usageRows.length ? sum(usageRows.map(row => num(row.calls))) : null)
+  fields.calls = n(summary, "model_calls.calls") ?? n(m, "calls.n") ?? (usageRows.length ? sum(usageRows.map(row => num(row.calls))) : null)
     ?? (callRows.length ? sum(callRows.map(row => num(row.calls))) : null)
     ?? (rows.some(row => typeof row.calls === "number") ? sum(rows.map(row => num(row.calls))) : null);
-  fields.call_failures = n(m, "calls.failures") ?? (usageRows.length ? sum(usageRows.map(row => num(row.failures))) : null)
+  fields.call_failures = n(summary, "model_calls.errors") ?? n(m, "calls.failures") ?? (usageRows.length ? sum(usageRows.map(row => num(row.failures))) : null)
     ?? (callRows.length ? sum(callRows.map(row => num(row.failures))) : null);
   fields.input_tokens = usageRows.length ? sum(usageRows.map(row => num(row.promptTokens)))
     : callRows.length ? sum(callRows.map(row => num(row.prompt_tokens))) : null;
   fields.output_tokens = usageRows.length ? sum(usageRows.map(row => num(row.completionTokens)))
     : callRows.length ? sum(callRows.map(row => num(row.completion_tokens))) : null;
+  fields.scoring_version = string(at(summary, "manifest.scorer.version")) ?? string(at(summary, "manifest.collector.version"));
+  fields.model_mean_input_tokens = n(summary, "model_calls.prompt_tokens");
+  fields.model_mean_output_tokens = n(summary, "model_calls.completion_tokens");
+  fields.model_mean_request_s = n(summary, "model_calls.seconds");
+  fields.model_output_tokens_per_s = n(summary, "model_calls.output_tokens_per_second");
   fields.cache_tokens = null; fields.cost_usd = null;
   for (const [prefix, key] of [["control", "without_akm"], ["akm", "with_akm"]]) {
     const armTrials = trials.filter(trial => trial.arm === prefix);

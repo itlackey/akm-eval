@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repeatRuns, spreadOf } from "./repeat.ts";
@@ -37,7 +37,9 @@ describe("spreadOf", () => {
 describe("repeatRuns", () => {
   const make = (parent: string) => async (label: string) => {
     const results_dir = makeResultsDir(parent, label);
-    return { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, timeouts: label.endsWith("r1") ? 1 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    const summary = { eval: "t", corpus: "public", model: "m", akm_version: "1", akm_bin: "akm", akm_build: null, n_errored: label.endsWith("r2") ? 2 : 0, timeouts: label.endsWith("r1") ? 1 : 0, metrics: { score: label.endsWith("r1") ? 1 : label.endsWith("r2") ? 3 : 0 }, results_dir };
+    writeFileSync(join(results_dir, "summary.json"), JSON.stringify({ ...summary, preserved: true }));
+    return summary;
   };
 
   test("without --repeat runs once under the label and writes nothing else", async () => {
@@ -45,6 +47,10 @@ describe("repeatRuns", () => {
     parents.push(parent);
     const runs = await repeatRuns(undefined, "base", make(parent));
     expect(runs).toHaveLength(1);
+    const saved = JSON.parse(readFileSync(join(runs[0].results_dir, "summary.json"), "utf8"));
+    expect(saved.wall_seconds).toBeGreaterThanOrEqual(0);
+    expect(saved.preserved).toBe(true);
+    expect(existsSync(join(runs[0].results_dir, RUNNING))).toBe(false);
     expect(readdirSync(parent)).toEqual([`${DAY}-base`]);
   });
 

@@ -20,7 +20,8 @@ of benchmarks/skillret is a split of its dataset and has no folder: its queries 
 again, with no --cases, and a --cases given with it has no folder to apply to and is left unused.
 
 A run whose rows lack a field the scorer reads is refused, and the fields are named. So is a run of an eval that has no src/measurement.ts,
-and a custom run whose cases cannot be found.
+a custom run whose cases cannot be found, or any selected case whose input changed.
+No cases are silently dropped. Labels may change; the original collection identity stays recorded.
 Exit code 0 when every folder was rescored, 2 when one was refused.`;
 
 function main(): number {

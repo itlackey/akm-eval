@@ -271,7 +271,7 @@ describe("harnessSha256", () => {
   });
 });
 
-describe("endpointIdentity, the whole endpoint of the matrix fingerprint", () => {
+describe("endpointIdentity, the sanitized endpoint for corpus consent", () => {
   test("keeps the scheme, host, port and path, so two deployments on one host differ", () => {
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).toBe("https://gateway.example/deployment-A/v1");
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).not.toBe(endpointIdentity("https://gateway.example/deployment-B/v1"));

@@ -8,7 +8,7 @@ Does reflect fix the frontmatter defects akm names, without rewriting the body o
 
 ```
 evals/reflect/run
-evals/reflect/run --model qwen3-27b --repeat 3
+evals/reflect/run --model qwen3-27b
 evals/reflect/run --corpus custom              # the rewrite: ./generate-assets --only reflect
 evals/reflect/run --cases ~/notes/reflect
 ```
@@ -78,8 +78,8 @@ A proposal passes three gates before it is queued. The eval runs with the first 
 Compare each gate on and off with `--repeat` on the same model:
 
 ```
-evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --label judge
-evals/reflect/run --repeat 3 --config-patch evals/reflect/patches/judge-on.json --retrieval-queries --label judge-queries
+evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --label judge
+evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --retrieval-queries --label judge-queries
 ```
 
 `evals/reflect/defect-filter --akm-src DIR` replays the defect filter of the akm checkout DIR on edits whose quality is known: `--reflect RESULTS_DIR` (a run made with `patches/defect-filter-off.json`; others are refused) or `--judge-gate public|private` (judge-gate's 106 labelled proposals). It prints, per set, how many good and bad edits the filter refused and by which rule. A replay reads each note from the cases here now, so it stops when the run read other cases; `--rescore` replays anyway and reports what differs.

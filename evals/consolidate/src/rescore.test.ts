@@ -121,9 +121,9 @@ describe("rescoring a run on a custom corpus", () => {
     expect(rowsOf(out)).toEqual(rows);
     expect(result).toMatchObject({ changed: [], dropped: [] });
     expect(summaryOf(out).corpus_folder).toBeNull();
-    // the folder is where the cases are read from: a case that is not in it is left out
+    // A missing selected case requires recollection; rescoring never drops it.
     writeFileSync(join(mine, "cases.jsonl"), readFileSync(join(ROOT, "evals", "consolidate", "assets", "cases.jsonl"), "utf8").split("\n").filter((l) => l && !l.includes('"id": "duplicate-01"')).join("\n") + "\n");
-    expect(rescoreFolder(dir, { cases: mine }).result.dropped).toEqual(["duplicate-01"]);
+    expect(() => rescoreFolder(dir, { cases: mine })).toThrow("selected cases are missing or changed: duplicate-01");
   });
 });
 

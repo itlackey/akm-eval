@@ -10,7 +10,7 @@ This task set is ours. It compares akm with itself across versions; never put it
 
 ```
 evals/agent-ab/run
-evals/agent-ab/run --repeat 3
+evals/agent-ab/run
 evals/agent-ab/run --corpus custom                       # the rewrite: ./generate-assets --only agent-ab
 evals/agent-ab/run --cases ~/tasks/agent-ab
 evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
@@ -77,7 +77,7 @@ A trial is scored when the verifier gave it a reward (1 or 0); otherwise it is e
 | called, not called | the akm trials split by that, each against the control on the same tasks (not randomised) |
 | read the curated results | akm trials in which the agent read the file the plugin writes at session start |
 
-Read `status`, then `completion`, then engagement before the difference: where the agent never called akm, the arms differ only by the plugin's hints and curated context. Six tasks move by a task or two between runs: use `--repeat 3`.
+Read `status`, then `completion`, then engagement before the difference: where the agent never called akm, the arms differ only by the plugin's hints and curated context. Small task sets can vary between runs. Use optional `--repeat N` when that variation affects the decision.
 
 ## What the summary reports
 

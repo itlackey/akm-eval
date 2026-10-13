@@ -82,7 +82,7 @@ export function timeoutsOf(trials: Trial[]): { control: number; akm: number } {
   return { control: count("control"), akm: count("akm") };
 }
 
-/** The numbers of the report that `--repeat` takes the spread of, and that a matrix reads: all numbers or null, none text. */
+/** Recorded benchmark metrics, also used by optional repeat summaries: numbers or null, none text. */
 export function metricsOf(report: Report, trials: RunTrial[]) {
   const timeouts = timeoutsOf(trials);
   const arm = (a: Report["control"], name: Arm) => ({

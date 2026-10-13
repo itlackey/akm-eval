@@ -182,3 +182,27 @@ test('quality ranking chooses the stronger model when comparable models are supp
   expect((await exportRows(page))[0].id).toBe(other.id);
   await expect(page.locator('#view-context')).toContainText('2 models');
 });
+
+test('model request telemetry is sortable, filterable and exported as per-call means', async ({ page, request }) => {
+  const data = await request.get('./data.json').then(response => response.json());
+  const source = structuredClone(data.runs.find(row => row.suite === 'reflect'));
+  source.comparison.model_mean_input_tokens = 120.5;
+  source.comparison.model_mean_output_tokens = 15.5;
+  source.comparison.model_mean_request_s = 2.5;
+  source.comparison.model_output_tokens_per_s = 6.2;
+  source.comparison.run_wall_s = 24;
+  const unknown = structuredClone(source); unknown.id += '-unknown';
+  for (const key of ['model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'run_wall_s']) unknown.comparison[key] = null;
+  await page.route('**/data.json*', route => route.fulfill({ json: { ...data, runs: [unknown, source] } }));
+  await page.goto('./'); await expect(page.locator('#count')).toHaveText('2 of 2 runs');
+  await page.locator('#view').selectOption('performance');
+  await header(page, 'model_output_tokens_per_s').click();
+  const rows = await exportRows(page);
+  expect(rows[0].model_output_tokens_per_s).toBe(6.2);
+  expect(rows[1].model_output_tokens_per_s).toBeNull();
+  expect(rows[0].model_mean_input_tokens).toBe(120.5);
+  expect(rows[0].input_tokens).toBeNull();
+  await page.locator('#header-filters').check();
+  await header(page, 'model_mean_request_s').locator('input').fill('>=2');
+  await expect(page.locator('#count')).toHaveText('1 of 2 runs');
+});

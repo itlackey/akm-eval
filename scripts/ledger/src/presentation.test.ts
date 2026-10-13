@@ -48,11 +48,12 @@ test("additional ranking cutoffs, judgment-adjusted ranking and completeness are
   expect(judged.find(score => score.label === "Keyword judged nDCG@10")?.value).toBe(.9);
 });
 
-test("repeat comparisons separate changed engine settings while retaining all individual run scores", () => {
+test("individual runs retain their different engine settings", () => {
   const summary = { eval: "reflect", corpus: "public", status: "complete", model: "model",
     manifest: { engines: { model: { temperature: 0 } } } };
   const base = { summary, samples: [], path: "v/reflect/r1", sourceRevision: "revision" };
   const first = presentRun(base)!;
   const changed = presentRun({ ...base, summary: { ...summary, manifest: { engines: { model: { temperature: 1 } } } } })!;
-  expect(first.cohort_key).not.toBe(changed.cohort_key);
+  expect(first.comparison.temperature).toBe(0);
+  expect(changed.comparison.temperature).toBe(1);
 });

@@ -7,7 +7,8 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Measurement } from "../../../lib/manifest.ts";
-import { NAME } from "./collect.ts";
+import { NAME, refOf } from "./collect.ts";
+import { retrievalSearches } from "./queries.ts";
 import { parseCases } from "./lib.ts";
 import { type Case, type Raw, type Row, errored, makeRow, rawOf, summarize } from "./score.ts";
 
@@ -44,6 +45,13 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   // what the retrieval check of akm's reflect grades an edit on.
   input: (c, searches) => ({ path: c.path, source: c.source, feedback: c.feedback, searches: searches ?? [] }),
   // Everything score() reads of the case: its class, the note it edits, the fields a result may change, the terms it must not carry and the dates it may name.
+  rescoreContexts: (root, summary, cases) => {
+    if (!summary.retrieval_queries) return new Map(cases.map(c => [c.id, []]));
+    const queries = retrievalSearches({ name: summary.corpus === "public" ? "public" : "custom",
+      folder: casesFolder(root, summary), rewrite: summary.manifest.settings.seed !== null,
+      seed: summary.manifest.settings.seed, flag: "stored corpus" }, root);
+    return new Map(cases.map(c => [c.id, queries.get(refOf(c.path)) ?? []]));
+  },
   labels: (c) => ({ class: c.class, source: c.source, allow: c.allow, forbid: c.forbid ?? [], anchors: c.anchors ?? [] }),
   rawOf,
   score: makeRow,
