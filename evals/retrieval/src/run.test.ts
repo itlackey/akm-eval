@@ -1088,7 +1088,7 @@ describe("the command", () => {
     expect(done.code, done.err || done.out).toBe(0);
     for (const folder of folders) {
       const summary = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
-      expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0 });
+      expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0, akm_version: "0.9.99-test" });
       expect(summary.wall_seconds).toBeGreaterThan(0);
       expect(existsSync(join(folder, ".running"))).toBe(false);
     }
