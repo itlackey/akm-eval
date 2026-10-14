@@ -1084,7 +1084,8 @@ describe("the command", () => {
     const day = new Date().toISOString().slice(0, 10);
     const folders = ["library", "books"].map(name => join(results, `${day}-${label}-${name}`));
     dirs.push(...folders);
-    expect(run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label]).code).toBe(0);
+    const done = run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label]);
+    expect(done.code, done.err || done.out).toBe(0);
     for (const folder of folders) {
       const summary = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
       expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0 });

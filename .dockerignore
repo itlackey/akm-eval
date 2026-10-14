@@ -2,6 +2,7 @@
 **
 !package.json
 !bun.lock
+!bunfig.toml
 !README.md
 !COMPATIBILITY.md
 !MEASUREMENT_CHANGELOG.md
