@@ -1,0 +1,15 @@
+AKM eval runner — Docker is the only host runtime required.
+
+Create an empty working folder, then mount it at the same absolute host/container path:
+
+  mkdir -p "$PWD/eval-work"
+  docker run --rm --init --user "$(id -u):$(id -g)" \
+    --mount type=bind,src="$PWD/eval-work",dst="$PWD/eval-work" \
+    --workdir "$PWD/eval-work" ghcr.io/itlackey/akm-eval:main \
+    benchmarks/longmemeval/run --help
+
+Append any eval/run, generate, compare, rescore, ledger or check command.
+Mount your .env and models.json read-only at <working-folder>/.env and models.json.
+Results, datasets, caches and private corpora remain in the working folder.
+Agent A/B and Terminal-Bench also need the Docker socket; see docker/README.md.
+No evaluation starts by default.

@@ -8,6 +8,10 @@ This eval gives distill 96 fictional memories and checks what it queues, with de
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/distill/run
 evals/distill/run --model qwen3-27b

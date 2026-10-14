@@ -15,6 +15,10 @@ For multi-session questions, inspect recall of **all required sessions** as well
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 benchmarks/longmemeval/run --limit 20
 benchmarks/longmemeval/run --model qwen3-27b --judge-model gpt-4o-2024-08-06 --limit 100

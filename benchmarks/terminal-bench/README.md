@@ -6,6 +6,10 @@ Does akm change an agent's pass rate on Terminal-Bench tasks?
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 benchmarks/terminal-bench/run --limit 10           # Harbor's ten-task sample: about 30 minutes
 benchmarks/terminal-bench/run                      # all 89 tasks: about 7 hours
@@ -27,9 +31,9 @@ A run that did not finish everything writes its summary with `status: "aborted"`
 
 ## What it needs
 
-- Docker, [uv](https://docs.astral.sh/uv/) and bun, and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a non-empty `MODEL_API_KEY`.
+- Docker on the host (the runner includes uv, Bun and Harbor), and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a non-empty `MODEL_API_KEY`.
 - Internet from the containers, and Docker Hub pulls of up to 89 images (run `docker login` if you pull more than 100 an hour). The images are 75 GB and Harbor leaves them behind: `docker images --format '{{.Repository}}:{{.Tag}}' | grep '^alexgshaw/' | xargs -r docker image rm` removes them. A full run's results are about 5 GB.
-- akm on this machine (`AKM_BIN` or `PATH`) to count the library's assets before the run; without it the setup checks less.
+- AKM (preinstalled in the runner) to count the library's assets before the run; without it the setup checks less.
 - CPU and memory for four containers at a time (up to 4 CPUs and 8 GB each).
 
 A full run with `openai/gpt-6-luna` on 2026-10-06 took 7 hours 6 minutes and cost $3.97; the ten-task sample took 28 minutes and $0.16.

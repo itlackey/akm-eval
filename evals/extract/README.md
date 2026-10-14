@@ -8,6 +8,10 @@ This eval gives extract 64 fictional Claude Code sessions and checks what it que
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/extract/run
 evals/extract/run --model qwen3-27b

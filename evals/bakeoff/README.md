@@ -18,6 +18,10 @@ Each strategy runs its one process. Memory inference is behind `experimental.imp
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/bakeoff/run
 evals/bakeoff/run --model qwen3-27b --process schema-repair

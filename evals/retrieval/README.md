@@ -11,6 +11,10 @@ It calls no model. Semantic search uses akm's built-in embedding model, bge-smal
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/retrieval/run                          # public: the library and the books
 evals/retrieval/run --corpus custom          # the rewrite in private/retrieval/assets (./generate-assets --only retrieval)

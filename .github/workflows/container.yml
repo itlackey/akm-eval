@@ -1,0 +1,40 @@
+name: Eval runner image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Build runner
+        run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t akm-eval:build .
+      - name: Check preinstalled tools without running evals
+        run: |
+          docker run --rm --init -i --network none akm-eval:build bash -eu <<'CHECK'
+          node --version; bun --version; akm --version; docker compose version
+          version=$(sed -n 's/^export const PINS = .*harbor: "\([0-9][0-9.]*\)".*/\1/p' lib/harbor/harbor.ts)
+          uv run --no-project --python 3.12 --with "harbor==$version" harbor --version
+          for command in evals/*/run benchmarks/*/run; do "$command" --help > /dev/null; done
+          CHECK
+      - name: Publish
+        if: github.ref == 'refs/heads/main'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag akm-eval:build "$IMAGE:sha-$GITHUB_SHA"
+          docker tag akm-eval:build "$IMAGE:main"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:main"

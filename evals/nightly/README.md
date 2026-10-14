@@ -28,6 +28,10 @@ The drain accepts what the gates allowed: a staged duplicate retirement and a re
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/nightly/run
 evals/nightly/run --model qwen3-27b

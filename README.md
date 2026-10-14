@@ -34,13 +34,12 @@ Retired evals are summarised in [`reports/retired-evals.md`](reports/retired-eva
 
 The [public results ledger](https://itlackey.github.io/akm-eval/) presents the
 every committed run in `reports/`, with sortable quality, performance and settings
-columns, full filtering, row comparison and artifact links. Run `bun run build:site` (or
-`scripts/ledger/run`) to build it locally. `.github/workflows/ledger-pages.yml`
+columns, full filtering, row comparison and artifact links. Run `eval_docker scripts/ledger/run` to build it locally. `.github/workflows/ledger-pages.yml`
 builds pull requests and publishes main changes to the reports or site.
 See [site/README.md](site/README.md) for publishing and refreshes.
 
 ```
-evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
+eval_docker evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
 corpus/library/       the shared akm library the evals use, also usable as an akm bundle
 lib/                  what the evals share: the akm sandbox, models, corpora, manifest, --repeat, the rewrite
 scripts/              check, compare, ledger, rescore, smoke
@@ -52,26 +51,42 @@ retired/              code of retired evals, to read, not to run
 private/, .cache/     your custom corpora and results, akm's embedding model (both gitignored)
 ```
 
-## Set up
+## Set up with Docker
 
-You need [bun](https://bun.sh) and akm on `PATH` (or `AKM_BIN`). The Harbor evals also need Docker and [uv](https://docs.astral.sh/uv/), and so does `scripts/check python`.
+Docker is the only runtime to install on your machine. The prebuilt runner includes
+all eval tools, Python/Node/Bun packages, AKM and the native embedding model. Create a dedicated working folder; the image refreshes its own code
+there and retains your configuration, datasets and results. See the [Docker guide](docker/README.md)
+for read-only configuration/case mounts, Harbor's Docker socket, stop/resume and image digests.
 
-Copy `.env.example` to `.env` and fill it in:
+```sh
+export AKM_EVAL_IMAGE=ghcr.io/itlackey/akm-eval:main
+export AKM_EVAL_WORK="$PWD/akm-eval-work"
+mkdir -p "$AKM_EVAL_WORK"
+docker pull "$AKM_EVAL_IMAGE"
+eval_docker() {
+  docker run --rm --init --user "$(id -u):$(id -g)" \
+    --mount "type=bind,src=$AKM_EVAL_WORK,dst=$AKM_EVAL_WORK" \
+    --workdir "$AKM_EVAL_WORK" "$AKM_EVAL_IMAGE" "$@"
+}
+eval_docker bash -c 'cp -n .env.example .env'
+```
 
-- `MODEL_BASE_URL`, `MODEL_API_KEY` and `MODEL_NAME`: the model under test.
-- `JUDGE_MODEL`, and `JUDGE_BASE_URL` with `JUDGE_API_KEY` if the judge is elsewhere: the judge, for `benchmarks/longmemeval` and `evals/retrieval/label`.
-- `AKM_BIN`: the akm to run, if not the one on `PATH`.
+Edit `$AKM_EVAL_WORK/.env`: `MODEL_BASE_URL`, `MODEL_API_KEY` and `MODEL_NAME`
+select the model; `JUDGE_MODEL` and optional `JUDGE_BASE_URL`/`JUDGE_API_KEY` select
+LongMemEval's judge. `AKM_BIN` optionally names another mounted AKM build. Native
+development from a source checkout is still supported with Bun and AKM; Harbor
+also needs uv and Docker. Host package installation is not part of the Docker workflow.
 
-A value set in `.env` wins over the same variable set in your shell; an empty one (`KEY=`) leaves the shell's. `.env` is gitignored.
-
-akm runs in a sandbox of temp folders per run and never touches your own akm bundle. It gets only a short list of your environment (`ALLOWED_ENV` in `lib/akm/akm.ts`) plus the variables its config names as `$NAME`, such as `$MODEL_API_KEY`.
+A nonempty value in `.env` wins over the same shell variable; an empty value
+leaves the shell's. The image has no credentials. AKM runs in isolated temporary
+folders and receives only the allowed environment and keys named by its config.
 
 ## Run an eval
 
 ```
-evals/retrieval/run                     # the public corpus
-evals/reflect/run --limit 5             # five cases, to check a setup
-evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
+eval_docker evals/retrieval/run --semantic on       # the public corpus
+eval_docker evals/reflect/run --semantic --limit 5             # five cases, to check a setup
+eval_docker evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
 ```
 
 A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write under `private/<name>/results/`). The default label is the model name (`akm-<version>` for the two that call no model). While a run is alive its folder holds a `.running` file with its pid. A run that gives up (the endpoint down, too many errors) writes its summary with `status: "aborted"` and exits non-zero: do not compare it.
@@ -79,9 +94,9 @@ A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write un
 ## Pick the model and the akm build
 
 ```
-evals/consolidate/run --model my-cloud-model
-evals/reflect/run --model my-small-model --akm "bun ~/code/akm/src/cli.ts" --label pr1100
-benchmarks/longmemeval/run --model my-model --judge-model my-judge
+eval_docker evals/consolidate/run --model my-cloud-model
+eval_docker evals/reflect/run --model my-small-model --semantic --label check
+eval_docker benchmarks/longmemeval/run --model my-model --judge-model my-judge
 ```
 
 - `--model ID` names the model, as your gateway at `MODEL_BASE_URL` names it, and wins over `MODEL_NAME`. `--judge-model ID` does the same for the judge.
@@ -100,10 +115,10 @@ LongMemEval model entries can add `"chat": { "max_completion_tokens": 2048, "rea
 ## Corpora
 
 ```
-evals/distill/run                                # --corpus public, the default
-evals/distill/run --corpus custom                # the rewrite in private/distill/assets
-evals/distill/run --cases ~/notes/distill        # a folder of your own cases
-evals/distill/run --corpus all                   # public and custom, side by side, never pooled
+eval_docker evals/distill/run                                # --corpus public, the default
+eval_docker evals/distill/run --corpus custom                # the rewrite in private/distill/assets
+eval_docker evals/distill/run --cases private/my-distill --yes        # a folder of your own cases
+eval_docker evals/distill/run --corpus all                   # public and custom, side by side, never pooled
 ```
 
 - `public` is the cases committed here, or the dataset a benchmark fetches.
@@ -125,13 +140,13 @@ Each eval's `run` command runs once by default. It writes `summary.json` and
 `samples.jsonl` to its results folder, including quality metrics, available timing
 and usage, errors, settings and input identities. Completed runs also record
 `wall_seconds` (unknown for resumed runs whose earlier duration is unavailable).
-A run with errors keeps them visible; a stopped run keeps its
-`.running` marker. Existing benchmark-specific resume flags still work.
+A run with errors keeps them visible; a gracefully stopped run keeps its
+partial artifacts and clears its `.running` marker. Existing benchmark-specific resume flags still work.
 
 ```sh
-evals/reflect/run --model model-a --label model-a
-evals/reflect/run --model model-b --label model-b
-scripts/compare/run evals/reflect/results/<A> evals/reflect/results/<B>
+eval_docker evals/reflect/run --model model-a --label model-a
+eval_docker evals/reflect/run --model model-b --label model-b
+eval_docker scripts/compare/run evals/reflect/results/<A> evals/reflect/results/<B>
 ```
 
 There is no special baseline, mandatory repeat count or saved scheduling state.
@@ -158,7 +173,7 @@ Benchmark-native attempts and paired with/without-AKM controls remain available.
 Repeated deterministic retrieval normally adds little information.
 
 ```sh
-evals/reflect/run --model model-a --repeat 2 --label check-variation
+eval_docker evals/reflect/run --model model-a --repeat 2 --label check-variation
 ```
 
 ### Explicit rescoring
@@ -181,20 +196,20 @@ See [comparison commands](scripts/compare/README.md) and the
 ## Check the repository
 
 ```
-scripts/check              # typecheck, python, test, in that order
-scripts/check typecheck    # tsc in every src folder
-scripts/check python       # the Harbor arm's tests, with uv
-scripts/check test         # bun test at the root
+eval_docker scripts/check              # typecheck, python, test, in that order
+eval_docker scripts/check typecheck    # tsc in every src folder
+eval_docker scripts/check python       # the Harbor arm's tests, with uv
+eval_docker scripts/check test         # bun test at the root
 ```
 
-No test needs akm or Docker: every test uses a fake akm. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request. `.github/workflows/akm-smoke.yml` runs `scripts/smoke/run` nightly against real akm releases: it runs each eval once on one case against a stub model, to see that akm still takes the evals' commands (see [`scripts/smoke/README.md`](scripts/smoke/README.md)). `.github/workflows/release.yml` publishes a release from `releases/v<version>.md`, by hand.
+The fixture tests use fake AKM/model processes. In the Docker workflow, the image provides all test dependencies. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request. `.github/workflows/akm-smoke.yml` runs `scripts/smoke/run` nightly against real akm releases: it runs each eval once on one case against a stub model, to see that akm still takes the evals' commands (see [`scripts/smoke/README.md`](scripts/smoke/README.md)). `.github/workflows/container.yml` builds/verifies the preinstalled runner and publishes the GHCR image on main. `.github/workflows/release.yml` publishes a release from `releases/v<version>.md`, by hand.
 
 ## Custom corpora
 
 ```
-./generate-assets                          # every eval
-./generate-assets --only retrieval,nightly # some
-./generate-assets --seed 42                # another seed, for this run
+eval_docker ./generate-assets                          # every eval
+eval_docker ./generate-assets --only retrieval,nightly # some
+eval_docker ./generate-assets --seed 42                # another seed, for this run
 ```
 
 `./generate-assets` rewrites each eval's public cases from a seed into `private/<eval>/assets`, with the seed in its `generated.json`. The first run creates `private/seed`. The rewrite (`lib/rewrite`) changes names, tool names, hosts, ids, dates and numbers, a few percent of the words, and keeps the meaning and the labels. It is not held-out data: a model that has seen the public cases can still recognise them.
