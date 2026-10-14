@@ -138,6 +138,15 @@ describe("loadModels", () => {
     expect(loadModels(write('{"a":{"base_url":"http://h/v1","model":"m","api_key_env":"A_KEY"}}'))).toEqual({ a: { base_url: "http://h/v1", model: "m", api_key_env: "A_KEY" } });
   });
 
+  test("reads explicit model limits and rejects malformed budgets before collection", () => {
+    const limits = { context: 32768, output: 4096 };
+    const entries = loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits } })));
+    expect(resolveModel("model", "local", {}, entries).limits).toEqual(limits);
+    for (const bad of [null, {}, [], { context: 0, output: 1 }, { context: 10, output: 11 }, { context: "10", output: 1 }, { context: 10, output: 1.5 }, { context: 10, output: 1, typo: 1 }]) {
+      expect(() => loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits: bad } })))).toThrow("limits needs positive integer");
+    }
+  });
+
   test('refuses a line that still has "private", and says the prompt before a run with --cases replaces it', () => {
     const message = 'models.json: "mine" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.';
     expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":true}}'))).toThrow(message);

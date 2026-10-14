@@ -7,6 +7,7 @@
 // measurement.ts by hand.
 
 import { cpSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import type { ModelLimits } from "../../../lib/models.ts";
 import { join, resolve } from "node:path";
 import { akmBuild, akmVersion, createSandbox, removeSandbox, runAkm, runAkmJson } from "../../../lib/akm/akm.ts";
 import { CONCURRENT_TRIALS, type AkmArm, jobConfig as harborJob, runHarbor, sha256Dir, stagePackages } from "../../../lib/harbor/harbor.ts";
@@ -89,6 +90,7 @@ export function enforcedAssets(count: LibraryCount, arm: Pick<AkmArm, "cli">): n
 export function jobConfig(o: {
   name: string;
   model: string;
+  modelLimits?: ModelLimits;
   lock: Lock;
   tasks: string[];
   librariesDir: string;
@@ -102,7 +104,7 @@ export function jobConfig(o: {
   const org = o.lock.registry.split("/")[0];
   return harborJob({
     name: o.name,
-    model: o.model,
+    model: o.model, modelLimits: o.modelLimits,
     jobsDir: o.jobsDir,
     attempts: o.attempts ?? DEFAULT_ATTEMPTS,
     librariesDir: o.librariesDir,
@@ -129,7 +131,7 @@ export interface Collected {
  * Seeds the library for the akm arm, counts its assets, and runs the selected `tasks` of the dataset in Harbor, into the results folder
  * `dir`. `library` is the folder the akm arm seeds from. Harbor reads the run's own copy of it, which is digested before Harbor starts.
  */
-export async function collect(o: { corpus: string; library: string; lock: Lock; tasks: string[]; attempts: number; dir: string; model: string; env: Record<string, string>; arm: AkmArm; akmEnv: Record<string, string> }): Promise<Collected> {
+export async function collect(o: { corpus: string; library: string; lock: Lock; tasks: string[]; attempts: number; dir: string; model: string; modelLimits?: ModelLimits; env: Record<string, string>; arm: AkmArm; akmEnv: Record<string, string> }): Promise<Collected> {
   const librariesDir = join(o.dir, "libraries");
   cpSync(o.library, join(librariesDir, LIBRARY), { recursive: true }); // what the akm arm seeds, kept with the run
   const counted = await measureLibrary(o.library);
@@ -139,7 +141,7 @@ export async function collect(o: { corpus: string; library: string; lock: Lock; 
   const libraryAssets = enforcedAssets(library, o.arm);
   if (library.assets !== null && libraryAssets === null) console.warn(`${NAME}: the ${library.assets} assets of the library were counted with akm ${library.measured_with?.akm_version}, and the akm arm installs akm ${o.arm.cli.version}. The setup will only check that its index is not empty. What it indexed is in akm_install.observed.assets_indexed.`);
   const staged = stagePackages(o.arm, o.dir); // the tarballs of a checkout, kept with the run
-  const cfg = jobConfig({ name: jobName(o.corpus), model: o.model, lock: o.lock, tasks: o.tasks, librariesDir, jobsDir: join(o.dir, "jobs"), attempts: o.attempts, libraryAssets, arm: o.arm, packagesDir: staged?.dir, akmEnv: o.akmEnv });
+  const cfg = jobConfig({ name: jobName(o.corpus), model: o.model, modelLimits: o.modelLimits, lock: o.lock, tasks: o.tasks, librariesDir, jobsDir: join(o.dir, "jobs"), attempts: o.attempts, libraryAssets, arm: o.arm, packagesDir: staged?.dir, akmEnv: o.akmEnv });
   const configFile = join(o.dir, "job.json");
   writeFileSync(configFile, `${JSON.stringify(cfg, null, 2)}\n`);
   console.log(`${NAME} (${o.corpus}): ${o.tasks.length} of ${Object.keys(o.lock.tasks).length} tasks x 2 arms x ${o.attempts} = ${o.tasks.length * 2 * o.attempts} trials, ${CONCURRENT_TRIALS} at a time`);

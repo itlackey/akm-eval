@@ -1,0 +1,290 @@
+{
+  "eval": "promotion",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "b35-semantic-20261014-pilot",
+  "date": "2026-10-14T05:39:19.033Z",
+  "git_commit": "32da9c5-dirty",
+  "harness_sha256": "1d4a2c92b5596c094642935ae147a4377cd02b41f47f0bf507e85188dda3f215",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "bunx --package akm-cli@0.10.261003-beta akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "limit": 8,
+  "strategy": "promotion",
+  "config_patch": {
+    "path": "../../../../../../tmp/akm-eval-semantic-20261014.json",
+    "sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "judge": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "judge"
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    },
+    "improve": {
+      "strategies": {
+        "promotion": {
+          "engine": "judge",
+          "processes": {
+            "triage": {
+              "enabled": true,
+              "applyMode": "queue",
+              "judgment": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "engine": {
+    "engine": "judge",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "728c5cf9de181c3fd2da3060618fb58729d2b39fed2f6ccce1e51f19d70d3b30",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 80,
+  "n_run": 8,
+  "n_errored": 0,
+  "timeouts": 0,
+  "seconds": 47.7,
+  "calls": {
+    "n": 8,
+    "failures": 0,
+    "served": {
+      "qwen3.6-35b-a3b": 8
+    }
+  },
+  "metrics": {
+    "proposals": {
+      "n": 8,
+      "good": 2,
+      "share_good": 0.25
+    },
+    "accepted": {
+      "n": 3,
+      "good": 2
+    },
+    "recall": {
+      "value": 1,
+      "accepted": 2,
+      "of": 2
+    },
+    "precision": {
+      "value": 0.6667,
+      "good": 2,
+      "of": 3
+    },
+    "bad_accepted": {
+      "value": 0.1667,
+      "accepted": 1,
+      "of": 6
+    },
+    "by_category": {
+      "duplicate": {
+        "n": 2,
+        "accepted": 1,
+        "rate": 0.5
+      },
+      "stale": {
+        "n": 2,
+        "accepted": 0,
+        "rate": 0
+      },
+      "ephemeral": {
+        "n": 2,
+        "accepted": 0,
+        "rate": 0
+      }
+    },
+    "outcomes": {
+      "good": {
+        "accept": 2,
+        "reject": 0,
+        "defer": 0,
+        "error": 0
+      },
+      "bad": {
+        "accept": 1,
+        "reject": 5,
+        "defer": 0,
+        "error": 0
+      }
+    }
+  },
+  "model_calls": {
+    "calls": 8,
+    "errors": 0,
+    "prompt_tokens": 2380.8,
+    "completion_tokens": 62,
+    "seconds": 1.94,
+    "output_tokens_per_second": 32
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "promotion",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "good-01": {
+        "input_sha256": "a42c43acf7c770b6c0a8a2f8c0f1ef6acf337ee86f06ed36081ca377d5c50c98",
+        "label_sha256": "2524e5b6cdaf9bc3cafc06cf310a571ac1a4e2d2d78b4712a19a9269de18c498"
+      },
+      "good-02": {
+        "input_sha256": "34c285610b85ee03c8ee091e01a269afe546a9a5629e96b93105770f1f402821",
+        "label_sha256": "780c55a1170035fc28e4017c895861027bda8bbb8f18ec4b583c95dad52f74c4"
+      },
+      "duplicate-01": {
+        "input_sha256": "281f0a39cc30debd6f2db4b8dc7d879375f8c05fe359d44d8f86db1082ae5f2f",
+        "label_sha256": "b916e212ce4b07b71c4854144c6bde6e172b5277017610cae80f19222314f802"
+      },
+      "duplicate-02": {
+        "input_sha256": "df3d37a6be1fa481c1297b658fa1a9a269d9fc4f4246fdf90451424ac034ce2b",
+        "label_sha256": "30cb3b1a9a1eaed8bd28ff6f5e75903b369e94a5b2872074455c37756d19045e"
+      },
+      "stale-01": {
+        "input_sha256": "56bbc36cfb95f4ae0d63e85037d16a8591dadbcffa9113dd11191dd56411da01",
+        "label_sha256": "2732f6b24675ed892855e5104b97635f6c921c74a81c51689b00bb0134b30c3a"
+      },
+      "stale-02": {
+        "input_sha256": "e25c6ea322e2cd540b992084755d263851066607628da9dd0fc7b5716683aede",
+        "label_sha256": "6b358c30713b08ce61bead7827028ad7624453b534e8c907fb6d4a39d7759b08"
+      },
+      "ephemeral-01": {
+        "input_sha256": "0bf7cabbb10450e8b211afc51491b248179fa016b993db694e778acc25a5539e",
+        "label_sha256": "b335e96f3fc6738d21fa5c8b0d42d50efb27126df1585cb1ea70d3b9123e71e9"
+      },
+      "ephemeral-02": {
+        "input_sha256": "cc22af648bf6b27df32eb58cf3b19d2b0d0e92afe5549ef86e455b62c3a3005f",
+        "label_sha256": "37252845cf2f10375ed43d50010371b1a9df1bc4a2a69b432ef4b3f5d0e9dc5a"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "bunx --package akm-cli@0.10.261003-beta akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "e444a2aff099a8ca0fe6d1241524c43de09ae9ce1285bbccb9e364bc907c4aa4",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "judge": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "judge"
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        },
+        "improve": {
+          "strategies": {
+            "promotion": {
+              "engine": "judge",
+              "processes": {
+                "triage": {
+                  "enabled": true,
+                  "applyMode": "queue",
+                  "judgment": {
+                    "enabled": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": "promotion",
+      "config_patch_sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191",
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "judge": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "good-01",
+        "good-02",
+        "duplicate-01",
+        "duplicate-02",
+        "stale-01",
+        "stale-02",
+        "ephemeral-01",
+        "ephemeral-02"
+      ],
+      "scored": [
+        "good-01",
+        "good-02",
+        "duplicate-01",
+        "duplicate-02",
+        "stale-01",
+        "stale-02",
+        "ephemeral-01",
+        "ephemeral-02"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 48.28
+}

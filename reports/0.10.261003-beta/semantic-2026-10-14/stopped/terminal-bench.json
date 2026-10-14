@@ -1,0 +1,248 @@
+{
+  "kind": "stopped-trial-inventory",
+  "eval": "terminal-bench",
+  "status": "stopped",
+  "corpus": "public",
+  "source_folder": "benchmarks/terminal-bench/results/2026-10-14-luna-semantic-20261014-full",
+  "expected_trials": 178,
+  "saved_trial_records": 33,
+  "trials_without_result": 145,
+  "setup_failures": 2,
+  "job_sha256": "03d084ef357f3b2e7b07955834c8251d6248e78280821074cbac52905a5a5d17",
+  "notes": [
+    "Derived inventory of existing Harbor trial results. No final collector summary was produced. Missing trials include interrupted and unstarted work; no full-run quality result is inferred."
+  ],
+  "trials": [
+    {
+      "trial": "dna-assembly__DhHfiqV",
+      "arm": "akm",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "541133bd8848a4ec51fbcc06972cecc7ec3baedddad6c76a1995b5b47a01e71d"
+    },
+    {
+      "trial": "dna-assembly__o6tKCrT",
+      "arm": "control",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "f99c615e154a38885856ae815e41bf2b9736051bcd53e1d8233a4336373acd2c"
+    },
+    {
+      "trial": "kv-store-grpc__Z6qrXuD",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "1a32e5c4c3f1897a5dbf8763c9f8db6cd1b5495b0d555b4b6450f3cf97ba4b5d"
+    },
+    {
+      "trial": "kv-store-grpc__jJdi9uG",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "5a54728ef090cff9e3011e16f6748d8a4a8208caf904d481ab652648700c7716"
+    },
+    {
+      "trial": "llm-inference-batching-scheduler__mo3P924",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "e88e85cab27cf47ff67ee9e5c7321455a345462c15c1ba335658c6bc974db4db"
+    },
+    {
+      "trial": "llm-inference-batching-scheduler__neVsqo5",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "79881e8a8bbdbcd4bf4ffb41d5498a9f750e1b70ef9ba0a5c48e8e27f780fdfe"
+    },
+    {
+      "trial": "log-summary-date-ranges__BAaCMqV",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "b1730022bc756e134cb3232b9cd4f2dd58c4fd383ab0398e315a8a5824cf51de"
+    },
+    {
+      "trial": "log-summary-date-ranges__PnvSjvm",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "214baba4e5db195bd0209d67445ac9a6a9191c3221a6cb2e8acec8c51d854078"
+    },
+    {
+      "trial": "model-extraction-relu-logits__mudG9kZ",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "d9ef956bbc68284601b704badfbbd9ff077c6cbf8939e7a07998094aaeb4711b"
+    },
+    {
+      "trial": "model-extraction-relu-logits__zpE8uWs",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "8270144ac61e653f400ca0cedaef3d4598eb33e5b68f9fcea747f33cdf75bd75"
+    },
+    {
+      "trial": "mteb-leaderboard__FcSgzxj",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "deaffd9d04880950a7afd77e5d425a30cdf72e29c41874e9b2dc8c02a6c8f6be"
+    },
+    {
+      "trial": "mteb-leaderboard__YMaVEkG",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "abc849e9a30b4678ed8244953eb088a2c466d931168a4973195eaac05f4b39d1"
+    },
+    {
+      "trial": "openssl-selfsigned-cert__cNQnsAE",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "6adabc589daa6e71c9ab5f7ee4bbe705b6778b4a4a36d69debf3cff85c96eded"
+    },
+    {
+      "trial": "openssl-selfsigned-cert__r8ebHN3",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "eb5d3bad33e4c38a626430ee878ad9511faaae954bcc63fe16eae712449d5f39"
+    },
+    {
+      "trial": "path-tracing__PZy7fwp",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "f90b93ee849b0f0a46efae1ae1a024914ef7ed10df4aa0bac730970b5a472771"
+    },
+    {
+      "trial": "path-tracing__VDwBoP7",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "cca3044eeaaaf1b4c5aae00879efefdb8e1b6eadceedfa9dd8477a32e4f0bacc"
+    },
+    {
+      "trial": "pypi-server__PnqQTpP",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "87532005d49210335582d5db0210d38598551bfcaa19fc5ec7b48b9de1cf76ef"
+    },
+    {
+      "trial": "pypi-server__WsGoRij",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "bfc333c1f8c975e7673086e998c6186e73e6c04db1b98f744fefb1064d42ff39"
+    },
+    {
+      "trial": "pytorch-model-recovery__2s3Swah",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "1431beed28373552bb93c021e15dc27a96ad512800b016dfc67ea8d23f9241ed"
+    },
+    {
+      "trial": "qemu-alpine-ssh__FrgNTXw",
+      "arm": "akm",
+      "reward": null,
+      "exception_type": "NonZeroAgentExitCodeError",
+      "source_sha256": "94c2b118bbab13e01651eae3b94e7ae2aa75297624ff658f88d4b41a173d1838"
+    },
+    {
+      "trial": "qemu-alpine-ssh__e7PR7ZB",
+      "arm": "control",
+      "reward": null,
+      "exception_type": "NonZeroAgentExitCodeError",
+      "source_sha256": "636c421c365f07817f23224aeef0e58c40d73ac1c6a086b60d63d17d52fec961"
+    },
+    {
+      "trial": "regex-chess__4XUtbEK",
+      "arm": "control",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "291735892e758c9afe8ceab1272135c45851924db50dc26244336f36c116ade3"
+    },
+    {
+      "trial": "regex-chess__vhNMMwP",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "537d34830c6dc147b122162bd65253e386817469ddd72c61348b78a6f1d7b037"
+    },
+    {
+      "trial": "regex-log__7VjMsJY",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "9deeff42c7aa255c42a09e4765cb66e9423e6807a22a3263d7a34b2ac7c59e5f"
+    },
+    {
+      "trial": "regex-log__uXRoZja",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "8696dc9eb439e8b97bdf35fe1ae6ea99ab45e3b4ea189cf9d088e1406059172e"
+    },
+    {
+      "trial": "schemelike-metacircular-eval__aAskV2i",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "b429a0bdc7201157286ca200310ee9fc316354a4aa4107efb0c1d39f1c7822b1"
+    },
+    {
+      "trial": "schemelike-metacircular-eval__kza2veg",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "897e85485e2c220ef40df43d4302b91d6d82e52e8d375ad40655f1cec07d1114"
+    },
+    {
+      "trial": "torch-pipeline-parallelism__DPwBUWZ",
+      "arm": "control",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "a205acc60a23c916216b9fbd658c04308c2a273eb84ab64cf569e94bed2a5780"
+    },
+    {
+      "trial": "torch-pipeline-parallelism__vuXvZvA",
+      "arm": "akm",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "775d96d3b43c3dce5a97dea0356de6c89822baa57fda805fa213fdeac2d476e4"
+    },
+    {
+      "trial": "torch-tensor-parallelism__6pbT7vD",
+      "arm": "control",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "165ba142a6d61b8218a2c05ae3c69faf44f98159fa2aad4f37c773b18282f469"
+    },
+    {
+      "trial": "torch-tensor-parallelism__JFhutbC",
+      "arm": "akm",
+      "reward": 0.0,
+      "exception_type": null,
+      "source_sha256": "a58c3c2def97ba2eff68a35cd6aaa44908ee24b0d30daa4ecfbe128b429a338c"
+    },
+    {
+      "trial": "write-compressor__C36NBhE",
+      "arm": "control",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "a5d8eb883094dab9faaaa9a35d5d416020f1b637c77ab3eecd5a04851ac8dd2a"
+    },
+    {
+      "trial": "write-compressor__tcnLSNP",
+      "arm": "akm",
+      "reward": 1.0,
+      "exception_type": null,
+      "source_sha256": "9c3fbe7c7deb3bef53640498c8679234015db212919850b6aa4f885d3d5546a5"
+    }
+  ]
+}

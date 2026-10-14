@@ -1,4 +1,13 @@
 {
-  "my-cloud-model": { "base_url": "https://api.example.com/v1", "api_key_env": "EXAMPLE_API_KEY" },
-  "my-local-model": { "base_url": "http://localhost:8101/v1" }
+  "my-cloud-model": {
+    "base_url": "https://api.example.com/v1",
+    "api_key_env": "EXAMPLE_API_KEY"
+  },
+  "my-local-model": {
+    "base_url": "http://localhost:8101/v1",
+    "limits": {
+      "context": 32768,
+      "output": 4096
+    }
+  }
 }

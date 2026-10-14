@@ -7,6 +7,7 @@
 // measurement.ts by hand.
 
 import { cpSync, readdirSync, writeFileSync } from "node:fs";
+import type { ModelLimits } from "../../../lib/models.ts";
 import { join } from "node:path";
 import {
   CONCURRENT_TRIALS,
@@ -25,8 +26,8 @@ export const ATTEMPTS = 3;
 export const attemptsFor = (limit?: number): number => (limit === undefined ? ATTEMPTS : 1);
 
 /** The Harbor job: the two arms on the same tasks. See lib/harbor/harbor.ts. The akm arm seeds the library each task names. */
-export function jobConfig(o: { name: string; model: string; tasksDir: string; tasks: string[]; librariesDir: string; attempts: number; jobsDir: string; arm?: AkmArm; packagesDir?: string | null; akmEnv?: Record<string, string> }): Record<string, unknown> {
-  return harborJob({ name: o.name, model: o.model, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv });
+export function jobConfig(o: { name: string; model: string; modelLimits?: ModelLimits; tasksDir: string; tasks: string[]; librariesDir: string; attempts: number; jobsDir: string; arm?: AkmArm; packagesDir?: string | null; akmEnv?: Record<string, string> }): Record<string, unknown> {
+  return harborJob({ name: o.name, model: o.model, modelLimits: o.modelLimits, jobsDir: o.jobsDir, attempts: o.attempts, librariesDir: o.librariesDir, datasets: [{ path: o.tasksDir, task_names: o.tasks }], arm: o.arm, packagesDir: o.packagesDir, akmEnv: o.akmEnv });
 }
 
 /** What a run of Harbor left, with the digests of the run's own copy of the tasks and the libraries, made before Harbor started. */
@@ -50,7 +51,7 @@ export interface Collected {
  * the run's own copy of the tasks and the libraries, which is digested before it starts: an edit to the live folders while the run goes is
  * neither what the trials used nor what the summary records. `of` is how many tasks the corpus has, for the line it prints.
  */
-export async function collect(o: { corpus: string; assets: string; tasks: string[]; of: number; attempts: number; dir: string; model: string; env: Record<string, string>; arm: AkmArm; akmEnv: Record<string, string> }): Promise<Collected> {
+export async function collect(o: { corpus: string; assets: string; tasks: string[]; of: number; attempts: number; dir: string; model: string; modelLimits?: ModelLimits; env: Record<string, string>; arm: AkmArm; akmEnv: Record<string, string> }): Promise<Collected> {
   const tasksDir = join(o.dir, "tasks");
   const librariesDir = join(o.dir, "libraries");
   for (const t of o.tasks) cpSync(join(o.assets, "tasks", t), join(tasksDir, t), { recursive: true });
@@ -61,7 +62,7 @@ export async function collect(o: { corpus: string; assets: string; tasks: string
   const jobsDir = join(o.dir, "jobs");
   const jobName = `${NAME}-${o.corpus}`;
   const staged = stagePackages(o.arm, o.dir); // the tarballs of a checkout, kept with the run
-  const cfg = jobConfig({ name: jobName, model: o.model, tasksDir, tasks: o.tasks, librariesDir, attempts: o.attempts, jobsDir, arm: o.arm, packagesDir: staged?.dir, akmEnv: o.akmEnv });
+  const cfg = jobConfig({ name: jobName, model: o.model, modelLimits: o.modelLimits, tasksDir, tasks: o.tasks, librariesDir, attempts: o.attempts, jobsDir, arm: o.arm, packagesDir: staged?.dir, akmEnv: o.akmEnv });
   const configFile = join(o.dir, "job.json");
   writeFileSync(configFile, `${JSON.stringify(cfg, null, 2)}\n`);
   console.log(`${NAME} (${o.corpus}): ${o.tasks.length} of ${o.of} tasks x 2 arms x ${o.attempts} = ${o.tasks.length * 2 * o.attempts} trials, ${CONCURRENT_TRIALS} at a time`);

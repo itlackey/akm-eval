@@ -33,7 +33,7 @@ import {
 import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
-import { MODEL_OPTIONS } from "../../../lib/models.ts";
+import { MODEL_OPTIONS, type ModelLimits } from "../../../lib/models.ts";
 import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
@@ -253,7 +253,7 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(BEN
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const lock = readLock();
@@ -262,7 +262,7 @@ export async function runCorpus(
   const arm = ctx.arm ?? releaseArm();
   const akmEnv = ctx.akmEnv ?? {};
   const dir = makeResultsDir(results, ctx.label);
-  const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, env: ctx.env, arm, akmEnv });
+  const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, env: ctx.env, arm, akmEnv });
   const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
   printSummary(summary);
   if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
@@ -276,7 +276,7 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
   try {
     values = parseArgs({
       args: Bun.argv.slice(2),
@@ -300,13 +300,13 @@ async function main(): Promise<void> {
   const limit = positive("--limit", values.limit);
   const attempts = positive("--attempts", values.attempts) ?? DEFAULT_ATTEMPTS;
   const repeat = positive("--repeat", values.repeat);
-  const akmEnv = parseAkmEnv(values["akm-env"]);
+  const akmEnv = parseAkmEnv(values["akm-env"], values.semantic);
   parseAkm(values.akm); // a bad --akm stops the run now, before Docker is asked about and a checkout is packed
   for (const c of corpora) {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env } = preflight(values);
+  const { model, env, modelLimits } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
   try {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
-    const ctx = { model, env, limit, attempts, arm, akmEnv };
+    const ctx = { model, modelLimits, env, limit, attempts, arm, akmEnv };
     const summaries: Summary[] = [];
     for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);

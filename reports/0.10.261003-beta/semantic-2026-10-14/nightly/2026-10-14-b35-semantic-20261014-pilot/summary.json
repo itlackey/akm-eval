@@ -1,0 +1,319 @@
+{
+  "eval": "nightly",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "b35-semantic-20261014-pilot",
+  "date": "2026-10-14T05:40:42.284Z",
+  "status": "complete",
+  "aborted_reason": null,
+  "git_commit": "32da9c5-dirty",
+  "harness_sha256": "11980c9fed7cf9f2b1ae7bdb7678314031ce1a62c6a1c9961c5e1da803c8eba2",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "bunx --package akm-cli@0.10.261003-beta akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "embedder": "real",
+  "limit": 12,
+  "strategy": "default",
+  "config_patch": {
+    "path": "../../../../../../tmp/akm-eval-semantic-20261014.json",
+    "sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "nightly": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "nightly"
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "nightly",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "nightly": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "6f3b2ac339a2fbee37666609b553444524aa402d8d26fef4da09020f19357174",
+  "seed": null,
+  "n_items": 35,
+  "n_planted": 12,
+  "n_errored": 0,
+  "seconds": {
+    "index": 4.6,
+    "feedback": 2.5,
+    "improve": 73.2,
+    "drain": 1,
+    "total": 82.4
+  },
+  "improve_ok": true,
+  "skipped_processes": [],
+  "drain": {
+    "promoted": 4,
+    "rejected": 0,
+    "deferred": 4,
+    "failed": 0
+  },
+  "outside_changed": [],
+  "pair_pass": {
+    "pairs_judged": 3,
+    "failed_judgments": 0,
+    "labels": {
+      "duplicate": 2,
+      "subsumed": 1
+    }
+  },
+  "calls_by": [
+    {
+      "process": "consolidate",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 7,
+      "failures": 0,
+      "prompt_tokens": 7360,
+      "completion_tokens": 730
+    },
+    {
+      "process": "reflect",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 7,
+      "failures": 0,
+      "prompt_tokens": 13670,
+      "completion_tokens": 435
+    },
+    {
+      "process": "distill",
+      "model": "qwen3.6-35b-a3b",
+      "calls": 3,
+      "failures": 0,
+      "prompt_tokens": 5044,
+      "completion_tokens": 508
+    }
+  ],
+  "metrics": {
+    "items": {
+      "n": 12,
+      "ok": 12,
+      "rate": 1
+    },
+    "by_kind": {
+      "pair": {
+        "n": 3,
+        "ok": 3
+      },
+      "reflect": {
+        "n": 2,
+        "ok": 2
+      },
+      "distill": {
+        "n": 2,
+        "ok": 2
+      },
+      "fix": {
+        "n": 1,
+        "ok": 1
+      },
+      "untouched": {
+        "n": 2,
+        "ok": 2
+      },
+      "silent": {
+        "n": 2,
+        "ok": 2
+      }
+    },
+    "failed": {},
+    "harm": {
+      "items": 0,
+      "outside_changed": 0,
+      "lessons_accepted": 0
+    },
+    "calls": {
+      "n": 17,
+      "failures": 0
+    },
+    "proactive": {
+      "selected": 2,
+      "due": 2,
+      "proposals": 2,
+      "on_silent": 2,
+      "on_others": 0
+    }
+  },
+  "model_calls": {
+    "calls": 18,
+    "errors": 0,
+    "prompt_tokens": 1449.6,
+    "completion_tokens": 93.1,
+    "seconds": 3.96,
+    "output_tokens_per_second": 23.5
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "nightly",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.3"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "cases": {
+      "duplicate-01": {
+        "input_sha256": "6c18adcc27f96e2bb17a2ed3c36f790d6750f5e06da7fe431750232e497a2db7",
+        "label_sha256": "98244ed8ad184162b9ef87d8a60a1c29fc7c9a69fec1f4efcbbb1fc2f57c8821"
+      },
+      "duplicate-02": {
+        "input_sha256": "50d9214c8d33fd3811a5c58dcd6fb77d6e919aabcbfc1ccfde29f5ec037e4034",
+        "label_sha256": "006510df4c3ce51d447e20d0b2ca45a0c7be265ed89c7296fbffd5fd8b8cd70c"
+      },
+      "subsumed-02": {
+        "input_sha256": "c342b0786c2f498e639462a95b8fc1fc6274d0ce5994a8dd645263b7dfcdded3",
+        "label_sha256": "03bfaa8baec4c730a82acaf6676f9d0a67704402a80e8705dca7de141845d71a"
+      },
+      "description-period-01": {
+        "input_sha256": "b01878321b3bd2359897d618c1925e7a495148641a0dce180cc67e97cec55fbe",
+        "label_sha256": "bdb280910163254ffe7eda36d2bc882382058b12229ff5de81c97f96dcfd0054"
+      },
+      "retrieval-miss-01": {
+        "input_sha256": "ce7c60c5cf5f416152163e9c48eb93fbb1c727ca7ed2add3e76ee38eb8dd58e4",
+        "label_sha256": "25add43ba9eda5da1dffbb1aae38661e1fcd9c8d880d8f1cd9d651087e695ff1"
+      },
+      "lesson-01": {
+        "input_sha256": "c261389361efd1ab2ea6a8e6dc085bcce1f35c59fb591423cea0590a53f0db5e",
+        "label_sha256": "9d88810531c1c721d76ba6475413e935613488c9da5d0a47713c6f3a9899497c"
+      },
+      "status-01": {
+        "input_sha256": "d15ab73e36fd000471e856c726ab6ef655223e96ee814c5d065cbde369b855ee",
+        "label_sha256": "1ef82bc0ceb205daa31d671f7c1746a17d49f36a275659a77c4ea33def832c21"
+      },
+      "exact-fix-01": {
+        "input_sha256": "11e8d5ba3d7a6847d190741dbc4a583b6863dc643bc55d1a37ca423497d38b97",
+        "label_sha256": "f317063bc5b51c170ecfadaadeb7a45832092dd01bd64bfe42ff2995eb14bf72"
+      },
+      "untouched-01": {
+        "input_sha256": "707bff47a9f6c843ab30a6521efefbdb650e88123322d1f21336f7562c145fa3",
+        "label_sha256": "ace410b369857e98fbe13a3f639e1c8ddfb43169012e1ab9812ed8d2e225f1cc"
+      },
+      "untouched-02": {
+        "input_sha256": "29b4205b5b28089100edbc52425b53efccc83aa97de4979957e996345d030ef5",
+        "label_sha256": "5e05bbb69b0870ee368b1b4f00e91921dffecfbcaeb8a8429fdf9b20a5aefb4e"
+      },
+      "silent-description-period-02": {
+        "input_sha256": "326f9b59f2d71b8c83fd60691f2b980dd1d6b6727dd43574666d34bfc73a0595",
+        "label_sha256": "821d30923b474d117e2a992a6e556d03bed60c3548b5c5704498137fac877005"
+      },
+      "silent-description-quote-02": {
+        "input_sha256": "5a3ce511b1dbfde4631f971f52bfd0034c0c699848efe0a165188dcef62d9e06",
+        "label_sha256": "38c9bb693248e19ce9ef6ff7e543e7fc3754fc3a367df150038f1374ba7e0396"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "bunx --package akm-cli@0.10.261003-beta akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "6050644d86a624951689609140f2a08c445b5a30486902289c5f30168ae3b3ad",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "nightly": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "nightly"
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "default",
+      "config_patch_sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191",
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "nightly": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {
+      "embedder": "real"
+    },
+    "completion": {
+      "selected": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-02",
+        "description-period-01",
+        "retrieval-miss-01",
+        "lesson-01",
+        "status-01",
+        "exact-fix-01",
+        "untouched-01",
+        "untouched-02",
+        "silent-description-period-02",
+        "silent-description-quote-02"
+      ],
+      "scored": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-02",
+        "description-period-01",
+        "retrieval-miss-01",
+        "lesson-01",
+        "status-01",
+        "exact-fix-01",
+        "untouched-01",
+        "untouched-02",
+        "silent-description-period-02",
+        "silent-description-quote-02"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 82.443
+}

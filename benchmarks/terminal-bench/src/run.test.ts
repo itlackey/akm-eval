@@ -448,7 +448,9 @@ describe("runCorpus", () => {
   test("writes the job, stages the library, runs Harbor and leaves the summary", async () => {
     fakeAkm(true);
     const { root, env } = fakeUv();
-    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "t", limit: 2, env }, join(root, "results")));
+    const modelLimits = { context: 32768, output: 4096 };
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", modelLimits, label: "t", limit: 2, env }, join(root, "results")));
+    for (const agent of JSON.parse(readFileSync(join(s.results_dir, "summary.json"), "utf8")).config.agents) expect(agent.kwargs.opencode_config.provider.openai.models.x.limit).toEqual(modelLimits);
     const dir = s.results_dir;
     expect(dir).toMatch(/results\/\d{4}-\d{2}-\d{2}-t$/);
     const job = readJson(join(dir, "job.json"));
@@ -864,7 +866,7 @@ describe("the caller's AKM_BIN", () => {
 describe("the command line", () => {
   /** Runs the runner as a person would, with only the environment given. These all stop before Docker is asked about. */
   const run = (args: string[], env: Record<string, string> = {}) => {
-    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { env: { PATH: process.env.PATH as string, HOME: process.env.HOME as string, ...env }, stdout: "pipe", stderr: "pipe" });
+    const done = Bun.spawnSync(["bun", "--no-env-file", join(import.meta.dir, "run.ts"), ...args], { env: { PATH: process.env.PATH as string, HOME: process.env.HOME as string, ...env }, stdout: "pipe", stderr: "pipe" });
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
@@ -919,7 +921,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     dirs.push(root);
     const bin = writeFakeHarbor(root);
     const run = (label: string, env: Record<string, string> = {}) => {
-      const done = Bun.spawnSync(["bun", join(root, "benchmarks", "terminal-bench", "src", "run.ts"), "--limit", "2", "--label", label], {
+      const done = Bun.spawnSync(["bun", "--no-env-file", join(root, "benchmarks", "terminal-bench", "src", "run.ts"), "--limit", "2", "--label", label], {
         env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME as string, MODEL_NAME: "openai/x", MODEL_API_KEY: "sk-test-key", ...env },
         stdout: "pipe",
         stderr: "pipe",
@@ -947,7 +949,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     dirs.push(root);
     const bin = writeFakeHarbor(root);
     const run = (args: string[], env: Record<string, string> = {}) => {
-      const done = Bun.spawnSync(["bun", join(root, "benchmarks", "terminal-bench", "src", "run.ts"), ...args], {
+      const done = Bun.spawnSync(["bun", "--no-env-file", join(root, "benchmarks", "terminal-bench", "src", "run.ts"), ...args], {
         env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME as string, MODEL_NAME: "openai/x", MODEL_API_KEY: "sk-test-key", ...env },
         stdout: "pipe",
         stderr: "pipe",
@@ -1038,4 +1040,11 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(bad.err).toContain('--corpus must be public, custom or all, not "elsewhere"');
     expect(run(["--corpus", "public", "--cases", "x"]).err).toContain("--cases is a custom corpus");
   }, 60_000);
+});
+
+
+test("Terminal-Bench forwards custom model limits to the saved configuration of both arms", () => {
+  const limits = { context: 32768, output: 4096 };
+  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
 });
