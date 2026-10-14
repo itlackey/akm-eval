@@ -46,6 +46,39 @@ Model services run separately. Use an endpoint reachable from the container;
 use and remain in the working folder. No credentials or private runs are baked
 into the image. A custom AKM checkout also needs an explicit mount for `--akm`.
 
+## Compare AKM source builds
+
+For a checkout whose runtime dependencies match the pinned AKM package, mount it
+read-only over that package and run its source with the image's Bun and packages:
+
+```sh
+AKM_CHECKOUT=/absolute/path/to/akm
+# Use a separate empty working folder for each build when comparing cold indexes.
+docker run --rm --init --user "$(id -u):$(id -g)" \
+  --mount "type=bind,src=$AKM_EVAL_WORK,dst=$AKM_EVAL_WORK" \
+  --mount "type=bind,src=$AKM_CHECKOUT,dst=/opt/akm-cli/node_modules/akm-cli,readonly" \
+  --workdir "$AKM_EVAL_WORK" "$AKM_EVAL_IMAGE" \
+  evals/retrieval/run --semantic on --limit 12 --label build-a \
+  --akm "bun /opt/akm-cli/node_modules/akm-cli/src/cli.ts"
+```
+
+Repeat with the other checkout and `--label build-b`, then use
+`scripts/compare/run` on each pair of collection folders (mount both saved folders
+in the comparison container). Remove `--limit` for full measurement. The source
+mount retains Git metadata, so commits that print the same package version still
+have different `akm_build` identities. Standalone Git clones work directly;
+worktrees also need their referenced Git directory mounted at its original path.
+A checkout with different runtime dependencies needs an image containing those
+matching dependencies; this recipe does not install them at startup.
+
+For a build-only comparison, keep the runner image digest, cases, labels, model
+and engine settings, semantic mode, machine and cache condition fixed. Check the
+reported settings differences before attributing a delta. Compare cold indexing
+with cold indexing, or warm with warm. Small changes in model-backed scores or
+latency warrant repeats under similar server load. Retrieval labels can be
+incomplete: inspect `judged_10`, and explicitly rescore both saved runs after
+adding grades. Comparison itself makes no model calls and changes no labels.
+
 ## Agent A/B and Terminal-Bench
 
 Harbor starts sibling task containers through the host Docker daemon. Add its

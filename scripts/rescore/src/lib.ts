@@ -150,7 +150,7 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
   const digests: Record<string, CaseDigest> = Object.fromEntries(selected.map((id) => [id, { input_sha256: (old.cases[id] as CaseDigest).input_sha256, label_sha256: labelOf(id) }]));
   const relabelled = selected.filter((id) => (old.cases[id] as CaseDigest).label_sha256 !== digests[id]?.label_sha256);
   const manifest: RunManifest = { ...old, cases: digests, completion: completionOf(m, selected, rows), rescored_from: { results: basename(stored.dir), scorer: old.scorer, at: now.toISOString(), dropped } };
-  manifest.scorer = { version: m.version };
+  manifest.scorer = { version: m.scoringVersion ?? m.version };
 
   const out: Obj = { ...summary, ...m.summarize(rows), manifest };
   if (options.cases !== undefined && !isSplit(summary)) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time

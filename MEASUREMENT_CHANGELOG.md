@@ -1,7 +1,8 @@
 # Measurement changelog
 
-Each eval's `version` in `src/measurement.ts` identifies its measurement. Bump it
-when the selected inputs, collection protocol, labels or scoring rules change.
+Each eval's `version` in `src/measurement.ts` identifies its collection. Bump it
+when the selected inputs, collection protocol or labels change. A scoring-only
+correction sets `scoringVersion` (default: `version`) without changing collection identity.
 Model/AKM/configuration experiments remain recorded settings within that version.
 Documentation, ledger and reporting changes alone do not require a new version.
 
@@ -12,6 +13,9 @@ current scoring version while retaining the original collector version. New
 inputs require collection. Add a release entry here when a version changes.
 
 ## Unreleased
+
+- reflect and nightly: scoring version 0.4 accepts harmless acronym plurals such as `PDFs` when the source names `PDF`; names, numbers and paths remain checked. Collection stays at 0.3. Explicitly rescore saved runs to compare this scoring correction; originals are preserved.
+- Retrieval single runs now record `wall_seconds` and clear their running marker through the existing shared runner, matching repeated runs. Cases, collection and scoring are unchanged.
 
 - longmemeval: measurement version 0.3. Undecidable judge replies are grading errors excluded from accuracy; identical grading prompts share one verdict within a run. Reader and judge request settings, usage, retries and provider-reported costs are saved separately. Graceful stops preserve completed questions. Earlier results retain their original scoring and artifacts.
 - agent-ab and terminal-bench: measurement version 0.4. Both arms share the repaired agent setup: archived Bullseye security indexes and no redundant distro Node install on glibc. Terminal-Bench also saves interrupted progress and can resume the same job with unchanged settings.

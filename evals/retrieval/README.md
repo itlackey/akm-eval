@@ -56,7 +56,8 @@ The judgments cover what akm 0.9.26's keyword search and a plain BM25 returned, 
 
 ## What the summary reports
 
-`summary.json`, per collection: `metrics` for each column, `abstention`, `errored`, `timeouts`, the search mode akm reported, `semantic_index` (`cold`, `warm` or `rebuilt`) and which akm built it, `assets_sha256` over the library, bundle mapping, queries and qrels (`assets` holds the four), the akm `config`, `seed` (of a rewrite), and the `manifest`. `samples.jsonl` has one row per query with every call's results, grades, time and error.
+`summary.json`, per collection: `metrics` for each column, `abstention`, `errored`, `timeouts`, the search mode akm reported, `semantic_index` (`cold`, `warm` or `rebuilt`) and which akm built it, `assets_sha256` over the library, bundle mapping, queries and qrels (`assets` holds the four), the akm `config`, `seed` (of a rewrite), and the `manifest`. `wall_seconds` includes collection setup, indexing and queries,
+for both single and repeated runs. `samples.jsonl` has one row per query with every call's results, grades, time and error.
 
 ## Grade results: label
 

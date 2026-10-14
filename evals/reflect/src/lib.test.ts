@@ -340,6 +340,17 @@ describe("score", () => {
     expect(score(c, withWhen("Use when you need a GO/FIX/NO\u2011STOP verdict on a key.")).checks.no_invented).toBe(false);
   });
 
+  test("plural acronyms are grounded by a whole singular, without stemming names, numbers or paths", () => {
+    const c = PUBLIC.find((x) => x.id === "description-truncated-03") as Case;
+    const withDescription = (d: string) => c.source.replace(/^description:.*(?:\n[ \t].*)*/m, `description: ${d}`);
+    const repaired = "Run the full print publishing pipeline with explicit GO/FIX/NO-GO gates for TTRPG PDFs.";
+    expect(score(c, withDescription(repaired)).checks).toMatchObject({ defect_fixed: true, no_invented: true });
+    for (const invented of ["GPUs", "PDF2s", "docs/PDFs", "v2.1s"])
+      expect(score(c, withDescription(repaired.replace("PDFs", invented))).checks.no_invented, invented).toBe(false);
+    const embedded = { ...c, source: c.source.replaceAll("PDF", "PDFX") };
+    expect(score(embedded, embedded.source.replace(/^description:.*(?:\n[ \t].*)*/m, `description: ${repaired}`)).checks.no_invented).toBe(false);
+  });
+
   test("a missing description needs one the model wrote: akm's own fallback from the heading does not count", () => {
     const c = defect("description-missing");
     const withDescription = (d: string) => c.source.replace("name: key-rotation", `name: key-rotation\ndescription: ${d}`);

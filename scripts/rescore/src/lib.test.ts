@@ -114,7 +114,7 @@ describe("rescoreFolder", () => {
     const was = summaryOf(dir).manifest as RunManifest;
     const now = summaryOf(out).manifest as RunManifest;
     expect(now.collector).toEqual(OTHER_COLLECTOR);
-    expect(now.scorer).toEqual({ version: MEASUREMENT.version });
+    expect(now.scorer).toEqual({ version: MEASUREMENT.scoringVersion ?? MEASUREMENT.version });
     expect(now.rescored_from?.scorer).toEqual(STALE);
     expect(now.cases).toEqual(was.cases);
     expect({ ...now, scorer: null, rescored_from: null }).toEqual({ ...was, scorer: null, rescored_from: null });
