@@ -39,7 +39,7 @@ builds pull requests and publishes main changes to the reports or site.
 See [site/README.md](site/README.md) for publishing and refreshes.
 
 ```
-eval_docker evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
+evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)
 corpus/library/       the shared akm library the evals use, also usable as an akm bundle
 lib/                  what the evals share: the akm sandbox, models, corpora, manifest, --repeat, the rewrite
 scripts/              check, compare, ledger, rescore, smoke
@@ -108,7 +108,7 @@ eval_docker benchmarks/longmemeval/run --model my-model --judge-model my-judge
 
 `summary.json` records the model, `akm_version`, `akm_bin`, `akm_build` (`git describe` of a checkout) and `akm_build_fingerprint` (a digest of its uncommitted changes). A pre-release can print the version of the release it branched from, so read `akm_build` to tell builds apart, and put the build in `--label`. Before measuring a new akm, run `scripts/smoke/run --contract --akm "..."` to see that the evals still read it.
 
-Use `--semantic` consistently on the process evals, Agent A/B, LongMemEval and Terminal-Bench. Process evals merge the pinned native embedder settings with any `--config-patch` and record the effective patch digest. Retrieval keeps its existing `--semantic on` syntax; SkillRet retains both comparators. For consolidate and nightly, `--semantic` also selects `--embedder real`; an explicit deterministic embedder conflicts. Defaults remain unchanged, so the search choice is explicit.
+Use `--semantic` consistently on the process evals, Agent A/B, LongMemEval and Terminal-Bench. Process evals merge the pinned native embedder settings with any `--config-patch` and record the effective patch digest. Retrieval keeps its existing `--semantic on` syntax; SkillRet retains both comparators. For consolidate and nightly, `--semantic` also selects `--embedder real`; an explicit deterministic embedder conflicts. Defaults remain unchanged, so the search choice is explicit. Process summaries include `semantic_verification`: embedding coverage and counts of semantic, nonsemantic and unknown search events. Incomplete coverage or a nonsemantic search is an error. Verification reads the eval's own events and adds no probe search; zero searches means retrieval was not observed, even when semantic search was configured. `telemetry_errors` flags unavailable search-event evidence.
 
 LongMemEval model entries can add `"chat": { "max_completion_tokens": 2048, "reasoning_effort": "none" }`, or `max_tokens` for endpoints that require that field. Choose settings the actual reader/judge supports; only the selected role receives them. Both reader arms use identical settings. Context limits belong in `limits`; Chat Completions output settings belong in `chat`. The example budgets are configuration examples, not measured server capacities. See [models.example.json](models.example.json) and [the LongMemEval guide](benchmarks/longmemeval/README.md).
 

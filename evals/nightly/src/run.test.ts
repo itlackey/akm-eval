@@ -68,8 +68,9 @@ if (cmd === "index") {
     else if (path.endsWith(".md")) db.query("INSERT INTO entries VALUES (?, ?)").run(join(dir, entry.name), scenario.indexedRefs?.[path] ?? path.replace(/\\.md$/, "").replace(/\\/SKILL$/, ""));
   } };
   walk(process.env.AKM_BUNDLE_DIR);
+  const entries = db.query("SELECT COUNT(*) AS n FROM entries").get().n;
   db.close();
-  json({ ok: true });
+  json({ ok: true, totalEntries: entries, verification: { embeddingCount: entries } });
 } else if (cmd === "feedback") {
   const db = new Database(join(process.env.AKM_DATA_DIR, "index.db"), { readonly: true });
   const found = db.query("SELECT concept_id FROM entries WHERE concept_id = ?").get(sub);

@@ -388,7 +388,7 @@ if (args[0] === "index") {
   const real = process.env.FAKE_EMBEDDER === "real";
   if (process.env.FAKE_EMBEDDER && real !== (config.embedding?.localModel === "Xenova/bge-small-en-v1.5" && !!process.env.HF_HOME && !process.env.AKM_EMBED_DETERMINISTIC)) { console.error("not the embedder the test asked for"); process.exit(3); }
   if (process.env.FAKE_EMBEDDER === "deterministic" && process.env.AKM_EMBED_DETERMINISTIC !== "1") { console.error("no deterministic embedder"); process.exit(3); }
-  console.log(JSON.stringify({ ok: true }));
+  console.log(JSON.stringify({ ok: true, totalEntries: 80, verification: { embeddingCount: 80 } }));
 } else if (args[0] === "improve") {
   if (process.env.FAKE_SLEEP) await Bun.sleep(30000);
   if (process.env.FAKE_CRASH) { console.error("boom"); process.exit(70); }

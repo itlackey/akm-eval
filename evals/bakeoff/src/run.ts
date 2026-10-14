@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
+import { type SemanticVerification, takeSemanticVerification } from "../../../lib/akm/semantic.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -92,6 +93,7 @@ interface Summary {
   /** What the run was made of (see lib/manifest.ts). */
   /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
   model_calls: ModelCalls | null;
+  semantic_verification?: SemanticVerification | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -224,6 +226,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
     served: counts.served,
     metrics: counts.metrics,
     model_calls: takeModelCalls(),
+    semantic_verification: takeSemanticVerification(),
     manifest,
     results_dir: dir,
   };

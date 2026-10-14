@@ -112,7 +112,7 @@ export async function runCase(c: LoadedCase, ctx: CaseContext): Promise<Row> {
   try {
     writeConfig(sandbox, ctx.config);
     cpSync(c.dir, join(sandbox.dir, "bundle"), { recursive: true });
-    if (c.feedback?.length) await runAkm(sandbox, ["index"]); // akm records feedback only against an indexed asset
+    if (c.feedback?.length) await runAkmJson(sandbox, ["index"]); // akm records feedback only against an indexed asset
     for (const f of c.feedback ?? []) {
       const fb = await runAkm(sandbox, ["feedback", memoryRef(c), f.signal === "positive" ? "--positive" : "--negative", ...(f.reason ? ["--reason", f.reason] : [])]);
       if (fb.code !== 0) return failed(exitMessage(fb.code, fb.stderr, fb.stdout), fb.timedOut);

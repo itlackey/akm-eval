@@ -49,7 +49,7 @@ if (cmd === "index") {
     if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
   }
   if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
-  json({ ok: true, totalEntries: notes.length });
+  json({ ok: true, totalEntries: notes.length, verification: { embeddingCount: notes.length } });
 } else if (cmd === "improve") {
   if (args[1] !== "--strategy" || args[2] !== (process.env.FAKE_STRATEGY ?? "consolidate") || !has("--no-sync") || !has("--json-to-stdout")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   if (what === "slow-improve") await Bun.sleep(30000);
