@@ -186,6 +186,8 @@ def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = 
     assets = re.search(r"^AKM-SETUP assets=(\d+)$", seeded, re.MULTILINE)
     tree = re.search(r"^AKM-SETUP tree_akm_cli=([0-9a-f]{64}) tree_plugin=([0-9a-f]{64})$", trees, re.MULTILINE)
     found = {"akm_cli": tree.group(1), "plugin": tree.group(2)} if tree else None
+    embeddings = re.search(r"^AKM-SETUP embeddings=(\d+)$", seeded, re.MULTILINE)
+    semantic = re.search(r"^AKM-SETUP search_mode=semantic$", seeded, re.MULTILINE)
     return {
         "akm_version": check.group(1) if check else None,
         "plugin_akm_cli": check.group(2) if check else None,
@@ -194,6 +196,7 @@ def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = 
         "lockfiles": dict(lockfiles or {"akm_cli": None, "plugin": None}),
         "dependency_trees": found,
         "dependency_tree_sha256": tree_sha256(found) if found else None,
+        **({"search_mode": "semantic", "embeddings_indexed": int(embeddings.group(1)) if embeddings else None} if semantic else {}),
     }
 
 
@@ -317,6 +320,25 @@ class AkmOpenCode(OpenCode):
         # A bundle with the fact templates akm scaffolds, then the library's type folders copied in (never loose files
         # such as a README), then a full index. No registry: the agent searches the library and nothing else. Every
         # asset of the library must be in the index, apart from the scaffold's facts. It prints how many are.
+        semantic = self.options.akm_env.get("AKM_EVAL_SEMANTIC_SEARCH") == "1"
+        semantic_config = (
+            "akm config set semanticSearchMode auto --silent && "
+            "akm config set embedding.localModel Xenova/bge-small-en-v1.5 --silent && "
+            "akm config set embedding.queryTimeoutMs 600000 --silent && "
+        ) if semantic else ""
+        index = "akm index --full >/dev/null && "
+        if semantic:
+            index = (
+                f"akm index --full >{AKM_ROOT}/index-result.json && "
+                "node -e 'const r=JSON.parse(require(\"fs\").readFileSync(0,\"utf8\"));"
+                "if(!Number.isInteger(r.totalEntries)||r.totalEntries<1||r.verification?.embeddingCount!==r.totalEntries){console.error(\"AKM-SETUP FATAL: incomplete semantic index\");process.exit(1)};"
+                "console.log(\"AKM-SETUP embeddings=\"+r.verification.embeddingCount)' "
+                f"<{AKM_ROOT}/index-result.json && "
+                "akm search --limit 1 --format json -- 'service backup configuration healthcheck' | "
+                "node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
+                "if(JSON.parse(s).searchMode!==\"semantic\"){console.error(\"AKM-SETUP FATAL: search is not semantic\");process.exit(1)};"
+                "console.log(\"AKM-SETUP search_mode=semantic\")})' && "
+            )
         assets = self.options.library_assets
         want = f'"$(find {LIBRARIES}/"$stash" -type f -not -name ".*" | wc -l)"' if assets is None else str(assets)
         return (
@@ -324,9 +346,10 @@ class AkmOpenCode(OpenCode):
             '[[ "$stash" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "AKM-SETUP FATAL: AKM_TASK_STASH=$stash is not a library name" >&2; exit 1; }; '
             f'[ -d {LIBRARIES}/"$stash" ] || {{ echo "AKM-SETUP FATAL: no library named $stash" >&2; exit 1; }}; '
             f"akm bundle create --dir {BUNDLE} --set-default && akm config set registries '[]' && "
+            + semantic_config +
             f'for d in {LIBRARIES}/"$stash"/*/; do cp -a "$d" {BUNDLE}/; done; '
             f"want={want}; rm -rf {LIBRARIES}; "
-            "akm index --full >/dev/null && "
+            + index +
             "got=$(akm info --format json -q | node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{"
             "const t=JSON.parse(s).indexStats.byType;console.log(Object.entries(t).reduce((n,[k,v])=>n+(k===\"fact\"?0:v),0))})') && "
             '[ "$got" -ge "$want" ] || { echo "AKM-SETUP FATAL: $got of the $want library assets are indexed" >&2; exit 1; }; '

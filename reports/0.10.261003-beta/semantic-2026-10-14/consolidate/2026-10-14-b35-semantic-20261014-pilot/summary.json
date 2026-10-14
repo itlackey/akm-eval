@@ -1,0 +1,344 @@
+{
+  "eval": "consolidate",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "b35-semantic-20261014-pilot",
+  "date": "2026-10-14T05:37:05.907Z",
+  "status": "complete",
+  "aborted_reason": null,
+  "git_commit": "32da9c5-dirty",
+  "harness_sha256": "4e9a35c6c487bc40caea688436a8cc8f87d741d9edcbbd7aa2ed67a61bbb9bd0",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "bunx --package akm-cli@0.10.261003-beta akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "embedder": "real",
+  "limit": 12,
+  "strategy": "consolidate",
+  "config_patch": {
+    "path": "../../../../../../tmp/akm-eval-semantic-20261014.json",
+    "sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "consolidate": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "consolidate"
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "consolidate",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "consolidate": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "b9f10923188198a6ebc758b3e84ef24bfb5d2dae34bd9bc8336d879a4c096f9b",
+  "seed": null,
+  "n_cases": 80,
+  "n_run": 12,
+  "n_scored": 12,
+  "n_errored": 0,
+  "timeouts": 0,
+  "n_paired": 10,
+  "served_models": {
+    "qwen3.6-35b-a3b": 29
+  },
+  "metrics": {
+    "unsafe": {
+      "n": 1,
+      "of": 12,
+      "staged": 0
+    },
+    "staged": {
+      "n": 4,
+      "safe": 4
+    },
+    "precision": {
+      "value": 0.8571,
+      "safe": 6,
+      "retired": 7
+    },
+    "recall": {
+      "value": 1,
+      "retired_safe": 6,
+      "of": 6
+    },
+    "classes": {
+      "duplicate": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 2,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 2,
+        "retired_unsafe": 0,
+        "kept": 0
+      },
+      "subsumed": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 1,
+          "supersedes": 1,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 2,
+        "retired_unsafe": 0,
+        "kept": 0
+      },
+      "supersedes": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 2,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 2,
+        "retired_unsafe": 0,
+        "kept": 0
+      },
+      "contradicts": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 1,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 2
+      },
+      "overlap": {
+        "n": 2,
+        "error": 0,
+        "paired": 2,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 1,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 1,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 1,
+        "kept": 1
+      },
+      "unrelated": {
+        "n": 2,
+        "error": 0,
+        "paired": 0,
+        "judged_as": {
+          "duplicate": 0,
+          "subsumed": 0,
+          "supersedes": 0,
+          "contradicts": 0,
+          "overlap": 0,
+          "unrelated": 0
+        },
+        "retired_safe": 0,
+        "retired_unsafe": 0,
+        "kept": 2
+      }
+    }
+  },
+  "model_calls": {
+    "calls": 29,
+    "errors": 0,
+    "prompt_tokens": 828.8,
+    "completion_tokens": 84.5,
+    "seconds": 1.44,
+    "output_tokens_per_second": 58.8
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "consolidate",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "duplicate-01": {
+        "input_sha256": "cd0d271e20f256af302fcc90a147526ba08f5f0525330db8d4e4db69219a4146",
+        "label_sha256": "74ba89ab4c61cf310b27f93cf50ea8bfea19250a04c7cd2ed579d64b98e1c596"
+      },
+      "duplicate-02": {
+        "input_sha256": "c0d9b64379538967f8789805ee0225accabfbaa784d23ff5366829d67c0394fb",
+        "label_sha256": "b7befa181f9a496b85225508f5bd055bb060ee875dfb910a267ca27c4254b91c"
+      },
+      "subsumed-01": {
+        "input_sha256": "45b6f013f0c7a5725fde33cb3893c8936e40c2030d362867d5d75f107c9f3b0a",
+        "label_sha256": "afe7e9ff5b760b6362c48928a08d2f5db544216e5df433020fd559b5dac6d302"
+      },
+      "subsumed-02": {
+        "input_sha256": "431a7f19be1fffc5bf1c7934f5e8d92ab095c14c9253fa91ee4207cae9671d78",
+        "label_sha256": "07fc43c4227b5fe9c850c592b1bc9fdf3220f48342ba8a963ec4f8b127edf166"
+      },
+      "supersedes-01": {
+        "input_sha256": "1d36c8b6caea30bed13b734146599ce280d684d6ed3fd2313e0490630a400e64",
+        "label_sha256": "b3b3afd5151387956d85bc207e2295454877ea018282e96733adb889180d38dc"
+      },
+      "supersedes-02": {
+        "input_sha256": "d68b37c1308509c579734af2e2d822222ec7dffab788eec81cb85598cbdea869",
+        "label_sha256": "60d13a81360a35bf71502c8e80d17afe8bb332d7d35b3130b27f405a11fd6275"
+      },
+      "contradicts-01": {
+        "input_sha256": "dfb1f0cb3c517b88351ed3107058764608e1241ee6c7f3255794761585e2c2e1",
+        "label_sha256": "072cabdd73a50b9e8202b3fc53bc9bdb4660ae0f6932fbaaf931d75974568a96"
+      },
+      "contradicts-02": {
+        "input_sha256": "01984088675d5cca7887b3bbd39f1ab3faccb3706d75a5349a6810ae38decf7c",
+        "label_sha256": "2ff5193c1c9bcd6cecdb2a9ecf997cf56c712d63b958ead97c7e05979f8c9bb4"
+      },
+      "overlap-01": {
+        "input_sha256": "30bd98cf1c0ac15c6a641c3552954aec6507d0fcf7c8ee0b58ac1bbc0411943e",
+        "label_sha256": "d185cd0512318822df31b11e0a9efcedfc88e4ba67ec4a8bb14b0d679a9e7d3a"
+      },
+      "overlap-02": {
+        "input_sha256": "37d21cef51c94189daa456295523daf7e086338b4cf99a988dbba9471c185273",
+        "label_sha256": "32c78160c0999ce35ae2f029e100ada0f5b4bed2586ad4a3d13fc0c5595ff9d7"
+      },
+      "unrelated-01": {
+        "input_sha256": "4d1cc9b981afe3f17ecab7fb256a96a513b1728a57c3b3615e406e1027c7d2a6",
+        "label_sha256": "07d4feb059b33eabaa889610d779eeae9fa4680f8a299e4f2bbe380d5a52f6b1"
+      },
+      "unrelated-02": {
+        "input_sha256": "02ca5ccc7616e799da405b9109eca5c05eb4c5253fbfa88b8b10932dc761bcc0",
+        "label_sha256": "c6d0fa82eba9d13a27ef6aa5efa6bd97ab2c00ac968cb0692213bd9eca02a72b"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "bunx --package akm-cli@0.10.261003-beta akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "5c1d9dbfd40ab3daa24014fc50b5363749ce61fb4420e7a9338bb6e6a0499c93",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "consolidate": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "consolidate"
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "consolidate",
+      "config_patch_sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191",
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "consolidate": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {
+      "embedder": "real"
+    },
+    "completion": {
+      "selected": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-01",
+        "subsumed-02",
+        "supersedes-01",
+        "supersedes-02",
+        "contradicts-01",
+        "contradicts-02",
+        "overlap-01",
+        "overlap-02",
+        "unrelated-01",
+        "unrelated-02"
+      ],
+      "scored": [
+        "duplicate-01",
+        "duplicate-02",
+        "subsumed-01",
+        "subsumed-02",
+        "supersedes-01",
+        "supersedes-02",
+        "contradicts-01",
+        "contradicts-02",
+        "overlap-01",
+        "overlap-02",
+        "unrelated-01",
+        "unrelated-02"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 76.712
+}

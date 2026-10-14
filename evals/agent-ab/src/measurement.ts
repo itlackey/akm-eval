@@ -51,7 +51,7 @@ function assetsOf(root: string, summary: Record<string, any>): string {
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   loadCases: (root, summary) => casesIn(assetsOf(root, summary)),
   caseId: (c) => c.id,
   input: (c) => ({ task_sha256: c.task_sha256, library: c.library, library_sha256: c.library_sha256 }),

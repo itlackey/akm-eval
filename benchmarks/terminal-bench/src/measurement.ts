@@ -29,7 +29,7 @@ export const caseOf = (id: string, task_digest: string | null | undefined, libra
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   // The tasks of the pinned dataset, with the library the akm arm seeds. The tasks are Harbor's and are not in this repository; the library is
   // the one in the run's corpus folder (corpus/ for the public corpus, `corpus_folder` for a custom one, which scripts/rescore sets from --cases
   // DIR when the run could not record it), else the digest the run recorded.

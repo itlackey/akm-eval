@@ -101,3 +101,17 @@ test("model-call telemetry shows means separately from totals, including missing
   expect(missing.model_mean_request_s).toBeNull();
   expect(missing.model_output_tokens_per_s).toBeNull();
 });
+
+
+test("recorded query modes take precedence over explicitly marked semantic configuration", () => {
+  const configured = { config: { semanticSearchMode: "auto", apiKey: "SECRET" } };
+  expect(comparisonFields(configured, [], []).search_method).toBe("semantic (configured)");
+  expect(comparisonFields({ ...configured, search_mode: "keyword" }, [], []).search_method).toBe("keyword");
+  expect(comparisonFields({ akm_env: { AKM_EVAL_SEMANTIC_SEARCH: "1" } }, [], []).search_method).toBe("semantic (configured)");
+  expect(comparisonFields({ config: { semanticSearchMode: "off" } }, [], []).search_method).toBe("keyword (configured)");
+  const setup = { ...configured, akm_install: { observed: { search_mode: ["semantic"] } } };
+  expect(comparisonFields(setup, [], []).search_method).toBe("semantic (setup verified)");
+  expect(comparisonFields({ ...setup, search_mode: "keyword" }, [], []).search_method).toBe("keyword");
+  expect(comparisonFields({}, [], []).search_method).toBeNull();
+  expect(JSON.stringify(comparisonFields(configured, [], []))).not.toContain("SECRET");
+});

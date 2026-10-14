@@ -33,6 +33,12 @@ export const JUDGE_OPTIONS = { "judge-model": { type: "string" } } as const;
 export const modelUsage = `  --model         the model, as the gateway names it, such as my-model. Default: MODEL_NAME in .env.`;
 export const judgeUsage = `  --judge-model   the judge, as the gateway names it. Default: JUDGE_MODEL in .env.`;
 
+/** Model limits OpenCode uses to compact context before a local server rejects a request. */
+export interface ModelLimits {
+  context: number;
+  output: number;
+}
+
 /** One line of models.json: a model that is not behind the gateway. */
 export interface ModelEntry {
   /** The name the endpoint expects, when it is not the line's name. */
@@ -40,16 +46,19 @@ export interface ModelEntry {
   base_url: string;
   /** The name of the environment variable that holds the key (set it in .env). Leave it out for a server that needs none. Never put a key in models.json. */
   api_key_env?: string;
+  /** Optional OpenCode context and output limits, applied equally to both Harbor arms. */
+  limits?: ModelLimits;
 }
 
 /** The keys a line of models.json may have. Any other is refused, so a typo such as "privat" cannot pass for a setting, and a key cannot sit in the file. */
-const LINE_KEYS = ["model", "base_url", "api_key_env"];
+const LINE_KEYS = ["model", "base_url", "api_key_env", "limits"];
 
 export interface ModelSettings {
   /** The name sent to the endpoint. */
   name: string;
   baseUrl: string;
   apiKey: string;
+  limits?: ModelLimits;
 }
 
 type Env = Record<string, string | undefined>;
@@ -79,6 +88,14 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
       const hint = key === "api_key" ? ": a key belongs in the environment. Set it in .env and name its variable in api_key_env" : "";
       throw new Error(`models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`);
     }
+    if (e.limits !== undefined) {
+      const limits = e.limits;
+      if (!limits || typeof limits !== "object" || Array.isArray(limits) ||
+        Object.keys(limits).some(key => key !== "context" && key !== "output") ||
+        !Number.isInteger(limits.context) || limits.context <= 0 ||
+        !Number.isInteger(limits.output) || limits.output <= 0 || limits.output > limits.context)
+        throw new Error(`models.json: "${id}": limits needs positive integer context and output, with output no larger than context`);
+    }
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);
   }
@@ -100,7 +117,7 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
   if (entry) {
     const key = entry.api_key_env ? env[entry.api_key_env]?.trim() : "";
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
-    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "" };
+    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", ...(entry.limits ? { limits: entry.limits } : {}) };
   }
   // The judge falls back to the model's endpoint and key when it names none of its own: the explicit fallback, else MODEL_* in env.
   const judgeOwnsNone = role === "judge" && !env.JUDGE_BASE_URL?.trim();

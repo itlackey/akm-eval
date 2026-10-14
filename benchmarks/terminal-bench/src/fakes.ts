@@ -19,7 +19,7 @@ export function writeFakeHarbor(root: string): string {
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, "uv"),
-    `#!/usr/bin/env bun
+    `#!/usr/bin/env -S bun --no-env-file
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = Bun.argv.slice(2);

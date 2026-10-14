@@ -702,7 +702,7 @@ describe("loadRunTrials", () => {
   test("collects what the akm arm's containers reported of themselves, without repeats", () => {
     const job = tmp();
     const locks = { akm_cli: "1".repeat(64), plugin: "2".repeat(64) };
-    const record = (v: string, assets: number, tree = "a".repeat(64)) => ({ "akm_install.json": { akm_version: v, plugin_akm_cli: "0.9.26", assets_indexed: assets, env: { AKM_CURATE_TIMEOUT: "30" }, lockfiles: locks, dependency_tree_sha256: tree } });
+    const record = (v: string, assets: number, tree = "a".repeat(64)) => ({ "akm_install.json": { akm_version: v, plugin_akm_cli: "0.9.26", assets_indexed: assets, search_mode: "semantic", embeddings_indexed: assets + 10, env: { AKM_CURATE_TIMEOUT: "30" }, lockfiles: locks, dependency_tree_sha256: tree } });
     trialDir(job, "a__b", "akm-opencode", {}, record("0.9.27", 259));
     trialDir(job, "b__b", "akm-opencode", {}, record("0.9.27", 259));
     trialDir(job, "c__b", "akm-opencode", {}, record("0.9.27-dev", 260, "b".repeat(64)));
@@ -711,6 +711,8 @@ describe("loadRunTrials", () => {
       akm_version: ["0.9.27", "0.9.27-dev"],
       plugin_akm_cli: ["0.9.26"],
       assets_indexed: [259, 260],
+      search_mode: ["semantic"],
+      embeddings_indexed: [269, 270],
       env: { AKM_CURATE_TIMEOUT: "30" },
       dependency_trees: ["a".repeat(64), "b".repeat(64)],
       lockfiles: locks,
@@ -951,4 +953,24 @@ describe("assetsSha256", () => {
     expect(assetsSha256({ ...base, dataset: { tasks: { x: "1" } } })).not.toBe(same);
     expect(assetsSha256({ ...base, attempts: 4 })).not.toBe(same);
   });
+});
+
+
+test("the semantic option reaches the AKM arm and preserves its other settings", () => {
+  const env = parseAkmEnv(["AKM_CURATE_TIMEOUT=30"], true);
+  expect(env).toEqual({ AKM_CURATE_TIMEOUT: "30", AKM_EVAL_SEMANTIC_SEARCH: "1" });
+  const job = jobConfig({ name: "semantic", model: "openai/m", jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [], akmEnv: env }) as any;
+  expect(job.agents[1].kwargs.akm_env).toEqual(env);
+  expect(job.agents[0].kwargs.akm_env).toBeUndefined();
+});
+
+
+test("custom model limits reach both Harbor arms while model aliases and credentials retain their meaning", () => {
+  const limits = { context: 32768, output: 4096 };
+  const settings = modelSettings("local-alias", { MODEL_API_KEY: "synthetic-model-key" }, { "local-alias": { model: "fast/local", base_url: "http://192.0.2.5/v1", api_key_env: "MODEL_API_KEY", limits } });
+  const job = jobConfig({ name: "bounded", model: settings.model, modelLimits: settings.modelLimits, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
+  for (const agent of job.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
+  expect(job.agents[0].kwargs.opencode_config).toEqual(job.agents[1].kwargs.opencode_config);
+  expect(settings.env.OPENAI_API_KEY).toBe("synthetic-model-key");
+  expect(JSON.stringify(job)).not.toContain("synthetic-model-key");
 });

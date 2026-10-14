@@ -1,0 +1,395 @@
+{
+  "eval": "longmemeval",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "luna-semantic-20261014-pilot",
+  "date": "2026-10-14T05:39:29.238Z",
+  "complete": true,
+  "resumed": false,
+  "status": "complete",
+  "aborted_reason": null,
+  "git_commit": "32da9c5-dirty",
+  "harness_sha256": "d5d801e9ffb7da98b9aefc2b86d99f735aca2be99be7ad735903bff7fb0d9210",
+  "model": "eval-luna/gpt-6-luna",
+  "judge_model": "chat/qwen3.8-27b",
+  "model_endpoint": "https://ai.lab.fwdslsh.dev",
+  "judge_endpoint": "https://ai.lab.fwdslsh.dev",
+  "temperature": 0,
+  "max_tokens": {
+    "model": 512,
+    "judge": 10
+  },
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "bunx --package akm-cli@0.10.261003-beta akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "top_k": 5,
+  "search_mode": "semantic",
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "reader_order": "haystack",
+  "retrieval_only": false,
+  "mode": null,
+  "dataset": {
+    "name": "LongMemEval, cleaned release, S variant",
+    "source": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned",
+    "licence": "MIT",
+    "revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+    "file": "longmemeval_s_cleaned.json",
+    "sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442"
+  },
+  "assets_sha256": "d8df44100e3548af92cdf2ce125a40d7b193827c1a0a633ab3ebc0b79521d274",
+  "seed": null,
+  "sample_seed": 42,
+  "sample": {
+    "order": "stratified-seeded",
+    "seed": 42,
+    "n": 20,
+    "total": 500,
+    "per_type": {
+      "single-session-user": 3,
+      "single-session-assistant": 2,
+      "single-session-preference": 1,
+      "multi-session": 5,
+      "temporal-reasoning": 6,
+      "knowledge-update": 3
+    }
+  },
+  "observed_models": [
+    "gpt-6-luna"
+  ],
+  "observed_judge_models": [
+    "qwen3.8-27b"
+  ],
+  "sessions_loaded": 961,
+  "sessions_over_projection_limit": 132,
+  "n_run": 20,
+  "n_scored": 20,
+  "n_errored": 0,
+  "timeouts": 0,
+  "answers_cut_off": {
+    "without_akm": 0,
+    "with_akm": 0
+  },
+  "answers_empty": {
+    "without_akm": 0,
+    "with_akm": 0
+  },
+  "metrics": {
+    "accuracy": {
+      "without_akm": {
+        "n": 20,
+        "correct": 16,
+        "rate": 0.8,
+        "n_errored": 0
+      },
+      "with_akm": {
+        "n": 20,
+        "correct": 18,
+        "rate": 0.9,
+        "n_errored": 0
+      },
+      "difference": {
+        "n": 20,
+        "value": 0.1,
+        "ci95": [
+          -0.091,
+          0.291
+        ],
+        "both_correct": 15,
+        "only_with_akm": 3,
+        "only_without_akm": 1,
+        "neither": 1
+      }
+    },
+    "by_type": {
+      "knowledge-update": {
+        "n": 3,
+        "without_akm": {
+          "n": 3,
+          "correct": 2,
+          "rate": 0.6667
+        },
+        "with_akm": {
+          "n": 3,
+          "correct": 2,
+          "rate": 0.6667
+        }
+      },
+      "multi-session": {
+        "n": 5,
+        "without_akm": {
+          "n": 5,
+          "correct": 4,
+          "rate": 0.8
+        },
+        "with_akm": {
+          "n": 5,
+          "correct": 4,
+          "rate": 0.8
+        }
+      },
+      "single-session-assistant": {
+        "n": 2,
+        "without_akm": {
+          "n": 2,
+          "correct": 2,
+          "rate": 1
+        },
+        "with_akm": {
+          "n": 2,
+          "correct": 2,
+          "rate": 1
+        }
+      },
+      "single-session-preference": {
+        "n": 1,
+        "without_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        },
+        "with_akm": {
+          "n": 1,
+          "correct": 1,
+          "rate": 1
+        }
+      },
+      "single-session-user": {
+        "n": 3,
+        "without_akm": {
+          "n": 3,
+          "correct": 2,
+          "rate": 0.6667
+        },
+        "with_akm": {
+          "n": 3,
+          "correct": 3,
+          "rate": 1
+        }
+      },
+      "temporal-reasoning": {
+        "n": 6,
+        "without_akm": {
+          "n": 6,
+          "correct": 5,
+          "rate": 0.8333
+        },
+        "with_akm": {
+          "n": 6,
+          "correct": 6,
+          "rate": 1
+        }
+      }
+    },
+    "retrieval": {
+      "k": 5,
+      "n": 20,
+      "zero_hit_rate": 0,
+      "hit_rate": 1,
+      "recall": 0.975,
+      "precision": 0.35,
+      "mrr": 0.9375,
+      "ndcg": 0.9288
+    },
+    "retrieval_abstention": {
+      "n": 0
+    }
+  },
+  "judge_undecidable": 0,
+  "notes": [
+    "The judge is not gpt-4o-2024-08-06, the judge the benchmark specifies (it answered as qwen3.8-27b). These scores are not comparable to published LongMemEval numbers."
+  ],
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "longmemeval",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "dccbc061": {
+        "input_sha256": "cae907c68e36611e627a7a13578df708c46f157c863e9dd2b10cbdad604f86bd",
+        "label_sha256": "6d162609a77b734a856bd82d8c22931590497e08bdaefb962436e3278561ddf2"
+      },
+      "001be529": {
+        "input_sha256": "ea34bcf86bca51f5f065c19cecb04f330f0fed7ac1a475303e704473203cab09",
+        "label_sha256": "106e335c52a3bf706f1c8d8cd5a0a50275ed1532b51ca60be6731b4c51d1609b"
+      },
+      "c14c00dd": {
+        "input_sha256": "08c2faf1353e75e8ee215caf8360e3d09284ef1ba89107690e77eb6b97247c4d",
+        "label_sha256": "cb6cbfaf0ff12c04102f95c5b0ce684bbdaff3bc393ad0bb5d97709ecb840572"
+      },
+      "2318644b": {
+        "input_sha256": "05021a5dc6671fcc04f9b985fc6d6912241ab6578adf38a577040059047439f4",
+        "label_sha256": "5327660acf310589e7b2c255690aaf58de134bd246586cfd6c42aca3cd31da8f"
+      },
+      "d851d5ba": {
+        "input_sha256": "6bb413f1191564b178f21ba865348357213ab70ad60d7e7591ab32429ad248bd",
+        "label_sha256": "63243c2a8581ea53d13c50092fa991e3437070da1b1af702fa43b405f50c2e9d"
+      },
+      "1d4e3b97": {
+        "input_sha256": "cb26c346bf2f3bd2241bb1ae911b6f62de49616ab39d47fcac3875767c9c36c7",
+        "label_sha256": "12fc685c6147f977bb885495c2f8175e5d61bca89d0e0817c1152688ab348afe"
+      },
+      "9aaed6a3": {
+        "input_sha256": "5830e791b77d3cbed68be38be932f63e689f0e496610b7e34977485a43ea8078",
+        "label_sha256": "3126c806183ad19dfcbdadc9d805a387d7a4eb8b811c58f54a7c5c3185e827a9"
+      },
+      "8979f9ec": {
+        "input_sha256": "2ec1da1270244e47a745e1a9b555a4d92ab313d4e9fa84e846930f5512d528e4",
+        "label_sha256": "4403f3beebf163c02fd2668fbe8cda98ebdf3d83cd43f6aec3ae107dfd173874"
+      },
+      "1192316e": {
+        "input_sha256": "4798e4b9b03f657716dd1e8f34e05dbbd00fdf5fe89a09ba2017c8f9d2f1705f",
+        "label_sha256": "ec331a5fb620c32c5af002168c3b31342b08835077540b9a61ed89dc4f816d7c"
+      },
+      "gpt4_f49edff3": {
+        "input_sha256": "0c9185cf4faa9d64942889ec510802a55304eff0f07f002e42edf556182ff216",
+        "label_sha256": "8feb4c7b1e885e629abc23cd60c4c6ecdf10e84136155557e43aff0980939522"
+      },
+      "gpt4_1d4ab0c9": {
+        "input_sha256": "1069f164dc0425ccf0722d19cd9a2dc9d3e8734c2991dd6414d73194cec46efe",
+        "label_sha256": "096018a1c91046962cdc4a5e3f4446f0f97f32898cc45752a88d5f61829a2855"
+      },
+      "gpt4_468eb064": {
+        "input_sha256": "4fca288865566149450b0dc99bee0ec2755367ef1ac9a4de379b4018c0b248f1",
+        "label_sha256": "ea559ac6d45c9e90d13d3a70285a59f106cd801ad9198dab7d967d462c5f6ee9"
+      },
+      "gpt4_385a5000": {
+        "input_sha256": "1392edd982de6518e2127ca00483669faba3cf539440727846ad72f476167f0e",
+        "label_sha256": "4810af2a565583168b5bdbe63bc7c401fa3b724923687cb761b148aa1fd53cba"
+      },
+      "2a1811e2": {
+        "input_sha256": "e311da50dfa3f1c6a89f080d7d5faca4f381b4db011397c51a714907b7e71a7d",
+        "label_sha256": "8741320eaa4c997359526647b9d94ff8c89488e786743340baa751ecaa8c2269"
+      },
+      "gpt4_cd90e484": {
+        "input_sha256": "a73f2119c2342a9051b46b39ec6322f4e34d61132265e9f7fa095ae4dc96890d",
+        "label_sha256": "2327eba602fb571268b836defb7e4b9d9e196f0d4b9ea26b38605f86b57cefe1"
+      },
+      "830ce83f": {
+        "input_sha256": "d222c92e0c1811e77c94cb10b05539323de3bc20d5764fbbf31825f5d6f3272e",
+        "label_sha256": "e8c1675aa60a8d4188f62228b8b192641a2018ebd54f26ec239c87eb417de106"
+      },
+      "71315a70": {
+        "input_sha256": "9196a4e16beb2b24c890a2e919b183a8f6e85b07cbbbcca8347d57d50ae77b59",
+        "label_sha256": "06e73b26aea235867bd6e9cc92fcb2fbccfb0272c40e693b48425b0565929799"
+      },
+      "45dc21b6": {
+        "input_sha256": "63a18fc69c72e333b8e9dddaa327730614ab510536240f7392a23a0fa789a258",
+        "label_sha256": "96a849ebfc37ee6e26ab802459bc9e89236cf6f4204a189a00b42df5f793086b"
+      },
+      "18dcd5a5": {
+        "input_sha256": "2158cbc51fd56f206a9f39dbc06730c7c3dfe6b3c240c86ff2f395a30d681c90",
+        "label_sha256": "e9a09967177fc8e260a3a6beadbdcfdb43c9716d34865b5cb4b2e9392c1dc5ce"
+      },
+      "1b9b7252": {
+        "input_sha256": "81d429d4fe9f45bb32f033c7c0e8421ea8bcfe1116753c06b37587127aa15fa9",
+        "label_sha256": "33910390945d5f1a171623450d96eb5aca3cfcaf25917360b4b449ee380a38f0"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "bunx --package akm-cli@0.10.261003-beta akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "8f573ba30eaa0d4e91eb99b2e95976cbfecd5cc27e8515a9f8272b1ac4394904",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "eval-luna/gpt-6-luna",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": null,
+        "timeoutMs": 900000
+      },
+      "judge": {
+        "model": "chat/qwen3.8-27b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": null,
+        "timeoutMs": 900000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "dccbc061",
+        "001be529",
+        "c14c00dd",
+        "2318644b",
+        "d851d5ba",
+        "1d4e3b97",
+        "9aaed6a3",
+        "8979f9ec",
+        "1192316e",
+        "gpt4_f49edff3",
+        "gpt4_1d4ab0c9",
+        "gpt4_468eb064",
+        "gpt4_385a5000",
+        "2a1811e2",
+        "gpt4_cd90e484",
+        "830ce83f",
+        "71315a70",
+        "45dc21b6",
+        "18dcd5a5",
+        "1b9b7252"
+      ],
+      "scored": [
+        "dccbc061",
+        "001be529",
+        "c14c00dd",
+        "2318644b",
+        "d851d5ba",
+        "1d4e3b97",
+        "9aaed6a3",
+        "8979f9ec",
+        "1192316e",
+        "gpt4_f49edff3",
+        "gpt4_1d4ab0c9",
+        "gpt4_468eb064",
+        "gpt4_385a5000",
+        "2a1811e2",
+        "gpt4_cd90e484",
+        "830ce83f",
+        "71315a70",
+        "45dc21b6",
+        "18dcd5a5",
+        "1b9b7252"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 321.122
+}

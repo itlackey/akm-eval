@@ -148,7 +148,7 @@ test('facets, date bounds, missing-value conditions, CSV and reordering work thr
   await page.locator('#model').selectOption('Qwen3.8-27b');
   expect((await exportRows(page)).every(row=>row.model==='chat/qwen3.8-27b')).toBe(true);
   await page.locator('#suite').selectOption('reflect'); await page.locator('#advanced-toggle').click();
-  const candidates=data.runs.filter(row=>row.suite==='reflect');
+  const candidates=data.runs.filter(row=>row.suite==='reflect' && row.model==='chat/qwen3.8-27b');
   const collection=candidates[0].collection; await page.locator('#collection').selectOption(collection);
   const date=candidates[0].date.slice(0,10);
   await page.locator('#dateFrom').fill(date); await page.locator('#dateFrom').dispatchEvent('change');

@@ -9,6 +9,10 @@ How does akm do as a memory backend on LongMemEval, next to a full-context basel
 
 It also scores what akm retrieved: how often a session that holds the answer is among the five.
 
+The default uses **one keyword search**, with semantic search off. It tests raw-session retrieval with a fixed five-session cap; it does not exercise distillation, query decomposition, or repeated evidence gathering. The full-history arm can already see every required fact. A quality gain from AKM is something to measure, not assume.
+
+For multi-session questions, inspect recall of **all required sessions** as well as hit rate. Finding one necessary session can still leave the question unanswerable. `--semantic` selects the existing semantic variant, whose effect needs its own measurement. Saved answer-call times exclude indexing, retrieval, and judging.
+
 ## Run
 
 ```

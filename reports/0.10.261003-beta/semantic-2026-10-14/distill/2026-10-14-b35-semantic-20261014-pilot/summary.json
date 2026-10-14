@@ -1,0 +1,393 @@
+{
+  "eval": "distill",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "b35-semantic-20261014-pilot",
+  "date": "2026-10-14T05:35:48.812Z",
+  "git_commit": "32da9c5-dirty",
+  "harness_sha256": "36e010368c4fa4744e2a3eeb7fcb2b7c3f519424d9cbac4c04150dc1035585b1",
+  "model": "fast/qwen3.6-35b-a3b",
+  "akm_version": "0.10.261003-beta",
+  "akm_bin": "bunx --package akm-cli@0.10.261003-beta akm",
+  "akm_build": null,
+  "akm_build_fingerprint": null,
+  "served_models": [
+    "qwen3.6-35b-a3b"
+  ],
+  "limit": 12,
+  "strategy": "distill-only",
+  "config_patch": {
+    "path": "../../../../../../tmp/akm-eval-semantic-20261014.json",
+    "sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191"
+  },
+  "config": {
+    "configVersion": "0.9.0",
+    "semanticSearchMode": "auto",
+    "registries": [],
+    "engines": {
+      "model": {
+        "kind": "llm",
+        "provider": "openai",
+        "endpoint": "<MODEL_BASE_URL>/chat/completions",
+        "model": "fast/qwen3.6-35b-a3b",
+        "apiKey": "$MODEL_API_KEY",
+        "timeoutMs": 600000,
+        "temperature": 0,
+        "enableThinking": false
+      }
+    },
+    "defaults": {
+      "llmEngine": "model",
+      "improveStrategy": "distill-only"
+    },
+    "improve": {
+      "strategies": {
+        "distill-only": {
+          "engine": "model",
+          "processes": {
+            "reflect": {
+              "enabled": false
+            },
+            "distill": {
+              "enabled": true,
+              "allowedTypes": [
+                "memory"
+              ]
+            },
+            "consolidate": {
+              "enabled": false
+            },
+            "memoryInference": {
+              "enabled": false
+            },
+            "extract": {
+              "enabled": false
+            },
+            "validation": {
+              "enabled": false
+            },
+            "triage": {
+              "enabled": false
+            },
+            "proactiveMaintenance": {
+              "enabled": false
+            }
+          },
+          "sync": {
+            "enabled": false
+          }
+        }
+      }
+    },
+    "embedding": {
+      "localModel": "Xenova/bge-small-en-v1.5",
+      "queryTimeoutMs": 600000
+    }
+  },
+  "engine": {
+    "engine": "model",
+    "model": "fast/qwen3.6-35b-a3b",
+    "endpoint": "https://ai.lab.fwdslsh.dev",
+    "temperature": 0,
+    "enableThinking": false,
+    "timeoutMs": 600000,
+    "engines": {
+      "model": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "assets_sha256": "4e28987bcef9ac86ab57e9dda76c194b9a25995bb2e2dc8dfb78b8d7d96d35e6",
+  "seed": null,
+  "status": "complete",
+  "aborted_reason": null,
+  "n_cases": 96,
+  "n_run": 12,
+  "n_scored": 12,
+  "n_errored": 0,
+  "timeouts": 0,
+  "metrics": {
+    "good_lessons": {
+      "n": 4,
+      "good": 2,
+      "rate": 0.5,
+      "ambiguous": 0
+    },
+    "wrong_lessons": {
+      "n": 6,
+      "wrong": 0,
+      "rate": 0
+    },
+    "lesson_updates": {
+      "n": 2,
+      "right": 0,
+      "rate": 0,
+      "ambiguous": 0,
+      "checks": {
+        "update_proposed": 0,
+        "existing_kept": 0,
+        "new_facts": 0,
+        "no_extra_claims": 0,
+        "not_copied": 0,
+        "no_new_lesson": 2
+      }
+    },
+    "by_class": {
+      "lesson-worthy": {
+        "n": 2,
+        "good": 1,
+        "rate": 0.5
+      },
+      "over-claim": {
+        "n": 2,
+        "good": 1,
+        "rate": 0.5
+      },
+      "dated-status": {
+        "n": 2,
+        "wrong": 0,
+        "rate": 0
+      },
+      "restates-asset": {
+        "n": 2,
+        "wrong": 0,
+        "rate": 0
+      },
+      "duplicate-lesson": {
+        "n": 2,
+        "wrong": 0,
+        "rate": 0
+      },
+      "lesson-update": {
+        "n": 2,
+        "right": 0,
+        "rate": 0
+      }
+    },
+    "outcomes": {
+      "lesson": {
+        "lesson": 2,
+        "update": 0,
+        "skipped": 1,
+        "rejected": 0,
+        "invalid": 1,
+        "error": 0
+      },
+      "none": {
+        "lesson": 0,
+        "update": 0,
+        "skipped": 6,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      },
+      "update": {
+        "lesson": 0,
+        "update": 0,
+        "skipped": 2,
+        "rejected": 0,
+        "invalid": 0,
+        "error": 0
+      }
+    },
+    "bad_by": {
+      "missing_fact": 0,
+      "forbidden_claim": 0,
+      "contradiction": 0,
+      "too_long": 0,
+      "copied": 0
+    }
+  },
+  "model_calls": {
+    "calls": 28,
+    "errors": 0,
+    "prompt_tokens": 682.8,
+    "completion_tokens": 81.1,
+    "seconds": 1.29,
+    "output_tokens_per_second": 62.8
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "distill",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.2"
+    },
+    "cases": {
+      "lesson-01": {
+        "input_sha256": "e5cc6119f318ba510fa94a665c7208a502ea013f3717a75b8977255f3c9f01f4",
+        "label_sha256": "f9752c3063a14ba8fbbcbc26931653566dcbdc134c742e456f1b327a17fa8a2d"
+      },
+      "lesson-02": {
+        "input_sha256": "09a81c8fc131021b2ee5e5b6b2364e3c086adfc8a630c3b11e7ae9b0ca1ae877",
+        "label_sha256": "30b8f764aed4417e40294cf6136f32bc7801adc67d3993dc70d02ae2ec7c414a"
+      },
+      "claim-01": {
+        "input_sha256": "e4e6f13dcf62c735e81f70882d0258de28e19009bc53d2b6b3ab7e57f2251f5f",
+        "label_sha256": "3e0408d8fe3c456a837e271060184bde743e105a2c14c5e94f266220107dbd4a"
+      },
+      "claim-02": {
+        "input_sha256": "111cc66bb52943438cc1bb636891c6994eec738b3353bbc1706ff8dae5408d8b",
+        "label_sha256": "5e94df2117d68a903d859f5e8b642278e909dc3075bbeacf0d4d41284184db0b"
+      },
+      "status-01": {
+        "input_sha256": "47bf6e1cef1b2fa4b54fa987e5eef7e207033bc034a0de23c60a34321d534caa",
+        "label_sha256": "0de47d528a4c13539a459e6f207f906f449a09dfecf5cf94baf4dc2f8395962b"
+      },
+      "status-02": {
+        "input_sha256": "f5df6c6d9d6130654c8cddbc185466b23e65637a12bf7ff63f0659b5518ca465",
+        "label_sha256": "177c78e5b5cd6988566f4a375b01506571c6af0bd73b37f6e56ec7e20ef45808"
+      },
+      "asset-01": {
+        "input_sha256": "f8f0da15bd7a49301b5ed855dc7c9a7df76da27351a15c5cc446c5a7046ef229",
+        "label_sha256": "87e6a7140f51b609797ee65f1cbb7d2dafd159d364bf17ed0b54544f92ca5bb2"
+      },
+      "asset-02": {
+        "input_sha256": "64b189df642d618247cee6f281f32a0663492a03ed0a8e36f608df86e97f3fee",
+        "label_sha256": "b664367b46c18fc7921f02c19bf5b8734b86ed1d468f267681d9aee1f461ec8f"
+      },
+      "dup-01": {
+        "input_sha256": "b5d960d404021fc1bab3f2a6cc6f05e2aba2baeb84151c9549e57df0ce474199",
+        "label_sha256": "6f017479aa55a71b4b096d78c968d6d597b84745e71834b70559cf5c77dab306"
+      },
+      "dup-02": {
+        "input_sha256": "a3de10740790dd80ff8476ab9e1d5fedbd8e8e4fdb0de73c8395997c6acab5dd",
+        "label_sha256": "0da917c01414acc3894c86b25d93d7fc709282c0afd3b8d86da2f424b7fb7e92"
+      },
+      "upd-01": {
+        "input_sha256": "20c1185cc395d057fe28962036e9aa7324969216fdd33e544093ba1b397d1567",
+        "label_sha256": "f4c9326504518e350773363b620b47a410c0f8c5696d1fb4f16fa811aa3522c2"
+      },
+      "upd-02": {
+        "input_sha256": "ee1bc2add3d2ceb265aecb244635a1faa89c5bf42844b7b5d613eb07171a48d7",
+        "label_sha256": "c4daac12affa4167b1d66662282b199a5fe4f3da8e448e8355c9fa88dca51bef"
+      }
+    },
+    "akm": {
+      "version": "0.10.261003-beta",
+      "bin": "bunx --package akm-cli@0.10.261003-beta akm",
+      "build": null,
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "fbf9efc15699218e0d50727fbf272605235e671abfdc34af0e7a450d28dd34c0",
+      "redacted": {
+        "configVersion": "0.9.0",
+        "semanticSearchMode": "auto",
+        "registries": [],
+        "engines": {
+          "model": {
+            "kind": "llm",
+            "provider": "openai",
+            "apiKey": "$MODEL_API_KEY"
+          }
+        },
+        "defaults": {
+          "llmEngine": "model",
+          "improveStrategy": "distill-only"
+        },
+        "improve": {
+          "strategies": {
+            "distill-only": {
+              "engine": "model",
+              "processes": {
+                "reflect": {
+                  "enabled": false
+                },
+                "distill": {
+                  "enabled": true,
+                  "allowedTypes": [
+                    "memory"
+                  ]
+                },
+                "consolidate": {
+                  "enabled": false
+                },
+                "memoryInference": {
+                  "enabled": false
+                },
+                "extract": {
+                  "enabled": false
+                },
+                "validation": {
+                  "enabled": false
+                },
+                "triage": {
+                  "enabled": false
+                },
+                "proactiveMaintenance": {
+                  "enabled": false
+                }
+              },
+              "sync": {
+                "enabled": false
+              }
+            }
+          }
+        },
+        "embedding": {
+          "localModel": "Xenova/bge-small-en-v1.5",
+          "queryTimeoutMs": 600000
+        }
+      }
+    },
+    "settings": {
+      "strategy": "distill-only",
+      "config_patch_sha256": "e52bcb101c0b00546da9895bda547f3074f30b5a30948e698a6d188ed3e5b191",
+      "timeout_ms": 900000,
+      "seed": null
+    },
+    "engines": {
+      "model": {
+        "model": "fast/qwen3.6-35b-a3b",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": 0,
+        "enableThinking": false,
+        "timeoutMs": 600000
+      }
+    },
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "lesson-01",
+        "lesson-02",
+        "claim-01",
+        "claim-02",
+        "status-01",
+        "status-02",
+        "asset-01",
+        "asset-02",
+        "dup-01",
+        "dup-02",
+        "upd-01",
+        "upd-02"
+      ],
+      "scored": [
+        "lesson-01",
+        "lesson-02",
+        "claim-01",
+        "claim-02",
+        "status-01",
+        "status-02",
+        "asset-01",
+        "asset-02",
+        "dup-01",
+        "dup-02",
+        "upd-01",
+        "upd-02"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 62.936
+}

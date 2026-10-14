@@ -487,3 +487,57 @@ def test_a_trial_with_no_log_leaves_a_verdict_as_well(tmp_path):
     with pytest.raises(m.AkmPluginNotLoadedError, match="no opencode log"):
         make(tmp_path).populate_context_post_run(AgentContext())
     assert json.loads((tmp_path / m.PLUGIN_STATUS_FILE).read_text())["live"] is False
+
+
+def test_semantic_setup_requires_embeddings_and_actual_semantic_search(tmp_path):
+    plain = make(tmp_path)._seed_command()
+    agent = make(tmp_path, akm_env={"AKM_EVAL_SEMANTIC_SEARCH": "1"})
+    command = agent._seed_command()
+    assert "config set semanticSearchMode auto" not in plain
+    assert "config set semanticSearchMode auto" in command
+    assert "config set embedding.localModel Xenova/bge-small-en-v1.5" in command
+    assert "embeddingCount!==r.totalEntries" in command
+    assert 'searchMode!=="semantic"' in command
+    assert subprocess.run(["bash", "-n", "-c", command], capture_output=True, text=True).returncode == 0
+    record = m.install_record("AKM-SETUP assets=8\nAKM-SETUP embeddings=11\nAKM-SETUP search_mode=semantic\n", "", agent.options.akm_env)
+    assert record["search_mode"] == "semantic"
+    assert record["embeddings_indexed"] == 11
+    assert record["env"]["AKM_EVAL_SEMANTIC_SEARCH"] == "1"
+
+
+@pytest.mark.parametrize("index,search,ok,reason", [
+    ({"totalEntries": 3, "verification": {"embeddingCount": 3}}, "semantic", True, ""),
+    ({"totalEntries": 3, "verification": {"embeddingCount": 2}}, "semantic", False, "incomplete semantic index"),
+    ({}, "semantic", False, "incomplete semantic index"),
+    ({"totalEntries": 3, "verification": {"embeddingCount": 3}}, "fts-fallback", False, "search is not semantic"),
+])
+def test_semantic_seed_accepts_verified_search_and_rejects_missing_embeddings_or_fallback(tmp_path, monkeypatch, index, search, ok, reason):
+    import os
+    root = tmp_path / "akm"
+    root.mkdir()
+    libraries = root / "libraries"
+    memories = libraries / "sample" / "memories"
+    memories.mkdir(parents=True)
+    (memories / "note.md").write_text("A public test note")
+    for key, value in {"NVM": "", "AKM_ROOT": str(root), "LIBRARIES": str(libraries), "BUNDLE": str(root / "bundle")}.items():
+        monkeypatch.setattr(m, key, value)
+    executable = tmp_path / "akm-cli" / "akm"
+    executable.parent.mkdir()
+    executable.write_text("\n".join([
+        "#!/usr/bin/env python3", "import json, os, sys", "a=sys.argv[1:]",
+        "if a[:2]==['bundle','create']: os.makedirs(a[a.index('--dir')+1],exist_ok=True)",
+        "if a[0]=='index': print(os.environ['TEST_INDEX'])",
+        "if a[0]=='search': print(json.dumps({'searchMode':os.environ['TEST_SEARCH']}))",
+        "if a[0]=='info': print(json.dumps({'indexStats':{'byType':{'fact':2,'memory':1}}}))",
+    ]) + "\n")
+    executable.chmod(0o755)
+    env = {**os.environ, "PATH": str(executable.parent) + os.pathsep + os.environ["PATH"], "AKM_TASK_STASH": "sample", "TEST_INDEX": json.dumps(index), "TEST_SEARCH": search}
+    command = make(tmp_path / "logs", library_assets=1, akm_env={"AKM_EVAL_SEMANTIC_SEARCH": "1"})._seed_command()
+    done = subprocess.run(["bash", "-c", command], capture_output=True, text=True, env=env)
+    assert (done.returncode == 0) is ok, done.stderr
+    if ok:
+        assert "AKM-SETUP search_mode=semantic" in done.stdout
+        assert "AKM-SETUP embeddings=3" in done.stdout
+    else:
+        assert reason in done.stderr
+        assert "AKM-SETUP search_mode=semantic" not in done.stdout

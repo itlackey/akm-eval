@@ -97,7 +97,7 @@ col("measurement", "Eval version", "text", "Settings", "Collector measurement ve
 col("scoring_version", "Scoring version", "text", "Settings", "Version of the scoring rules. Explicit rescoring preserves the original eval version separately.");
 col("strategy", "Strategy", "text", "Settings", "Recorded AKM improve strategy.");
 col("mode", "Run mode", "text", "Settings", "Recorded benchmark mode, such as retrieval-only.");
-col("search_method", "Search methods", "text", "Settings", "Recorded keyword and/or semantic search modes.");
+col("search_method", "Search methods", "text", "Settings", "Recorded search modes. A configured qualifier means the setting was recorded, without an observed query mode.");
 col("embedding_model", "Embedding model", "text", "Settings", "Recorded embedder or semantic embedding model.");
 col("judge_model", "Judge model", "text", "Settings", "Recorded answer-judge model, when present.");
 col("temperature", "Temperature", "number", "Settings", "Shared recorded engine temperature; null if engine temperatures differ.");
@@ -200,7 +200,12 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   fields.temperature = n(summary, "temperature") ?? n(summary, "engine.temperature") ?? (temperatures.length === 1 ? temperatures[0]! : null);
   fields.thinking = unique(engines.map(engine => typeof engine.enableThinking === "boolean" ? engine.enableThinking ? "On" : "Off" : null));
   fields.strategy = string(summary.strategy) ?? string(at(summary, "manifest.settings.strategy"));
-  fields.search_method = typeof summary.search_mode === "string" ? summary.search_mode : unique(Object.values(obj(summary.search_mode)));
+  const observedSearch = typeof summary.search_mode === "string" ? summary.search_mode : unique(Object.values(obj(summary.search_mode)));
+  const setupModes = at(summary, "akm_install.observed.search_mode");
+  const setupSearch = Array.isArray(setupModes) ? unique(setupModes) : null;
+  const configuredSearch = at(summary, "config.semanticSearchMode") ?? at(summary, "manifest.config.redacted.semanticSearchMode");
+  fields.search_method = observedSearch ?? (setupSearch ? `${setupSearch} (setup verified)` : configuredSearch === "auto" || at(summary, "akm_env.AKM_EVAL_SEMANTIC_SEARCH") === "1"
+    ? "semantic (configured)" : configuredSearch === "off" ? "keyword (configured)" : null);
   fields.embedding_model = string(summary.semantic_model) ?? string(summary.embedder);
   fields.judge_model = string(summary.judge_model);
   fields.max_tokens = n(summary, "max_tokens.model") ?? num(summary.max_tokens);

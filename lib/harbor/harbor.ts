@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { dirtyFingerprint } from "../akm/akm.ts";
 import { fail } from "../cli.ts";
-import { type ModelEntry, type ModelSettings, loadModels, resolveModel } from "../models.ts";
+import { type ModelEntry, type ModelLimits, type ModelSettings, loadModels, resolveModel } from "../models.ts";
 import { credentialField, sha256File, sha256Text } from "../provenance.ts";
 import type { Arm, Trial } from "./report.ts";
 import type { RunTrial } from "./score.ts";
@@ -101,7 +101,7 @@ const hostnameOf = (url: string): string | null => {
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
  * Only what Harbor needs goes into the environment (hostEnv), and the model's variables.
  */
-export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string> } {
+export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; modelLimits?: ModelLimits } {
   const id = (flag ?? host.MODEL_NAME)?.trim();
   if (flag !== undefined && !id) fail("--model needs a model name");
   if (!id) fail("name the model: pass --model NAME, or set MODEL_NAME in .env, as opencode names it, such as openai/gpt-6-luna. See .env.example.");
@@ -131,7 +131,7 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
     const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
     if (!m.apiKey) fail(`no model key for ${model}: set MODEL_API_KEY (or the models.json line's api_key_env) in .env. Every trial would fail at the model call, after its setup.`);
-    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl } };
+    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}) };
   }
 
   const model = modelName(id);
@@ -147,7 +147,7 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
 }
 
 /** What a run needs besides the model, checked before the first container starts. `values` are the parsed flags. */
-export function preflight(values: { model?: string } = {}): { model: string; env: Record<string, string> } {
+export function preflight(values: { model?: string } = {}): ReturnType<typeof modelSettings> {
   const settings = modelSettings(values.model, process.env);
   if (!Bun.which("uv")) fail("uv is needed. See https://docs.astral.sh/uv/");
   if (Bun.spawnSync(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exitCode !== 0) fail("Docker is not reachable: `docker info` failed. Every trial runs in a container.");
@@ -313,7 +313,7 @@ export function stagePackages(arm: AkmArm, dir: string): { dir: string; files: {
 export const FIXED_AKM_ENV = ["AKM_BUNDLE_DIR", "AKM_CONFIG_DIR", "AKM_DATA_DIR", "AKM_CACHE_DIR", "AKM_STATE_DIR", "AKM_OPENCODE_CLI"];
 
 /** `--akm-env KEY=VALUE`, repeated: the extra AKM_* settings of the akm arm. */
-export function parseAkmEnv(values: string[] | undefined): Record<string, string> {
+export function parseAkmEnv(values: string[] | undefined, semantic = false): Record<string, string> {
   const out: Record<string, string> = {};
   for (const v of values ?? []) {
     const eq = v.indexOf("=");
@@ -325,12 +325,14 @@ export function parseAkmEnv(values: string[] | undefined): Record<string, string
     if (Object.hasOwn(out, key)) fail(`--akm-env ${key} is given twice`);
     out[key] = v.slice(eq + 1);
   }
+  if (semantic) out.AKM_EVAL_SEMANTIC_SEARCH = "1";
   return out;
 }
 
 /** The options of the Harbor evals for the akm under test, for parseArgs, and their lines of an eval's usage text. */
-export const AKM_ARM_OPTIONS = { akm: { type: "string" }, "akm-env": { type: "string", multiple: true } } as const;
-export const akmArmUsage = `  --akm           the akm of the akm arm, which runs in a container: akm-cli@x.y.z (an exact npm release), or the folder of an
+export const AKM_ARM_OPTIONS = { semantic: { type: "boolean" }, akm: { type: "string" }, "akm-env": { type: "string", multiple: true } } as const;
+export const akmArmUsage = `  --semantic      enable AKM hybrid semantic search with bge-small-en-v1.5; setup verifies embeddings and a semantic query.
+  --akm           the akm of the akm arm, which runs in a container: akm-cli@x.y.z (an exact npm release), or the folder of an
                   akm checkout, which is packed with npm pack and installed from the tarball. A checkout that holds the plugin
                   (a folder whose package.json is named akm-opencode) gets it packed too. Default: akm-cli@${PINS.akm_cli}.
                   AKM_BIN is not read: it is a command on this machine.
@@ -350,6 +352,7 @@ export const akmArmUsage = `  --akm           the akm of the akm arm, which runs
 export function jobConfig(o: {
   name: string;
   model: string;
+  modelLimits?: ModelLimits;
   jobsDir: string;
   attempts: number;
   librariesDir: string;
@@ -361,7 +364,12 @@ export function jobConfig(o: {
 }): Record<string, unknown> {
   const arm = o.arm ?? releaseArm();
   // The same model does opencode's side jobs, such as titling a session, so the run calls one model only.
-  const opencodeConfig = { $schema: "https://opencode.ai/config.json", autoupdate: false, small_model: o.model };
+  const opencodeConfig: Record<string, unknown> = { $schema: "https://opencode.ai/config.json", autoupdate: false, small_model: o.model };
+  if (o.modelLimits) {
+    const slash = o.model.indexOf("/");
+    const provider = o.model.slice(0, slash), id = o.model.slice(slash + 1);
+    opencodeConfig.provider = { [provider]: { models: { [id]: { limit: o.modelLimits } } } };
+  }
   const both = { model_name: o.model, override_setup_timeout_sec: SETUP_TIMEOUT_SEC };
   const tarballs = arm.cli.tarball !== null || arm.plugin.tarball !== null;
   if (tarballs && !o.packagesDir) throw new Error("the akm arm has tarballs, and the job names no folder for them");
@@ -471,6 +479,9 @@ export interface Observed {
   plugin_akm_cli: string[];
   /** The assets akm indexed in the seeded library. */
   assets_indexed: number[];
+  /** Query modes and embedding counts explicitly verified during semantic setup; absent in older records. */
+  search_mode?: string[];
+  embeddings_indexed?: number[];
   /** The AKM_* settings the arm ran with (the arm's, then the job's), from the first akm trial that recorded them. */
   env: Record<string, string> | null;
   /** The digest of the dependency tree each akm trial installed (`dependency_tree_sha256` of akm_install.json: akm-cli's and the plugin's `npm ls --all --json`), without repeats. More than one means the containers did not install the same code. */
@@ -506,6 +517,8 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
       if (typeof install.akm_version === "string") observed.akm_version.push(install.akm_version);
       if (typeof install.plugin_akm_cli === "string") observed.plugin_akm_cli.push(install.plugin_akm_cli);
       if (typeof install.assets_indexed === "number") observed.assets_indexed.push(install.assets_indexed);
+      if (typeof install.search_mode === "string") (observed.search_mode ??= []).push(install.search_mode);
+      if (typeof install.embeddings_indexed === "number") (observed.embeddings_indexed ??= []).push(install.embeddings_indexed);
       if (observed.env === null && typeof install.env === "object" && install.env !== null) observed.env = install.env;
       if (typeof install.dependency_tree_sha256 === "string") observed.dependency_trees.push(install.dependency_tree_sha256);
       const locks = install.lockfiles;
@@ -513,7 +526,7 @@ export function loadRunTrials(jobDir: string): { trials: RunTrial[]; observed: O
     }
     return row;
   });
-  return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed), dependency_trees: distinct(observed.dependency_trees) } };
+  return { trials, observed: { ...observed, akm_version: distinct(observed.akm_version), plugin_akm_cli: distinct(observed.plugin_akm_cli), assets_indexed: distinct(observed.assets_indexed), dependency_trees: distinct(observed.dependency_trees), ...(observed.search_mode ? { search_mode: distinct(observed.search_mode) } : {}), ...(observed.embeddings_indexed ? { embeddings_indexed: distinct(observed.embeddings_indexed) } : {}) } };
 }
 
 // ---- whether the run did what it set out to do ----------------------------------------------------------------------------

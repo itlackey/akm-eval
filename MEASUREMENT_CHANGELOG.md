@@ -11,6 +11,10 @@ rescoring can apply current scoring rules to unchanged inputs: it records the
 current scoring version while retaining the original collector version. New
 inputs require collection. Add a release entry here when a version changes.
 
+## Unreleased
+
+- agent-ab and terminal-bench: measurement version 0.3. `--semantic` enables the AKM arm's hybrid search with pinned bge-small-en-v1.5 embeddings. Setup verifies complete embedding coverage and an actual semantic query, and saves that proof. Runs without the flag retain keyword search. Optional `models.json` context/output limits are recorded in the shared OpenCode job configuration and applied equally to both arms. Earlier runs keep version 0.2 and require new collection for comparison with this collector.
+
 ## 0.6
 
 No eval's cases, modes or scoring rules changed. Eval versions remain as in 0.5.
