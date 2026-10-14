@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
 import { OVERRIDE_OPTIONS, parseOverrides } from "../../../lib/akm/overrides.ts";
+import { type SemanticVerification, takeSemanticVerification } from "../../../lib/akm/semantic.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -40,6 +41,7 @@ ${corpusUsage}
   --limit   run N cases, the first of each process in turn, so a short run covers every process
   --repeat  run the corpus N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
+  --semantic  enable native bge-small-en-v1.5 semantic search; merge with any config patch
   --config-patch FILE  a JSON file deep-merged into the akm config the eval writes, after it. A relative FILE is from the repository root.
 ${modelUsage}
 ${akmUsage}
@@ -91,6 +93,7 @@ interface Summary {
   /** What the run was made of (see lib/manifest.ts). */
   /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
   model_calls: ModelCalls | null;
+  semantic_verification?: SemanticVerification | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -223,6 +226,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
     served: counts.served,
     metrics: counts.metrics,
     model_calls: takeModelCalls(),
+    semantic_verification: takeSemanticVerification(),
     manifest,
     results_dir: dir,
   };
@@ -235,9 +239,9 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; process?: string; limit?: string; repeat?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; process?: string; limit?: string; repeat?: string; "config-patch"?: string; semantic?: boolean; label?: string; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, process: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, "config-patch": OVERRIDE_OPTIONS["config-patch"], ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, process: { type: "string" }, limit: { type: "string" }, repeat: { type: "string" }, "config-patch": OVERRIDE_OPTIONS["config-patch"], semantic: OVERRIDE_OPTIONS.semantic, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`bakeoff: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -255,7 +259,7 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   if (values.process !== undefined && !(PROCESSES as readonly string[]).includes(values.process)) fail(`--process must be one of ${PROCESSES.join(", ")}, not "${values.process}"`);
-  const configPatch = parseOverrides({ "config-patch": values["config-patch"] }, "", fail).configPatch;
+  const configPatch = parseOverrides({ "config-patch": values["config-patch"], semantic: values.semantic }, "", fail).configPatch;
 
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   useAkm(values, fail);

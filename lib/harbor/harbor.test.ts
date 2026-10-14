@@ -477,7 +477,7 @@ describe("jobConfig", () => {
   const [control, akm] = (jobConfig(base) as any).agents;
 
   test("names the two arms and gives them one model, one opencode and one config", () => {
-    expect(control.name).toBe("opencode");
+    expect(control.import_path).toBe("eval_opencode:EvalOpenCode");
     expect(akm.import_path).toBe("akm_opencode:AkmOpenCode");
     expect(akm.model_name).toBe(control.model_name);
     expect(akm.kwargs.version).toBe(PINS.opencode);

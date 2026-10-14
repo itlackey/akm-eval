@@ -21,6 +21,10 @@ The index uses akm's embedding model (133 MB, downloaded once into `.cache/model
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/promotion/run
 evals/promotion/run --model qwen3-27b

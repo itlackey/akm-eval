@@ -5,7 +5,7 @@
 """The treatment arm of the evals that run an agent in Harbor with and without akm (evals/agent-ab, benchmarks/terminal-bench):
 opencode with the akm-opencode plugin.
 
-The control arm is Harbor's own `opencode` agent. This class is that agent plus four things, and nothing else:
+Both arms share EvalOpenCode's Harbor setup, including compatibility repairs for frozen task images. This class is that agent plus four things, and nothing else:
 
 1. The plugin, named in opencode's config.
 2. akm itself: akm-cli installed, and an akm bundle seeded from the library `AKM_TASK_STASH` names (set in the task's
@@ -45,6 +45,7 @@ from typing import override
 from pydantic import Field, field_validator, model_validator
 
 from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
+from eval_opencode import EvalOpenCode
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
@@ -200,7 +201,7 @@ def install_record(seeded: str, checked: str, env: dict[str, str], trees: str = 
     }
 
 
-class AkmOpenCode(OpenCode):
+class AkmOpenCode(EvalOpenCode):
     options_model = AkmOpenCodeOptions
     options: AkmOpenCodeOptions
 

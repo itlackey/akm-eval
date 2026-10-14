@@ -10,9 +10,9 @@
 import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 import { Akm, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import type { Question } from "./dataset.ts";
-import { type ChatResult, type Endpoint, TEMPERATURE, chat } from "./llm.ts";
+import { type ChatResult, type Endpoint, TEMPERATURE, ChatError, chat, tokenLimit } from "./llm.ts";
 import { type SessionView, isAbstentionQuestion, judgePrompt, readerPrompt, stripReasoning } from "./prompts.ts";
-import { type Raw, type RawArm, type Row, makeRow } from "./score.ts";
+import { type Raw, type RawArm, type Row, makeRow, isDecidable } from "./score.ts";
 
 export const NAME = "longmemeval";
 
@@ -25,7 +25,7 @@ export const MAX_JUDGE_TOKENS = 10; // the benchmark's own: evaluate_qa.py asks 
 export const READER_ORDER = "haystack";
 
 /** The temperature and token limits a run sends, as summary.json holds them. A run with no model sends nothing. */
-export const sampling = (retrievalOnly: boolean) => ({ temperature: retrievalOnly ? null : TEMPERATURE, max_tokens: retrievalOnly ? null : { model: MAX_ANSWER_TOKENS, judge: MAX_JUDGE_TOKENS } });
+export const sampling = (retrievalOnly: boolean, model: Endpoint | null = null, judge: Endpoint | null = null) => ({ temperature: retrievalOnly ? null : TEMPERATURE, max_tokens: retrievalOnly ? null : { model: tokenLimit(model, MAX_ANSWER_TOKENS), judge: tokenLimit(judge, MAX_JUDGE_TOKENS) } });
 
 /** The sandbox a run asks its questions in: akm's own config and folders, with its built-in embedder when the search is semantic. */
 export const openSandbox = (mode: SearchMode): Sandbox => createSandbox(NAME, mode === "semantic" ? { semantic: true } : {});
@@ -33,23 +33,29 @@ export const openSandbox = (mode: SearchMode): Sandbox => createSandbox(NAME, mo
 const failedArm = (error: string, partial: Partial<RawArm> = {}): RawArm => ({ hypothesis: null, verdict: null, error, seconds: null, prompt_tokens: null, completion_tokens: null, finish_reason: null, model: null, judge_model: null, ...partial });
 
 /** One answer from the model, and the judge's verdict on it. */
-async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpoint): Promise<RawArm> {
+async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpoint, cache: Map<string, ChatResult>): Promise<RawArm> {
   let reply: ChatResult;
   try {
     reply = await chat(model, prompt, { maxTokens: MAX_ANSWER_TOKENS });
   } catch (e) {
-    return failedArm((e as Error).message);
+    return failedArm((e as Error).message, e instanceof ChatError ? { reader_usage: e.usage } : {});
   }
   // The judge is sent the answer without its reasoning. A reply that was only reasoning (a thinking model cut off at the token limit) has
   // no answer: it is recorded as empty, the judge is not asked about it, and the scorer counts it wrong.
   const hypothesis = stripReasoning(reply.text);
-  const got = { hypothesis, seconds: reply.seconds, prompt_tokens: reply.promptTokens, completion_tokens: reply.completionTokens, finish_reason: reply.finishReason, model: reply.model };
+  const got = { hypothesis, seconds: reply.seconds, prompt_tokens: reply.promptTokens, completion_tokens: reply.completionTokens, finish_reason: reply.finishReason, model: reply.model, reader_usage: reply.usage };
   if (hypothesis === "") return { ...failedArm(""), ...got, error: null };
   try {
-    const verdictReply = await chat(judge, judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstentionQuestion(q.question_id)), { maxTokens: MAX_JUDGE_TOKENS });
-    return { ...failedArm(""), ...got, error: null, verdict: verdictReply.text.trim().slice(0, 200), judge_model: verdictReply.model };
+    const prompt = judgePrompt(q.question_type, q.question, String(q.answer), hypothesis, isAbstentionQuestion(q.question_id));
+    const key = JSON.stringify([judge.baseUrl, judge.model, judge.chat, prompt]);
+    const cached = cache.get(key);
+    const verdictReply = cached ?? await chat(judge, prompt, { maxTokens: MAX_JUDGE_TOKENS });
+    cache.set(key, verdictReply);
+    const verdict = verdictReply.text.trim().slice(0, 200);
+    return { ...failedArm(""), ...got, error: isDecidable(verdict) ? null : `judge: undecidable verdict: ${verdict}`,
+      verdict, judge_model: verdictReply.model, judge_usage: cached ? null : verdictReply.usage, judge_cached: !!cached };
   } catch (e) {
-    return failedArm(`judge: ${(e as Error).message}`, got);
+    return failedArm(`judge: ${(e as Error).message}`, { ...got, ...(e instanceof ChatError ? { judge_usage: e.usage } : {}) });
   }
 }
 
@@ -57,10 +63,12 @@ export interface Context {
   akm: Akm;
   model: Endpoint | null;
   judge: Endpoint | null;
+  judgeCache?: Map<string, ChatResult>;
 }
 
 /** Asks one question, and returns its scored row. A run with no model or no judge only searches. */
 export async function collectQuestion(q: Question, ctx: Context): Promise<Row> {
+  const cache = ctx.judgeCache ?? new Map<string, ChatResult>();
   const sessions: SessionView[] = q.haystack_sessions.map((turns, i) => ({ date: q.haystack_dates[i], turns: turns.map((t) => ({ role: t.role, content: t.content })) }));
   const raw: Raw = { n_sessions: sessions.length, sessions_over_projection_limit: overProjectionLimit(sessions), retrieved_session_ids: null, retrieval_error: null, timed_out: false, without_akm: null, with_akm: null };
 
@@ -82,8 +90,8 @@ export async function collectQuestion(q: Question, ctx: Context): Promise<Row> {
     raw.timed_out = isAkmTimeout(raw.retrieval_error);
   }
   if (ctx.model && ctx.judge) {
-    raw.without_akm = await answer(readerPrompt(sessions, q.question_date, q.question), q, ctx.model, ctx.judge);
-    raw.with_akm = raw.retrieval_error === null ? await answer(readerPrompt(retrieved, q.question_date, q.question), q, ctx.model, ctx.judge) : failedArm(`akm: ${raw.retrieval_error}`);
+    raw.without_akm = await answer(readerPrompt(sessions, q.question_date, q.question), q, ctx.model, ctx.judge, cache);
+    raw.with_akm = raw.retrieval_error === null ? await answer(readerPrompt(retrieved, q.question_date, q.question), q, ctx.model, ctx.judge, cache) : failedArm(`akm: ${raw.retrieval_error}`);
   }
   return makeRow(q, raw);
 }

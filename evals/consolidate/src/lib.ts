@@ -22,7 +22,11 @@ export const embedderUsage = `  --embedder      deterministic (default) or real.
                   the real embedder may pair others, and its runs are not comparable with deterministic ones.`;
 
 /** The embedder that `--embedder` names. `fail` ends the run with a message. */
-export function parseEmbedder(value: string | undefined, fail: (message: string) => never): Embedder {
+export function parseEmbedder(value: string | undefined, fail: (message: string) => never, semantic = false): Embedder {
+  if (semantic) {
+    if (value !== undefined && value !== "real") fail("--semantic uses the real embedder; omit --embedder or use --embedder real");
+    return "real";
+  }
   if (value === undefined) return "deterministic";
   if (!(EMBEDDERS as readonly string[]).includes(value)) fail(`--embedder must be deterministic or real, not "${value}"`);
   return value as Embedder;

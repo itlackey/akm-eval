@@ -85,8 +85,8 @@ interface Summary extends ReturnType<typeof summarize> {
   complete: boolean;
   /** The rows include earlier work whose full wall time is not recorded. */
   resumed: boolean;
-  /** "aborted" for a run that did not finish what it set out to do, and then aborted_reason says why. A run still going, or killed, has not finished either. */
-  status: "complete" | "aborted";
+  /** Active checkpoints are running; an interrupted run is aborted with its reason. */
+  status: "running" | "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
   /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
@@ -131,7 +131,7 @@ interface Summary extends ReturnType<typeof summarize> {
 let commit: string | undefined;
 const gitCommit = (): string => (commit ??= commitOf(ROOT)); // asked once: the summary is written after every question
 
-/** Why a summary that is not complete says aborted when nothing gave up: the run was cut short, or is still going and writes it again after the next question. */
+/** A stopped run that did not finish its selected questions. */
 const UNFINISHED = "the run had not asked every question when this summary was written";
 
 const questions = (n: number): string => `${n} question${n === 1 ? "" : "s"}`;
@@ -179,7 +179,7 @@ function printSideBySide(a: Summary, b: Summary): void {
 }
 
 /** The settings of the model or the judge as the manifest keeps them: the host of the endpoint, never the path. */
-const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS });
+const engineOf = (e: Endpoint): EngineSetting => ({ model: e.model, endpoint: endpointHost(e.baseUrl), temperature: TEMPERATURE, enableThinking: null, timeoutMs: CHAT_TIMEOUT_MS, ...(e.chat ? { chat: e.chat } : {}) });
 
 /**
  * What differs between the manifest of a stored run and the manifest of this run, each as a clause for a message: "a different akm build
@@ -312,7 +312,7 @@ export async function runCorpus(
   console.log(`${NAME} (${corpus.name}): ${sample.n} of ${sample.total} questions${sample.seed === null ? "" : `, drawn with sample seed ${sample.seed}`}${rows.length > 0 ? `, ${rows.length} already done` : ""}`);
   if (ctx.model && sample.n > 50) console.log("  Each question sends the whole history, about 115k tokens, in the without-akm arm. Use --limit for a shorter run.");
 
-  const save = (complete: boolean, abortedReason?: string) => {
+  const save = (complete: boolean, abortedReason?: string, running = false) => {
     const summary: Summary = {
       eval: NAME,
       corpus: corpus.name,
@@ -321,15 +321,15 @@ export async function runCorpus(
       date: new Date().toISOString(),
       complete,
       resumed: args.resume !== undefined,
-      status: complete ? "complete" : "aborted",
-      aborted_reason: complete ? null : (abortedReason ?? UNFINISHED),
+      status: running ? "running" : complete ? "complete" : "aborted",
+      aborted_reason: complete || running ? null : (abortedReason ?? UNFINISHED),
       git_commit: gitCommit(),
       harness_sha256: HARNESS,
       model: ctx.model?.model ?? null,
       judge_model: ctx.judge?.model ?? null,
       model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,
       judge_endpoint: ctx.judge ? endpointHost(ctx.judge.baseUrl) : null,
-      ...sampling(retrievalOnly),
+      ...sampling(retrievalOnly, ctx.model, ctx.judge),
       akm_version: ctx.version,
       ...build,
       top_k: TOP_K,
@@ -353,6 +353,10 @@ export async function runCorpus(
     return summary;
   };
 
+  save(false, undefined, true); // even a stop during the first question leaves a checkpoint
+  ctx = { ...ctx, judgeCache: new Map() };
+  const interrupted = () => { save(false, "interrupted by the operator"); clearRunning(dir); process.exit(130); };
+  process.once("SIGINT", interrupted); process.once("SIGTERM", interrupted);
   let failedInARow = 0;
   let anyScored = false;
   let searchFailedInARow = 0;
@@ -360,33 +364,41 @@ export async function runCorpus(
   let gaveUp: string | undefined;
   let gaveUpOn: "akm" | "model" = "model";
   const done = new Set(rows.map((r) => r.id));
-  for (const q of sample.items) {
-    if (done.has(q.question_id)) continue;
-    const row = await collectQuestion(q, ctx);
-    rows.push(row);
-    appendFileSync(samples, `${JSON.stringify(row)}\n`);
-    save(false);
-    const word = (a: Row["with_akm"]) => (a === null ? "-" : a.ok ? (a.correct ? "correct" : "wrong") : "error");
-    const seconds = (a: Row["with_akm"]) => (a?.seconds === null || a === null ? "" : ` ${a.seconds}s`);
-    const hit = row.retrieval ? `hit ${row.retrieval.hit ? "yes" : "no"}, recall ${fixed(row.retrieval.recall)}` : `error ${row.retrieval_error?.slice(0, 80)}`;
-    console.log(`  [${String(rows.length).padStart(String(sample.n).length)}/${sample.n}] ${q.question_type.padEnd(25)} ${q.question_id.slice(0, 14).padEnd(14)}  without akm: ${word(row.without_akm)}${seconds(row.without_akm)} | with akm: ${word(row.with_akm)}${seconds(row.with_akm)} | retrieval: ${hit}`);
-    for (const arm of [row.without_akm, row.with_akm]) if (arm?.error) console.log(`      ${arm.error.slice(0, 160)}`);
-    if (row.retrieval !== null) anySearched = true;
-    searchFailedInARow = row.retrieval === null ? searchFailedInARow + 1 : 0;
-    if (!anySearched && searchFailedInARow >= GIVE_UP_AFTER) {
-      gaveUp = row.retrieval_error ?? "no error was reported";
-      gaveUpOn = "akm";
-      break;
-    }
-    if (ctx.model) {
-      const scored = [row.without_akm, row.with_akm].some((a) => a?.ok);
-      if (scored) anyScored = true;
-      failedInARow = scored ? 0 : failedInARow + 1;
-      if (!anyScored && failedInARow >= GIVE_UP_AFTER) {
-        gaveUp = row.without_akm?.error ?? row.with_akm?.error ?? "no error was reported";
+  try {
+    for (const q of sample.items) {
+      if (done.has(q.question_id)) continue;
+      const row = await collectQuestion(q, ctx);
+      rows.push(row);
+      appendFileSync(samples, `${JSON.stringify(row)}\n`);
+      save(false, undefined, true);
+      const word = (a: Row["with_akm"]) => (a === null ? "-" : a.ok ? (a.correct ? "correct" : "wrong") : "error");
+      const seconds = (a: Row["with_akm"]) => (a?.seconds === null || a === null ? "" : ` ${a.seconds}s`);
+      const hit = row.retrieval ? `hit ${row.retrieval.hit ? "yes" : "no"}, recall ${fixed(row.retrieval.recall)}` : `error ${row.retrieval_error?.slice(0, 80)}`;
+      console.log(`  [${String(rows.length).padStart(String(sample.n).length)}/${sample.n}] ${q.question_type.padEnd(25)} ${q.question_id.slice(0, 14).padEnd(14)}  without akm: ${word(row.without_akm)}${seconds(row.without_akm)} | with akm: ${word(row.with_akm)}${seconds(row.with_akm)} | retrieval: ${hit}`);
+      for (const arm of [row.without_akm, row.with_akm]) if (arm?.error) console.log(`      ${arm.error.slice(0, 160)}`);
+      if (row.retrieval !== null) anySearched = true;
+      searchFailedInARow = row.retrieval === null ? searchFailedInARow + 1 : 0;
+      if (!anySearched && searchFailedInARow >= GIVE_UP_AFTER) {
+        gaveUp = row.retrieval_error ?? "no error was reported";
+        gaveUpOn = "akm";
         break;
       }
+      if (ctx.model) {
+        const scored = [row.without_akm, row.with_akm].some((a) => a?.ok);
+        if (scored) anyScored = true;
+        failedInARow = scored ? 0 : failedInARow + 1;
+        if (!anyScored && failedInARow >= GIVE_UP_AFTER) {
+          gaveUp = row.without_akm?.error ?? row.with_akm?.error ?? "no error was reported";
+          break;
+        }
+      }
     }
+  } catch (error) {
+    save(false, `collector failed: ${(error as Error).message}`);
+    clearRunning(dir);
+    throw error;
+  } finally {
+    process.off("SIGINT", interrupted); process.off("SIGTERM", interrupted);
   }
   const stopped = gaveUp === undefined ? undefined : gaveUpOn === "akm" ? `akm could not search the first ${GIVE_UP_AFTER} questions, so the run stopped. Last error: ${gaveUp}` : `the first ${GIVE_UP_AFTER} questions could not be answered and graded, so the run stopped. Last error: ${gaveUp}`;
   const summary = save(stopped === undefined && rows.length === sample.n, stopped);
@@ -399,7 +411,7 @@ export async function runCorpus(
   return summary;
 }
 
-const toEndpoint = (m: ModelSettings): Endpoint => ({ baseUrl: m.baseUrl, model: m.name, apiKey: m.apiKey });
+const toEndpoint = (m: ModelSettings): Endpoint => ({ baseUrl: m.baseUrl, model: m.name, apiKey: m.apiKey, ...(m.chat ? { chat: m.chat } : {}) });
 
 /**
  * The model under test and the judge. The model is resolved first (useModel also writes it to MODEL_* in `env`), and its endpoint and

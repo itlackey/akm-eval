@@ -115,3 +115,12 @@ test("recorded query modes take precedence over explicitly marked semantic confi
   expect(comparisonFields({}, [], []).search_method).toBeNull();
   expect(JSON.stringify(comparisonFields(configured, [], []))).not.toContain("SECRET");
 });
+
+
+test("LongMemEval totals include actual judge calls once and retain unknown billing", () => {
+  const call = { prompt_tokens: 7, completion_tokens: 3, cached_tokens: 2, retries: 0, cost_usd: null };
+  const rows = [{ without_akm: { prompt_tokens: 7, completion_tokens: 3, reader_usage: call, judge_usage: call }, with_akm: { prompt_tokens: 7, completion_tokens: 3, reader_usage: call, judge_usage: null, judge_cached: true } }];
+  const fields = comparisonFields({ eval: "longmemeval" }, rows, []);
+  expect(fields).toMatchObject({ calls: 3, input_tokens: 21, output_tokens: 9, cache_tokens: 6, cost_usd: null, usage_basis: "Reader + judge", control_input_tokens: 7, akm_input_tokens: 7 });
+  expect(comparisonFields({ eval: "longmemeval" }, [{ without_akm: { prompt_tokens: 7 } }], []).usage_basis).toBe("Reader only; judge usage unavailable");
+});

@@ -202,3 +202,15 @@ describe("every eval and benchmark takes its model and akm the same way", () => 
     expect(missing).toEqual([]);
   });
 });
+
+
+test("chat settings are validated separately from OpenCode context limits", () => {
+  const dir = mkdtempSync(join(tmpdir(), "model-chat-")); dirs.push(dir);
+  const file = join(dir, "models.json");
+  for (const chat of [{ max_tokens: 0 }, { max_tokens: 10, max_completion_tokens: 20 }, { reasoning_effort: "" }, { api_key: "secret" }]) {
+    writeFileSync(file, JSON.stringify({ reader: { base_url: GATEWAY, chat } }));
+    expect(() => loadModels(file)).toThrow("models.json");
+  }
+  writeFileSync(file, JSON.stringify({ reader: { base_url: GATEWAY, chat: { max_completion_tokens: 2048, reasoning_effort: "none" } } }));
+  expect(resolveModel("model", "reader", ENV, loadModels(file)).chat).toEqual({ max_completion_tokens: 2048, reasoning_effort: "none" });
+});

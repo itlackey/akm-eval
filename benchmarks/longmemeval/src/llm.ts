@@ -1,11 +1,13 @@
 // A chat request to any OpenAI-compatible endpoint, with retries for a busy or dropped connection.
 
+import type { ChatSettings } from "../../../lib/models.ts";
 import { completionsUrl } from "../../../lib/akm/akm.ts";
 
 export interface Endpoint {
   baseUrl: string;
   apiKey: string;
   model: string;
+  chat?: ChatSettings;
 }
 
 export interface ChatResult {
@@ -17,7 +19,23 @@ export interface ChatResult {
   finishReason: string | null;
   seconds: number;
   retries: number;
+  usage: CallUsage;
 }
+
+export interface CallUsage {
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  cached_tokens: number | null;
+  reasoning_tokens: number | null;
+  cost_usd: number | null;
+  seconds: number;
+  retries: number;
+  failed: boolean;
+}
+export class ChatError extends Error {
+  constructor(message: string, readonly usage: CallUsage) { super(message); }
+}
+export const tokenLimit = (endpoint: Endpoint | null, fallback: number): number => endpoint?.chat?.max_completion_tokens ?? endpoint?.chat?.max_tokens ?? fallback;
 
 export interface ChatOptions {
   temperature?: number;
@@ -44,7 +62,10 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
     model: endpoint.model,
     messages: [{ role: "user", content: prompt }],
     temperature,
-    ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+    ...(endpoint.chat?.max_completion_tokens !== undefined ? { max_completion_tokens: endpoint.chat.max_completion_tokens }
+      : endpoint.chat?.max_tokens !== undefined ? { max_tokens: endpoint.chat.max_tokens }
+      : maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+    ...(endpoint.chat?.reasoning_effort !== undefined ? { reasoning_effort: endpoint.chat.reasoning_effort } : {}),
     stream: false,
   });
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -61,7 +82,7 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
         const reply = JSON.parse(raw) as {
           model?: string;
           choices?: { message?: { content?: string | null }; finish_reason?: string | null }[];
-          usage?: { prompt_tokens?: number; completion_tokens?: number };
+          usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number } };
         };
         const choice = reply.choices?.[0];
         if (!choice) throw new Error(`the reply has no choices: ${raw.slice(0, 200)}`);
@@ -73,6 +94,13 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
           finishReason: choice.finish_reason ?? null,
           seconds: Number(((performance.now() - started) / 1000).toFixed(1)),
           retries: attempt,
+          usage: {
+            prompt_tokens: reply.usage?.prompt_tokens ?? null, completion_tokens: reply.usage?.completion_tokens ?? null,
+            cached_tokens: reply.usage?.prompt_tokens_details?.cached_tokens ?? null,
+            reasoning_tokens: reply.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+            cost_usd: reply.usage?.cost ?? null,
+            seconds: Number(((performance.now() - started) / 1000).toFixed(1)), retries: attempt, failed: false,
+          },
         };
       }
       failure = `HTTP ${response.status}: ${raw.trim().slice(0, 300)}`;
@@ -84,7 +112,10 @@ export async function chat(endpoint: Endpoint, prompt: string, options: ChatOpti
       failure = timedOut ? `the request timed out after ${Math.round(timeoutMs / 1000)} s` : `${error.name}: ${error.message}`.slice(0, 300);
       retryable = !timedOut && (error instanceof TypeError || /ECONN|socket|connect|network|fetch failed/i.test(error.message));
     }
-    if (!retryable || attempt >= retries) throw new Error(failure);
+    if (!retryable || attempt >= retries) throw new ChatError(failure, {
+      prompt_tokens: null, completion_tokens: null, cached_tokens: null, reasoning_tokens: null, cost_usd: null,
+      seconds: Number(((performance.now() - started) / 1000).toFixed(1)), retries: attempt, failed: true,
+    });
     await sleep(Math.min(retryBackoffMs * 2 ** attempt, 30_000));
   }
 }

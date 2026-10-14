@@ -84,6 +84,9 @@ col("input_tokens", "Recorded input tokens", "number", "Usage", "Sum of availabl
 col("output_tokens", "Recorded output tokens", "number", "Usage", "Sum of available output-token records. For paired benchmarks this includes both arms. Failed calls may have no usage record.", 0);
 col("cache_tokens", "Cached input tokens", "number", "Usage", "Recorded cached input tokens; not subtracted from the input-token total.", 0);
 col("cost_usd", "Recorded cost (USD)", "number", "Usage", "Sum of available monetary cost records, with usage coverage shown separately. No price is inferred for local or free services.", 4);
+col("cost_calls", "Calls with cost records", "number", "Usage", "Number of calls with provider-reported monetary cost; not a price estimate.", 0);
+col("reasoning_tokens", "Reasoning tokens", "number", "Usage", "Recorded reasoning tokens; included in output-token totals.", 0);
+col("usage_basis", "Usage basis", "text", "Usage", "Whether recorded LongMemEval totals cover the reader alone or the reader and judge.");
 col("usage_cases", "Usage cases", "number", "Usage", "Cases or trials providing usage records; null when only summary totals exist.", 0);
 for (const [key, label] of [["control", "Without AKM"], ["akm", "With AKM"]]) {
   col(`${key}_input_tokens`, `${label} input tokens`, "number", "Usage", "Recorded arm-specific input token total.", 0);
@@ -194,6 +197,23 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
     fields.usage_cases = trials.length ? trials.filter(trial => n(trial, "tokens.input") !== null ||
       n(trial, "tokens.output") !== null || num(trial.costUsd) !== null).length || null
       : rows.filter(row => n(row, "without_akm.prompt_tokens") !== null || n(row, "with_akm.prompt_tokens") !== null).length || null;
+  }
+  if (summary.eval === "longmemeval" && summary.retrieval_only !== true) {
+    const calls = rows.flatMap(row => ["without_akm", "with_akm"].flatMap(arm => {
+      const a = obj(row[arm]);
+      return [a.reader_usage, a.judge_usage].filter(v => v !== null && typeof v === "object").map(obj);
+    }));
+    fields.usage_basis = calls.length ? "Reader + judge" : "Reader only; judge usage unavailable";
+    if (calls.length) {
+      fields.calls = calls.reduce((total, call) => total + 1 + (num(call.retries) ?? 0), 0);
+      fields.call_failures = calls.reduce((total, call) => total + (call.failed === true ? 1 : 0) + (num(call.retries) ?? 0), 0);
+      fields.input_tokens = recordedSum(calls.map(call => num(call.prompt_tokens)));
+      fields.output_tokens = recordedSum(calls.map(call => num(call.completion_tokens)));
+      fields.cache_tokens = recordedSum(calls.map(call => num(call.cached_tokens)));
+      fields.reasoning_tokens = recordedSum(calls.map(call => num(call.reasoning_tokens)));
+      fields.cost_calls = calls.filter(call => num(call.cost_usd) !== null).length;
+      fields.cost_usd = recordedSum(calls.map(call => num(call.cost_usd)));
+    }
   }
   const engines = Object.values(obj(at(summary, "manifest.engines"))).map(obj);
   const temperatures = [...new Set(engines.map(engine => num(engine.temperature)).filter(v => v !== null))];

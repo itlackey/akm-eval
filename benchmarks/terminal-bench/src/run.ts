@@ -4,7 +4,7 @@
 //
 //   benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -28,16 +28,19 @@ import {
   positive,
   preflight,
   releaseArm,
+  runHarbor,
+  sha256Dir,
+  buildFingerprint,
   statusOf,
 } from "../../../lib/harbor/harbor.ts";
 import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } from "../../../lib/harbor/report.ts";
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, type ModelLimits } from "../../../lib/models.ts";
-import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { canonical, endpointHost, harnessSha256, redactConfig, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
-import { makeResultsDir } from "../../../lib/results.ts";
-import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, collect, jobName, readLock } from "./collect.ts";
+import { makeResultsDir, markRunning, clearRunning } from "../../../lib/results.ts";
+import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, type Collected, collect, jobConfig, jobName, readLock } from "./collect.ts";
 import { MEASUREMENT, caseOf } from "./measurement.ts";
 
 // These live in ./collect.ts, the collector. They are exported from here too, for what imported them from here.
@@ -63,6 +66,8 @@ ${corpusUsage}
   --label     names the results folder: <UTC date>-<label>. Default: the model name.
   --limit     run the first N tasks of an order that starts with Harbor's terminal-bench-sample (ten tasks) and goes on
               by name. Without it every task of the dataset runs.
+  --concurrency N  simultaneous trials (default 4), recorded in the job
+  --resume DIR     continue an interrupted run with the same inputs and settings
   --attempts  run each task N times per arm (default ${DEFAULT_ATTEMPTS}). The pass rate of a task is then the share of its attempts passed.
   --repeat    run the whole benchmark N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
               <UTC date>-<label>-repeat-summary.json beside them
@@ -102,7 +107,9 @@ interface Summary {
   attempts: number;
   harbor_exit: number;
   /** `complete` when Harbor exited 0 and every cell of the grid has a trial, `aborted` otherwise (see aborted_reason). An aborted run keeps all its artifacts, and its numbers cover the trials that finished. */
-  status: "complete" | "aborted";
+  status: "running" | "complete" | "aborted";
+  harbor_config_sha256?: string | null;
+  resumed?: boolean;
   aborted_reason: string | null;
   /** The grid the job asked for, tasks x arms x attempts, and what became of each cell: overall and per arm. */
   completion: Completion;
@@ -170,6 +177,8 @@ export function summarize(o: {
   tasks: string[];
   dir: string;
   exit: number;
+  running?: boolean;
+  resumed?: boolean;
   attempts?: number;
   arm?: AkmArm;
   akmEnv?: Record<string, string>;
@@ -228,8 +237,10 @@ export function summarize(o: {
     n_tasks: o.tasks.length,
     attempts,
     harbor_exit: o.exit,
-    status,
-    aborted_reason,
+    status: o.running ? "running" : status,
+    aborted_reason: o.running ? null : aborted_reason,
+    ...(o.resumed ? { resumed: true } : {}),
+    harbor_config_sha256: existsSync(join(jobDir, "config.json")) ? sha256File(join(jobDir, "config.json")) : null,
     completion,
     assets_sha256: assetsSha256({ library: o.library?.sha256 ?? null, dataset, attempts }),
     engine: { model: o.model, endpoint },
@@ -253,17 +264,43 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(BEN
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; modelLimits?: ModelLimits; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; concurrency?: number; resume?: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const lock = readLock();
-  const tasks = selectTasks(lock, ctx.limit);
-  const attempts = ctx.attempts ?? DEFAULT_ATTEMPTS;
+  const prior: Summary | null = ctx.resume ? JSON.parse(readFileSync(join(resolve(ctx.resume), "summary.json"), "utf8")) : null;
+  const tasks = selectTasks(lock, ctx.limit ?? prior?.limit ?? undefined);
+  const attempts = ctx.attempts ?? prior?.attempts ?? DEFAULT_ATTEMPTS;
   const arm = ctx.arm ?? releaseArm();
   const akmEnv = ctx.akmEnv ?? {};
-  const dir = makeResultsDir(results, ctx.label);
-  const got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, env: ctx.env, arm, akmEnv });
-  const summary = summarize({ corpus: c, label: ctx.label, model: ctx.model, limit: ctx.limit, lock, tasks, dir, exit: got.exit, attempts, arm, akmEnv, packages: got.staged?.files, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
+  const dir = ctx.resume ? resolve(ctx.resume) : makeResultsDir(results, ctx.label);
+  const save = (got: Collected, running = false) => summarize({ corpus: c, label: prior?.label ?? ctx.label, model: ctx.model, limit: ctx.limit ?? prior?.limit ?? undefined, lock, tasks, dir, exit: got.exit, running, resumed: prior !== null, attempts, arm, akmEnv, packages: got.staged?.files ?? prior?.akm_install.packages, library: got.library, endpoint: endpointHost(ctx.env.OPENAI_BASE_URL), job: jobRecord(got.cfg, dir, ROOT) });
+  let got: Collected;
+  if (prior) {
+    const cfg = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
+    const jobDir = join(dir, "jobs", jobName(c.name));
+    const wanted = jobConfig({ name: jobName(c.name), model: ctx.model, modelLimits: ctx.modelLimits,
+      concurrency: ctx.concurrency ?? cfg.n_concurrent_trials, lock, tasks, attempts, jobsDir: join(dir, "jobs"),
+      librariesDir: join(dir, "libraries"), arm, akmEnv, libraryAssets: cfg.agents[1].kwargs.library_assets,
+      packagesDir: arm.cli.tarball || arm.plugin.tarball ? join(dir, "akm-packages") : null });
+    if (prior.harness_sha256 !== HARNESS || prior.corpus !== c.name || prior.model !== ctx.model ||
+      prior.akm_bin !== arm.bin || prior.akm_build !== arm.build ||
+      prior.akm_build_fingerprint !== buildFingerprint(arm.build_fingerprint ?? null, prior.akm_install.dependency_tree_sha256) ||
+      canonical(prior.manifest.cases) !== canonical(caseDigests(MEASUREMENT, tasks.map(id => caseOf(id, lock.tasks[id], prior.library.sha256)))) ||
+      prior.engine.endpoint !== endpointHost(ctx.env.OPENAI_BASE_URL) || canonical(cfg) !== canonical(wanted) ||
+      prior.library.sha256 !== sha256Dir(libraryOf(c)) || !prior.harbor_config_sha256 ||
+      prior.harbor_config_sha256 !== sha256File(join(jobDir, "config.json")))
+      fail("--resume must use the original harness, corpus, library, model, model limits, AKM settings and unmodified Harbor job; start a fresh run for changed settings");
+    markRunning(dir);
+    console.log(`${NAME}: resuming ${dir}; completed Harbor trials are reused`);
+    got = { cfg, staged: null, library: { ...prior.library, sha256: prior.library.sha256! }, exit: 130 };
+    save(got, true);
+    got.exit = await runHarbor(join(dir, "job.json"), join(dir, "harbor.log"), ctx.env, { resume: jobDir });
+  } else {
+    got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv, onReady: prepared => { save(prepared, true); } });
+  }
+  const summary = save(got);
+  clearRunning(dir);
   printSummary(summary);
   if (summary.status === "aborted") fail(`${summary.aborted_reason}. The results above cover the trials that finished. See ${relative(ROOT, join(dir, "harbor.log"))}`, 1);
   return summary;
@@ -276,11 +313,11 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; resume?: string; concurrency?: string; help?: boolean };
   try {
     values = parseArgs({
       args: Bun.argv.slice(2),
-      options: { ...CORPUS_OPTIONS, limit: { type: "string" }, attempts: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } },
+      options: { ...CORPUS_OPTIONS, limit: { type: "string" }, attempts: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, resume: { type: "string" }, concurrency: { type: "string" }, label: { type: "string" }, help: { type: "boolean", short: "h" } },
       strict: true,
     }).values;
   } catch (e) {
@@ -300,6 +337,8 @@ async function main(): Promise<void> {
   const limit = positive("--limit", values.limit);
   const attempts = positive("--attempts", values.attempts) ?? DEFAULT_ATTEMPTS;
   const repeat = positive("--repeat", values.repeat);
+  const concurrency = positive("--concurrency", values.concurrency);
+  if (values.resume && (corpora.length !== 1 || repeat !== undefined)) fail("--resume carries on one corpus and does not go with --repeat");
   const akmEnv = parseAkmEnv(values["akm-env"], values.semantic);
   parseAkm(values.akm); // a bad --akm stops the run now, before Docker is asked about and a checkout is packed
   for (const c of corpora) {
@@ -315,7 +354,7 @@ async function main(): Promise<void> {
   try {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
-    const ctx = { model, modelLimits, env, limit, attempts, arm, akmEnv };
+    const ctx = { model, modelLimits, env, limit, attempts: values.attempts === undefined ? undefined : attempts, arm, akmEnv, concurrency, resume: values.resume };
     const summaries: Summary[] = [];
     for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);

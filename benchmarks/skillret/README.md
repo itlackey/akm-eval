@@ -6,6 +6,10 @@ Given a request, does akm rank the right skills first from a large skill library
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 benchmarks/skillret/run                     # public: the test split
 benchmarks/skillret/run --corpus custom     # a library of the same size drawn from the train split

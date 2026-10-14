@@ -198,7 +198,7 @@ async function startLedger() {
     if (view === 'all') return columns.map(column => column.key);
     if (view === 'compare') return compareKeys;
     if (view === 'impact') return ['model', 'suite', 'label', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'date'];
-    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'usage_cases', 'run_wall_s', 'collection', 'date'];
+    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'date'];
     const base = ['model', 'suite', 'label', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
     let extras;
     if (view === 'quality') extras = columns.filter(column => (column.group === 'Quality' || (state.facets.suite && column.key.startsWith('score:'))) && recorded(column));

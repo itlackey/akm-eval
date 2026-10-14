@@ -541,3 +541,27 @@ def test_semantic_seed_accepts_verified_search_and_rejects_missing_embeddings_or
     else:
         assert reason in done.stderr
         assert "AKM-SETUP search_mode=semantic" not in done.stdout
+
+
+@pytest.mark.parametrize("musl", [False, True])
+def test_shared_setup_avoids_redundant_debian_node_packages(tmp_path, musl):
+    from unittest.mock import AsyncMock
+    agent = m.EvalOpenCode(logs_dir=tmp_path, model_name="openai/custom", version="1.18.34")
+    environment = FakeEnvironment()
+    environment.exec = AsyncMock(side_effect=[SimpleNamespace(return_code=0)] if musl else [SimpleNamespace(return_code=1), SimpleNamespace(return_code=0, stdout="", stderr="")])
+    with mock.patch.object(OpenCode, "ensure_system_dependencies", new_callable=AsyncMock) as install:
+        asyncio.run(agent.ensure_system_dependencies(environment, ("curl", "bash", "coreutils", "nodejs", "npm")))
+        dependencies = install.await_args.args[1]
+        assert dependencies == (("curl", "bash", "coreutils", "nodejs", "npm") if musl else ("curl", "bash", "coreutils"))
+    assert issubclass(m.AkmOpenCode, m.EvalOpenCode)
+
+
+def test_pinned_harbor_keeps_context_limits_in_the_actual_opencode_config(tmp_path):
+    import shlex
+    limits = {"context": 32768, "output": 4096}
+    config = {"provider": {"openai": {"models": {"fast/custom-35b": {"limit": limits}}}}}
+    for agent in [m.EvalOpenCode(logs_dir=tmp_path, model_name="openai/fast/custom-35b", version="1.18.34", opencode_config=config), make(tmp_path, model_name="openai/fast/custom-35b", opencode_config=config)]:
+        command = agent._build_register_config_command()
+        words = shlex.split(command)
+        saved = json.loads(words[words.index("echo") + 1])
+        assert saved["provider"]["openai"]["models"]["fast/custom-35b"]["limit"] == limits

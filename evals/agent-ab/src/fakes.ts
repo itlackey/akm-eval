@@ -72,7 +72,7 @@ for (const file of JSON.parse(process.env.UV_FAKE_EDIT ?? "[]")) appendFileSync(
 const tasks = process.env.UV_FAKE_NOTHING ? [] : job.datasets[0].task_names;
 tasks.forEach((task, i) => {
   for (const agent of job.agents) {
-    const name = agent.name ?? "akm-opencode";
+    const name = agent.name ?? (agent.import_path?.endsWith(":EvalOpenCode") ? "opencode" : "akm-opencode");
     if (process.env.UV_FAKE_MISSING && i === tasks.length - 1 && name === "akm-opencode") continue;
     for (let k = 0; k < job.n_attempts; k++) {
       const dir = join(job.jobs_dir, job.job_name, task + "__" + name + "__" + k);

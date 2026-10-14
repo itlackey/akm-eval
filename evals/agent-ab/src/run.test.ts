@@ -78,7 +78,7 @@ describe("jobConfig", () => {
   const [control, akm] = cfg.agents;
 
   test("runs both arms on the same tasks, model, opencode and config", () => {
-    expect(control.name).toBe("opencode");
+    expect(control.import_path).toBe("eval_opencode:EvalOpenCode");
     expect(akm.import_path).toBe("akm_opencode:AkmOpenCode");
     expect(control.model_name).toBe("openai/gpt-6-luna");
     expect(akm.model_name).toBe(control.model_name);
@@ -196,7 +196,7 @@ describe("runCorpus", () => {
     for (const agent of stored.job.agents) expect(agent.kwargs.opencode_config.provider.openai.models.x.limit).toEqual(modelLimits);
     expect(stored.job.datasets).toEqual([{ path: "tasks", task_names: selectTasks(taskNames(join(EVAL_DIR, "tasks")), 3) }]);
     expect(stored.job).toMatchObject({ n_attempts: 1, n_concurrent_trials: 4 });
-    expect(stored.job.agents[0]).toMatchObject({ name: "opencode", override_setup_timeout_sec: 2700, kwargs: { opencode_config: { autoupdate: false } } });
+    expect(stored.job.agents[0]).toMatchObject({ import_path: "eval_opencode:EvalOpenCode", override_setup_timeout_sec: 2700, kwargs: { opencode_config: { autoupdate: false } } });
     expect(stored.job.agents[1]).toMatchObject({ import_path: "akm_opencode:AkmOpenCode", override_setup_timeout_sec: 2700, kwargs: { akm_cli_version: PINS.akm_cli, libraries_dir: "libraries" } });
     expect(stored.libraries_sha256).toBe(sha256Dir(join(EVAL_DIR, "libraries")));
     expect(stored.libraries_sha256).toBe(sha256Dir(join(s.results_dir, "libraries")));

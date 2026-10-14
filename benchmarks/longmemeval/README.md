@@ -15,6 +15,10 @@ For multi-session questions, inspect recall of **all required sessions** as well
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 benchmarks/longmemeval/run --limit 20
 benchmarks/longmemeval/run --model qwen3-27b --judge-model gpt-4o-2024-08-06 --limit 100
@@ -33,10 +37,10 @@ The public data is the cleaned LongMemEval S release at the revision pinned in `
 
 ## What it needs from models
 
-- **The model**: a context of 131k or more for the without-akm arm (a question that does not fit errors that arm only). Answers are limited to 512 tokens, so the model should not think first; any reasoning is stripped before the judge sees the answer, and an answer cut off inside its reasoning is scored wrong.
+- **The model**: a context of 131k or more for the without-akm arm (a question that does not fit errors that arm only). Answers default to 512 tokens; a `models.json` entry can select a larger supported budget and reasoning setting, so the model should answer directly; any reasoning is stripped before the judge sees the answer, and an answer cut off inside its reasoning is scored wrong.
 - **The judge**: `JUDGE_MODEL` or `--judge-model`, at `JUDGE_BASE_URL` (else the model's endpoint). It answers yes or no to the benchmark's own grading prompts, copied from `evaluate_qa.py`, in 10 tokens. Published numbers use `gpt-4o-2024-08-06`; with another judge the scores are not comparable, and `summary.json` says so in `notes`.
 
-Every request sends temperature 0. On a local 27B a question took about three minutes without akm and half a minute with it, so use `--limit` first.
+Every request sends temperature 0. Each model/judge entry can add `chat` settings (`max_tokens` or `max_completion_tokens`, and optional `reasoning_effort`), as supported by its endpoint. The actual settings and token budgets are saved in the summary/manifest and checked on resume. See the [official request fields](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create). Configure the reader to produce a final answer within its budget and inspect a representative pilot before further paid collection. On a local 27B a question took about three minutes without akm and half a minute with it, so use `--limit` first.
 
 ## How akm is used
 
@@ -51,7 +55,7 @@ Keyword search by default. The returned sessions go into the same prompt as the 
 
 ## How a question is scored
 
-A verdict is correct when the judge's reply holds "yes". A question is an abstention question when `_abs` is in its id.
+Measurement 0.3 accepts a judge verdict only when it is an unambiguous yes or no. An undecidable reply remains in the artifact as a grading error and is excluded from accuracy, rather than counting against the reader. Identical grading prompts share one verdict within a run; `judge_cached` identifies reuse, and usage is recorded only for the actual call. Historical artifacts and their legacy scoring rule remain unchanged. A valid positive verdict is correct. A question is an abstention question when `_abs` is in its id.
 
 | Metric | Meaning |
 |---|---|
@@ -64,6 +68,8 @@ A verdict is correct when the judge's reply holds "yes". A question is an absten
 A small model that cannot use a 115k prompt can score better with akm; a large one can score worse when akm misses evidence. `retrieval` tells which. With 20 questions the interval of the difference is usually 20 points or more each side: compare nothing under 100 questions unless the gap is large.
 
 ## What the summary reports
+
+Active checkpoints use `status: "running"`; SIGINT/SIGTERM writes an aborted summary with completed questions preserved. Per-arm `reader_usage` and `judge_usage` retain token/cache/reasoning counters, elapsed time, retries and provider-reported cost when available. Failed requests retain elapsed time/retries with unknown tokens and cost. Reused grades have no second judge usage record. Reader timings still exclude indexing/search/judging; actual billing remains unknown unless supplied by the provider.
 
 `summary.json`: `metrics`, the counts run, scored and errored, `status` and `aborted_reason` (it is rewritten after every question, and aborts when the first three questions cannot be searched or answered), `model_endpoint` and `judge_endpoint` (hosts only), `temperature`, `max_tokens`, `search_mode`, `mode` (`retrieval-only` or null), `config`, `assets_sha256`, `seed` (of a rewrite: do not publish it), `sample_seed`, `sessions_loaded`, `sessions_over_projection_limit`, `answers_cut_off`, `answers_empty`, `judge_undecidable`, `timeouts`, `corpus_folder`, `harness_sha256`, `notes` and the `manifest`. `samples.jsonl`: one row per question with the key, what akm returned in rank order, and for each arm the answer, verdict, time and tokens.
 

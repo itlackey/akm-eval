@@ -49,7 +49,7 @@ if (cmd === "index") {
     if (process.env.AKM_EMBED_DETERMINISTIC !== "1" || config.embedding) { console.error("no deterministic embedder"); process.exit(3); }
   }
   if (config.semanticSearchMode !== "auto") { console.error("semantic search is off"); process.exit(3); }
-  json({ ok: true, totalEntries: notes.length });
+  json({ ok: true, totalEntries: notes.length, verification: { embeddingCount: notes.length } });
 } else if (cmd === "improve") {
   if (args[1] !== "--strategy" || args[2] !== (process.env.FAKE_STRATEGY ?? "consolidate") || !has("--no-sync") || !has("--json-to-stdout")) { console.error("unexpected " + args.join(" ")); process.exit(2); }
   if (what === "slow-improve") await Bun.sleep(30000);
@@ -449,13 +449,13 @@ describe("runCorpus", () => {
     }
   });
 
-  test("the real embedder's config is refused by an akm run with the hash embedder's sandbox, so the two cannot be mixed up", async () => {
+  test("a real embedding config prepares the shared model cache in an initially plain sandbox", async () => {
     process.env.FAKE_EMBEDDER = "real";
     try {
-      const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")], "deterministic"); // a plain sandbox: no model folder
+      const { ctx, folders } = setup([mk("d1", "duplicate", "retire-older")], "deterministic"); // writeConfig prepares the model cache
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, embedder: "real" }, folders.results));
-      expect(summary.n_errored).toBe(1);
-      expect(resultsOf(folders).rows[0].error).toContain("the real embedder is not set up");
+      expect(summary.n_errored).toBe(0);
+      expect(summary.embedder).toBe("real");
     } finally {
       delete process.env.FAKE_EMBEDDER;
     }
@@ -498,6 +498,11 @@ describe("the command", () => {
 
   test("lists --embedder in its usage", () => {
     expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
+  });
+
+  test("--semantic selects the native embedder and refuses the deterministic selector", () => {
+    expect(run(["--semantic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--semantic", "--embedder", "deterministic"], model).err).toContain("--semantic uses the real embedder");
   });
 
   test("lists the corpora public and custom, and --cases", () => {

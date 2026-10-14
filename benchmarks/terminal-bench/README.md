@@ -6,6 +6,10 @@ Does akm change an agent's pass rate on Terminal-Bench tasks?
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 benchmarks/terminal-bench/run --limit 10           # Harbor's ten-task sample: about 30 minutes
 benchmarks/terminal-bench/run                      # all 89 tasks: about 7 hours
@@ -17,6 +21,8 @@ benchmarks/terminal-bench/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 
 - The corpus is the library the akm arm gets; the tasks are always the same. `public` is `corpus/library`; `custom` is `evals/retrieval`'s rewritten library in `private/retrieval/assets/library`, or the `library/` of `--cases DIR` (a folder in the format `evals/retrieval` reads).
 - `--limit N` runs the first N of a fixed order whose first ten are Harbor's `terminal-bench-sample`.
+- `--concurrency N` selects simultaneous trials (default 4), recorded in the job.
+- `--resume DIR` continues a gracefully interrupted run using the same harness, inputs, model limits, AKM settings and unmodified Harbor configuration. Completed trials are reused through Harbor; the run is marked resumed. Changed protocols require a fresh run. SIGINT/SIGTERM forwards to Harbor and writes a partial summary.
 - `--attempts N` runs each task N times per arm (default 1); a task's pass rate is then its share of passed attempts.
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model`, `--akm` and `--akm-env` work as in `evals/agent-ab` (see its README). The default akm is `akm-cli@0.10.261003-beta`; `AKM_BIN` is not read for the arm.
@@ -25,9 +31,9 @@ A run that did not finish everything writes its summary with `status: "aborted"`
 
 ## What it needs
 
-- Docker, [uv](https://docs.astral.sh/uv/) and bun, and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a non-empty `MODEL_API_KEY`.
+- Docker on the host (the runner includes uv, Bun and Harbor), and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a non-empty `MODEL_API_KEY`.
 - Internet from the containers, and Docker Hub pulls of up to 89 images (run `docker login` if you pull more than 100 an hour). The images are 75 GB and Harbor leaves them behind: `docker images --format '{{.Repository}}:{{.Tag}}' | grep '^alexgshaw/' | xargs -r docker image rm` removes them. A full run's results are about 5 GB.
-- akm on this machine (`AKM_BIN` or `PATH`) to count the library's assets before the run; without it the setup checks less.
+- AKM (preinstalled in the runner) to count the library's assets before the run; without it the setup checks less.
 - CPU and memory for four containers at a time (up to 4 CPUs and 8 GB each).
 
 A full run with `openai/gpt-6-luna` on 2026-10-06 took 7 hours 6 minutes and cost $3.97; the ten-task sample took 28 minutes and $0.16.
@@ -75,7 +81,7 @@ No effect of akm on the pass rate, as expected for a library with nothing about 
 
 ## Notes
 
-- `qemu-alpine-ssh` and `qemu-startup` are built on Debian 11, whose security archive no longer serves Node, so both arms error on them in every run.
+- Earlier Debian 11 task images failed package installation because live Bullseye security indexes referenced removed packages ([Debian #1147093](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1147093)). Both arms now share setup that redirects Bullseye security sources to the signed archive. On glibc, Harbor installs Node through nvm instead of first requesting redundant distro Node packages; musl keeps packaged Node. A setup-only check installed Node 22.23.3 and pinned OpenCode 1.18.34 in `qemu-alpine-ssh:20251031`. Published historical failures remain unchanged.
 - Never put a figure from here beside a leaderboard row: the leaderboard takes at least five trials per task, uploaded to Harbor Hub. Say what a figure is: "Terminal-Bench 2.1, 89 tasks, one attempt, opencode 1.18.34 and this model, with and without akm".
 - A task measures akm only when the control fails it; most of these the control passes.
 

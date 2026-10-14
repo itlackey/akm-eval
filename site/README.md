@@ -84,6 +84,10 @@ records are summed with coverage counts; failed calls may have no usage record.
 separately from totals. `model_calls.seconds` is mean request duration and includes
 prefill, reasoning and overhead; output tokens per second is not decode-only
 speed. These means are never multiplied by call counts to invent totals.
+New LongMemEval artifacts include reader and judge calls, cached/reasoning tokens,
+retries and provider-reported cost. Reused grades count once. **Usage basis**
+identifies older artifacts whose totals cover readers only; **Calls with cost
+records** shows monetary coverage. Arm-specific tokens remain reader-only.
 Cached tokens remain part of input-token totals. Costs are never inferred from
 provider prices or from free/local serving.
 

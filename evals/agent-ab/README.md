@@ -8,6 +8,10 @@ This task set is ours. It compares akm with itself across versions; never put it
 
 ## Run
 
+Use the [prebuilt Docker runner](../../docker/README.md); no host package
+installation is needed. The examples below are commands to append after the
+image name in `docker run` (see the root setup).
+
 ```
 evals/agent-ab/run
 evals/agent-ab/run
@@ -26,7 +30,7 @@ A run that did not finish everything (Harbor failed, or a task, arm and attempt 
 
 ## What it needs
 
-- Docker, [uv](https://docs.astral.sh/uv/) (runs Harbor at its pinned release) and bun; npm only to pack a checkout.
+- Docker on the host. The runner includes uv, Bun, npm and the pinned Harbor dependencies; native source-checkout runs need those tools installed separately.
 - A model with tool calling, at an endpoint that serves the Responses API (`/v1/responses`) and that a container can reach: not `localhost`. A local server needs a non-empty `MODEL_API_KEY` (any value) and the machine's network address:
 
   ```

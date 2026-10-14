@@ -15,7 +15,7 @@ import { type Case, type Raw, type Row, errored, isAbstention, makeRow, rawOf, s
 export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
-  version: "0.2",
+  version: "0.3",
   loadCases: (root, summary) => {
     // The public questions are fetched into the benchmark's assets. A custom corpus is in corpus_folder (scripts/rescore sets it from --cases when the
     // run could not record it), and a run from before the corpora were renamed (`private`) has the rewrite where generate-assets puts it.

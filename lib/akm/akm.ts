@@ -33,11 +33,13 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { tallyCalls } from "./usage.ts";
+import { type SemanticState, verifySemantic } from "./semantic.ts";
 
 export interface Sandbox {
   dir: string; // the temp folder, and the working folder of every akm run
   cmd: string[]; // the akm command: the words of AKM_BIN, or `akm`
   env: Record<string, string>; // the environment akm runs in
+  semantic?: SemanticState; // verification cursor, enabled by writeConfig for the native semantic model
   keep?: string[]; // the variables the caller gave akm whatever the config says: MODEL_API_KEY for keepModelKey
   referenced?: string[]; // the variables the config in this sandbox names as $NAME that ALLOWED_ENV does not list, which env holds. writeConfig sets it
 }
@@ -296,6 +298,13 @@ function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
   giveReferencedVariables(sandbox, config);
+  const c = config as { semanticSearchMode?: unknown; embedding?: { localModel?: unknown }; engines?: Record<string, unknown> };
+  sandbox.semantic = c?.semanticSearchMode === "auto" && c.embedding?.localModel === SEMANTIC_MODEL && Object.keys(c.engines ?? {}).length > 0 ? (sandbox.semantic ?? { lastEvent: 0 }) : undefined;
+  // Config patches can enable the native embedder after the sandbox was created.
+  if ((config as { embedding?: { localModel?: unknown } })?.embedding?.localModel === SEMANTIC_MODEL) {
+    mkdirSync(MODEL_CACHE, { recursive: true });
+    sandbox.env.HF_HOME = MODEL_CACHE;
+  }
 }
 
 /** What a timeout is called in a message, such as `timed out after 900s`. */
@@ -318,11 +327,24 @@ export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions 
     timeout: timeoutMs,
     killSignal: "SIGKILL",
   });
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  const stopOwnedChild = () => proc.kill("SIGKILL");
+  process.once("exit", stopOwnedChild); // a collector saving a stop checkpoint must not leave akm running
+  let stdout: string, stderr: string, code: number;
+  try {
+    [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  } finally {
+    process.off("exit", stopOwnedChild);
+  }
   const ms = performance.now() - t0;
   // A killed process exits 137. Bun's `killed` is true for any process that has exited, so the signal decides, and the exit code when Bun gives none.
   const killed = proc.signalCode !== null ? proc.signalCode === "SIGKILL" : code === 137;
   const timedOut = killed && ms >= timeoutMs;
+  if (sandbox.semantic && code === 0) {
+    let problem: string | null;
+    try { problem = verifySemantic(sandbox.semantic, sandbox.env.AKM_DATA_DIR, args[0], stdout); }
+    catch (e) { problem = `could not verify semantic execution: ${(e as Error).message}`; }
+    if (problem) return { stdout, stderr: `${stderr}\nsemantic verification: ${problem}`, code: 1, ms, timedOut };
+  }
   return { stdout, stderr: timedOut ? [stderr.trimEnd(), `akm ${timedOutAfter(timeoutMs)}`].filter(Boolean).join("\n") : stderr, code, ms, timedOut };
 }
 

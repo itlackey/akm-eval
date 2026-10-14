@@ -174,6 +174,7 @@ export function withoutEngineSettings(x: unknown): unknown {
 }
 
 export interface EngineSetting {
+  chat?: import("./models.ts").ChatSettings;
   model: string | null;
   /** The endpoint's host: scheme, host and port, with no path, no query and no credentials. */
   endpoint: string | null;

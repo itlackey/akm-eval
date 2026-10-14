@@ -13,6 +13,10 @@ inputs require collection. Add a release entry here when a version changes.
 
 ## Unreleased
 
+- longmemeval: measurement version 0.3. Undecidable judge replies are grading errors excluded from accuracy; identical grading prompts share one verdict within a run. Reader and judge request settings, usage, retries and provider-reported costs are saved separately. Graceful stops preserve completed questions. Earlier results retain their original scoring and artifacts.
+- agent-ab and terminal-bench: measurement version 0.4. Both arms share the repaired agent setup: archived Bullseye security indexes and no redundant distro Node install on glibc. Terminal-Bench also saves interrupted progress and can resume the same job with unchanged settings.
+- Process evals record native semantic index coverage and modes from searches they actually perform as `semantic_verification`. Incomplete embedding coverage or an observed nonsemantic search makes the command an error. Verification adds no searches or model calls; zero observed searches is not evidence that retrieval occurred. Cases and scoring versions are unchanged.
+
 - agent-ab and terminal-bench: measurement version 0.3. `--semantic` enables the AKM arm's hybrid search with pinned bge-small-en-v1.5 embeddings. Setup verifies complete embedding coverage and an actual semantic query, and saves that proof. Runs without the flag retain keyword search. Optional `models.json` context/output limits are recorded in the shared OpenCode job configuration and applied equally to both arms. Earlier runs keep version 0.2 and require new collection for comparison with this collector.
 
 ## 0.6

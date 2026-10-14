@@ -239,7 +239,7 @@ describe("runCorpus", () => {
     expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
     expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
-    expect(graded).toHaveLength(6);
+    expect(graded).toHaveLength(4);
     expect(graded.every((b) => b.max_tokens === 10 && b.temperature === 0)).toBe(true);
     expect(bodies.filter((b) => !graded.includes(b)).every((b) => b.max_tokens === 512 && b.temperature === 0)).toBe(true);
     // the files it read: the lock and the questions, by name, so the same files elsewhere give the same digest
@@ -406,7 +406,7 @@ describe("runCorpus", () => {
     // a reply that has its answer after the reasoning is judged on the answer alone
     reply = { content: "<think>It could be RED7, or 3, or BLUE42.</think>\nBLUE42", finish: "stop" };
     const answered = await quiet(() => runCorpus(publicOf(folders), { label: "answer", sampleSeed: 1 }, context, folders));
-    expect(judged).toHaveLength(6);
+    expect(judged).toHaveLength(3);
     for (const prompt of judged) {
       expect(prompt).toContain("Model Response: BLUE42\n");
       expect(prompt).not.toContain("RED7");
@@ -453,13 +453,13 @@ describe("runCorpus", () => {
     console.log = () => {};
     try {
       await runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, context, folders);
-      expect(counter.requests).toBe(12); // three questions, two answers and two verdicts each
+      expect(counter.requests).toBe(10); // three questions, six answers and four distinct grades
       const dir = join(folders.results, readdirSync(folders.results)[0]);
       const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n");
       writeFileSync(join(dir, "samples.jsonl"), `${lines[0]}\n${lines[1].slice(0, 40)}`); // one done, one cut short
       counter.requests = 0;
       const summary = await runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, context, folders);
-      expect(counter.requests).toBe(8);
+      expect(counter.requests).toBe(7);
       expect(summary).toMatchObject({ n_run: 3, n_scored: 3, complete: true, resumed: true });
       expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).resumed).toBe(true);
       expect(summary.metrics.accuracy?.difference).toMatchObject({ n: 3, value: -0.3333 });
@@ -511,7 +511,7 @@ describe("runCorpus", () => {
     const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
     const context = { akm, model: endpoint, judge: { ...endpoint, model: "fake-judge" }, version: "v" };
     const first = await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, context, folders));
-    expect(counter.requests).toBe(12);
+    expect(counter.requests).toBe(10);
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     const summaryFile = join(dir, "summary.json");
     const samplesFile = join(dir, "samples.jsonl");
@@ -672,7 +672,7 @@ describe("runCorpus", () => {
     server = fakeEndpoint({ requests: 0 }, "fake-model", [], () => seen.push(existsSync(marker())));
     const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
     await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, { akm, model: endpoint, judge: endpoint, version: "v" }, folders));
-    expect(seen).toHaveLength(12);
+    expect(seen).toHaveLength(10);
     expect(seen.every(Boolean)).toBe(true);
     // this process is still alive, as it is under --corpus all when the next corpus starts, and the marker of the finished folder is gone
     expect(existsSync(marker())).toBe(false);
@@ -691,7 +691,7 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject(build);
     const resume = (c: typeof context) => quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, c, folders));
     const marker = join(dir, ".running");
-    expect(markers).toHaveLength(12);
+    expect(markers).toHaveLength(10);
     expect(markers.every((m) => m === String(process.pid))).toBe(true); // the first run marked the folder while it ran, and its process is this one
     expect(existsSync(marker)).toBe(false); // and cleared the marker when it ended
 
@@ -722,7 +722,7 @@ describe("runCorpus", () => {
     writeFileSync(join(dir, "samples.jsonl"), `${rows[0]}\n`);
     markers.length = 0;
     await resume(context);
-    expect(markers).toHaveLength(8); // the two questions that were left, two answers and two verdicts each
+    expect(markers).toHaveLength(7); // the two remaining questions: four answers and three distinct grades
     expect(markers.every((m) => m === String(process.pid))).toBe(true);
     expect(existsSync(marker)).toBe(false);
 

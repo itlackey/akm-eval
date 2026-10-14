@@ -2,6 +2,8 @@
 // the label a model name makes, and the two texts that get written into results or printed: the model endpoint hidden, and
 // what akm said when a command failed.
 
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { completionsUrl } from "./akm/akm.ts";
 
 /** A failure that ends the run with a message. It is thrown, so the sandbox is cleaned up on the way out. */
@@ -18,11 +20,14 @@ export function fail(message: string, code = 2): never {
   throw new Fatal(message, code);
 }
 
-/** The short commit of the checkout at `root`, with -dirty when tracked files have changes, or "unknown" outside a repository. */
+/** The short commit of the checkout at `root`, with -dirty when tracked files have changes, the recorded image revision without Git metadata, or "unknown". */
 export function gitCommit(root: string): string {
   const run = (args: string[]) => Bun.spawnSync(["git", "-C", root, ...args], { stderr: "ignore" });
   const head = run(["rev-parse", "--short", "HEAD"]);
-  if (head.exitCode !== 0) return "unknown";
+  if (head.exitCode !== 0) {
+    const imageRevision = join(root, ".akm-eval-revision");
+    return existsSync(imageRevision) ? readFileSync(imageRevision, "utf8").trim() || "unknown" : "unknown";
+  }
   const dirty = run(["status", "--porcelain", "--untracked-files=no"]).stdout.toString().trim() !== "";
   return head.stdout.toString().trim() + (dirty ? "-dirty" : "");
 }

@@ -13,3 +13,6 @@ benchmarks/*/results/*
 !evals/*/results/.gitkeep
 !benchmarks/*/results/.gitkeep
 models.json
+
+# Dedicated working folder from the Docker quickstart.
+/akm-eval-work

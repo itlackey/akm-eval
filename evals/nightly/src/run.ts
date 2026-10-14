@@ -10,6 +10,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { type ModelCalls, takeModelCalls } from "../../../lib/akm/usage.ts";
+import { type SemanticVerification, takeSemanticVerification } from "../../../lib/akm/semantic.ts";
 import { Fatal, fail, gitCommit, hideEndpoint, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
@@ -107,6 +108,7 @@ interface Summary extends RunInputs, CorpusFields {
   /** What the run was made of (see lib/manifest.ts). */
   /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
   model_calls: ModelCalls | null;
+  semantic_verification?: SemanticVerification | null;
   manifest: RunManifest;
   results_dir: string;
 }
@@ -215,6 +217,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     calls_by: calls.by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
     metrics: counts.metrics,
     model_calls: takeModelCalls(),
+    semantic_verification: takeSemanticVerification(),
     manifest: buildManifest({
       measurement: MEASUREMENT,
       corpus: corpus.name,
@@ -234,7 +237,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; embedder?: string; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
+  let values: { model?: string; akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; embedder?: string; semantic?: boolean; strategy?: string; "config-patch"?: string; label?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...EMBEDDER_OPTIONS, ...OVERRIDE_OPTIONS, ...MODEL_OPTIONS, ...AKM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -251,7 +254,7 @@ async function main(): Promise<void> {
   if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) fail("--limit must be a positive integer");
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
-  const embedder = parseEmbedder(values.embedder, fail);
+  const embedder = parseEmbedder(values.embedder, fail, values.semantic);
   const overrides = parseOverrides(values, STRATEGY, fail);
 
   useAkm(values, fail);

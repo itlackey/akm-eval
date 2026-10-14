@@ -9,5 +9,14 @@
       "context": 32768,
       "output": 4096
     }
+  },
+  "my-direct-reader": {
+    "model": "your-reader-model",
+    "base_url": "https://api.example.com/v1",
+    "api_key_env": "EXAMPLE_API_KEY",
+    "chat": {
+      "max_completion_tokens": 2048,
+      "reasoning_effort": "none"
+    }
   }
 }

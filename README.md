@@ -11,17 +11,17 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 | Folder | Question it answers | Flags |
 |---|---|---|
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `--cases` `--yes` `--repeat` `--akm` `--semantic` |
-| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `--cases` `--yes` `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/distill` | Do distilled lessons say only what the source memory says? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--pool` `--timeout-ms` |
-| `evals/extract` | Does extraction pull durable insights from session logs, and leave routine sessions empty? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/nightly` | Does a full nightly improve run give good results unattended? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
+| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `--cases` `--yes` `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/distill` | Do distilled lessons say only what the source memory says? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--pool` `--timeout-ms` `--semantic` |
+| `evals/extract` | Does extraction pull durable insights from session logs, and leave routine sessions empty? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/nightly` | Does a full nightly improve run give good results unattended? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
 | `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` |
-| `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--yes` `--process` `--repeat` `--config-patch` `--model` `--akm` |
+| `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--yes` `--process` `--repeat` `--config-patch` `--model` `--akm` `--semantic` |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | `--cases` `--yes` `--repeat` `--sample-seed` `--retrieval-only` `--semantic` `--resume` `--model` `--judge-model` `--akm` |
-| `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `--attempts` `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` |
+| `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `--attempts` `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` `--resume` `--concurrency` |
 | `benchmarks/skillret` | Does akm rank the right skills first in a large skill library (SkillRet)? | `--repeat` `--akm` |
 
 `scripts/smoke/src/readme.test.ts` runs every `run --help` and fails when this table lists other flags.
@@ -34,8 +34,7 @@ Retired evals are summarised in [`reports/retired-evals.md`](reports/retired-eva
 
 The [public results ledger](https://itlackey.github.io/akm-eval/) presents the
 every committed run in `reports/`, with sortable quality, performance and settings
-columns, full filtering, row comparison and artifact links. Run `bun run build:site` (or
-`scripts/ledger/run`) to build it locally. `.github/workflows/ledger-pages.yml`
+columns, full filtering, row comparison and artifact links. Run `eval_docker scripts/ledger/run` to build it locally. `.github/workflows/ledger-pages.yml`
 builds pull requests and publishes main changes to the reports or site.
 See [site/README.md](site/README.md) for publishing and refreshes.
 
@@ -52,26 +51,42 @@ retired/              code of retired evals, to read, not to run
 private/, .cache/     your custom corpora and results, akm's embedding model (both gitignored)
 ```
 
-## Set up
+## Set up with Docker
 
-You need [bun](https://bun.sh) and akm on `PATH` (or `AKM_BIN`). The Harbor evals also need Docker and [uv](https://docs.astral.sh/uv/), and so does `scripts/check python`.
+Docker is the only runtime to install on your machine. The prebuilt runner includes
+all eval tools, Python/Node/Bun packages, AKM and the native embedding model. Create a dedicated working folder; the image refreshes its own code
+there and retains your configuration, datasets and results. See the [Docker guide](docker/README.md)
+for read-only configuration/case mounts, Harbor's Docker socket, stop/resume and image digests.
 
-Copy `.env.example` to `.env` and fill it in:
+```sh
+export AKM_EVAL_IMAGE=ghcr.io/itlackey/akm-eval:main
+export AKM_EVAL_WORK="$PWD/akm-eval-work"
+mkdir -p "$AKM_EVAL_WORK"
+docker pull "$AKM_EVAL_IMAGE"
+eval_docker() {
+  docker run --rm --init --user "$(id -u):$(id -g)" \
+    --mount "type=bind,src=$AKM_EVAL_WORK,dst=$AKM_EVAL_WORK" \
+    --workdir "$AKM_EVAL_WORK" "$AKM_EVAL_IMAGE" "$@"
+}
+eval_docker bash -c 'cp -n .env.example .env'
+```
 
-- `MODEL_BASE_URL`, `MODEL_API_KEY` and `MODEL_NAME`: the model under test.
-- `JUDGE_MODEL`, and `JUDGE_BASE_URL` with `JUDGE_API_KEY` if the judge is elsewhere: the judge, for `benchmarks/longmemeval` and `evals/retrieval/label`.
-- `AKM_BIN`: the akm to run, if not the one on `PATH`.
+Edit `$AKM_EVAL_WORK/.env`: `MODEL_BASE_URL`, `MODEL_API_KEY` and `MODEL_NAME`
+select the model; `JUDGE_MODEL` and optional `JUDGE_BASE_URL`/`JUDGE_API_KEY` select
+LongMemEval's judge. `AKM_BIN` optionally names another mounted AKM build. Native
+development from a source checkout is still supported with Bun and AKM; Harbor
+also needs uv and Docker. Host package installation is not part of the Docker workflow.
 
-A value set in `.env` wins over the same variable set in your shell; an empty one (`KEY=`) leaves the shell's. `.env` is gitignored.
-
-akm runs in a sandbox of temp folders per run and never touches your own akm bundle. It gets only a short list of your environment (`ALLOWED_ENV` in `lib/akm/akm.ts`) plus the variables its config names as `$NAME`, such as `$MODEL_API_KEY`.
+A nonempty value in `.env` wins over the same shell variable; an empty value
+leaves the shell's. The image has no credentials. AKM runs in isolated temporary
+folders and receives only the allowed environment and keys named by its config.
 
 ## Run an eval
 
 ```
-evals/retrieval/run                     # the public corpus
-evals/reflect/run --limit 5             # five cases, to check a setup
-evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
+eval_docker evals/retrieval/run --semantic on       # the public corpus
+eval_docker evals/reflect/run --semantic --limit 5             # five cases, to check a setup
+eval_docker evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
 ```
 
 A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write under `private/<name>/results/`). The default label is the model name (`akm-<version>` for the two that call no model). While a run is alive its folder holds a `.running` file with its pid. A run that gives up (the endpoint down, too many errors) writes its summary with `status: "aborted"` and exits non-zero: do not compare it.
@@ -79,27 +94,31 @@ A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write un
 ## Pick the model and the akm build
 
 ```
-evals/consolidate/run --model my-cloud-model
-evals/reflect/run --model my-small-model --akm "bun ~/code/akm/src/cli.ts" --label pr1100
-benchmarks/longmemeval/run --model my-model --judge-model my-judge
+eval_docker evals/consolidate/run --model my-cloud-model
+eval_docker evals/reflect/run --model my-small-model --semantic --label check
+eval_docker benchmarks/longmemeval/run --model my-model --judge-model my-judge
 ```
 
 - `--model ID` names the model, as your gateway at `MODEL_BASE_URL` names it, and wins over `MODEL_NAME`. `--judge-model ID` does the same for the judge.
 - A model that is not behind that gateway takes a line in `models.json` (copy `models.example.json`; gitignored): `{ "name": { "base_url": "...", "api_key_env": "SOME_KEY", "model": "..." } }`. `--model name` then goes to that URL with the key in that variable. Never put a key in `models.json`.
-- Harbor evals accept optional `"limits": { "context": 32768, "output": 4096 }` in a `models.json` entry. OpenCode uses these budgets for context compaction. Both arms receive identical limits, recorded in the saved job configuration. Set them to the server's actual budgets; see [OpenCode provider configuration](https://opencode.ai/docs/providers/#custom-provider). Other evals keep their existing output budgets.
+- Harbor evals accept optional `"limits": { "context": 32768, "output": 4096 }` in a `models.json` entry. OpenCode uses these budgets for context compaction. Both arms receive identical limits, recorded in the saved job configuration. Set them to the server's actual budgets; see [OpenCode provider configuration](https://opencode.ai/docs/providers/#custom-provider). LongMemEval also accepts per-role Chat Completions settings, described below.
 - `--akm COMMAND` (or `AKM_BIN`) is a command line, such as `bun ~/code/akm/src/cli.ts`. Quote a word with spaces; a leading `~/` is your home folder; nothing else is expanded.
 - The Harbor evals (`agent-ab`, `terminal-bench`) install akm in a container, so their `--akm` is a release (`akm-cli@0.9.26`) or the folder of an akm checkout, and `--akm-env KEY=VALUE` sets an `AKM_*` setting for the akm arm. opencode there calls the Responses API.
 - `--strategy NAME` and `--config-patch FILE` run another akm strategy or config than the eval's own. `--embedder deterministic|real` (consolidate, nightly) picks akm's word-hash embedder (default) or its real embedding model; the two are never compared.
 
 `summary.json` records the model, `akm_version`, `akm_bin`, `akm_build` (`git describe` of a checkout) and `akm_build_fingerprint` (a digest of its uncommitted changes). A pre-release can print the version of the release it branched from, so read `akm_build` to tell builds apart, and put the build in `--label`. Before measuring a new akm, run `scripts/smoke/run --contract --akm "..."` to see that the evals still read it.
 
+Use `--semantic` consistently on the process evals, Agent A/B, LongMemEval and Terminal-Bench. Process evals merge the pinned native embedder settings with any `--config-patch` and record the effective patch digest. Retrieval keeps its existing `--semantic on` syntax; SkillRet retains both comparators. For consolidate and nightly, `--semantic` also selects `--embedder real`; an explicit deterministic embedder conflicts. Defaults remain unchanged, so the search choice is explicit. Process summaries include `semantic_verification`: embedding coverage and counts of semantic, nonsemantic and unknown search events. Incomplete coverage or a nonsemantic search is an error. Verification reads the eval's own events and adds no probe search; zero searches means retrieval was not observed, even when semantic search was configured. `telemetry_errors` flags unavailable search-event evidence.
+
+LongMemEval model entries can add `"chat": { "max_completion_tokens": 2048, "reasoning_effort": "none" }`, or `max_tokens` for endpoints that require that field. Choose settings the actual reader/judge supports; only the selected role receives them. Both reader arms use identical settings. Context limits belong in `limits`; Chat Completions output settings belong in `chat`. The example budgets are configuration examples, not measured server capacities. See [models.example.json](models.example.json) and [the LongMemEval guide](benchmarks/longmemeval/README.md).
+
 ## Corpora
 
 ```
-evals/distill/run                                # --corpus public, the default
-evals/distill/run --corpus custom                # the rewrite in private/distill/assets
-evals/distill/run --cases ~/notes/distill        # a folder of your own cases
-evals/distill/run --corpus all                   # public and custom, side by side, never pooled
+eval_docker evals/distill/run                                # --corpus public, the default
+eval_docker evals/distill/run --corpus custom                # the rewrite in private/distill/assets
+eval_docker evals/distill/run --cases private/my-distill --yes        # a folder of your own cases
+eval_docker evals/distill/run --corpus all                   # public and custom, side by side, never pooled
 ```
 
 - `public` is the cases committed here, or the dataset a benchmark fetches.
@@ -121,13 +140,13 @@ Each eval's `run` command runs once by default. It writes `summary.json` and
 `samples.jsonl` to its results folder, including quality metrics, available timing
 and usage, errors, settings and input identities. Completed runs also record
 `wall_seconds` (unknown for resumed runs whose earlier duration is unavailable).
-A run with errors keeps them visible; a stopped run keeps its
-`.running` marker. Existing benchmark-specific resume flags still work.
+A run with errors keeps them visible; a gracefully stopped run keeps its
+partial artifacts and clears its `.running` marker. Existing benchmark-specific resume flags still work.
 
 ```sh
-evals/reflect/run --model model-a --label model-a
-evals/reflect/run --model model-b --label model-b
-scripts/compare/run evals/reflect/results/<A> evals/reflect/results/<B>
+eval_docker evals/reflect/run --model model-a --label model-a
+eval_docker evals/reflect/run --model model-b --label model-b
+eval_docker scripts/compare/run evals/reflect/results/<A> evals/reflect/results/<B>
 ```
 
 There is no special baseline, mandatory repeat count or saved scheduling state.
@@ -154,7 +173,7 @@ Benchmark-native attempts and paired with/without-AKM controls remain available.
 Repeated deterministic retrieval normally adds little information.
 
 ```sh
-evals/reflect/run --model model-a --repeat 2 --label check-variation
+eval_docker evals/reflect/run --model model-a --repeat 2 --label check-variation
 ```
 
 ### Explicit rescoring
@@ -177,20 +196,20 @@ See [comparison commands](scripts/compare/README.md) and the
 ## Check the repository
 
 ```
-scripts/check              # typecheck, python, test, in that order
-scripts/check typecheck    # tsc in every src folder
-scripts/check python       # the Harbor arm's tests, with uv
-scripts/check test         # bun test at the root
+eval_docker scripts/check              # typecheck, python, test, in that order
+eval_docker scripts/check typecheck    # tsc in every src folder
+eval_docker scripts/check python       # the Harbor arm's tests, with uv
+eval_docker scripts/check test         # bun test at the root
 ```
 
-No test needs akm or Docker: every test uses a fake akm. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request. `.github/workflows/akm-smoke.yml` runs `scripts/smoke/run` nightly against real akm releases: it runs each eval once on one case against a stub model, to see that akm still takes the evals' commands (see [`scripts/smoke/README.md`](scripts/smoke/README.md)). `.github/workflows/release.yml` publishes a release from `releases/v<version>.md`, by hand.
+The fixture tests use fake AKM/model processes. In the Docker workflow, the image provides all test dependencies. `.github/workflows/check.yml` runs `scripts/check` on every push and pull request. `.github/workflows/akm-smoke.yml` runs `scripts/smoke/run` nightly against real akm releases: it runs each eval once on one case against a stub model, to see that akm still takes the evals' commands (see [`scripts/smoke/README.md`](scripts/smoke/README.md)). `.github/workflows/container.yml` builds/verifies the preinstalled runner and publishes the GHCR image on main. `.github/workflows/release.yml` publishes a release from `releases/v<version>.md`, by hand.
 
 ## Custom corpora
 
 ```
-./generate-assets                          # every eval
-./generate-assets --only retrieval,nightly # some
-./generate-assets --seed 42                # another seed, for this run
+eval_docker ./generate-assets                          # every eval
+eval_docker ./generate-assets --only retrieval,nightly # some
+eval_docker ./generate-assets --seed 42                # another seed, for this run
 ```
 
 `./generate-assets` rewrites each eval's public cases from a seed into `private/<eval>/assets`, with the seed in its `generated.json`. The first run creates `private/seed`. The rewrite (`lib/rewrite`) changes names, tool names, hosts, ids, dates and numbers, a few percent of the words, and keeps the meaning and the labels. It is not held-out data: a model that has seen the public cases can still recognise them.

@@ -445,6 +445,26 @@ describe("runCorpus", () => {
 
   const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8"));
 
+  test("resume reuses completed trial bytes and rejects changed settings", async () => {
+    const { root, env } = fakeUv();
+    const ctx = { model: "openai/x", label: "recover", limit: 2, concurrency: 1, env: { ...env, UV_FAKE_MISSING: "1" } };
+    const results = join(root, "results");
+    await expect(quiet(() => runCorpus(PUBLIC, ctx, results))).rejects.toThrow("no result");
+    const dir = join(results, readdirSync(results)[0]!);
+    const first = rowsOf(dir).flatMap(row => row.trials)[0];
+    const jobDir = join(dir, "jobs", "terminal-bench-public");
+    const before = readFileSync(join(jobDir, readdirSync(jobDir).find(name => name.includes("__opencode__"))!, "result.json"), "utf8");
+    const summary = await quiet(() => runCorpus(PUBLIC, { ...ctx, env, resume: dir }, results));
+    expect(summary.status).toBe("complete");
+    expect(summary.job.n_concurrent_trials).toBe(1);
+    expect(readFileSync(join(jobDir, readdirSync(jobDir).find(name => name.includes("__opencode__"))!, "result.json"), "utf8")).toBe(before);
+    expect(first).toBeDefined();
+    await expect(quiet(() => runCorpus(PUBLIC, { ...ctx, env, resume: dir, concurrency: 2 }, results))).rejects.toThrow("original harness");
+    await expect(quiet(() => runCorpus(PUBLIC, { ...ctx, env, resume: dir, modelLimits: { context: 8192, output: 1024 } }, results))).rejects.toThrow("original harness");
+    const config = join(jobDir, "config.json"); writeFileSync(config, readFileSync(config, "utf8") + " ");
+    await expect(quiet(() => runCorpus(PUBLIC, { ...ctx, env, resume: dir }, results))).rejects.toThrow("original harness");
+  });
+
   test("writes the job, stages the library, runs Harbor and leaves the summary", async () => {
     fakeAkm(true);
     const { root, env } = fakeUv();
@@ -1047,4 +1067,34 @@ test("Terminal-Bench forwards custom model limits to the saved configuration of 
   const limits = { context: 32768, output: 4096 };
   const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
   for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
+});
+
+
+test("SIGTERM stops owned fake Harbor and writes a partial summary", async () => {
+  const root = sandboxRepo(); dirs.push(root);
+  const bin = writeFakeHarbor(root);
+  const proc = Bun.spawn([process.execPath, "--no-env-file", join(root, "benchmarks/terminal-bench/src/run.ts"), "--model", "fake", "--limit", "2", "--label", "stop"], {
+    cwd: root, stdout: "ignore", stderr: "ignore", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, MODEL_BASE_URL: "https://gateway.example/v1", MODEL_API_KEY: "fake", UV_FAKE_MISSING: "1", UV_FAKE_WAIT: "1" },
+  });
+  let child = 0;
+  try {
+    const results = join(root, "benchmarks/terminal-bench/results");
+    let dir = "";
+    for (let i = 0; i < 100; i++) {
+      const folder = readdirSync(results).find(name => name.endsWith("-stop"));
+      if (folder) { dir = join(results, folder); if (existsSync(join(dir, "uv-waiting"))) break; }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    expect(existsSync(join(dir, "uv-waiting"))).toBe(true);
+    child = Number(readFileSync(join(dir, "uv-waiting"), "utf8"));
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).status).toBe("running");
+    proc.kill("SIGTERM");
+    const code = await Promise.race([proc.exited, new Promise(resolve => setTimeout(() => resolve(-1), 5000))]);
+    expect(code).toBe(1);
+    expect(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", harbor_exit: 130, completion: { completed: 3, missing: 1 } });
+    expect(existsSync(join(dir, ".running"))).toBe(false);
+  } finally {
+    proc.kill();
+    if (child) { try { process.kill(child, "SIGKILL"); } catch {} }
+  }
 });

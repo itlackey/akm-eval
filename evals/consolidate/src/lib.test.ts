@@ -197,6 +197,9 @@ describe("the embedder", () => {
     expect(parseEmbedder(undefined, fail)).toBe("deterministic");
     expect(parseEmbedder("deterministic", fail)).toBe("deterministic");
     expect(parseEmbedder("real", fail)).toBe("real");
+    expect(parseEmbedder(undefined, fail, true)).toBe("real");
+    expect(parseEmbedder("real", fail, true)).toBe("real");
+    expect(() => parseEmbedder("deterministic", fail, true)).toThrow("--semantic uses the real embedder");
     expect(() => parseEmbedder("fake", fail)).toThrow('--embedder must be deterministic or real, not "fake"');
     expect(() => parseEmbedder("", fail)).toThrow("--embedder must be deterministic or real");
   });

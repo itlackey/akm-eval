@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = --help ] || [ "$#" = 0 ]; then
+  cat /opt/akm-eval/docker/usage.txt
+  exit 0
+fi
+# This directory is managed by the image. Never overwrite an unrelated checkout.
+if [ ! -f .akm-eval-revision ] && [ -n "$(find . -mindepth 1 -maxdepth 1 ! -name .env ! -name models.json -print -quit)" ]; then
+  echo "akm-eval: mount an empty working folder (configuration files .env and models.json are allowed); see docker/README.md" >&2
+  exit 2
+fi
+# Refresh shipped code/dependencies, preserving results, custom corpora and configuration.
+cp -R /opt/akm-eval/. .
+mkdir -p .cache/models .home
+cp -Rn /opt/akm-models/. .cache/models/
+export HOME="$PWD/.home"
+exec "$@"

@@ -67,6 +67,12 @@ describe("gitCommit", () => {
     expect(gitCommit(dir)).toBe(`${sha}-dirty`);
   });
 
+  test("keeps the image source revision when its managed working folder has no Git metadata", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, ".akm-eval-revision"), "container-source-dirty\n");
+    expect(gitCommit(dir)).toBe("container-source-dirty");
+  });
+
   test("is unknown for a folder that is not a checkout, and for a repository with no commit", () => {
     expect(gitCommit(tmp())).toBe("unknown");
     const empty = tmp();
