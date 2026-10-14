@@ -42,6 +42,37 @@ describe("published eval projection", () => {
       "https://github.com/itlackey/akm-eval/blob/revision/reports/0.10.1/reflect/real-r1/summary.json",
     );
   });
+  test("retains saved measurement notes with public text redaction", () => {
+    const run = presentRun(input(report({ notes: [
+      "The Qwen judge differs from the benchmark judge.",
+      "11 answers stopped at the token limit.",
+      "Endpoint https://user:password@private.lab.example/v1 on /home/operator/data.",
+      null, 7, "",
+    ] }), "longmem/run", []))!;
+    expect(run.notes).toContain("The Qwen judge differs from the benchmark judge.");
+    expect(run.notes).toContain("11 answers stopped at the token limit.");
+    expect(run.notes).toContain("[private endpoint] on ~/data.");
+    expect(run.notes).not.toContain("user:password");
+    expect(run.notes).not.toContain("private.lab.example");
+    expect(run.notes).not.toContain("/home/operator");
+  });
+  test("exposes LongMemEval judge failures without rescoring identical answers", () => {
+    const samples = [
+      { without_akm: { ok: true, hypothesis: "Same answer.", correct: true }, with_akm: { ok: true, hypothesis: "Same answer.", correct: false } },
+      { without_akm: { ok: true, hypothesis: "Different answer.", correct: true }, with_akm: { ok: true, hypothesis: "Another answer.", correct: false } },
+      { without_akm: { ok: true, hypothesis: "Same answer.", correct: true }, with_akm: { ok: false, hypothesis: "Same answer.", correct: false } },
+      { without_akm: { ok: true, hypothesis: null, correct: true }, with_akm: { ok: true, hypothesis: null, correct: false } },
+      { without_akm: { ok: true, hypothesis: "Same answer.", correct: undefined }, with_akm: { ok: true, hypothesis: "Same answer.", correct: false } },
+    ];
+    const original = JSON.stringify(samples);
+    const summary = report({ eval: "longmemeval", judge_undecidable: 1 });
+    const run = presentRun(input(summary, "longmem/run", samples))!;
+    expect(run.notes).toContain("1 judge response was undecidable.");
+    expect(run.notes).toContain("1 identical answer received different grades across arms.");
+    expect(JSON.stringify(samples)).toBe(original);
+    expect(presentRun(input(report({ eval: "longmemeval", judge_undecidable: 0 }), "longmem/clean", []))!.notes).toBe("");
+    expect(presentRun(input(report(), "reflect/run", samples))!.notes).not.toContain("identical answer");
+  });
   test("excludes private and incomplete results", () => {
     expect(presentRun(input(report({ corpus: "custom" })))).toBeNull();
     expect(presentRun(input(report({ status: "aborted" })))).toBeNull();

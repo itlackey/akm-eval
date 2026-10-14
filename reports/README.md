@@ -2,6 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md`](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md): fresh full Luna semantic LongMemEval run; 500 attempted, 499 scored pairs, limitations retained.
 - [`0.10.261003-beta/semantic-2026-10-14/README.md`](0.10.261003-beta/semantic-2026-10-14/README.md): semantic 35B/Luna results, completed artifacts, and stopped benchmark coverage.
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
 - [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): Bifrost runs, limitations, and reproduction commands.
@@ -77,3 +78,4 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 | 0.10.261003-beta | retrieval | [bifrost-fast35b-v06-20261013-books](0.10.261003-beta/retrieval/bifrost-fast35b-v06-20261013-books) | public | none | full public run; 51 recorded, 51 scored, 0 errors |
 | 0.10.261003-beta | skillret | [bifrost-fast35b-v06-20261013](0.10.261003-beta/skillret/bifrost-fast35b-v06-20261013) | public | none | full public run; 4392 recorded, 4392 scored, 0 errors |
 | 0.10.261003-beta | agent-ab | [bifrost-fast35b-v06-20261013](0.10.261003-beta/agent-ab/bifrost-fast35b-v06-20261013) | public | openai/fast/qwen3.6-35b-a3b | full public run; 6 recorded, 6 scored, 0 errors |
+| 0.10.261003-beta | longmemeval | [luna-semantic-fresh-20261014-full](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full) | public | eval-luna/gpt-6-luna | full semantic run; 500 attempted, 499 scored pairs, 1 error; Qwen judge |

@@ -95,6 +95,8 @@ export function presentRun(input: RunInput): LedgerRun | null {
   let role: LedgerRun["role"] =
     s.limit || sample.limit || (sampleN !== null && total !== null && sampleN < total) ? "Pilot" : "Full suite";
   const notes: string[] = [];
+  if (Array.isArray(s.notes))
+    notes.push(...s.notes.filter((note): note is string => typeof note === "string" && note.trim().length > 0).map(publicText));
   if (s.resumed === true) notes.push("Resumed from saved cases; full run wall time is unknown.");
   if (suite === "agent-ab" && label === "bifrost-gpt120-pilot") {
     role = "Diagnostic";
@@ -104,6 +106,19 @@ export function presentRun(input: RunInput): LedgerRun | null {
   }
   if (role === "Pilot") notes.push("Only part of this test was run. The score does not estimate full-test performance.");
   const rows = input.samples?.map(object) ?? [];
+  if (suite === "longmemeval") {
+    const undecidable = n(s, "judge_undecidable");
+    if (undecidable !== null && undecidable > 0)
+      notes.push(`${undecidable} judge response${undecidable === 1 ? " was" : "s were"} undecidable.`);
+    const inconsistent = rows.filter((row) => {
+      const without = object(row.without_akm), withAkm = object(row.with_akm);
+      const answer = text(without.hypothesis).trim();
+      return without.ok === true && withAkm.ok === true && answer !== "" && answer === text(withAkm.hypothesis).trim()
+        && typeof without.correct === "boolean" && typeof withAkm.correct === "boolean" && without.correct !== withAkm.correct;
+    }).length;
+    if (inconsistent)
+      notes.push(`${inconsistent} identical answer${inconsistent === 1 ? "" : "s"} received different grades across arms.`);
+  }
   const layout = rows.filter((row) => /Reflect refused: the file for/.test(text(row.error))).length;
   const missing = rows.filter((row) => /ASSET_NOT_FOUND/.test(text(row.error))).length;
   if (layout)
