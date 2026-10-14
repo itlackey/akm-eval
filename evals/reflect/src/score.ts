@@ -187,8 +187,10 @@ function specifics(value: string): string[] {
     .filter((t) => t !== "" && /\d|[A-Z].*[A-Z]|[a-z][/_.][a-z]/.test(t));
 }
 
-/** The specific words of a changed value that the note does not hold. */
-const ungrounded = (value: string, note: string): string[] => specifics(value).filter((t) => !note.toLowerCase().includes(t.toLowerCase()));
+/** The specific words of a changed value that the note does not hold. A plural acronym (PDFs) is grounded by its whole singular (PDF). */
+const ungrounded = (value: string, note: string): string[] => specifics(value).filter((t) =>
+  !note.toLowerCase().includes(t.toLowerCase()) && !(/^[A-Z]{2,}s$/.test(t) && new RegExp(`\\b${t.slice(0, -1)}\\b`).test(note)),
+);
 
 /** Does `after` still hold every name, number and path `before` had, however they are spelled or joined? Other words may change. */
 function keepsNames(before: string, after: string): boolean {

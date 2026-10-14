@@ -44,7 +44,7 @@ Metrics, for each of four columns (`search` and `curate` on the keyword index, `
 | Metric | Meaning |
 |---|---|
 | `ndcg_10` | nDCG over the first 10 results; a result nobody graded counts as not relevant |
-| `ndcg_10_condensed` | nDCG over the graded results alone. The real score lies between this and `ndcg_10` |
+| `ndcg_10_condensed` | nDCG over the graded results alone; shows sensitivity to unjudged results, not a bound on the true score |
 | `judged_10` | the share of the first 10 results someone graded. Not a quality score |
 | `p_5`, `success_5` | the share of the first 5 places that are relevant; the share of queries with a relevant asset in the first 5 |
 | `mrr`, `recall_10` | one over the rank of the first relevant asset; the share of relevant assets in the first 10 |
@@ -56,7 +56,8 @@ The judgments cover what akm 0.9.26's keyword search and a plain BM25 returned, 
 
 ## What the summary reports
 
-`summary.json`, per collection: `metrics` for each column, `abstention`, `errored`, `timeouts`, the search mode akm reported, `semantic_index` (`cold`, `warm` or `rebuilt`) and which akm built it, `assets_sha256` over the library, bundle mapping, queries and qrels (`assets` holds the four), the akm `config`, `seed` (of a rewrite), and the `manifest`. `samples.jsonl` has one row per query with every call's results, grades, time and error.
+`summary.json`, per collection: `metrics` for each column, `abstention`, `errored`, `timeouts`, the search mode akm reported, `semantic_index` (`cold`, `warm` or `rebuilt`) and which akm built it, `assets_sha256` over the library, bundle mapping, queries and qrels (`assets` holds the four), the akm `config`, `seed` (of a rewrite), and the `manifest`. `wall_seconds` includes collection setup, indexing and queries,
+for both single and repeated runs. `samples.jsonl` has one row per query with every call's results, grades, time and error.
 
 ## Grade results: label
 

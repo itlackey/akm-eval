@@ -1,4 +1,4 @@
 [test]
 # The tests inside corpus/library belong to its skills. They are not tests of this repository.
 # The tests inside retired/ are akm's old ones. They run only inside an akm checkout (see retired/akm-scripts-akm-eval/README.md).
-pathIgnorePatterns = ["corpus/**", "private/**", "retired/**"]
+pathIgnorePatterns = ["corpus/**", "private/**", "retired/**", "akm-eval-work/**"]

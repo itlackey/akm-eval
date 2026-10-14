@@ -36,6 +36,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
   version: "0.3",
+  scoringVersion: "0.4",
   loadCases: (root, summary) => {
     const file = join(casesFolder(root, summary), "cases.jsonl");
     return parseCases(readFileSync(file, "utf8"), file);

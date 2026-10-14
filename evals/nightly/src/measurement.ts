@@ -29,6 +29,7 @@ export const MEASUREMENT: Measurement<Planted, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
   version: "0.3",
+  scoringVersion: "0.4",
   loadCases: (root, summary) => {
     const night = loadNight(assetsOf(root, summary));
     return planted(night.items, night.files);

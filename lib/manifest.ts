@@ -30,6 +30,8 @@ export interface Measurement<Case = any, Raw = any, Row extends Obj = Obj> {
   eval: string;
   /** The version of what the eval asks akm, such as "0.2". Runs are compared by it. */
   version: string;
+  /** A scoring-only revision; defaults to version. It leaves unchanged collection protocols comparable after explicit rescoring. */
+  scoringVersion?: string;
   /** The cases a summary's corpus holds now, with their labels, read from `root`. This is what a run is scored against again. Throws a message when the corpus cannot be read. */
   loadCases(root: string, summary: Obj): Case[];
   /** The case's id, which is the `id` of its row in samples.jsonl. */
@@ -127,7 +129,7 @@ export interface RunManifest {
 }
 
 export interface ManifestInput<Case = any> {
-  measurement: Pick<Measurement<Case>, "eval" | "version">;
+  measurement: Pick<Measurement<Case>, "eval" | "version" | "scoringVersion">;
   corpus: string;
   collection?: string | null;
   mode?: string | null;
@@ -153,7 +155,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
     mode: input.mode ?? null,
     harness_version: HARNESS_VERSION,
     collector: { version: input.measurement.version },
-    scorer: { version: input.measurement.version },
+    scorer: { version: input.measurement.scoringVersion ?? input.measurement.version },
     cases: input.cases,
     akm: { version: input.akm?.version ?? null, bin: input.akm?.bin ?? null, build: input.akm?.build ?? null, build_fingerprint: input.akm?.build_fingerprint ?? null },
     config: { sha256: redacted === null ? null : sha256Json(redacted), redacted },

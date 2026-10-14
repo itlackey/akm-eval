@@ -1075,6 +1075,25 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
+  test("single CLI runs record elapsed time and clear their running markers for both collections", () => {
+    const { root, akmBin } = setup();
+    const script = join(root, "fake-akm.ts");
+    writeFileSync(script, readFileSync(script, "utf8").replace('const query = rest[rest.indexOf("--") + 1];', 'const query = "alpha";'));
+    const label = root.split("/").at(-1) as string;
+    const results = join(ROOT, "evals", "retrieval", "results");
+    const day = new Date().toISOString().slice(0, 10);
+    const folders = ["library", "books"].map(name => join(results, `${day}-${label}-${name}`));
+    dirs.push(...folders);
+    const done = run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label, "--akm", akmBin]);
+    expect(done.code, done.err || done.out).toBe(0);
+    for (const folder of folders) {
+      const summary = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
+      expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0, akm_version: "0.9.99-test" });
+      expect(summary.wall_seconds).toBeGreaterThan(0);
+      expect(existsSync(join(folder, ".running"))).toBe(false);
+    }
+  });
+
   test("takes --semantic on, off or auto, and says what else is wrong with it", () => {
     expect(run(["--semantic", "maybe"])).toMatchObject({ code: 2, err: 'retrieval: --semantic must be on, off or auto, not "maybe"\n' });
     expect(run(["--semantic"]).err).toContain("Usage: evals/retrieval/run");

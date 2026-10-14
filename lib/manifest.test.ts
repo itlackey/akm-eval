@@ -106,6 +106,13 @@ describe("the manifest", () => {
     expect(m.scorer).toEqual({ version: "0.2" });
   });
 
+  test("a scoring-only revision preserves the collector version", () => {
+    const m = buildManifest({ measurement: { ...TOY, scoringVersion: "0.3" }, corpus: "public", cases: {}, completion: { selected: [], scored: [], errored: [] } });
+    expect(m.collector).toEqual({ version: "0.2" });
+    expect(m.scorer).toEqual({ version: "0.3" });
+    expect(manifestProblems(m)).toEqual([]);
+  });
+
   test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and no path (#65)", () => {
     const m = build();
     expect(m.config.redacted).toEqual(withoutEngineSettings(m.config.redacted));

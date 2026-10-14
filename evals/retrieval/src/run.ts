@@ -380,7 +380,7 @@ async function main(): Promise<void> {
   for (const s of sets) {
     const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(isOwn(s.corpus), limit, flag as SemanticFlag), semanticFlag: flag as SemanticFlag }, s.folders);
     // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
-    if (repeat === undefined) summaries.push(await run(label));
+    if (repeat === undefined) summaries.push(...await repeatRuns(undefined, label ?? "", () => run(label)));
     else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));
   }
   if (summaries.length > 1 && repeat === undefined) printSideBySide([...new Set(summaries.map((s) => s.collection))].flatMap((name) => summaries.filter((s) => s.collection === name)));
