@@ -1076,7 +1076,7 @@ describe("the command", () => {
   };
 
   test("single CLI runs record elapsed time and clear their running markers for both collections", () => {
-    const { root } = setup();
+    const { root, akmBin } = setup();
     const script = join(root, "fake-akm.ts");
     writeFileSync(script, readFileSync(script, "utf8").replace('const query = rest[rest.indexOf("--") + 1];', 'const query = "alpha";'));
     const label = root.split("/").at(-1) as string;
@@ -1084,7 +1084,7 @@ describe("the command", () => {
     const day = new Date().toISOString().slice(0, 10);
     const folders = ["library", "books"].map(name => join(results, `${day}-${label}-${name}`));
     dirs.push(...folders);
-    const done = run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label]);
+    const done = run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label, "--akm", akmBin]);
     expect(done.code, done.err || done.out).toBe(0);
     for (const folder of folders) {
       const summary = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
