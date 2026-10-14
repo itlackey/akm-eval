@@ -1,6 +1,8 @@
 # AKM semantic search evaluation results — stopped collection
 
-The public process evals on AKM `0.10.261003-beta` used `fast/qwen3.6-35b-a3b` through Bifrost with semantic search enabled. All eight process suites completed without collection errors. They exposed missed lesson updates, unsafe retirement proposals, and one extracted instruction from an untrusted PR body. Collection was stopped on October 14, 2026. The three full paired benchmarks are incomplete; all collectors and their owned containers were stopped. No evals were restarted while preparing this report.
+A later [fresh full LongMemEval run using Luna and semantic search](../longmemeval/luna-semantic-fresh-20261014-full/README.md) attempted all 500 questions on October 14, 2026, with 499 scored pairs and one API error. It supersedes the LongMemEval prefix below for full-run coverage; the stopped artifacts remain unchanged. Agent A/B and Terminal-Bench remain stopped.
+
+The public process evals on AKM `0.10.261003-beta` used `fast/qwen3.6-35b-a3b` through Bifrost with semantic search enabled. All eight process suites completed without collection errors. They exposed missed lesson updates, unsafe retirement proposals, and one extracted instruction from an untrusted PR body. Collection was stopped on October 14, 2026. At that stop, the three full paired benchmarks were incomplete; all collectors and their owned containers were stopped. No evals were restarted while preparing this report.
 
 ## Models and measurement
 
@@ -69,7 +71,7 @@ These stopped artifacts are excluded from the public ledger's completed-run rows
 1. Harness validation and input checks are complete for the changes in this report. The new model-limit path still needs a representative real pilot before any claim that it prevents endpoint context failures.
 2. Expanded public process cases and native benchmark inputs are available and verified. Preserve their exact selections and hashes in further collections.
 3. Representative pilots were collected. Before further paid collection, address the 35B context budget, the Terminal-Bench package-install failures, and LongMemEval's output budget and judge consistency.
-4. Completing the three full paired collections requires a new instruction to run them. Any changed protocol must retain appropriate measurement provenance. Update this report and compare only compatible complete runs afterward; no universal repeats or matrix scheduler are required.
+4. LongMemEval now has a separate full collection linked above. Completing the full Agent A/B and Terminal-Bench collections requires a new instruction to run them. Any changed protocol must retain appropriate measurement provenance. Update this report and compare only compatible complete runs afterward; no universal repeats or matrix scheduler are required.
 
 ## Reproduction
 
