@@ -44,7 +44,7 @@ Metrics, for each of four columns (`search` and `curate` on the keyword index, `
 | Metric | Meaning |
 |---|---|
 | `ndcg_10` | nDCG over the first 10 results; a result nobody graded counts as not relevant |
-| `ndcg_10_condensed` | nDCG over the graded results alone. The real score lies between this and `ndcg_10` |
+| `ndcg_10_condensed` | nDCG over the graded results alone; shows sensitivity to unjudged results, not a bound on the true score |
 | `judged_10` | the share of the first 10 results someone graded. Not a quality score |
 | `p_5`, `success_5` | the share of the first 5 places that are relevant; the share of queries with a relevant asset in the first 5 |
 | `mrr`, `recall_10` | one over the rank of the first relevant asset; the share of relevant assets in the first 10 |
