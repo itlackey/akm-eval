@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createSandbox, removeSandbox, writeConfig } from "./akm.ts";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -114,4 +115,19 @@ describe("patchedConfig and overrideSummary", () => {
     expect(overrideSummary(defaultOverrides("default"))).toEqual({ strategy: "default", config_patch: null });
     expect(overrideSummary({ strategy: "x", configPatch: { path: "p.json", sha256: "abc", patch: { big: true } } })).toEqual({ strategy: "x", config_patch: { path: "p.json", sha256: "abc" } });
   });
+});
+
+
+test("the shared semantic option preserves custom settings and fingerprints the effective patch", () => {
+  const dir = tmp(); const file = join(dir, "custom.json");
+  writeFileSync(file, JSON.stringify({ custom: { preserved: true }, semanticSearchMode: "off" }));
+  const overrides = parseOverrides({ semantic: true, "config-patch": file }, "default", fail);
+  expect(patchedConfig({}, overrides)).toMatchObject({ custom: { preserved: true }, semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+  expect(overrides.configPatch?.sha256).not.toBe(parseOverrides({ "config-patch": file }, "default", fail).configPatch?.sha256);
+  expect(parseOverrides({}, "default", fail).configPatch).toBeNull();
+  const sandbox = createSandbox("semantic-patch-test");
+  try {
+    writeConfig(sandbox, patchedConfig({}, overrides));
+    expect(sandbox.env.HF_HOME).toEndWith("/.cache/models");
+  } finally { removeSandbox(sandbox); }
 });

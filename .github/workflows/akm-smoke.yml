@@ -35,23 +35,43 @@ jobs:
         leg: ${{ fromJSON(github.event_name == 'pull_request' && '[{"akm":"pinned","flags":"--contract","advisory":false}]' || '[{"akm":"pinned","flags":"--contract","advisory":false},{"akm":"latest","flags":"--strict","advisory":true}]') }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Always report the required check; publication-only changes do not run evals.
+      - name: Check whether eval code changed
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- . ':!reports' ':!site' ':!scripts/ledger'; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Publication-only change; eval smoke is skipped."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: oven-sh/setup-bun@v2
+        if: steps.scope.outputs.run == 'true'
         with:
           bun-version: 1.4.2
 
       # akm runs on Node.
       - uses: actions/setup-node@v4
+        if: steps.scope.outputs.run == 'true'
         with:
           node-version: 22
 
       # promotion indexes with akm's embedding model, 133 MB from huggingface.co. It is public, and nothing else goes in this cache.
       - uses: actions/cache@v4
+        if: steps.scope.outputs.run == 'true'
         with:
           path: .cache/models
           key: akm-embedding-model-bge-small-en-v1.5
 
       - name: Install akm
+        if: steps.scope.outputs.run == 'true'
         run: |
           if [ "${{ matrix.leg.akm }}" = latest ]; then
             version=latest
@@ -64,4 +84,5 @@ jobs:
           akm --version
 
       - name: scripts/smoke
+        if: steps.scope.outputs.run == 'true'
         run: scripts/smoke/run ${{ matrix.leg.flags }}

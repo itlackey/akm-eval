@@ -296,6 +296,11 @@ function giveReferencedVariables(sandbox: Sandbox, config: unknown): void {
 export function writeConfig(sandbox: Sandbox, config: unknown): void {
   writeFileSync(join(sandbox.dir, "config", "config.json"), `${JSON.stringify(config, null, 2)}\n`);
   giveReferencedVariables(sandbox, config);
+  // Config patches can enable the native embedder after the sandbox was created.
+  if ((config as { embedding?: { localModel?: unknown } })?.embedding?.localModel === SEMANTIC_MODEL) {
+    mkdirSync(MODEL_CACHE, { recursive: true });
+    sandbox.env.HF_HOME = MODEL_CACHE;
+  }
 }
 
 /** What a timeout is called in a message, such as `timed out after 900s`. */
@@ -318,7 +323,14 @@ export async function runAkm(sandbox: Sandbox, args: string[], opts: RunOptions 
     timeout: timeoutMs,
     killSignal: "SIGKILL",
   });
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  const stopOwnedChild = () => proc.kill("SIGKILL");
+  process.once("exit", stopOwnedChild); // a collector saving a stop checkpoint must not leave akm running
+  let stdout: string, stderr: string, code: number;
+  try {
+    [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  } finally {
+    process.off("exit", stopOwnedChild);
+  }
   const ms = performance.now() - t0;
   // A killed process exits 137. Bun's `killed` is true for any process that has exited, so the signal decides, and the exit code when Bun gives none.
   const killed = proc.signalCode !== null ? proc.signalCode === "SIGKILL" : code === 137;

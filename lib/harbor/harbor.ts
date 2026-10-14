@@ -353,6 +353,7 @@ export function jobConfig(o: {
   name: string;
   model: string;
   modelLimits?: ModelLimits;
+  concurrency?: number;
   jobsDir: string;
   attempts: number;
   librariesDir: string;
@@ -377,10 +378,10 @@ export function jobConfig(o: {
     job_name: o.name,
     jobs_dir: o.jobsDir,
     n_attempts: o.attempts,
-    n_concurrent_trials: CONCURRENT_TRIALS,
+    n_concurrent_trials: o.concurrency ?? CONCURRENT_TRIALS,
     environment: { type: "docker", delete: true },
     agents: [
-      { name: "opencode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig } },
+      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig } },
       {
         import_path: "akm_opencode:AkmOpenCode",
         ...both,
@@ -447,9 +448,10 @@ export function sha256Dir(dir: string, except: string[] = []): string {
 }
 
 /** Runs Harbor in a Python environment that has exactly the pinned release, and copies what it prints to the log. */
-export async function runHarbor(configFile: string, logFile: string, env: Record<string, string>): Promise<number> {
-  const log = createWriteStream(logFile);
-  const proc = Bun.spawn(["uv", "run", "--no-project", "--python", "3.12", "--with", `harbor==${PINS.harbor}`, "harbor", "run", "-c", configFile, "--yes"], {
+export async function runHarbor(configFile: string, logFile: string, env: Record<string, string>, options: { resume?: string } = {}): Promise<number> {
+  const log = createWriteStream(logFile, { flags: options.resume ? "a" : "w" });
+  const command = options.resume ? ["jobs", "resume", "--job-path", options.resume] : ["run", "-c", configFile, "--yes"];
+  const proc = Bun.spawn(["uv", "run", "--no-project", "--python", "3.12", "--with", `harbor==${PINS.harbor}`, "harbor", ...command], {
     env: { ...env, PYTHONPATH: resolve(import.meta.dir) }, // where akm_opencode.py is
     stdout: "pipe",
     stderr: "pipe",
@@ -460,10 +462,17 @@ export async function runHarbor(configFile: string, logFile: string, env: Record
       log.write(chunk);
     }
   };
-  await Promise.all([tee(proc.stdout, process.stdout), tee(proc.stderr, process.stderr)]);
-  const code = await proc.exited;
-  await new Promise((done) => log.end(done));
-  return code;
+  let interrupted = false;
+  const stop = () => { interrupted = true; proc.kill("SIGINT"); };
+  process.on("SIGINT", stop); process.on("SIGTERM", stop);
+  try {
+    await Promise.all([tee(proc.stdout, process.stdout), tee(proc.stderr, process.stderr)]);
+    const code = await proc.exited;
+    return interrupted ? 130 : code;
+  } finally {
+    process.off("SIGINT", stop); process.off("SIGTERM", stop);
+    await new Promise((done) => log.end(done));
+  }
 }
 
 // ---- what the run left ----------------------------------------------------------------------------------------------------

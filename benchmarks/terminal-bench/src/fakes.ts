@@ -20,19 +20,26 @@ export function writeFakeHarbor(root: string): string {
   writeFileSync(
     join(bin, "uv"),
     `#!/usr/bin/env -S bun --no-env-file
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const args = Bun.argv.slice(2);
-const job = JSON.parse(readFileSync(args[args.indexOf("-c") + 1], "utf8"));
+const resuming = args.includes("--job-path");
+const file = resuming ? join(args[args.indexOf("--job-path") + 1], "config.json") : args[args.indexOf("-c") + 1];
+const job = JSON.parse(readFileSync(file, "utf8"));
+if (!process.env.UV_FAKE_NOTHING) {
+  const jobDir = join(job.jobs_dir, job.job_name); mkdirSync(jobDir, { recursive: true });
+  if (!existsSync(join(jobDir, "config.json"))) writeFileSync(join(jobDir, "config.json"), JSON.stringify(job));
+}
 writeFileSync(join(job.jobs_dir, "..", "uv-env.json"), JSON.stringify(process.env));
 if (!process.env.UV_FAKE_NOTHING) {
   const tasks = job.datasets[0].task_names;
   tasks.forEach((task, i) => {
     for (const agent of job.agents) {
-      const name = agent.name ?? "akm-opencode";
+      const name = agent.name ?? (agent.import_path?.endsWith(":EvalOpenCode") ? "opencode" : "akm-opencode");
       if (process.env.UV_FAKE_MISSING && i === tasks.length - 1 && name === "akm-opencode") continue;
       for (let k = 0; k < job.n_attempts; k++) {
         const dir = join(job.jobs_dir, job.job_name, task.split("/")[1] + "__" + name + "__" + k);
+        if (resuming && existsSync(join(dir, "result.json"))) continue;
         mkdirSync(join(dir, "agent"), { recursive: true });
         const trial = { task_name: task, agent_info: { name }, verifier_result: { rewards: { reward: name === "opencode" ? 0 : 1 } }, started_at: "2026-10-06T04:00:00Z", finished_at: "2026-10-06T04:05:00Z" };
         if (process.env.UV_FAKE_TIMEOUTS && i === 0 && name === "opencode") trial.exception_info = { exception_type: "AgentTimeoutError" };
@@ -51,6 +58,12 @@ if (!process.env.UV_FAKE_NOTHING) {
       }
     }
   });
+}
+if (process.env.UV_FAKE_WAIT) {
+  process.on("SIGINT", () => process.exit(130));
+  writeFileSync(join(job.jobs_dir, "..", "uv-waiting"), String(process.pid));
+  setInterval(() => {}, 1000);
+  await new Promise(() => {});
 }
 process.exit(Number(process.env.UV_FAKE_EXIT ?? 0));
 `,

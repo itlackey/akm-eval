@@ -11,6 +11,7 @@
 // A fix here applies to stored runs too: scripts/rescore scores them again from their raw outputs.
 
 import { type Retrieval, type RetrievalSummary, retrievalMetrics, summarizeRetrieval } from "../../../lib/ir.ts";
+import type { CallUsage } from "./llm.ts";
 import type { Question } from "./dataset.ts";
 import { type PairedDifference, type Rate, pairedDifference, rate } from "./metrics.ts";
 
@@ -48,6 +49,9 @@ export interface RawArm {
   model: string | null;
   /** The model name the judge's endpoint answered with. */
   judge_model: string | null;
+  reader_usage?: CallUsage;
+  judge_usage?: CallUsage | null;
+  judge_cached?: boolean;
 }
 
 /** What the collector got back for one question. */
@@ -113,6 +117,9 @@ function scoreArm(raw: RawArm | null): Arm | null {
     finish_reason: raw.finish_reason,
     model: raw.model,
     judge_model: raw.judge_model,
+    ...(raw.reader_usage ? { reader_usage: raw.reader_usage } : {}),
+    ...(raw.judge_usage !== undefined ? { judge_usage: raw.judge_usage } : {}),
+    ...(raw.judge_cached !== undefined ? { judge_cached: raw.judge_cached } : {}),
   };
 }
 
@@ -139,6 +146,7 @@ export function makeRow(c: Case, raw: Raw): Row {
 
 const RAW_FIELDS = ["n_sessions", "sessions_over_projection_limit", "retrieved_session_ids", "retrieval_error", "timed_out"] as const;
 const ARM_FIELDS = ["hypothesis", "verdict", "error", "seconds", "prompt_tokens", "completion_tokens", "finish_reason", "model", "judge_model"] as const;
+const USAGE_FIELDS = ["reader_usage", "judge_usage", "judge_cached"] as const;
 
 /**
  * The raw output in a stored row, or the names of the fields it lacks. A row of a run from before the raw output was stored has no
@@ -153,7 +161,7 @@ export function rawOf(row: Record<string, any>): { raw: Raw } | { missing: strin
     else if (arm !== null) {
       const lacks = ARM_FIELDS.filter((f) => arm[f] === undefined);
       missing.push(...lacks.map((f) => `${name}.${f}`));
-      arms[name] = Object.fromEntries(ARM_FIELDS.map((f) => [f, arm[f]])) as unknown as RawArm;
+      arms[name] = Object.fromEntries([...ARM_FIELDS, ...USAGE_FIELDS.filter(f => arm[f] !== undefined)].map((f) => [f, arm[f]])) as unknown as RawArm;
     }
   }
   if (missing.length > 0) return { missing };
@@ -196,8 +204,8 @@ export function summarize(rows: Row[]) {
   const both = rows.filter((r) => r.without_akm?.ok && r.with_akm?.ok);
   const scoredQuestions = retrievalOnly ? rows.filter((r) => r.retrieval).length : both.length;
   const arms = rows.flatMap((r) => [r.without_akm, r.with_akm]).filter((a): a is Arm => a !== null);
-  const undecidable = arms.filter((a) => a.ok && a.decidable === false).length;
-  const judged = arms.filter((a) => a.ok && a.decidable !== null).length; // the arms the judge gave a verdict on: an empty answer was not put to it
+  const undecidable = arms.filter((a) => a.verdict !== null && a.hypothesis !== "" && !isDecidable(a.verdict)).length;
+  const judged = arms.filter((a) => a.verdict !== null).length; // the arms the judge gave a verdict on: an empty answer was not put to it
   const timeouts = rows.filter((r) => r.timed_out === true).length;
   const answered = arms.filter((a) => a.hypothesis !== null).length;
   const countArm = (keep: (a: Arm) => boolean): ArmCounts => ({ without_akm: rows.filter((r) => r.without_akm && keep(r.without_akm)).length, with_akm: rows.filter((r) => r.with_akm && keep(r.with_akm)).length });

@@ -9,13 +9,14 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { semanticConfig } from "./akm.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 
 export interface ConfigPatch {
-  /** The patch file, from the repository root. */
+  /** The patch source: a repository-relative file, --semantic, or their merge. */
   path: string;
-  /** The SHA-256 of the file's bytes, so two runs with the same path can be told apart. */
+  /** SHA-256 of file bytes, or of the effective JSON patch when --semantic is merged. */
   sha256: string;
   patch: Record<string, unknown>;
 }
@@ -25,12 +26,13 @@ export interface Overrides {
   configPatch: ConfigPatch | null;
 }
 
-/** The two options, for parseArgs. */
-export const OVERRIDE_OPTIONS = { strategy: { type: "string" }, "config-patch": { type: "string" } } as const;
+/** Shared strategy, config and semantic options, for parseArgs. */
+export const OVERRIDE_OPTIONS = { strategy: { type: "string" }, "config-patch": { type: "string" }, semantic: { type: "boolean" } } as const;
 
-/** The two lines of an eval's usage text. `def` is the strategy the eval runs without --strategy. */
+/** The shared lines of an eval's usage text. `def` is the strategy the eval runs without --strategy. */
 export const overridesUsage = (def: string): string =>
   `  --strategy      the akm improve strategy to run in place of ${def}. A strategy of the config patch works, or one akm ships.
+  --semantic      enable native bge-small-en-v1.5 semantic search; merge with any config patch
   --config-patch  FILE: a JSON file deep-merged into the config the eval writes, after it. A relative FILE is from the repository root.`;
 
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
@@ -74,7 +76,7 @@ export function loadConfigPatch(file: string, root = ROOT): ConfigPatch {
 }
 
 /** The strategy and config patch of a run, from parsed options. `def` is the eval's own strategy. `fail` ends the run with a message. */
-export function parseOverrides(values: { strategy?: string; "config-patch"?: string }, def: string, fail: (message: string) => never, root = ROOT): Overrides {
+export function parseOverrides(values: { strategy?: string; "config-patch"?: string; semantic?: boolean }, def: string, fail: (message: string) => never, root = ROOT): Overrides {
   if (values.strategy !== undefined && !values.strategy.trim()) fail("--strategy needs a strategy name");
   let configPatch: ConfigPatch | null = null;
   if (values["config-patch"] !== undefined) {
@@ -83,6 +85,11 @@ export function parseOverrides(values: { strategy?: string; "config-patch"?: str
     } catch (e) {
       fail((e as Error).message);
     }
+  }
+  if (values.semantic) {
+    const { semanticSearchMode, embedding } = semanticConfig();
+    const patch = deepMerge(configPatch?.patch ?? {}, { semanticSearchMode, embedding });
+    configPatch = { path: configPatch ? `${configPatch.path} + --semantic` : "--semantic", sha256: createHash("sha256").update(JSON.stringify(patch)).digest("hex"), patch };
   }
   return { strategy: values.strategy?.trim() ?? def, configPatch };
 }

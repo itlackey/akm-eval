@@ -11,17 +11,17 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 | Folder | Question it answers | Flags |
 |---|---|---|
 | `evals/retrieval` | Does akm search put the assets an agent needs at the top? | `--cases` `--yes` `--repeat` `--akm` `--semantic` |
-| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `--cases` `--yes` `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/distill` | Do distilled lessons say only what the source memory says? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--pool` `--timeout-ms` |
-| `evals/extract` | Does extraction pull durable insights from session logs, and leave routine sessions empty? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/nightly` | Does a full nightly improve run give good results unattended? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` |
-| `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` |
+| `evals/judge-gate` | Does the quality judge pass good improve proposals and refuse bad ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/reflect` | Does reflect fix the frontmatter defects akm names, without rewriting the body or inventing claims? | `--cases` `--yes` `--repeat` `--retrieval-queries` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/distill` | Do distilled lessons say only what the source memory says? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/consolidate` | Does consolidate retire only notes whose every claim the replacement keeps? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--pool` `--timeout-ms` `--semantic` |
+| `evals/extract` | Does extraction pull durable insights from session logs, and leave routine sessions empty? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/nightly` | Does a full nightly improve run give good results unattended? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
+| `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
 | `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` |
-| `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--yes` `--process` `--repeat` `--config-patch` `--model` `--akm` |
+| `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--yes` `--process` `--repeat` `--config-patch` `--model` `--akm` `--semantic` |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | `--cases` `--yes` `--repeat` `--sample-seed` `--retrieval-only` `--semantic` `--resume` `--model` `--judge-model` `--akm` |
-| `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `--attempts` `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` |
+| `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `--attempts` `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` `--resume` `--concurrency` |
 | `benchmarks/skillret` | Does akm rank the right skills first in a large skill library (SkillRet)? | `--repeat` `--akm` |
 
 `scripts/smoke/src/readme.test.ts` runs every `run --help` and fails when this table lists other flags.
@@ -86,12 +86,16 @@ benchmarks/longmemeval/run --model my-model --judge-model my-judge
 
 - `--model ID` names the model, as your gateway at `MODEL_BASE_URL` names it, and wins over `MODEL_NAME`. `--judge-model ID` does the same for the judge.
 - A model that is not behind that gateway takes a line in `models.json` (copy `models.example.json`; gitignored): `{ "name": { "base_url": "...", "api_key_env": "SOME_KEY", "model": "..." } }`. `--model name` then goes to that URL with the key in that variable. Never put a key in `models.json`.
-- Harbor evals accept optional `"limits": { "context": 32768, "output": 4096 }` in a `models.json` entry. OpenCode uses these budgets for context compaction. Both arms receive identical limits, recorded in the saved job configuration. Set them to the server's actual budgets; see [OpenCode provider configuration](https://opencode.ai/docs/providers/#custom-provider). Other evals keep their existing output budgets.
+- Harbor evals accept optional `"limits": { "context": 32768, "output": 4096 }` in a `models.json` entry. OpenCode uses these budgets for context compaction. Both arms receive identical limits, recorded in the saved job configuration. Set them to the server's actual budgets; see [OpenCode provider configuration](https://opencode.ai/docs/providers/#custom-provider). LongMemEval also accepts per-role Chat Completions settings, described below.
 - `--akm COMMAND` (or `AKM_BIN`) is a command line, such as `bun ~/code/akm/src/cli.ts`. Quote a word with spaces; a leading `~/` is your home folder; nothing else is expanded.
 - The Harbor evals (`agent-ab`, `terminal-bench`) install akm in a container, so their `--akm` is a release (`akm-cli@0.9.26`) or the folder of an akm checkout, and `--akm-env KEY=VALUE` sets an `AKM_*` setting for the akm arm. opencode there calls the Responses API.
 - `--strategy NAME` and `--config-patch FILE` run another akm strategy or config than the eval's own. `--embedder deterministic|real` (consolidate, nightly) picks akm's word-hash embedder (default) or its real embedding model; the two are never compared.
 
 `summary.json` records the model, `akm_version`, `akm_bin`, `akm_build` (`git describe` of a checkout) and `akm_build_fingerprint` (a digest of its uncommitted changes). A pre-release can print the version of the release it branched from, so read `akm_build` to tell builds apart, and put the build in `--label`. Before measuring a new akm, run `scripts/smoke/run --contract --akm "..."` to see that the evals still read it.
+
+Use `--semantic` consistently on the process evals, Agent A/B, LongMemEval and Terminal-Bench. Process evals merge the pinned native embedder settings with any `--config-patch` and record the effective patch digest. Retrieval keeps its existing `--semantic on` syntax; SkillRet retains both comparators. For consolidate and nightly, `--semantic` also selects `--embedder real`; an explicit deterministic embedder conflicts. Defaults remain unchanged, so the search choice is explicit.
+
+LongMemEval model entries can add `"chat": { "max_completion_tokens": 2048, "reasoning_effort": "none" }`, or `max_tokens` for endpoints that require that field. Choose settings the actual reader/judge supports; only the selected role receives them. Both reader arms use identical settings. Context limits belong in `limits`; Chat Completions output settings belong in `chat`. The example budgets are configuration examples, not measured server capacities. See [models.example.json](models.example.json) and [the LongMemEval guide](benchmarks/longmemeval/README.md).
 
 ## Corpora
 
