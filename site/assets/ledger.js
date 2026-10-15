@@ -515,6 +515,18 @@ async function startLedger() {
     applyFilters();
   };
 
+  let copyFeedback;
+  $('copy-link').onclick = async () => {
+    syncURL(); clearTimeout(copyFeedback);
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      $('copy-link').textContent = 'Copied!'; $('copy-status').textContent = 'Link copied.';
+    } catch {
+      $('copy-link').textContent = 'Copy failed'; $('copy-status').textContent = 'Copy failed. Copy the URL from the address bar.';
+    }
+    copyFeedback = setTimeout(() => { $('copy-link').textContent = 'Copy link'; $('copy-status').textContent = ''; }, 2000);
+  };
+
   function download(name, type, content) {
     const url = URL.createObjectURL(new Blob([content], { type }));
     const link = document.createElement('a'); link.href = url; link.download = name; link.click();
