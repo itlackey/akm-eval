@@ -8,7 +8,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { aliasesOf, type Qrel } from "../../retrieval/src/lib.ts";
 import { createSandbox, engineConfig, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { indexedRef, indexedRefs } from "../../../lib/akm/indexed-refs.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
@@ -80,8 +79,8 @@ export function labelledQueries(queries: string, qrels: string): Map<string, str
   const text = new Map<string, string>();
   for (const line of queries.split("\n")) if (line.trim()) text.set(JSON.parse(line).id, JSON.parse(line).query);
   const found = new Map<string, { query: string; grade: number; id: string }[]>();
-  const rows = qrels.split("\n").filter(line => line.trim()).map(line => JSON.parse(line) as Qrel);
-  const aliases = aliasesOf(rows);
+  const rows = qrels.split("\n").filter(line => line.trim()).map(line => JSON.parse(line) as { id: string; ref: string; grade: number; alias_of?: string });
+  const aliases = Object.fromEntries(rows.filter(row => row.alias_of !== undefined).map(row => [row.ref, row.alias_of as string]));
   for (const q of rows) {
     const query = text.get(q.id);
     if (query === undefined) continue;
