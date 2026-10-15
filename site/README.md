@@ -54,8 +54,8 @@ measures and individual test metrics. No row selection is needed.
   plus conditions on any column. Conditions combine with AND. Filter chips
   can be removed individually; **Reset** clears all filters.
 - Filters, selected columns and their order, and sorting are stored in the URL
-  automatically. Copy the address bar to share the current results; opening or
-  reloading that link restores them. For example, `?suite=skillret&role=Full+suite&akm=0.9.32&akm=0.10.261005-beta&latest=1`
+  automatically. Click **Copy link** to copy the current view URL, or copy the
+  address bar. Opening or reloading that link restores the same settings. For example, `?suite=skillret&role=Full+suite&akm=0.9.32&akm=0.10.261005-beta&latest=1`
   shows the latest full SkillRet results for those two versions. Search uses
   `q`, dates use `from` / `to`, and error-only uses `errors=1`. Advanced conditions
   use repeated `filter` parameters containing JSON `[column, operator, value]`

@@ -491,6 +491,10 @@ test('shared views restore chosen columns, dragged order and multiple sort keys'
   expect(await visible(page)).toEqual(columns);
   const ids = (await exportRows(page)).map(row => row.id), link = page.url();
   expect(ids.length).toBeGreaterThan(0);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.locator('#copy-link').click(); await expect(page.locator('#copy-link')).toHaveText('Copied!');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  await expect(page.locator('#copy-status')).toHaveText('Link copied.');
   const linked = await page.context().newPage(); await linked.goto(link);
   await expect(linked.locator('#view')).toHaveValue('custom');
   expect(await visible(linked)).toEqual(columns); await expect(linked.locator('#sort-status')).toHaveText(sorting);
@@ -542,9 +546,25 @@ test('column and sort links handle metric keys, browser history and touch contro
     await expect(touch.locator('#touch-direction')).toContainText('Ascending');
     expect(await cards.evaluateAll(elements => elements.map(element => element.dataset.runId))).toEqual(touchIds);
     await expect(cards.first().locator('dt')).toHaveText([metric.label]);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await touch.locator('#copy-link').tap(); await expect(touch.locator('#copy-link')).toHaveText('Copied!');
+    expect(await touch.evaluate(() => navigator.clipboard.readText())).toBe(touch.url());
   } finally { await context.close(); }
   await page.goto('./?column=&sort='); await expect(page.locator('#view')).toHaveValue('custom');
   expect(await visible(page)).toEqual(['sources']); await expect(page.locator('#sort-status')).toHaveText('');
   await page.goto('./?column=removed-column&sort=removed-column:asc'); await expect(page.locator('#view')).toHaveValue('compare');
   expect(new URL(page.url()).searchParams.has('column')).toBe(false); expect(new URL(page.url()).searchParams.has('sort')).toBe(false);
+});
+
+
+test('Copy link reports clipboard denial without claiming success or changing the view', async ({ page }) => {
+  await page.goto('./?suite=skillret&latest=1'); await expect(page.locator('#suite')).toHaveValue('skillret');
+  const url = page.url(), count = await page.locator('#count').textContent();
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: {
+    writeText: async () => { throw new Error('Clipboard access denied'); },
+  } }));
+  await page.locator('#copy-link').click(); await expect(page.locator('#copy-link')).toHaveText('Copy failed');
+  await expect(page.locator('#copy-status')).toHaveText('Copy failed. Copy the URL from the address bar.');
+  expect(page.url()).toBe(url); await expect(page.locator('#count')).toHaveText(count);
+  await expect(page.locator('#copy-link')).toHaveText('Copy link');
 });
