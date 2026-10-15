@@ -72,6 +72,8 @@ jobs:
 
       - name: Install akm
         if: steps.scope.outputs.run == 'true'
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip # CPU binaries ship in npm; this runner needs no optional CUDA download.
         run: |
           if [ "${{ matrix.leg.akm }}" = latest ]; then
             version=latest
