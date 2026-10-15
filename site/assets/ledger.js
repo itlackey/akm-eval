@@ -55,6 +55,15 @@ function runName(value, suite) {
   for (const prefix of [`bifrost-${suite}-example-`, `${suite}-example-`]) if (label.startsWith(prefix)) label = label.slice(prefix.length);
   return label.replace(/-r(\d+)$/, ' · r$1');
 }
+function latestRuns(rows) {
+  const latest = new Map();
+  for (const row of rows) {
+    const key = JSON.stringify([row.akm_version, row.suite, row.collection, row.mode, row.model, row.search_method, row.embedding_model, row.strategy]);
+    const previous = latest.get(key);
+    if (!previous || row.date > previous.date || (row.date === previous.date && row.id < previous.id)) latest.set(key, row);
+  }
+  return [...latest.values()];
+}
 function comparisonRow(row) {
   const basis = row.case_p50_s != null ? ['case', 'AKM command']
     : row.keyword_p50_s != null ? ['keyword', 'Keyword query']
@@ -62,7 +71,7 @@ function comparisonRow(row) {
   const control = row.scores.find(score => score.label.endsWith('without AKM'));
   const withAKM = row.scores.find(score => score.label.endsWith('with AKM'));
   const paired = row.paired_cases > 0 && control?.value != null && withAKM?.value != null;
-  return { ...row, model_route: row.model, control_quality_percent: control?.value == null ? null : control.value * 100,
+  return { ...row, case_coverage: `${row.scored ?? '—'} / ${row.total_cases ?? row.recorded ?? '—'}`, model_route: row.model, control_quality_percent: control?.value == null ? null : control.value * 100,
     akm_quality_percent: withAKM?.value == null ? null : withAKM.value * 100,
     akm_gain_ci: row.akm_delta_lo_pp == null || row.akm_delta_hi_pp == null ? null : `${row.akm_delta_lo_pp.toFixed(2)} to ${row.akm_delta_hi_pp.toFixed(2)}`,
     median_time_change_percent: paired && row.control_p50_s > 0 && row.akm_p50_s != null ? (row.akm_p50_s / row.control_p50_s - 1) * 100 : null,
@@ -88,6 +97,7 @@ async function startLedger() {
   const dataset = await response.json();
   const rows = dataset.runs.map(run => comparisonRow({ ...run, ...run.comparison }));
   const columns = [...dataset.columns, ...[
+    { key: 'case_coverage', label: 'Cases scored / total', kind: 'text', group: 'Run', description: 'Scored cases / total suite cases when recorded, otherwise selected or saved cases. The quality metric may use only a subset; Metric cases shows that denominator.' },
     { key: 'model_route', label: 'Model route', kind: 'text', group: 'Settings', description: 'Full recorded model identifier, including its serving route. The Model column uses a shortened display name.' },
     { key: 'latency_p50_s', label: 'Latency p50 (s)', kind: 'number', group: 'Performance', decimals: 2, description: 'Median elapsed time. Uses command, keyword-query or with-AKM agent/answer timing as identified in Latency basis. Compare runs with the same basis.' },
     { key: 'latency_p95_s', label: 'Latency p95 (s)', kind: 'number', group: 'Performance', decimals: 2, description: '95th percentile of the same timings as Latency p50. This is elapsed time including overhead, not token-generation speed.' },
@@ -100,14 +110,15 @@ async function startLedger() {
   ]];
   const columnByKey = new Map(columns.map(column => [column.key, column]));
   const facets = ['model', 'suite', 'role', 'collection', 'measurement', 'search_method', 'strategy'];
-  const state = { search: '', versions: [], facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
+  const state = { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
+  let latestIds = null;
   let grid, ready = false, visibleKeys = new Set(), layoutSignature = '';
   const widths = { model: 164, suite: 118, label: 196, quality_percent: 100, quality_metric: 205,
-    scored: 100, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
+    scored: 100, case_coverage: 116, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
     akm_version: 162, date: 155, recorded: 110 };
-  const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
-  const compareKeys = ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'measurement', 'scoring_version', 'mode', 'label', 'date'];
+  const titles = { quality_cases: 'Metric cases', model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
+  const compareKeys = ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'case_coverage', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'quality_cases', 'collection', 'measurement', 'scoring_version', 'mode', 'label', 'date'];
 
   for (const key of facets) {
     const values = [...new Set(rows.map(row => key === 'model' ? modelName(row.model) : row[key]))].filter(Boolean).sort();
@@ -141,7 +152,7 @@ async function startLedger() {
   $('provenance').innerHTML = `<a href="https://github.com/itlackey/akm-eval/tree/${encodeURIComponent(dataset.source_revision)}/reports">Published reports · ${escapeHTML(dataset.source_revision.slice(0, 8))}</a> · ` +
     '<a href="https://github.com/fwdslsh/website">fwdslsh theme</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · <a href="./assets/vendor/tabulator.LICENSE">Tabulator MIT license</a>.';
 
-  function filtered(row) {
+  function matchesFilters(row) {
     if (state.analysisView === 'impact' && !(row.paired_cases > 0 && row.control_quality_percent != null && row.akm_quality_percent != null)) return false;
     if (state.search && !matchesText([row.model, modelName(row.model), ...columns.map(column => row[column.key])].join(' '), state.search)) return false;
     if (state.versions.length && !state.versions.includes(row.akm_version)) return false;
@@ -152,6 +163,16 @@ async function startLedger() {
       if (value && (key === 'model' ? modelName(row.model) : row[key]) !== value) return false;
     }
     return state.conditions.every(condition => matchesCondition(row[condition.key], condition, columnByKey.get(condition.key)));
+  }
+  function filtered(row) {
+    return matchesFilters(row) && (!latestIds || latestIds.has(row.id));
+  }
+  function updateLatest() {
+    if (!state.latestOnly) { latestIds = null; return; }
+    const headers = grid.getHeaderFilters();
+    const matching = rows.filter(matchesFilters).filter(row => headers.every(filter =>
+      matchesHeader(row[filter.field], filter.value.replace('≥', '>=').replace('≤', '<='), columnByKey.get(filter.field))));
+    latestIds = new Set(latestRuns(matching).map(row => row.id));
   }
   function updateCount() {
     if (!ready) return;
@@ -178,6 +199,10 @@ async function startLedger() {
       text = 'Compare medians within the same test and timing basis. New runs include model request duration and output tokens per second when usage is available. Missing values stay blank; first-token timing is not recorded.';
       if (test && models.length === 1) text += ` Only ${models[0]} is published for this test.`;
     } else text = 'Choose a test, then use Quality ranking, Speed & usage or AKM impact. Each row is a published run; hover a run to see its full label.';
+    if (test && state.versions.length && !active.length) {
+      const available = [...new Set(rows.filter(row => row.suite === test && (!state.facets.role || row.role === state.facets.role)).map(row => row.akm_version))];
+      if (available.length) text += ` Published ${test} results for this scope use AKM ${available.join(', ')}. Clear other filters or select one of those versions to see them.`;
+    }
     $('view-context').textContent = text;
   }
   function renderChips() {
@@ -189,6 +214,7 @@ async function startLedger() {
     for (const version of state.versions) chip(`AKM version: ${version}`, () => { state.versions = state.versions.filter(value => value !== version); });
     if (state.dateFrom) chip(`From: ${state.dateFrom}`, () => { $('dateFrom').value = ''; state.dateFrom = ''; });
     if (state.dateTo) chip(`Through: ${state.dateTo}`, () => { $('dateTo').value = ''; state.dateTo = ''; });
+    if (state.latestOnly) chip('Latest only', () => { $('latest-only').checked = false; state.latestOnly = false; });
     if (state.errorsOnly) chip('With errors', () => { $('errorsOnly').checked = false; state.errorsOnly = false; });
     const names = { contains: 'contains', eq: '=', gte: '≥', lte: '≤', between: 'between', missing: 'unrecorded', present: 'recorded' };
     for (const condition of state.conditions) chip(`${columnByKey.get(condition.key).label} ${names[condition.operator]} ${['missing', 'present'].includes(condition.operator) ? '' : condition.value}`, () => { state.conditions = state.conditions.filter(item => item !== condition); });
@@ -355,10 +381,12 @@ async function startLedger() {
   });
   for (const event of ['dataFiltered', 'dataSorted', 'pageLoaded', 'renderComplete']) grid.on(event, updateCount);
   grid.on('dataFiltered', renderChips);
+  grid.on('dataFiltering', updateLatest);
 
   for (const key of facets) $(key).onchange = () => { state.facets[key] = $(key).value; applyFilters(); };
   $('search').oninput = () => { state.search = $('search').value.trim(); applyFilters(); };
   for (const key of ['dateFrom', 'dateTo']) $(key).onchange = () => { state[key] = $(key).value; applyFilters(); };
+  $('latest-only').onchange = () => { state.latestOnly = $('latest-only').checked; applyFilters(); };
   $('errorsOnly').onchange = () => { state.errorsOnly = $('errorsOnly').checked; applyFilters(); };
   $('advanced-toggle').onclick = () => { const open = $('advanced-panel').hidden; $('advanced-panel').hidden = !open; $('advanced-toggle').setAttribute('aria-expanded', String(open)); };
   $('view').onchange = () => {
@@ -414,8 +442,8 @@ async function startLedger() {
   changeOperator();
   $('reset').onclick = () => {
     for (const key of [...facets, 'search', 'dateFrom', 'dateTo']) $(key).value = '';
-    $('errorsOnly').checked = false;
-    Object.assign(state, { search: '', versions: [], facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
+    $('errorsOnly').checked = false; $('latest-only').checked = false;
+    Object.assign(state, { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
     grid.clearHeaderFilter();
     grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
     applyFilters();
