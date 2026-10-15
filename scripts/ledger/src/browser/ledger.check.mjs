@@ -173,6 +173,7 @@ test('facets, date bounds, missing-value conditions, CSV and reordering work thr
   // Drag a metric ahead of quality to exercise the native movable-column behavior.
   const from=await header(page,'quality_metric').boundingBox(), to=await header(page,'quality_percent').boundingBox();
   await page.mouse.move(from.x+from.width/2,from.y+15); await page.mouse.down();
+  await expect(page.locator('.tabulator-moving')).toBeVisible();
   await page.mouse.move(to.x+8,to.y+15,{steps:15}); await page.mouse.up();
   await expect.poll(()=>header(page,'quality_metric').evaluate(element=>element.getBoundingClientRect().x)).toBeLessThan(to.x+10);
 });
