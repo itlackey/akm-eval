@@ -60,7 +60,7 @@ Standard Reflect fixed 38/40 defect cases on 0.9.32 and 38/40 on beta; each pres
 
 Isolated consolidation found safe retirements in 38/40 eligible cases on 0.9.32 versus 36/40 on beta. Retirement precision was 38/39 (97.44%) versus 36/38 (94.74%). Stable proposed one unsafe retirement with none staged; beta proposed two with **one staged for automatic acceptance**. These are proposed retirements in isolated fixtures; this collector does not run the drain. Both embedded all 160 notes and scored all 80 cases without request errors. In beta case `overlap-07`, the staged retirement would discard the unique fact that queue consumers are paused during a database migration; the successor note does not contain it ([saved case output](../0.10.261005-beta/consolidate/2026-10-15-compare-0.10.261005-beta-35b-semantic-full-20261014/samples.jsonl)). This needs follow-up; one run does not establish whether the cause is a deterministic code change or model variation.
 
-The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All use native semantic embeddings, temperature 0 and thinking disabled.
+The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All enable native semantic configuration, temperature 0 and thinking disabled. Embedding coverage is verified for collectors that index notes; direct judge-gate and session extraction do not index or search a corpus, so their null semantic-verification fields are expected.
 
 ## Additional modes
 
