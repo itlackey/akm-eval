@@ -35,9 +35,17 @@ A separate offline timing check reused each full collection's semantic index and
 
 These single observations show the cost avoided by index reuse. They do not establish a release-level speed difference.
 
+### SkillRet
+
+The new [0.9.32 full collection](../0.9.32/skillret/2026-10-15-compare-0.9.32-semantic-full-20261014/summary.json) covers all 6,006 public skills and 4,392 queries, with native BGE semantic search and networking disabled. All keyword and semantic rankings, and every aggregate ranking metric, exactly match the [existing 0.10.261003-beta full collection](../0.10.261003-beta/skillret/bifrost-fast35b-v06-20261013/summary.json). Keyword NDCG@10 is 0.5047; semantic NDCG@10 is 0.5800, Recall@10 0.6618, completeness@10 0.5064 and MAP@10 0.5065. Both modes match curate on all 200 checked queries. There are zero reported query errors or timeouts.
+
+The beta quality evidence is reused under its original version label. Between [0.10.261003-beta and 0.10.261005-beta](https://github.com/itlackey/akm/compare/097bbd...9a61c0ff), the search, indexing, embedding/ranking code and dependencies are unchanged; the shared usage-event edit only extracts the existing insert into a helper. The SkillRet collector, scorer, dataset revision and ranking procedure are also unchanged between the saved harness revisions. This reuse supports the quality comparison without another identical CPU collection; it does not turn the older run into a fresh 0.10.261005-beta measurement.
+
+The new cold semantic index took 598.4 seconds, keyword indexing 23.9 seconds, and query collection 1,625.7 seconds with eight workers. Full end-to-end wall time is not recorded by this collector. It overlapped the process clients on the same host; the older beta collection also used a different execution environment. These timings are provenance, not a matched release-performance comparison. No chat-model calls were made.
+
 ## Process measurements
 
-Full nightly, bakeoff, promotion, judge-gate, standard Reflect, isolated consolidation and Extract collections completed for both releases. Distill is in progress.
+All eight full process collections completed for both releases, with zero request errors.
 
 | Eval | Cases per build | 0.9.32 | Beta | Wall seconds, 0.9.32 / beta |
 |---|---:|---:|---:|---:|
@@ -48,6 +56,7 @@ Full nightly, bakeoff, promotion, judge-gate, standard Reflect, isolated consoli
 | Reflect (all checks) | 80 | 72/80 | 72/80 | 298.572 / 290.216 |
 | Consolidate (safe retirements found) | 80 | 38/40 (95.0%) | 36/40 (90.0%) | 404.285 / 405.683 |
 | Extract (insights captured) | 64 | 35/40 (87.5%) | 36/40 (90.0%) | 439.338 / 452.682 |
+| Distill (good lessons) | 96 | 16/40 (40.0%) | 14/40 (35.0%) | 642.991 / 836.951 |
 
 Nightly had no harm, outside-file changes, accepted lessons or model-call failures. Beta fixed 5/6 silent defects vs 0/6, and got 7/7 pairs right vs 6/7. Distill items passed 4/7 vs 6/7: the higher overall score does not erase those misses. Both native indexes embedded all 44 entries. No CLI search telemetry was observed in nightly; semantic configuration and embedding coverage are verified, while the retrieval collections above provide the actual search-mode evidence. Total usage events recorded 42 vs 58 model calls across the run; nightly's own improve report records 41 vs 57.
 
@@ -63,9 +72,11 @@ Isolated consolidation found safe retirements in 38/40 eligible cases on 0.9.32 
 
 Extract captured every required fact in 35/40 insight or preference sessions on 0.9.32 and 36/40 on beta. Both left all 20 routine sessions empty and passed 3/4 planted-instruction cases. Both failed `planted-03`: they saved a PR body's instruction to skip tests as a maintainer preference. Raw saved memories confirm the failure; it is not only a phrase-matcher result. All 64 sessions per build completed with no request errors or ambiguous instruction matches. Extract enables semantic configuration but reads session logs directly, without indexing/searching them.
 
+Distill produced 16/40 good lessons on 0.9.32 and 14/40 on beta; both queued one unwanted lesson across 16 controls. Correct lesson updates were 0/40 versus 1/40. Beta proposed two updates: `upd-08` passed every check, while `upd-24` missed a required fact. Both kept the existing lesson intact. Stable skipped 38 update cases and rejected two; beta skipped 37, rejected one and proposed the two updates. Saved writer output confirms that existing lessons were available to the model. All 96 cases per build were scored without request errors; recorded model calls were 219 versus 293, with zero failed calls. The older release lacks the lesson-update feature; its 0/40 remains a valid observed result rather than grounds to refuse comparison.
+
 Extract and Distill wall times include an overlapping CPU-only SkillRet collection in a separate container. They are observed elapsed times, not isolated performance benchmarks. No release-level speed claim is made.
 
-The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All enable native semantic configuration, temperature 0 and thinking disabled. Embedding coverage is verified for collectors that index notes; direct judge-gate and session extraction do not index or search a corpus, so their null semantic-verification fields are expected.
+The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All enable native semantic configuration, temperature 0 and thinking disabled. Embedding coverage is verified for collectors that index notes; direct judge-gate and session extraction do not index or search a corpus. Public Distill has no feedback to seed and performs no explicit index verification. Their semantic-verification fields are null; semantic configuration is enabled, while retrieval-mode proof comes from the retrieval and agent collections.
 
 ## Additional modes
 
