@@ -155,12 +155,16 @@ async function startLedger() {
   function syncURL() {
     if (!ready || restoringURL) return;
     const url = new URL(window.location.href), params = url.searchParams;
-    for (const key of [...params.keys()]) if (facets.includes(key) || ['q', 'akm', 'latest', 'errors', 'from', 'to', 'view', 'filter'].includes(key) || key.startsWith('header.')) params.delete(key);
+    for (const key of [...params.keys()]) if (facets.includes(key) || ['q', 'akm', 'latest', 'errors', 'from', 'to', 'view', 'filter', 'column', 'sort'].includes(key) || key.startsWith('header.')) params.delete(key);
     for (const key of facets) if (state.facets[key]) params.set(key, state.facets[key]);
     for (const version of state.versions) params.append('akm', version);
     for (const [key, value] of [['q', state.search], ['latest', state.latestOnly ? '1' : ''], ['errors', state.errorsOnly ? '1' : ''], ['from', state.dateFrom], ['to', state.dateTo], ['view', state.analysisView === 'compare' ? '' : state.analysisView]]) if (value) params.set(key, value);
     for (const { key, operator, value } of state.conditions) params.append('filter', JSON.stringify([key, operator, value]));
     for (const { field, value } of grid.getHeaderFilters()) params.set('header.' + field, value);
+    const selected = selectedColumns();
+    if ($('view').value === 'custom') for (const key of selected.length ? selected : ['']) params.append('column', key);
+    const sorting = grid.getSorters().map(sort => sort.field + ':' + sort.dir);
+    if (JSON.stringify(sorting) !== JSON.stringify(defaultSort().map(sort => sort.column + ':' + sort.dir))) for (const sort of sorting.length ? sorting : ['']) params.append('sort', sort);
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
   }
   function restoreURL() {
@@ -191,7 +195,15 @@ async function startLedger() {
     $('header-filters').checked = grid.getHeaderFilters().length > 0;
     $('grid').classList.toggle('hide-header-filters', !$('header-filters').checked);
     applyFilters(); applyView(state.analysisView);
-    grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
+    const selected = [...new Set(params.getAll('column').filter(key => columnByKey.has(key)))];
+    if (selected.length || params.get('column') === '') {
+      applyView('custom', false, selected); $('view').value = 'custom';
+    }
+    const sorting = params.getAll('sort').map(value => {
+      const separator = value.lastIndexOf(':');
+      return { column: value.slice(0, separator), dir: value.slice(separator + 1) };
+    }).filter(sort => columnByKey.has(sort.column) && ['asc', 'desc'].includes(sort.dir));
+    grid.setSort(sorting.length || params.get('sort') === '' ? sorting : defaultSort());
     restoringURL = false; syncURL();
   }
 
@@ -289,8 +301,13 @@ async function startLedger() {
     else extras = columns.filter(column => ['Settings', 'Provenance'].includes(column.group) && recorded(column));
     return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'label', 'date'])];
   }
-  function applyView(view, force = false) {
-    const keys = viewKeys(view);
+  function selectedColumns() {
+    return grid.getColumns().filter(column => column.isVisible() && columnByKey.has(column.getField())).map(column => column.getField());
+  }
+  function defaultSort() {
+    return [{ column: state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', dir: state.analysisView === 'performance' ? 'asc' : 'desc' }];
+  }
+  function applyView(view, force = false, keys = viewKeys(view)) {
     const signature = JSON.stringify([view, keys]);
     if (!force && signature === layoutSignature && keys.length === visibleKeys.size && keys.every(key => visibleKeys.has(key))) {
       updateCount(); return;
@@ -306,7 +323,7 @@ async function startLedger() {
       width: sizing[field] ?? widths[field] ?? (columnByKey.get(field).kind === 'number' ? Math.min(340, Math.max(130, columnByKey.get(field).label.length * 7 + 36)) : 190) })), { field: 'sources', visible: true, width: 140 }]);
     grid.setSort(sorting);
     for (const filter of filters) grid.setHeaderFilterValue(filter.field, filter.value);
-    renderColumnChooser(); updateCount();
+    renderColumnChooser(); updateCount(); syncURL();
   }
   function renderColumnChooser() {
     const query = $('column-search').value;
@@ -321,7 +338,7 @@ async function startLedger() {
         input.onchange = () => {
           if (input.checked) { visibleKeys.add(column.key); grid.showColumn(column.key); }
           else { visibleKeys.delete(column.key); grid.hideColumn(column.key); }
-          $('view').value = 'custom'; updateCount();
+          visibleKeys = new Set(selectedColumns()); $('view').value = 'custom'; updateCount(); syncURL();
         };
         label.append(input, document.createTextNode(column.label)); $('column-list').append(label);
       }
@@ -425,6 +442,10 @@ async function startLedger() {
   });
   for (const event of ['dataFiltered', 'dataSorted', 'pageLoaded', 'renderComplete']) grid.on(event, updateCount);
   grid.on('dataFiltered', () => { renderChips(); syncURL(); });
+  grid.on('dataSorted', syncURL);
+  grid.on('columnMoved', () => {
+    layoutSignature = ''; visibleKeys = new Set(selectedColumns()); $('view').value = 'custom'; updateCount(); syncURL();
+  });
   window.addEventListener('popstate', restoreURL);
   grid.on('dataFiltering', updateLatest);
 
@@ -439,7 +460,7 @@ async function startLedger() {
     if (view !== 'custom') {
       state.analysisView = view;
       applyFilters(); applyView(view);
-      grid.setSort(view === 'quality' ? 'quality_percent' : view === 'performance' ? 'latency_p50_s' : view === 'impact' ? 'akm_delta_pp' : 'date', view === 'performance' ? 'asc' : 'desc');
+      grid.setSort(defaultSort());
     }
   };
   $('columns-toggle').onclick = () => openChooser($('columns-panel').hidden);
@@ -490,7 +511,7 @@ async function startLedger() {
     $('errorsOnly').checked = false; $('latest-only').checked = false;
     Object.assign(state, { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
     grid.clearHeaderFilter();
-    grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
+    grid.setSort(defaultSort());
     applyFilters();
   };
 
