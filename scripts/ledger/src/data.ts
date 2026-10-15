@@ -18,7 +18,6 @@ export interface LedgerRun {
   errors: number | null;
   notes: string;
   source_commit: string;
-  harness_sha256: string;
   metrics: ObjectValue;
   summary_url: string;
   samples_url: string;
@@ -176,7 +175,6 @@ export function presentRun(input: RunInput): LedgerRun | null {
     errors,
     notes: notes.join(" "),
     source_commit: text(s.git_commit),
-    harness_sha256: text(s.harness_sha256),
     metrics: object(publicValue(m)),
     summary_url: `${base}/summary.json`,
     samples_url: `${base}/samples.jsonl`,

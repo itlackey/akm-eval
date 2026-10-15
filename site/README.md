@@ -1,11 +1,8 @@
 # Public comparison ledger
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. Public artifacts have a row unless
-explicitly retired in [`reports/retired-results.json`](../reports/retired-results.json),
-which maps report-folder paths to reasons. [Retired results](../reports/retired-results.md)
-remain at their original paths for audit and explicit CLI comparison. Repeats and
-pilots remain available when not superseded. Stopped/running snapshots are Diagnostic,
+repository's committed `reports/` tree. Every public result has a row, including
+repeats and pilots. Stopped/running snapshots are Diagnostic,
 and legacy summaries carry an explicit completion-status note. Private corpora
 remain excluded. The build makes no model calls.
 

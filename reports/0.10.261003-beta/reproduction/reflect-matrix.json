@@ -1,9 +1,0 @@
-{
-  "prefix": "bifrost-reflect-example",
-  "model": "chat/qwen3.8-27b",
-  "akm": "akm",
-  "baseline": [{ "name": "base", "eval": "reflect", "args": ["--limit", "3"] }],
-  "configs": [{ "name": "filter-off", "eval": "reflect", "args": ["--limit", "3", "--config-patch", "../../../evals/reflect/patches/defect-filter-off.json"] }],
-  "screen": { "limit": 3 },
-  "repeats": 3
-}

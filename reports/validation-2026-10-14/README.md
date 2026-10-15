@@ -1,16 +1,12 @@
 # Docker validation and explicit rescoring — 2026-10-14
 
-These are saved public observations, published without restarting any eval.
-Eight original artifacts were copied byte-for-byte from the mounted Docker
-workspaces: Reflect and its earlier explicit rescore, the two full retrieval
-collections, and the four bounded build-validation runs. Six new retrieval
-rescored folders apply the expanded frozen judgments to those same raw outputs.
-Original artifacts remain available for audit. Active ledger rows use the corrected
-rescores; [retired originals](../retired-results.md) are excluded from current comparisons.
+These saved public observations contain the corrected Reflect scores and
+expanded-label retrieval results. Superseded original scoring folders were deleted.
+The retained rescores include the saved raw outputs and timings; no collection was
+restarted for this cleanup.
 
 ## Reflect: 35B, semantic configured
 
-- [Original 80 cases](../0.10.261003-beta/reflect/docker-35b-semantic-full-20261014/summary.json): 72/80 correct, collector/scorer 0.3.
 - [Explicit rescore](../0.10.261003-beta/reflect/docker-35b-semantic-full-20261014-rescored/summary.json): **73/80 correct**, collector 0.3, scorer 0.4.
 - Exactly one case changes: `description-truncated-03`, whose grounded `PDFs` plural was incorrectly rejected when the source said `PDF`. All saved proposals, outcomes and timings are identical.
 - Model route `fast/qwen3.6-35b-a3b`; all 80 served replies identify `qwen3.6-35b-a3b`. Zero execution errors/timeouts; wall time 284.055 seconds. Provider billing was not recorded.
@@ -18,7 +14,9 @@ rescores; [retired originals](../retired-results.md) are excluded from current c
 
 ## Full public retrieval
 
-[Library original](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-library/summary.json), [library rescored](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-library-rescored/summary.json), [books original](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-books/summary.json), [books rescored](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-books-rescored/summary.json).
+[Library](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-library-rescored/summary.json)
+and [books](../0.10.261003-beta/retrieval/docker-semantic-full-20261014-books-rescored/summary.json)
+use the expanded judgments.
 
 The original Docker collection covered 136 library and 51 books queries over
 251 and 93 assets. All semantic searches used native BGE; saved index/event
@@ -30,9 +28,7 @@ collection wall time, which remains unknown in these artifacts.
 
 | Collection | Labels | Keyword nDCG@10 | Semantic nDCG@10 | Keyword judged top ten | Semantic judged top ten |
 | --- | --- | ---: | ---: | ---: | ---: |
-| library | original | 0.8030 | 0.7935 | 96.34% | 69.21% |
 | library | expanded | 0.7573 | 0.8260 | 100% | 100% |
-| books | original | 0.8768 | 0.9214 | 24.27% | 21.37% |
 | books | expanded | 0.8275 | 0.9093 | 100% | 100% |
 
 The rescores change relevance labels only: they demonstrate label sensitivity,
@@ -60,15 +56,9 @@ need new judgments. Compare only the same frozen inputs and label digests.
 ## Bounded build comparison and tooling checks
 
 [Build validation](../0.9.31/README.md) publishes both clean source commits,
-all four original runs, their four expanded-label rescores, and saved
-comparisons. Quality deltas are zero for corresponding build runs under either
-label set. Each collection has one observation per build: timings validate
+the four expanded-label rescores and saved comparisons. Quality deltas are zero
+for corresponding build runs. Each collection has one observation per build: timings validate
 measurement/reporting and do not establish a performance improvement.
-
-The cleanup in [PR #106](https://github.com/itlackey/akm-eval/pull/106) passed all
-TypeScript checks, 42 Python tests, and 2,769 Bun tests (13 gated skips), plus
-hosted CI and pinned AKM smoke. The published image was pulled anonymously and
-verified offline against merged main, including its scorer and timing fixes.
 
 ## Reproduction provenance
 

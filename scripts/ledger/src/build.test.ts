@@ -72,15 +72,6 @@ test("rebuilds from newly published data, retains stopped public evidence and sk
     expect(html).not.toContain(".lab.");
     expect(readFileSync(join(output, ".nojekyll"), "utf8")).toBe("");
     expect(dataset.latest_groups).toBeUndefined();
-    // Retirement changes publication only: keep negative/partial evidence unless explicitly selected.
-    save("retired", { metrics: { new_metric: 0 } });
-    writeFileSync(join(reports, "retired-results.json"), JSON.stringify({ "version/new-suite/retired": "Superseded by a corrected rescore." }));
-    const active = build();
-    expect(active.runs.map((run: any) => run.label).sort()).toEqual(["first", "new", "partial"]);
-    expect(active.retired_reports).toBe(1);
-    expect(active.excluded_reports).toBe(1);
-    expect(JSON.parse(readFileSync(join(reports, "version/new-suite/retired/summary.json"), "utf8")).metrics.new_metric).toBe(0);
-    expect(readFileSync(join(reports, "version/new-suite/retired/samples.jsonl"), "utf8")).toContain('"correct":true');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

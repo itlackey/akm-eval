@@ -14,20 +14,17 @@ was disabled. This is a tooling pilot, not a full quality/performance benchmark.
 Both builds embedded all 251 library and 93 books assets with cold indexes.
 Saved database checks verified 52 semantic search events including four setup
 probes, with no fallback, unknown modes, query errors or timeouts. Both Git
-builds are clean and have null dirty fingerprints. Corresponding saved input,
-configuration and harness digests match. Only the AKM build changes.
+builds are clean. Only the AKM build changes.
 
-All original `summary.json` and `samples.jsonl` files in `retrieval/` are
-preserved byte-for-byte. Each `-rescored` folder uses the expanded 2026-10-15
-judgments; it preserves raw rankings, timings and original collector 0.2,
-records scorer 0.3 and updates the manifest's case label digests. All four
-methods have 100% judged top-ten coverage for ranked tasks in these rescores.
+The four `-rescored` folders use the expanded judgments and retain raw rankings,
+timings and collector 0.2, with scorer 0.3. All four search/curate methods have
+100% judged top-ten coverage for ranked tasks. Superseded original scoring
+folders and comparisons were deleted.
 
-- Original comparisons: [library](comparison/library-original.md), [books](comparison/books-original.md).
 - Expanded-label comparisons: [library](comparison/library-rescored.md), [books](comparison/books-rescored.md).
 - Every comparison also has a JSON file beside it.
 
-All four comparisons have zero comparable quality deltas and no compatibility
+Both comparisons have zero comparable quality deltas and no compatibility
 warnings. Timing deltas are candidate minus baseline. One observation per
 build cannot establish a performance improvement. See the [publication
 report](../validation-2026-10-14/README.md) for the full runs, judgment protocol,
