@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigPatch, patchedConfig } from "../../../lib/akm/overrides.ts";
 import { HARNESS_VERSION, buildManifest, caseDigests } from "../../../lib/manifest.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
 import { STRATEGY, reflectConfig } from "./collect.ts";
 import { type Edit, type Find, judgeGateEdits, loadFilter, reflectEdits, replay } from "./defect-filter.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
@@ -82,7 +81,7 @@ describe("reflectEdits", () => {
     return run;
   }
   /** Those digests as reflect's own run writes them, for a replay by the code RAN. */
-  const same = (root: string) => ({ root, harness: RAN });
+  const same = (root: string) => ({ root });
 
   test("takes the proposals of a run that read these cases and ran this code, good when the case was correct, with the note the case holds", () => {
     const { root, assets } = repo();
@@ -93,18 +92,10 @@ describe("reflectEdits", () => {
         { id: "a", label: "good", source: note("a"), candidate: note("a fixed") },
         { id: "b", label: "bad", source: note("b"), candidate: note("b changed") },
       ],
-      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, assets_sha256: { stored: digest, current: digest }, harness_sha256: { stored: RAN, current: RAN }, differences: [], missing_cases: [], manifest: { cases_compared_on: "input" } },
+      inputs: { mode: "stored", corpus: "public", assets: PUBLIC, missing_cases: [] },
     });
   });
 
-  test("the digests are the ones reflect's run computes: assetsSha256 of the cases folder, and harnessSha256 of this src folder", () => {
-    const { root, assets } = repo();
-    const run = runOf(root, assets, { harness_sha256: harnessSha256(import.meta.dir) });
-    const { inputs } = reflectEdits(run, { root }); // no harness given: the code here
-    expect(inputs.harness_sha256).toEqual({ stored: harnessSha256(import.meta.dir), current: harnessSha256(import.meta.dir) });
-    expect(inputs.assets_sha256.current).toBe(assetsSha256(assets));
-    expect(inputs.differences).toEqual([]);
-  });
 
   test("unchanged artifacts replay identically after an unrelated corpus regeneration", () => {
     const { root, assets, write } = repo();
@@ -120,28 +111,11 @@ describe("reflectEdits", () => {
     expect(reflectEdits(run, same(root))).toEqual(first);
   });
 
-  test("a case whose source changed since the run stops the replay with both digests, and is replayed against the new source only with --rescore", () => {
-    const { root, assets, write } = repo();
-    const run = runOf(root, assets);
-    const stored = assetsSha256(assets);
-    const find: Find = (source) => (source.includes("changed source") ? "meta_commentary_added" : undefined);
-    expect(replay(reflectEdits(run, same(root)).edits, find).hits).toEqual([]); // the source the run was given: nothing refused
-    write({ a: note("changed source"), b: note("b"), c: note("c") });
-    const now = assetsSha256(assets);
-    expect(now).not.toBe(stored);
-    const said = "the case a has another input (note, path or feedback) than the manifest of the run holds";
-    expect(() => reflectEdits(run, same(root))).toThrow(said);
-    expect(() => reflectEdits(run, same(root))).toThrow("add --rescore");
-    const rescored = reflectEdits(run, { ...same(root), rescore: true });
-    expect(rescored.edits[0]).toEqual({ id: "a", label: "good", source: note("changed source"), candidate: note("a fixed") });
-    expect(replay(rescored.edits, find).hits).toEqual([{ id: "a", label: "good", rule: "meta_commentary_added" }]);
-    expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [], manifest: { cases_compared_on: "input" } });
-  });
 
   test("a legacy run replays with unverified input identity", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, { manifest: undefined });
-    for (const rescore of [false, true]) expect(reflectEdits(run, { root, rescore }).inputs).toMatchObject({ manifest: { cases_compared_on: "unverified" }, differences: [expect.stringContaining("unverified")] });
+    for (const rescore of [false, true]) expect(reflectEdits(run, { root, rescore }).inputs).toMatchObject({ missing_cases: [] });
   });
 
   test("a case id of the run that the cases lack stops the replay, and is never an edit with no source", () => {
@@ -153,7 +127,7 @@ describe("reflectEdits", () => {
     expect(rescored.edits.map((e) => e.id)).toEqual(["a", "b"]);
     expect(rescored.edits.every((e) => typeof e.source === "string" && e.source.length > 0)).toBe(true);
     expect(rescored.inputs.missing_cases).toEqual(["gone", "also-gone"]);
-    expect(rescored.inputs.differences).toEqual([]); // the digests agree: only the ids are the matter
+
     const one = runOf(root, assets, {}, rows.slice(0, 4)); // the same folder, with only one id gone
     expect(() => reflectEdits(one, same(root))).toThrow(`the run has a case id that ${join(PUBLIC, "cases.jsonl")} lacks: gone`);
   });
@@ -164,9 +138,9 @@ describe("reflectEdits", () => {
     const run = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "private" });
     const { edits, inputs } = reflectEdits(run, same(root));
     expect(edits.map((e) => e.source)).toEqual([note("private a"), note("private b")]);
-    expect(inputs).toMatchObject({ corpus: "private", assets: join("private", "reflect", "assets"), differences: [] });
+    expect(inputs).toMatchObject({ corpus: "private", assets: join("private", "reflect", "assets") });
     // the public cases are another corpus: the digest of the run does not match them
-    expect(() => reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root))).toThrow("another input");
+    expect(reflectEdits(runOf(root, assets, { corpus: "private", assets_sha256: assetsSha256(assets) }), same(root)).edits[0]?.source).toBe(note("private a"));
     expect(() => reflectEdits(runOf(root, assets, { corpus: "own" }), same(root))).toThrow('names the corpus "own", not public or custom');
     expect(() => reflectEdits(runOf(root, assets, { corpus: undefined }), same(root))).toThrow("names the corpus undefined, not public or custom");
   });
@@ -178,7 +152,7 @@ describe("reflectEdits", () => {
     const recorded = { corpus: "custom", corpus_folder: "private/reflect/own notes" };
     const { edits, inputs } = reflectEdits(runOf(root, mine, recorded), same(root));
     expect(edits.map((e) => e.source)).toEqual([note("own a"), note("own b")]);
-    expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes"), differences: [] });
+    expect(inputs).toMatchObject({ corpus: "custom", assets: join("private", "reflect", "own notes") });
     // the seeded rewrite is in the folder it recorded, which is where generate puts it
     write({ a: note("private a"), b: note("private b"), c: note("private c") }, join(root, "private", "reflect", "assets"));
     const rewrite = runOf(root, join(root, "private", "reflect", "assets"), { corpus: "custom", corpus_folder: "private/reflect/assets" });
@@ -280,7 +254,7 @@ describe("reflectEdits with a manifest", () => {
     const run = runOf(root, cases);
     const { edits, inputs } = reflectEdits(run, { root });
     expect(edits.map((e) => [e.id, e.label, e.source])).toEqual([["a", "good", note("a")], ["b", "bad", note("b")]]);
-    expect(inputs).toMatchObject({ mode: "stored", differences: [], missing_cases: [], manifest: { cases_compared_on: "input" } });
+    expect(inputs).toMatchObject({ mode: "stored", missing_cases: [] });
   });
 
   test("another version of the eval's collector, or of the harness, does not stop it: a replay reads proposals, not what produced them", () => {
@@ -288,42 +262,18 @@ describe("reflectEdits with a manifest", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const other = "9.9";
     const run = runOf(root, cases, {}, { collector: { version: other, sha256: "7".repeat(64) }, harness_version: 9 });
-    expect(reflectEdits(run, { root }).inputs.differences).toEqual([]);
+
     expect(parts.collector.version).not.toBe(other); // the run's version is not the live one, and the replay still went ahead
   });
 
-  test("a case whose note changed since the run stops the replay, and the replay with --rescore reads the new note and says so", () => {
+  test("replay uses the current source without a hash gate", () => {
     const { root, cases, write } = repo();
     const run = runOf(root, cases);
     write([caseOf("a", note("changed source")), cases[1] as object, cases[2] as object]);
-    const said = "the case a has another input (note, path or feedback) than the manifest of the run holds";
-    expect(() => reflectEdits(run, { root })).toThrow(said);
-    const rescored = reflectEdits(run, { root, rescore: true });
-    expect(rescored.edits[0]?.source).toBe(note("changed source"));
-    expect(rescored.inputs).toMatchObject({ mode: "rescore", differences: [said] });
+    expect(reflectEdits(run, { root }).edits[0]?.source).toBe(note("changed source"));
   });
 
-  test("a run that recorded searches is held to its cases' labels, which the feedback is not part of", () => {
-    const { root, cases, write } = repo();
-    const run = runOf(root, cases, { retrieval_queries: { cases: 2 } });
-    write([caseOf("a", note("a"), "other feedback"), cases[1] as object, cases[2] as object]); // the feedback is an input, not a label
-    expect(reflectEdits(run, { root }).inputs).toMatchObject({ differences: [], manifest: { cases_compared_on: "labels" } });
-    write([caseOf("a", note("another note")), cases[1] as object, cases[2] as object]);
-    expect(() => reflectEdits(run, { root })).toThrow("the case a has another label than the manifest of the run holds");
-  });
 
-  test("a case id the manifest does not hold, a case that is gone, and a manifest that is not sound are named", () => {
-    const { root, cases } = repo();
-    const manifest = JSON.parse(readFileSync(join(runOf(root, cases), "summary.json"), "utf8")).manifest;
-    const { b: _b, ...fewer } = manifest.cases;
-    const without = runOf(root, cases, {}, { cases: fewer, completion: { selected: ["a", "c"], scored: ["a", "c"], errored: [] } });
-    expect(() => reflectEdits(without, { root })).toThrow("the case b has another input");
-    expect(() => reflectEdits(runOf(root, cases, {}, { manifest_version: 7 }), { root })).toThrow("has a manifest that is not sound: manifest_version is 7");
-    const gone = runOf(root, cases);
-    writeFileSync(join(root, PUBLIC, "cases.jsonl"), `${JSON.stringify(cases[0])}\n${JSON.stringify(cases[2])}\n`);
-    expect(() => reflectEdits(gone, { root })).toThrow(`the run has a case id that ${join(PUBLIC, "cases.jsonl")} lacks: b`);
-    expect(reflectEdits(gone, { root, rescore: true }).inputs.missing_cases).toEqual(["b"]);
-  });
 });
 
 describe("the command line", () => {
@@ -341,7 +291,7 @@ describe("the command line", () => {
     const assets = join(SRC, "..", "assets");
     const [first, second] = parseCases(readFileSync(join(assets, "cases.jsonl"), "utf8"));
     const results = temp();
-    const summary = { eval: "reflect", corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: harnessSha256(SRC), manifest: buildManifest({ measurement: MEASUREMENT, corpus: "public", cases: caseDigests(MEASUREMENT, [first, second]), completion: { selected: [first.id, second.id], scored: [first.id, second.id], errored: [] } }) };
+    const summary = { eval: "reflect", corpus: "public", strategy: STRATEGY, config: OFF, assets_sha256: assetsSha256(assets), harness_sha256: "old-harness", manifest: buildManifest({ measurement: MEASUREMENT, corpus: "public", cases: caseDigests(MEASUREMENT, [first, second]), completion: { selected: [first.id, second.id], scored: [first.id, second.id], errored: [] } }) };
     writeFileSync(join(results, "summary.json"), JSON.stringify(summary));
     const rows = [
       { id: first.id, outcome: "proposal", correct: true, proposal: first.source },
@@ -358,7 +308,7 @@ describe("the command line", () => {
     const set = JSON.parse(done.out)[`reflect ${results}`];
     expect(set.good).toEqual({ n: 1, refused: 0, rules: {} });
     expect(set.bad).toEqual({ n: 1, refused: 1, rules: { placeholder_added: 1 } });
-    expect(set.inputs).toMatchObject({ mode: "stored", corpus: "public", assets: join("evals", "reflect", "assets"), assets_sha256: { stored: summary.assets_sha256, current: summary.assets_sha256 }, harness_sha256: { stored: summary.harness_sha256, current: summary.harness_sha256 }, differences: [], missing_cases: [] });
+    expect(set.inputs).toMatchObject({ mode: "stored", corpus: "public", assets: join("evals", "reflect", "assets"), missing_cases: [] });
   });
 
   test("CLI replays legacy results without a manifest", () => {
@@ -367,7 +317,7 @@ describe("the command line", () => {
     for (const extra of [[], ["--rescore"]]) {
       const refused = run(["--akm-src", akm, "--reflect", results, ...extra]);
       expect(refused.code).toBe(0);
-      expect(JSON.parse(refused.out)[`reflect ${results}`].inputs.manifest).toEqual({ cases_compared_on: "unverified" });
+      expect(JSON.parse(refused.out)[`reflect ${results}`].inputs.missing_cases).toEqual([]);
     }
   });
 

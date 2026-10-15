@@ -15,7 +15,7 @@ import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, renamed } from "../../../lib/corpus.ts";
 import { type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { buildManifest, caseDigests, completionOf, type RunManifest } from "../../../lib/manifest.ts";
-import { harnessSha256, redactConfig, sha256Json } from "../../../lib/provenance.ts";
+import { redactConfig, sha256Json } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
@@ -29,7 +29,6 @@ import { type CurateAgreement, type CurateCheck, KS, type Lines, METRICS, type S
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 const labelOf = (sys: System): string => (modeOf(sys) === "semantic" ? "akm search, semantic" : "akm search");
 
 /** The label of a run without --label. */
@@ -64,8 +63,6 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
@@ -245,7 +242,7 @@ export async function runCorpus(corpus: Corpus, ctx: CollectContext & { label?: 
     label: started.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     akm_version: collected.version,
     ...build,
     search_mode: { keyword: [...collected.seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...collected.seen.semantic].sort().join(", ") || "unknown" } : {}) },

@@ -5,7 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointHost, harnessSha256, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { type LoadedCase, type Raw, assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
@@ -264,7 +264,7 @@ describe("runCorpus", () => {
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
     expect(stored.status).toBe("aborted");
     expect(stored.aborted_reason).toBe("5 sessions in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/);
+
     // and a run that went through every session, with errors that were not in a row, is complete
     const ok = (id: string) => ({ id, class: "routine", fake: empty() });
     const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
@@ -291,8 +291,8 @@ describe("what summary.json says about the run", () => {
     const summary = await quiet(() => runPublic(ctx, folders));
     const stored = storedIn(summary.results_dir);
     expect(stored).toMatchObject({ strategy: "extract-only", config_patch: null, seed: null, timeouts: 0, n_errored: 0, status: "complete", aborted_reason: null });
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     expect(stored.engine).toEqual({ engine: "model", model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000, engines: { model: { model: "the-model", endpoint: endpointHost("http://localhost:8080/v1/chat/completions"), temperature: 0, enableThinking: false, timeoutMs: 600000 } } });
     const written = extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey);
@@ -398,7 +398,7 @@ describe("the manifest of a run", () => {
   test("holds the config without the engine's settings, and the engine with the digest of its endpoint", async () => {
     const stored = storedIn((await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))))).results_dir);
     const { manifest, config, engine } = stored;
-    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(config)));
+
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);

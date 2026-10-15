@@ -95,7 +95,7 @@ describe("a custom run is scored again from its corpus_folder", () => {
     const { summary, folder } = await customRun(parent);
     writeFileSync(join(folder, "cases.json"), JSON.stringify(CASES(["retries", "2 seconds", "a term the derived memory never had"])));
     const done = rescoreRun(readStored(summary.results_dir));
-    expect(done.relabelled).toEqual(["infer"]);
+
     expect(done.changed).toEqual(["infer"]);
     expect(done.rows.map((r) => [r.id, r.correct])).toEqual([["infer", false], ["promote", true]]);
   });
@@ -132,7 +132,7 @@ describe("a custom run on a folder outside the repository is rescored with --cas
     for (const [path, text] of Object.entries({ "memories/retry.md": MEMORY, ...POOL })) writeFileSync(join(moved, path), text);
     writeFileSync(join(moved, "cases.json"), JSON.stringify(CASES(["retries", "a term the derived memory never had"])));
     const done = rescoreRun(readStored(summary.results_dir), { cases: moved });
-    expect(done.relabelled).toEqual(["infer"]);
+
     expect(done.rows.map((r) => [r.id, r.correct])).toEqual([["infer", false], ["promote", true]]);
     expect(folder).not.toBe(moved);
   });

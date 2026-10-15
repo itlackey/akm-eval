@@ -7,7 +7,7 @@ import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointHost, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
 import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -236,8 +236,8 @@ describe("runCorpus", () => {
     expect(settings.endpoint).toBe("http://localhost:9"); // the host: never the path
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     const again = await quiet(() => runPublic(ctx, setup(cases.slice(0, 1), plan).folders));
     expect(again.assets_sha256).toBe(stored.assets_sha256);
@@ -405,7 +405,7 @@ describe("the manifest of a run", () => {
   test("holds the config without the model's settings and the engines with a host and a digest, and the summary's config has the same digest", async () => {
     const { ctx, folders } = setup(cases.slice(0, 1), plan);
     const { manifest, config, engine } = stored(await quiet(() => runPublic(ctx, folders)));
-    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(config)));
+
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);

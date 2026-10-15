@@ -17,7 +17,7 @@ import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
-import { type EngineSettings, engineSettings, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, redactConfig } from "../../../lib/provenance.ts";
 import { type CaseContext, NAME, STRATEGY, configFor, refOf, runCase } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { retrievalSearches } from "./queries.ts";
@@ -27,7 +27,6 @@ export { runCase };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 export const MIN_AKM = "0.9.25-alpha.3"; // the first release where reflect changes only the frontmatter
 const GIVE_UP_AFTER = 5; // consecutive cases that error, before any case gets an outcome
 
@@ -60,8 +59,6 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
@@ -206,7 +203,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: Ctx, resultsParent:
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: ctx.model,
     akm_version: ctx.version,
     ...build,

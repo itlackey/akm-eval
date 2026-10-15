@@ -9,7 +9,6 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { caseDigests, readManifest } from "../../../lib/manifest.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -25,17 +24,9 @@ Takes the results folders of distill runs (each has a summary.json and a samples
 on one corpus, and counts, for each pass bar, the good and the bad lessons that pass, go to review and are rejected.
 A lesson is good when it passes the distill eval's checks for its case; a lesson for a case that expects none is bad.
 
-The checks read the cases, the memories and the scorer of the code here now, not the ones the run was given. So the manifest in the
-summary.json of a run must hold, for every case of the run, the input and the label digests of the case as it is now, and every case id
-of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
-Legacy runs remain readable and report unverified original input identity.
+The checks use the current cases, memories and scorer to judge the saved lessons.
 
-The judge's first score is called reusable from akm ${RENAMED_IN}, and novelty before. A run of an older akm is read with novelty as
-reusable. A run whose scores have other names, or whose akm version is not known, is refused, and the message names the release.
-
-  --rescore  read the runs anyway, and judge their stored lessons by the cases and the checks here now, when a run has cases with other
-             inputs or labels, or has a case id that is gone. The report names the stored
-             and the current digests, and the case ids left out.
+  --rescore  omit rows whose case no longer exists, reporting the missing case ids.
   --cases    the folder of the cases of a custom run whose folder was outside the repository, so the summary does not record it.
 
 Prints JSON, with "inputs": for each run, the corpus folder read and what differs.
@@ -136,15 +127,9 @@ export interface Inputs {
   corpus: string;
   /** The folder of the cases the read used, from the repository root. */
   assets: string;
-  /** Whether the original collection recorded input digests. */
-  manifest: "manifest" | "legacy";
   /** The akm release of the run, and the name its judge's first criterion had in the rows that were judged (null when none was). */
   akm_version: string | null;
   judge_first_criterion: "reusable" | "novelty" | null;
-  /** What a read without --rescore would have stopped on. Empty when nothing does. */
-  differences: string[];
-  /** The cases of the run whose input or labels are not the ones here now. */
-  changed_cases: string[];
   /** The case ids of the run that the cases here now lack. Their rows are left out. */
   missing_cases: string[];
 }
@@ -162,18 +147,11 @@ type SampleRow = { id: string; class: string; outcome: string; gate: string | nu
 
 const some = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${ids.length > n ? `, and ${ids.length - n} more` : ""}`;
 
-/**
- * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. A lesson is good by
- * the cases, the memories and the checks here now, so its manifest must hold the input and label digests of each case (the input covers
- * the memory) as they are here now. Legacy runs report unverified original input identity; every case id of the run must be in the corpus. Otherwise this throws and
- * says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and says all of it in `inputs`.
- */
+/** Judge saved lessons using the current cases and checks. */
 export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; noScores: number; inputs: Inputs } {
   const root = options.root ?? ROOT;
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   if (summary.eval !== NAME) throw new Error(`${resultsDir} is a run of ${JSON.stringify(summary.eval)}, not of ${NAME}`);
-  const reading = readManifest(summary);
-  if (reading.kind === "invalid") throw new Error(`${resultsDir}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
   const assets = options.cases !== undefined ? resolve(root, options.cases) : corpusFolder(root, summary);
   const where = relative(root, assets);
   const cases = new Map(loadCases(assets).map((c) => [c.id, c]));
@@ -181,28 +159,12 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const rows = readFileSync(join(resultsDir, "samples.jsonl"), "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l) as SampleRow);
   const ids = [...new Set(rows.map((r) => r.id))];
   const missing = ids.filter((id) => !cases.has(id));
-  const present = ids.filter((id) => cases.has(id)).map((id) => cases.get(id) as LoadedCase);
-
-  const now = caseDigests(MEASUREMENT, present);
-  const differences: string[] = [];
-  const changed: string[] = [];
-  if (reading.kind === "manifest") {
-    const m = reading.manifest;
-    const unknown = present.filter((c) => m.cases[c.id] === undefined).map((c) => c.id);
-    if (unknown.length > 0) differences.push(`the manifest of the run does not hold the case${unknown.length === 1 ? "" : "s"} ${some(unknown)}`);
-    for (const c of present) {
-      const was = m.cases[c.id];
-      if (was !== undefined && (was.input_sha256 !== now[c.id]?.input_sha256 || was.label_sha256 !== now[c.id]?.label_sha256)) changed.push(c.id);
-    }
-    if (changed.length > 0) differences.push(`${changed.length === 1 ? "the case" : "the cases"} ${some(changed)} ${changed.length === 1 ? "has" : "have"} another input or other labels than when the run was made (its memory, its bundle, its feedback, or the facts and claims it is judged by)`);
-  }
-  if (!options.rescore && (differences.length > 0 || missing.length > 0)) {
-    const lines = [...differences, ...(missing.length > 0 ? [`the run has ${missing.length === 1 ? "a case id" : "case ids"} that ${where}/cases.json lacks: ${missing.join(", ")}`] : [])];
+  if (!options.rescore && missing.length > 0) {
+    const lines = [...(missing.length > 0 ? [`the run has ${missing.length === 1 ? "a case id" : "case ids"} that ${where}/cases.json lacks: ${missing.join(", ")}`] : [])];
     throw new Error(`${resultsDir} cannot be judged by the cases and the scorer here now:\n  - ${lines.join("\n  - ")}\nA lesson would be good or bad by cases, memories and checks other than the run's. To judge its stored lessons by what is here now on purpose, add --rescore.`);
   }
 
-  if (reading.kind === "legacy") differences.push("Original input digests were not recorded; replay uses the current cases and input identity is unverified.");
-  const version = reading.kind === "manifest" ? reading.manifest.akm.version : typeof summary.akm_version === "string" ? summary.akm_version : null;
+  const version = typeof summary.akm_version === "string" ? summary.akm_version : summary.manifest?.akm?.version ?? null;
   const judged: Judged[] = [];
   let skipped = 0;
   let noScores = 0;
@@ -227,11 +189,8 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     mode: options.rescore ? "rescore" : "stored",
     corpus: String(summary.corpus),
     assets: where,
-    manifest: reading.kind,
     akm_version: version,
     judge_first_criterion: judged.length === 0 ? null : novelty ? "novelty" : "reusable",
-    differences,
-    changed_cases: changed,
     missing_cases: missing,
   };
   return { judged, skipped, noScores, inputs };

@@ -6,7 +6,7 @@ import { commandLine } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { comparePair } from "../../../scripts/compare/src/lib.ts";
-import { endpointHost, harnessSha256, sha256Json } from "../../../lib/provenance.ts";
+import { endpointHost, sha256Json } from "../../../lib/provenance.ts";
 import { assetsSha256, bundleFiles, distillConfig, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
@@ -261,8 +261,8 @@ describe("runCorpus", () => {
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored.seed).toBeNull();
     expect(stored).toMatchObject({ timeouts: 0, status: "complete" });
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     // the same files give the same digest, whatever their folder; another memory gives another
     const again = await quiet(() => runFolders(ctx, assetsFor(scenarios.slice(0, 1))));
@@ -298,8 +298,8 @@ describe("runCorpus", () => {
     expect(comparePair(saved(sa), saved(sb)).warnings.join(" ")).not.toContain("seed differs");
     // a rewrite is different: its seed made the assets, so two seeds are two inputs
     const [ra, rb] = [stored(await quiet(() => runFolders(ctx, a, { rewrite: true, seed: "1" }))), stored(await quiet(() => runFolders(ctx, b, { rewrite: true, seed: "2" })))];
-    expect(comparePair(saved(ra), saved(rb)).warnings.join(" ")).toContain("seed");
-    expect(comparePair(saved(ra), saved(rb)).rows.find(row => row.key === "quality_percent")?.delta).toBeNull();
+    expect(comparePair(saved(ra), saved(rb)).changes.find(c => c.field === "settings")).toBeDefined();
+    expect(comparePair(saved(ra), saved(rb)).rows.find(row => row.key === "quality_percent")?.delta).toBe(0);
   });
 
   test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {

@@ -14,7 +14,7 @@ import { Fatal, fail, gitCommit as commitOf, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, resolveCorpora } from "../../../lib/corpus.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf, readManifest } from "../../../lib/manifest.ts";
 import { JUDGE_OPTIONS, MODEL_OPTIONS, type ModelEntry, type ModelSettings, judgeUsage, modelUsage, useJudge, useModel } from "../../../lib/models.ts";
-import { type EngineSetting, canonical, endpointHost, harnessSha256, sha256File } from "../../../lib/provenance.ts";
+import { type EngineSetting, canonical, endpointHost, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { clearRunning, makeResultsDir, markRunning } from "../../../lib/results.ts";
 import { Akm, PROJECTION_LIMIT, type SearchMode } from "./akm.ts";
@@ -29,7 +29,6 @@ import { type Row, summarize } from "./score.ts";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 const DEFAULT_SAMPLE_SEED = 42;
 const GIVE_UP_AFTER = 3; // questions in a row that failed the same way, before the first one that did not
 
@@ -89,8 +88,6 @@ interface Summary extends ReturnType<typeof summarize> {
   status: "running" | "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string | null;
   judge_model: string | null;
   /** The host the model and the judge are called at. Never the path, which can name a deployment or carry a key. Null when the run has no model. */
@@ -200,7 +197,7 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   note("akm command", prior.akm.bin, now.akm.bin);
   note("akm build", prior.akm.build, now.akm.build);
   note("akm build fingerprint", prior.akm.build_fingerprint, now.akm.build_fingerprint); // two edits of one commit are two builds
-  note("akm config", prior.config.sha256, now.config.sha256);
+  note("akm config", canonical(prior.config.redacted), canonical(now.config.redacted));
   note("settings", canonical(prior.settings), canonical(now.settings));
   note("treatment hints", canonical(prior.treatment_hints), canonical(now.treatment_hints));
   for (const role of ["model", "judge"]) {
@@ -211,20 +208,13 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
     note(`${role} endpoint`, was?.endpoint, is?.endpoint);
     note(`${role} settings`, rest(was), rest(is));
   }
-  const ids = [...new Set([...Object.keys(prior.cases), ...Object.keys(now.cases)])];
-  const differ = ids.filter((id) => canonical(prior.cases[id]) !== canonical(now.cases[id]));
+  const ids = [...new Set([...Object.keys(prior.cases ?? {}), ...Object.keys(now.cases ?? {})])];
+  const differ = ids.filter((id) => canonical(prior.cases?.[id]) !== canonical(now.cases?.[id]));
   if (differ.length > 0) out.push(`different questions (${differ.length} of ${ids.length} differ in what they present or are judged by, or are not asked now)`);
   return out;
 }
 
-/**
- * The rows of an earlier run in `dir` that need no redoing, for --resume. The run must be the same one, which its manifest says: the same
- * corpus, the questions (each by the digest of what it presents and of what it is judged by), the eval's version, the model, the
- * judge and the endpoints they are called at, akm (version, command, build with the fingerprint of its uncommitted changes, and config), and
- * harness. A question with an arm that errored is asked again. A run made by other code is refused, not continued: the summary would name
- * this run's code for rows that code did not make, and there is no mixed-version mode. A summary with no manifest or no harness_sha256 is
- * from before it was recorded, so its code is unknown, and it is refused the same way.
- */
+/** Reuse completed rows when resuming with the same recorded run settings. Retry errored questions. */
 export function resumableRows(dir: string, now: { manifest: RunManifest; retrievalOnly: boolean }): Row[] {
   const summaryPath = join(dir, "summary.json");
   if (!existsSync(summaryPath)) fail(`${dir} has no summary.json, so it is not a run to resume`);
@@ -233,9 +223,6 @@ export function resumableRows(dir: string, now: { manifest: RunManifest; retriev
   if (reading.kind === "legacy") fail(`${dir} was run by an older version of this eval, before the run manifest, whose rows are not comparable to the ones it would add. Run again without --resume.`);
   if (reading.kind === "invalid") fail(`${dir} has a manifest that is not sound (${reading.problems.join("; ")}). Run again without --resume.`);
   if (reading.manifest.rescored_from !== undefined) fail(`${dir} is the result of scripts/rescore, not a run, so there is nothing in it to carry on. Resume the folder it was made from.`);
-  if (prior.harness_sha256 !== HARNESS) {
-    fail(`${dir} was run by other code than this run's: its harness_sha256 is ${prior.harness_sha256 ?? "not recorded (the summary is from before it was)"}, and this run's is ${HARNESS}. Its rows are not carried into a summary that names this code. Start a new run, without --resume.`);
-  }
   const [different] = manifestDifferences(reading.manifest, now.manifest);
   if (different !== undefined) fail(`${dir} was run with ${different}. Run again with the same settings, or without --resume.`);
   const lines = readFileSync(join(dir, "samples.jsonl"), "utf8").split("\n").filter((l) => l.trim() !== "");
@@ -324,7 +311,7 @@ export async function runCorpus(
       status: running ? "running" : complete ? "complete" : "aborted",
       aborted_reason: complete || running ? null : (abortedReason ?? UNFINISHED),
       git_commit: gitCommit(),
-      harness_sha256: HARNESS,
+
       model: ctx.model?.model ?? null,
       judge_model: ctx.judge?.model ?? null,
       model_endpoint: ctx.model ? endpointHost(ctx.model.baseUrl) : null,

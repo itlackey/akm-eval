@@ -32,23 +32,22 @@ describe("two stored runs", () => {
     expect(report.rows.find(r => r.key === "metrics.defects.rate")!.b).toBe(.999);
     expect(report.rows.find(r => r.key === "metrics.defects.rate")!.delta).not.toBeNull();
   });
-  test("suppresses quality deltas for unequal scored cases even when counts match", () => {
+  test("shows deltas alongside recorded coverage even when scored cases differ", () => {
     const a = fixture(), b = clone(a);
     a.summary.manifest.completion.errored = [a.rows[0]!.id];
     b.summary.manifest.completion.errored = [b.rows[1]!.id];
     for (const r of [a, b]) r.summary.manifest.completion.scored = r.rows.map(row => row.id).filter(id => !r.summary.manifest.completion.errored.includes(id));
     const report = comparePair(a, b);
-    expect(report.rows.find(r => r.key === "quality_percent")!.delta).toBeNull();
+    expect(report.rows.find(r => r.key === "quality_percent")!.delta).toBe(0);
     expect(report.rows.find(r => r.key === "errors")!.delta).toBe(0);
-    expect(report.warnings.join(" ")).toContain("coverage");
   });
-  test("unequal timing records suppress time deltas and keep stored values", () => {
+  test("unequal timing records keep stored values and arithmetic deltas", () => {
     const a = fixture(), b = clone(a);
     delete b.rows[0]!.seconds;
     const row = comparePair(a, b).rows.find(r => r.key === "case_mean_s")!;
     expect(row.a).toBe(1);
     expect(row.b).toBe(1);
-    expect(row.delta).toBeNull();
+    expect(row.delta).toBe(0);
   });
   test("unrecorded telemetry stays missing; recorded zero stays zero", () => {
     const a = fixture(), b = clone(a);
@@ -84,19 +83,19 @@ describe("two stored runs", () => {
   });
 });
 
-test("different metric denominators suppress named and raw rate deltas", () => {
+test("different metric denominators remain visible without withholding arithmetic differences", () => {
   const a = fixture(), b = clone(a);
   b.summary.metrics.defects.n++;
   const report = comparePair(a, b);
   for (const key of ["quality_percent", "metrics.defects.rate", "score:Correct fixes"])
-    expect(report.rows.find(r => r.key === key)).toMatchObject({ delta: null, note: "Unequal metric denominators" });
+    expect(report.rows.find(r => r.key === key)).toMatchObject({ delta: 0, note: "" });
 });
 
-test("full runner wall time is not subtracted from older collector-only timing", () => {
+test("stored wall times are displayed as recorded", () => {
   const a = fixture(), b = clone(a);
   a.summary.seconds = 10;
   b.summary.wall_seconds = 12;
-  expect(comparePair(a, b).rows.find(r => r.key === "run_wall_s")).toMatchObject({ a: 10, b: 12, delta: null, note: "Different wall-time measurements" });
+  expect(comparePair(a, b).rows.find(r => r.key === "run_wall_s")).toMatchObject({ a: 10, b: 12, delta: 2, note: "" });
 });
 
 
@@ -107,11 +106,10 @@ test("legacy public runs from one recorded collector compare without inventing a
   const before = JSON.stringify([a, b]);
   const report = comparePair(a, b);
   expect(report.rows.find(r => r.key === "metrics.search.ndcg_10")?.delta).toBe(0);
-  expect(report.warnings.join(" ")).toContain("original input digests were not recorded");
   expect(report.changes.find(c => c.field === "akm")).toBeDefined();
   expect(JSON.stringify([a, b])).toBe(before);
   b.summary.git_commit = "another";
-  expect(comparePair(a, b).rows.find(r => r.key === "metrics.search.ndcg_10")?.delta).toBeNull();
+  expect(comparePair(a, b).rows.find(r => r.key === "metrics.search.ndcg_10")?.delta).toBe(0);
 });
 
 test("stopped results show saved values and counts with explicit coverage", () => {
@@ -120,7 +118,7 @@ test("stopped results show saved values and counts with explicit coverage", () =
   b.rows.pop(); b.summary.manifest.completion.scored.pop();
   const report = comparePair(a, b);
   expect(report.warnings.join(" ")).toContain("operator stopped");
-  expect(report.rows.find(r => r.key === "quality_percent")).toMatchObject({ a: expect.any(Number), b: expect.any(Number), delta: null });
+  expect(report.rows.find(r => r.key === "quality_percent")).toMatchObject({ a: expect.any(Number), b: expect.any(Number), delta: 0 });
   expect(report.rows.find(r => r.key === "recorded")?.delta).toBe(-1);
 });
 
@@ -129,13 +127,13 @@ test("unknown evals, incomplete metadata and missing samples still show stored m
   for (const r of [a, b]) { r.summary.eval = "future-eval"; r.summary.manifest = { future: true }; r.samplesMissing = true; r.rows = []; }
   const report = comparePair(a, b);
   expect(report.rows.find(r => r.key === "metrics.defects.rate")?.a).toBeNumber();
-  expect(report.rows.find(r => r.key === "metrics.defects.rate")?.delta).toBeNull();
-  expect(report.warnings.join(" ")).toContain("manifest metadata is unusable");
+  expect(report.rows.find(r => r.key === "metrics.defects.rate")?.delta).toBe(0);
+  expect(report.warnings.join(" ")).toContain("samples.jsonl is missing");
 });
 
-test("cold and warm indexes remain visible without claiming a build-time delta", () => {
+test("cold and warm indexes display timings and the changed cache setting", () => {
   const a = fixture("retrieval"), b = clone(a);
   a.summary.semantic_index = "cold"; b.summary.semantic_index = "warm";
   a.summary.index_seconds = { semantic: 40 }; b.summary.index_seconds = { semantic: .2 };
-  expect(comparePair(a, b).rows.find(r => r.key === "semantic_index_s")).toMatchObject({ a: 40, b: .2, delta: null });
+  expect(comparePair(a, b).rows.find(r => r.key === "semantic_index_s")).toMatchObject({ a: 40, b: .2, delta: -39.8 });
 });

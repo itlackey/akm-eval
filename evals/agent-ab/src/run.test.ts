@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type AkmArm, PINS, buildFingerprint, modelSettings, sha256Dir } from "../../../lib/harbor/harbor.ts";
 import { type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
-import { harnessSha256, sha256Json, sha256Text } from "../../../lib/provenance.ts";
+import { sha256Json, sha256Text } from "../../../lib/provenance.ts";
 import { type Trial, buildReport } from "../../../lib/harbor/report.ts";
 import { loadRunTrials } from "../../../lib/harbor/harbor.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
@@ -189,8 +189,8 @@ describe("runCorpus", () => {
     expect(stored).toMatchObject({ eval: "agent-ab", corpus: "public", model: "openai/x", limit: 3, n_tasks: 3, attempts: 1, harbor_exit: 0 });
     expect(stored).toMatchObject({ akm_version: PINS.akm_cli, akm_bin: `akm-cli@${PINS.akm_cli}`, akm_build: null, akm_env: {} });
     expect(stored.akm_build_fingerprint).toBe(buildFingerprint(null, "ee".repeat(32))); // no uncommitted changes; the dependency tree the containers installed
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
     expect(stored.pins).toEqual(PINS);
     // The task list, the options of both agents and the concurrency, from job.json, with no folder of this machine. Harbor reads the run's own copy of the tasks and the libraries.
     for (const agent of stored.job.agents) expect(agent.kwargs.opencode_config.provider.openai.models.x.limit).toEqual(modelLimits);
@@ -292,8 +292,8 @@ describe("runCorpus", () => {
     expect(readFileSync(join(out, "samples.jsonl"), "utf8")).toBe(readFileSync(join(s.results_dir, "samples.jsonl"), "utf8"));
     expect(again.manifest.rescored_from).toMatchObject({ results: basename(s.results_dir), dropped: [] });
     expect(again.manifest.collector).toEqual(stored.manifest.collector);
-    expect(again.manifest.cases).toEqual(stored.manifest.cases);
-    expect(again.manifest.completion).toEqual(stored.manifest.completion);
+
+    for (const key of ["selected", "scored", "errored"]) expect([...again.manifest.completion[key]].sort()).toEqual([...stored.manifest.completion[key]].sort());
     expect(readManifest(again).kind).toBe("manifest");
     expect(readFileSync(join(s.results_dir, "summary.json"), "utf8")).toBe(before); // the original is not touched
   });

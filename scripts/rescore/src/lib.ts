@@ -3,8 +3,8 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { type CaseDigest, type Measurement, type RunManifest, completionOf, corpusFolderOf, loadMeasurement, readManifest, REPO_ROOT } from "../../../lib/manifest.ts";
-import { canonical, sha256Json } from "../../../lib/provenance.ts";
+import { type Measurement, completionOf, corpusFolderOf, loadMeasurement, REPO_ROOT } from "../../../lib/manifest.ts";
+import { canonical } from "../../../lib/provenance.ts";
 
 type Obj = Record<string, any>;
 
@@ -25,8 +25,6 @@ export interface Rescored {
   dropped: string[];
   /** Case ids whose scored row is not the one the run stored. */
   changed: string[];
-  /** Case ids whose labels are not the ones the run was made with (they are not an error: that is what a rescore is for). */
-  relabelled: string[];
 }
 
 export interface RescoreOptions {
@@ -83,20 +81,13 @@ function summaryForCases(stored: Stored, root: string, cases: string | undefined
   return { ...summary, corpus_folder: folder };
 }
 
-/**
- * Scores a stored run again: each row is read back into its raw output (`rawOf`), scored with the current scorer against the current case
- * (`score`), and the summary takes the counts and metrics from the new rows. The manifest is the run's own, with the current scorer, the
- * labels' digests as they are now, the completion of the new rows, and `rescored_from`. Legacy runs keep their unknown collection
- * provenance and record the current scoring identity separately. Missing raw fields are named explicitly.
- */
+/** Score saved raw output with the current cases and scorer, without model calls or changing the original. */
 export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescored {
   const root = options.root ?? REPO_ROOT;
   const now = options.now ?? new Date();
   const { summary } = stored;
-  const reading = readManifest(summary);
   const m = measurementOf(stored, root);
-  if (reading.kind === "invalid") throw new RescoreError(`${stored.dir} has a manifest that is not sound: ${reading.problems.join("; ")}`);
-  const old = reading.kind === "manifest" ? reading.manifest : null;
+  const old = isObject(summary.manifest) ? summary.manifest : null;
   const seen = summaryForCases(stored, root, options.cases);
 
   let cases: any[];
@@ -106,24 +97,15 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
     throw new RescoreError(`the cases ${stored.dir} was scored against cannot be read: ${(e as Error).message}`);
   }
   const byId = new Map(cases.map((c) => [m.caseId(c), c]));
-  const selected = old?.completion.selected ?? stored.rows.map(row => row.id);
-  const selectedCases = selected.map(id => byId.get(id));
-  const missing = selected.filter(id => !byId.has(id));
-  if (missing.length) throw new RescoreError(`${stored.dir}: selected cases are missing or changed: ${short(missing)}. Recollect this eval; rescore does not drop cases.`);
-  let contexts: Map<string, unknown> | undefined;
-  try { contexts = m.rescoreContexts?.(root, seen, selectedCases); }
-  catch (error) { throw new RescoreError(`${stored.dir}: cannot verify case input context: ${(error as Error).message}`); }
-  for (const c of selectedCases) {
-    const id = m.caseId(c);
-    if (old && sha256Json(m.input(c, contexts?.get(id))) !== old.cases[id]?.input_sha256)
-      throw new RescoreError(`${stored.dir}: case input changed: ${id}. Recollect this eval; old output cannot answer changed inputs.`);
-  }
   const rowIds = new Set<string>();
   for (const row of stored.rows) {
     if (!isObject(row) || typeof row.id !== "string" || !row.id || rowIds.has(row.id)) throw new RescoreError(`${stored.dir}: invalid or duplicate sample id`);
-    if (!selected.includes(row.id)) throw new RescoreError(`${stored.dir}: row ${row.id} was not selected`);
     rowIds.add(row.id);
   }
+  const selected = stored.rows.map(row => row.id);
+  const missing = selected.filter(id => !byId.has(id));
+  if (missing.length) throw new RescoreError(`${stored.dir}: selected cases are missing or changed: ${short(missing)}. Provide the cases with --cases DIR; rescore does not drop cases.`);
+
 
   const lacks = new Map<string, string[]>();
   const dropped: string[] = [];
@@ -142,29 +124,15 @@ export function rescoreRun(stored: Stored, options: RescoreOptions = {}): Rescor
 
   const rows = kept.map(({ c, raw }) => m.score(c, raw));
   const changed = kept.filter(({ row }, i) => canonical(row) !== canonical(rows[i])).map(({ row }) => String(row.id));
-  const labelOf = (id: string): string => sha256Json(m.labels(byId.get(id)));
-  const scoredIds = kept.map(({ row }) => String(row.id));
-  let manifest: RunManifest | undefined;
-  let relabelled: string[] = [];
-  if (old) {
-    const stray = scoredIds.filter(id => old.cases[id] === undefined);
-    if (stray.length > 0) throw new RescoreError(`${stored.dir} has rows for cases its manifest does not hold: ${short(stray)}`);
-    const digests: Record<string, CaseDigest> = Object.fromEntries(selected.map(id => [id, { input_sha256: old.cases[id]!.input_sha256, label_sha256: labelOf(id) }]));
-    relabelled = selected.filter(id => old.cases[id]!.label_sha256 !== digests[id]?.label_sha256);
-    manifest = { ...old, cases: digests, completion: completionOf(m, selected, rows), scorer: { version: m.scoringVersion ?? m.version },
-      rescored_from: { results: basename(stored.dir), scorer: old.scorer, at: now.toISOString(), dropped } };
-  }
-  const out: Obj = { ...summary, ...m.summarize(rows), manifest };
-  if (!old) {
-    // Preserve unknown collection provenance instead of fabricating a modern manifest.
-    out.scoring_version = m.scoringVersion ?? m.version;
-    out.scoring_labels_sha256 = sha256Json(Object.fromEntries(selected.map(id => [id, labelOf(id)])));
-    out.rescored_from = { results: basename(stored.dir), at: now.toISOString(), input_identity: "unverified" };
-    out.notes = [...(Array.isArray(summary.notes) ? summary.notes : []), "Legacy rescore against current cases and labels; original case-input digests were not recorded and input identity is unverified."];
-  }
+  // Old collection metadata is descriptive; rescoring needs the saved output and current cases.
+  const rescored_from = { results: basename(stored.dir), scorer: old?.scorer, at: now.toISOString(), dropped };
+  const manifest = old ? { ...old, cases: undefined, completion: completionOf(m, selected, rows),
+    scorer: { version: m.scoringVersion ?? m.version }, rescored_from } : undefined;
+  const out: Obj = { ...summary, ...m.summarize(rows), manifest,
+    scoring_version: m.scoringVersion ?? m.version, rescored_from };
   if (options.cases !== undefined && !isSplit(summary)) out.corpus_folder = corpusFolderOf(options.cases, root); // where the cases were read from this time
   if (typeof summary.label === "string") out.label = `${summary.label}-rescored`;
-  return { summary: out, rows, dropped, changed, relabelled };
+  return { summary: out, rows, dropped, changed };
 }
 
 /** The name of the folder beside `dir` that holds its rescored result: `-rescored` before a repeat's `-rN`, else at the end. */

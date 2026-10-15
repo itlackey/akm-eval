@@ -1,9 +1,8 @@
 // What ties a run to its inputs, for the summary.json every eval writes: digests of the files it read, the config it ran
-// with (secrets redacted), the model it called and the host of its endpoint, and the code it ran. Pure helpers: they read the files they are given, nothing else.
+// with (secrets redacted), the model it called and the host of its endpoint.
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
 
 const sha256 = (data: string | Uint8Array): string => createHash("sha256").update(data).digest("hex");
 
@@ -34,45 +33,6 @@ export function canonical(x: unknown): string {
 
 /** The digest of any JSON value: sha256 of its canonical text. */
 export const sha256Json = (x: unknown): string => sha256(canonical(x));
-
-/** The repository root, one folder above lib/. */
-const REPO_ROOT = resolve(import.meta.dir, "..");
-
-/** A file that tests the code and is not the code: `*.test.ts`, `test_*.py`, and `fakes.ts` and `golden.ts`, the test doubles and the golden-file check that only tests import. */
-const testFile = (name: string): boolean => /\.test\.ts$/.test(name) || /^test_.*\.py$/.test(name) || name === "fakes.ts" || name === "golden.ts";
-
-/** The files in `dir` and the folders below it whose name ends in one of `extensions`, without tests, fixtures, dependencies and caches. */
-function codeFiles(dir: string, extensions: string[]): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name.startsWith(".") || ["node_modules", "__pycache__", "fixtures"].includes(entry.name) ? [] : codeFiles(path, extensions);
-    return entry.isFile() && !testFile(entry.name) && extensions.some((ext) => entry.name.endsWith(ext)) ? [path] : [];
-  });
-}
-
-/**
- * The digest of the code a run was made with, for the `harness_sha256` of a summary.json: one sha256 over a manifest of the eval's own
- * source files (every `.ts` and `.py` in `evalSrcDir`, at any depth) and of the shared code it runs on (every `.ts` and `.py` file under
- * lib/, such as the akm arm of the Harbor evals in lib/harbor/akm_opencode.py, and lib/env.sh). The manifest has the path of each file from the repository root, with the digest of its content, in the order of the
- * paths. It leaves out the tests (`*.test.ts`, `test_*.py`, `fakes.ts`), the fixtures, the dependencies and the READMEs, since none of
- * them changes what a run measures. The digest does not depend on where the checkout is, and it covers edits that are not committed,
- * which `git_commit` does not.
- *
- * `also` names the src folders of other evals whose code this one imports (nightly scores with the checks of consolidate, distill and
- * reflect), counted the same way. `root` is the checkout the code is in: this one, but for tests.
- */
-export function harnessSha256(evalSrcDir: string, options: { also?: string[]; root?: string } = {}): string {
-  const base = resolve(options.root ?? REPO_ROOT);
-  const folders = [evalSrcDir, ...(options.also ?? [])].map((dir) => resolve(dir));
-  for (const dir of folders) {
-    const inside = relative(base, dir);
-    if (inside === "" || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) throw new Error(`${dir} is not inside the repository at ${base}`);
-  }
-  const env = join(base, "lib", "env.sh");
-  const paths = new Set([...folders.flatMap((dir) => codeFiles(dir, [".ts", ".py"])), ...codeFiles(join(base, "lib"), [".ts", ".py"]), ...(existsSync(env) ? [env] : [])]);
-  return manifestDigest([...paths].map((path) => [relative(base, path).split(sep).join("/"), sha256File(path)]));
-}
 
 const REDACTED = "<redacted>";
 

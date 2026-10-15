@@ -8,8 +8,8 @@ const USAGE = `Usage: scripts/compare/run A B [--json FILE] [--md FILE]
 
 Show stored quality, performance, usage and settings for two saved runs.
 A and B are results folders or their summary.json files. Legacy, stopped and
-mismatched runs remain readable; warnings identify uncertainty and unsupported
-deltas stay blank. Delta is B minus A. Runs no models, never rescores, and never
+mismatched runs remain readable. Numeric deltas are B minus A; missing values
+stay blank. Runs no models, never rescores, and never
 changes the saved results.
 
   --json FILE  also save the report as JSON

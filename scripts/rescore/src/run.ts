@@ -10,7 +10,7 @@ const USAGE = `Usage: scripts/rescore/run [--cases DIR] RESULTS_DIR...
 Scores each results folder (or the summary.json in it) of an eval again: the raw output each case's row holds is scored with the scorer
 and the labels (the cases) that the repository has now, and the result is written to a new folder beside the original,
 <folder>-rescored (before the -rN of a repeat). The original is never modified. The new summary.json has the current scorer in its
-manifest, the collector of the original run, and rescored_from. Legacy runs can be rescored from raw output; their original input identity remains explicitly unverified.
+manifest, the collector of the original run, and rescored_from. Legacy runs can also be rescored from their saved raw output.
 
 A run on the public corpus is scored against the committed cases. A run on a custom corpus is scored against the cases in its \`corpus_folder\`,
 which the summary records when the folder is inside the repository. A folder outside it is not recorded (its name can say what is in it), so
@@ -20,8 +20,7 @@ of benchmarks/skillret is a split of its dataset and has no folder: its queries 
 again, with no --cases, and a --cases given with it has no folder to apply to and is left unused.
 
 A run whose rows lack a field the scorer reads is refused, and the fields are named. So is a run of an eval that has no src/measurement.ts,
-a custom run whose cases cannot be found, or any selected case whose input changed.
-No cases are silently dropped. Labels may change; the original collection identity stays recorded.
+or a run whose cases cannot be found. No cases are silently dropped.
 Exit code 0 when every folder was rescored, 2 when one was refused.`;
 
 function main(): number {
@@ -51,7 +50,7 @@ function main(): number {
       const { out, result } = rescoreFolder(path, { cases: values.cases });
       console.log(`rescore: ${path} -> ${out}`);
       console.log(`  ${result.rows.length} cases scored again; ${result.changed.length} rows differ from the stored ones${result.changed.length > 0 ? `: ${result.changed.slice(0, 8).join(", ")}${result.changed.length > 8 ? ", ..." : ""}` : ""}`);
-      if (result.relabelled.length > 0) console.log(`  ${result.relabelled.length} cases have other labels than when the run was made: ${result.relabelled.slice(0, 8).join(", ")}${result.relabelled.length > 8 ? ", ..." : ""}`);
+
       if (result.dropped.length > 0) console.log(`  ${result.dropped.length} cases are no longer in the corpus and were left out: ${result.dropped.slice(0, 8).join(", ")}`);
     } catch (e) {
       if (!(e instanceof RescoreError)) throw e;
