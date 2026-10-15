@@ -124,6 +124,7 @@ All six public fictional-tool tasks ran once per arm, giving 12 scored trials pe
 | Scored trials / unscored trials | 12 / 0 | 12 / 0 |
 | Control / AKM agent timeouts | 0 / 0 | 1 / 0 |
 | Mean trial minutes, control / AKM | 1.2 / 2.7 | 3.5 / 3.9 |
+| Recorded runner elapsed seconds | 413.216 | 704.895 |
 
 Beta's control on `drillbit--fix-runbook-train` reached the ten-minute agent budget. The verifier still ran and returned 0, so the timeout remains a scored task failure. Its completion record says 11 completed and one failed; all 12 have scored rewards. There were no API error events or empty agent trajectories in either saved collection. Neither collection had an AKM-arm timeout.
 
@@ -162,3 +163,9 @@ USER eval
 Use the documented Docker mounted-working-folder command with the corresponding image. Retrieval command: `evals/retrieval/run --semantic on --label LABEL` with `--network none`. Process commands explicitly select `--model fast-35b-direct --semantic`; nightly and consolidate also select `--embedder real`. The local model alias is configured in a read-only mounted `models.json`; credentials remain in the local environment. Saved engine metadata includes the endpoint host and port.
 
 Agent A/B uses the documented Docker socket and same-absolute-path mounts, `--model fast/qwen3.6-35b-a3b --semantic --akm akm-cli@VERSION --limit 6`, and the read-only `models.json` / `.env` mounts. Its model entry uses `"limits": {"context": 32768, "output": 4096}` so OpenCode knows the server budget. The existing gateway handles its Responses traffic; ordinary process evals use direct chat completions.
+
+## Validation and remaining coverage
+
+The 33 new public collections contain 6,178 saved rows. JSON, case counts, duplicate IDs, credential redaction and local report links were checked. The ledger builds with all 35 existing plus 33 new rows and excludes none. Saved-result comparison succeeded for the eight process pairs, library/books retrieval, native pool, Reflect context, Luna pilots, reused SkillRet and Agent A/B. The affected ledger suites passed 25 tests. The ledger's generic partial-test warning was removed because a requested limit can still include every task; recorded coverage and settings remain visible. Collection and scoring code are unchanged. Repository, pinned-smoke and ledger/browser checks run in [PR #112](https://github.com/itlackey/akm-eval/pull/112).
+
+The current-build larger LongMemEval and Terminal-Bench comparisons remain held. The current Luna evidence is seven questions per build; Reflect query-context evidence is 12 cases, and Agent A/B uses one attempt per task. These bounds, the scored control timeout, shared-server timing conditions and unreported billing remain limits on interpretation.
