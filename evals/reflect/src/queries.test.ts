@@ -46,12 +46,12 @@ function rewrite(): string {
 const privateCases = (): Case[] => parseCases(readFileSync(join(rewrite(), "assets", "cases.jsonl"), "utf8"));
 
 describe("retrievalSearches", () => {
-  test("the public corpus gets the labelled queries of 75 of its 80 notes, as the retrieval eval labels them", () => {
+  test("the public corpus gets the labelled queries of 77 of its 80 notes, as the retrieval eval labels them", () => {
     const searches = retrievalSearches(publicCorpus, REPO);
     const withQueries = PUBLIC.filter((c) => searches.has(refOf(c.path)));
     expect(PUBLIC).toHaveLength(80);
-    expect(withQueries).toHaveLength(75); // q018 now labels three previously ungraded notes
-    expect(PUBLIC.filter((c) => !searches.has(refOf(c.path))).map((c) => c.id).sort()).toEqual(["body-defect-10", "historical-02", "retrieval-miss-06", "unsupported-ask-08", "unsupported-ask-09"]);
+    expect(withQueries).toHaveLength(77); // expanded retrieval judgments cover two more planted notes
+    expect(PUBLIC.filter((c) => !searches.has(refOf(c.path))).map((c) => c.id).sort()).toEqual(["body-defect-10", "historical-02", "retrieval-miss-06"]);
     expect(searches.get("skills/akm-migrate")).toEqual(["upgrade akm-cli across several 0.9 releases safely"]);
     for (const queries of searches.values()) expect(queries.length).toBeLessThanOrEqual(5);
   });
@@ -62,7 +62,7 @@ describe("retrievalSearches", () => {
     const pub = retrievalSearches(publicCorpus, REPO);
     const ids = (cases: Case[], s: Map<string, string[]>) => cases.filter((c) => s.has(refOf(c.path))).map((c) => c.id);
     expect(ids(privateCases(), searches)).toEqual(ids(PUBLIC, pub));
-    expect(ids(privateCases(), searches)).toHaveLength(75);
+    expect(ids(privateCases(), searches)).toHaveLength(77);
     // the notes are renamed (akm becomes another word, and so does a tool name in a path), and so are the queries
     const was = PUBLIC.find((c) => c.id === "historical-01") as Case;
     const now = privateCases().find((c) => c.id === "historical-01") as Case;

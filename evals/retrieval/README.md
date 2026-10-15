@@ -67,31 +67,31 @@ evals/retrieval/label --from evals/retrieval/results/<UTC date>-<label>-library
 evals/retrieval/label --cases ~/notes/retrieval
 ```
 
-`label` pools the top 10 of `akm search`, `akm curate` and a plain BM25 for each task query, with the assets the author expected, asks a judge model to grade each unjudged pair 0 to 3, and appends the grade to `assets/qrels.jsonl` with the judge, a digest of the prompt, the date and a digest of the asset. Stop and rerun it at will; a pair whose asset changed is graded again. `--from RESULTS_DIR` pools a run's results instead, semantic columns included. `--cases DIR` grades your own set (no BM25), says which judge gets your notes and asks first. The judge is `--judge-model ID` or `JUDGE_MODEL`, at `JUDGE_BASE_URL`. Use one judge for a set: `label` and `run` warn when the qrels mix judges. The library's existing grades are stamped judge `legacy`.
+`label` pools the top 10 of `akm search`, `akm curate` and a plain BM25 for each task query, with the assets the author expected, asks a judge model to grade each unjudged pair 0 to 3, and appends the grade to `assets/qrels.jsonl` with the judge, a digest of the prompt, the date and a digest of the asset. Stop and rerun it at will; a pair whose asset changed is graded again. `--from RESULTS_DIR` pools a run's results instead, semantic columns included. `--cases DIR` grades your own set (no BM25), says which judge gets your notes and asks first. The judge is `--judge-model ID` or `JUDGE_MODEL`, at `JUDGE_BASE_URL`. Use one judge for a set: `label` and `run` warn when the qrels mix judges. The library's original grades are stamped judge `legacy`. The [2026-10-15 expansion](assets/judgment-expansion-20261015.md) fills the missing top-ten task-query pairs from saved keyword/semantic runs in both public collections; it uses explicit Codex review, preserves existing judgments, and does not run the collector or a judge endpoint.
 
 ## Domain mix
 
-The public library has 251 assets and 1,502 graded pairs, by top-level group:
+The public library has 251 assets and 1,876 graded pairs, by top-level group:
 
 | Group | Assets | Graded rows | Share of rows | Relevant rows |
 |---|---:|---:|---:|---:|
-| ai-skills | 87 | 478 | 31.8% | 145 |
-| print | 45 | 410 | 27.3% | 159 |
-| coding | 60 | 196 | 13.0% | 67 |
-| e2e-testing | 13 | 142 | 9.5% | 43 |
-| administrative | 20 | 106 | 7.1% | 42 |
-| dev-workflow | 5 | 47 | 3.1% | 8 |
-| reports | 5 | 38 | 2.5% | 13 |
-| gws-setup | 6 | 30 | 2.0% | 7 |
-| notify | 3 | 16 | 1.1% | 6 |
-| writing | 3 | 13 | 0.9% | 6 |
-| akm-migrate | 1 | 10 | 0.7% | 1 |
-| development | 1 | 8 | 0.5% | 2 |
-| cmyk-image-converter | 1 | 6 | 0.4% | 3 |
-| other | 1 | 2 | 0.1% | 2 |
-| all | 251 | 1502 | 100.0% | 504 |
+| ai-skills | 87 | 631 | 33.6% | 181 |
+| print | 45 | 494 | 26.3% | 180 |
+| coding | 60 | 271 | 14.4% | 89 |
+| e2e-testing | 13 | 159 | 8.5% | 44 |
+| administrative | 20 | 131 | 7.0% | 45 |
+| dev-workflow | 5 | 53 | 2.8% | 9 |
+| reports | 5 | 43 | 2.3% | 14 |
+| gws-setup | 6 | 33 | 1.8% | 7 |
+| notify | 3 | 16 | 0.9% | 6 |
+| writing | 3 | 16 | 0.9% | 7 |
+| akm-migrate | 1 | 10 | 0.5% | 1 |
+| cmyk-image-converter | 1 | 8 | 0.4% | 4 |
+| development | 1 | 8 | 0.4% | 2 |
+| other | 1 | 3 | 0.2% | 2 |
+| all | 251 | 1876 | 100.0% | 591 |
 
-`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 59% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
+`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 60% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
 
 ## Licence
 

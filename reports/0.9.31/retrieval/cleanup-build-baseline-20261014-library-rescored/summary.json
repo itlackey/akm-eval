@@ -1,0 +1,313 @@
+{
+  "eval": "retrieval",
+  "corpus": "public",
+  "corpus_folder": null,
+  "collection": "library",
+  "label": "cleanup-build-baseline-20261014-rescored",
+  "date": "2026-10-14T22:45:05.544Z",
+  "git_commit": "763b9d4f56a524ecb533cd1def46a79b3bf4cf94",
+  "harness_sha256": "897f342ecc05145ebe054cf4ea064f6d1279b4572b2cb2aad4ce27ca98a8c986",
+  "akm_version": "0.9.31",
+  "akm_bin": "bun /opt/akm-cli/node_modules/akm-cli/src/cli.ts",
+  "akm_build": "85ad76b",
+  "akm_build_fingerprint": null,
+  "search_mode": {
+    "keyword": "keyword",
+    "semantic": "semantic"
+  },
+  "semantic_model": "Xenova/bge-small-en-v1.5",
+  "semantic_index": "cold",
+  "semantic_index_built_by": {
+    "version": "0.9.31",
+    "akm_bin": "bun /opt/akm-cli/node_modules/akm-cli/src/cli.ts",
+    "akm_build": "85ad76b",
+    "builtAt": "2026-10-14T22:44:40.174Z"
+  },
+  "semantic_flag": "on",
+  "depth": 10,
+  "relevant_from_grade": 2,
+  "limit": 12,
+  "n_assets": 251,
+  "index_seconds": {
+    "keyword": 0.6,
+    "semantic": 17.2
+  },
+  "status": "complete",
+  "aborted_reason": null,
+  "n_queries": 12,
+  "n_scored": 8,
+  "n_errored": 0,
+  "errored": {
+    "search": 0,
+    "curate": 0,
+    "semantic_search": 0,
+    "semantic_curate": 0
+  },
+  "timeouts": 0,
+  "metrics": {
+    "search": {
+      "n": 8,
+      "ndcg_10": 0.6733,
+      "ndcg_10_condensed": 0.6733,
+      "p_5": 0.45,
+      "success_5": 1,
+      "mrr": 0.9167,
+      "recall_10": 0.6174,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "curate": {
+      "n": 8,
+      "ndcg_10": 0.6733,
+      "ndcg_10_condensed": 0.6733,
+      "p_5": 0.45,
+      "success_5": 1,
+      "mrr": 0.9167,
+      "recall_10": 0.6174,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_search": {
+      "n": 8,
+      "ndcg_10": 0.8663,
+      "ndcg_10_condensed": 0.8663,
+      "p_5": 0.525,
+      "success_5": 1,
+      "mrr": 1,
+      "recall_10": 0.8639,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    },
+    "semantic_curate": {
+      "n": 8,
+      "ndcg_10": 0.8663,
+      "ndcg_10_condensed": 0.8663,
+      "p_5": 0.525,
+      "success_5": 1,
+      "mrr": 1,
+      "recall_10": 0.8639,
+      "judged_10": 1,
+      "banned_above": null,
+      "banned_above_first": null
+    }
+  },
+  "abstention": {
+    "non_task": {
+      "search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      }
+    },
+    "no_answer": {
+      "search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_search": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      },
+      "semantic_curate": {
+        "n": 2,
+        "abstained": 0,
+        "rate": 0
+      }
+    }
+  },
+  "config": {
+    "keyword": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "off",
+      "registries": []
+    },
+    "semantic": {
+      "configVersion": "0.9.0",
+      "semanticSearchMode": "auto",
+      "registries": [],
+      "embedding": {
+        "localModel": "Xenova/bge-small-en-v1.5",
+        "queryTimeoutMs": 600000
+      }
+    }
+  },
+  "engine": {
+    "engine": null,
+    "model": null,
+    "endpoint": null,
+    "temperature": null,
+    "enableThinking": null,
+    "timeoutMs": null,
+    "engines": {}
+  },
+  "assets_sha256": "286a47db65cd339f7c4eafe6689cc3740a1e115d64c59633a9da844ac011c060",
+  "assets": {
+    "library_sha256": "8813ba794a3d327c4d58927ef75edf8c080e8b5814c8e523e620774b5980a227",
+    "bundles_sha256": null,
+    "queries_sha256": "67226cb018df92850e89992e14a9bafe478381393f78282159a50198e9b1a97e",
+    "qrels_sha256": "5e6ebee0154605a16e834a30f4222dde7f211f155400392196bcfd85bd312793"
+  },
+  "seed": null,
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "retrieval",
+    "corpus": "public",
+    "collection": "library",
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.2"
+    },
+    "scorer": {
+      "version": "0.3"
+    },
+    "cases": {
+      "q001": {
+        "input_sha256": "f0b73a59f83108d3192a31b4cd05e322641eb8c0e74daf1874240f9143958ff4",
+        "label_sha256": "78d2c3a6e53865ebb0969d452fd5dc4ce3306bc90aa7265c1a2d058e02fa30c8"
+      },
+      "q002": {
+        "input_sha256": "84dfaae53601e32c4b22e68d5bb697073bbffe72ef268197a6b5fa746d0987c4",
+        "label_sha256": "556466aea8559895f2ac799c39ef14beb2c8b74f51f927284cfae530a0562799"
+      },
+      "q003": {
+        "input_sha256": "00f9db0fcc0dc573ff230517185c7f5155268c0f9f67a0109ddfc1b9409d8f57",
+        "label_sha256": "e814420bf47c503c8ca0cd3b9dc26ea20802935fbc73aecee68d678e78f30092"
+      },
+      "q004": {
+        "input_sha256": "a359ae85fda686f01ae78a0dcfa862ce20fe69681702d5c205e4c0fd7a86b349",
+        "label_sha256": "5dbab32317e8110565f63f6395fb13b2ec1d53f5b5e4065e9a83637dc19f2975"
+      },
+      "q005": {
+        "input_sha256": "ecbae3c4ec347be35862ec5ec7e68e7180b194c58acf728532f13e0c12bc664f",
+        "label_sha256": "e7d4473b56f98471a9818d56eaf9ecc0cf173361d77e86557f7c8d59c6579b77"
+      },
+      "q006": {
+        "input_sha256": "44b2b9acb3642f6bf576f298ca7c131961afeb8630a12e1146b10ba300a0afab",
+        "label_sha256": "635c425ae9665fcb3a46e11973d3a150c5a3bc5dc7575481ed1270a73d9eec57"
+      },
+      "q007": {
+        "input_sha256": "48a338f80e47f57290be7040e4e9852f7696cf6ff7f438725a7e8f20e4e94caa",
+        "label_sha256": "1552583f9e1801f4c767305378dc522297f489274da38c311c2fab99faec0019"
+      },
+      "q008": {
+        "input_sha256": "f614053cfef33f91c429ba92761270da824018aa4493f9da28e32529e0e8b241",
+        "label_sha256": "01755f7a3bc9a358c66852eb09c46b317bc64db9a5531cc56f9c05f02d4076f5"
+      },
+      "q009": {
+        "input_sha256": "0b27cd450c2bbaba87eec065c710a7bcc28beefb3b51e2c6b42259e5aa0938b6",
+        "label_sha256": "dcabbc6945d7ca237e21470395a93ba848b6e580001d6bea05a329df18ef7315"
+      },
+      "q010": {
+        "input_sha256": "5eb35a57f3726180086fa407b8a4d855a798879a663d78a133e0e9926da78d47",
+        "label_sha256": "8898d179d6955b1493cbdf302a647b218420ca2695442ded3d862582ac30a2c4"
+      },
+      "n01": {
+        "input_sha256": "b54a1f050a0be7f71300ec89e2d2b37c6e1dd355f2f2561164460f400db36800",
+        "label_sha256": "4066c419f3567187439f8011391514d8d0efc48f98a64bb7dabc4d2c37b87402"
+      },
+      "n02": {
+        "input_sha256": "fe47e38c14849978c77ee480fccd37f71be521f14139a1a85e3b8384625ee4c9",
+        "label_sha256": "3e6998597f8273df3ab37a21eb28f4fde9b189f74df2497ca6d15f4088d69815"
+      }
+    },
+    "akm": {
+      "version": "0.9.31",
+      "bin": "bun /opt/akm-cli/node_modules/akm-cli/src/cli.ts",
+      "build": "85ad76b",
+      "build_fingerprint": null
+    },
+    "config": {
+      "sha256": "c566a4169735f3c958e1c3d6bab06f9c5e3601d80e3c9ff6efff4895bec89e88",
+      "redacted": {
+        "keyword": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "off",
+          "registries": []
+        },
+        "semantic": {
+          "configVersion": "0.9.0",
+          "semanticSearchMode": "auto",
+          "registries": [],
+          "embedding": {
+            "localModel": "Xenova/bge-small-en-v1.5",
+            "queryTimeoutMs": 600000
+          }
+        }
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": 120000,
+      "seed": null
+    },
+    "engines": {},
+    "treatment_hints": {},
+    "completion": {
+      "selected": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "n01",
+        "n02"
+      ],
+      "scored": [
+        "q001",
+        "q002",
+        "q003",
+        "q004",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009",
+        "q010",
+        "n01",
+        "n02"
+      ],
+      "errored": []
+    },
+    "rescored_from": {
+      "results": "cleanup-build-baseline-20261014-library",
+      "scorer": {
+        "version": "0.2"
+      },
+      "at": "2026-10-15T00:35:10.745Z",
+      "dropped": []
+    }
+  },
+  "wall_seconds": 43.01
+}
