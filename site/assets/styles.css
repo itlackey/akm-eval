@@ -148,3 +148,31 @@ footer p { flex: 1; color: var(--text-dim); margin: 0; }
   #grid .tabulator-page { padding-inline: 5px; margin-inline: 1px; }
   .table-help { padding-inline: .75rem; }
 }
+
+/* Small touch screens share the grid's filtered, sorted and paginated rows. */
+.touch-sort { display: flex; align-items: end; gap: .5rem; padding: .75rem; }
+.touch-sort label { flex: 1; }
+#touch-cards { display: grid; gap: .75rem; padding: 0 .75rem .75rem; }
+.run-card { padding: 1rem; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-card); min-width: 0; overflow-wrap: anywhere; }
+.run-card h2 { margin: 0; font-size: 16px; }
+.run-identity { margin: .25rem 0 1rem; color: var(--primary); font: 12px var(--font-mono); }
+.run-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem 1rem; margin: 0; }
+.run-card dt { color: var(--text-dim); font-size: 12px; }
+.run-card dd { margin: .2rem 0 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.run-card dl > div:has(a) { grid-column: 1 / -1; }
+.run-reports { display: flex; gap: 1rem; margin-top: .75rem; }
+.run-reports a { display: inline-flex; align-items: center; min-height: 44px; }
+.touch-layout #grid .tabulator-paginator { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; white-space: normal; }
+.touch-layout #grid .tabulator-pages { display: inline-flex; }
+.touch-layout #grid { height: auto !important; max-height: none !important; }
+.touch-layout #grid .tabulator-header, .touch-layout #grid .tabulator-tableholder, .touch-layout .table-help, .touch-layout .view-options > .check-label { display: none; }
+@media (any-pointer: coarse) {
+  input, select { font-size: 16px; }
+  .menu-heading button { min-height: 44px; min-width: 44px; }
+  .touch-layout .view-options > label:first-child { width: 170px; }
+  input, select, button, .version-filter summary { min-height: 44px; }
+  .filter-chip { white-space: normal; text-align: left; }
+  .check-label, #column-list label, #version-options label { min-height: 44px; }
+  #grid .tabulator-page, #grid .tabulator-page-size { min-height: 44px; }
+  #grid .tabulator-page { min-width: 44px; }
+}

@@ -36,12 +36,14 @@ measures and individual test metrics. No row selection is needed.
 
 - Use **Columns** to search, show or hide any field. Drag headings to reorder
   columns and column edges to resize them. Model and test stay fixed on wide
-  screens; mobile allows the entire grid to scroll.
+  screens. On touch screens up to 900px wide, runs appear as stacked cards
+  with the selected fields, full run labels, a sort control and the same
+  pagination. Scrolling the page reaches every field without sideways swiping.
 - Click headings to sort; Shift-click combines sort keys. Numeric sorting uses
   numbers, with missing values last in either direction. The current sort is
   stated above the table.
-- Model, test and scope filters are always available. **Filters** opens
-  collection, versions, search methods, strategy and inclusive date bounds,
+- Model, test, scope and multi-select AKM version filters are always available.
+  **Filters** opens collection, eval versions, search methods, strategy and inclusive date bounds,
   plus conditions on any column. Conditions combine with AND. Filter chips
   can be removed individually; **Reset** clears all filters.
 - Enable **Column filters** to filter directly in headings. Numeric inputs
@@ -120,7 +122,7 @@ The browser suite starts an isolated local static server, checks the actual
 published dataset through UI interactions, and saves screenshots under
 `.browser-results/`. It covers the three question workflows, numeric/missing
 filters, sorting, resizing, column controls, pagination, exports and mobile
-scrolling. Unit tests cover projection, rounding boundaries and unequal paired
+swipe scrolling, card sorting and phone/tablet layouts. Unit tests cover projection, rounding boundaries and unequal paired
 sample sizes. GitHub Pages CI runs both suites before deployment.
 
 Serve `.site-output/` with a static server. Relative paths support GitHub Pages'

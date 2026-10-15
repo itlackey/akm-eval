@@ -77,6 +77,13 @@
       </div>
       <div class="grid-status"><p id="count" role="status" aria-live="polite">Loading…</p><p id="sort-status" aria-live="polite"></p></div>
       <p id="view-context" class="view-context" aria-live="polite"></p>
+      <section id="touch-results" aria-label="Benchmark runs" hidden>
+        <div class="touch-sort">
+          <label>Sort by<select id="touch-sort"></select></label>
+          <button id="touch-direction" type="button">Descending ↓</button>
+        </div>
+        <div id="touch-cards"></div>
+      </section>
       <div id="grid" class="hide-header-filters" aria-label="Sortable benchmark results"></div>
       <p class="table-help">Click headings to sort · Shift-click to sort several columns · Drag column edges to resize · Drag headings to reorder</p>
       <noscript><p>Enable JavaScript to explore the ledger, or <a href="./data.json">download the results</a>.</p></noscript>
