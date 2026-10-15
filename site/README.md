@@ -42,6 +42,13 @@ measures and individual test metrics. No row selection is needed.
 - Click headings to sort; Shift-click combines sort keys. Numeric sorting uses
   numbers, with missing values last in either direction. The current sort is
   stated above the table.
+- **Latest only** keeps the newest matching result per AKM version, test,
+  model, collection, mode, search method, embedding model and strategy. Other
+  filters, including column filters, apply first. Clear it to see older runs.
+- **Full suite** includes only completed full collections with all selected
+  cases scored and no recorded errors. **Cases scored / total** shows overall
+  coverage; **Metric cases** is the subset used for the displayed quality score
+  (for example, 19 eligible clusters out of a completed 47-cluster pool).
 - Model, test, scope and multi-select AKM version filters are always available.
   **Filters** opens collection, eval versions, search methods, strategy and inclusive date bounds,
   plus conditions on any column. Conditions combine with AND. Filter chips

@@ -70,7 +70,7 @@ describe("published eval projection", () => {
     expect(run.notes).toContain("1 judge response was undecidable.");
     expect(run.notes).toContain("1 identical answer received different grades across arms.");
     expect(JSON.stringify(samples)).toBe(original);
-    expect(presentRun(input(report({ eval: "longmemeval", judge_undecidable: 0 }), "longmem/clean", []))!.notes).toBe("");
+    expect(presentRun(input(report({ eval: "longmemeval", judge_undecidable: 0 }), "longmem/clean", []))!.notes).not.toContain("judge response");
     expect(presentRun(input(report(), "reflect/run", samples))!.notes).not.toContain("identical answer");
   });
   test("excludes private results and labels stopped public evidence explicitly", () => {
@@ -133,4 +133,27 @@ describe("independent saved runs", () => {
     expect(runs[2]!.role).toBe("Pilot");
     expect(runs.every(r => !("cohort_key" in r))).toBe(true);
   });
+});
+
+
+test("Full suite requires completed scoring of the full selection, without confusing metric subsets with run coverage", () => {
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const complete = report({ n_scored: 3, n_errored: 0, manifest: { completion: { selected: ["a", "b", "c"], scored: ["a", "b", "c"], errored: [] } } });
+  expect(presentRun(input(complete, "full", rows))!.role).toBe("Full suite");
+  expect(presentRun(input({ ...complete, status: "aborted" }, "stopped", rows))!.role).toBe("Diagnostic");
+  expect(presentRun(input({ ...complete, status: undefined }, "unknown", rows))!.role).toBe("Diagnostic");
+  expect(presentRun(input({ ...complete, n_errored: 1 }, "error", rows))!.role).toBe("Diagnostic");
+  expect(presentRun(input(complete, "missing-file-rows", rows.slice(0, 2)))!.role).toBe("Diagnostic");
+  expect(presentRun(input({ ...complete, n_cases: 80 }, "partial-selection", rows))!.role).toBe("Diagnostic");
+  expect(presentRun(input({ ...complete, limit: 3 }, "pilot", rows))!.role).toBe("Pilot");
+  const failed = { ...complete, manifest: { completion: { selected: ["a", "b", "c"], scored: ["a", "b"], errored: ["c"] } } };
+  expect(presentRun(input(failed, "unscored", rows))!).toMatchObject({ role: "Diagnostic", scored: 2 });
+  const clusters = Array.from({ length: 47 }, (_, i) => ({ id: String(i) }));
+  const pool = report({ eval: "consolidate", mode: "pool", n_cases: 1, n_clusters: 47, n_scored: 1, n_errored: 0,
+    manifest: { completion: { selected: clusters.map(row => row.id), scored: clusters.map(row => row.id), errored: [] } },
+    metrics: { recall: { value: 16 / 19, retired_safe: 16, of: 19 } } });
+  const result = presentRun(input(pool, "pool", clusters))!;
+  expect(result).toMatchObject({ role: "Full suite", recorded: 47, scored: 47 });
+  expect(result.total_cases).toBe(47);
+  expect(result.comparison.quality_cases).toBe(19);
 });

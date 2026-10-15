@@ -44,7 +44,7 @@ col("label", "Run", "text", "Run", "Published run label. Each active artifact is
 col("suite", "Test", "text", "Run", "Evaluation suite. Compare quality within the same test and collection.");
 col("collection", "Collection", "text", "Run", "Test collection, such as books or library.");
 col("date", "Collected (UTC)", "date", "Run", "Recorded collection timestamp.");
-col("role", "Scope", "text", "Run", "Full suite, pilot or diagnostic compatibility run.");
+col("role", "Scope", "text", "Run", "Full suite requires complete scoring of the full collection without missing or errored cases. Other saved runs remain pilot or diagnostic.");
 col("quality_percent", "Quality %", "number", "Quality", "The named primary metric scaled from 0–1 to 0–100. This is not an overall score across tests.", 2, "%");
 col("quality_metric", "Quality metric", "text", "Quality", "The exact metric used in Quality %. Agent and answer benchmarks use the AKM arm; search uses keyword nDCG@10.");
 col("quality_passed", "Quality passed", "number", "Quality", "Primary metric's recorded numerator. Ranking scores have no passed-case numerator.", 0);

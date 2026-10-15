@@ -30,7 +30,7 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   expect(layout.p95Right).toBeLessThan(1420);
   const order = await page.locator('.tabulator-header [tabulator-field]').evaluateAll(elements => elements.filter(element => element.offsetWidth).map(element => element.getAttribute('tabulator-field')));
   expect(order.slice(0, 3)).toEqual(['model', 'suite', 'akm_version']);
-  expect(order.indexOf('label')).toBe(18);
+  expect(order.at(-3)).toBe('label');
   const runLabels = await cells(page, 'label').allTextContents();
   expect(runLabels.every(label => label.trim())).toBe(true);
   const visibleRuns = await exportRows(page);
@@ -339,4 +339,48 @@ test('small touch screens show complete run cards with native scrolling, sorting
     await expect(page.locator('.tabulator-header')).toBeVisible();
     expect(issues).toEqual([]);
   } finally { await context.close(); }
+});
+
+
+test('Latest only follows scope, version, model, collection, search and column filters', async ({ page, request }) => {
+  const data = await request.get('./data.json').then(response => response.json());
+  const source = data.runs.find(row => row.suite === 'reflect' && row.role === 'Full suite');
+  const make = (id, version, date, score, extra = {}) => ({ ...structuredClone(source), id, label: id, akm_version: version,
+    date, collection: 'core', ...extra, comparison: { ...source.comparison, quality_percent: score } });
+  const runs = [
+    make('old', '0.9.32', '2026-10-01', 50), make('new', '0.9.32', '2026-10-03', 75),
+    make('pilot', '0.9.32', '2026-10-04', 25, { role: 'Pilot' }),
+    make('beta', '0.10.261005-beta', '2026-10-03', 90),
+    make('other-model', '0.9.32', '2026-10-02', 10, { model: 'test/other-model' }),
+    make('other-collection', '0.9.32', '2026-10-02', 30, { collection: 'other' }),
+    make('older-beta', '0.10.261003-beta', '2026-10-02', 80),
+  ];
+  await page.route('**/data.json*', route => route.fulfill({ json: { ...data, runs } }));
+  await page.goto('./'); await expect(page.locator('#count')).toHaveText('7 of 7 runs');
+  const ids = async () => (await exportRows(page)).map(row => row.id).sort();
+  await page.locator('#latest-only').check();
+  expect(await ids()).toEqual(['beta', 'older-beta', 'other-collection', 'other-model', 'pilot']);
+  await page.locator('#role').selectOption('Full suite');
+  expect(await ids()).toEqual(['beta', 'new', 'older-beta', 'other-collection', 'other-model']);
+  await page.locator('#version-summary').click();
+  await page.getByRole('checkbox', { name: '0.9.32', exact: true }).check();
+  await page.getByRole('checkbox', { name: '0.10.261005-beta', exact: true }).check();
+  await page.locator('#model').selectOption(await page.locator('#model option').filter({ hasText: 'Qwen3.6-35b-a3b' }).getAttribute('value'));
+  await page.locator('#advanced-toggle').click();
+  await page.locator('#collection').selectOption('core');
+  expect(await ids()).toEqual(['beta', 'new']);
+  await page.locator('#header-filters').check();
+  await header(page, 'quality_percent').locator('input').fill('<=60');
+  expect(await ids()).toEqual(['old']);
+  await page.locator('#active-filters button').filter({ hasText: 'Quality %' }).click();
+  await page.locator('#search').fill('old');
+  expect(await ids()).toEqual(['old']);
+  await page.locator('#search').fill('');
+  expect(await ids()).toEqual(['beta', 'new']);
+  await page.locator('#latest-only').uncheck();
+  expect(await ids()).toEqual(['beta', 'new', 'old']);
+  await page.locator('#latest-only').check();
+  await page.locator('#reset').click();
+  await expect(page.locator('#latest-only')).not.toBeChecked();
+  expect((await ids()).length).toBe(runs.length);
 });

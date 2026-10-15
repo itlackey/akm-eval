@@ -35,3 +35,17 @@ test("comparison preserves paired quality gain independently of marginal arm per
 test("unscored diagnostics do not produce a speed improvement claim", () => {
   expect(run(`comparisonRow({ scores:[], control_p50_s:96.8, akm_p50_s:137.9 }).median_time_change_percent`)).toBeNull();
 });
+
+
+test("latest results retain distinct versions, tests, models and collections with deterministic date ties", () => {
+  const result = run(`latestRuns([
+    {id:'old',akm_version:'0.9.32',suite:'reflect',model:'35b',date:'2026-10-01'},
+    {id:'new',akm_version:'0.9.32',suite:'reflect',model:'35b',date:'2026-10-02'},
+    {id:'beta',akm_version:'0.10-beta',suite:'reflect',model:'35b',date:'2026-10-01'},
+    {id:'model',akm_version:'0.9.32',suite:'reflect',model:'luna',date:'2026-10-01'},
+    {id:'test',akm_version:'0.9.32',suite:'extract',model:'35b',date:'2026-10-01'},
+    {id:'books',akm_version:'0.9.32',suite:'reflect',model:'35b',collection:'books',date:'2026-10-01'},
+    {id:'z-tie',akm_version:'0.9.32',suite:'reflect',model:'35b',date:'2026-10-02'}
+  ]).map(row=>row.id).sort()`);
+  expect(Array.from(result)).toEqual(['beta', 'books', 'model', 'new', 'test']);
+});
