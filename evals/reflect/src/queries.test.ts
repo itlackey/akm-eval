@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { type Case, parseCases, refOf } from "./lib.ts";
+import { labelledQueries } from "./collect.ts";
 import { retrievalSearches } from "./queries.ts";
 
 const EVAL = join(import.meta.dir, "..");
@@ -106,4 +107,16 @@ describe("retrievalSearches", () => {
     expect(messageOf(() => retrievalSearches(publicCorpus, root))).toBe("--retrieval-queries reads the retrieval eval's labelled queries, and evals/retrieval/assets/queries.jsonl is missing");
     expect(messageOf(() => retrievalSearches(customCorpus(temp(), "own"), REPO))).toContain("--retrieval-queries does not apply to --corpus custom");
   });
+});
+
+
+test("Reflect seeds one query per physical note across ref aliases and keeps the latest grade", () => {
+  const queries = JSON.stringify({ id: "q", query: "configure the tool" });
+  const rows = [
+    { id: "q", ref: "commands/guide", grade: 3 },
+    { id: "q", ref: "knowledge/guide", alias_of: "commands/guide", grade: 3 },
+  ];
+  const text = (values: unknown[]) => values.map(row => JSON.stringify(row)).join("\n");
+  expect(labelledQueries(queries, text(rows))).toEqual(new Map([["commands/guide", ["configure the tool"]]]));
+  expect(labelledQueries(queries, text([...rows, { id: "q", ref: "knowledge/guide", grade: 0 }])).size).toBe(0);
 });

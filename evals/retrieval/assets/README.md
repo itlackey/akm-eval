@@ -2,7 +2,7 @@ RETRIEVAL CANARY: do not train on this data. canary GUID a66457bc-c93e-4a2e-ab81
 
 # Retrieval
 
-The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 1,876 pairs of a task query and an asset. The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansion below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
+The queries and the judgments for the retrieval eval, for the public library in `corpus/library`: 111 task queries and 25 non-task inputs, and a grade from 0 to 3 for 1,876 returned-ref judgments (1,846 query/asset identities after alias normalization). The original pool had 1,521 pairs when graded; see "Changes since the grading" and the expansion below. The second collection, the books, is in `books/`: see "books/" below. A set of your own uses the same format: see "A set of your own".
 
 ## Expanded judgments — 2026-10-15 (UTC)
 
@@ -11,14 +11,17 @@ unjudged task-query/asset pairs from the union of keyword search/curate and
 semantic search/curate top-ten results in the full Docker run and both saved
 build-validation runs. No query, asset, earlier grade or banned pair changed.
 
-| Collection | Earlier pairs | Added | Current pairs | Current relevant pairs |
+| Collection | Earlier pairs | Added | Current pairs | Current relevant asset identities |
 | --- | ---: | ---: | ---: | ---: |
-| library | 1,502 | 374 | 1,876 | 591 |
+| library | 1,502 | 374 | 1,876 | 583 |
 | books | 179 | 492 | 671 | 144 |
 
 Of the library additions, 30 inherit a frozen grade of the same query/file
 under an older command ref; their stored asset digests were verified before
 transferring the grade to the knowledge ref returned by newer AKM builds.
+All 33 returned-ref variants of five verified same-file notes declare `alias_of`;
+the scorer counts each physical asset once in ideal ranking and recall, while
+raw refs stay unchanged. There are 1,846 canonical library pairs.
 The other 344 library and all 492 books additions record `codex-review` with
 the protocol digest, date and asset digest. This is model review in the
 maintenance session, not human annotation or a new Qwen judge run.
@@ -75,6 +78,7 @@ One JSON object per line, one per pair of a task query and an asset.
 | `ref` | the asset, by the ref `akm search` prints for it |
 | `grade` | 0 to 3, below |
 | `reason` | the judge's reason, in about 25 words |
+| `alias_of` | optional canonical ref of the same physical asset, verified by the label author; share one grade/ideal-ranking identity |
 | `banned` | optional, `true` on a pair of grade 0 that must never rank above a relevant asset. The library has none. See "books/" |
 | `judge` | optional, the model that graded the pair. `label` writes it |
 | `prompt_sha256` | optional, a digest of the prompt the judge was given: its version, system text, the layout of the message and the 16,000-character window |

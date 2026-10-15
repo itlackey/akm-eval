@@ -30,7 +30,7 @@ const REWRITE = join(ROOT, "lib", "rewrite", "rewrite.ts");
 
 /**
  * One file per query, one per query's expected assets and one per query's qrels, so the rewrite sees ordinary lines
- * and not JSON escapes. A qrels file holds two lines per row: the ref, then the reason. The grades stay out of the
+ * and not JSON escapes. A qrels file holds the ref, reason and optional alias target per row. The grades stay out of the
  * text: nothing in them needs a rewrite.
  */
 export function explode(queries: Query[], qrels: Qrel[], dir: string): void {
@@ -40,7 +40,7 @@ export function explode(queries: Query[], qrels: Qrel[], dir: string): void {
     if (q.expected?.length) writeFileSync(join(dir, "expected", `${q.id}.txt`), `${q.expected.join("\n")}\n`);
   }
   const byId = new Map<string, string[]>();
-  for (const r of qrels) byId.set(r.id, [...(byId.get(r.id) ?? []), r.ref, r.reason.replace(/\s+/g, " ").trim()]);
+  for (const r of qrels) byId.set(r.id, [...(byId.get(r.id) ?? []), r.ref, r.reason.replace(/\s+/g, " ").trim(), ...(r.alias_of ? [r.alias_of] : [])]);
   for (const [id, lines] of byId) writeFileSync(join(dir, "qrels", `${id}.txt`), `${lines.join("\n")}\n`);
 }
 
@@ -61,10 +61,10 @@ export function assemble(queries: Query[], qrels: Qrel[], dir: string): { querie
     })),
     qrels: qrels.map((r) => {
       const at = used.get(r.id) ?? 0;
-      used.set(r.id, at + 2);
+      used.set(r.id, at + (r.alias_of ? 3 : 2));
       const l = lines.get(r.id) as string[];
       const { asset_sha256: _publicText, ...kept } = r; // the digest is of the public asset, whose text the private one does not have
-      return { ...kept, ref: l[at], reason: l[at + 1] };
+      return { ...kept, ref: l[at], reason: l[at + 1], ...(r.alias_of ? { alias_of: l[at + 2] } : {}) };
     }),
   };
 }
@@ -73,7 +73,7 @@ export function assemble(queries: Query[], qrels: Qrel[], dir: string): { querie
 export function problems(pub: { queries: Query[]; qrels: Qrel[]; nAssets: number }, priv: { queries: Query[]; qrels: Qrel[]; refs: Set<string> }): string[] {
   const found: string[] = [];
   if (priv.refs.size !== pub.nAssets) found.push(`the private library has ${priv.refs.size} assets, the public one ${pub.nAssets}`);
-  const named = [...priv.qrels.map((r) => r.ref), ...priv.queries.flatMap((q) => q.expected ?? [])];
+  const named = [...priv.qrels.map((r) => priv.refs.has(r.ref) ? r.ref : (r.alias_of ?? r.ref)), ...priv.queries.flatMap((q) => q.expected ?? [])];
   const missing = [...new Set(named.filter((ref) => !priv.refs.has(ref)))];
   if (missing.length) found.push(`${missing.length} qrel or expected refs name no asset in the private library, such as ${missing.slice(0, 3).join(", ")}`);
   // A pair graded again has two rows in the public qrels, and keeps both: the rewrite must not make fewer pairs of them, which two assets that became one do.

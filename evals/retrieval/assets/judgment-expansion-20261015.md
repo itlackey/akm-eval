@@ -29,3 +29,8 @@ in `prompt_sha256`, and the existing `assetSha256` (front matter plus the first
 16,000 body characters) in `asset_sha256`. This distinguishes the review from
 the earlier Qwen endpoint and E6 goldens. Frozen mixed-judge labels improve
 coverage, but do not establish human agreement or exhaustive relevance.
+
+Five verified same-file ref variants declare `alias_of` on their 33 new rows.
+Grades, ideal ranking and recall count each physical asset once; returned
+refs stay verbatim in raw results. The mapping is explicit, not inferred from
+ref spelling. Rewrites carry the target through the same text mapping.

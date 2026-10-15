@@ -8,6 +8,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { aliasesOf, type Qrel } from "../../retrieval/src/lib.ts";
 import { createSandbox, engineConfig, removeSandbox, runAkmJson, writeConfig } from "../../../lib/akm/akm.ts";
 import { indexedRef, indexedRefs } from "../../../lib/akm/indexed-refs.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
@@ -79,12 +80,15 @@ export function labelledQueries(queries: string, qrels: string): Map<string, str
   const text = new Map<string, string>();
   for (const line of queries.split("\n")) if (line.trim()) text.set(JSON.parse(line).id, JSON.parse(line).query);
   const found = new Map<string, { query: string; grade: number; id: string }[]>();
-  for (const line of qrels.split("\n")) {
-    if (!line.trim()) continue;
-    const q = JSON.parse(line) as { id: string; ref: string; grade: number };
+  const rows = qrels.split("\n").filter(line => line.trim()).map(line => JSON.parse(line) as Qrel);
+  const aliases = aliasesOf(rows);
+  for (const q of rows) {
     const query = text.get(q.id);
-    if (query === undefined || q.grade < 2) continue;
-    found.set(q.ref, [...(found.get(q.ref) ?? []), { query, grade: q.grade, id: q.id }]);
+    if (query === undefined) continue;
+    const ref = aliases[q.ref] ?? q.ref;
+    const list = (found.get(ref) ?? []).filter(row => row.id !== q.id);
+    if (q.grade >= 2) list.push({ query, grade: q.grade, id: q.id });
+    if (list.length) found.set(ref, list); else found.delete(ref);
   }
   return new Map([...found].map(([ref, list]) => [ref, list.sort((a, b) => b.grade - a.grade || (a.id < b.id ? -1 : 1)).slice(0, MAX_QUERIES).map((q) => q.query)]));
 }

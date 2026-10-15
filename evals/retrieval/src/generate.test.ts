@@ -37,6 +37,16 @@ const qrels: Qrel[] = [
 ];
 
 describe("explode and assemble", () => {
+  test("rewrites a same-file alias target together with its returned ref", () => {
+    const dir = tmp();
+    const rows = [{ id: "q1", ref: "knowledge/alice-guide", alias_of: "commands/alice-guide", grade: 3, reason: "Same file." }];
+    explode(queries, rows, dir);
+    writeFileSync(join(dir, "qrels", "q1.txt"), "knowledge/new-guide\nSame file.\ncommands/new-guide\n");
+    expect(assemble(queries, rows, dir).qrels).toEqual([
+      { ...rows[0], ref: "knowledge/new-guide", alias_of: "commands/new-guide" },
+    ]);
+  });
+
   test("write one file per query and one per query's qrels, and read them back unchanged", () => {
     const dir = tmp();
     explode(queries, qrels, dir);

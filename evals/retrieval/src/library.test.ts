@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { isTask, parseQrels, parseQueries } from "./lib.ts";
+import { aliasesOf, isTask, parseQrels, parseQueries } from "./lib.ts";
 import { domainMix, filesOf, groupOf, libraryRefs, mixTable, pathsNamedBy, refOfFile } from "./library.ts";
 import { publicMix } from "./mix.ts";
 
@@ -101,6 +101,8 @@ describe("the public library", () => {
     // Keep the historical ref/count checks above, and verify these returned refs against the same physical Markdown files.
     const notes = new Set(filesOf(LIBRARY).filter((p) => p.startsWith("skills/") && p.endsWith(".md") && !p.endsWith("/SKILL.md")).map((p) => `knowledge/${p.slice(0, -3)}`));
     expect([...named].filter((ref) => !byRef.has(ref) && !notes.has(ref))).toEqual([]);
+    for (const row of qrels.filter(row => row.alias_of))
+      expect(byRef.get(row.alias_of!)).toEqual([`${row.ref.slice("knowledge/".length)}.md`]);
   });
 
   test("every task query has a row in the qrels, and no row is of a query that is not in the file", () => {
@@ -219,7 +221,9 @@ describe("the domain mix", () => {
   test("covers every asset of the library and every graded pair of the qrels", () => {
     const mix = publicMix();
     expect(mix.reduce((n, r) => n + r.assets, 0)).toBe(libraryRefs(LIBRARY).size);
-    const pairs = new Set(parseQrels(text(join(ASSETS, "qrels.jsonl"))).map((r) => `${r.id}\t${r.ref}`));
+    const qrels = parseQrels(text(join(ASSETS, "qrels.jsonl")));
+    const aliases = aliasesOf(qrels);
+    const pairs = new Set(qrels.map((r) => `${r.id}\t${aliases[r.ref] ?? r.ref}`));
     expect(mix.reduce((n, r) => n + r.rows, 0)).toBe(pairs.size);
   });
 

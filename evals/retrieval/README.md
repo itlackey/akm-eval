@@ -71,16 +71,16 @@ evals/retrieval/label --cases ~/notes/retrieval
 
 ## Domain mix
 
-The public library has 251 assets and 1,876 graded pairs, by top-level group:
+The public library has 251 assets and 1,876 judgment rows (1,846 query/asset identities after alias normalization), by top-level group:
 
 | Group | Assets | Graded rows | Share of rows | Relevant rows |
 |---|---:|---:|---:|---:|
-| ai-skills | 87 | 631 | 33.6% | 181 |
-| print | 45 | 494 | 26.3% | 180 |
-| coding | 60 | 271 | 14.4% | 89 |
-| e2e-testing | 13 | 159 | 8.5% | 44 |
-| administrative | 20 | 131 | 7.0% | 45 |
-| dev-workflow | 5 | 53 | 2.8% | 9 |
+| ai-skills | 87 | 601 | 32.6% | 173 |
+| print | 45 | 494 | 26.8% | 180 |
+| coding | 60 | 271 | 14.7% | 89 |
+| e2e-testing | 13 | 159 | 8.6% | 44 |
+| administrative | 20 | 131 | 7.1% | 45 |
+| dev-workflow | 5 | 53 | 2.9% | 9 |
 | reports | 5 | 43 | 2.3% | 14 |
 | gws-setup | 6 | 33 | 1.8% | 7 |
 | notify | 3 | 16 | 0.9% | 6 |
@@ -89,9 +89,9 @@ The public library has 251 assets and 1,876 graded pairs, by top-level group:
 | cmyk-image-converter | 1 | 8 | 0.4% | 4 |
 | development | 1 | 8 | 0.4% | 2 |
 | other | 1 | 3 | 0.2% | 2 |
-| all | 251 | 1876 | 100.0% | 591 |
+| all | 251 | 1846 | 100.0% | 583 |
 
-`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 60% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
+`bun evals/retrieval/src/mix.ts` prints it, and a test fails when this one differs. Two groups hold 59% of the rows, so a score here says how akm ranks a library of a few tool and print domains. Check a change on the books and on a set of your own before calling it general.
 
 ## Licence
 

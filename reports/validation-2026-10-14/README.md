@@ -30,7 +30,7 @@ collection wall time, which remains unknown in these artifacts.
 | Collection | Labels | Keyword nDCG@10 | Semantic nDCG@10 | Keyword judged top ten | Semantic judged top ten |
 | --- | --- | ---: | ---: | ---: | ---: |
 | library | original | 0.8030 | 0.7935 | 96.34% | 69.21% |
-| library | expanded | 0.7549 | 0.8233 | 100% | 100% |
+| library | expanded | 0.7573 | 0.8260 | 100% | 100% |
 | books | original | 0.8768 | 0.9214 | 24.27% | 21.37% |
 | books | expanded | 0.8275 | 0.9093 | 100% | 100% |
 
@@ -45,7 +45,9 @@ non-task input and on no no-answer task in the original full run.
 [Judgment protocol](../../evals/retrieval/assets/judgment-expansion-20261015.md):
 866 missing pairs added (374 library, 492 books). Thirty library rows reuse a
 verified same-file judgment under a changed ref classification; 836 are Codex
-review. Original Qwen/legacy/E6 grades and all 99 banned pairs are intact.
+review. The 33 new ref-variant rows declare `alias_of` for five verified
+same-file notes: ideal ranking and recall count each asset once, and raw refs
+remain intact. Original Qwen/legacy/E6 grades and all 99 banned pairs are intact.
 Reflect's optional `--retrieval-queries` also reads these labels: future runs
 cover 77 planted notes instead of 75, recorded as Reflect collection 0.4. The
 published standard Reflect run did not use that option and is unaffected.
