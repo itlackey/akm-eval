@@ -63,7 +63,8 @@ measures and individual test metrics. No row selection is needed.
   parameters while keeping the selected columns, preset view and unrelated URL
   parameters. Custom columns use repeated `column=key` parameters in display
   order; multiple sort keys use repeated `sort=key:asc` or `sort=key:desc`
-  parameters in priority order. Preset defaults need no extra parameters.
+  parameters in the table's sort order (last key takes priority). Preset
+  defaults need no extra parameters.
   **Reset to comparison columns** removes the custom column selection.
 - Enable **Column filters** to filter directly in headings. Numeric inputs
   accept `>=80`, `<=5`, `80..95` or an exact number in displayed units. Text
