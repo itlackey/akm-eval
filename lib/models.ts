@@ -58,7 +58,7 @@ export interface ModelEntry {
   chat?: ChatSettings;
 }
 
-/** Supported fields. Unknown metadata is reported; literal credentials and obsolete privacy policy still need an explicit correction. */
+/** Supported fields. Unknown metadata is reported; literal credentials need an explicit correction. */
 const LINE_KEYS = ["model", "base_url", "api_key_env", "limits", "chat"];
 
 export interface ModelSettings {
@@ -93,7 +93,6 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     if (typeof e !== "object" || e === null || typeof e.base_url !== "string" || !e.base_url.trim()) throw new Error(`models.json: "${id}" needs a base_url`);
     for (const key of Object.keys(e)) {
       if (LINE_KEYS.includes(key)) continue;
-      if (key === "private") throw new Error(`models.json: "${id}" has "private", which is obsolete: --cases explicitly selects custom cases for the chosen model. Delete the key.`);
       const hint = key === "api_key" ? ": a key belongs in the environment. Set it in .env and name its variable in api_key_env" : "";
       const message = `models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`;
       if (key === "api_key") throw new Error(message);
