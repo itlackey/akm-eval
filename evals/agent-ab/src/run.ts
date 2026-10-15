@@ -33,7 +33,7 @@ import { type Report, buildReport, formatReport, sideBySide as sideBySideOf } fr
 import { type RunTrial, makeRow, summarize } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, type ModelLimits } from "../../../lib/models.ts";
-import { endpointHost, harnessSha256, redactConfig } from "../../../lib/provenance.ts";
+import { endpointHost, redactConfig } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { NAME, attemptsFor, collect, jobConfig } from "./collect.ts";
@@ -45,7 +45,6 @@ export { jobConfig, taskNames };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 
 const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
@@ -77,8 +76,6 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   /** What `--akm` named, with the home folder as ~: akm-cli@x.y.z or the checkout's folder. akm_build is the checkout's git describe, null for a release. */
@@ -204,7 +201,7 @@ export async function runCorpus(
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: ctx.model,
     ...akmFields,
     pins: pinsOf(arm),

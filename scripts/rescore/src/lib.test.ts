@@ -98,7 +98,7 @@ describe("rescoreFolder", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(text(dir)).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     const s = summaryOf(out);
     const o = summaryOf(dir);
     expect(s).toMatchObject({ label: "golden-rescored", n_run: 10, metrics: o.metrics, served: o.served, n_errored: o.n_errored });
@@ -116,10 +116,10 @@ describe("rescoreFolder", () => {
     expect(now.collector).toEqual(OTHER_COLLECTOR);
     expect(now.scorer).toEqual({ version: MEASUREMENT.scoringVersion ?? MEASUREMENT.version });
     expect(now.rescored_from?.scorer).toEqual(STALE);
-    expect(now.cases).toEqual(was.cases);
-    expect({ ...now, scorer: null, rescored_from: null }).toEqual({ ...was, scorer: null, rescored_from: null });
+    expect(now.cases).toBeUndefined();
+    expect({ ...now, cases: null, scorer: null, rescored_from: null }).toEqual({ ...was, cases: null, scorer: null, rescored_from: null });
     const { manifest: _a, label: _l, ...rest } = summaryOf(dir);
-    const { manifest: _b, label: _m, ...rest2 } = summaryOf(out);
+    const { manifest: _b, label: _m, scoring_version: _v, rescored_from: _r, ...rest2 } = summaryOf(out);
     expect(rest2).toEqual(rest);
   });
 
@@ -132,10 +132,15 @@ describe("rescoreFolder", () => {
     expect(rowsOf(out).every((r, i) => JSON.stringify(r) === JSON.stringify(MEASUREMENT.score(CASES[i] as Case, BAD(CASES[i] as Case))))).toBe(true);
   });
 
-  test("a run made before akm-eval 0.2 (no manifest) is refused before anything else, and nothing is written", () => {
-    const old = run({ manifest: () => undefined, summary: { eval: "toy" } });
-    expect(() => rescoreFolder(old)).toThrow(`${old} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`);
-    expect(readdirSync(join(old, ".."))).toEqual(["2026-10-12-golden"]);
+  test("legacy raw outputs can be rescored without inventing collection metadata", () => {
+    const old = run({ manifest: () => undefined });
+    const before = text(old);
+    const { out, result } = rescoreFolder(old);
+    expect(text(old)).toBe(before);
+    expect(summaryOf(out).manifest).toBeUndefined();
+    expect(summaryOf(out).scoring_version).toBe(MEASUREMENT.scoringVersion ?? MEASUREMENT.version);
+    expect(summaryOf(out).rescored_from.results).toBe("2026-10-12-golden");
+    expect(result.rows).toEqual(rowsOf(old));
   });
 });
 
@@ -152,12 +157,12 @@ describe("what a rescore refuses", () => {
   test("an eval that declares no measurement, a manifest that is not sound, and a folder that is not a run", () => {
     const other = run({ summary: { eval: "toy" }, manifest: (m) => ({ ...m, eval: "toy" }) });
     expect(() => rescoreFolder(other)).toThrow("is a run of toy, which declares no measurement yet (it has no src/measurement.ts), so there is no scorer to score it with");
-    expect(() => rescoreFolder(run({ manifest: (m) => ({ ...m, manifest_version: 9 }) }))).toThrow("has a manifest that is not sound: manifest_version is 9");
+    expect(rescoreFolder(run({ manifest: (m) => ({ ...m, manifest_version: 9 }) })).result.rows).toHaveLength(10);
     const empty = tmp();
     expect(() => rescoreFolder(empty)).toThrow("is not a results folder: it has no summary.json");
     const running = run();
     writeFileSync(join(running, ".running"), "1\n");
-    expect(() => rescoreFolder(running)).toThrow("is still being written");
+    expect(rescoreFolder(running).result.summary.notes.join(" ")).toContain("saved snapshot only");
     const noSamples = run();
     rmSync(join(noSamples, "samples.jsonl"));
     expect(() => readStored(noSamples)).toThrow("has no samples.jsonl");
@@ -169,21 +174,15 @@ describe("the cases of the corpus now", () => {
   test("an unselected row is refused without changing the original", () => {
     const dir = run({ rows: (rows) => [...rows, { ...rows[0], id: "dropped-case-01" }] });
     const before = text(dir);
-    expect(() => rescoreFolder(dir)).toThrow("was not selected");
+    expect(() => rescoreFolder(dir)).toThrow("selected cases are missing");
     expect(text(dir)).toBe(before);
   });
-  test("changed inputs are refused instead of copying their old input digest", () => {
+  test("obsolete case hashes do not prevent explicit rescoring", () => {
     const dir = run({ manifest: m => ({ ...m, cases: { ...m.cases,
       [CASES[0]!.id]: { ...m.cases[CASES[0]!.id]!, input_sha256: "f".repeat(64) } } }) });
-    expect(() => rescoreFolder(dir)).toThrow("case input changed");
+    expect(rescoreFolder(dir).result.rows).toHaveLength(10);
   });
 
-  test("a case whose labels changed since the run is named, and its label digest in the new manifest is the current one", () => {
-    const dir = run({ manifest: (m) => ({ ...m, cases: { ...m.cases, [(CASES[2] as Case).id]: { ...(m.cases[(CASES[2] as Case).id] as object), label_sha256: "e".repeat(64) } } as RunManifest["cases"] }) });
-    const { out, result } = rescoreFolder(dir);
-    expect(result.relabelled).toEqual([(CASES[2] as Case).id]);
-    expect((summaryOf(out).manifest as RunManifest).cases).toEqual((summaryOf(run()).manifest as RunManifest).cases);
-  });
 
   test("a case that errored stays errored, in the completion too", () => {
     const err: Raw = { outcome: "error", reason: "non_zero_exit: HTTP 503", error: "non_zero_exit: HTTP 503", seconds: 2 };
@@ -402,7 +401,7 @@ describe("the custom corpus of skillret, a split of its dataset (no folder)", ()
     const { dir, cases, rows } = stored(M, root);
     expect(cases.map((q: any) => q.id)).toEqual(["a1", "a2", "a3"]); // the train queries, drawn as a run draws them
     const result = rescoreRun(readStored(dir), { root });
-    expect(result).toMatchObject({ dropped: [], changed: [], relabelled: [] });
+    expect(result).toMatchObject({ dropped: [], changed: [] });
     expect(result.rows).toEqual(rows);
     expect(result.summary).toMatchObject({ corpus: "custom", corpus_folder: null });
     expect(manifestProblems(result.summary.manifest)).toEqual([]);

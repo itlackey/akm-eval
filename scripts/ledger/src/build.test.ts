@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-test("rebuilds from newly published data, skips incomplete/private samples, and emits only the public site", () => {
+test("rebuilds from newly published data, retains stopped public evidence and skips private samples, and emits only the public site", () => {
   const root = mkdtempSync(join(tmpdir(), "eval-ledger-build-"));
   try {
     const reports = join(root, "reports"),
@@ -30,7 +30,7 @@ test("rebuilds from newly published data, skips incomplete/private samples, and 
       );
       writeFileSync(
         join(folder, "samples.jsonl"),
-        overrides.corpus === "custom" || overrides.status === "aborted" ? "not JSON" : '{"id":"a","correct":true}\n',
+        overrides.corpus === "custom" ? "not JSON" : '{"id":"a","correct":true}\n',
       );
     }
     function build() {
@@ -54,12 +54,13 @@ test("rebuilds from newly published data, skips incomplete/private samples, and 
     save("first");
     save("private", { corpus: "custom" });
     save("partial", { status: "aborted" });
-    expect(build().runs).toHaveLength(1);
+    expect(build().runs).toHaveLength(2);
     save("new", { date: "2026-10-13T02:00:00Z" });
     const dataset = build();
-    expect(dataset.runs).toHaveLength(2);
+    expect(dataset.runs).toHaveLength(3);
+    expect(dataset.runs.find((r: any) => r.label === "partial").role).toBe("Diagnostic");
     expect(dataset.latest_collection_date).toBe("2026-10-13T02:00:00Z");
-    expect(dataset.excluded_reports).toBe(2);
+    expect(dataset.excluded_reports).toBe(1);
     expect(readFileSync(join(output, "data.json"), "utf8")).not.toContain("PRIVATE_CONFIG_TOKEN");
     const html = readFileSync(join(output, "index.html"), "utf8");
     expect(html).toContain('href="./assets/styles.css?v=revision"');

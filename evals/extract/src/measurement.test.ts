@@ -129,7 +129,7 @@ describe("rescoring a stored run", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8") + readFileSync(join(dir, "summary.json"), "utf8")).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
     expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts });
     expect(manifestProblems(s.manifest)).toEqual([]);

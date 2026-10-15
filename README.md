@@ -26,7 +26,7 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 
 `scripts/smoke/src/readme.test.ts` runs every `run --help` and fails when this table lists other flags.
 
-- **What a summary records.** Each run writes `summary.json` and `samples.jsonl` (one row per case, with akm's raw output). The seven evals that run a model through akm record `model`, `akm_version`, `akm_bin`, `akm_build`, `akm_build_fingerprint`, `limit`, `strategy`, `config_patch`, `config` (the akm config the eval wrote), `engine` (the model and the host of its endpoint, never the path), `assets_sha256`, `seed`, `n_errored` and `metrics`. Every eval that calls a model through akm also records `model_calls`, from akm's own record of each call: `calls`, `errors`, and per successful call the mean `prompt_tokens`, `completion_tokens` and `seconds`, with `output_tokens_per_second`. akm does not stream, so a call's time includes its prefill: prefill and decode are not told apart. Every summary has a `manifest` (`lib/manifest.ts`), which is what compare reads, and a `status` of `complete` or `aborted`. A config value is written as `<redacted>` when its key ends in key, token, secret, password, credential, authorization or cookie, or its last word is auth, bearer, pat or pass (`credentialField` in `lib/provenance.ts`); a `$NAME` reference stays. URL logins and credential query values are also removed at any depth.
+- **What a summary records.** Each run writes `summary.json` and `samples.jsonl` (one row per case, with akm's raw output). The seven evals that run a model through akm record `model`, `akm_version`, `akm_bin`, `akm_build`, `akm_build_fingerprint`, `limit`, `strategy`, `config_patch`, `config` (the akm config the eval wrote), `engine` (the model and the host of its endpoint, never the path), `assets_sha256`, `seed`, `n_errored` and `metrics`. Every eval that calls a model through akm also records `model_calls`, from akm's own record of each call: `calls`, `errors`, and per successful call the mean `prompt_tokens`, `completion_tokens` and `seconds`, with `output_tokens_per_second`. akm does not stream, so a call's time includes its prefill: prefill and decode are not told apart. New summaries record a `manifest` (`lib/manifest.ts`) and completion status; comparison also reads older summaries that lack those fields. A config value is written as `<redacted>` when its key ends in key, token, secret, password, credential, authorization or cookie, or its last word is auth, bearer, pat or pass (`credentialField` in `lib/provenance.ts`); a `$NAME` reference stays. URL logins and credential query values are also removed at any depth.
 
 Retired evals are summarised in [`reports/retired-evals.md`](reports/retired-evals.md).
 
@@ -89,7 +89,7 @@ eval_docker evals/reflect/run --semantic --limit 5             # five cases, to 
 eval_docker evals/reflect/run --label qwen          # results in evals/reflect/results/<UTC date>-qwen/
 ```
 
-A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write under `private/<name>/results/`). The default label is the model name (`akm-<version>` for the two that call no model). While a run is alive its folder holds a `.running` file with its pid. A run that gives up (the endpoint down, too many errors) writes its summary with `status: "aborted"` and exits non-zero: do not compare it.
+A run writes `evals/<name>/results/<UTC date>-<label>/` (custom corpora write under `private/<name>/results/`). The default label is the model name (`akm-<version>` for the two that call no model). While a run is alive its folder holds a `.running` file with its pid. A run that gives up (the endpoint down, too many errors) writes its summary with `status: "aborted"` and exits non-zero. Its saved results remain available for inspection and comparison, with incomplete coverage marked.
 
 ## Pick the model and the akm build
 
@@ -104,7 +104,7 @@ eval_docker benchmarks/longmemeval/run --model my-model --judge-model my-judge
 - Harbor evals accept optional `"limits": { "context": 32768, "output": 4096 }` in a `models.json` entry. OpenCode uses these budgets for context compaction. Both arms receive identical limits, recorded in the saved job configuration. Set them to the server's actual budgets; see [OpenCode provider configuration](https://opencode.ai/docs/providers/#custom-provider). LongMemEval also accepts per-role Chat Completions settings, described below.
 - `--akm COMMAND` (or `AKM_BIN`) is a command line, such as `bun ~/code/akm/src/cli.ts`. Quote a word with spaces; a leading `~/` is your home folder; nothing else is expanded.
 - The Harbor evals (`agent-ab`, `terminal-bench`) install akm in a container, so their `--akm` is a release (`akm-cli@0.9.26`) or the folder of an akm checkout, and `--akm-env KEY=VALUE` sets an `AKM_*` setting for the akm arm. opencode there calls the Responses API.
-- `--strategy NAME` and `--config-patch FILE` run another akm strategy or config than the eval's own. `--embedder deterministic|real` (consolidate, nightly) picks akm's word-hash embedder (default) or its real embedding model; the two are never compared.
+- `--strategy NAME` and `--config-patch FILE` run another akm strategy or config than the eval's own. `--embedder deterministic|real` (consolidate, nightly) picks akm's word-hash embedder (default) or its real embedding model; the selected embedder is recorded.
 
 `summary.json` records the model, `akm_version`, `akm_bin`, `akm_build` (`git describe` of a checkout) and `akm_build_fingerprint` (a digest of its uncommitted changes). A pre-release can print the version of the release it branched from, so read `akm_build` to tell builds apart, and put the build in `--label`. Before measuring a new akm, run `scripts/smoke/run --contract --akm "..."` to see that the evals still read it.
 
@@ -150,19 +150,17 @@ eval_docker scripts/compare/run evals/reflect/results/<A> evals/reflect/results/
 ```
 
 There is no special baseline, mandatory repeat count or saved scheduling state.
-Any two compatible saved runs can be compared whenever needed. Comparison makes
+Any two saved runs can be viewed side by side whenever needed. Comparison makes
 no model calls and never changes results. It shows stored quality, performance,
 usage, settings and B-minus-A differences. It does not declare a statistical
 winner. The [public ledger](https://itlackey.github.io/akm-eval/) offers filtering,
 sorting and export of each published run; [site documentation](site/README.md)
 explains the fields and question-focused views.
 
-Comparisons require the same eval version, scoring version, corpus, collection,
-mode, selected case IDs, input digests and labels. Model, AKM and configuration
-changes are shown as the things being compared. No cases are silently dropped.
-Unequal scored or timing coverage leaves the affected deltas blank. A new full
-run cannot be compared with an old smaller set merely because some IDs match.
-Results before 0.2 have no manifest and must be collected again.
+Comparison reads legacy, stopped and summary-only results. It shows stored values,
+coverage, changed settings and B-minus-A differences without hash, manifest,
+version or completion gates. Interpret differences using the recorded models,
+AKM builds, configurations and conditions, including cold versus warm indexes.
 
 ### Optional repeats
 
@@ -181,9 +179,9 @@ eval_docker evals/reflect/run --model model-a --repeat 2 --label check-variation
 For a scoring fix or updated labels, `scripts/rescore/run RESULTS_DIR` reads saved
 raw output and writes a new `-rescored` folder. Supply `--cases DIR` when a custom
 corpus is outside the repository or has moved. It preserves the original
-collection identity and records the current scoring version. Changed or missing
-inputs are refused: those require a new collection. The original stays intact.
-Rescoring is never part of a comparison or ledger build.
+collection metadata and records the current scoring version. It requires the
+cases and raw output that the scorer uses, without hash checks. The original
+stays intact. Rescoring is never part of a comparison or ledger build.
 
 Bump the eval's `version` in `src/measurement.ts` when inputs, case selection or
 collection protocol change. For a scoring correction or label-only change, set

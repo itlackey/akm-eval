@@ -143,9 +143,9 @@ describe("the table in the root README", () => {
         expect(helpCorpora(await helps.get(row.folder)!)).toEqual(["custom", "public"]);
       }, HELP_TIMEOUT_MS);
 
-      helpTest(row.folder)("COMPATIBILITY.md says 'or later' when the run stops on an older akm, with the version the help names", async () => {
+      helpTest(row.folder)("COMPATIBILITY.md records the tested release named by help", async () => {
         const akm = AKM.get(row.folder) ?? "";
-        const said = /Needs akm (\S+) or later/.exec(await helps.get(row.folder)!);
+        const said = /Tested with akm (\S+) or later/.exec(await helps.get(row.folder)!);
         if (said) {
           expect(akm).toContain(said[1]);
           expect(akm).toContain("or later");

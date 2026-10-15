@@ -6,7 +6,7 @@ import { createSandbox } from "../../../lib/akm/akm.ts";
 import { manifestProblems } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
-import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost } from "../../../lib/provenance.ts";
 import { assetsDigest } from "./inputs.ts";
 import { sandboxOptions } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -431,8 +431,8 @@ describe("runPool", () => {
       expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(47);
       const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
       expect(stored.results_dir).toBeUndefined();
-      expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-      expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
       expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
     } finally {

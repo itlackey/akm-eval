@@ -16,7 +16,6 @@ import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolve
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, type Overrides, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { INPUT_FILES, RELATIONS, parseCases, selectCases } from "./cases.ts";
@@ -32,7 +31,6 @@ import { type Row, metrics, summarize } from "./score.ts";
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 const GIVE_UP_AFTER = 5; // consecutive cases with no verdict, before any verdict at all
 
 const POOL_DIR = join(EVAL_DIR, "assets", "pool");
@@ -79,8 +77,6 @@ interface Summary extends RunInputs, CorpusFields {
   status: "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
@@ -220,7 +216,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     status: stop ? "aborted" : "complete",
     aborted_reason: stop?.reason ?? null,
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: ctx.model,
     akm_version: ctx.version,
     ...build,
@@ -265,8 +261,6 @@ interface PoolSummary extends RunInputs {
   status: "complete" | "aborted";
   aborted_reason: string | null;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   akm_bin: string;
@@ -349,7 +343,7 @@ export async function runPool(ctx: PoolRunContext, pool = loadPool(POOL_DIR), re
     label: ctx.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: ctx.model,
     akm_version: ctx.version,
     ...build,

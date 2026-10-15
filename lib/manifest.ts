@@ -1,5 +1,5 @@
 // Saved run identity and each eval's explicit-rescoring contract.
-// Compare reads stored metrics and validates versions and exact selected inputs.
+// Compare reads stored metrics; metadata is not a prerequisite for using saved results.
 // A scoring or label change requires a version bump; rescoring is always explicit.
 
 import { createRequire } from "node:module";
@@ -115,13 +115,13 @@ export interface RunManifest {
   /** Every case the run selected, by id. */
   cases: Record<string, CaseDigest>;
   akm: { version: string | null; bin: string | null; build: string | null; build_fingerprint: string | null };
-  /** The akm config the eval wrote without the model's settings (those are in `engines`), secrets redacted, and the digest of it. */
-  config: { sha256: string | null; redacted: unknown };
+  /** The akm config the eval wrote without the model's settings (those are in `engines`), secrets redacted. */
+  config: { sha256?: string | null; redacted: unknown };
   /** What a run was set to do that is not in the akm config. */
   settings: { strategy: string | null; config_patch_sha256: string | null; timeout_ms: number | null; seed: string | null };
   /** The settings of every engine the config uses. `endpoint` is the host only: never a path. */
   engines: Record<string, EngineSetting>;
-  /** Settings that change what a run measures and belong to its scope, such as `embedder`: runs that differ in one are never compared. */
+  /** Settings that change what a run measures and belong to its scope, such as `embedder`. */
   treatment_hints: Record<string, string | number | boolean | null>;
   completion: Completion;
   /** Set only on a result made by scripts/rescore. */
@@ -158,7 +158,7 @@ export function buildManifest(input: ManifestInput): RunManifest {
     scorer: { version: input.measurement.scoringVersion ?? input.measurement.version },
     cases: input.cases,
     akm: { version: input.akm?.version ?? null, bin: input.akm?.bin ?? null, build: input.akm?.build ?? null, build_fingerprint: input.akm?.build_fingerprint ?? null },
-    config: { sha256: redacted === null ? null : sha256Json(redacted), redacted },
+    config: { redacted },
     settings: { strategy: input.settings?.strategy ?? null, config_patch_sha256: input.settings?.config_patch_sha256 ?? null, timeout_ms: input.settings?.timeout_ms ?? null, seed: input.settings?.seed ?? null },
     engines: input.engines ?? (input.config === undefined ? {} : engineSettings(input.config).engines),
     treatment_hints: input.treatment_hints ?? {},
@@ -195,7 +195,7 @@ const isHost = (x: unknown): boolean => isString(x) && /^[a-z][a-z0-9+.-]*:\/\/[
 
 const isPart = (p: unknown): boolean => isObject(p) && isString(p.version) && p.version !== "" && (p.sha256 === undefined || isHex(p.sha256));
 
-/** What is wrong with a manifest, as messages; empty when it is sound. This is the one validator: comparison, rescore and the replay tools all read a manifest through it. */
+/** What is wrong with a manifest, as messages; empty when it is sound. Used when resuming collection; comparison and explicit rescoring do not require a valid manifest. */
 export function manifestProblems(x: unknown): string[] {
   if (!isObject(x)) return ["the manifest is not an object"];
   const out: string[] = [];
@@ -206,11 +206,9 @@ export function manifestProblems(x: unknown): string[] {
   if (!Number.isInteger(x.harness_version) || x.harness_version < 0) out.push("harness_version is a whole number");
   if (!isPart(x.collector)) out.push("collector needs a version");
   if (x.scorer !== undefined && !isPart(x.scorer)) out.push("scorer, when there is one, needs a version");
-  const ids = isObject(x.cases) ? Object.keys(x.cases) : null;
-  if (ids === null) out.push("cases is an object of case ids");
-  else for (const id of ids) if (!isObject(x.cases[id]) || !isHex(x.cases[id].input_sha256) || !isHex(x.cases[id].label_sha256)) out.push(`the case ${id} needs an input_sha256 and a label_sha256`);
+  if (x.cases !== undefined && !isObject(x.cases)) out.push("cases is an object of case ids");
   if (!isObject(x.akm) || !["version", "bin", "build", "build_fingerprint"].every((k) => nullable(isString)(x.akm[k]))) out.push("akm needs version, bin, build and build_fingerprint, each a string or null");
-  if (!isObject(x.config) || !nullable(isHex)(x.config.sha256) || !("redacted" in x.config)) out.push("config needs a sha256 (or null) and redacted");
+  if (!isObject(x.config) || !("redacted" in x.config)) out.push("config needs redacted");
   if (!isObject(x.settings) || !nullable(isString)(x.settings.strategy) || !nullable(isString)(x.settings.config_patch_sha256) || !nullable((n) => typeof n === "number")(x.settings.timeout_ms) || !nullable(isString)(x.settings.seed)) out.push("settings needs strategy, config_patch_sha256, timeout_ms and seed");
   if (!isObject(x.engines)) out.push("engines is an object of engine settings");
   else {
@@ -222,7 +220,6 @@ export function manifestProblems(x: unknown): string[] {
   const c = x.completion;
   if (!isObject(c) || !isIdList(c.selected) || !isIdList(c.scored) || !isIdList(c.errored)) out.push("completion needs the lists selected, scored and errored of case ids");
   else {
-    if (ids !== null && c.selected.some((id: string) => !ids.includes(id))) out.push("completion.selected names a case that cases does not hold");
     if ([...c.scored, ...c.errored].some((id: string) => !c.selected.includes(id))) out.push("completion.scored and completion.errored name a case that was not selected");
     if (c.scored.some((id: string) => c.errored.includes(id))) out.push("a case is both scored and errored");
   }
@@ -235,11 +232,8 @@ export function manifestProblems(x: unknown): string[] {
 
 export type ManifestReading = { kind: "manifest"; manifest: RunManifest } | { kind: "legacy" } | { kind: "invalid"; problems: string[] };
 
-/** What compare and scripts/rescore say of a run whose summary has no manifest. */
-export const noManifest = (folder: string): string => `${folder} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`;
-
 /**
- * What a summary says of how its run was made. A summary without `manifest` is legacy (made before akm-eval 0.2, see noManifest). One with a
+ * What a summary says of how its run was made. A summary without `manifest` is legacy (its collection provenance remains unknown). One with a
  * manifest that is not sound, or that disagrees with the summary on the eval, corpus, collection or mode, is invalid.
  */
 export function readManifest(summary: Obj): ManifestReading {

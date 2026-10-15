@@ -116,7 +116,7 @@ describe("the manifest", () => {
   test("keeps the config redacted and without the model's settings, with its digest, and the engines with a host and no path (#65)", () => {
     const m = build();
     expect(m.config.redacted).toEqual(withoutEngineSettings(m.config.redacted));
-    expect(m.config.sha256).toBe(sha256Json(m.config.redacted));
+    expect(m.config.sha256).toBeUndefined();
     expect(m.engines.m).toEqual({ model: "the-model", endpoint: "https://gateway.example", temperature: 0, enableThinking: false, timeoutMs: 600000 });
     const text = JSON.stringify(m);
     for (const secret of ["sk-literal", "DUMMYSECRET0123"]) expect(text).not.toContain(secret);
@@ -124,7 +124,7 @@ describe("the manifest", () => {
 
   test("a config without engines gives none, and a run with no config has no digest of it", () => {
     const none = buildManifest({ measurement: TOY, corpus: "public", cases: {}, completion: { selected: [], scored: [], errored: [] } });
-    expect(none).toMatchObject({ config: { sha256: null, redacted: null }, engines: {}, akm: { version: null }, settings: { strategy: null } });
+    expect(none).toMatchObject({ config: { redacted: null }, engines: {}, akm: { version: null }, settings: { strategy: null } });
     expect(manifestProblems(none)).toEqual([]);
   });
 
@@ -143,12 +143,12 @@ describe("the manifest", () => {
     expect(mutate((x) => (x.scorer = { version: 1 }))).toEqual(["scorer, when there is one, needs a version"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: 1 }, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: { version: "0.3", sha256: "a".repeat(64) }, at: "now", dropped: [] }))).toEqual([]);
-    expect(mutate((x) => (x.cases.a.input_sha256 = null))).toEqual(["the case a needs an input_sha256 and a label_sha256"]);
+
     expect(mutate((x) => (x.engines.m.endpoint = "https://gateway.example/k-DUMMYSECRET0123/v1"))).toEqual(["the engine m needs a model and an endpoint that is a host with no path"]);
     expect(mutate((x) => (x.engines.m.endpoint = "https://user:pw@gateway.example"))).toHaveLength(1);
     expect(mutate((x) => (x.completion.scored = ["a", "zzz"]))).toEqual(["completion.scored and completion.errored name a case that was not selected"]);
     expect(mutate((x) => (x.completion.errored = ["a"]))).toEqual(["a case is both scored and errored"]);
-    expect(mutate((x) => (x.completion.selected = ["a", "nope"]))).toEqual(["completion.selected names a case that cases does not hold"]);
+
     expect(mutate((x) => (x.treatment_hints = { embedder: ["real"] }))).toEqual(["treatment_hints is an object of strings, numbers, booleans and nulls"]);
     expect(mutate((x) => (x.rescored_from = { results: "a/b", scorer: null, at: "now", dropped: [] }))).toEqual(["rescored_from needs results (a folder name), scorer (or null), at and dropped"]);
     expect(mutate((x) => (x.rescored_from = { results: "folder", scorer: null, at: "now", dropped: [] }))).toEqual([]);

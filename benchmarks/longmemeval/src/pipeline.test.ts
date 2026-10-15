@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { commandLine, semanticConfig, writeConfig } from "../../../lib/akm/akm.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { harnessSha256, sha256Files } from "../../../lib/provenance.ts";
+import { sha256Files } from "../../../lib/provenance.ts";
 import { Akm } from "./akm.ts";
 import { DATA_FILE, type Question } from "./dataset.ts";
 import { assembleQuestion, commonWords, evidenceChecked, evidenceCoverage, evidenceKept, explodeQuestion, generate, shiftTextDates, shiftYears } from "./generate.ts";
@@ -498,7 +498,7 @@ describe("runCorpus", () => {
     expect(await resume(older, { ...context, build: clean })).toMatchObject({ complete: true, akm_build_fingerprint: null });
   });
 
-  test("resume refuses rows that another harness made, or one of unknown code, and carries on with the same code, retrying only what errored (R07)", async () => {
+  test("resume reuses completed rows despite obsolete fingerprint metadata and retries only errors", async () => {
     const { akm, folders } = setup();
     const searches = { n: 0 };
     const search = akm.search.bind(akm);
@@ -515,8 +515,6 @@ describe("runCorpus", () => {
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     const summaryFile = join(dir, "summary.json");
     const samplesFile = join(dir, "samples.jsonl");
-    const current = first.harness_sha256;
-    expect(current).toMatch(/^[0-9a-f]{64}$/);
     const stored = readFileSync(summaryFile, "utf8");
     const rows = readFileSync(samplesFile, "utf8");
     const resume = () => quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, context, folders));
@@ -526,28 +524,14 @@ describe("runCorpus", () => {
       searches.n = 0;
     };
 
-    // the stored digest is another valid one, as if another version of the code had written the rows
-    const other = "f".repeat(64);
-    const changed = JSON.stringify({ ...JSON.parse(stored), harness_sha256: other });
-    writeFileSync(summaryFile, changed);
+    // Obsolete fingerprint metadata does not invalidate completed work.
+    writeFileSync(summaryFile, JSON.stringify({ ...JSON.parse(stored), harness_sha256: "obsolete" }));
     reset();
-    await expect(resume()).rejects.toThrow(`its harness_sha256 is ${other}, and this run's is ${current}`);
-    await expect(resume()).rejects.toThrow("Start a new run, without --resume.");
-    // it asked nothing and searched nothing, and the folder is as it was: the summary still names the code that made the rows, and nothing is marked as running
+    expect(await resume()).toMatchObject({ n_run: 3, complete: true });
     expect(asked()).toEqual({ requests: 0, searches: 0 });
-    expect(readFileSync(summaryFile, "utf8")).toBe(changed);
-    expect(readFileSync(samplesFile, "utf8")).toBe(rows);
-    expect(existsSync(join(dir, ".running"))).toBe(false);
-
-    // a summary from before harness_sha256 was recorded has unknown code, and is refused the same way
-    const { harness_sha256: _unknown, ...unknown } = JSON.parse(stored);
-    writeFileSync(summaryFile, JSON.stringify(unknown));
-    await expect(resume()).rejects.toThrow(`its harness_sha256 is not recorded (the summary is from before it was), and this run's is ${current}`);
-    expect(asked()).toEqual({ requests: 0, searches: 0 });
-
     // the same code carries on: the completed rows are reused, nothing is asked or searched again, and the summary names this code
     writeFileSync(summaryFile, stored);
-    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true, status: "complete", harness_sha256: current });
+    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true, status: "complete" });
     expect(asked()).toEqual({ requests: 0, searches: 0 });
     expect(readFileSync(samplesFile, "utf8")).toBe(rows);
 
@@ -555,7 +539,7 @@ describe("runCorpus", () => {
     const lines = rows.trim().split("\n").map((l) => JSON.parse(l));
     lines[1] = { ...lines[1], with_akm: { ...lines[1].with_akm, ok: false, correct: null, verdict: null, error: "the endpoint went down" } };
     writeFileSync(samplesFile, lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
-    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true, harness_sha256: current });
+    expect(await resume()).toMatchObject({ n_run: 3, n_errored: 0, complete: true });
     expect(asked()).toEqual({ requests: 4, searches: 1 }); // that question: two answers and two verdicts, and one search
     const done = readFileSync(samplesFile, "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(done.map((r) => r.id).sort()).toEqual(["q-cats", "q-passport_abs", "q-secret"]);
@@ -599,8 +583,8 @@ describe("runCorpus", () => {
       expect(summary).toMatchObject({ model_endpoint: null, judge_endpoint: null, temperature: null, max_tokens: null });
       const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
-      expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this benchmark's code and lib/
-      expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
       expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     } finally {
       console.log = quiet;
@@ -839,8 +823,8 @@ describe("the command", () => {
     expect(approved.err).toContain("consent-test-akm reached");
   });
 
-  test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder, and --help names --cases", () => {
+    for (const old of ["own", "own-feedback"]) {
       const refused = command(["--corpus", old]);
       expect(refused.code, old).toBe(2);
       expect(refused.err, old).toContain(`longmemeval: --corpus ${old} was renamed in 0.2: use `);

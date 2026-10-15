@@ -132,7 +132,7 @@ describe("rescoring a stored run", () => {
     expect(readdirSync(join(dir, "..")).sort()).toEqual(["2026-10-12-golden", "2026-10-12-golden-rescored"]);
     expect(readFileSync(join(dir, "samples.jsonl"), "utf8") + readFileSync(join(dir, "summary.json"), "utf8")).toBe(before);
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
+    expect(result).toMatchObject({ changed: [], dropped: [] });
     const [s, o] = [summaryOf(out), summaryOf(dir)];
     expect(s).toMatchObject({ label: "golden-rescored", n_run: FIXTURE_CASES.length, metrics: o.metrics, n_errored: o.n_errored, timeouts: o.timeouts, rubric_version: 2 });
     expect(manifestProblems(s.manifest)).toEqual([]);
@@ -151,13 +151,13 @@ describe("rescoring a stored run", () => {
     writeFileSync(join(dir, "summary.json"), JSON.stringify({ ...summary, manifest }));
     writeFileSync(join(dir, "samples.jsonl"), rowsOf(dir).map((r) => `${JSON.stringify(r.id === c.id ? { ...r, severity: "churn" } : r)}\n`).join(""));
     const { out, result } = rescoreFolder(dir);
-    expect(result.relabelled).toEqual([c.id]);
+
     expect(result.changed).toEqual([c.id]);
     expect(rowsOf(out).find((r) => r.id === c.id).severity).toBe("harmful");
     const stale = rowsOf(dir);
     expect(MEASUREMENT.summarize(stale).metrics.bad_churn.n).toBe(summary.metrics.bad_churn.n + (stale.find((r) => r.id === c.id).outcome === "error" ? 0 : 1)); // the stored rows count the case as churn
     expect(summaryOf(out).metrics).toEqual(summary.metrics); // the rescored summary counts it as harmful
-    expect(summaryOf(out).manifest.cases[c.id].label_sha256).toBe(caseDigests(MEASUREMENT, [c])[c.id].label_sha256);
+    expect(summaryOf(out).manifest.cases).toBeUndefined();
   });
 
   test("a run whose rows lack the verdict cannot be scored again, and the field is named", () => {
@@ -185,7 +185,7 @@ describe("rescoring a run on a custom corpus", () => {
     const dir = stored({ custom: { folder: relativeFolder(folder) } });
     const { out, result } = rescoreFolder(dir);
     expect(result.changed).toEqual([CHANGED]); // the stored row says harmful; the folder's case says churn
-    expect(result.relabelled).toEqual([CHANGED]);
+
     expect(rowsOf(out).find((r) => r.id === CHANGED).severity).toBe("churn");
     expect(summaryOf(out)).toMatchObject({ corpus: "custom", corpus_folder: relativeFolder(folder) });
     expect(summaryOf(out).manifest.corpus).toBe("custom");

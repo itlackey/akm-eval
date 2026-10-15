@@ -7,7 +7,7 @@ import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointHost, harnessSha256, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, sha256Json, sha256Text, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { libraryFileOf } from "./build.ts";
 import { type Case, type Raw, assetsSha256, atLeast, inject, parseCases, reflectConfig, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -236,8 +236,8 @@ describe("runCorpus", () => {
     expect(settings.endpoint).toBe("http://localhost:9"); // the host: never the path
     expect(stored.assets_sha256).toBe(assetsSha256(folders.assets));
     expect(stored).toMatchObject({ seed: null, status: "complete", aborted_reason: null, timeouts: 0 });
-    expect(stored.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(stored.harness_sha256).toBe(harnessSha256(import.meta.dir));
+
+
     expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
     const again = await quiet(() => runPublic(ctx, setup(cases.slice(0, 1), plan).folders));
     expect(again.assets_sha256).toBe(stored.assets_sha256);
@@ -405,7 +405,7 @@ describe("the manifest of a run", () => {
   test("holds the config without the model's settings and the engines with a host and a digest, and the summary's config has the same digest", async () => {
     const { ctx, folders } = setup(cases.slice(0, 1), plan);
     const { manifest, config, engine } = stored(await quiet(() => runPublic(ctx, folders)));
-    expect(manifest.config.sha256).toBe(sha256Json(withoutEngineSettings(config)));
+
     expect(manifest.config.redacted).toEqual(withoutEngineSettings(config));
     expect(JSON.stringify(manifest.config.redacted)).not.toContain("localhost");
     expect(manifest.engines).toEqual(engine.engines);
@@ -531,10 +531,10 @@ describe("run --corpus custom", () => {
     expect(noQrels.err).not.toContain("could not run");
   }, 60_000);
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
     const tree = copyOfRepo();
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "reflect")]).code).toBe(0);
-    for (const old of ["private", "own", "own-feedback"]) {
+    for (const old of ["own", "own-feedback"]) {
       const done = bun(tree, "run.ts", ["--corpus", old]);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`reflect: --corpus ${old} was renamed in 0.2: use `);

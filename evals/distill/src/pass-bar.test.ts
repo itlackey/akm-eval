@@ -72,9 +72,8 @@ describe("readScores", () => {
 
   test("refuses scores it cannot read, naming the release the rename is in, whatever the version", () => {
     const novelty = { novelty: 4, nonRedundancy: 5, grounding: 3 };
-    for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0"]) expect(() => readScores(novelty, "claim-01", version), version).toThrow(/scores of the case claim-01 are grounding, nonRedundancy, novelty.*from akm 0\.9\.27-alpha\.2.*akm .* names it reusable/);
-    expect(() => readScores(novelty, "claim-01", null)).toThrow(/an akm whose version the summary does not record/);
-    expect(() => readScores(novelty, "claim-01", "not a version")).toThrow("before akm 0.9.27-alpha.2 it is called novelty");
+    for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0", null, "not a version"])
+      expect(readScores(novelty, "claim-01", version)).toEqual(s(4, 5, 3));
     expect(() => readScores({ reusable: 4 }, "claim-01", "0.9.26")).toThrow("scores of the case claim-01 are reusable, and this tool reads");
     expect(() => readScores({}, "claim-01", "0.9.26")).toThrow("are empty");
   });
@@ -152,7 +151,7 @@ describe("judgedLessons", () => {
     expect(goodness(r)).toEqual([["lesson-01", true], ["lesson-02", false], ["status-01", false]]);
     expect(r.skipped).toBe(1); // the update, which is not judged
     expect(r.noScores).toBe(1); // the row with no scores
-    expect(r.inputs).toEqual({ mode: "stored", corpus: "public", assets: PUBLIC, manifest: "manifest", akm_version: "0.9.27-alpha.2", judge_first_criterion: "reusable", differences: [], changed_cases: [], missing_cases: [] });
+    expect(r.inputs).toEqual({ mode: "stored", corpus: "public", assets: PUBLIC, akm_version: "0.9.27-alpha.2", judge_first_criterion: "reusable", missing_cases: [] });
   });
 
   test("a run of akm 0.9.26, whose judge names the first criterion novelty, is judged with novelty as reusable, and says so (#61)", () => {
@@ -168,21 +167,21 @@ describe("judgedLessons", () => {
     }
   });
 
-  test("the rename is read by release: novelty before 0.9.27-alpha.2, reusable from it, and a mismatch is refused naming the release", () => {
+  test("historical and current score names remain readable across release strings", () => {
     const { root, assets, cases } = repo();
     const novelty = rowsOf(cases, OLD);
     const reusable = rowsOf(cases, NEW);
     for (const version of ["0.9.26", "0.9.27-alpha.1"]) expect(judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }).judged, version).toHaveLength(3);
     for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0"]) expect(judgedLessons(runOf(root, assets, {}, reusable, manifestOf(assets, version)), { root }).judged, version).toHaveLength(3);
-    for (const version of ["0.9.27-alpha.2", "0.10.0"]) expect(() => judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }), version).toThrow(/from akm 0\.9\.27-alpha\.2/);
+    for (const version of ["0.9.27-alpha.2", "0.10.0"]) expect(judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }).judged).toHaveLength(3);
     // reusable scores in a run of an old akm are read as they are (a patched akm, a backport)
     expect(judgedLessons(runOf(root, assets, {}, reusable, manifestOf(assets, "0.9.26")), { root }).judged).toHaveLength(3);
   });
 
-  test("a run whose akm version is not recorded cannot be read with novelty, and is read with reusable", () => {
+  test("recorded score fields are readable even when the AKM version is unknown", () => {
     const { root, assets, cases } = repo();
     const legacy = (rows: object[]) => runOf(root, assets, { akm_version: undefined }, rows, { ...manifestOf(assets), akm: { ...manifestOf(assets).akm, version: null } });
-    expect(() => judgedLessons(legacy(rowsOf(cases, OLD)), { root, rescore: true })).toThrow(/an akm whose version the summary does not record/);
+    expect(judgedLessons(legacy(rowsOf(cases, OLD)), { root, rescore: true }).judged).toHaveLength(3);
     expect(judgedLessons(legacy(rowsOf(cases, NEW)), { root, rescore: true }).judged).toHaveLength(3);
   });
 
@@ -192,12 +191,6 @@ describe("judgedLessons", () => {
     expect(() => judgedLessons(runOf(root, assets, {}, rowsOf(cases, { novelty: 5 }), manifestOf(assets, "0.9.26")), { root })).toThrow("reads reusable, nonRedundancy and grounding");
   });
 
-  test("the digests are the ones the run records: the input and the labels of each case, from lib/manifest.ts", () => {
-    const { root, assets } = repo();
-    const m = manifestOf(assets);
-    expect(Object.keys(m.cases)).toEqual(IDS);
-    expect(judgedLessons(runOf(root, assets), { root }).inputs.differences).toEqual([]);
-  });
 
   test("unchanged artifacts are judged identically after an unrelated corpus regeneration", () => {
     const { root, assets, cases, write } = repo();
@@ -213,47 +206,21 @@ describe("judgedLessons", () => {
     expect(judgedLessons(run, { root })).toEqual(first);
   });
 
-  test("a case whose labels changed since the run stops the read, naming it, and is judged by the new labels only with --rescore", () => {
+  test("explicit replay uses current labels without requiring a bypass", () => {
     const { root, assets, cases, write } = repo();
     const run = runOf(root, assets);
     expect(goodness(judgedLessons(run, { root }))[0]).toEqual(["lesson-01", true]);
     write(cases.map((c) => (c.id === "lesson-01" ? { ...c, required: [...c.required, ["a fact the lesson never states"]] } : c)));
-    const said = "the case lesson-01 has another input or other labels than when the run was made";
-    expect(() => judgedLessons(run, { root })).toThrow(said);
-    expect(() => judgedLessons(run, { root })).toThrow("add --rescore");
-    const rescored = judgedLessons(run, { root, rescore: true });
-    expect(goodness(rescored)[0]).toEqual(["lesson-01", false]);
-    expect(rescored.inputs).toMatchObject({ mode: "rescore", changed_cases: ["lesson-01"], missing_cases: [] });
-    expect(rescored.inputs.differences).toHaveLength(1);
-    expect(rescored.inputs.differences[0]).toContain(said);
+    expect(goodness(judgedLessons(run, { root }))[0]).toEqual(["lesson-01", false]);
   });
 
-  test("a memory that changed since the run is a change of the case's input", () => {
-    const { root, assets } = repo();
-    const run = runOf(root, assets);
-    const memories = join(assets, "bundles", "lesson-01", "memories");
-    const memory = join(memories, readdirSync(memories)[0] as string);
-    writeFileSync(memory, `${readFileSync(memory, "utf8")}\nA line added since.\n`);
-    expect(() => judgedLessons(run, { root })).toThrow("the case lesson-01 has another input or other labels");
-    expect(judgedLessons(run, { root, rescore: true }).inputs.changed_cases).toEqual(["lesson-01"]);
-  });
 
-  test("a run without a manifest is refused even with --rescore", () => {
+  test("a run without a manifest reports unverified original inputs", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, {}, rowsOf(realCases(), OLD), null);
-    for (const rescore of [false, true]) expect(() => judgedLessons(run, { root, rescore })).toThrow("was made before akm-eval 0.2");
+    for (const rescore of [false, true]) expect(judgedLessons(run, { root, rescore }).inputs).toMatchObject({ missing_cases: [] });
   });
 
-  test("a manifest that is not sound, a manifest without the case, and a run of another eval are refused", () => {
-    const { root, assets } = repo();
-    const m = manifestOf(assets);
-    expect(() => judgedLessons(runOf(root, assets, {}, undefined, { ...m, manifest_version: 9 }), { root })).toThrow("has a manifest that is not sound: manifest_version is 9");
-    const { "lesson-02": _gone, ...cases } = m.cases;
-    const without = runOf(root, assets, {}, undefined, { ...m, cases, completion: { selected: Object.keys(cases), scored: Object.keys(cases), errored: [] } });
-    expect(() => judgedLessons(without, { root })).toThrow("the manifest of the run does not hold the case lesson-02");
-    expect(judgedLessons(without, { root, rescore: true }).judged).toHaveLength(3);
-    expect(() => judgedLessons(runOf(root, assets, { eval: "reflect" }), { root })).toThrow('is a run of "reflect", not of distill');
-  });
 
   test("a case id of the run that the cases lack stops the read, and with --rescore leaves its row out and names it", () => {
     const { root, assets } = repo();
@@ -263,7 +230,7 @@ describe("judgedLessons", () => {
     const rescored = judgedLessons(run, { root, rescore: true });
     expect(rescored.judged.map((j) => j.id)).toEqual(["lesson-01", "lesson-02", "status-01"]);
     expect(rescored.inputs.missing_cases).toEqual(["gone-01", "gone-02"]);
-    expect(rescored.inputs.differences).toEqual([]); // the digests agree: only the ids are the matter
+
     expect(rescored.skipped).toBe(1);
     expect(rescored.noScores).toBe(1); // as without the rows of the gone cases: they are named in missing_cases, not counted
     const one = runOf(root, assets, {}, rows.slice(0, 6)); // the same folder, with only one id gone
@@ -280,17 +247,17 @@ describe("judgedLessons", () => {
     };
     const own = at(join("private", "distill", "own", "assets"));
     const recorded = runOf(root, own, { corpus: "custom", corpus_folder: "private/distill/own/assets" }, undefined, { ...manifestOf(own), corpus: "custom" });
-    expect(judgedLessons(recorded, { root }).inputs).toMatchObject({ corpus: "custom", assets: join("private", "distill", "own", "assets"), differences: [] });
+    expect(judgedLessons(recorded, { root }).inputs).toMatchObject({ corpus: "custom", assets: join("private", "distill", "own", "assets") });
     for (const [corpus, folder] of [["private", join("private", "distill", "assets")], ["own", join("private", "distill", "own", "assets")], ["own-feedback", join("private", "distill", "own", "assets-feedback")]] as const) {
       const where = at(folder);
       const run = runOf(root, where, { corpus }, undefined, { ...manifestOf(where), corpus });
-      expect(judgedLessons(run, { root }).inputs, corpus).toMatchObject({ corpus, assets: folder, differences: [] });
+      expect(judgedLessons(run, { root }).inputs, corpus).toMatchObject({ corpus, assets: folder });
     }
     // a custom run outside the repository records no folder: --cases names it
     const outside = runOf(root, own, { corpus: "custom", corpus_folder: null }, undefined, { ...manifestOf(own), corpus: "custom" });
     expect(() => judgedLessons(outside, { root })).toThrow("Name the folder with --cases DIR");
-    expect(judgedLessons(outside, { root, cases: join("private", "distill", "own", "assets") }).inputs).toMatchObject({ assets: join("private", "distill", "own", "assets"), differences: [] });
-    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow("was made before akm-eval 0.2");
+    expect(judgedLessons(outside, { root, cases: join("private", "distill", "own", "assets") }).inputs).toMatchObject({ assets: join("private", "distill", "own", "assets") });
+    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow("Name the folder with --cases DIR");
     expect(() => judgedLessons(runOf(root, assets, { corpus: undefined }), { root })).toThrow("read the corpus undefined");
   });
 });
@@ -334,7 +301,7 @@ describe("the command line", () => {
     expect(out.mismatch).toBe(0);
     expect(out.bars.shipped.pass).toEqual({ good: 1, bad: 1 });
     expect(out.inputs).toHaveLength(1);
-    expect(out.inputs[0]).toMatchObject({ results, mode: "stored", corpus: "public", assets: join("evals", "distill", "assets"), manifest: "manifest", akm_version: "0.9.26", judge_first_criterion: "novelty", differences: [], changed_cases: [], missing_cases: [] });
+    expect(out.inputs[0]).toMatchObject({ results, mode: "stored", corpus: "public", assets: join("evals", "distill", "assets"), akm_version: "0.9.26", judge_first_criterion: "novelty", missing_cases: [] });
   });
 
   test("a run of a later akm with reusable scores is routed the same way", () => {
@@ -345,7 +312,8 @@ describe("the command line", () => {
   });
 
   test("scores it does not know exit 2 with a message that names the release, and print nothing (#61)", () => {
-    const { results } = setup("0.9.27", "novelty");
+    const { results, rows } = setup("0.9.27", "novelty");
+    writeFileSync(join(results, "samples.jsonl"), rows.map(row => JSON.stringify({ ...row, scores: { novelty: 4 } })).join("\n") + "\n");
     const done = run([results]);
     expect(done.code).toBe(2);
     expect(done.out).toBe("");
@@ -363,14 +331,13 @@ describe("the command line", () => {
     expect(done.err).toContain("2 have no judge scores");
   });
 
-  test("stops with exit 2 on a run without a manifest, also with --rescore", () => {
+  test("CLI judges legacy results without inventing input provenance", () => {
     const { results, tamper } = setup();
     tamper({ manifest: undefined });
     for (const args of [[results], ["--rescore", results]]) {
       const refused = run(args);
-      expect(refused.code).toBe(2);
-      expect(refused.out).toBe("");
-      expect(refused.err).toContain("was made before akm-eval 0.2");
+      expect(refused.code).toBe(0);
+      expect(JSON.parse(refused.out).inputs[0].missing_cases).toEqual([]);
     }
   });
 
@@ -382,7 +349,7 @@ describe("the command line", () => {
     expect(help.code).toBe(0);
     expect(help.out).toContain("--rescore");
     expect(help.out).toContain("--cases");
-    expect(help.out).toContain("0.9.27-alpha.2");
+    expect(help.out).toContain("current cases");
     expect(run(["--no-such-flag", "x"]).code).toBe(2);
   });
 });

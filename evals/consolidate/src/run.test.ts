@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost } from "../../../lib/provenance.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
@@ -394,9 +394,9 @@ describe("runCorpus", () => {
     expect(summary.config.embedding).toBeUndefined();
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
     // every key it wrote before is still there
-    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
-    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/); // the digest of this eval's code and lib/
-    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir));
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_cases", "n_run", "n_scored", "n_errored", "n_paired", "served_models", "metrics", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
+
+
     expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
@@ -511,8 +511,8 @@ describe("the command", () => {
     expect(help).toMatch(/--cases +the folder of a custom corpus/);
   });
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
+    for (const old of ["own", "own-feedback"]) {
       const done = run(["--corpus", old], model);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`consolidate: --corpus ${old} was renamed in 0.2: use `);

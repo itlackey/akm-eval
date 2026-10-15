@@ -58,7 +58,7 @@ export interface ModelEntry {
   chat?: ChatSettings;
 }
 
-/** The keys a line of models.json may have. Any other is refused, so a typo such as "privat" cannot pass for a setting, and a key cannot sit in the file. */
+/** Supported fields. Unknown metadata is reported; literal credentials and obsolete privacy policy still need an explicit correction. */
 const LINE_KEYS = ["model", "base_url", "api_key_env", "limits", "chat"];
 
 export interface ModelSettings {
@@ -95,12 +95,17 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
       if (LINE_KEYS.includes(key)) continue;
       if (key === "private") throw new Error(`models.json: "${id}" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.`);
       const hint = key === "api_key" ? ": a key belongs in the environment. Set it in .env and name its variable in api_key_env" : "";
-      throw new Error(`models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`);
+      const message = `models.json: "${id}" has an unknown key "${key}"${hint}. The keys of a line are ${LINE_KEYS.join(", ")}`;
+      if (key === "api_key") throw new Error(message);
+      console.warn(`${message}; ignored`);
     }
     if (e.chat !== undefined) {
       const chat = e.chat;
-      if (!chat || typeof chat !== "object" || Array.isArray(chat) || Object.keys(chat).some(k => !["max_tokens", "max_completion_tokens", "reasoning_effort"].includes(k)))
+      if (!chat || typeof chat !== "object" || Array.isArray(chat))
         throw new Error(`models.json: "${id}": chat accepts max_tokens, max_completion_tokens and reasoning_effort`);
+      if (Object.hasOwn(chat, "api_key")) throw new Error(`models.json: "${id}": put credentials in the environment and name the variable in api_key_env`);
+      for (const key of Object.keys(chat))
+        if (!["max_tokens", "max_completion_tokens", "reasoning_effort"].includes(key)) console.warn(`models.json: "${id}" has an unknown chat key "${key}"; ignored`);
       if (chat.max_tokens !== undefined && chat.max_completion_tokens !== undefined)
         throw new Error(`models.json: "${id}": choose one chat token-limit field`);
       for (const limit of [chat.max_tokens, chat.max_completion_tokens])
@@ -111,11 +116,12 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     if (e.limits !== undefined) {
       const limits = e.limits;
       if (!limits || typeof limits !== "object" || Array.isArray(limits) ||
-        Object.keys(limits).some(key => key !== "context" && key !== "output") ||
         !Number.isInteger(limits.context) || limits.context <= 0 ||
         !Number.isInteger(limits.output) || limits.output <= 0 || limits.output > limits.context)
         throw new Error(`models.json: "${id}": limits needs positive integer context and output, with output no larger than context`);
     }
+    for (const key of Object.keys(e.limits ?? {}))
+      if (key !== "context" && key !== "output") console.warn(`models.json: "${id}" has an unknown limits key "${key}"; ignored`);
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);
   }
@@ -137,7 +143,13 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
   if (entry) {
     const key = entry.api_key_env ? env[entry.api_key_env]?.trim() : "";
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
-    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", ...(entry.limits ? { limits: entry.limits } : {}), ...(entry.chat ? { chat: entry.chat } : {}) };
+    const limits = entry.limits ? { context: entry.limits.context, output: entry.limits.output } : undefined;
+    const chat: ChatSettings | undefined = entry.chat ? {
+      ...(entry.chat.max_tokens !== undefined ? { max_tokens: entry.chat.max_tokens } : {}),
+      ...(entry.chat.max_completion_tokens !== undefined ? { max_completion_tokens: entry.chat.max_completion_tokens } : {}),
+      ...(entry.chat.reasoning_effort !== undefined ? { reasoning_effort: entry.chat.reasoning_effort } : {}),
+    } : undefined;
+    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", ...(limits ? { limits } : {}), ...(chat ? { chat } : {}) };
   }
   // The judge falls back to the model's endpoint and key when it names none of its own: the explicit fallback, else MODEL_* in env.
   const judgeOwnsNone = role === "judge" && !env.JUDGE_BASE_URL?.trim();

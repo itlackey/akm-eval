@@ -14,7 +14,7 @@ import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, resolveCorpora } from "../../../lib/corpus.ts";
 import { type BuiltBy, type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf, corpusFolderOf } from "../../../lib/manifest.ts";
-import { type EngineSettings, engineSettings, harnessSha256, sha256Text } from "../../../lib/provenance.ts";
+import { type EngineSettings, engineSettings, sha256Text } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import * as akm from "./akm.ts";
@@ -27,7 +27,6 @@ import { type Abstention, type Columns, DEPTH, RELEVANT, type Row, type System, 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir);
 export { SYSTEMS };
 const labelOf = (sys: System): string => `${sys.startsWith("semantic_") ? "semantic " : ""}${sys.endsWith("curate") ? "curate" : "search"}`;
 /** What --semantic says: score the semantic search (on), never (off), or only in a full run of the public and rewrite corpora (auto). */
@@ -73,8 +72,6 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
   akm_bin: string;
@@ -307,7 +304,7 @@ export async function runCollection(
       label,
       date: new Date().toISOString(),
       git_commit: gitCommit(ROOT),
-      harness_sha256: HARNESS,
+
       akm_version: version,
       ...build,
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },

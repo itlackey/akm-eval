@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { engineConfig } from "./akm/akm.ts";
-import { canonical, credentialField, endpointHost, endpointIdentity, engineSettings, harnessSha256, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
+import { canonical, credentialField, endpointHost, endpointIdentity, engineSettings, redactConfig, sha256File, sha256Files, sha256Json, sha256Text, withoutEngineSettings } from "./provenance.ts";
 
 const dirs: string[] = [];
 const files = (contents: Record<string, string>) => {
@@ -143,133 +143,7 @@ describe("engineSettings", () => {
   });
 });
 
-describe("harnessSha256", () => {
-  const REPO = resolve(import.meta.dir, "..");
-  /** A small repository: the shared lib/, two evals, and every kind of file the digest counts or leaves out. */
-  const REPOSITORY: Record<string, string> = {
-    "lib/a.ts": "export const a = 1;\n",
-    "lib/sub/b.ts": "export const b = 2;\n",
-    "lib/env.sh": "load_env() { :; }\n",
-    "lib/harbor/arm.py": "ARM = 1\n",
-    "lib/harbor/test_arm.py": "def test(): pass\n",
-    "lib/a.test.ts": "test one\n",
-    "lib/README.md": "the lib\n",
-    "lib/golden.ts": "export const golden = 1;\n",
-    "evals/x/src/run.ts": "export const run = 1;\n",
-    "evals/x/src/lib.ts": "export const score = 1;\n",
-    "evals/x/src/helper.py": "VALUE = 1\n",
-    "evals/x/src/lib.test.ts": "test two\n",
-    "evals/x/src/test_helper.py": "def test(): pass\n",
-    "evals/x/src/fakes.ts": "export const fake = 1;\n",
-    "evals/x/src/fixtures/case.ts": "export const fixture = 1;\n",
-    "evals/x/src/node_modules/dep/index.ts": "export const dep = 1;\n",
-    "evals/x/src/package.json": "{}\n",
-    "evals/x/README.md": "the eval\n",
-    "evals/y/src/run.ts": "export const other = 1;\n",
-  };
-  const roots: string[] = [];
-  /** The repository above on disk, with `changes` applied: a file's new text. */
-  const checkout = (changes: Record<string, string> = {}): string => {
-    const root = mkdtempSync(join(tmpdir(), "harness-test-"));
-    roots.push(root);
-    for (const [path, text] of Object.entries({ ...REPOSITORY, ...changes })) {
-      mkdirSync(join(root, dirname(path)), { recursive: true });
-      writeFileSync(join(root, path), text);
-    }
-    return root;
-  };
-  const digest = (root: string, also: string[] = []): string => harnessSha256(join(root, "evals", "x", "src"), { root, also: also.map((dir) => join(root, dir)) });
-  afterEach(() => {
-    for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
-  });
 
-  test("is one sha256 that does not depend on where the checkout is", () => {
-    const [one, two] = [checkout(), checkout()];
-    expect(digest(one)).toMatch(/^[0-9a-f]{64}$/);
-    expect(digest(two)).toBe(digest(one));
-  });
-
-  test("is the same for the code of this repository in two checkout paths, and is the one the runners write", () => {
-    const copy = (): string => {
-      const root = mkdtempSync(join(tmpdir(), "harness-real-"));
-      roots.push(root);
-      for (const folder of ["lib", join("evals", "retrieval", "src")]) cpSync(join(REPO, folder), join(root, folder), { recursive: true, filter: (from) => !from.split(sep).includes("node_modules") });
-      return root;
-    };
-    const [one, two] = [copy(), copy()];
-    const at = (root: string) => harnessSha256(join(root, "evals", "retrieval", "src"), { root });
-    expect(at(two)).toBe(at(one));
-    expect(harnessSha256(join(REPO, "evals", "retrieval", "src"))).toBe(at(one));
-    expect(harnessSha256(join(REPO, "evals", "distill", "src"))).not.toBe(at(one)); // another eval is another digest
-  });
-
-  test("changes with an edit to the eval's own code, to a .ts or .py file of lib/, to lib/env.sh, and with a file added, renamed or dropped", () => {
-    const base = digest(checkout());
-    const changes: Record<string, string>[] = [
-      { "evals/x/src/lib.ts": "export const score = 2;\n" },
-      { "evals/x/src/run.ts": "export const run = 2;\n" },
-      { "evals/x/src/helper.py": "VALUE = 2\n" },
-      { "evals/x/src/new.ts": "export const added = 1;\n" },
-      { "lib/a.ts": "export const a = 2;\n" },
-      { "lib/sub/b.ts": "export const b = 3;\n" },
-      { "lib/env.sh": "load_env() { return 1; }\n" },
-      { "lib/harbor/arm.py": "ARM = 2\n" },
-      { "lib/added.ts": "export const added = 1;\n" },
-    ];
-    for (const change of changes) expect(digest(checkout(change))).not.toBe(base);
-    const renamed = checkout();
-    renameSync(join(renamed, "evals", "x", "src", "lib.ts"), join(renamed, "evals", "x", "src", "scoring.ts"));
-    expect(digest(renamed)).not.toBe(base);
-    const dropped = checkout();
-    rmSync(join(dropped, "lib", "a.ts"));
-    expect(digest(dropped)).not.toBe(base);
-  });
-
-  test("does not change with an edit to a test, a test double, the golden-file check, a fixture, a dependency, a README or a file that is not code", () => {
-    const base = digest(checkout());
-    const changes: Record<string, string>[] = [
-      { "evals/x/src/lib.test.ts": "test edited\n" },
-      { "evals/x/src/test_helper.py": "def test(): return 1\n" },
-      { "evals/x/src/fakes.ts": "export const fake = 2;\n" },
-      { "evals/x/src/fixtures/case.ts": "export const fixture = 2;\n" },
-      { "evals/x/src/node_modules/dep/index.ts": "export const dep = 2;\n" },
-      { "evals/x/src/package.json": '{"edited":true}\n' },
-      { "evals/x/README.md": "the eval, edited\n" },
-      { "lib/a.test.ts": "test edited\n" },
-      { "lib/golden.ts": "export const golden = 2;\n" },
-      { "lib/harbor/test_arm.py": "def test(): return 1\n" },
-      { "lib/README.md": "the lib, edited\n" },
-      { "evals/y/src/run.ts": "export const other = 2;\n" },
-      { "evals/x/src/new.test.ts": "a test added\n", "lib/new.test.ts": "a test added\n", "evals/x/src/NOTES.md": "notes\n" },
-    ];
-    for (const change of changes) expect(digest(checkout(change))).toBe(base);
-  });
-
-  test("counts the src folders of the evals whose code an eval imports, when it names them", () => {
-    const base = digest(checkout(), ["evals/y/src"]);
-    expect(base).not.toBe(digest(checkout()));
-    expect(digest(checkout({ "evals/y/src/run.ts": "export const other = 2;\n" }), ["evals/y/src"])).not.toBe(base);
-    expect(digest(checkout({ "evals/y/src/run.ts": "export const other = 2;\n" }))).toBe(digest(checkout()));
-  });
-
-  test("refuses a folder that is not inside the repository", () => {
-    const root = checkout();
-    expect(() => harnessSha256(tmpdir(), { root })).toThrow("is not inside the repository");
-    expect(() => harnessSha256(root, { root })).toThrow("is not inside the repository");
-    expect(() => digest(root, ["../elsewhere"])).toThrow("is not inside the repository");
-  });
-
-  test("digests a folder of Python files as a manifest of path from the root and content digest, sorted, with test_*.py left out: a fixed digest, so a change to how it is made shows", () => {
-    const root = mkdtempSync(join(tmpdir(), "harness-golden-"));
-    roots.push(root);
-    const src = join(root, "evals", "bakeoff", "src");
-    mkdirSync(src, { recursive: true });
-    writeFileSync(join(src, "helper.py"), "X = 1\n");
-    writeFileSync(join(src, "bakeoff.py"), "print('a')\n");
-    writeFileSync(join(src, "test_bakeoff.py"), "ignored\n");
-    expect(harnessSha256(src, { root })).toBe("aa0d380a5736fa683bc2cb7aa9dec98f860df640d388f41e0a0eeed36a5a5129");
-  });
-});
 
 describe("endpointIdentity, the sanitized endpoint for corpus consent", () => {
   test("keeps the scheme, host, port and path, so two deployments on one host differ", () => {

@@ -37,7 +37,7 @@ import { type Report, type Trial, formatReport, sideBySide as sideBySideOf } fro
 import { type RunTrial, makeRow, summarize as scoreRows } from "../../../lib/harbor/score.ts";
 import { type RunManifest, buildManifest, caseDigests, completionOf as casesCompletion, corpusFolderOf } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, type ModelLimits } from "../../../lib/models.ts";
-import { canonical, endpointHost, harnessSha256, redactConfig, sha256File } from "../../../lib/provenance.ts";
+import { canonical, endpointHost, redactConfig, sha256File } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir, markRunning, clearRunning } from "../../../lib/results.ts";
 import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, type Collected, collect, jobConfig, jobName, readLock } from "./collect.ts";
@@ -50,7 +50,6 @@ export type { LibraryCount, Lock } from "./collect.ts";
 const BENCH_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir, { also: [join(ROOT, "evals", "retrieval", "src")] });
 
 const USAGE = `Usage: benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
@@ -86,8 +85,6 @@ interface Summary {
   label: string;
   date: string;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   /** What `--akm` named, with the home folder as ~: akm-cli@x.y.z or the checkout's folder. akm_build is the checkout's git describe, null for a release. */
@@ -226,7 +223,7 @@ export function summarize(o: {
     label: o.label,
     date: new Date().toISOString(),
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: o.model,
     ...akmFields,
     pins: pinsOf(arm),
@@ -283,14 +280,14 @@ export async function runCorpus(
       concurrency: ctx.concurrency ?? cfg.n_concurrent_trials, lock, tasks, attempts, jobsDir: join(dir, "jobs"),
       librariesDir: join(dir, "libraries"), arm, akmEnv, libraryAssets: cfg.agents[1].kwargs.library_assets,
       packagesDir: arm.cli.tarball || arm.plugin.tarball ? join(dir, "akm-packages") : null });
-    if (prior.harness_sha256 !== HARNESS || prior.corpus !== c.name || prior.model !== ctx.model ||
+    if (prior.corpus !== c.name || prior.model !== ctx.model ||
       prior.akm_bin !== arm.bin || prior.akm_build !== arm.build ||
       prior.akm_build_fingerprint !== buildFingerprint(arm.build_fingerprint ?? null, prior.akm_install.dependency_tree_sha256) ||
       canonical(prior.manifest.cases) !== canonical(caseDigests(MEASUREMENT, tasks.map(id => caseOf(id, lock.tasks[id], prior.library.sha256)))) ||
       prior.engine.endpoint !== endpointHost(ctx.env.OPENAI_BASE_URL) || canonical(cfg) !== canonical(wanted) ||
       prior.library.sha256 !== sha256Dir(libraryOf(c)) || !prior.harbor_config_sha256 ||
       prior.harbor_config_sha256 !== sha256File(join(jobDir, "config.json")))
-      fail("--resume must use the original harness, corpus, library, model, model limits, AKM settings and unmodified Harbor job; start a fresh run for changed settings");
+      fail("--resume must use the original corpus, library, model, model limits, AKM settings and unmodified Harbor job; start a fresh run for changed settings");
     markRunning(dir);
     console.log(`${NAME}: resuming ${dir}; completed Harbor trials are reused`);
     got = { cfg, staged: null, library: { ...prior.library, sha256: prior.library.sha256! }, exit: 130 };

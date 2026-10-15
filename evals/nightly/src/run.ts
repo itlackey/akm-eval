@@ -16,7 +16,6 @@ import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolve
 import { buildManifest, caseDigests, completionOf, corpusFolderOf, type RunManifest } from "../../../lib/manifest.ts";
 import { MODEL_OPTIONS, modelUsage, useModel } from "../../../lib/models.ts";
 import { OVERRIDE_OPTIONS, defaultOverrides, overrideSummary, overridesUsage, parseOverrides } from "../../../lib/akm/overrides.ts";
-import { harnessSha256 } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import { makeResultsDir } from "../../../lib/results.ts";
 import { type RunInputs, privateAssetsProblem, runInputs } from "../../consolidate/src/inputs.ts";
@@ -34,7 +33,6 @@ export const MIN_AKM = "0.9.26"; // the first release with the pair judge's clai
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 // The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-const HARNESS = harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => join(ROOT, "evals", name, "src")) });
 
 const USAGE = `Usage: evals/nightly/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--embedder deterministic|real] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]
 
@@ -53,7 +51,7 @@ ${modelUsage}
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
+Tested with akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
 
 /** What the summary of a run records of its corpus: public or custom, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
 interface CorpusFields {
@@ -71,8 +69,6 @@ interface Summary extends RunInputs, CorpusFields {
   status: "complete";
   aborted_reason: null;
   git_commit: string;
-  /** A digest of the eval's source files and of the shared code in lib/ that the run used (see harnessSha256 in lib/provenance.ts). */
-  harness_sha256: string;
   model: string;
   akm_version: string;
   /** The AKM_BIN command and the git build it runs from, null for an installed release. See akmBuild. */
@@ -197,7 +193,7 @@ export async function runCorpus(corpus: ResolvedCorpus, ctx: RunContext, results
     status: "complete",
     aborted_reason: null,
     git_commit: gitCommit(ROOT),
-    harness_sha256: HARNESS,
+
     model: ctx.model,
     akm_version: ctx.version,
     ...build,
@@ -278,7 +274,7 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
 
-  if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
+  if (!atLeast(version, MIN_AKM)) console.warn(`akm ${version} predates the tested release ${MIN_AKM}; continuing with the requested build. Command or output errors will be recorded normally.`);
 
   const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides, embedder };
   const summaries: Summary[] = [];

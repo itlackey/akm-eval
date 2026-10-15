@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
 import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
-import { endpointHost, harnessSha256 } from "../../../lib/provenance.ts";
+import { endpointHost } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
@@ -469,10 +469,10 @@ describe("runCorpus", () => {
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
     // every key it wrote before is still there
-    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "harness_sha256", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
+    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
     // the digest of the code covers the night's own src folder, the consolidate, distill and reflect code it imports, and lib/
-    expect(summary.harness_sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(summary.harness_sha256).toBe(harnessSha256(import.meta.dir, { also: ["consolidate", "distill", "reflect"].map((name) => resolve(import.meta.dir, "..", "..", name, "src")) }));
+
+
     expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
@@ -598,7 +598,7 @@ describe("the command", () => {
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
     expect(run([]).err).toContain("name the model: pass --model ID, or set MODEL_NAME in .env");
-    expect(run(["--help"]).out).toContain("Needs akm 0.9.26 or later");
+    expect(run(["--help"]).out).toContain("Tested with akm 0.9.26 or later");
     expect(run(["--help"]).out).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
   });
 
@@ -636,8 +636,8 @@ describe("the command", () => {
     expect(help).toMatch(/--cases +the folder of a custom corpus/);
   });
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
+    for (const old of ["own", "own-feedback"]) {
       const done = run(["--corpus", old], model);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`nightly: --corpus ${old} was renamed in 0.2: use `);
@@ -655,12 +655,12 @@ describe("the command", () => {
     expect(run(["--cases", empty, "-y"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
   });
 
-  test("refuses an akm older than the one it is written for", () => {
+  test("warns about an older build and records actual command failures", () => {
     const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
     dirs.push(root);
     writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
     const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
-    expect(done.code).toBe(2);
-    expect(done.err).toContain("akm 0.9.25 is older than this eval is written for. It needs akm 0.9.26 or later.");
+    expect(done.code).toBe(1);
+    expect(done.err).toContain("predates the tested release");
   });
 });

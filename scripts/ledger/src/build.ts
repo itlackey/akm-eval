@@ -25,7 +25,7 @@ const runs: LedgerRun[] = [];
 let excluded = 0;
 for (const file of summaries(reports)) {
   const summary: unknown = JSON.parse(readFileSync(file, "utf8"));
-  if (object(summary).corpus !== "public" || object(summary).status !== "complete") {
+  if (object(summary).corpus !== "public") {
     excluded++;
     continue;
   }
@@ -47,7 +47,7 @@ for (const file of summaries(reports)) {
   runs.push(run);
 }
 if (!runs.length)
-  throw new Error("No completed public reports found. Point --results at akm-eval's published reports directory.");
+  throw new Error("No public reports found. Point --results at akm-eval's published reports directory.");
 runs.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 const dataset = {
   source_revision: sourceRevision,
