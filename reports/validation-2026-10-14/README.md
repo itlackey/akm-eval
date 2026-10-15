@@ -5,7 +5,8 @@ Eight original artifacts were copied byte-for-byte from the mounted Docker
 workspaces: Reflect and its earlier explicit rescore, the two full retrieval
 collections, and the four bounded build-validation runs. Six new retrieval
 rescored folders apply the expanded frozen judgments to those same raw outputs.
-Every original and derived artifact remains a separate ledger row.
+Original artifacts remain available for audit. Active ledger rows use the corrected
+rescores; [retired originals](../retired-results.md) are excluded from current comparisons.
 
 ## Reflect: 35B, semantic configured
 

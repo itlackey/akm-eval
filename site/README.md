@@ -1,8 +1,11 @@
 # Public comparison ledger
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. Every public artifact has a
-row, including repeats and pilots. Stopped/running snapshots are Diagnostic,
+repository's committed `reports/` tree. Public artifacts have a row unless
+explicitly retired in [`reports/retired-results.json`](../reports/retired-results.json),
+which maps report-folder paths to reasons. [Retired results](../reports/retired-results.md)
+remain at their original paths for audit and explicit CLI comparison. Repeats and
+pilots remain available when not superseded. Stopped/running snapshots are Diagnostic,
 and legacy summaries carry an explicit completion-status note. Private corpora
 remain excluded. The build makes no model calls.
 
@@ -63,8 +66,8 @@ selected input set. Use the saved-run CLI to verify exact input compatibility.
 Unknown measurements display —, distinct from recorded zeroes.
 
 **Paired gain** comes from the recorded shared-case comparison. It need not
-match the subtraction of overall arm scores: LongMemEval's published pilot has
-60% and 75% marginal accuracy but a 25-point paired gain on four shared cases.
+match the subtraction of overall arm scores: LongMemEval's full semantic run has
+424/500 and 401/499 marginal accuracy; its paired gain uses 499 shared cases.
 The recorded confidence bounds and pilot sample sizes are shown without
 inventing stronger evidence.
 
