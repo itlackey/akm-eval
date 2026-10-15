@@ -107,7 +107,6 @@ export function presentRun(input: RunInput): LedgerRun | null {
       "This trial used a plugin that could not run with AKM CLI 0.10. Use it to inspect the compatibility failure, not to estimate task performance.",
     );
   }
-  if (role === "Pilot") notes.push("Only part of this test was run. The score does not estimate full-test performance.");
   const rows = input.samples?.map(object) ?? [];
   if (suite === "longmemeval") {
     const undecidable = n(s, "judge_undecidable");

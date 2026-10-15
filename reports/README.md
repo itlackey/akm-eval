@@ -2,6 +2,7 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`0.9.32-vs-0.10.261005-beta/README.md`](0.9.32-vs-0.10.261005-beta/README.md): matched semantic retrieval, eight full 35B process pairs, SkillRet reuse, six-task Agent A/B, warm timing and bounded Luna pilots; larger cloud collections held.
 - [`validation-2026-10-14/README.md`](validation-2026-10-14/README.md): Docker validation, 35B Reflect rescore and expanded-label semantic retrieval results.
 - [`0.9.31/README.md`](0.9.31/README.md): bounded comparisons between two clean source builds, with expanded-label results.
 - [`0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md`](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md): fresh full Luna semantic LongMemEval run; 500 attempted, 499 scored pairs, limitations retained.
@@ -9,7 +10,7 @@ Published public results of the evals, and notes. Raw benchmark datasets and Har
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
 - [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): retrieval controls and links to current model results.
 
-The ledger and table below list the published results. Corrected rescores replace superseded scoring rows.
+The ledger lists every published run. The current matched release comparison is linked above; the table below records earlier collections. Corrected rescores replace superseded scoring rows.
 
 Each public run contains its original `summary.json` and `samples.jsonl`. Comparison reads stored scores. Explicit rescoring can use current labels for unchanged inputs and writes a new folder; it never rewrites published artifacts. Custom cases and private outputs are never included.
 
