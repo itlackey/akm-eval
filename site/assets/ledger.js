@@ -117,7 +117,7 @@ async function startLedger() {
     scored: 100, case_coverage: 116, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
     akm_version: 162, date: 155, recorded: 110 };
-  const titles = { quality_cases: 'Metric cases', model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
+  const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Metric cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
   const compareKeys = ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'case_coverage', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'quality_cases', 'collection', 'measurement', 'scoring_version', 'mode', 'label', 'date'];
 
   for (const key of facets) {
