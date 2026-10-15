@@ -46,8 +46,8 @@ and JUDGE_MODEL grades both answers; a judge with no JUDGE_BASE_URL goes to the 
                     results side by side.
   --cases DIR       a custom corpus of your own: a folder with ${DATA_FILE}, in the dataset's format.
                     It is --corpus custom. See "Corpora" in README.md. The run says which model and judge it sends the
-                    chats to and asks first.
-  -y, --yes         send the chats of --cases without asking.
+                    chats to before starting.
+  -y, --yes         accepted for compatibility; no confirmation is required.
   --limit N         ask N questions, drawn at random under the sample seed in proportion to question type
   --sample-seed N   the seed of that draw (default ${DEFAULT_SAMPLE_SEED}). It is recorded in summary.json as sample_seed,
                     apart from seed, the seed that made the custom dataset.

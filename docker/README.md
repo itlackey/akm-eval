@@ -38,7 +38,7 @@ docker run --rm --init --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$PWD/settings/models.json,dst=$AKM_EVAL_WORK/models.json,readonly" \
   --mount "type=bind,src=$PWD/my-cases,dst=/input,readonly" \
   --workdir "$AKM_EVAL_WORK" "$AKM_EVAL_IMAGE" \
-  evals/reflect/run --cases /input --yes --semantic --limit 5
+  evals/reflect/run --cases /input --semantic --limit 5
 ```
 
 Model services run separately. Use an endpoint reachable from the container;

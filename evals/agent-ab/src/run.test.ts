@@ -691,16 +691,14 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const mine = join(root, "mine");
     cpSync(join(root, "evals", "agent-ab", "tasks"), join(mine, "tasks"), { recursive: true });
     cpSync(join(root, "evals", "agent-ab", "libraries"), join(mine, "libraries"), { recursive: true });
-    // it asks before anything runs: with no terminal and no -y it stops, naming the model and the endpoint the agent will use
-    const asked = run(["--cases", "mine", "--limit", "1", "--label", "asked"]);
-    expect(asked.code).toBe(2);
-    expect(asked.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at its provider's own endpoint without asking");
-    const gateway = run(["--cases", "mine", "--limit", "1", "--label", "asked"], { MODEL_BASE_URL: "https://user:SYNTH-pass@gw.example.net:8443/deployment/v1?api_key=SYNTH-key" });
-    expect(gateway.err).toContain("agent-ab: add -y to send the cases in mine to openai/x at https://gw.example.net:8443/deployment/v1 without asking");
+    const ran = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
+    expect(ran.code, ran.err).toBe(0); // fake Harbor only; no real model or Docker calls
+    expect(ran.out).toContain("  model  openai/x at its provider's own endpoint");
+    expect(ran.out).not.toContain("Continue?");
+    const gateway = run(["--cases", "mine", "--limit", "1", "--label", "gateway"], { MODEL_BASE_URL: "https://user:SYNTH-pass@gw.example.net:8443/deployment/v1?api_key=SYNTH-key" });
+    expect(gateway.code, gateway.err).toBe(0);
+    expect(gateway.out).toContain("  model  openai/x at https://gw.example.net:8443/deployment/v1");
     expect(gateway.err + gateway.out).not.toContain("SYNTH");
-    expect(existsSync(join(root, "private", "agent-ab", "results"))).toBe(false); // nothing ran
-    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
-    expect(ran.code, ran.err).toBe(0);
     expect(summary("own", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "mine", seed: null, status: "complete" });
     rmSync(join(mine, "tasks"), { recursive: true });
     const empty = run(["--cases", "mine", "--limit", "1", "--label", "empty"]);

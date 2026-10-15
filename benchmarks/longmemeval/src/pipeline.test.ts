@@ -793,7 +793,7 @@ describe("the command", () => {
   const RUN = join(import.meta.dir, "run.ts");
   /** run.ts as a command, with the model and the judge of a synthetic gateway and no models.json line for them. */
   const command = (args: string[]) => {
-    // Stop at the version probe after consent; reader retries against a dead endpoint take over a minute.
+    // Stop at the version probe after destination reporting; reader retries against a dead endpoint take over a minute.
     const stub = join(tmp(), "consent-akm.ts");
     writeFileSync(stub, 'console.error("consent-test-akm reached"); process.exit(1);');
     const env = { ...process.env, AKM_BIN: commandLine([process.execPath, stub]), MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_API_KEY: "", MODEL_NAME: "synthetic-model", JUDGE_BASE_URL: "http://127.0.0.1:9/v1", JUDGE_MODEL: "synthetic-judge" };
@@ -808,19 +808,20 @@ describe("the command", () => {
     expect(run.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
   });
 
-  test("--cases asks before it sends the chats to the model and the judge: with no terminal and no -y it stops before anything runs, and -y goes on", () => {
+  test("--cases reports both destinations and proceeds without a terminal or --yes", () => {
     const notes = tmp();
     writeFileSync(join(notes, DATA_FILE), JSON.stringify(tinyDataset()));
-    const asked = command(["--cases", notes, "--limit", "1"]);
-    expect(asked.code).toBe(2);
-    expect(asked.err).toContain(`longmemeval: add -y to send the cases in ${notes} to synthetic-model at http://127.0.0.1:9/v1 and synthetic-judge at http://127.0.0.1:9/v1 without asking`);
-    // --retrieval-only has no model and no judge, so there is nothing to ask about
+    for (const flags of [[], ["--yes"]]) {
+      const run = command(["--cases", notes, "--limit", "1", ...flags]);
+      expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
+      expect(run.out).toContain("  model  synthetic-model at http://127.0.0.1:9/v1");
+      expect(run.out).toContain("  judge  synthetic-judge at http://127.0.0.1:9/v1");
+      expect(run.out).not.toContain("Continue?");
+      expect(run.err).toContain("consent-test-akm reached"); // stub stops before any model call
+    }
     const retrieval = command(["--cases", notes, "--retrieval-only"]);
-    expect(retrieval.err).not.toContain("add -y");
+    expect(retrieval.out).not.toContain("will be sent to");
     expect(retrieval.err).toContain("consent-test-akm reached");
-    const approved = command(["--cases", notes, "--limit", "1", "--yes"]);
-    expect(approved.err).not.toContain("add -y");
-    expect(approved.err).toContain("consent-test-akm reached");
   });
 
   test("--corpus own and own-feedback need an explicit folder, and --help names --cases", () => {

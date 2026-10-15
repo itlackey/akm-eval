@@ -150,10 +150,11 @@ describe("loadModels", () => {
     }
   });
 
-  test('refuses a line that still has "private", and says the prompt before a run with --cases replaces it', () => {
-    const message = 'models.json: "mine" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.';
-    expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":true}}'))).toThrow(message);
-    expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":false}}'))).toThrow(message);
+  test('obsolete "private" metadata does not prevent selecting a model', () => {
+    for (const value of [true, false]) {
+      const entries = loadModels(write(JSON.stringify({ mine: { base_url: "http://localhost:8080/v1", private: value } })));
+      expect(resolveModel("model", "mine", {}, entries)).toEqual({ name: "mine", baseUrl: "http://localhost:8080/v1", apiKey: "" });
+    }
   });
 
   test("refuses a line without a URL, a key where the name of one belongs, and a file that is not an object", () => {

@@ -145,7 +145,7 @@ describe("engineSettings", () => {
 
 
 
-describe("endpointIdentity, the sanitized endpoint for corpus consent", () => {
+describe("endpointIdentity, the sanitized endpoint for corpus destination reporting", () => {
   test("keeps the scheme, host, port and path, so two deployments on one host differ", () => {
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).toBe("https://gateway.example/deployment-A/v1");
     expect(endpointIdentity("https://gateway.example/deployment-A/v1")).not.toBe(endpointIdentity("https://gateway.example/deployment-B/v1"));

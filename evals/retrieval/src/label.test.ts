@@ -857,16 +857,16 @@ describe("the command", () => {
     }
   });
 
-  test("--cases asks before it sends your notes to the judge: with no terminal and no -y it stops before it reads anything, and -y goes on", () => {
+  test("--cases reports the judge and proceeds without a terminal or --yes", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" };
-    const asked = run(["--cases", "notes"], judge);
-    expect(asked.code).toBe(2);
-    expect(asked.err).toContain("retrieval label: add -y to send the cases in notes to m at http://localhost:1/v1 without asking");
-    expect(asked.err).not.toContain("secret");
-    expect(asked.out).toBe("");
-    for (const yes of ["-y", "--yes"]) expect(run(["--cases", "notes", yes], judge).err, yes).toContain("is missing"); // past the question: the folder holds no set
-    // the public library goes to the judge too, but it is the repository's own
-    expect(run(["--limit", "0"], judge).err).not.toContain("add -y");
+    for (const flags of [[], ["-y"], ["--yes"]]) {
+      const done = run(["--cases", "notes", ...flags], judge);
+      expect(done.out).toContain("The cases in notes will be sent to:");
+      expect(done.out).toContain("  judge  m at http://localhost:1/v1");
+      expect(done.out).not.toContain("Continue?");
+      expect(done.err).toContain("is missing"); // no cases to read, so no judge call
+      expect(done.err + done.out).not.toContain("secret");
+    }
   });
 
   test("grades the public library or a set of your own, and says so for the rewrite and for all", () => {
