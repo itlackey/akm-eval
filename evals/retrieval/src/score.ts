@@ -30,6 +30,7 @@ export interface Case {
   kind: string;
   grades: Record<string, number>;
   banned: string[];
+  aliases?: Record<string, string>;
 }
 
 // --- Scoring one query ------------------------------------------------------------------------------------------
@@ -173,13 +174,14 @@ export function makeRow(c: Case, raw: Raw): Row {
   for (const sys of SYSTEMS) {
     const a = raw[sys];
     if (a === undefined) continue;
+    const refs = a.refs.map(r => c.aliases?.[r] ?? r);
     row[sys] = {
       refs: a.refs,
-      grades: a.refs.map((r) => (Object.hasOwn(c.grades, r) ? (c.grades[r] as number) : null)),
+      grades: refs.map((r) => (Object.hasOwn(c.grades, r) ? (c.grades[r] as number) : null)),
       seconds: a.seconds,
       ...(a.error ? { error: a.error } : {}),
       ...(a.timedOut ? { timed_out: true as const } : {}),
-      ...(isTask(c) && nRelevant > 0 && !a.error ? { scores: scoreQuery(c.grades, a.refs, c.banned) } : {}),
+      ...(isTask(c) && nRelevant > 0 && !a.error ? { scores: scoreQuery(c.grades, [...new Set(refs)], c.banned) } : {}),
     };
   }
   return row as Row;

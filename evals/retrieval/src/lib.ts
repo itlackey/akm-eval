@@ -24,6 +24,8 @@ export interface Qrel {
   ref: string;
   grade: number;
   reason: string;
+  /** Another returned ref for the same physical asset; score it once under this canonical ref. */
+  alias_of?: string;
   /** The asset must never rank above a relevant one: a decoy, or an asset that is out of date. It has grade 0. */
   banned?: boolean;
   // Where a grade came from. label writes these four; a row made before it did has none of them, and a set of your own may leave them out.
@@ -74,15 +76,19 @@ export function parseQrels(text: string, where = "qrels"): Qrel[] {
     if (typeof r.id !== "string" || typeof r.ref !== "string") return 'has no string "id" and "ref"';
     if (!Number.isInteger(r.grade) || (r.grade as number) < 0 || (r.grade as number) > 3) return `has grade ${JSON.stringify(r.grade)}, expected 0 to 3`;
     if (r.banned !== undefined && !(r.banned === true && r.grade === 0)) return 'has a "banned" that is not true on a grade 0 pair';
-    for (const key of ["judge", "prompt_sha256", "date", "asset_sha256"]) if (r[key] !== undefined && (typeof r[key] !== "string" || !r[key])) return `has a "${key}" that is not a string`;
+    for (const key of ["judge", "prompt_sha256", "date", "asset_sha256", "alias_of"]) if (r[key] !== undefined && (typeof r[key] !== "string" || !r[key])) return `has a "${key}" that is not a string`;
     return null;
   });
 }
 
+/** Explicit same-file identities recorded by the label author; no ref aliases are inferred. */
+export const aliasesOf = (qrels: Qrel[]): Record<string, string> => Object.fromEntries(qrels.filter(r => r.alias_of !== undefined).map(r => [r.ref, r.alias_of as string]));
+
 /** Query id to the refs it bans. */
 export function bannedByQuery(qrels: Qrel[]): Map<string, string[]> {
+  const aliases = aliasesOf(qrels);
   const by = new Map<string, string[]>();
-  for (const r of qrels) if (r.banned) by.set(r.id, [...(by.get(r.id) ?? []), r.ref]);
+  for (const r of qrels) if (r.banned) by.set(r.id, [...(by.get(r.id) ?? []), aliases[r.ref] ?? r.ref]);
   return by;
 }
 
@@ -119,10 +125,11 @@ export function mixedJudgesWarning(qrels: Qrel[], where = "qrels.jsonl"): string
 
 /** Query id to ref to grade. A pair that appears twice keeps its last grade. */
 export function gradesByQuery(qrels: Qrel[]): Map<string, Record<string, number>> {
+  const aliases = aliasesOf(qrels);
   const by = new Map<string, Record<string, number>>();
   for (const r of qrels) {
     const grades = by.get(r.id) ?? {};
-    grades[r.ref] = r.grade;
+    grades[aliases[r.ref] ?? r.ref] = r.grade;
     by.set(r.id, grades);
   }
   return by;
@@ -132,7 +139,8 @@ export function gradesByQuery(qrels: Qrel[]): Map<string, Record<string, number>
 export function casesOf(queries: Query[], qrels: Qrel[]): Case[] {
   const grades = gradesByQuery(qrels);
   const banned = bannedByQuery(qrels);
-  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [] }));
+  const aliases = aliasesOf(qrels);
+  return queries.map((q) => ({ id: q.id, query: q.query, kind: q.kind, grades: grades.get(q.id) ?? {}, banned: banned.get(q.id) ?? [], ...(Object.keys(aliases).length ? { aliases } : {}) }));
 }
 
 /**

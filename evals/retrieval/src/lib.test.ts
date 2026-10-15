@@ -9,6 +9,8 @@ import {
   abstention,
   assetSha256,
   bannedByQuery,
+  casesOf,
+  makeRow,
   foldRefs,
   gradesByQuery,
   isTask,
@@ -379,4 +381,25 @@ describe("summarize and abstention", () => {
     expect(abstention([0, 3, 10, 0])).toEqual({ n: 4, abstained: 2, rate: 0.5 });
     expect(abstention([])).toEqual({ n: 0, abstained: 0, rate: null });
   });
+});
+
+
+test("same-file ref classifications share relevance credit while raw refs remain intact", () => {
+  const queries = [{ id: "q", query: "configure the tool", kind: "direct" }];
+  const qrels = parseQrels([
+    { id: "q", ref: "commands/guide", grade: 3, reason: "direct" },
+    { id: "q", ref: "knowledge/guide", alias_of: "commands/guide", grade: 3, reason: "same file" },
+  ].map(row => JSON.stringify(row)).join("\n"));
+  const separate = casesOf(queries, qrels.map(({ alias_of: _alias, ...row }) => row))[0]!;
+  expect(Object.keys(separate.grades)).toHaveLength(2); // spelling alone never merges assets
+  const c = casesOf(queries, qrels)[0]!;
+  const refs = ["knowledge/guide", "commands/guide"];
+  const answer = { refs, seconds: 0.1 };
+  const row = makeRow(c, { search: answer, curate: answer });
+  expect(row.n_relevant).toBe(1);
+  expect(row.search.refs).toEqual(refs);
+  expect(row.search.grades).toEqual([3, 3]);
+  expect(row.search.scores).toMatchObject({ ndcg_10: 1, recall_10: 1, judged_10: 1, p_5: 0.2 });
+  expect(gradesByQuery([...qrels, { id: "q", ref: "knowledge/guide", grade: 1, reason: "later review" }]).get("q"))
+    .toEqual({ "commands/guide": 1 });
 });

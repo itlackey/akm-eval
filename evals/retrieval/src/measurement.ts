@@ -45,6 +45,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   eval: NAME,
   // The version of what this eval asks akm. Change it by hand when that changes; runs are compared by it.
   version: "0.2",
+  scoringVersion: "0.3",
   loadCases: (root, summary) => {
     const folder = setFolder(root, summary);
     const cases = casesOf(parseQueries(readFileSync(join(folder, "queries.jsonl"), "utf8"), join(folder, "queries.jsonl")), parseQrels(readFileSync(join(folder, "qrels.jsonl"), "utf8"), join(folder, "qrels.jsonl")));
@@ -54,7 +55,7 @@ export const MEASUREMENT: Measurement<Case, Raw, Row> = {
   input: inputOf,
   rescoreContexts: (_root, summary, cases) => new Map(cases.map(c => [c.id, libraryOf(summary)])),
   // Everything score() reads of the case: whether it is a task, the grade of each asset judged for it and the assets it bans.
-  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort() }),
+  labels: (c) => ({ kind: c.kind, grades: c.grades, banned: [...c.banned].sort(), ...(c.aliases ? { aliases: c.aliases } : {}) }),
   rawOf,
   score: makeRow,
   errored,

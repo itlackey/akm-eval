@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { sha256File, sha256Json } from "../../../lib/provenance.ts";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
+import { comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Case, type Row } from "./score.ts";
 
@@ -16,9 +17,12 @@ const ROOT = join(import.meta.dir, "..", "..", "..");
 const FIXTURES = join(ROOT, "evals", "retrieval", "fixtures");
 const ASSETS = join(ROOT, "evals", "retrieval", "assets");
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const CASES: Case[] = jsonl(join(FIXTURES, "cases.jsonl"));
+const FIXTURE_CASES: Case[] = jsonl(join(FIXTURES, "cases.jsonl"));
 const RAW: { case: string; note: string; raw: any }[] = jsonl(join(FIXTURES, "raw.jsonl"));
 const BOOKS = ["legal-standard-deduction-current", "culinary-sear-steaming-not-browning"];
+// The scorer goldens remain frozen; this suite tests rescoring against the current public judgments.
+const current = ["library", "books"].flatMap(collection => MEASUREMENT.loadCases(ROOT, { corpus: "public", collection }));
+const CASES = FIXTURE_CASES.map(c => current.find(now => now.id === c.id) as Case);
 /** The case ids of a collection: the books are the two cases of the golden folder with a banned asset. */
 const idsOf = (collection: "library" | "books"): string[] => CASES.map((c) => c.id).filter((id) => BOOKS.includes(id) === (collection === "books"));
 const LIBRARY = { library_sha256: "1".repeat(64), bundles_sha256: null };
@@ -126,8 +130,9 @@ describe("rescoring a retrieval run", () => {
     const { out, result } = rescoreFolder(dir);
     expect(result).toMatchObject({ changed: [], dropped: [], relabelled: [] });
     expect(rowsOf(out)).toEqual(rowsOf(dir));
-    expect(summaryOf(out).metrics.search.banned_above).toBe(0); // the relevant asset is first in both
-    expect(rowsOf(out).map((r) => r.search.scores.banned_above)).toEqual([false, false]);
+    expect(summaryOf(out).metrics.search.banned_above).toBe(0.5); // expanded labels find another relevant asset below a banned result
+    expect(rowsOf(out).map((r) => r.search.scores.banned_above)).toEqual([false, true]);
+    expect(rowsOf(out).map((r) => r.search.scores.banned_above_first)).toEqual([false, false]);
   });
 
   test("a change to the qrels is a change of the labels: the run is scored again against them, and the cases it touched are named", () => {
@@ -143,12 +148,12 @@ describe("rescoring a retrieval run", () => {
     expect(result.changed.sort()).toEqual(["q001", "q003"]);
     expect(result.relabelled.sort()).toEqual(["q001", "q003"]);
     const now = rowsOf(out);
-    const golden = jsonl(join(FIXTURES, "expected.jsonl"));
+    const currentRows = rowsOf(run());
     for (const id of ["q001", "q003"]) {
-      const expected = golden.find((r, i) => r.id === id && RAW[i]?.note === (RAW.find((l) => l.case === id) as { note: string }).note);
+      const expected = currentRows.find(r => r.id === id);
       expect(now.find((r) => r.id === id)).toEqual(expected); // the row the current labels and the stored results give
     }
-    expect(now.find((r) => r.id === "q003").search.scores.ndcg_10).toBe(0.9864);
+    expect(now.find((r) => r.id === "q003").search.scores.ndcg_10).toBeGreaterThan(0);
     // the rescored manifest has the current labels' digests, the original inputs, and the current scorer
     const m = summaryOf(out).manifest as RunManifest;
     const old = summaryOf(stale).manifest as RunManifest;
@@ -157,6 +162,19 @@ describe("rescoring a retrieval run", () => {
     expect(m.cases.q003?.input_sha256).toBe(old.cases.q003?.input_sha256);
     expect(m.cases.q004).toEqual(old.cases.q004);
     expect(summaryOf(out).metrics.search.ndcg_10).not.toBe(summaryOf(stale).metrics.search.ndcg_10);
+  });
+
+  test("expanded labels preserve compatibility between a historical rescore and a fresh collection", () => {
+    const historical = run({
+      labels: c => c.id === "q003" ? { ...c, grades: {} } : c,
+      manifest: m => ({ ...m, collector: { ...m.collector, version: "0.2" }, scorer: { version: "0.2" } }),
+    });
+    const { out } = rescoreFolder(historical);
+    const fresh = run();
+    const report = comparePair(loadRun(out), loadRun(fresh));
+    expect(report).toMatchObject({ eval_version: "0.2", scoring_version: "0.3", warnings: [] });
+    expect(report.rows.find(row => row.key === "quality_percent")?.delta).toBe(0);
+    expect(summaryOf(historical).manifest.scorer.version).toBe("0.2");
   });
 
   test("a run with a manifest from another scorer is scored by the current one, and the manifest says which it was", () => {

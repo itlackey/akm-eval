@@ -2,6 +2,8 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
+- [`validation-2026-10-14/README.md`](validation-2026-10-14/README.md): Docker validation, 35B Reflect rescore and expanded-label semantic retrieval results; originals preserved.
+- [`0.9.31/README.md`](0.9.31/README.md): bounded comparisons between two clean source builds, with original and expanded-label results.
 - [`0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md`](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md): fresh full Luna semantic LongMemEval run; 500 attempted, 499 scored pairs, limitations retained.
 - [`0.10.261003-beta/semantic-2026-10-14/README.md`](0.10.261003-beta/semantic-2026-10-14/README.md): semantic 35B/Luna results, completed artifacts, and stopped benchmark coverage.
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
@@ -79,3 +81,17 @@ scripts/compare/run reports/<version>/<eval>/<run-A> reports/<version>/<eval>/<r
 | 0.10.261003-beta | skillret | [bifrost-fast35b-v06-20261013](0.10.261003-beta/skillret/bifrost-fast35b-v06-20261013) | public | none | full public run; 4392 recorded, 4392 scored, 0 errors |
 | 0.10.261003-beta | agent-ab | [bifrost-fast35b-v06-20261013](0.10.261003-beta/agent-ab/bifrost-fast35b-v06-20261013) | public | openai/fast/qwen3.6-35b-a3b | full public run; 6 recorded, 6 scored, 0 errors |
 | 0.10.261003-beta | longmemeval | [luna-semantic-fresh-20261014-full](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full) | public | eval-luna/gpt-6-luna | full semantic run; 500 attempted, 499 scored pairs, 1 error; Qwen judge |
+| 0.10.261003-beta | reflect | [docker-35b-semantic-full-20261014](0.10.261003-beta/reflect/docker-35b-semantic-full-20261014) | public | fast/qwen3.6-35b-a3b | 80 cases; full public Docker run |
+| 0.10.261003-beta | reflect | [docker-35b-semantic-full-20261014-rescored](0.10.261003-beta/reflect/docker-35b-semantic-full-20261014-rescored) | public | fast/qwen3.6-35b-a3b | 80 cases; explicit rescore |
+| 0.10.261003-beta | retrieval | [docker-semantic-full-20261014-books](0.10.261003-beta/retrieval/docker-semantic-full-20261014-books) | public | none | 51 cases; full public Docker run |
+| 0.10.261003-beta | retrieval | [docker-semantic-full-20261014-books-rescored](0.10.261003-beta/retrieval/docker-semantic-full-20261014-books-rescored) | public | none | 51 cases; expanded-label rescore |
+| 0.10.261003-beta | retrieval | [docker-semantic-full-20261014-library](0.10.261003-beta/retrieval/docker-semantic-full-20261014-library) | public | none | 136 cases; full public Docker run |
+| 0.10.261003-beta | retrieval | [docker-semantic-full-20261014-library-rescored](0.10.261003-beta/retrieval/docker-semantic-full-20261014-library-rescored) | public | none | 136 cases; expanded-label rescore |
+| 0.9.31 | retrieval | [cleanup-build-baseline-20261014-books](0.9.31/retrieval/cleanup-build-baseline-20261014-books) | public | none | 12 cases; bounded build validation |
+| 0.9.31 | retrieval | [cleanup-build-baseline-20261014-books-rescored](0.9.31/retrieval/cleanup-build-baseline-20261014-books-rescored) | public | none | 12 cases; expanded-label rescore |
+| 0.9.31 | retrieval | [cleanup-build-baseline-20261014-library](0.9.31/retrieval/cleanup-build-baseline-20261014-library) | public | none | 12 cases; bounded build validation |
+| 0.9.31 | retrieval | [cleanup-build-baseline-20261014-library-rescored](0.9.31/retrieval/cleanup-build-baseline-20261014-library-rescored) | public | none | 12 cases; expanded-label rescore |
+| 0.9.31 | retrieval | [cleanup-build-candidate-20261014-books](0.9.31/retrieval/cleanup-build-candidate-20261014-books) | public | none | 12 cases; bounded build validation |
+| 0.9.31 | retrieval | [cleanup-build-candidate-20261014-books-rescored](0.9.31/retrieval/cleanup-build-candidate-20261014-books-rescored) | public | none | 12 cases; expanded-label rescore |
+| 0.9.31 | retrieval | [cleanup-build-candidate-20261014-library](0.9.31/retrieval/cleanup-build-candidate-20261014-library) | public | none | 12 cases; bounded build validation |
+| 0.9.31 | retrieval | [cleanup-build-candidate-20261014-library-rescored](0.9.31/retrieval/cleanup-build-candidate-20261014-library-rescored) | public | none | 12 cases; expanded-label rescore |

@@ -19,7 +19,7 @@ evals/reflect/run --cases ~/notes/reflect
 
 - `--limit N` runs the first N cases; the first ten hold each class once.
 - `--strategy NAME` runs another strategy than `reflect-only`; `--config-patch FILE` changes the config (see "Measure akm's gates").
-- `--retrieval-queries` gives each note the retrieval eval's labelled queries for it as searches that found it, so akm's retrieval check has something to grade. Public notes and their rewrite only.
+- `--retrieval-queries` gives each note the retrieval eval's labelled queries for it as searches that found it, so akm's retrieval check has something to grade. Public notes and their rewrite only. Collection version 0.4 uses the expanded retrieval judgments (77 of 80 notes); standard runs do not use this query context.
 
 Each case gets its own akm sandbox and runs:
 

@@ -185,8 +185,8 @@ collection identity and records the current scoring version. Changed or missing
 inputs are refused: those require a new collection. The original stays intact.
 Rescoring is never part of a comparison or ledger build.
 
-Bump the eval's `version` in `src/measurement.ts` when inputs, case selection,
-collection protocol or labels change. For a scoring-only correction, set
+Bump the eval's `version` in `src/measurement.ts` when inputs, case selection or
+collection protocol change. For a scoring correction or label-only change, set
 `scoringVersion` instead; it defaults to `version`. Record the reason in
 [MEASUREMENT_CHANGELOG.md](MEASUREMENT_CHANGELOG.md). Existing results retain their
 versions. Do not recollect for documentation, UI or reporting-only changes.

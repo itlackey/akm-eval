@@ -1,8 +1,8 @@
 # Measurement changelog
 
 Each eval's `version` in `src/measurement.ts` identifies its collection. Bump it
-when the selected inputs, collection protocol or labels change. A scoring-only
-correction sets `scoringVersion` (default: `version`) without changing collection identity.
+when the selected inputs or collection protocol change. A scoring correction
+or label-only change sets `scoringVersion` (default: `version`) without changing collection identity.
 Model/AKM/configuration experiments remain recorded settings within that version.
 Documentation, ledger and reporting changes alone do not require a new version.
 
@@ -14,7 +14,10 @@ inputs require collection. Add a release entry here when a version changes.
 
 ## Unreleased
 
-- reflect and nightly: scoring version 0.4 accepts harmless acronym plurals such as `PDFs` when the source names `PDF`; names, numbers and paths remain checked. Collection stays at 0.3. Explicitly rescore saved runs to compare this scoring correction; originals are preserved.
+- reflect: collection version 0.4 records the expanded retrieval-label inputs used by optional `--retrieval-queries` (77 planted notes now have labeled queries, previously 75). Standard Reflect inputs and scoring 0.4 are unchanged; saved collector 0.3 runs retain their identities.
+- retrieval: scoring version 0.3 expands the frozen judgments by 374 library and 492 books pairs from all four columns of six saved semantic runs. Inputs and collection version 0.2 are unchanged. Explicit same-file label aliases prevent duplicate relevance credit across AKM ref classifications; ranking formulas are unchanged. Explicit rescoring retains collector 0.2 and records scorer 0.3 plus the expanded label digests; originals remain intact.
+
+- reflect and nightly: scoring version 0.4 accepts harmless acronym plurals such as `PDFs` when the source names `PDF`; names, numbers and paths remain checked. Nightly collection stays at 0.3; the separate label expansion above moves Reflect collection to 0.4. Explicitly rescore saved runs to compare this scoring correction; originals are preserved.
 - Retrieval single runs now record `wall_seconds` and clear their running marker through the existing shared runner, matching repeated runs. Cases, collection and scoring are unchanged.
 
 - longmemeval: measurement version 0.3. Undecidable judge replies are grading errors excluded from accuracy; identical grading prompts share one verdict within a run. Reader and judge request settings, usage, retries and provider-reported costs are saved separately. Graceful stops preserve completed questions. Earlier results retain their original scoring and artifacts.
