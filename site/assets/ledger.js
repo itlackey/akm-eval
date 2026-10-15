@@ -77,7 +77,6 @@ function formatCell(value, column) {
   })) + (column.unit === '%' ? '<span class="unit">%</span>' : '');
   if (column.kind === 'date') return escapeHTML(value.replace('T', ' ').slice(0, 16));
   if (column.key === 'model') return escapeHTML(modelName(value));
-  if (/sha256|fingerprint/.test(column.key)) return escapeHTML(value.slice(0, 12));
   return escapeHTML(value);
 }
 

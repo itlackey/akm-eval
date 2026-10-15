@@ -118,10 +118,6 @@ col("harbor_version", "Harbor version", "text", "Settings", "Recorded Harbor ben
 col("plugin_version", "AKM plugin version", "text", "Settings", "Recorded AKM plugin pin.");
 col("source_commit", "Collector commit", "text", "Provenance", "Collector source commit, including its recorded dirty marker.");
 col("akm_build", "AKM build", "text", "Provenance", "Recorded AKM checkout build; an installed release can leave this unrecorded.");
-col("akm_build_fingerprint", "AKM build SHA", "text", "Provenance", "Recorded fingerprint distinguishing uncommitted AKM builds.");
-col("harness_sha256", "Harness SHA", "text", "Provenance", "Collector code fingerprint. Different digests can mean changed measurement.");
-col("assets_sha256", "Inputs SHA", "text", "Provenance", "Test inputs fingerprint.");
-col("config_sha256", "Config SHA", "text", "Provenance", "Recorded redacted configuration fingerprint.");
 col("notes", "Notes", "text", "Provenance", "Interpretation and compatibility notes.");
 
 export function comparisonFields(summary: RecordValue, samples: unknown[] | null, scores: Score[]): Record<string, Cell> {
@@ -237,10 +233,7 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   fields.semantic_index = string(summary.semantic_index);
   for (const [key, pin] of [["opencode_version", "opencode"], ["harbor_version", "harbor"], ["plugin_version", "akm_plugin"]])
     fields[key!] = string(at(summary, `pins.${pin}`));
-  fields.assets_sha256 = string(summary.assets_sha256);
   fields.akm_build = string(summary.akm_build);
-  fields.akm_build_fingerprint = string(summary.akm_build_fingerprint);
-  fields.config_sha256 = string(at(summary, "manifest.config.sha256"));
   for (const score of scores) fields[`score:${score.label}`] = score.value === null ? null : score.value * (score.unit === "percent" ? 100 : 1);
   return fields;
 }

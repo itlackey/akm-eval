@@ -2,14 +2,14 @@
 
 Published public results of the evals, and notes. Raw benchmark datasets and Harbor job directories are kept out of this tree.
 
-- [`validation-2026-10-14/README.md`](validation-2026-10-14/README.md): Docker validation, 35B Reflect rescore and expanded-label semantic retrieval results; originals preserved.
-- [`0.9.31/README.md`](0.9.31/README.md): bounded comparisons between two clean source builds, with original and expanded-label results.
+- [`validation-2026-10-14/README.md`](validation-2026-10-14/README.md): Docker validation, 35B Reflect rescore and expanded-label semantic retrieval results.
+- [`0.9.31/README.md`](0.9.31/README.md): bounded comparisons between two clean source builds, with expanded-label results.
 - [`0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md`](0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md): fresh full Luna semantic LongMemEval run; 500 attempted, 499 scored pairs, limitations retained.
 - [`0.10.261003-beta/semantic-2026-10-14/README.md`](0.10.261003-beta/semantic-2026-10-14/README.md): semantic 35B/Luna results, completed artifacts, and stopped benchmark coverage.
 - [`retired-evals.md`](retired-evals.md): what the retired evals asked, found and why they ended.
-- [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): Bifrost runs, limitations, and reproduction commands.
+- [`0.10.261003-beta/README.md`](0.10.261003-beta/README.md): retrieval controls and links to current model results.
 
-The ledger and table below contain active comparison rows. [Retired results](retired-results.md) preserve rejected runs, diagnostics, superseded pilots and old scoring rows at their original paths. Corrected rescores are the current quality rows.
+The ledger and table below list the published results. Corrected rescores replace superseded scoring rows.
 
 Each public run contains its original `summary.json` and `samples.jsonl`. Comparison reads stored scores. Explicit rescoring can use current labels for unchanged inputs and writes a new folder; it never rewrites published artifacts. Custom cases and private outputs are never included.
 

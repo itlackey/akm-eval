@@ -1,6 +1,6 @@
 # AKM semantic search evaluation results — stopped collection
 
-A later [fresh full LongMemEval run using Luna and semantic search](../longmemeval/luna-semantic-fresh-20261014-full/README.md) attempted all 500 questions on October 14, 2026, with 499 scored pairs and one API error. It supersedes the LongMemEval prefix below for full-run coverage; the stopped artifacts remain unchanged. Agent A/B and Terminal-Bench remain stopped.
+A later [fresh full LongMemEval run using Luna and semantic search](../longmemeval/luna-semantic-fresh-20261014-full/README.md) attempted all 500 questions on October 14, 2026, with 499 scored pairs and one API error. It is the retained LongMemEval answer collection. Agent A/B and Terminal-Bench remain stopped.
 
 The public process evals on AKM `0.10.261003-beta` used `fast/qwen3.6-35b-a3b` through Bifrost with semantic search enabled. All eight process suites completed without collection errors. They exposed missed lesson updates, unsafe retirement proposals, and one extracted instruction from an untrusted PR body. Collection was stopped on October 14, 2026. At that stop, the three full paired benchmarks were incomplete; all collectors and their owned containers were stopped. No evals were restarted while preparing this report.
 
@@ -44,8 +44,6 @@ The existing [full SkillRet run](../skillret/akm-0.10-public/summary.json) is re
 
 ## Paired benchmark pilots
 
-The [20-question Luna LongMemEval pilot](longmemeval/2026-10-14-luna-semantic-20261014-pilot/summary.json) completed with no request failures, empty answers, truncated answers or undecidable judge replies. Full history scored 16/20 and semantic AKM retrieval 18/20. The paired difference was 10 percentage points, with a 95% interval from -9.1 to 29.1 points. All required sessions were retrieved for 19 questions; the remaining partial miss produced the AKM arm's one evidence-related loss. The pilot took 321 seconds. It does not establish the full benchmark's outcome.
-
 The [two-task 35B agent pilot](agent-ab/2026-10-14-b35-semantic-20261014-pilot/summary.json) scored control 0/2 and AKM 1/2, with no errors. Both AKM containers verified semantic search; the agent called AKM in one of the two trials. The [two-task Luna Terminal-Bench pilot](terminal-bench/2026-10-14-luna-semantic-20261014-pilot/summary.json) scored 1/2 in each arm with no errors. Both AKM containers verified semantic search, and Luna read their curated context. The Terminal-Bench pilot took 740 seconds.
 
 LongMemEval still tests one search over raw sessions with a five-session limit against a full-history reader. It does not exercise distillation or repeated evidence gathering. The reader gets 512 output tokens and the judge 10. Answer-call times exclude indexing, retrieval and judging. During the full run, an identical answer for `3b6f954b` received different judge verdicts in the two arms; the original answers and verdicts are preserved for audit.
@@ -54,24 +52,21 @@ LongMemEval still tests one search over raw sessions with a five-session limit a
 
 | Benchmark | Planned coverage | Saved coverage | State |
 |---|---:|---:|---|
-| LongMemEval, Luna | 500 questions | 362 scored questions | Original summary is aborted; 138 questions remain |
 | Agent A/B, 35B | 36 trials | 29 trial records: 23 completed, 2 agent failures, 4 cancellations | 7 trials have no result; original summary is aborted |
 | Terminal-Bench, Luna | 178 trials across 89 tasks | 33 trial records, including 2 setup failures | No final collector summary; 145 trials have no result |
-
-The original aborted [LongMemEval summary](stopped/longmemeval/summary.json) and [samples](stopped/longmemeval/samples.jsonl) are preserved byte-for-byte. On this prefix, full history answered 292/362 correctly (80.66%) and AKM answered 278/362 (76.80%). The paired difference is -3.87 percentage points, with a 95% interval of -8.11 to +0.38 points. This prefix covers four question types and omits every single-session-assistant and knowledge-update question. It cannot represent the full benchmark. There were no request errors or undecidable judge replies, but 14 answers exhausted the 512-token output budget and had no answer text: 11 in full history and 3 with AKM. Empty answers were scored wrong. The identical-answer grading discrepancy described above is unchanged.
 
 The original aborted [Agent A/B summary](stopped/agent-ab/summary.json) and [samples](stopped/agent-ab/samples.jsonl) retain their native completion grid and scores. Two agent exits reported context overflow on the 35B endpoint. The current harness supports explicit OpenCode model limits in `models.json`, passed equally to both arms and saved in the job config. Those limits were not applied to this collected run, and the implementation has only been validated with fake collectors. No corrected full run was collected.
 
 The [Terminal-Bench inventory](stopped/terminal-bench.json) is derived from existing trial files, with source hashes and per-trial outcomes. Both setup failures were on `qemu-alpine-ssh`, one in each arm, when package installation exited with code 100. Raw Harbor jobs and logs remain local; this inventory is not a replacement collector summary. Interrupted and unstarted trials are counted as having no result.
 
-These stopped artifacts are excluded from the public ledger's completed-run rows. The 21 completed artifact folders contain eight full process runs, two full retrieval collections, and eleven pilots. SkillRet reuses the previously published matching full run.
+The stopped Agent A/B snapshot is Diagnostic in the ledger. This report retains eight full process runs, two full retrieval collections and the Agent/Terminal pilots. SkillRet reuses the previously published full run.
 
 ## Remaining work
 
 1. Harness validation and input checks are complete for the changes in this report. The new model-limit path still needs a representative real pilot before any claim that it prevents endpoint context failures.
 2. Expanded public process cases and native benchmark inputs are available and verified. Preserve their exact selections and hashes in further collections.
 3. Representative pilots were collected. Before further paid collection, address the 35B context budget, the Terminal-Bench package-install failures, and LongMemEval's output budget and judge consistency.
-4. LongMemEval now has a separate full collection linked above. Completing the full Agent A/B and Terminal-Bench collections requires a new instruction to run them. Any changed protocol must retain appropriate measurement provenance. Update this report and compare only compatible complete runs afterward; no universal repeats or matrix scheduler are required.
+4. LongMemEval now has a separate full collection linked above. Completing the full Agent A/B and Terminal-Bench collections requires a new instruction to run them. Record protocol differences and coverage when comparing the saved results.
 
 ## Reproduction
 
@@ -97,7 +92,3 @@ evals/agent-ab/run --semantic --model fast/qwen3.6-35b-a3b --akm akm-cli@0.10.26
 benchmarks/longmemeval/run --semantic --model eval-luna/gpt-6-luna
 benchmarks/terminal-bench/run --semantic --model eval-luna/gpt-6-luna --akm akm-cli@0.10.261003-beta
 ```
-
-## Validation
-
-Validation uses fake model/AKM/Harbor fixtures and saved artifacts. No real eval, API probe, smoke collection or benchmark was restarted during this PR. The final repository check passed all TypeScript checks, 39 Python tests and 2,816 Bun tests (13 gated tests skipped) in the working checkout. All eight ledger browser tests passed against combined latest-main and new report data. The test counts include fixture files copied into local result libraries; CI uses a clean checkout. Semantic setup is exercised with a stub CLI, including absent/partial embeddings and keyword fallback. Both collector paths are tested with fake Harbor for preservation of identical model limits in the saved job. Original completed artifacts are checked against their local source summaries and samples, including exact selected case IDs and byte equality. The two aborted artifacts are copied without rewriting their recorded status, scores or provenance. The earlier pinned-release contract and startup smokes each passed all nine applicable suites; those results are reused.
