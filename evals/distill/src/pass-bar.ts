@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { caseDigests, noManifest, readManifest } from "../../../lib/manifest.ts";
+import { caseDigests, readManifest } from "../../../lib/manifest.ts";
 import { atLeast } from "../../reflect/src/lib.ts";
 import { type LoadedCase, NAME, checkLesson, corpusFolder, lessonText, loadCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
@@ -28,7 +28,7 @@ A lesson is good when it passes the distill eval's checks for its case; a lesson
 The checks read the cases, the memories and the scorer of the code here now, not the ones the run was given. So the manifest in the
 summary.json of a run must hold, for every case of the run, the input and the label digests of the case as it is now, and every case id
 of the run must be in the corpus. Otherwise the run is not read, and the message says what differs.
-A run without a manifest is refused, also with --rescore.
+Legacy runs remain readable and report unverified original input identity.
 
 The judge's first score is called reusable from akm ${RENAMED_IN}, and novelty before. A run of an older akm is read with novelty as
 reusable. A run whose scores have other names, or whose akm version is not known, is refused, and the message names the release.
@@ -115,14 +115,13 @@ export function namesReusable(version: string | null): boolean | null {
 }
 
 /**
- * The judge's scores of a row as `Scores`, or undefined when the row has none. `reusable` is read as it is, and `novelty` as `reusable` for a
- * run of an akm before 0.9.27-alpha.2, which is when the criterion was renamed. Anything else is not a score this tool can read: it throws,
+ * The judge's scores of a row as `Scores`, or undefined when the row has none. `reusable` is read as it is, and `novelty` as its historical spelling. The recorded fields determine what can be read; the version remains provenance. Anything else is not a score this tool can read: it throws,
  * naming the release and the keys, so that a run is never reported as empty for want of the name.
  */
 export function readScores(scores: Record<string, unknown> | null, id: string, version: string | null): Scores | undefined {
   if (!scores) return undefined;
   const num = (k: string): number | undefined => (typeof scores[k] === "number" ? (scores[k] as number) : undefined);
-  const first = num("reusable") ?? (namesReusable(version) === false ? num("novelty") : undefined);
+  const first = num("reusable") ?? num("novelty");
   const [nonRedundancy, grounding] = [num("nonRedundancy"), num("grounding")];
   if (first !== undefined && nonRedundancy !== undefined && grounding !== undefined) return { reusable: first, nonRedundancy, grounding };
   const was = version === null ? "an akm whose version the summary does not record" : `akm ${version}`;
@@ -137,8 +136,8 @@ export interface Inputs {
   corpus: string;
   /** The folder of the cases the read used, from the repository root. */
   assets: string;
-  /** Every accepted run has a manifest. */
-  manifest: "manifest";
+  /** Whether the original collection recorded input digests. */
+  manifest: "manifest" | "legacy";
   /** The akm release of the run, and the name its judge's first criterion had in the rows that were judged (null when none was). */
   akm_version: string | null;
   judge_first_criterion: "reusable" | "novelty" | null;
@@ -166,7 +165,7 @@ const some = (ids: string[], n = 5): string => `${ids.slice(0, n).join(", ")}${i
 /**
  * The judged lessons of one results folder. A row has them when the judge scored a lesson and the text of it is known. A lesson is good by
  * the cases, the memories and the checks here now, so its manifest must hold the input and label digests of each case (the input covers
- * the memory) as they are here now. A run with no manifest is refused, also with `rescore`, and every case id of the run must be in the corpus. Otherwise this throws and
+ * the memory) as they are here now. Legacy runs report unverified original input identity; every case id of the run must be in the corpus. Otherwise this throws and
  * says what differs. With `rescore` it judges anyway, leaves out the rows of a case that is gone, and says all of it in `inputs`.
  */
 export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): { judged: Judged[]; skipped: number; noScores: number; inputs: Inputs } {
@@ -174,7 +173,6 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   if (summary.eval !== NAME) throw new Error(`${resultsDir} is a run of ${JSON.stringify(summary.eval)}, not of ${NAME}`);
   const reading = readManifest(summary);
-  if (reading.kind === "legacy") throw new Error(noManifest(resultsDir));
   if (reading.kind === "invalid") throw new Error(`${resultsDir}/summary.json has a manifest that is not sound: ${reading.problems.join("; ")}`);
   const assets = options.cases !== undefined ? resolve(root, options.cases) : corpusFolder(root, summary);
   const where = relative(root, assets);
@@ -188,7 +186,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
   const now = caseDigests(MEASUREMENT, present);
   const differences: string[] = [];
   const changed: string[] = [];
-  {
+  if (reading.kind === "manifest") {
     const m = reading.manifest;
     const unknown = present.filter((c) => m.cases[c.id] === undefined).map((c) => c.id);
     if (unknown.length > 0) differences.push(`the manifest of the run does not hold the case${unknown.length === 1 ? "" : "s"} ${some(unknown)}`);
@@ -203,7 +201,8 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     throw new Error(`${resultsDir} cannot be judged by the cases and the scorer here now:\n  - ${lines.join("\n  - ")}\nA lesson would be good or bad by cases, memories and checks other than the run's. To judge its stored lessons by what is here now on purpose, add --rescore.`);
   }
 
-  const version = reading.manifest.akm.version;
+  if (reading.kind === "legacy") differences.push("Original input digests were not recorded; replay uses the current cases and input identity is unverified.");
+  const version = reading.kind === "manifest" ? reading.manifest.akm.version : typeof summary.akm_version === "string" ? summary.akm_version : null;
   const judged: Judged[] = [];
   let skipped = 0;
   let noScores = 0;
@@ -228,7 +227,7 @@ export function judgedLessons(resultsDir: string, options: ReplayOptions = {}): 
     mode: options.rescore ? "rescore" : "stored",
     corpus: String(summary.corpus),
     assets: where,
-    manifest: "manifest",
+    manifest: reading.kind,
     akm_version: version,
     judge_first_criterion: judged.length === 0 ? null : novelty ? "novelty" : "reusable",
     differences,

@@ -420,8 +420,8 @@ describe("the command", () => {
     expect(done.err).not.toContain("no-such-akm-in-this-test"); // the akm was never asked for
   });
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
+    for (const old of ["own", "own-feedback"]) {
       const done = run(["--corpus", old], model);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`judge-gate: --corpus ${old} was renamed in 0.2: use `);
@@ -434,13 +434,13 @@ describe("the command", () => {
     expect(run(["--help"]).out).toContain("[--corpus public|custom|all] [--cases DIR]");
   });
 
-  test("refuses an akm older than the one it was built on", () => {
+  test("warns about an older build and records actual command failures", () => {
     const root = mkdtempSync(join(tmpdir(), "judge-gate-cmd-"));
     dirs.push(root);
     writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.24");');
     const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
-    expect(done.code).toBe(2);
-    expect(done.err).toContain("akm 0.9.24 has no `improve judge` command. This eval needs akm 0.9.25-alpha.2 or later.");
+    expect(done.code).toBe(1);
+    expect(done.err).toContain("predates the tested release");
   });
 });
 

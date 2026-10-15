@@ -1044,12 +1044,12 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(empty.err).toContain("the custom library is missing (mine/library)");
   }, 60_000);
 
-  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, private, own and own-feedback were renamed, and a value that is none of them is refused", () => {
+  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, own and own-feedback need an explicit folder, and a value that is none of them is refused", () => {
     const { run } = repo();
     const missing = run(["--corpus", "custom"]);
     expect(missing.code).toBe(2);
     expect(missing.err).toContain("the custom library is missing (private/retrieval/assets/library). Make it with: ./generate-assets --only retrieval");
-    for (const old of ["private", "own", "own-feedback"]) {
+    for (const old of ["own", "own-feedback"]) {
       const renamed = run(["--corpus", old]);
       expect(renamed.code, old).toBe(2);
       expect(renamed.err, old).toContain(`terminal-bench: --corpus ${old} was renamed in 0.2: use `);

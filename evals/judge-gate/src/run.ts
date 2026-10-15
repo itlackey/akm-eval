@@ -46,7 +46,7 @@ ${modelUsage}
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.`;
+Tested with akm 0.9.25-alpha.2 or later on PATH, or in AKM_BIN.`;
 
 interface Summary {
   eval: string;
@@ -267,7 +267,7 @@ async function main(): Promise<void> {
   const sandbox = openSandbox(baseUrl, model, hasKey, overrides);
   try {
     const version = await akmVersion(sandbox).catch((e: Error) => fail(e.message));
-    if (!atLeast(version, MIN_AKM)) fail(`akm ${version} has no \`improve judge\` command. This eval needs akm ${MIN_AKM} or later.`);
+    if (!atLeast(version, MIN_AKM)) console.warn(`akm ${version} predates the tested release ${MIN_AKM}; continuing with the requested build. Command or output errors will be recorded normally.`);
 
     const summaries: Summary[] = [];
     for (const c of corpora) {

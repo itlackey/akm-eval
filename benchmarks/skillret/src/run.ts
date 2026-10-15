@@ -294,7 +294,7 @@ async function main(): Promise<void> {
   useAkm(values, fail);
   const assets = join(EVAL_DIR, "assets");
   // The custom corpus is a split of the dataset: it has no folder, so it takes no --cases.
-  const choice = values.corpus ?? "public";
+  const choice = values.corpus === "private" ? "custom" : values.corpus ?? "public";
   const old = renamed(choice, "--corpus custom");
   if (old) fail(old);
   if (!["public", "custom", "all"].includes(choice)) fail(`--corpus must be public, custom or all, not "${choice}"`);

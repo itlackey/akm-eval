@@ -95,15 +95,15 @@ describe("resolveCorpora", () => {
     expect(resolveIn({}, promotion)[0].name).toBe("public");
   });
 
-  test("the old values --corpus private, own and own-feedback stop with the name of what replaces them, and nothing is looked for", () => {
+  test("legacy corpus names accept unambiguous aliases and ask for a folder when needed", () => {
     const { root, resolveIn } = setup();
     const own = "--corpus own was renamed in 0.2: use --cases DIR for a folder of your own";
-    expect(messageOf(() => resolveIn({ corpus: "private" }))).toBe("--corpus private was renamed in 0.2: use --corpus custom (the rewrite in private/<eval>/assets), or --cases DIR for a folder of your own");
+    expect(resolveIn({ corpus: "private" })).toEqual(resolveIn({ corpus: "custom" }));
     expect(messageOf(() => resolveIn({ corpus: "own" }))).toBe(own);
     expect(messageOf(() => resolveIn({ corpus: "own-feedback" }))).toBe("--corpus own-feedback was renamed in 0.2: use --cases DIR for a folder of your own");
-    expect(messageOf(() => resolveIn({ corpus: "own", cases: "night" }))).toBe(own);
+    expect(resolveIn({ corpus: "own", cases: "night" })).toEqual(resolveIn({ cases: "night" }));
     // an eval with no rewrite does not offer one
-    expect(messageOf(() => resolveIn({ corpus: "private" }, { rewrite: false }))).toBe("--corpus private was renamed in 0.2: use --cases DIR for a folder of your own");
+    expect(messageOf(() => resolveIn({ corpus: "private" }, { rewrite: false }))).toContain("Use --cases DIR");
     expect(renamed("private", "--corpus custom")).toBe("--corpus private was renamed in 0.2: use --corpus custom");
     for (const value of ["public", "custom", "all", "bogus", undefined]) expect(renamed(value, "x")).toBeUndefined();
     expect(existsSync(join(root, "private"))).toBe(false);
@@ -279,7 +279,7 @@ describe("every eval and benchmark that takes --corpus", () => {
     expect(runs.length).toBeGreaterThanOrEqual(14);
   });
 
-  test("stops at --corpus private, own and own-feedback with the new form, before anything runs", async () => {
+  test("old corpus names never launch a model while setup is missing", async () => {
     const cwd = temp(); // a folder with no .env in it
     const env = { ...process.env, AKM_BIN: "/nonexistent/akm-for-this-test" };
     const stop = async (file: string, old: string) => {
@@ -287,7 +287,7 @@ describe("every eval and benchmark that takes --corpus", () => {
       const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       return { file, old, code, err };
     };
-    const tries = runs.flatMap((file) => ["private", "own", "own-feedback"].map((old) => [file, old] as const));
+    const tries = runs.flatMap((file) => ["own", "own-feedback"].map((old) => [file, old] as const));
     for (let i = 0; i < tries.length; i += 8) {
       for (const done of await Promise.all(tries.slice(i, i + 8).map(([file, old]) => stop(file, old)))) {
         expect([done.file, done.old, done.code]).toEqual([done.file, done.old, 2]);

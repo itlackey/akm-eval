@@ -73,10 +73,11 @@ describe("published eval projection", () => {
     expect(presentRun(input(report({ eval: "longmemeval", judge_undecidable: 0 }), "longmem/clean", []))!.notes).toBe("");
     expect(presentRun(input(report(), "reflect/run", samples))!.notes).not.toContain("identical answer");
   });
-  test("excludes private and incomplete results", () => {
+  test("excludes private results and labels stopped public evidence explicitly", () => {
     expect(presentRun(input(report({ corpus: "custom" })))).toBeNull();
-    expect(presentRun(input(report({ status: "aborted" })))).toBeNull();
-    expect(presentRun(input(report({ status: "running" })))).toBeNull();
+    expect(presentRun(input(report({ status: "aborted", aborted_reason: "operator stopped" })))!).toMatchObject({ role: "Diagnostic", notes: expect.stringContaining("operator stopped") });
+    expect(presentRun(input(report({ status: "running" })))!.notes).toContain("recorded work");
+    expect(presentRun(input(report({ status: undefined })))!.notes).toContain("Legacy result");
   });
   test("uses sampling metadata and preserves diagnostic scope", () => {
     expect(presentRun(input(report({ limit: 3 })))!.role).toBe("Pilot");

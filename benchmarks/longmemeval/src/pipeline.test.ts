@@ -839,8 +839,8 @@ describe("the command", () => {
     expect(approved.err).toContain("consent-test-akm reached");
   });
 
-  test("--corpus private, own and own-feedback were renamed, and --help names --cases", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder, and --help names --cases", () => {
+    for (const old of ["own", "own-feedback"]) {
       const refused = command(["--corpus", old]);
       expect(refused.code, old).toBe(2);
       expect(refused.err, old).toContain(`longmemeval: --corpus ${old} was renamed in 0.2: use `);

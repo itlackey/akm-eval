@@ -72,9 +72,8 @@ describe("readScores", () => {
 
   test("refuses scores it cannot read, naming the release the rename is in, whatever the version", () => {
     const novelty = { novelty: 4, nonRedundancy: 5, grounding: 3 };
-    for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0"]) expect(() => readScores(novelty, "claim-01", version), version).toThrow(/scores of the case claim-01 are grounding, nonRedundancy, novelty.*from akm 0\.9\.27-alpha\.2.*akm .* names it reusable/);
-    expect(() => readScores(novelty, "claim-01", null)).toThrow(/an akm whose version the summary does not record/);
-    expect(() => readScores(novelty, "claim-01", "not a version")).toThrow("before akm 0.9.27-alpha.2 it is called novelty");
+    for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0", null, "not a version"])
+      expect(readScores(novelty, "claim-01", version)).toEqual(s(4, 5, 3));
     expect(() => readScores({ reusable: 4 }, "claim-01", "0.9.26")).toThrow("scores of the case claim-01 are reusable, and this tool reads");
     expect(() => readScores({}, "claim-01", "0.9.26")).toThrow("are empty");
   });
@@ -168,21 +167,21 @@ describe("judgedLessons", () => {
     }
   });
 
-  test("the rename is read by release: novelty before 0.9.27-alpha.2, reusable from it, and a mismatch is refused naming the release", () => {
+  test("historical and current score names remain readable across release strings", () => {
     const { root, assets, cases } = repo();
     const novelty = rowsOf(cases, OLD);
     const reusable = rowsOf(cases, NEW);
     for (const version of ["0.9.26", "0.9.27-alpha.1"]) expect(judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }).judged, version).toHaveLength(3);
     for (const version of ["0.9.27-alpha.2", "0.9.27", "0.10.0"]) expect(judgedLessons(runOf(root, assets, {}, reusable, manifestOf(assets, version)), { root }).judged, version).toHaveLength(3);
-    for (const version of ["0.9.27-alpha.2", "0.10.0"]) expect(() => judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }), version).toThrow(/from akm 0\.9\.27-alpha\.2/);
+    for (const version of ["0.9.27-alpha.2", "0.10.0"]) expect(judgedLessons(runOf(root, assets, {}, novelty, manifestOf(assets, version)), { root }).judged).toHaveLength(3);
     // reusable scores in a run of an old akm are read as they are (a patched akm, a backport)
     expect(judgedLessons(runOf(root, assets, {}, reusable, manifestOf(assets, "0.9.26")), { root }).judged).toHaveLength(3);
   });
 
-  test("a run whose akm version is not recorded cannot be read with novelty, and is read with reusable", () => {
+  test("recorded score fields are readable even when the AKM version is unknown", () => {
     const { root, assets, cases } = repo();
     const legacy = (rows: object[]) => runOf(root, assets, { akm_version: undefined }, rows, { ...manifestOf(assets), akm: { ...manifestOf(assets).akm, version: null } });
-    expect(() => judgedLessons(legacy(rowsOf(cases, OLD)), { root, rescore: true })).toThrow(/an akm whose version the summary does not record/);
+    expect(judgedLessons(legacy(rowsOf(cases, OLD)), { root, rescore: true }).judged).toHaveLength(3);
     expect(judgedLessons(legacy(rowsOf(cases, NEW)), { root, rescore: true }).judged).toHaveLength(3);
   });
 
@@ -238,10 +237,10 @@ describe("judgedLessons", () => {
     expect(judgedLessons(run, { root, rescore: true }).inputs.changed_cases).toEqual(["lesson-01"]);
   });
 
-  test("a run without a manifest is refused even with --rescore", () => {
+  test("a run without a manifest reports unverified original inputs", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, {}, rowsOf(realCases(), OLD), null);
-    for (const rescore of [false, true]) expect(() => judgedLessons(run, { root, rescore })).toThrow("was made before akm-eval 0.2");
+    for (const rescore of [false, true]) expect(judgedLessons(run, { root, rescore }).inputs).toMatchObject({ manifest: "legacy", differences: [expect.stringContaining("unverified")] });
   });
 
   test("a manifest that is not sound, a manifest without the case, and a run of another eval are refused", () => {
@@ -290,7 +289,7 @@ describe("judgedLessons", () => {
     const outside = runOf(root, own, { corpus: "custom", corpus_folder: null }, undefined, { ...manifestOf(own), corpus: "custom" });
     expect(() => judgedLessons(outside, { root })).toThrow("Name the folder with --cases DIR");
     expect(judgedLessons(outside, { root, cases: join("private", "distill", "own", "assets") }).inputs).toMatchObject({ assets: join("private", "distill", "own", "assets"), differences: [] });
-    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow("was made before akm-eval 0.2");
+    expect(() => judgedLessons(runOf(root, assets, { corpus: "somewhere-else" }, undefined, null), { root })).toThrow("Name the folder with --cases DIR");
     expect(() => judgedLessons(runOf(root, assets, { corpus: undefined }), { root })).toThrow("read the corpus undefined");
   });
 });
@@ -345,7 +344,8 @@ describe("the command line", () => {
   });
 
   test("scores it does not know exit 2 with a message that names the release, and print nothing (#61)", () => {
-    const { results } = setup("0.9.27", "novelty");
+    const { results, rows } = setup("0.9.27", "novelty");
+    writeFileSync(join(results, "samples.jsonl"), rows.map(row => JSON.stringify({ ...row, scores: { novelty: 4 } })).join("\n") + "\n");
     const done = run([results]);
     expect(done.code).toBe(2);
     expect(done.out).toBe("");
@@ -363,14 +363,13 @@ describe("the command line", () => {
     expect(done.err).toContain("2 have no judge scores");
   });
 
-  test("stops with exit 2 on a run without a manifest, also with --rescore", () => {
+  test("CLI judges legacy results without inventing input provenance", () => {
     const { results, tamper } = setup();
     tamper({ manifest: undefined });
     for (const args of [[results], ["--rescore", results]]) {
       const refused = run(args);
-      expect(refused.code).toBe(2);
-      expect(refused.out).toBe("");
-      expect(refused.err).toContain("was made before akm-eval 0.2");
+      expect(refused.code).toBe(0);
+      expect(refused.out).toContain("unverified");
     }
   });
 

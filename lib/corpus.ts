@@ -76,7 +76,8 @@ export function resolveCorpora(o: ResolveOptions): ResolvedCorpus[] {
   const root = o.root ?? ROOT;
   const rewrite = o.rewrite !== false;
   const { corpus, cases } = o.values;
-  const choice = corpus ?? (cases === undefined ? "public" : "custom");
+  const requested = corpus ?? (cases === undefined ? "public" : "custom");
+  const choice = requested === "private" || (cases !== undefined && ["own", "own-feedback"].includes(requested)) ? "custom" : requested;
   const old = renamed(choice, `${choice === "private" && rewrite ? "--corpus custom (the rewrite in private/<eval>/assets), or " : ""}--cases DIR for a folder of your own`);
   if (old) return fail(old);
   if (choice !== "public" && choice !== "custom" && choice !== "all") return fail(`--corpus must be public, custom or all, not "${choice}"`);

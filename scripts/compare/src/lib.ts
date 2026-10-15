@@ -1,50 +1,46 @@
 /** Compare recorded results. No collectors, model calls, rescoring or run scheduling. */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { noManifest, readManifest, type RunManifest } from "../../../lib/manifest.ts";
+import { readManifest, type RunManifest } from "../../../lib/manifest.ts";
 import { canonical, redactConfig } from "../../../lib/provenance.ts";
 import { comparisonFields, coreColumns, scoreColumns, type Cell } from "../../ledger/src/comparison.ts";
 import { scores } from "../../ledger/src/presentation.ts";
 
 export const SUPPORTED = ["nightly", "consolidate", "distill", "reflect", "promotion", "judge-gate", "extract", "retrieval", "agent-ab", "terminal-bench", "bakeoff", "longmemeval", "skillret"];
 type Row = Record<string, any>;
-export interface Run { dir: string; summary: Row; rows: Row[] }
+export interface Run { dir: string; summary: Row; rows: Row[]; samplesMissing?: boolean; running?: boolean }
 export class CompareError extends Error {}
 const object = (v: unknown): v is Row => v !== null && typeof v === "object" && !Array.isArray(v);
 const equal = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 const ids = (values: string[]) => [...values].sort();
 
-function manifest(run: Run): RunManifest {
+function manifest(run: Run): RunManifest | null {
   const read = readManifest(run.summary);
-  if (read.kind === "legacy") throw new CompareError(noManifest(run.dir));
-  if (read.kind === "invalid") throw new CompareError(`${run.dir}: invalid manifest: ${read.problems.join("; ")}`);
-  if (!SUPPORTED.includes(read.manifest.eval)) throw new CompareError(`Unsupported eval: ${read.manifest.eval}`);
-  if (run.summary.status !== "complete") throw new CompareError(`${run.dir}: run is not complete (${run.summary.status ?? "unknown status"})`);
+  return read.kind === "manifest" ? read.manifest : null;
+}
+
+function validateRows(run: Run): void {
   const seen = new Set<string>();
   for (const row of run.rows) {
     if (!object(row) || typeof row.id !== "string" || !row.id) throw new CompareError(`${run.dir}: a sample has no string id`);
     if (seen.has(row.id)) throw new CompareError(`${run.dir}: duplicate sample id ${row.id}`);
-    if (!read.manifest.completion.selected.includes(row.id)) throw new CompareError(`${run.dir}: sample ${row.id} was not selected`);
     seen.add(row.id);
   }
-  if (!equal(ids([...seen]), ids([...read.manifest.completion.scored, ...read.manifest.completion.errored])))
-    throw new CompareError(`${run.dir}: samples disagree with manifest completion`);
-  return read.manifest;
 }
 
-/** A completed results folder, or its summary.json. Does not modify its contents. */
+/** A saved results folder, or its summary.json. Does not modify its contents. */
 export function loadRun(path: string): Run {
   let dir = resolve(path);
   if (existsSync(dir) && statSync(dir).isFile()) dir = dirname(dir);
-  if (existsSync(join(dir, ".running"))) throw new CompareError(`${dir} is still being written (.running exists)`);
   try {
     const summary: unknown = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     if (!object(summary)) throw new CompareError(`${dir}: summary is not an object`);
-    const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").split(/\r?\n/).filter(line => line.trim()).map((line, i) => {
+    const samplesMissing = !existsSync(join(dir, "samples.jsonl"));
+    const rows = (samplesMissing ? "" : readFileSync(join(dir, "samples.jsonl"), "utf8")).split(/\r?\n/).filter(line => line.trim()).map((line, i) => {
       try { return JSON.parse(line); } catch { throw new CompareError(`${dir}/samples.jsonl:${i + 1}: invalid JSON`); }
     });
-    const run = { dir, summary, rows };
-    manifest(run);
+    const run: Run = { dir, summary, rows, ...(samplesMissing ? { samplesMissing: true } : {}), ...(existsSync(join(dir, ".running")) ? { running: true } : {}) };
+    validateRows(run);
     return run;
   } catch (error) {
     if (error instanceof CompareError) throw error;
@@ -60,21 +56,45 @@ export interface PairReport {
   warnings: string[]; rows: ComparisonRow[];
 }
 
-/** Strict input identity, independent of the model or AKM settings being compared. */
-export function compatible(a: Run, b: Run): [RunManifest, RunManifest] {
-  const am = manifest(a), bm = manifest(b);
-  for (const key of ["eval", "corpus", "collection", "mode", "harness_version"] as const)
-    if (!equal(am[key], bm[key])) throw new CompareError(`${key} differs: ${am[key]} vs ${bm[key]}`);
-  if (am.collector.version !== bm.collector.version) throw new CompareError(`eval version differs: ${am.collector.version} vs ${bm.collector.version}`);
-  if ((am.scorer?.version ?? am.collector.version) !== (bm.scorer?.version ?? bm.collector.version))
-    throw new CompareError("scoring version differs; explicitly rescore both runs if their inputs are unchanged");
-  if (!equal(am.settings.seed, bm.settings.seed)) throw new CompareError("the seed of the private assets differs");
-  if (!equal(ids(am.completion.selected), ids(bm.completion.selected))) throw new CompareError("selected cases differ; no cases are silently dropped");
-  for (const id of am.completion.selected) {
-    if (am.cases[id]!.input_sha256 !== bm.cases[id]!.input_sha256) throw new CompareError(`case input differs: ${id}`);
-    if (am.cases[id]!.label_sha256 !== bm.cases[id]!.label_sha256) throw new CompareError(`case labels differ: ${id}; explicitly rescore both runs to the same labels`);
+/** Differences affect the supported deltas, never whether stored results can be viewed. */
+function differences(a: Run, b: Run, am: RunManifest | null, bm: RunManifest | null): string[] {
+  const out: string[] = [];
+  for (const key of ["eval", "corpus", "collection", "mode"] as const)
+    if (!equal(am?.[key] ?? a.summary[key] ?? null, bm?.[key] ?? b.summary[key] ?? null)) out.push(`${key} differs`);
+  if (am && bm) {
+    if (am.harness_version !== bm.harness_version) out.push("harness version differs");
+    if (am.collector.version !== bm.collector.version) out.push("eval version differs");
+    if ((am.scorer?.version ?? am.collector.version) !== (bm.scorer?.version ?? bm.collector.version)) out.push("scoring version differs");
+    if (!equal(am.settings.seed, bm.settings.seed)) out.push("generated-corpus seed differs");
+    if (!equal(ids(am.completion.selected), ids(bm.completion.selected))) out.push("selected cases differ; no cases were dropped");
+    for (const id of am.completion.selected) {
+      if (!bm.cases[id]) continue;
+      if (am.cases[id]!.input_sha256 !== bm.cases[id]!.input_sha256) out.push(`case input differs: ${id}`);
+      if (am.cases[id]!.label_sha256 !== bm.cases[id]!.label_sha256) out.push(`case labels differ: ${id}`);
+    }
+  } else {
+    // Older public runs identify the committed cases and scorer by their source commit.
+    const commit = a.summary.git_commit;
+    if (typeof commit !== "string" || !/^[a-f0-9]{7,40}$/.test(commit) || commit !== b.summary.git_commit)
+      out.push("legacy input/scoring identity is unverified: source commits are missing, dirty or different");
+    if (a.summary.corpus !== "public" && (!a.summary.assets_sha256 || a.summary.assets_sha256 !== b.summary.assets_sha256))
+      out.push("legacy custom-corpus identity is unverified");
+    for (const key of ["assets_sha256", "harness_sha256", "seed", "n_assets", "scoring_version", "scoring_labels_sha256"])
+      if (!equal(a.summary[key] ?? null, b.summary[key] ?? null)) out.push(`${key} differs or is unrecorded on one side`);
+    const other = new Map(b.rows.map(r => [r.id, r]));
+    for (const row of a.rows) {
+      const paired = other.get(row.id);
+      if (paired && ["query", "kind", "n_relevant"].some(k => !equal(row[k] ?? null, paired[k] ?? null))) out.push(`recorded case input or labels differ: ${row.id}`);
+    }
   }
-  return [am, bm];
+  return out;
+}
+
+function completion(run: Run, m: RunManifest | null) {
+  if (m) return m.completion;
+  const selected = run.rows.map(r => r.id);
+  const errored = run.rows.filter(r => r.error || r.outcome === "error" || ["search", "curate", "semantic_search", "semantic_curate"].some(k => r[k]?.error)).map(r => r.id);
+  return { selected, errored, scored: selected.filter(id => !errored.includes(id)) };
 }
 
 /** Include every stored scalar metric, including benchmark-native intervals. */
@@ -84,11 +104,16 @@ function flatten(value: unknown, path = "metrics", out: Record<string, Cell> = {
   else if (Array.isArray(value) || object(value)) for (const [key, child] of Object.entries(value)) flatten(child, `${path}.${key}`, out);
   return out;
 }
-function values(run: Run, m: RunManifest): Record<string, Cell> {
-  return { ...comparisonFields(run.summary, run.rows, scores(run.summary)), ...flatten(run.summary.metrics),
-    model: run.summary.model ?? null, label: run.summary.label ?? null, suite: m.eval,
-    collection: m.collection, mode: m.mode, measurement: m.collector.version,
-    akm_version: m.akm.version, recorded: run.rows.length, scored: m.completion.scored.length, errors: m.completion.errored.length,
+function values(run: Run, m: RunManifest | null): Record<string, Cell> {
+  const fields = comparisonFields(run.summary, run.samplesMissing ? null : run.rows, scores(run.summary));
+  const done = completion(run, m);
+  return { ...fields, ...flatten(run.summary.metrics),
+    model: run.summary.model ?? null, label: run.summary.label ?? null, suite: m?.eval ?? run.summary.eval ?? null,
+    scoring_version: m?.scorer?.version ?? m?.collector.version ?? run.summary.scoring_version ?? null,
+    collection: m?.collection ?? run.summary.collection ?? null, mode: m?.mode ?? run.summary.mode ?? null, measurement: m?.collector.version ?? null,
+    akm_version: m?.akm.version ?? run.summary.akm_version ?? null, status: run.summary.status ?? "unrecorded",
+    recorded: run.samplesMissing ? fields.recorded ?? null : run.rows.length,
+    scored: m ? done.scored.length : run.summary.n_scored ?? fields.scored ?? null, errors: m ? done.errored.length : run.summary.n_errored ?? fields.errors ?? null,
     date: run.summary.date ?? null, source_commit: run.summary.git_commit ?? null, harness_sha256: run.summary.harness_sha256 ?? null,
   };
 }
@@ -103,16 +128,38 @@ function observations(run: Run): unknown {
 }
 
 export function comparePair(a: Run, b: Run): PairReport {
-  const [am, bm] = compatible(a, b);
+  validateRows(a); validateRows(b);
+  const am = manifest(a), bm = manifest(b);
   const warnings: string[] = [];
-  const coverage = equal(ids(am.completion.scored), ids(bm.completion.scored));
-  const complete = [am, bm].every(m => m.completion.selected.length === m.completion.scored.length + m.completion.errored.length);
-  const judge = equal([a.summary.judge_model ?? null, am.engines.judge ?? null], [b.summary.judge_model ?? null, bm.engines.judge ?? null]);
-  const quality = coverage && complete && judge;
+  let complete = true;
+  for (const run of [a, b]) {
+    const read = readManifest(run.summary), m = manifest(run), done = completion(run, m);
+    if (read.kind === "legacy") warnings.push(`${run.dir}: legacy result; original input digests were not recorded. Deltas use recorded cases and the source commit where they match.`);
+    if (read.kind === "invalid") warnings.push(`${run.dir}: manifest metadata is unusable: ${read.problems.join("; ")}. Stored results are shown.`);
+    if (run.samplesMissing) { warnings.push(`${run.dir}: samples.jsonl is missing; showing summary values.`); complete = false; }
+    if (run.running) { warnings.push(`${run.dir}: .running marker exists (possibly stale); showing a saved snapshot.`); }
+    if (run.summary.status !== undefined && run.summary.status !== "complete") {
+      warnings.push(`${run.dir}: status ${run.summary.status}${run.summary.aborted_reason ? `: ${run.summary.aborted_reason}` : ""}; showing saved coverage.`); complete = false;
+    }
+    if (!m && !run.samplesMissing) {
+      const expected = run.summary.n_run ?? run.summary.n_queries ?? run.summary.n_tasks ?? run.summary.n_items;
+      if (typeof expected === "number" && expected !== run.rows.length) {
+        warnings.push(`${run.dir}: sample coverage (${run.rows.length}) differs from the summary (${expected}).`); complete = false;
+      }
+    }
+    if (read.kind === "invalid" || done.selected.length !== done.scored.length + done.errored.length ||
+      !equal(ids(run.rows.map(r => r.id)), ids([...done.scored, ...done.errored]))) complete = false;
+  }
+  const mismatch = differences(a, b, am, bm);
+  warnings.push(...mismatch.map(reason => `${reason}. Stored values are shown; quality, performance and usage deltas are omitted.`));
+  const ac = completion(a, am), bc = completion(b, bm);
+  const coverage = equal(ids(ac.scored), ids(bc.scored)) && equal(ids(ac.selected), ids(bc.selected));
+  const judge = equal([a.summary.judge_model ?? null, am?.engines.judge ?? null], [b.summary.judge_model ?? null, bm?.engines.judge ?? null]);
+  const quality = mismatch.length === 0 && coverage && complete && judge;
   if (!coverage || !complete) warnings.push("Scored coverage differs or is incomplete. Quality deltas are omitted; stored values are shown.");
   if (!judge) warnings.push("Answer judges differ. Quality deltas are omitted.");
-  const timing = coverage && complete && equal(observations(a), observations(b)) &&
-    ["workers", "attempts"].every(k => equal(a.summary[k] ?? null, b.summary[k] ?? null));
+  const timing = mismatch.length === 0 && coverage && complete && equal(observations(a), observations(b)) &&
+    ["workers", "attempts", "semantic_index"].every(k => equal(a.summary[k] ?? null, b.summary[k] ?? null));
   if (!timing) warnings.push("Timing or workload coverage differs. Performance and usage deltas are omitted.");
   const av = values(a, am), bv = values(b, bm);
   const columns = [...coreColumns, ...scoreColumns([a, b].map(r => ({ scores: scores(r.summary) })))];
@@ -124,12 +171,13 @@ export function comparePair(a: Run, b: Run): PairReport {
     const col = columnMap.get(key), group = col?.group ?? "Stored metrics";
     const isQuality = group === "Quality" || group === "Test metrics" || group === "Stored metrics";
     const isTiming = group === "Performance" || group === "Usage";
-    let note = isQuality && !quality ? "Unequal scoring coverage or judge" : isTiming && !timing ? "Unequal timing or workload coverage" : "";
+    let note = isQuality && !quality ? (mismatch.length ? "Different or unverified inputs/scoring" : "Unequal scoring coverage or judge") : isTiming && !timing ? "Unequal timing or workload coverage" : "";
     if (key === "run_wall_s" && (typeof a.summary.wall_seconds === "number") !== (typeof b.summary.wall_seconds === "number"))
       note = "Different wall-time measurements";
     // Counts remain useful even when a run has more errors. Rates require equal denominators.
     if (["recorded", "scored", "errors", "timeouts"].includes(key)) note = "";
     const scoreName = key.startsWith("score:") ? key.slice(6) : key === "quality_percent" ? av.quality_metric : null;
+    if (key === "quality_percent" && av.quality_metric !== bv.quality_metric) note = "Different primary metrics";
     if (scoreName) {
       const sa = scores(a.summary).find(s => s.label === scoreName), sb = scores(b.summary).find(s => s.label === scoreName);
       if (sa?.denominator !== sb?.denominator) note = "Unequal metric denominators";
@@ -144,15 +192,18 @@ export function comparePair(a: Run, b: Run): PairReport {
     rows.push({ key, label: col?.label ?? key, group, unit: col?.unit ?? "", a: x, b: y,
       delta: !note && typeof x === "number" && typeof y === "number" ? y - x : null, note });
   }
-  const settings = (r: Run, m: RunManifest) => ({ model: r.summary.model ?? null, akm: m.akm, config: m.config, settings: m.settings,
-    engines: m.engines, benchmark_settings: m.treatment_hints, judge_model: r.summary.judge_model ?? null,
+  const settings = (r: Run, m: RunManifest | null) => ({ model: r.summary.model ?? null,
+    akm: m?.akm ?? { version: r.summary.akm_version ?? null, bin: r.summary.akm_bin ?? null, build: r.summary.akm_build ?? null },
+    config: m?.config ?? r.summary.config ?? null, settings: m?.settings ?? r.summary.config_patch ?? null,
+    engines: m?.engines ?? r.summary.engine ?? null, benchmark_settings: m?.treatment_hints ?? null, judge_model: r.summary.judge_model ?? null,
+    semantic_index: r.summary.semantic_index ?? null, semantic_model: r.summary.semantic_model ?? null,
     workers: r.summary.workers ?? null, attempts: r.summary.attempts ?? null, search_mode: r.summary.search_mode ?? null });
   const as = settings(a, am), bs = settings(b, bm);
   const changes = Object.keys(as).filter(k => !equal(as[k as keyof typeof as], bs[k as keyof typeof bs]))
     .map(field => ({ field, a: redactConfig(as[field as keyof typeof as]), b: redactConfig(bs[field as keyof typeof bs]) }));
   if (changes.length > 1) warnings.push("Several settings changed; these differences do not isolate the effect of any one change.");
-  return { eval: am.eval, eval_version: am.collector.version, scoring_version: am.scorer?.version ?? am.collector.version,
-    corpus: am.corpus, collection: am.collection, mode: am.mode, a: { dir: a.dir, label: a.summary.label ?? a.dir },
+  return { eval: am?.eval ?? a.summary.eval ?? "unrecorded", eval_version: am?.collector.version ?? "unrecorded", scoring_version: am?.scorer?.version ?? am?.collector.version ?? "unrecorded",
+    corpus: am?.corpus ?? a.summary.corpus ?? "unrecorded", collection: am?.collection ?? a.summary.collection ?? null, mode: am?.mode ?? a.summary.mode ?? null, a: { dir: a.dir, label: a.summary.label ?? a.dir },
     b: { dir: b.dir, label: b.summary.label ?? b.dir }, changes, warnings, rows };
 }
 

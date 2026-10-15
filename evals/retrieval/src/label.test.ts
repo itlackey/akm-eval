@@ -846,9 +846,9 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
-  test("--corpus private, own and own-feedback were renamed: it stops with the new form, before it reads or runs anything", () => {
+  test("--corpus own and own-feedback need an explicit folder: it stops with the new form, before it reads or runs anything", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" };
-    for (const old of ["private", "own", "own-feedback"]) {
+    for (const old of ["own", "own-feedback"]) {
       const done = run(["--corpus", old], judge);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`retrieval label: --corpus ${old} was renamed in 0.2: use `);

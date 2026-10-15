@@ -124,11 +124,11 @@ describe("loadModels", () => {
     expect(loadModels(write(JSON.stringify(TERRA)))).toEqual(TERRA);
   });
 
-  test("refuses a key it does not know, and says that an api_key belongs in the environment", () => {
+  test("warns on unknown metadata and still requires literal credentials in the environment", () => {
     const line = (extra: string) => `{"a":{"base_url":"http://h/v1"${extra}}}`;
     expect(() => loadModels(write(line(',"api_key":"sk-SYNTH-secret"')))).toThrow('models.json: "a" has an unknown key "api_key": a key belongs in the environment. Set it in .env and name its variable in api_key_env.');
-    expect(() => loadModels(write(line(',"privat":true')))).toThrow('models.json: "a" has an unknown key "privat". The keys of a line are model, base_url, api_key_env');
-    expect(() => loadModels(write('{"ok":{"base_url":"http://h/v1"},"b":{"base_url":"http://h/v1","baseUrl":"x"}}'))).toThrow('"b" has an unknown key "baseUrl"');
+    expect(loadModels(write(line(',"privat":true'))).a.base_url).toBe("http://h/v1");
+    expect(loadModels(write('{"ok":{"base_url":"http://h/v1"},"b":{"base_url":"http://h/v1","baseUrl":"x"}}')).b.base_url).toBe("http://h/v1");
     try {
       loadModels(write(line(',"api_key":"sk-SYNTH-secret"')));
     } catch (e) {
@@ -142,7 +142,10 @@ describe("loadModels", () => {
     const limits = { context: 32768, output: 4096 };
     const entries = loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits } })));
     expect(resolveModel("model", "local", {}, entries).limits).toEqual(limits);
-    for (const bad of [null, {}, [], { context: 0, output: 1 }, { context: 10, output: 11 }, { context: "10", output: 1 }, { context: 10, output: 1.5 }, { context: 10, output: 1, typo: 1 }]) {
+    const extra = loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits: { ...limits, future: 1 }, chat: { reasoning_effort: "low", future: true } } })));
+    expect(resolveModel("model", "local", {}, extra).limits).toEqual(limits);
+    expect(resolveModel("model", "local", {}, extra).chat).toEqual({ reasoning_effort: "low" });
+    for (const bad of [null, {}, [], { context: 0, output: 1 }, { context: 10, output: 11 }, { context: "10", output: 1 }, { context: 10, output: 1.5 }]) {
       expect(() => loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits: bad } })))).toThrow("limits needs positive integer");
     }
   });

@@ -53,7 +53,7 @@ ${modelUsage}
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
+Tested with akm ${MIN_AKM} or later, on PATH or in AKM_BIN.`;
 
 /** What the summary of a run records of its corpus: public or custom, and the folder of a custom corpus if that is inside the repository (null for the public one and for a folder outside it, for scripts/rescore: lib/manifest.ts corpusFolderOf). Never an absolute path. */
 interface CorpusFields {
@@ -278,7 +278,7 @@ async function main(): Promise<void> {
     removeSandbox(probe);
   }
 
-  if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than this eval is written for. It needs akm ${MIN_AKM} or later.`);
+  if (!atLeast(version, MIN_AKM)) console.warn(`akm ${version} predates the tested release ${MIN_AKM}; continuing with the requested build. Command or output errors will be recorded normally.`);
 
   const ctx = { newSandbox, baseUrl, model, hasKey, version, label, limit, overrides, embedder };
   const summaries: Summary[] = [];

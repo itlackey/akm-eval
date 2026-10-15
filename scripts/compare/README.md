@@ -5,7 +5,7 @@ scripts/compare/run A B
 scripts/compare/run A B --json comparison.json --md comparison.md
 ```
 
-A and B are completed results folders, or their `summary.json` files. One run on
+A and B are saved results folders, or their `summary.json` files. One run on
 each side is enough. The command reads stored data and prints quality,
 performance, usage, settings and B-minus-A differences. Percent values use
 percentage points for their deltas. Benchmark-native confidence intervals are
@@ -15,18 +15,24 @@ named metrics. Missing telemetry stays blank, distinct from zero.
 
 ## Valid comparisons
 
-Both runs must have the same eval and scoring versions, corpus, collection,
-mode, selected cases, input digests, labels and generated-corpus seed. A malformed,
-unmanifested, running or aborted result is refused. Case order does not matter.
-Cases are never silently intersected. Model routes, engine settings, AKM builds
-and configuration may differ and are shown in the report. Multiple changed
-settings cannot isolate any one setting's effect.
+The command shows legacy, stopped, summary-only and mismatched results. Differences
+in eval/scoring versions, corpus, collection, mode, cases, inputs or labels are
+reported; they do not prevent viewing stored values. It never silently intersects
+cases. A stale `.running` marker is a snapshot warning, not a reason to discard data.
+Malformed JSON and duplicate sample IDs remain errors.
 
-Quality deltas are omitted when scored case coverage or answer judges differ.
-Performance and usage deltas are omitted when timing coverage, completion,
-workers or task attempts differ. Metric denominator differences also suppress
-that metric's delta. The original values and counts remain visible. Timing is
-elapsed work or wall time as labelled; these are different measures.
+Matching manifests support deltas. Legacy public results can also use matching
+recorded cases and a clean collector commit, with an explicit warning that original
+input digests were not recorded. Unknown or conflicting identity suppresses deltas.
+Rescored legacy results record scoring version/label digests separately; their
+original input identity stays unverified. Model routes, engine settings, AKM builds
+and configuration differences are shown. Multiple changed settings do not isolate
+a single change.
+
+Quality deltas are omitted when scored coverage, completion or answer judges differ.
+Performance and usage deltas also require equal timing/workload coverage and cache
+conditions. Different metric denominators suppress that metric's delta. Stored
+values and counts remain visible; no winner is inferred.
 
 Saved results do not expire when a checkout changes. Compare compatible old runs
 as collected. To apply current scoring rules and labels, explicitly run:

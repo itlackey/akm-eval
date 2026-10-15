@@ -531,10 +531,10 @@ describe("run --corpus custom", () => {
     expect(noQrels.err).not.toContain("could not run");
   }, 60_000);
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
     const tree = copyOfRepo();
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "reflect")]).code).toBe(0);
-    for (const old of ["private", "own", "own-feedback"]) {
+    for (const old of ["own", "own-feedback"]) {
       const done = bun(tree, "run.ts", ["--corpus", old]);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`reflect: --corpus ${old} was renamed in 0.2: use `);

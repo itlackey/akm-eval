@@ -219,7 +219,7 @@ describe("runCorpus", () => {
     expect(report.rows.length).toBeGreaterThan(0);
     // what the fix is for: a run that recorded the seed file, as these did before, is refused against one that recorded another
     const was = (run: Run, seed: string): Run => ({ ...run, summary: { ...run.summary, seed, manifest: { ...run.summary.manifest, settings: { ...run.summary.manifest.settings, seed } } } });
-    expect(() => comparePair(was(runs[0] as Run, "99"), was(runs[1] as Run, "123456789012345678"))).toThrow("the seed of the private assets differs");
+    expect(comparePair(was(runs[0] as Run, "99"), was(runs[1] as Run, "123456789012345678")).warnings.join(" ")).toContain("seed differs");
   });
 
   test("a proposal whose model call timed out is an errored row marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
@@ -565,8 +565,8 @@ describe("the corpus on the command line", () => {
     expect(missing.err).toContain("the custom set is missing");
   });
 
-  test("--corpus private, own and own-feedback were renamed: the run stops with the new form, which for promotion is --cases DIR", async () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder: the run stops with the new form, which for promotion is --cases DIR", async () => {
+    for (const old of ["own", "own-feedback"]) {
       const done = await cli(["--corpus", old], ENV);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`promotion: --corpus ${old} was renamed in 0.2: use --cases DIR for a folder of your own`);

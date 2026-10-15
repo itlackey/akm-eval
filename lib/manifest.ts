@@ -235,11 +235,8 @@ export function manifestProblems(x: unknown): string[] {
 
 export type ManifestReading = { kind: "manifest"; manifest: RunManifest } | { kind: "legacy" } | { kind: "invalid"; problems: string[] };
 
-/** What compare and scripts/rescore say of a run whose summary has no manifest. */
-export const noManifest = (folder: string): string => `${folder} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`;
-
 /**
- * What a summary says of how its run was made. A summary without `manifest` is legacy (made before akm-eval 0.2, see noManifest). One with a
+ * What a summary says of how its run was made. A summary without `manifest` is legacy (its collection provenance remains unknown). One with a
  * manifest that is not sound, or that disagrees with the summary on the eval, corpus, collection or mode, is invalid.
  */
 export function readManifest(summary: Obj): ManifestReading {

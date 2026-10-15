@@ -57,16 +57,16 @@ describe("two stored runs", () => {
     expect(report.rows.find(r => r.key === "model_mean_request_s")).toMatchObject({ a: null, b: 0, delta: null });
     expect(report.rows.some(r => r.key === "model_output_tokens_per_s")).toBe(false);
   });
-  test("malformed, duplicate, incomplete and unmanifested files fail clearly", () => {
+  test("malformed and duplicate samples fail; legacy files and stale markers stay readable", () => {
     const dir = mkdtempSync(join(tmpdir(), "compare-")); folders.push(dir);
     const source = join(fixtures, "reflect", "before"); cpSync(source, dir, { recursive: true });
-    writeFileSync(join(dir, ".running"), ""); expect(() => loadRun(dir)).toThrow("still being written"); rmSync(join(dir, ".running"));
+    writeFileSync(join(dir, ".running"), ""); expect(loadRun(dir).running).toBe(true); rmSync(join(dir, ".running"));
     const rows = readFileSync(join(dir, "samples.jsonl"), "utf8");
     writeFileSync(join(dir, "samples.jsonl"), rows + rows); expect(() => loadRun(dir)).toThrow("duplicate");
     writeFileSync(join(dir, "samples.jsonl"), "{bad}"); expect(() => loadRun(dir)).toThrow("invalid JSON");
     writeFileSync(join(dir, "samples.jsonl"), rows);
     const summary = fixture().summary; delete summary.manifest;
-    writeFileSync(join(dir, "summary.json"), JSON.stringify(summary)); expect(() => loadRun(dir)).toThrow("before akm-eval 0.2");
+    writeFileSync(join(dir, "summary.json"), JSON.stringify(summary)); expect(loadRun(dir).rows.length).toBeGreaterThan(0);
   });
   test("CLI writes JSON and Markdown, rejects old orchestration flags and source overwrite", () => {
     const dir = mkdtempSync(join(tmpdir(), "compare-cli-")); folders.push(dir);
@@ -77,6 +77,10 @@ describe("two stored runs", () => {
     expect(JSON.parse(readFileSync(join(dir, "report.json"), "utf8")).rows.length).toBeGreaterThan(0);
     expect(cli([a, b, "--treatment", "model"]).exitCode).toBe(2);
     expect(cli([a, b, "--json", join(a, "summary.json")]).exitCode).toBe(2);
+    const copy = join(dir, "source"); cpSync(a, copy, { recursive: true });
+    const original = readFileSync(join(copy, "summary.json"), "utf8");
+    expect(cli([copy, b, "--json", join(copy, "comparison.json")]).exitCode).toBe(0);
+    expect(readFileSync(join(copy, "summary.json"), "utf8")).toBe(original);
   });
 });
 
@@ -93,4 +97,45 @@ test("full runner wall time is not subtracted from older collector-only timing",
   a.summary.seconds = 10;
   b.summary.wall_seconds = 12;
   expect(comparePair(a, b).rows.find(r => r.key === "run_wall_s")).toMatchObject({ a: 10, b: 12, delta: null, note: "Different wall-time measurements" });
+});
+
+
+test("legacy public runs from one recorded collector compare without inventing a manifest", () => {
+  const a = fixture("retrieval"), b = clone(a);
+  for (const r of [a, b]) { delete r.summary.manifest; delete r.summary.status; r.summary.git_commit = "bacf627"; }
+  a.summary.akm_version = "0.9.31"; b.summary.akm_version = "0.10.26101002";
+  const before = JSON.stringify([a, b]);
+  const report = comparePair(a, b);
+  expect(report.rows.find(r => r.key === "metrics.search.ndcg_10")?.delta).toBe(0);
+  expect(report.warnings.join(" ")).toContain("original input digests were not recorded");
+  expect(report.changes.find(c => c.field === "akm")).toBeDefined();
+  expect(JSON.stringify([a, b])).toBe(before);
+  b.summary.git_commit = "another";
+  expect(comparePair(a, b).rows.find(r => r.key === "metrics.search.ndcg_10")?.delta).toBeNull();
+});
+
+test("stopped results show saved values and counts with explicit coverage", () => {
+  const a = fixture(), b = clone(a);
+  b.summary.status = "aborted"; b.summary.aborted_reason = "operator stopped";
+  b.rows.pop(); b.summary.manifest.completion.scored.pop();
+  const report = comparePair(a, b);
+  expect(report.warnings.join(" ")).toContain("operator stopped");
+  expect(report.rows.find(r => r.key === "quality_percent")).toMatchObject({ a: expect.any(Number), b: expect.any(Number), delta: null });
+  expect(report.rows.find(r => r.key === "recorded")?.delta).toBe(-1);
+});
+
+test("unknown evals, incomplete metadata and missing samples still show stored metrics", () => {
+  const a = fixture(), b = clone(a);
+  for (const r of [a, b]) { r.summary.eval = "future-eval"; r.summary.manifest = { future: true }; r.samplesMissing = true; r.rows = []; }
+  const report = comparePair(a, b);
+  expect(report.rows.find(r => r.key === "metrics.defects.rate")?.a).toBeNumber();
+  expect(report.rows.find(r => r.key === "metrics.defects.rate")?.delta).toBeNull();
+  expect(report.warnings.join(" ")).toContain("manifest metadata is unusable");
+});
+
+test("cold and warm indexes remain visible without claiming a build-time delta", () => {
+  const a = fixture("retrieval"), b = clone(a);
+  a.summary.semantic_index = "cold"; b.summary.semantic_index = "warm";
+  a.summary.index_seconds = { semantic: 40 }; b.summary.index_seconds = { semantic: .2 };
+  expect(comparePair(a, b).rows.find(r => r.key === "semantic_index_s")).toMatchObject({ a: 40, b: .2, delta: null });
 });

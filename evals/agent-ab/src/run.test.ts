@@ -635,11 +635,11 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
     expect(summary("p", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: "7" } });
 
-    // The old value stops before anything runs.
+    // The historical spelling uses the same generated cases and the same fake collector.
     const old = run(["--corpus", "private", "--limit", "1", "--label", "old"]);
-    expect(old.code).toBe(2);
-    expect(old.err).toContain("agent-ab: --corpus private was renamed in 0.2: use --corpus custom (the rewrite in private/<eval>/assets), or --cases DIR for a folder of your own");
-    expect(readdirSync(join(root, "private", "agent-ab", "results")).some((d) => d.endsWith("-old"))).toBe(false); // it made no results folder
+    expect(old.code).toBe(0);
+    expect(summary("old", "custom")).toMatchObject({ corpus: "custom", seed: "7", status: "complete" });
+    expect(readdirSync(join(root, "private", "agent-ab", "results")).some(d => d.endsWith("-old"))).toBe(true);
   }, 60_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the cases there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {

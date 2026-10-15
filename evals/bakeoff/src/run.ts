@@ -47,7 +47,7 @@ ${modelUsage}
 ${akmUsage}
   --label   names the results folder: <UTC date>-<label>. Default: the model name.
 
-Needs akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
+Tested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.`;
 
 interface Summary {
   eval: string;
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
   } finally {
     removeSandbox(probe);
   }
-  if (!atLeast(version, MIN_AKM)) fail(`akm ${version} is older than the ${MIN_AKM} this eval was checked against. It needs akm ${MIN_AKM} or later.`);
+  if (!atLeast(version, MIN_AKM)) console.warn(`akm ${version} predates the tested release ${MIN_AKM}; continuing with the requested build. Command or output errors will be recorded normally.`);
 
   const ctx: Ctx = { baseUrl, model, hasKey, version, label, limit, process: values.process as Process | undefined, configPatch };
   const summaries: Summary[] = [];

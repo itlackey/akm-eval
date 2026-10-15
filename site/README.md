@@ -1,9 +1,10 @@
 # Public comparison ledger
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. Every completed public artifact has a
-row, including repeats, pilots and compatibility diagnostics. Private, running
-and aborted reports are excluded. The build makes no model calls.
+repository's committed `reports/` tree. Every public artifact has a
+row, including repeats and pilots. Stopped/running snapshots are Diagnostic,
+and legacy summaries carry an explicit completion-status note. Private corpora
+remain excluded. The build makes no model calls.
 
 The design adapts [fwdslsh/website](https://github.com/fwdslsh/website)'s palette,
 typography, grid and slash motif, with CC BY 4.0 attribution. The grid uses pinned

@@ -10,7 +10,7 @@ const USAGE = `Usage: scripts/rescore/run [--cases DIR] RESULTS_DIR...
 Scores each results folder (or the summary.json in it) of an eval again: the raw output each case's row holds is scored with the scorer
 and the labels (the cases) that the repository has now, and the result is written to a new folder beside the original,
 <folder>-rescored (before the -rN of a repeat). The original is never modified. The new summary.json has the current scorer in its
-manifest, the collector of the original run, and rescored_from. A run without a manifest (made before akm-eval 0.2) is refused.
+manifest, the collector of the original run, and rescored_from. Legacy runs can be rescored from raw output; their original input identity remains explicitly unverified.
 
 A run on the public corpus is scored against the committed cases. A run on a custom corpus is scored against the cases in its \`corpus_folder\`,
 which the summary records when the folder is inside the repository. A folder outside it is not recorded (its name can say what is in it), so

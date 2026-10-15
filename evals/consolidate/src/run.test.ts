@@ -511,8 +511,8 @@ describe("the command", () => {
     expect(help).toMatch(/--cases +the folder of a custom corpus/);
   });
 
-  test("--corpus private, own and own-feedback were renamed: the run stops before it reaches akm", () => {
-    for (const old of ["private", "own", "own-feedback"]) {
+  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
+    for (const old of ["own", "own-feedback"]) {
       const done = run(["--corpus", old], model);
       expect(done.code, old).toBe(2);
       expect(done.err, old).toContain(`consolidate: --corpus ${old} was renamed in 0.2: use `);

@@ -132,10 +132,16 @@ describe("rescoreFolder", () => {
     expect(rowsOf(out).every((r, i) => JSON.stringify(r) === JSON.stringify(MEASUREMENT.score(CASES[i] as Case, BAD(CASES[i] as Case))))).toBe(true);
   });
 
-  test("a run made before akm-eval 0.2 (no manifest) is refused before anything else, and nothing is written", () => {
-    const old = run({ manifest: () => undefined, summary: { eval: "toy" } });
-    expect(() => rescoreFolder(old)).toThrow(`${old} was made before akm-eval 0.2 (it has no manifest), so it cannot be compared or scored again: run it again`);
-    expect(readdirSync(join(old, ".."))).toEqual(["2026-10-12-golden"]);
+  test("legacy raw outputs can be rescored without inventing collection metadata", () => {
+    const old = run({ manifest: () => undefined });
+    const before = text(old);
+    const { out, result } = rescoreFolder(old);
+    expect(text(old)).toBe(before);
+    expect(summaryOf(out).manifest).toBeUndefined();
+    expect(summaryOf(out).scoring_version).toBe(MEASUREMENT.scoringVersion ?? MEASUREMENT.version);
+    expect(summaryOf(out).rescored_from.input_identity).toBe("unverified");
+    expect(summaryOf(out).notes.join(" ")).toContain("input identity is unverified");
+    expect(result.rows).toEqual(rowsOf(old));
   });
 });
 
@@ -157,7 +163,7 @@ describe("what a rescore refuses", () => {
     expect(() => rescoreFolder(empty)).toThrow("is not a results folder: it has no summary.json");
     const running = run();
     writeFileSync(join(running, ".running"), "1\n");
-    expect(() => rescoreFolder(running)).toThrow("is still being written");
+    expect(rescoreFolder(running).result.summary.notes.join(" ")).toContain("saved snapshot only");
     const noSamples = run();
     rmSync(join(noSamples, "samples.jsonl"));
     expect(() => readStored(noSamples)).toThrow("has no samples.jsonl");

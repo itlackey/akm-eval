@@ -69,7 +69,7 @@ function publicValue(value: unknown): unknown {
 }
 export function presentRun(input: RunInput): LedgerRun | null {
   const s = object(input.summary);
-  if (s.corpus !== "public" || s.status !== "complete") return null;
+  if (s.corpus !== "public") return null;
   const suite = text(s.eval);
   const label = text(s.label);
   const m = object(s.metrics);
@@ -95,6 +95,10 @@ export function presentRun(input: RunInput): LedgerRun | null {
   let role: LedgerRun["role"] =
     s.limit || sample.limit || (sampleN !== null && total !== null && sampleN < total) ? "Pilot" : "Full suite";
   const notes: string[] = [];
+  if (s.status !== undefined && s.status !== "complete") {
+    role = "Diagnostic";
+    notes.push(`Status: ${publicText(String(s.status))}. Saved results cover only the recorded work.${typeof s.aborted_reason === "string" ? ` ${publicText(s.aborted_reason)}` : ""}`);
+  } else if (s.status === undefined) notes.push("Legacy result: completion status was not recorded.");
   if (Array.isArray(s.notes))
     notes.push(...s.notes.filter((note): note is string => typeof note === "string" && note.trim().length > 0).map(publicText));
   if (s.resumed === true) notes.push("Resumed from saved cases; full run wall time is unknown.");

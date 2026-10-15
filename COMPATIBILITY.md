@@ -1,12 +1,12 @@
 # Which akm each eval runs on
 
-Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PATH`) and reads the JSON it prints. Nightly and reflect also read `data/index.db` to resolve each planted file's indexed ref, using `entries(file_path, concept_id)`; promotion writes to `state.db`. The indexed-ref lookup was checked on 0.9.26 and 0.10.261003-beta and fails explicitly when a file has no unambiguous identity. "Or later" means the run stops on an older akm (`MIN_AKM` in the eval's source). A bare version is the release the eval was written for; nothing is checked. No eval has a ceiling.
+Every eval that uses akm runs the `akm` command (from `--akm`, `AKM_BIN` or `PATH`) and reads the JSON it prints. Nightly and reflect also read `data/index.db` to resolve each planted file's indexed ref, using `entries(file_path, concept_id)`; promotion writes to `state.db`. The indexed-ref lookup was checked on 0.9.26 and 0.10.261003-beta and fails explicitly when a file has no unambiguous identity. Versions below a tested minimum produce a warning; the requested build still runs, and actual command/output failures remain visible. A bare version is a release the eval was checked against. No eval has a version ceiling.
 
 | Eval | akm | Last run on |
 |---|---|---|
 | `evals/retrieval` | 0.9.26. Works on 0.9 and 0.10 (reads the projection flag from `search --help`) | 0.10.261003-beta: three full keyword repeats; library semantic run aborted on missing curate `searchMode`, which is fixed since: a curate that abstains, with no results and no `searchMode`, is an empty answer |
 | `evals/judge-gate` | 0.9.25-alpha.2 or later | 0.10.261003-beta: three full real-model repeats, no errors |
-| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta on v0.4: three full real-model repeats; indexed-ref errors repaired, six AKM file-layout refusals each, 44/50 cases scored; matrix pilots pass. The six notes have since moved into their type's folder, where akm reflects on them |
+| `evals/reflect` | 0.9.25-alpha.3 or later | 0.10.261003-beta on v0.4: three full real-model repeats; indexed-ref errors repaired, six AKM file-layout refusals each, 44/50 cases scored; bounded validation pilots pass. The six notes have since moved into their type's folder, where akm reflects on them |
 | `evals/distill` | 0.9.26 and 0.9.31. The `lesson-update` class needs 0.10.0; an older akm scores 0 on it | 0.10.261003-beta: three full real-model repeats, no errors, including lesson updates |
 | `evals/consolidate` | 0.9.26, the first release whose pair judge lists the claims each note holds alone | 0.10.261003-beta: three full real-model pair repeats, no errors, including crash recovery; default deterministic embedder |
 | `evals/extract` | 0.9.26 or later | 0.10.261003-beta: three full real-model repeats, no errors, including two replacement runs after the crash |

@@ -138,10 +138,10 @@ describe("reflectEdits", () => {
     expect(rescored.inputs).toEqual({ mode: "rescore", corpus: "public", assets: PUBLIC, assets_sha256: { stored, current: now }, harness_sha256: { stored: RAN, current: RAN }, differences: [said], missing_cases: [], manifest: { cases_compared_on: "input" } });
   });
 
-  test("a run without a manifest is refused even with --rescore", () => {
+  test("a legacy run replays with unverified input identity", () => {
     const { root, assets } = repo();
     const run = runOf(root, assets, { manifest: undefined });
-    for (const rescore of [false, true]) expect(() => reflectEdits(run, { root, rescore })).toThrow("was made before akm-eval 0.2");
+    for (const rescore of [false, true]) expect(reflectEdits(run, { root, rescore }).inputs).toMatchObject({ manifest: { cases_compared_on: "unverified" }, differences: [expect.stringContaining("unverified")] });
   });
 
   test("a case id of the run that the cases lack stops the replay, and is never an edit with no source", () => {
@@ -361,14 +361,13 @@ describe("the command line", () => {
     expect(set.inputs).toMatchObject({ mode: "stored", corpus: "public", assets: join("evals", "reflect", "assets"), assets_sha256: { stored: summary.assets_sha256, current: summary.assets_sha256 }, harness_sha256: { stored: summary.harness_sha256, current: summary.harness_sha256 }, differences: [], missing_cases: [] });
   });
 
-  test("stops with exit 2 on a legacy run, also with --rescore", () => {
+  test("CLI replays legacy results without a manifest", () => {
     const { akm, results, tamper } = setup();
     tamper({ manifest: undefined });
     for (const extra of [[], ["--rescore"]]) {
       const refused = run(["--akm-src", akm, "--reflect", results, ...extra]);
-      expect(refused.code).toBe(2);
-      expect(refused.out).toBe("");
-      expect(refused.err).toContain("was made before akm-eval 0.2");
+      expect(refused.code).toBe(0);
+      expect(JSON.parse(refused.out)[`reflect ${results}`].inputs.manifest).toEqual({ cases_compared_on: "unverified" });
     }
   });
 

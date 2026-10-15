@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { noManifest, readManifest } from "../../../lib/manifest.ts";
+import { readManifest } from "../../../lib/manifest.ts";
 import { harnessSha256, sha256Json } from "../../../lib/provenance.ts";
 import { STRATEGY } from "./collect.ts";
 import { assetsSha256, parseCases } from "./lib.ts";
@@ -26,7 +26,7 @@ Runs the defect filter of the akm checkout DIR on each labelled edit and counts 
                 does not have the filter off (its defectFilter lists empty) is refused, with or without --rescore.
                 The source of an edit is the case's, read from the cases here now. So the manifest of the run must hold the digest of
                 each case's input as it is now (after a scorer fix, scripts/rescore the run first and replay that folder).
-                A run without a manifest is refused, also with --rescore. Every case id of the run must be in the corpus.
+                Legacy runs remain readable and report unverified original input identity. Every case id of the run must be in the corpus.
   --rescore     replay the proposals of a --reflect run against the cases and code here now even though its summary.json records
                 other digests, records none, or has a case id that is gone. The report names the stored and the current digests
                 and the case ids left out.
@@ -118,7 +118,7 @@ export interface Inputs {
    * compared on, "input" (the note, the path and the feedback each case was given) or "labels" for a run that recorded searches, whose
    * input digest includes them.
    */
-  manifest: { cases_compared_on: "input" | "labels" };
+  manifest: { cases_compared_on: "input" | "labels" | "unverified" };
 }
 
 export interface ReplayOptions {
@@ -136,7 +136,7 @@ export interface ReplayOptions {
  *
  * A run with a manifest is held to its case digests and its scorer: the input of each case it ran (the note, its path and the feedback; the
  * labels instead for a run that recorded searches) must be the digest the manifest holds. After a scorer fix, a run is scored again by
- * scripts/rescore and that folder replayed. A run without a manifest is refused, also with `rescore`.
+ * scripts/rescore and that folder replayed. Legacy runs report unverified original input identity.
  * Each case id of the run must be in the corpus. Otherwise this throws and says what differs. With `rescore` it replays
  * anyway, leaves out the proposals of a case that is gone, and says both in `inputs`. A run that had the defect filter on is refused
  * either way (see filterOnProblem).
@@ -145,7 +145,6 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
   const root = options.root ?? ROOT;
   const summary = JSON.parse(readFileSync(join(resultsDir, "summary.json"), "utf8")) as Record<string, any>;
   const reading = readManifest(summary);
-  if (reading.kind === "legacy") throw new Error(noManifest(resultsDir));
   if (reading.kind === "invalid") throw new Error(`${join(resultsDir, "summary.json")} has a manifest that is not sound: ${reading.problems.join("; ")}`);
   const filterOn = filterOnProblem(resultsDir, summary);
   if (filterOn !== null) throw new Error(filterOn); // not for --rescore to waive: it is about what the run means, not its digests
@@ -160,8 +159,8 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
   const current = { assets: assetsSha256(assets), harness: options.harness ?? harnessSha256(import.meta.dir) };
   const differences: string[] = [];
   const rows = jsonl<{ id: string; outcome: string; correct: boolean | null; proposal?: string }>(join(resultsDir, "samples.jsonl"));
-  let checked: Inputs["manifest"];
-  {
+  let checked: Inputs["manifest"] = { cases_compared_on: "unverified" };
+  if (reading.kind === "manifest") {
     const { manifest } = reading;
     const on = summary.retrieval_queries == null ? "input" : "labels";
     const moved = [...new Set(rows.map((r) => r.id))].filter((id) => {
@@ -180,6 +179,8 @@ export function reflectEdits(resultsDir: string, options: ReplayOptions = {}): {
     const lines = [...differences, ...(missing.length > 0 ? [`the run has ${missing.length === 1 ? "a case id" : "case ids"} that ${where}/cases.jsonl lacks: ${missing.join(", ")}`] : [])];
     throw new Error(`${resultsDir} cannot be replayed against the cases and code here now:\n  - ${lines.join("\n  - ")}\nThe source of each edit would not be the one the run was given. To score its proposals against what is here now on purpose, add --rescore.`);
   }
+
+  if (reading.kind === "legacy") differences.push("Original input digests were not recorded; replay uses the current cases and input identity is unverified.");
 
   const edits: Edit[] = [];
   for (const row of rows) {
