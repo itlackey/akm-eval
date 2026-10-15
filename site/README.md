@@ -1,8 +1,8 @@
 # Public comparison ledger
 
 The [benchmark ledger](https://itlackey.github.io/akm-eval/) builds from this
-repository's committed `reports/` tree. Every public artifact has a
-row, including repeats and pilots. Stopped/running snapshots are Diagnostic,
+repository's committed `reports/` tree. Every public result has a row, including
+repeats and pilots. Stopped/running snapshots are Diagnostic,
 and legacy summaries carry an explicit completion-status note. Private corpora
 remain excluded. The build makes no model calls.
 
@@ -36,14 +36,36 @@ measures and individual test metrics. No row selection is needed.
 
 - Use **Columns** to search, show or hide any field. Drag headings to reorder
   columns and column edges to resize them. Model and test stay fixed on wide
-  screens; mobile allows the entire grid to scroll.
+  screens. On touch screens up to 900px wide, runs appear as stacked cards
+  with the selected fields, full run labels, a sort control and the same
+  pagination. Scrolling the page reaches every field without sideways swiping.
 - Click headings to sort; Shift-click combines sort keys. Numeric sorting uses
   numbers, with missing values last in either direction. The current sort is
   stated above the table.
-- Model, test and scope filters are always available. **Filters** opens
-  collection, versions, search methods, strategy and inclusive date bounds,
+- **Latest only** keeps the newest matching result per AKM version, test,
+  model, collection, mode, search method, embedding model and strategy. Other
+  filters, including column filters, apply first. Clear it to see older runs.
+- **Full suite** includes only completed full collections with all selected
+  cases scored and no recorded errors. **Cases scored / total** shows overall
+  coverage; **Metric cases** is the subset used for the displayed quality score
+  (for example, 19 eligible clusters out of a completed 47-cluster pool).
+- Model, test, scope and multi-select AKM version filters are always available.
+  **Filters** opens collection, eval versions, search methods, strategy and inclusive date bounds,
   plus conditions on any column. Conditions combine with AND. Filter chips
   can be removed individually; **Reset** clears all filters.
+- Filters, selected columns and their order, and sorting are stored in the URL
+  automatically. Copy the address bar to share the current results; opening or
+  reloading that link restores them. For example, `?suite=skillret&role=Full+suite&akm=0.9.32&akm=0.10.261005-beta&latest=1`
+  shows the latest full SkillRet results for those two versions. Search uses
+  `q`, dates use `from` / `to`, and error-only uses `errors=1`. Advanced conditions
+  use repeated `filter` parameters containing JSON `[column, operator, value]`
+  arrays; column filters use `header.<column>=value`. Reset clears filter
+  parameters while keeping the selected columns, preset view and unrelated URL
+  parameters. Custom columns use repeated `column=key` parameters in display
+  order; multiple sort keys use repeated `sort=key:asc` or `sort=key:desc`
+  parameters in the table's sort order (last key takes priority). Preset
+  defaults need no extra parameters.
+  **Reset to comparison columns** removes the custom column selection.
 - Enable **Column filters** to filter directly in headings. Numeric inputs
   accept `>=80`, `<=5`, `80..95` or an exact number in displayed units. Text
   inputs accept words and `|` alternatives. `blank` and `recorded` distinguish
@@ -63,8 +85,8 @@ selected input set. Use the saved-run CLI to verify exact input compatibility.
 Unknown measurements display —, distinct from recorded zeroes.
 
 **Paired gain** comes from the recorded shared-case comparison. It need not
-match the subtraction of overall arm scores: LongMemEval's published pilot has
-60% and 75% marginal accuracy but a 25-point paired gain on four shared cases.
+match the subtraction of overall arm scores: LongMemEval's full semantic run has
+424/500 and 401/499 marginal accuracy; its paired gain uses 499 shared cases.
 The recorded confidence bounds and pilot sample sizes are shown without
 inventing stronger evidence.
 
@@ -120,7 +142,7 @@ The browser suite starts an isolated local static server, checks the actual
 published dataset through UI interactions, and saves screenshots under
 `.browser-results/`. It covers the three question workflows, numeric/missing
 filters, sorting, resizing, column controls, pagination, exports and mobile
-scrolling. Unit tests cover projection, rounding boundaries and unequal paired
+swipe scrolling, card sorting and phone/tablet layouts. Unit tests cover projection, rounding boundaries and unequal paired
 sample sizes. GitHub Pages CI runs both suites before deployment.
 
 Serve `.site-output/` with a static server. Relative paths support GitHub Pages'

@@ -2,7 +2,7 @@
 
 On October 14, 2026, a fresh public LongMemEval S run attempted all 500 questions with Luna in both answer arms and AKM semantic search. Full history scored 424/500 correct (84.80%); the AKM arm scored 401/499 (80.36%). The paired accuracy difference over 499 shared scored questions was -4.41 percentage points, with a recorded 95% interval of -7.77 to -1.05 points.
 
-The original [summary](summary.json) and [samples](samples.jsonl) are copied unchanged. This run started from the first question and reused no answers from earlier stopped runs. All six question types are covered. The [earlier stopped collection](../../semantic-2026-10-14/README.md#stopped-full-benchmarks) remains historical partial evidence.
+The original [summary](summary.json) and [samples](samples.jsonl) are copied unchanged. This run started from the first question and reused no answers from earlier stopped runs. All six question types are covered.
 
 ## Models and semantic retrieval
 

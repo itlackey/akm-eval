@@ -19,7 +19,7 @@ evals/reflect/run --cases ~/notes/reflect
 
 - `--limit N` runs the first N cases; the first ten hold each class once.
 - `--strategy NAME` runs another strategy than `reflect-only`; `--config-patch FILE` changes the config (see "Measure akm's gates").
-- `--retrieval-queries` gives each note the retrieval eval's labelled queries for it as searches that found it, so akm's retrieval check has something to grade. Public notes and their rewrite only. Collection version 0.4 uses the expanded retrieval judgments (77 of 80 notes); standard runs do not use this query context.
+- `--retrieval-queries` records the retrieval eval's labeled queries as searches that found each note. AKM 0.9's retrieval check grades edits against them when the quality judge is enabled. AKM 0.10 removed that check; it still accepts the seeded query context but makes no relevance-grading calls. Public notes and their rewrite only. Collection version 0.4 uses the expanded retrieval judgments (77 of 80 notes); standard runs do not use this query context.
 
 Each case gets its own akm sandbox and runs:
 
@@ -71,15 +71,15 @@ For scale, with a scripted model on akm 0.9.26: never proposing anything fixes 0
 
 ## Measure akm's gates
 
-A proposal passes three gates before it is queued. The eval runs with the first on and the others off; the patches in `patches/` change that.
+AKM 0.9 can check the defect filter, quality judge and retrieval relevance before queuing a proposal. AKM 0.10 removed the retrieval check ([policy decision 9](https://github.com/itlackey/akm/blob/9a61c0ffb5412f6fde567583ba91b8745f62077e/docs/architecture/0.10-process-rules.md#policy-decisions)). The eval runs with the defect filter on and quality judge off; the patches in `patches/` change that.
 
 | Gate | What it does | How to measure it |
 |---|---|---|
 | defect filter | refuses placeholder text, talk about the edit, or frontmatter copied into the body | `patches/defect-filter-off.json`, and the replay below |
 | quality judge | refuses an edit that does not score 4 or more on every criterion | `patches/judge-on.json` |
-| retrieval check | refuses an edit whose note grades lower on the queries that found it | `patches/judge-on.json` with `--retrieval-queries` |
+| retrieval check (AKM 0.9) | refuses an edit whose note grades lower on the queries that found it | `patches/judge-on.json` with `--retrieval-queries` |
 
-Compare each gate on and off with `--repeat` on the same model:
+Compare the same model and cases with the gate on and off:
 
 ```
 evals/reflect/run --config-patch evals/reflect/patches/judge-on.json --label judge

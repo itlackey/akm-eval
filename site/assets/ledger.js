@@ -55,6 +55,15 @@ function runName(value, suite) {
   for (const prefix of [`bifrost-${suite}-example-`, `${suite}-example-`]) if (label.startsWith(prefix)) label = label.slice(prefix.length);
   return label.replace(/-r(\d+)$/, ' · r$1');
 }
+function latestRuns(rows) {
+  const latest = new Map();
+  for (const row of rows) {
+    const key = JSON.stringify([row.akm_version, row.suite, row.collection, row.mode, row.model, row.search_method, row.embedding_model, row.strategy]);
+    const previous = latest.get(key);
+    if (!previous || row.date > previous.date || (row.date === previous.date && row.id < previous.id)) latest.set(key, row);
+  }
+  return [...latest.values()];
+}
 function comparisonRow(row) {
   const basis = row.case_p50_s != null ? ['case', 'AKM command']
     : row.keyword_p50_s != null ? ['keyword', 'Keyword query']
@@ -62,7 +71,7 @@ function comparisonRow(row) {
   const control = row.scores.find(score => score.label.endsWith('without AKM'));
   const withAKM = row.scores.find(score => score.label.endsWith('with AKM'));
   const paired = row.paired_cases > 0 && control?.value != null && withAKM?.value != null;
-  return { ...row, model_route: row.model, control_quality_percent: control?.value == null ? null : control.value * 100,
+  return { ...row, case_coverage: `${row.scored ?? '—'} / ${row.total_cases ?? row.recorded ?? '—'}`, model_route: row.model, control_quality_percent: control?.value == null ? null : control.value * 100,
     akm_quality_percent: withAKM?.value == null ? null : withAKM.value * 100,
     akm_gain_ci: row.akm_delta_lo_pp == null || row.akm_delta_hi_pp == null ? null : `${row.akm_delta_lo_pp.toFixed(2)} to ${row.akm_delta_hi_pp.toFixed(2)}`,
     median_time_change_percent: paired && row.control_p50_s > 0 && row.akm_p50_s != null ? (row.akm_p50_s / row.control_p50_s - 1) * 100 : null,
@@ -77,7 +86,6 @@ function formatCell(value, column) {
   })) + (column.unit === '%' ? '<span class="unit">%</span>' : '');
   if (column.kind === 'date') return escapeHTML(value.replace('T', ' ').slice(0, 16));
   if (column.key === 'model') return escapeHTML(modelName(value));
-  if (/sha256|fingerprint/.test(column.key)) return escapeHTML(value.slice(0, 12));
   return escapeHTML(value);
 }
 
@@ -89,6 +97,7 @@ async function startLedger() {
   const dataset = await response.json();
   const rows = dataset.runs.map(run => comparisonRow({ ...run, ...run.comparison }));
   const columns = [...dataset.columns, ...[
+    { key: 'case_coverage', label: 'Cases scored / total', kind: 'text', group: 'Run', description: 'Scored cases / total suite cases when recorded, otherwise selected or saved cases. The quality metric may use only a subset; Metric cases shows that denominator.' },
     { key: 'model_route', label: 'Model route', kind: 'text', group: 'Settings', description: 'Full recorded model identifier, including its serving route. The Model column uses a shortened display name.' },
     { key: 'latency_p50_s', label: 'Latency p50 (s)', kind: 'number', group: 'Performance', decimals: 2, description: 'Median elapsed time. Uses command, keyword-query or with-AKM agent/answer timing as identified in Latency basis. Compare runs with the same basis.' },
     { key: 'latency_p95_s', label: 'Latency p95 (s)', kind: 'number', group: 'Performance', decimals: 2, description: '95th percentile of the same timings as Latency p50. This is elapsed time including overhead, not token-generation speed.' },
@@ -100,19 +109,34 @@ async function startLedger() {
     { key: 'latency_basis', label: 'Latency basis', kind: 'text', group: 'Performance', description: 'Which recorded timing supplies the comparison latency. Original timing fields remain available separately.' },
   ]];
   const columnByKey = new Map(columns.map(column => [column.key, column]));
-  const facets = ['model', 'suite', 'role', 'collection', 'akm_version', 'measurement', 'search_method', 'strategy'];
-  const state = { search: '', facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
+  const facets = ['model', 'suite', 'role', 'collection', 'measurement', 'search_method', 'strategy'];
+  const state = { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
+  let latestIds = null, restoringURL = false;
   let grid, ready = false, visibleKeys = new Set(), layoutSignature = '';
   const widths = { model: 164, suite: 118, label: 196, quality_percent: 100, quality_metric: 205,
-    scored: 100, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
+    scored: 100, case_coverage: 116, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
     akm_version: 162, date: 155, recorded: 110 };
-  const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
-  const compareKeys = ['model', 'suite', 'label', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'measurement', 'scoring_version', 'mode', 'akm_version', 'date'];
+  const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Metric cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
+  const compareKeys = ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'case_coverage', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'quality_cases', 'collection', 'measurement', 'scoring_version', 'mode', 'label', 'date'];
 
   for (const key of facets) {
     const values = [...new Set(rows.map(row => key === 'model' ? modelName(row.model) : row[key]))].filter(Boolean).sort();
     for (const value of values) $(key).add(new Option(value, value));
+  }
+  for (const version of [...new Set(rows.map(row => row.akm_version))].filter(Boolean).sort()) {
+    const label = document.createElement('label'); label.className = 'check-label';
+    const input = document.createElement('input'); input.type = 'checkbox'; input.value = version;
+    input.onchange = () => {
+      state.versions = [...$('version-options').querySelectorAll('input:checked')].map(input => input.value);
+      applyFilters();
+    };
+    label.append(input, document.createTextNode(version)); $('version-options').append(label);
+  }
+  function renderVersions() {
+    for (const input of $('version-options').querySelectorAll('input')) input.checked = state.versions.includes(input.value);
+    $('version-summary').textContent = state.versions.length === 1 ? `AKM ${state.versions[0]}`
+      : state.versions.length ? `AKM versions (${state.versions.length})` : 'All AKM versions';
   }
   const grouped = new Map();
   for (const column of columns) {
@@ -128,9 +152,65 @@ async function startLedger() {
   $('provenance').innerHTML = `<a href="https://github.com/itlackey/akm-eval/tree/${encodeURIComponent(dataset.source_revision)}/reports">Published reports · ${escapeHTML(dataset.source_revision.slice(0, 8))}</a> · ` +
     '<a href="https://github.com/fwdslsh/website">fwdslsh theme</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · <a href="./assets/vendor/tabulator.LICENSE">Tabulator MIT license</a>.';
 
-  function filtered(row) {
+  function syncURL() {
+    if (!ready || restoringURL) return;
+    const url = new URL(window.location.href), params = url.searchParams;
+    for (const key of [...params.keys()]) if (facets.includes(key) || ['q', 'akm', 'latest', 'errors', 'from', 'to', 'view', 'filter', 'column', 'sort'].includes(key) || key.startsWith('header.')) params.delete(key);
+    for (const key of facets) if (state.facets[key]) params.set(key, state.facets[key]);
+    for (const version of state.versions) params.append('akm', version);
+    for (const [key, value] of [['q', state.search], ['latest', state.latestOnly ? '1' : ''], ['errors', state.errorsOnly ? '1' : ''], ['from', state.dateFrom], ['to', state.dateTo], ['view', state.analysisView === 'compare' ? '' : state.analysisView]]) if (value) params.set(key, value);
+    for (const { key, operator, value } of state.conditions) params.append('filter', JSON.stringify([key, operator, value]));
+    for (const { field, value } of grid.getHeaderFilters()) params.set('header.' + field, value);
+    const selected = selectedColumns();
+    if ($('view').value === 'custom') for (const key of selected.length ? selected : ['']) params.append('column', key);
+    const sorting = grid.getSorters().map(sort => sort.field + ':' + sort.dir);
+    if (JSON.stringify(sorting) !== JSON.stringify(defaultSort().map(sort => sort.column + ':' + sort.dir))) for (const sort of sorting.length ? sorting : ['']) params.append('sort', sort);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+  }
+  function restoreURL() {
+    restoringURL = true;
+    const params = new URLSearchParams(window.location.search);
+    state.versions = [...new Set(params.getAll('akm').filter(Boolean))];
+    state.conditions = [];
+    for (const key of facets) {
+      const value = params.get(key) ?? '';
+      if (value && ![...$(key).options].some(option => option.value === value)) $(key).add(new Option(value, value));
+      $(key).value = state.facets[key] = value;
+    }
+    for (const [key, param] of [['search', 'q'], ['dateFrom', 'from'], ['dateTo', 'to']]) {
+      $(key).value = params.get(param) ?? ''; state[key] = $(key).value.trim();
+    }
+    for (const [key, id, param] of [['latestOnly', 'latest-only', 'latest'], ['errorsOnly', 'errorsOnly', 'errors']]) $(id).checked = state[key] = params.get(param) === '1';
+    for (const value of params.getAll('filter')) {
+      try {
+        const [key, operator, input] = JSON.parse(value);
+        if (columnByKey.has(key) && ['contains', 'eq', 'gte', 'lte', 'between', 'missing', 'present'].includes(operator) && typeof input === 'string') state.conditions.push({ key, operator, value: input });
+      } catch { /* Ignore malformed URL conditions; keep the other filters usable. */ }
+    }
+    const view = params.get('view');
+    state.analysisView = [...$('view').options].some(option => option.value === view && !option.disabled) ? view : 'compare';
+    $('view').value = state.analysisView;
+    grid.clearHeaderFilter();
+    for (const [key, value] of params) if (key.startsWith('header.') && columnByKey.has(key.slice(7))) grid.setHeaderFilterValue(key.slice(7), value);
+    $('header-filters').checked = grid.getHeaderFilters().length > 0;
+    $('grid').classList.toggle('hide-header-filters', !$('header-filters').checked);
+    applyFilters(); applyView(state.analysisView);
+    const selected = [...new Set(params.getAll('column').filter(key => columnByKey.has(key)))];
+    if (selected.length || params.get('column') === '') {
+      applyView('custom', false, selected); $('view').value = 'custom';
+    }
+    const sorting = params.getAll('sort').map(value => {
+      const separator = value.lastIndexOf(':');
+      return { column: value.slice(0, separator), dir: value.slice(separator + 1) };
+    }).filter(sort => columnByKey.has(sort.column) && ['asc', 'desc'].includes(sort.dir));
+    grid.setSort(sorting.length || params.get('sort') === '' ? sorting : defaultSort());
+    restoringURL = false; syncURL();
+  }
+
+  function matchesFilters(row) {
     if (state.analysisView === 'impact' && !(row.paired_cases > 0 && row.control_quality_percent != null && row.akm_quality_percent != null)) return false;
     if (state.search && !matchesText([row.model, modelName(row.model), ...columns.map(column => row[column.key])].join(' '), state.search)) return false;
+    if (state.versions.length && !state.versions.includes(row.akm_version)) return false;
     if (state.errorsOnly && !(row.errors > 0)) return false;
     if (state.dateFrom && (!row.date || row.date.slice(0, 10) < state.dateFrom)) return false;
     if (state.dateTo && (!row.date || row.date.slice(0, 10) > state.dateTo)) return false;
@@ -139,10 +219,20 @@ async function startLedger() {
     }
     return state.conditions.every(condition => matchesCondition(row[condition.key], condition, columnByKey.get(condition.key)));
   }
+  function filtered(row) {
+    return matchesFilters(row) && (!latestIds || latestIds.has(row.id));
+  }
+  function updateLatest() {
+    if (!state.latestOnly) { latestIds = null; return; }
+    const headers = grid.getHeaderFilters();
+    const matching = rows.filter(matchesFilters).filter(row => headers.every(filter =>
+      matchesHeader(row[filter.field], filter.value.replace('≥', '>=').replace('≤', '<='), columnByKey.get(filter.field))));
+    latestIds = new Set(latestRuns(matching).map(row => row.id));
+  }
   function updateCount() {
     if (!ready) return;
     $('count').textContent = `${grid.getData('active').length} of ${rows.length} runs`;
-    updateContext();
+    updateContext(); queueMicrotask(renderTouchRuns);
     const sorts = grid.getSorters();
     $('sort-status').textContent = sorts.length ? 'Sort: ' + sorts.map(sort => `${titles[sort.field] ?? columnByKey.get(sort.field)?.label ?? sort.field} ${sort.dir === 'asc' ? '↑' : '↓'}`).join(' · ') : '';
   }
@@ -164,6 +254,10 @@ async function startLedger() {
       text = 'Compare medians within the same test and timing basis. New runs include model request duration and output tokens per second when usage is available. Missing values stay blank; first-token timing is not recorded.';
       if (test && models.length === 1) text += ` Only ${models[0]} is published for this test.`;
     } else text = 'Choose a test, then use Quality ranking, Speed & usage or AKM impact. Each row is a published run; hover a run to see its full label.';
+    if (test && state.versions.length && !active.length) {
+      const available = [...new Set(rows.filter(row => row.suite === test && (!state.facets.role || row.role === state.facets.role)).map(row => row.akm_version))];
+      if (available.length) text += ` Published ${test} results for this scope use AKM ${available.join(', ')}. Clear other filters or select one of those versions to see them.`;
+    }
     $('view-context').textContent = text;
   }
   function renderChips() {
@@ -172,8 +266,10 @@ async function startLedger() {
     const chip = (text, remove) => chips.push({ text, remove });
     if (state.search) chip(`Search: ${state.search}`, () => { $('search').value = ''; state.search = ''; });
     for (const [key, value] of Object.entries(state.facets)) if (value) chip(`${key === 'suite' ? 'Test' : columnByKey.get(key)?.label ?? key}: ${value}`, () => { $(key).value = ''; state.facets[key] = ''; });
+    for (const version of state.versions) chip(`AKM version: ${version}`, () => { state.versions = state.versions.filter(value => value !== version); });
     if (state.dateFrom) chip(`From: ${state.dateFrom}`, () => { $('dateFrom').value = ''; state.dateFrom = ''; });
     if (state.dateTo) chip(`Through: ${state.dateTo}`, () => { $('dateTo').value = ''; state.dateTo = ''; });
+    if (state.latestOnly) chip('Latest only', () => { $('latest-only').checked = false; state.latestOnly = false; });
     if (state.errorsOnly) chip('With errors', () => { $('errorsOnly').checked = false; state.errorsOnly = false; });
     const names = { contains: 'contains', eq: '=', gte: '≥', lte: '≤', between: 'between', missing: 'unrecorded', present: 'recorded' };
     for (const condition of state.conditions) chip(`${columnByKey.get(condition.key).label} ${names[condition.operator]} ${['missing', 'present'].includes(condition.operator) ? '' : condition.value}`, () => { state.conditions = state.conditions.filter(item => item !== condition); });
@@ -188,25 +284,30 @@ async function startLedger() {
     $('filter-badge').textContent = chips.length ? `(${chips.length})` : '';
   }
   function applyFilters() {
-    grid.setFilter(filtered); renderChips();
+    renderVersions(); grid.setFilter(filtered); renderChips();
     if (['quality', 'performance', 'settings', 'impact'].includes($('view').value)) applyView($('view').value);
     updateCount();
   }
   function viewKeys(view) {
     const context = rows.filter(filtered);
     const recorded = column => context.some(row => row[column.key] != null && row[column.key] !== '');
-    if (view === 'all') return columns.map(column => column.key);
+    if (view === 'all') return columns.map(column => column.key === 'label' ? 'akm_version' : column.key === 'akm_version' ? 'label' : column.key);
     if (view === 'compare') return compareKeys;
-    if (view === 'impact') return ['model', 'suite', 'label', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'date'];
-    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'date'];
-    const base = ['model', 'suite', 'label', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
+    if (view === 'impact') return ['model', 'suite', 'akm_version', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'label', 'date'];
+    if (view === 'performance') return ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'label', 'date'];
+    const base = ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
     let extras;
     if (view === 'quality') extras = columns.filter(column => (column.group === 'Quality' || (state.facets.suite && column.key.startsWith('score:'))) && recorded(column));
     else extras = columns.filter(column => ['Settings', 'Provenance'].includes(column.group) && recorded(column));
-    return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'date'])];
+    return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'label', 'date'])];
   }
-  function applyView(view, force = false) {
-    const keys = viewKeys(view);
+  function selectedColumns() {
+    return grid.getColumns().filter(column => column.isVisible() && columnByKey.has(column.getField())).map(column => column.getField());
+  }
+  function defaultSort() {
+    return [{ column: state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', dir: state.analysisView === 'performance' ? 'asc' : 'desc' }];
+  }
+  function applyView(view, force = false, keys = viewKeys(view)) {
     const signature = JSON.stringify([view, keys]);
     if (!force && signature === layoutSignature && keys.length === visibleKeys.size && keys.every(key => visibleKeys.has(key))) {
       updateCount(); return;
@@ -222,7 +323,7 @@ async function startLedger() {
       width: sizing[field] ?? widths[field] ?? (columnByKey.get(field).kind === 'number' ? Math.min(340, Math.max(130, columnByKey.get(field).label.length * 7 + 36)) : 190) })), { field: 'sources', visible: true, width: 140 }]);
     grid.setSort(sorting);
     for (const filter of filters) grid.setHeaderFilterValue(filter.field, filter.value);
-    renderColumnChooser(); updateCount();
+    renderColumnChooser(); updateCount(); syncURL();
   }
   function renderColumnChooser() {
     const query = $('column-search').value;
@@ -237,7 +338,7 @@ async function startLedger() {
         input.onchange = () => {
           if (input.checked) { visibleKeys.add(column.key); grid.showColumn(column.key); }
           else { visibleKeys.delete(column.key); grid.hideColumn(column.key); }
-          $('view').value = 'custom'; updateCount();
+          visibleKeys = new Set(selectedColumns()); $('view').value = 'custom'; updateCount(); syncURL();
         };
         label.append(input, document.createTextNode(column.label)); $('column-list').append(label);
       }
@@ -248,7 +349,38 @@ async function startLedger() {
     $('columns-panel').hidden = !open; $('columns-toggle').setAttribute('aria-expanded', String(open));
     if (open) { renderColumnChooser(); $('column-search').focus(); }
   }
-  const frozen = window.matchMedia('(min-width: 900px)').matches;
+  const touchLayout = window.matchMedia('(max-width: 900px) and (any-pointer: coarse)');
+  function renderTouchRuns() {
+    if (!ready || !touchLayout.matches) return;
+    const active = grid.getData('active'), size = grid.getPageSize();
+    const start = typeof size === 'number' ? (grid.getPage() - 1) * size : 0;
+    const page = typeof size === 'number' ? active.slice(start, start + size) : active;
+    const sort = grid.getSorters()[0];
+    const keys = [...new Set([...visibleKeys, sort?.field].filter(Boolean))];
+    $('touch-sort').replaceChildren(...keys.map(key => new Option(titles[key] ?? columnByKey.get(key).label, key)));
+    $('touch-sort').value = sort?.field ?? 'date';
+    $('touch-direction').textContent = sort?.dir === 'asc' ? 'Ascending ↑' : 'Descending ↓';
+    $('touch-cards').innerHTML = page.length ? page.map(row => {
+      const fields = [...visibleKeys].filter(key => !['model', 'suite', 'akm_version'].includes(key));
+      return `<article class="run-card" data-run-id="${escapeHTML(row.id)}">
+        <h2>${escapeHTML(modelName(row.model))}</h2>
+        <p class="run-identity">${escapeHTML(row.suite)} · AKM ${escapeHTML(row.akm_version)}</p>
+        <dl>${fields.map(key => `<div><dt>${escapeHTML(titles[key] ?? columnByKey.get(key).label)}</dt><dd>${key === 'label'
+          ? `<a href="${escapeHTML(row.summary_url)}" target="_blank" rel="noopener">${escapeHTML(row.label)}</a>`
+          : formatCell(row[key], columnByKey.get(key))}</dd></div>`).join('')}</dl>
+        <div class="run-reports"><a href="${escapeHTML(row.summary_url)}" target="_blank" rel="noopener">Summary ↗</a><a href="${escapeHTML(row.samples_url)}" target="_blank" rel="noopener">Cases ↗</a></div>
+      </article>`;
+    }).join('') : '<p class="empty">No runs match these filters. Reset filters to show all runs.</p>';
+  }
+  function updateTouchLayout() {
+    document.body.classList.toggle('touch-layout', touchLayout.matches);
+    $('touch-results').hidden = !touchLayout.matches;
+    if (ready) { grid.redraw(true); updateCount(); }
+  }
+  touchLayout.addEventListener('change', updateTouchLayout);
+  $('touch-sort').onchange = () => grid.setSort($('touch-sort').value, grid.getSorters()[0]?.dir ?? 'desc');
+  $('touch-direction').onclick = () => grid.setSort($('touch-sort').value, grid.getSorters()[0]?.dir === 'asc' ? 'desc' : 'asc');
+  const frozen = window.matchMedia('(min-width: 900px)').matches && !touchLayout.matches;
   grid = new Tabulator('#grid', {
     data: rows, index: 'id', maxHeight: 'min(62vh, 620px)', layout: 'fitData', rowHeight: 38,
     movableColumns: true, columnHeaderSortMulti: true,
@@ -301,18 +433,26 @@ async function startLedger() {
       }, tooltip: 'Original published summary and sample output for this run.' }],
   });
   grid.on('tableBuilt', () => {
-    ready = true; visibleKeys = new Set(compareKeys); layoutSignature = JSON.stringify(['compare', compareKeys]); renderColumnChooser(); updateCount();
+    ready = true; visibleKeys = new Set(compareKeys); layoutSignature = JSON.stringify(['compare', compareKeys]); renderColumnChooser(); updateTouchLayout();
     for (const input of document.querySelectorAll('.tabulator-header-filter input')) {
       const field = input.closest('[tabulator-field]')?.getAttribute('tabulator-field');
       input.setAttribute('aria-label', 'Filter ' + (columnByKey.get(field)?.label ?? field));
     }
+    restoreURL();
   });
   for (const event of ['dataFiltered', 'dataSorted', 'pageLoaded', 'renderComplete']) grid.on(event, updateCount);
-  grid.on('dataFiltered', renderChips);
+  grid.on('dataFiltered', () => { renderChips(); syncURL(); });
+  grid.on('dataSorted', syncURL);
+  grid.on('columnMoved', () => {
+    layoutSignature = ''; visibleKeys = new Set(selectedColumns()); $('view').value = 'custom'; updateCount(); syncURL();
+  });
+  window.addEventListener('popstate', restoreURL);
+  grid.on('dataFiltering', updateLatest);
 
   for (const key of facets) $(key).onchange = () => { state.facets[key] = $(key).value; applyFilters(); };
   $('search').oninput = () => { state.search = $('search').value.trim(); applyFilters(); };
   for (const key of ['dateFrom', 'dateTo']) $(key).onchange = () => { state[key] = $(key).value; applyFilters(); };
+  $('latest-only').onchange = () => { state.latestOnly = $('latest-only').checked; applyFilters(); };
   $('errorsOnly').onchange = () => { state.errorsOnly = $('errorsOnly').checked; applyFilters(); };
   $('advanced-toggle').onclick = () => { const open = $('advanced-panel').hidden; $('advanced-panel').hidden = !open; $('advanced-toggle').setAttribute('aria-expanded', String(open)); };
   $('view').onchange = () => {
@@ -320,15 +460,23 @@ async function startLedger() {
     if (view !== 'custom') {
       state.analysisView = view;
       applyFilters(); applyView(view);
-      grid.setSort(view === 'quality' ? 'quality_percent' : view === 'performance' ? 'latency_p50_s' : view === 'impact' ? 'akm_delta_pp' : 'date', view === 'performance' ? 'asc' : 'desc');
+      grid.setSort(defaultSort());
     }
   };
   $('columns-toggle').onclick = () => openChooser($('columns-panel').hidden);
   $('columns-close').onclick = () => { openChooser(false); $('columns-toggle').focus(); };
   $('column-search').oninput = renderColumnChooser;
   $('reset-columns').onclick = () => { $('view').value = 'compare'; state.analysisView = 'compare'; applyFilters(); applyView('compare', true); };
-  document.addEventListener('click', event => { if (!event.target.closest('.column-menu')) openChooser(false); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') openChooser(false); });
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.column-menu')) openChooser(false);
+    if (!event.target.closest('.version-filter')) $('version-filter').open = false;
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      openChooser(false);
+      if ($('version-filter').open) { $('version-filter').open = false; $('version-summary').focus(); }
+    }
+  });
   $('header-filters').onchange = () => {
     $('grid').classList.toggle('hide-header-filters', !$('header-filters').checked); grid.redraw(true);
   };
@@ -360,10 +508,10 @@ async function startLedger() {
   changeOperator();
   $('reset').onclick = () => {
     for (const key of [...facets, 'search', 'dateFrom', 'dateTo']) $(key).value = '';
-    $('errorsOnly').checked = false;
-    Object.assign(state, { search: '', facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
+    $('errorsOnly').checked = false; $('latest-only').checked = false;
+    Object.assign(state, { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
     grid.clearHeaderFilter();
-    grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
+    grid.setSort(defaultSort());
     applyFilters();
   };
 

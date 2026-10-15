@@ -39,13 +39,17 @@
         <label><span class="sr-only">Model</span><select id="model"><option value="">All models</option></select></label>
         <label><span class="sr-only">Test</span><select id="suite"><option value="">All tests</option></select></label>
         <label><span class="sr-only">Scope</span><select id="role"><option value="">All run scopes</option></select></label>
+        <details id="version-filter" class="version-filter">
+          <summary id="version-summary">All AKM versions</summary>
+          <div id="version-options" role="group" aria-label="AKM versions"></div>
+        </details>
+        <label class="check-label latest-filter"><input id="latest-only" type="checkbox"> Latest only</label>
         <button id="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-panel">Filters <span id="filter-badge"></span></button>
         <button id="reset" type="button" class="quiet">Reset</button>
       </div>
       <div id="advanced-panel" class="advanced-panel" hidden>
         <div class="extra-filters">
           <label>Collection<select id="collection"><option value="">All collections</option></select></label>
-          <label>AKM version<select id="akm_version"><option value="">All versions</option></select></label>
           <label>Eval version<select id="measurement"><option value="">All versions</option></select></label>
           <label>Search method<select id="search_method"><option value="">All methods</option></select></label>
           <label>Strategy<select id="strategy"><option value="">All strategies</option></select></label>
@@ -74,6 +78,13 @@
       </div>
       <div class="grid-status"><p id="count" role="status" aria-live="polite">Loading…</p><p id="sort-status" aria-live="polite"></p></div>
       <p id="view-context" class="view-context" aria-live="polite"></p>
+      <section id="touch-results" aria-label="Benchmark runs" hidden>
+        <div class="touch-sort">
+          <label>Sort by<select id="touch-sort"></select></label>
+          <button id="touch-direction" type="button">Descending ↓</button>
+        </div>
+        <div id="touch-cards"></div>
+      </section>
       <div id="grid" class="hide-header-filters" aria-label="Sortable benchmark results"></div>
       <p class="table-help">Click headings to sort · Shift-click to sort several columns · Drag column edges to resize · Drag headings to reorder</p>
       <noscript><p>Enable JavaScript to explore the ledger, or <a href="./data.json">download the results</a>.</p></noscript>

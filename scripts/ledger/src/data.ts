@@ -14,11 +14,11 @@ export interface LedgerRun {
   akm_version: string;
   measurement: string;
   recorded: number | null;
+  total_cases: number | null;
   scored: number | null;
   errors: number | null;
   notes: string;
   source_commit: string;
-  harness_sha256: string;
   metrics: ObjectValue;
   summary_url: string;
   samples_url: string;
@@ -74,11 +74,15 @@ export function presentRun(input: RunInput): LedgerRun | null {
   const label = text(s.label);
   const m = object(s.metrics);
   const recorded = input.samples?.length ?? n(s, "n_queries") ?? n(s, "n_tasks") ?? n(s, "n_items") ?? n(s, "sample.n");
+  const completion = object(at(s, "manifest.completion"));
+  const selected = Array.isArray(completion.selected) ? completion.selected : null;
+  const completed = Array.isArray(completion.scored) ? completion.scored : null;
+  const failed = Array.isArray(completion.errored) ? completion.errored : null;
   const errorModes = Object.values(object(s.errored)).map(number);
   const modeErrors = errorModes.length && errorModes.every((value): value is number => value !== null)
     ? errorModes.reduce((sum, value) => sum + value, 0) : null;
-  const errors = n(s, "n_errored") ?? modeErrors;
-  let scored = n(s, "n_scored");
+  const errors = n(s, "n_errored") ?? modeErrors ?? failed?.length ?? null;
+  let scored = completed?.length ?? n(s, "n_scored");
   if (scored === null) {
     if (suite === "nightly") scored = n(m, "items.n");
     else if (suite === "promotion") scored = n(m, "proposals.n");
@@ -98,7 +102,18 @@ export function presentRun(input: RunInput): LedgerRun | null {
   if (s.status !== undefined && s.status !== "complete") {
     role = "Diagnostic";
     notes.push(`Status: ${publicText(String(s.status))}. Saved results cover only the recorded work.${typeof s.aborted_reason === "string" ? ` ${publicText(s.aborted_reason)}` : ""}`);
-  } else if (s.status === undefined) notes.push("Legacy result: completion status was not recorded.");
+  } else if (s.status === undefined) {
+    role = "Diagnostic";
+    notes.push("Legacy result: completion status was not recorded.");
+  }
+  const expected = s.mode === "pool" ? n(s, "n_clusters") : total ?? n(s, "n_cases");
+  const allScored = selected && completed
+    ? selected.length > 0 && selected.every(id => completed.includes(id)) && recorded === selected.length
+    : recorded !== null && recorded > 0 && scored !== null && scored >= recorded;
+  if (role === "Full suite" && (!allScored || (expected !== null && recorded !== null && recorded < expected) || (errors !== null && errors > 0) || (failed && failed.length > 0))) {
+    role = "Diagnostic";
+    notes.push(`Incomplete scoring coverage: ${scored ?? "unknown"} scored of ${expected ?? selected?.length ?? recorded ?? "unknown"} cases${errors ? `; ${errors} errors` : ""}.`);
+  }
   if (Array.isArray(s.notes))
     notes.push(...s.notes.filter((note): note is string => typeof note === "string" && note.trim().length > 0).map(publicText));
   if (s.resumed === true) notes.push("Resumed from saved cases; full run wall time is unknown.");
@@ -108,7 +123,6 @@ export function presentRun(input: RunInput): LedgerRun | null {
       "This trial used a plugin that could not run with AKM CLI 0.10. Use it to inspect the compatibility failure, not to estimate task performance.",
     );
   }
-  if (role === "Pilot") notes.push("Only part of this test was run. The score does not estimate full-test performance.");
   const rows = input.samples?.map(object) ?? [];
   if (suite === "longmemeval") {
     const undecidable = n(s, "judge_undecidable");
@@ -172,11 +186,11 @@ export function presentRun(input: RunInput): LedgerRun | null {
     akm_version: text(s.akm_version) || "Unspecified",
     measurement,
     recorded,
+    total_cases: expected ?? selected?.length ?? recorded,
     scored,
     errors,
     notes: notes.join(" "),
     source_commit: text(s.git_commit),
-    harness_sha256: text(s.harness_sha256),
     metrics: object(publicValue(m)),
     summary_url: `${base}/summary.json`,
     samples_url: `${base}/samples.jsonl`,

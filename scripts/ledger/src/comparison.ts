@@ -40,11 +40,11 @@ function col(key: string, label: string, kind: Column["kind"], group: string, de
   coreColumns.push({ key, label, kind, group, description, decimals, unit });
 }
 col("model", "Model / route", "text", "Run", "Recorded model identifier, including the serving route. Retrieval runs have no answer model.");
-col("label", "Run", "text", "Run", "Published run label. Every artifact is a separate row, including repeats and pilots.");
+col("label", "Run", "text", "Run", "Published run label. Each active artifact is a separate row, including repeats and pilots.");
 col("suite", "Test", "text", "Run", "Evaluation suite. Compare quality within the same test and collection.");
 col("collection", "Collection", "text", "Run", "Test collection, such as books or library.");
 col("date", "Collected (UTC)", "date", "Run", "Recorded collection timestamp.");
-col("role", "Scope", "text", "Run", "Full suite, pilot or diagnostic compatibility run.");
+col("role", "Scope", "text", "Run", "Full suite requires complete scoring of the full collection without missing or errored cases. Other saved runs remain pilot or diagnostic.");
 col("quality_percent", "Quality %", "number", "Quality", "The named primary metric scaled from 0–1 to 0–100. This is not an overall score across tests.", 2, "%");
 col("quality_metric", "Quality metric", "text", "Quality", "The exact metric used in Quality %. Agent and answer benchmarks use the AKM arm; search uses keyword nDCG@10.");
 col("quality_passed", "Quality passed", "number", "Quality", "Primary metric's recorded numerator. Ranking scores have no passed-case numerator.", 0);
@@ -118,10 +118,6 @@ col("harbor_version", "Harbor version", "text", "Settings", "Recorded Harbor ben
 col("plugin_version", "AKM plugin version", "text", "Settings", "Recorded AKM plugin pin.");
 col("source_commit", "Collector commit", "text", "Provenance", "Collector source commit, including its recorded dirty marker.");
 col("akm_build", "AKM build", "text", "Provenance", "Recorded AKM checkout build; an installed release can leave this unrecorded.");
-col("akm_build_fingerprint", "AKM build SHA", "text", "Provenance", "Recorded fingerprint distinguishing uncommitted AKM builds.");
-col("harness_sha256", "Harness SHA", "text", "Provenance", "Collector code fingerprint. Different digests can mean changed measurement.");
-col("assets_sha256", "Inputs SHA", "text", "Provenance", "Test inputs fingerprint.");
-col("config_sha256", "Config SHA", "text", "Provenance", "Recorded redacted configuration fingerprint.");
 col("notes", "Notes", "text", "Provenance", "Interpretation and compatibility notes.");
 
 export function comparisonFields(summary: RecordValue, samples: unknown[] | null, scores: Score[]): Record<string, Cell> {
@@ -237,10 +233,7 @@ export function comparisonFields(summary: RecordValue, samples: unknown[] | null
   fields.semantic_index = string(summary.semantic_index);
   for (const [key, pin] of [["opencode_version", "opencode"], ["harbor_version", "harbor"], ["plugin_version", "akm_plugin"]])
     fields[key!] = string(at(summary, `pins.${pin}`));
-  fields.assets_sha256 = string(summary.assets_sha256);
   fields.akm_build = string(summary.akm_build);
-  fields.akm_build_fingerprint = string(summary.akm_build_fingerprint);
-  fields.config_sha256 = string(at(summary, "manifest.config.sha256"));
   for (const score of scores) fields[`score:${score.label}`] = score.value === null ? null : score.value * (score.unit === "percent" ? 100 : 1);
   return fields;
 }
