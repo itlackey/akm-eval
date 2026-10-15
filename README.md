@@ -117,22 +117,17 @@ LongMemEval model entries can add `"chat": { "max_completion_tokens": 2048, "rea
 ```
 eval_docker evals/distill/run                                # --corpus public, the default
 eval_docker evals/distill/run --corpus custom                # the rewrite in private/distill/assets
-eval_docker evals/distill/run --cases private/my-distill --yes        # a folder of your own cases
+eval_docker evals/distill/run --cases private/my-distill        # a folder of your own cases
 eval_docker evals/distill/run --corpus all                   # public and custom, side by side, never pooled
 ```
 
 - `public` is the cases committed here, or the dataset a benchmark fetches.
 - `custom` is the public cases rewritten from a seed by `./generate-assets` (see "Custom corpora"), or, with `--cases DIR`, a folder of your own in the eval's format. Each eval's README describes the format. A relative `DIR` is from the repository root. `evals/promotion` has no rewrite, so its custom corpus is `--cases` only. `benchmarks/skillret` takes no `--cases`: its custom corpus is another split of its dataset.
 
-A run with `--cases` sends your cases to a model, so before anything runs it says where and asks:
-
-```
-The cases in ~/notes/distill will be sent to:
-  model  qwen3-8b at https://gateway.example/v1
-Continue? [Y/n]
-```
-
-`-y` or `--yes` skips the question. With no terminal and no `-y` the run stops, so a script with `--cases` needs `-y`. A public or rewrite run never asks. `evals/retrieval` calls no model, and takes `-y` without needing it.
+An explicit `--cases DIR` selects your custom cases. Before model calls, the run
+prints the model and judge destinations with credentials removed, then proceeds
+without a confirmation prompt or terminal requirement. `-y` and `--yes` remain
+accepted for existing scripts. Retrieval-only runs make no model calls.
 
 ## Run, save, compare
 

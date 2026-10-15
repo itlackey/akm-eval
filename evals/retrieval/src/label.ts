@@ -41,7 +41,7 @@ Use one judge for a set: label warns when the qrels were graded by another, or h
             corpus, the rewrite, is not graded: generate carries the public grades over to it).
   --cases   the folder of your own set, in the format of "Run your own set" in evals/retrieval/README.md. It is graded from
             what akm search and akm curate return for it (no BM25: the library is too big to list), and the grades are appended
-            to its qrels.jsonl. It sends your notes to the judge: it says which one and asks first, and -y or --yes skips the question.
+            to its qrels.jsonl. It reports the judge destination before sending your notes; no confirmation is required.
   --stamp-legacy  gives every row of assets/qrels.jsonl that records no digest of its asset the digest of the asset as the
             library has it now, and judge "legacy" when it records no judge, so that a later edit to the asset grades the pair
             again. It grades nothing, calls no judge and runs no akm, and can be run again: it stamps only what is not stamped.

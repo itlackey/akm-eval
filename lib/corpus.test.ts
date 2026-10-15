@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { CORPUS_OPTIONS, type Recipient, confirmCases, renamed, resolveCorpora } from "./corpus.ts";
-import { Fatal } from "./cli.ts";
 
 const LIB = import.meta.dir;
 const REPO = resolve(LIB, "..");
@@ -179,89 +178,44 @@ describe("./generate-assets", () => {
   });
 });
 
-describe("confirmCases", () => {
-  const GATEWAY = "https://gateway.example/v1";
-  const model: Recipient = { role: "model", name: "qwen3-8b", baseUrl: GATEWAY };
-  const judge: Recipient = { role: "judge", name: "qwen3-32b", baseUrl: GATEWAY };
-  /** A run in which `answer` is typed at a terminal: what it printed, what it asked, and how it ended. */
-  const ask = async (to: Recipient[], answer: string, values: { cases?: string; yes?: boolean } = { cases: "~/notes/distill" }) => {
+describe("custom-case destinations", () => {
+  const model: Recipient = { role: "model", name: "qwen3-8b", baseUrl: "https://gateway.example/v1" };
+  const judge: Recipient = { role: "judge", name: "qwen3-32b", baseUrl: "https://gateway.example/v1" };
+  const report = async (to: Recipient[], values: { cases?: string; yes?: boolean } = { cases: "~/notes/distill" }) => {
     const shown: string[] = [];
-    const asked: string[] = [];
-    let ended: { message: string; code: number } | undefined;
-    try {
-      await confirmCases(values, to, { tty: true, log: (line) => shown.push(line), ask: async (question) => (asked.push(question), answer) });
-    } catch (e) {
-      if (!(e instanceof Fatal)) throw e;
-      ended = { message: e.message, code: e.code };
-    }
-    return { shown, asked, ended };
+    await confirmCases(values, to, { log: line => shown.push(line) });
+    return shown;
   };
 
-  test("names the folder, the model, the judge and the endpoint of each, and asks", async () => {
-    const done = await ask([model, judge], "");
-    expect(done.shown).toEqual(["The cases in ~/notes/distill will be sent to:", "  model  qwen3-8b at https://gateway.example/v1", "  judge  qwen3-32b at https://gateway.example/v1"]);
-    expect(done.asked).toEqual(["Continue? [Y/n] "]);
-    expect((await ask([model], "")).shown).toEqual(["The cases in ~/notes/distill will be sent to:", "  model  qwen3-8b at https://gateway.example/v1"]); // an eval without a judge shows no judge line
-    expect((await ask([judge], "")).shown[1]).toBe("  judge  qwen3-32b at https://gateway.example/v1"); // and retrieval label has only a judge
+  test("reports the folder, model, judge and endpoints without a confirmation", async () => {
+    expect(await report([model, judge])).toEqual([
+      "The cases in ~/notes/distill will be sent to:",
+      "  model  qwen3-8b at https://gateway.example/v1",
+      "  judge  qwen3-32b at https://gateway.example/v1",
+    ]);
+    expect((await report([model])).length).toBe(2);
+    expect((await report([judge]))[1]).toBe("  judge  qwen3-32b at https://gateway.example/v1");
   });
 
-  test("shows the endpoint as scheme://host[:port]/path, with no credentials and no query, and a model whose provider answers for itself without one", async () => {
-    const at = async (baseUrl: string | undefined) => (await ask([{ role: "model", name: "m", baseUrl }], "")).shown[1];
+  test("destination reporting removes credentials and queries", async () => {
+    const at = async (baseUrl: string | undefined) => (await report([{ role: "model", name: "m", baseUrl }]))[1];
     expect(await at("HTTPS://user:SYNTH-pass@Gateway.example:8443/deployment-A/v1/?api_key=SYNTH-key#frag")).toBe("  model  m at https://gateway.example:8443/deployment-A/v1");
     expect(await at("http://localhost:8080")).toBe("  model  m at http://localhost:8080");
     expect(await at(undefined)).toBe("  model  m at its provider's own endpoint");
     expect(await at("not a url SYNTH-secret")).toBe("  model  m at an endpoint that is not a URL");
   });
 
-  test("Enter, y and yes continue, in any case", async () => {
-    for (const answer of ["", "y", "Y", "yes", " Yes "]) expect((await ask([model], answer)).ended, JSON.stringify(answer)).toBeUndefined();
-  });
-
-  test("n and no stop with exit 1 and say nothing was sent, and so does any other answer", async () => {
-    for (const answer of ["n", "N", "no", "No", "maybe", "yep"]) expect((await ask([model], answer)).ended, JSON.stringify(answer)).toEqual({ message: "Stopped: nothing was sent.", code: 1 });
-  });
-
-  test("-y and --yes skip the question, whatever else holds", async () => {
-    const { values } = parseArgs({ args: ["--cases", "notes", "-y"], options: CORPUS_OPTIONS, strict: true });
-    expect(values).toEqual({ cases: "notes", yes: true });
-    expect(parseArgs({ args: ["--cases", "notes", "--yes"], options: CORPUS_OPTIONS, strict: true }).values).toEqual({ cases: "notes", yes: true });
-    const done = await ask([model, judge], "n", { cases: "notes", yes: true });
-    expect(done).toEqual({ shown: [], asked: [], ended: undefined });
-    // no terminal needed either
-    await confirmCases({ cases: "notes", yes: true }, [model], { tty: false });
-  });
-
-  test("with no terminal and no -y it stops, and says what to add", async () => {
-    const stop = async (to: Recipient[], values = { cases: "~/notes/distill" } as { cases?: string; yes?: boolean }) => {
-      const shown: string[] = [];
-      let ended: { message: string; code: number } | undefined;
-      try {
-        await confirmCases(values, to, { tty: false, log: (line) => shown.push(line), ask: async () => "y" });
-      } catch (e) {
-        if (!(e instanceof Fatal)) throw e;
-        ended = { message: e.message, code: e.code };
-      }
-      return { shown, ended };
-    };
-    expect(await stop([model])).toEqual({ shown: [], ended: { message: "add -y to send the cases in ~/notes/distill to qwen3-8b at https://gateway.example/v1 without asking", code: 2 } });
-    expect((await stop([model, judge])).ended?.message).toBe("add -y to send the cases in ~/notes/distill to qwen3-8b at https://gateway.example/v1 and qwen3-32b at https://gateway.example/v1 without asking");
-    expect((await stop([{ role: "model", name: "m", baseUrl: "https://u:SYNTH-pass@h.example/v1?key=SYNTH-key" }])).ended?.message).toBe("add -y to send the cases in ~/notes/distill to m at https://h.example/v1 without asking");
-  });
-
-  test("a public run and --corpus custom without --cases never ask, with or without a terminal", async () => {
-    for (const tty of [true, false]) {
-      for (const [corpus, cases] of [["public", undefined], ["custom", undefined], [undefined, undefined], ["all", undefined]] as const) {
-        const { values } = parseArgs({ args: [...(corpus ? ["--corpus", corpus] : []), ...(cases ? ["--cases", cases] : [])], options: CORPUS_OPTIONS, strict: true });
-        const asked: string[] = [];
-        await confirmCases(values, [model, judge], { tty, log: (line) => asked.push(line), ask: async (question) => (asked.push(question), "n") });
-        expect(asked, `${corpus} ${tty}`).toEqual([]);
-      }
+  test("-y and --yes remain accepted and preserve destination reporting", async () => {
+    for (const flag of ["-y", "--yes"]) {
+      const { values } = parseArgs({ args: ["--cases", "notes", flag], options: CORPUS_OPTIONS, strict: true });
+      expect(values).toEqual({ cases: "notes", yes: true });
+      expect(await report([model], values)).toEqual(await report([model], { cases: "notes" }));
     }
   });
 
-  test("a run that has no model or judge to send the cases to asks nothing (longmemeval --retrieval-only)", async () => {
-    await confirmCases({ cases: "notes" }, [], { tty: false });
-    expect((await ask([], "n")).ended).toBeUndefined();
+  test("public/rewrite runs and calls with no recipients have no destination report", async () => {
+    expect(await report([model, judge], {})).toEqual([]);
+    expect(await report([], { cases: "notes" })).toEqual([]);
   });
 });
 
@@ -297,7 +251,7 @@ describe("every eval and benchmark that takes --corpus", () => {
   }, 120_000);
 });
 
-describe("every run that sends --cases to a model asks first, once", () => {
+describe("every run that sends --cases reports its destinations before setup", () => {
   const sourceOf = (file: string): string => readFileSync(file, "utf8");
   const runs = [
     ...["evals", "benchmarks"].flatMap((group) =>
@@ -321,14 +275,14 @@ describe("every run that sends --cases to a model asks first, once", () => {
     for (const { file, source } of runs.filter((r) => takesCases(r.source))) {
       const calls = source.split("confirmCases(").length - 1;
       if (SENDS_NONE.includes(file)) {
-        if (calls !== 0) wrong.push(`${file}: sends nothing to a model but asks`);
+        if (calls !== 0) wrong.push(`${file}: sends nothing to a model but reports recipients`);
         continue;
       }
       const main = source.slice(Math.max(source.indexOf("async function main"), 0));
       const asked = main.indexOf("confirmCases(");
       const firstUse = Math.min(...["createSandbox(", "openSandbox(", "akmArm(", "akmVersion(", "labelCollection("].map((use) => (main.indexOf(use) < 0 ? Infinity : main.indexOf(use))));
       if (calls !== 1) wrong.push(`${file}: calls confirmCases ${calls} times`);
-      else if (asked > firstUse) wrong.push(`${file}: asks after it has made a sandbox`);
+      else if (asked > firstUse) wrong.push(`${file}: reports recipients after it has made a sandbox`);
     }
     expect(wrong).toEqual([]);
   });
