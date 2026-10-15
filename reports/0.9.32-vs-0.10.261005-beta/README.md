@@ -37,7 +37,7 @@ These single observations show the cost avoided by index reuse. They do not esta
 
 ## Process measurements
 
-Full nightly, bakeoff, promotion and judge-gate collections completed for both releases. Other process measurements are in progress.
+Full nightly, bakeoff, promotion, judge-gate, standard Reflect and isolated consolidation collections completed for both releases. Other process measurements are in progress.
 
 | Eval | Cases per build | 0.9.32 | Beta | Wall seconds, 0.9.32 / beta |
 |---|---:|---:|---:|---:|
@@ -45,6 +45,8 @@ Full nightly, bakeoff, promotion and judge-gate collections completed for both r
 | Bakeoff | 40 | 27/40 (67.5%) | 29/40 (72.5%) | 184.497 / 213.455 |
 | Promotion (precision) | 80 | 89.74% | 87.80% | 193.129 / 200.027 |
 | Judge-gate (good passed) | 135 | 15/40 (37.5%) | 14/40 (35.0%) | 270.424 / 269.375 |
+| Reflect (all checks) | 80 | 72/80 | 72/80 | 298.572 / 290.216 |
+| Consolidate (safe retirements found) | 80 | 38/40 (95.0%) | 36/40 (90.0%) | 404.285 / 405.683 |
 
 Nightly had no harm, outside-file changes, accepted lessons or model-call failures. Beta fixed 5/6 silent defects vs 0/6, and got 7/7 pairs right vs 6/7. Distill items passed 4/7 vs 6/7: the higher overall score does not erase those misses. Both native indexes embedded all 44 entries. No CLI search telemetry was observed in nightly; semantic configuration and embedding coverage are verified, while the retrieval collections above provide the actual search-mode evidence. Total usage events recorded 42 vs 58 model calls across the run; nightly's own improve report records 41 vs 57.
 
@@ -54,9 +56,27 @@ Promotion accepted 35/40 good and 4/40 bad proposals on 0.9.32, versus 36/40 goo
 
 Judge-gate passed 15/40 good and 1/95 bad revisions on 0.9.32, versus 14/40 good and 0/95 bad on beta. Neither passed any of the 67 harmful revisions. Precision was 93.75% and 100%; both rejected or deferred most good proposals. All 135 cases per build were scored without errors. Semantic mode was configured, but this direct candidate-judgment task does not index or retrieve a corpus.
 
+Standard Reflect fixed 38/40 defect cases on 0.9.32 and 38/40 on beta; each preserved the controls correctly in 34/40 and 34/40 respectively. Both scored all 80 without request errors and embedded 80/80 entries. Unwanted metadata edits and invented control-note details remain failed checks; no proposal changed a body. This standard mode keeps the quality judge off.
+
+Isolated consolidation found safe retirements in 38/40 eligible cases on 0.9.32 versus 36/40 on beta. Retirement precision was 38/39 (97.44%) versus 36/38 (94.74%). Stable proposed one unsafe retirement with none staged; beta proposed two with **one staged for automatic acceptance**. These are proposed retirements in isolated fixtures; this collector does not run the drain. Both embedded all 160 notes and scored all 80 cases without request errors. In beta case `overlap-07`, the staged retirement would discard the unique fact that queue consumers are paused during a database migration; the successor note does not contain it ([saved case output](../0.10.261005-beta/consolidate/2026-10-15-compare-0.10.261005-beta-35b-semantic-full-20261014/samples.jsonl)). This needs follow-up; one run does not establish whether the cause is a deterministic code change or model variation.
+
 The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All use native semantic embeddings, temperature 0 and thinking disabled.
 
 ## Additional modes
+
+### Reflect with retrieval-query context
+
+Twelve cases per build cover all ten Reflect classes (seven defect cases, five controls). Both enable native semantic configuration, the existing `judge-on.json` patch and `--retrieval-queries`; all 12 notes have labeled query context. AKM 0.10 intentionally removed the relevance guard ([policy decision 9](https://github.com/itlackey/akm/blob/9a61c0ffb5412f6fde567583ba91b8745f62077e/docs/architecture/0.10-process-rules.md#policy-decisions)); its context remains seeded but is not graded. This bounded mode is distinct from the full standard Reflect run.
+
+| Metric | 0.9.32 | Beta |
+|---|---:|---:|
+| Defect cases correct | 6/7 | 7/7 |
+| Controls correct | 5/5 | 5/5 |
+| Quality-judge / retrieval-check refusals | 1 / 1 | 1 / 0 |
+| Model calls / failed calls | 64 / 0 | 20 / 0 |
+| Wall seconds | 89.54 | 60.465 |
+
+Both scored all 12 and embedded every note without request errors. On 0.9.32, `description-quote-01` was refused because its relevance grade changed from 2.50 to 2.25 across four queries; this confirms the check actually graded the query context. The legacy check compares LLM relevance grades of the old and new note; it is distinct from the native search-ranking measurement above. Beta made only 20 calls (12 generations plus eight quality judgments), versus 64 on 0.9.32. The missing relevance calls are the intended feature removal, not a faster grader. The harness README was corrected; collection and scoring code were unchanged. The results remain bounded validation, with single-run model variation.
 
 ### Native consolidation pool
 
@@ -71,7 +91,7 @@ All 80 notes / 47 clusters ran together under the shipped consolidation strategy
 | Model calls / failed calls | 57 / 0 | 59 / 0 |
 | Wall seconds | 94.465 | 95.743 |
 
-Unsafe proposals are preserved as quality failures. Pool mode includes AKM's anti-collapse behavior and has no fixed random seed; these are single observations, not proof of a release-level improvement. The four failed pair judgments in each run are recorded separately from request failures. No CLI search telemetry was observed; native embedding coverage is 80/80.
+Unsafe proposals are preserved as quality failures. None was staged for automatic acceptance in either build. Pool mode includes AKM's anti-collapse behavior and has no fixed random seed; these are single observations, not proof of a release-level improvement. The four failed pair judgments in each run are recorded separately from request failures. No CLI search telemetry was observed; native embedding coverage is 80/80.
 
 ## Larger benchmarks
 
