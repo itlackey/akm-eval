@@ -111,7 +111,7 @@ async function startLedger() {
   const columnByKey = new Map(columns.map(column => [column.key, column]));
   const facets = ['model', 'suite', 'role', 'collection', 'measurement', 'search_method', 'strategy'];
   const state = { search: '', versions: [], latestOnly: false, facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
-  let latestIds = null;
+  let latestIds = null, restoringURL = false;
   let grid, ready = false, visibleKeys = new Set(), layoutSignature = '';
   const widths = { model: 164, suite: 118, label: 196, quality_percent: 100, quality_metric: 205,
     scored: 100, case_coverage: 116, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
@@ -151,6 +151,49 @@ async function startLedger() {
   $('snapshot').textContent = `${rows.length} published runs · ${new Set(rows.map(row => row.suite)).size} tests`;
   $('provenance').innerHTML = `<a href="https://github.com/itlackey/akm-eval/tree/${encodeURIComponent(dataset.source_revision)}/reports">Published reports · ${escapeHTML(dataset.source_revision.slice(0, 8))}</a> · ` +
     '<a href="https://github.com/fwdslsh/website">fwdslsh theme</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · <a href="./assets/vendor/tabulator.LICENSE">Tabulator MIT license</a>.';
+
+  function syncURL() {
+    if (!ready || restoringURL) return;
+    const url = new URL(window.location.href), params = url.searchParams;
+    for (const key of [...params.keys()]) if (facets.includes(key) || ['q', 'akm', 'latest', 'errors', 'from', 'to', 'view', 'filter'].includes(key) || key.startsWith('header.')) params.delete(key);
+    for (const key of facets) if (state.facets[key]) params.set(key, state.facets[key]);
+    for (const version of state.versions) params.append('akm', version);
+    for (const [key, value] of [['q', state.search], ['latest', state.latestOnly ? '1' : ''], ['errors', state.errorsOnly ? '1' : ''], ['from', state.dateFrom], ['to', state.dateTo], ['view', state.analysisView === 'compare' ? '' : state.analysisView]]) if (value) params.set(key, value);
+    for (const { key, operator, value } of state.conditions) params.append('filter', JSON.stringify([key, operator, value]));
+    for (const { field, value } of grid.getHeaderFilters()) params.set('header.' + field, value);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+  }
+  function restoreURL() {
+    restoringURL = true;
+    const params = new URLSearchParams(window.location.search);
+    state.versions = [...new Set(params.getAll('akm').filter(Boolean))];
+    state.conditions = [];
+    for (const key of facets) {
+      const value = params.get(key) ?? '';
+      if (value && ![...$(key).options].some(option => option.value === value)) $(key).add(new Option(value, value));
+      $(key).value = state.facets[key] = value;
+    }
+    for (const [key, param] of [['search', 'q'], ['dateFrom', 'from'], ['dateTo', 'to']]) {
+      $(key).value = params.get(param) ?? ''; state[key] = $(key).value.trim();
+    }
+    for (const [key, id, param] of [['latestOnly', 'latest-only', 'latest'], ['errorsOnly', 'errorsOnly', 'errors']]) $(id).checked = state[key] = params.get(param) === '1';
+    for (const value of params.getAll('filter')) {
+      try {
+        const [key, operator, input] = JSON.parse(value);
+        if (columnByKey.has(key) && ['contains', 'eq', 'gte', 'lte', 'between', 'missing', 'present'].includes(operator) && typeof input === 'string') state.conditions.push({ key, operator, value: input });
+      } catch { /* Ignore malformed URL conditions; keep the other filters usable. */ }
+    }
+    const view = params.get('view');
+    state.analysisView = [...$('view').options].some(option => option.value === view && !option.disabled) ? view : 'compare';
+    $('view').value = state.analysisView;
+    grid.clearHeaderFilter();
+    for (const [key, value] of params) if (key.startsWith('header.') && columnByKey.has(key.slice(7))) grid.setHeaderFilterValue(key.slice(7), value);
+    $('header-filters').checked = grid.getHeaderFilters().length > 0;
+    $('grid').classList.toggle('hide-header-filters', !$('header-filters').checked);
+    applyFilters(); applyView(state.analysisView);
+    grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
+    restoringURL = false; syncURL();
+  }
 
   function matchesFilters(row) {
     if (state.analysisView === 'impact' && !(row.paired_cases > 0 && row.control_quality_percent != null && row.akm_quality_percent != null)) return false;
@@ -378,9 +421,11 @@ async function startLedger() {
       const field = input.closest('[tabulator-field]')?.getAttribute('tabulator-field');
       input.setAttribute('aria-label', 'Filter ' + (columnByKey.get(field)?.label ?? field));
     }
+    restoreURL();
   });
   for (const event of ['dataFiltered', 'dataSorted', 'pageLoaded', 'renderComplete']) grid.on(event, updateCount);
-  grid.on('dataFiltered', renderChips);
+  grid.on('dataFiltered', () => { renderChips(); syncURL(); });
+  window.addEventListener('popstate', restoreURL);
   grid.on('dataFiltering', updateLatest);
 
   for (const key of facets) $(key).onchange = () => { state.facets[key] = $(key).value; applyFilters(); };

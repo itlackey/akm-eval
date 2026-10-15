@@ -297,6 +297,12 @@ test('small touch screens show complete run cards with native scrolling, sorting
     await page.getByRole('checkbox', { name: '0.9.32', exact: true }).tap();
     expect((await exportRows(page)).every(row => row.suite === 'reflect' && row.akm_version === '0.9.32')).toBe(true);
     await page.locator('#view').selectOption('performance');
+    const linkedIds = (await exportRows(page)).map(row => row.id);
+    await page.reload();
+    await expect(page.locator('#suite')).toHaveValue('reflect');
+    await expect(page.locator('#version-summary')).toHaveText('AKM 0.9.32');
+    await expect(cards).toHaveCount(linkedIds.length);
+    expect(await cardIds()).toEqual(linkedIds);
     await expect(cards.first()).toContainText('Latency p50');
     await page.locator('#touch-sort').selectOption('quality_percent');
     const sorted = await exportRows(page);
@@ -384,4 +390,80 @@ test('Latest only follows scope, version, model, collection, search and column f
   await page.locator('#reset').click();
   await expect(page.locator('#latest-only')).not.toBeChecked();
   expect((await ids()).length).toBe(runs.length);
+});
+
+test('filter links restore facets, versions, conditions and column filters after reload', async ({ page, request }) => {
+  const data = await request.get('./data.json').then(response => response.json());
+  const source = data.runs.find(row => row.suite === 'reflect');
+  const make = (id, version, date) => ({ ...structuredClone(source), id, label: id, akm_version: version,
+    date, model: 'test/35b', collection: 'core', role: 'Diagnostic', measurement: '0.2', errors: 1,
+    comparison: { ...source.comparison, quality_percent: 90, cost_usd: null, search_method: 'semantic', strategy: 'native' } });
+  const runs = [make('old', '0.9.32', '2026-10-01'), make('new', '0.9.32', '2026-10-03'), make('beta', '0.10.261005-beta', '2026-10-03')];
+  await page.route('**/data.json*', route => route.fulfill({ json: { ...data, runs } }));
+  await page.goto('./?campaign=shared#main'); await expect(page.locator('#count')).toHaveText('3 of 3 runs');
+  const query = 'reflect | café & +/?#';
+  await page.locator('#search').fill(query);
+  await page.locator('#suite').selectOption('reflect'); await page.locator('#role').selectOption('Diagnostic');
+  await page.locator('#model').selectOption('35b'); await page.locator('#latest-only').check();
+  await page.locator('#version-summary').click();
+  for (const version of ['0.9.32', '0.10.261005-beta']) await page.getByRole('checkbox', { name: version, exact: true }).check();
+  await page.locator('#advanced-toggle').click();
+  for (const [key, value] of Object.entries({ collection: 'core', measurement: '0.2', search_method: 'semantic', strategy: 'native' })) await page.locator('#' + key).selectOption(value);
+  for (const [key, value] of [['dateFrom', '2026-10-01'], ['dateTo', '2026-10-04']]) {
+    await page.locator('#' + key).fill(value); await page.locator('#' + key).dispatchEvent('change');
+  }
+  await page.locator('#errorsOnly').check(); await page.locator('#view').selectOption('performance');
+  await page.locator('#filter-column').selectOption('cost_usd'); await page.locator('#filter-operator').selectOption('missing');
+  await page.locator('#add-filter button').click();
+  const condition = '35b | café & +/?#';
+  await page.locator('#filter-column').selectOption('model_route'); await page.locator('#filter-operator').selectOption('contains');
+  await page.locator('#filter-value').fill(condition); await page.locator('#add-filter button').click();
+  await page.locator('#header-filters').check(); await header(page, 'quality_percent').locator('input').fill('≥80');
+  const ids = async () => (await exportRows(page)).map(row => row.id).sort();
+  expect(await ids()).toEqual(['beta', 'new']);
+  const link = page.url(), params = new URL(link).searchParams;
+  expect(params.get('q')).toBe(query); expect(params.getAll('akm').sort()).toEqual(['0.10.261005-beta', '0.9.32']);
+  expect(params.getAll('filter').map(value => JSON.parse(value))).toEqual([['cost_usd', 'missing', ''], ['model_route', 'contains', condition]]);
+  expect(params.get('header.quality_percent')).toBe('≥80');
+  expect(params.get('campaign')).toBe('shared'); expect(new URL(link).hash).toBe('#main');
+  await page.reload(); await expect(page.locator('#count')).toHaveText('2 of 3 runs');
+  expect(await ids()).toEqual(['beta', 'new']); expect(page.url()).toBe(link);
+  await expect(page.locator('#search')).toHaveValue(query); await expect(page.locator('#view')).toHaveValue('performance');
+  await expect(page.locator('#latest-only')).toBeChecked(); await expect(page.locator('#header-filters')).toBeChecked();
+  await expect(header(page, 'quality_percent').locator('input')).toHaveValue('≥80');
+  await page.locator('#advanced-toggle').click(); await expect(page.locator('#errorsOnly')).toBeChecked();
+  for (const [key, value] of Object.entries({ model: '35b', suite: 'reflect', role: 'Diagnostic', collection: 'core', measurement: '0.2', search_method: 'semantic', strategy: 'native', dateFrom: '2026-10-01', dateTo: '2026-10-04' })) await expect(page.locator('#' + key)).toHaveValue(value);
+  await page.locator('#active-filters button').filter({ hasText: 'Model route contains' }).click();
+  expect(new URL(page.url()).searchParams.getAll('filter')).toHaveLength(1);
+  await page.locator('#active-filters button').filter({ hasText: 'AKM version: 0.10.261005-beta' }).click();
+  expect(new URL(page.url()).searchParams.getAll('akm')).toEqual(['0.9.32']); expect(await ids()).toEqual(['new']);
+  await page.locator('#reset').click(); expect(await ids()).toEqual(['beta', 'new', 'old']);
+  expect([...new URL(page.url()).searchParams]).toEqual([['campaign', 'shared'], ['view', 'performance']]);
+});
+
+test('links tolerate malformed conditions and restore filters on browser Back and Forward', async ({ page, request }) => {
+  const data = await request.get('./data.json').then(response => response.json());
+  const params = new URLSearchParams({ suite: 'skillret', role: 'Full suite', latest: '1', view: 'invalid', filter: '{broken', 'header.unknown-column': 'nope' });
+  params.append('filter', JSON.stringify(['unknown-column', 'eq', 'nope']));
+  params.append('filter', JSON.stringify(['model', 'unknown-operator', 'nope']));
+  params.append('akm', '0.9.32'); params.append('akm', '0.10.261005-beta');
+  await page.goto('./?' + params); await expect(page.locator('#count')).toHaveText(`2 of ${data.runs.length} runs`);
+  const skills = await exportRows(page);
+  expect(skills.every(row => row.suite === 'skillret' && row.scored === 4392)).toBe(true);
+  expect(new URL(page.url()).searchParams.has('filter')).toBe(false);
+  expect(new URL(page.url()).searchParams.has('header.unknown-column')).toBe(false);
+  const original = page.url();
+  await page.evaluate(() => history.pushState(null, '', '?suite=reflect'));
+  await page.locator('#reset').click(); await page.locator('#suite').selectOption('reflect');
+  const reflect = data.runs.filter(row => row.suite === 'reflect');
+  await expect(page.locator('#count')).toHaveText(`${reflect.length} of ${data.runs.length} runs`);
+  await page.goBack(); await expect(page.locator('#count')).toHaveText(`2 of ${data.runs.length} runs`);
+  expect(page.url()).toBe(original); await expect(page.locator('#latest-only')).toBeChecked();
+  await page.goForward(); await expect(page.locator('#count')).toHaveText(`${reflect.length} of ${data.runs.length} runs`);
+  await expect(page.locator('#latest-only')).not.toBeChecked(); await expect(page.locator('#version-summary')).toHaveText('All AKM versions');
+  await page.goto('./?suite=skillret&model=unpublished-model');
+  await expect(page.locator('#count')).toHaveText(`0 of ${data.runs.length} runs`);
+  await expect(page.locator('#model')).toHaveValue('unpublished-model');
+  await page.locator('#active-filters button').filter({ hasText: 'unpublished-model' }).click();
+  expect((await exportRows(page)).every(row => row.suite === 'skillret')).toBe(true);
 });

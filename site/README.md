@@ -53,6 +53,14 @@ measures and individual test metrics. No row selection is needed.
   **Filters** opens collection, eval versions, search methods, strategy and inclusive date bounds,
   plus conditions on any column. Conditions combine with AND. Filter chips
   can be removed individually; **Reset** clears all filters.
+- Filters and the preset view are stored in the URL automatically. Copy the
+  address bar to share the current results; opening or reloading that link
+  restores them. For example, `?suite=skillret&role=Full+suite&akm=0.9.32&akm=0.10.261005-beta&latest=1`
+  shows the latest full SkillRet results for those two versions. Search uses
+  `q`, dates use `from` / `to`, and error-only uses `errors=1`. Advanced conditions
+  use repeated `filter` parameters containing JSON `[column, operator, value]`
+  arrays; column filters use `header.<column>=value`. Reset clears filter
+  parameters while keeping the selected view and unrelated URL parameters.
 - Enable **Column filters** to filter directly in headings. Numeric inputs
   accept `>=80`, `<=5`, `80..95` or an exact number in displayed units. Text
   inputs accept words and `|` alternatives. `blank` and `recorded` distinguish
