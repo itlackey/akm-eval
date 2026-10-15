@@ -76,6 +76,8 @@ Distill produced 16/40 good lessons on 0.9.32 and 14/40 on beta; both queued one
 
 Extract and Distill wall times include an overlapping CPU-only SkillRet collection in a separate container. They are observed elapsed times, not isolated performance benchmarks. No release-level speed claim is made.
 
+The local 35B service was shared with other workloads, without reserving its slots. Recorded wall times and token rates reflect that load and do not establish a release-level speed difference.
+
 The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b-a3b` (34,660,610,688 parameters, Q2_K Medium, 32,768-token context). No cloud credentials are mounted for process runs. All enable native semantic configuration, temperature 0 and thinking disabled. Embedding coverage is verified for collectors that index notes; direct judge-gate and session extraction do not index or search a corpus. Public Distill has no feedback to seed and performs no explicit index verification. Their semantic-verification fields are null; semantic configuration is enabled, while retrieval-mode proof comes from the retrieval and agent collections.
 
 ## Additional modes
@@ -109,11 +111,38 @@ All 80 notes / 47 clusters ran together under the shipped consolidation strategy
 
 Unsafe proposals are preserved as quality failures. None was staged for automatic acceptance in either build. Pool mode includes AKM's anti-collapse behavior and has no fixed random seed; these are single observations, not proof of a release-level improvement. The four failed pair judgments in each run are recorded separately from request failures. No CLI search telemetry was observed; native embedding coverage is 80/80.
 
+## Agent A/B
+
+All six public fictional-tool tasks ran once per arm, giving 12 scored trials per build. This covers every task with one attempt, rather than the default three attempts. Docker used the existing local-35B gateway profile `fast/qwen3.6-35b-a3b`, with a 32,768-token context and 4,096-token output limit. Both held OpenCode 1.18.34, Harbor 0.24.0 and plugin 0.10.261002-beta constant. The plugin carries CLI 0.10.261003-beta; `AKM_OPENCODE_CLI` selects the release under test for its subprocess calls. Each of the six AKM trials per build verified the selected CLI version, complete native embedding coverage and an actual semantic-search response.
+
+| Metric | 0.9.32 | Beta |
+|---|---:|---:|
+| Control tasks passed | 1/6 | 1/6 |
+| AKM tasks passed | 4/6 | 5/6 |
+| AKM trials that called AKM | 3/6 | 4/6 |
+| AKM trials that read the curated-results file | 0/6 | 0/6 |
+| Scored trials / unscored trials | 12 / 0 | 12 / 0 |
+| Control / AKM agent timeouts | 0 / 0 | 1 / 0 |
+| Mean trial minutes, control / AKM | 1.2 / 2.7 | 3.5 / 3.9 |
+
+Beta's control on `drillbit--fix-runbook-train` reached the ten-minute agent budget. The verifier still ran and returned 0, so the timeout remains a scored task failure. Its completion record says 11 completed and one failed; all 12 have scored rewards. There were no API error events or empty agent trajectories in either saved collection. Neither collection had an AKM-arm timeout.
+
+The control passed `drillbit--scale-replicas-train` in both builds, showing that task can be solved without retrieval. Stable's AKM arm missed both `inkwell--add-healthcheck-train` and `inkwell--new-service-scaled-train`; beta missed only the healthcheck. Both control arms passed the same single task. These six tasks and single attempts support bounded comparison; the one-task AKM difference does not establish a release-level improvement. The model service was shared, so timings and the control timeout also reflect ambient load. Costs reported by the agent are unknown, rather than measured dollar charges.
+
+Artifacts: [0.9.32](../0.9.32/agent-ab/2026-10-15-compare-0.9.32-35b-semantic-six-tasks-retry-20261014/summary.json), [beta](../0.10.261005-beta/agent-ab/2026-10-15-compare-0.10.261005-beta-35b-semantic-six-tasks-20261014/summary.json).
+
+Two execution issues were resolved before this collection:
+
+- The direct LAN Responses route reported generated tokens but OpenCode saved no assistant text or tool calls. The existing gateway route to local 35B produced real tool calls and file edits in both release pilots. Only the working route is used for these task-quality results; no API adapter or harness change was needed.
+- Docker exhausted its default network address pools during the first six-task attempt: three trials scored and nine failed setup. Four empty networks were traced to this repo's stopped Terminal-Bench run and removed individually, freeing capacity. A clean local collection then scored every task. No host network settings were changed. Setup failures and superseded pilots were kept out of the public quality rows.
+
 ## Larger benchmarks
 
 Existing historical results remain available with their original versions and limitations. Large cloud-model LongMemEval and Terminal-Bench collections have not been started; they require approval. Luna is selected for both. The user kept larger cloud runs on hold after reviewing the pilot. Neither the proposed 100-question LongMemEval collection nor a new Terminal-Bench collection was started.
 
 A seven-question-per-build Luna protocol pilot completed in 78.868 and 70.962 seconds. Both verified semantic retrieval, scored all seven pairs and had zero transport errors, truncated/empty answers or undecidable judge replies. Reader settings were `max_completion_tokens: 2048`, `reasoning_effort: none`; the judge was local `qwen3.6-35b-a3b` with a 64-token budget. Each build used 825,756 reader input tokens; the second reported 825,714 cached tokens. The provider reported no dollar cost. This is protocol validation, not sufficient evidence of a quality difference. AKM answered 6/7 correctly in both builds; the full-history control scored 6/7 and 7/7, illustrating model variation with unchanged retrieval. The saved pilots are explicitly labeled as such. Larger collections remain held at the user's request.
+
+The [earlier full semantic Luna collection](../0.10.261003-beta/longmemeval/luna-semantic-fresh-20261014-full/README.md) remains valid historical evidence under 0.10.261003-beta: 500 attempted questions and 499 paired scores. Its 512-token reader budget produced 11 empty answers; one request failed, and the older 27B judge had an undecidable response and a recorded inconsistency. These settings and failures remain visible alongside the current pilots. The [existing two-task Terminal-Bench pilot](../0.10.261003-beta/semantic-2026-10-14/terminal-bench/2026-10-14-luna-semantic-20261014-pilot/summary.json) is retained under its original build.
 
 ## Reproduction
 
@@ -131,3 +160,5 @@ USER eval
 ```
 
 Use the documented Docker mounted-working-folder command with the corresponding image. Retrieval command: `evals/retrieval/run --semantic on --label LABEL` with `--network none`. Process commands explicitly select `--model fast-35b-direct --semantic`; nightly and consolidate also select `--embedder real`. The local model alias is configured in a read-only mounted `models.json`; credentials remain in the local environment. Saved engine metadata includes the endpoint host and port.
+
+Agent A/B uses the documented Docker socket and same-absolute-path mounts, `--model fast/qwen3.6-35b-a3b --semantic --akm akm-cli@VERSION --limit 6`, and the read-only `models.json` / `.env` mounts. Its model entry uses `"limits": {"context": 32768, "output": 4096}` so OpenCode knows the server budget. The existing gateway handles its Responses traffic; ordinary process evals use direct chat completions.
