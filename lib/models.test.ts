@@ -150,8 +150,8 @@ describe("loadModels", () => {
     }
   });
 
-  test('refuses a line that still has "private", and says the prompt before a run with --cases replaces it', () => {
-    const message = 'models.json: "mine" has "private", which a prompt replaces: a run with --cases asks before it sends your cases to a model. Delete the key.';
+  test('refuses obsolete "private" policy without claiming a confirmation is required', () => {
+    const message = 'models.json: "mine" has "private", which is obsolete: --cases explicitly selects custom cases for the chosen model. Delete the key.';
     expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":true}}'))).toThrow(message);
     expect(() => loadModels(write('{"mine":{"base_url":"http://localhost:8080/v1","private":false}}'))).toThrow(message);
   });

@@ -517,22 +517,22 @@ describe("run --corpus custom", () => {
     // akm is not there, so a run that gets past its checks stops at the version probe, before it calls a model.
     const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine([join(tree, "no-akm")]) };
     const p = Bun.spawnSync(["bun", join(tree, "evals", "distill", "src", script), ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
-    return { code: p.exitCode, err: p.stderr.toString() };
+    return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
 
-  test("--cases asks before it sends the cases to the model: with no terminal and no -y it stops before akm is asked for, and -y or --yes goes on; --corpus custom never asks", () => {
+  test("--cases reports its model and proceeds without a terminal or --yes", () => {
     const tree = copyOfRepo();
     const notes = join(tree, "my notes");
     cpSync(join(EVAL, "assets"), notes, { recursive: true });
-    const asked = bun(tree, "run.ts", ["--cases", notes]);
-    expect(asked.code).toBe(2);
-    expect(asked.err).toContain(`distill: add -y to send the cases in ${notes} to m at http://127.0.0.1:9/v1 without asking`);
-    expect(asked.err).not.toContain("could not run");
-    for (const yes of ["-y", "--yes"]) expect(bun(tree, "run.ts", ["--cases", notes, yes]).err, yes).toContain("could not run"); // past the question, stopped for want of akm
+    for (const flags of [[], ["-y"], ["--yes"]]) {
+      const run = bun(tree, "run.ts", ["--cases", notes, ...flags]);
+      expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
+      expect(run.out).toContain("  model  m at http://127.0.0.1:9/v1");
+      expect(run.out).not.toContain("Continue?");
+      expect(run.err).toContain("could not run"); // missing test AKM stops execution before model calls
+    }
     expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "distill")]).code).toBe(0);
-    const rewrite = bun(tree, "run.ts", ["--corpus", "custom"]);
-    expect(rewrite.err).toContain("could not run"); // the rewrite is the repository's own, derived from public cases: nothing to ask
-    expect(rewrite.err).not.toContain("add -y");
+    expect(bun(tree, "run.ts", ["--corpus", "custom"]).err).toContain("could not run");
   }, 60_000);
 
   test("stops and says how to make the assets when there are none", () => {
