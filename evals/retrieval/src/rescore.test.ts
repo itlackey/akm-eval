@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { type RunManifest, buildManifest, caseDigests, completionOf, manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { sha256File, sha256Json } from "../../../lib/provenance.ts";
 import { RescoreError, rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
+import { comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { type Case, type Row } from "./score.ts";
 
@@ -161,6 +162,19 @@ describe("rescoring a retrieval run", () => {
     expect(m.cases.q003?.input_sha256).toBe(old.cases.q003?.input_sha256);
     expect(m.cases.q004).toEqual(old.cases.q004);
     expect(summaryOf(out).metrics.search.ndcg_10).not.toBe(summaryOf(stale).metrics.search.ndcg_10);
+  });
+
+  test("expanded labels preserve compatibility between a historical rescore and a fresh collection", () => {
+    const historical = run({
+      labels: c => c.id === "q003" ? { ...c, grades: {} } : c,
+      manifest: m => ({ ...m, collector: { ...m.collector, version: "0.2" }, scorer: { version: "0.2" } }),
+    });
+    const { out } = rescoreFolder(historical);
+    const fresh = run();
+    const report = comparePair(loadRun(out), loadRun(fresh));
+    expect(report).toMatchObject({ eval_version: "0.2", scoring_version: "0.3", warnings: [] });
+    expect(report.rows.find(row => row.key === "quality_percent")?.delta).toBe(0);
+    expect(summaryOf(historical).manifest.scorer.version).toBe("0.2");
   });
 
   test("a run with a manifest from another scorer is scored by the current one, and the manifest says which it was", () => {
