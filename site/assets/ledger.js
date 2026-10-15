@@ -99,8 +99,8 @@ async function startLedger() {
     { key: 'latency_basis', label: 'Latency basis', kind: 'text', group: 'Performance', description: 'Which recorded timing supplies the comparison latency. Original timing fields remain available separately.' },
   ]];
   const columnByKey = new Map(columns.map(column => [column.key, column]));
-  const facets = ['model', 'suite', 'role', 'collection', 'akm_version', 'measurement', 'search_method', 'strategy'];
-  const state = { search: '', facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
+  const facets = ['model', 'suite', 'role', 'collection', 'measurement', 'search_method', 'strategy'];
+  const state = { search: '', versions: [], facets: {}, conditions: [], analysisView: 'compare', errorsOnly: false, dateFrom: '', dateTo: '' };
   let grid, ready = false, visibleKeys = new Set(), layoutSignature = '';
   const widths = { model: 164, suite: 118, label: 196, quality_percent: 100, quality_metric: 205,
     scored: 100, quality_cases: 102, errors: 82, latency_p50_s: 111, latency_p95_s: 111, calls: 98,
@@ -112,6 +112,20 @@ async function startLedger() {
   for (const key of facets) {
     const values = [...new Set(rows.map(row => key === 'model' ? modelName(row.model) : row[key]))].filter(Boolean).sort();
     for (const value of values) $(key).add(new Option(value, value));
+  }
+  for (const version of [...new Set(rows.map(row => row.akm_version))].filter(Boolean).sort()) {
+    const label = document.createElement('label'); label.className = 'check-label';
+    const input = document.createElement('input'); input.type = 'checkbox'; input.value = version;
+    input.onchange = () => {
+      state.versions = [...$('version-options').querySelectorAll('input:checked')].map(input => input.value);
+      applyFilters();
+    };
+    label.append(input, document.createTextNode(version)); $('version-options').append(label);
+  }
+  function renderVersions() {
+    for (const input of $('version-options').querySelectorAll('input')) input.checked = state.versions.includes(input.value);
+    $('version-summary').textContent = state.versions.length === 1 ? `AKM ${state.versions[0]}`
+      : state.versions.length ? `AKM versions (${state.versions.length})` : 'All AKM versions';
   }
   const grouped = new Map();
   for (const column of columns) {
@@ -130,6 +144,7 @@ async function startLedger() {
   function filtered(row) {
     if (state.analysisView === 'impact' && !(row.paired_cases > 0 && row.control_quality_percent != null && row.akm_quality_percent != null)) return false;
     if (state.search && !matchesText([row.model, modelName(row.model), ...columns.map(column => row[column.key])].join(' '), state.search)) return false;
+    if (state.versions.length && !state.versions.includes(row.akm_version)) return false;
     if (state.errorsOnly && !(row.errors > 0)) return false;
     if (state.dateFrom && (!row.date || row.date.slice(0, 10) < state.dateFrom)) return false;
     if (state.dateTo && (!row.date || row.date.slice(0, 10) > state.dateTo)) return false;
@@ -171,6 +186,7 @@ async function startLedger() {
     const chip = (text, remove) => chips.push({ text, remove });
     if (state.search) chip(`Search: ${state.search}`, () => { $('search').value = ''; state.search = ''; });
     for (const [key, value] of Object.entries(state.facets)) if (value) chip(`${key === 'suite' ? 'Test' : columnByKey.get(key)?.label ?? key}: ${value}`, () => { $(key).value = ''; state.facets[key] = ''; });
+    for (const version of state.versions) chip(`AKM version: ${version}`, () => { state.versions = state.versions.filter(value => value !== version); });
     if (state.dateFrom) chip(`From: ${state.dateFrom}`, () => { $('dateFrom').value = ''; state.dateFrom = ''; });
     if (state.dateTo) chip(`Through: ${state.dateTo}`, () => { $('dateTo').value = ''; state.dateTo = ''; });
     if (state.errorsOnly) chip('With errors', () => { $('errorsOnly').checked = false; state.errorsOnly = false; });
@@ -187,7 +203,7 @@ async function startLedger() {
     $('filter-badge').textContent = chips.length ? `(${chips.length})` : '';
   }
   function applyFilters() {
-    grid.setFilter(filtered); renderChips();
+    renderVersions(); grid.setFilter(filtered); renderChips();
     if (['quality', 'performance', 'settings', 'impact'].includes($('view').value)) applyView($('view').value);
     updateCount();
   }
@@ -326,8 +342,16 @@ async function startLedger() {
   $('columns-close').onclick = () => { openChooser(false); $('columns-toggle').focus(); };
   $('column-search').oninput = renderColumnChooser;
   $('reset-columns').onclick = () => { $('view').value = 'compare'; state.analysisView = 'compare'; applyFilters(); applyView('compare', true); };
-  document.addEventListener('click', event => { if (!event.target.closest('.column-menu')) openChooser(false); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape') openChooser(false); });
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.column-menu')) openChooser(false);
+    if (!event.target.closest('.version-filter')) $('version-filter').open = false;
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      openChooser(false);
+      if ($('version-filter').open) { $('version-filter').open = false; $('version-summary').focus(); }
+    }
+  });
   $('header-filters').onchange = () => {
     $('grid').classList.toggle('hide-header-filters', !$('header-filters').checked); grid.redraw(true);
   };
@@ -360,7 +384,7 @@ async function startLedger() {
   $('reset').onclick = () => {
     for (const key of [...facets, 'search', 'dateFrom', 'dateTo']) $(key).value = '';
     $('errorsOnly').checked = false;
-    Object.assign(state, { search: '', facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
+    Object.assign(state, { search: '', versions: [], facets: {}, conditions: [], errorsOnly: false, dateFrom: '', dateTo: '' });
     grid.clearHeaderFilter();
     grid.setSort(state.analysisView === 'quality' ? 'quality_percent' : state.analysisView === 'performance' ? 'latency_p50_s' : state.analysisView === 'impact' ? 'akm_delta_pp' : 'date', state.analysisView === 'performance' ? 'asc' : 'desc');
     applyFilters();
