@@ -107,7 +107,7 @@ async function startLedger() {
     input_tokens: 124, output_tokens: 124, cost_usd: 130, role: 112, collection: 135,
     akm_version: 162, date: 155, recorded: 110 };
   const titles = { model: 'Model', label: 'Run', scored: 'All scored cases', quality_cases: 'Score cases', errors: 'Errors', input_tokens: 'Input tokens', output_tokens: 'Output tokens', cost_usd: 'Cost (USD)', calls: 'Calls', date: 'Collected (UTC)', akm_delta_pp: 'Paired gain (pp)', control_p50_s: 'Without p50 (s)', akm_p50_s: 'With p50 (s)' };
-  const compareKeys = ['model', 'suite', 'label', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'measurement', 'scoring_version', 'mode', 'akm_version', 'date'];
+  const compareKeys = ['model', 'suite', 'akm_version', 'quality_percent', 'quality_metric', 'quality_cases', 'errors', 'latency_p50_s', 'latency_p95_s', 'calls', 'input_tokens', 'output_tokens', 'cost_usd', 'role', 'collection', 'measurement', 'scoring_version', 'mode', 'label', 'date'];
 
   for (const key of facets) {
     const values = [...new Set(rows.map(row => key === 'model' ? modelName(row.model) : row[key]))].filter(Boolean).sort();
@@ -156,7 +156,7 @@ async function startLedger() {
   function updateCount() {
     if (!ready) return;
     $('count').textContent = `${grid.getData('active').length} of ${rows.length} runs`;
-    updateContext();
+    updateContext(); queueMicrotask(renderTouchRuns);
     const sorts = grid.getSorters();
     $('sort-status').textContent = sorts.length ? 'Sort: ' + sorts.map(sort => `${titles[sort.field] ?? columnByKey.get(sort.field)?.label ?? sort.field} ${sort.dir === 'asc' ? '↑' : '↓'}`).join(' · ') : '';
   }
@@ -210,15 +210,15 @@ async function startLedger() {
   function viewKeys(view) {
     const context = rows.filter(filtered);
     const recorded = column => context.some(row => row[column.key] != null && row[column.key] !== '');
-    if (view === 'all') return columns.map(column => column.key);
+    if (view === 'all') return columns.map(column => column.key === 'label' ? 'akm_version' : column.key === 'akm_version' ? 'label' : column.key);
     if (view === 'compare') return compareKeys;
-    if (view === 'impact') return ['model', 'suite', 'label', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'date'];
-    if (view === 'performance') return ['model', 'suite', 'label', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'date'];
-    const base = ['model', 'suite', 'label', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
+    if (view === 'impact') return ['model', 'suite', 'akm_version', 'role', 'control_quality_percent', 'akm_quality_percent', 'akm_delta_pp', 'akm_gain_ci', 'paired_cases', 'control_p50_s', 'akm_p50_s', 'median_time_change_percent', 'control_timed', 'akm_timed', 'errors', 'collection', 'label', 'date'];
+    if (view === 'performance') return ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'latency_p50_s', 'latency_p95_s', 'latency_basis', 'latency_timed', 'errors', 'calls', 'model_mean_input_tokens', 'model_mean_output_tokens', 'model_mean_request_s', 'model_output_tokens_per_s', 'input_tokens', 'output_tokens', 'cost_usd', 'cost_calls', 'usage_cases', 'usage_basis', 'run_wall_s', 'collection', 'label', 'date'];
+    const base = ['model', 'suite', 'akm_version', 'role', 'quality_percent', 'quality_metric', 'quality_cases', 'scored', 'errors'];
     let extras;
     if (view === 'quality') extras = columns.filter(column => (column.group === 'Quality' || (state.facets.suite && column.key.startsWith('score:'))) && recorded(column));
     else extras = columns.filter(column => ['Settings', 'Provenance'].includes(column.group) && recorded(column));
-    return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'date'])];
+    return [...new Set([...base, ...extras.map(column => column.key), 'collection', 'role', 'label', 'date'])];
   }
   function applyView(view, force = false) {
     const keys = viewKeys(view);
@@ -263,7 +263,38 @@ async function startLedger() {
     $('columns-panel').hidden = !open; $('columns-toggle').setAttribute('aria-expanded', String(open));
     if (open) { renderColumnChooser(); $('column-search').focus(); }
   }
-  const frozen = window.matchMedia('(min-width: 900px)').matches;
+  const touchLayout = window.matchMedia('(max-width: 900px) and (any-pointer: coarse)');
+  function renderTouchRuns() {
+    if (!ready || !touchLayout.matches) return;
+    const active = grid.getData('active'), size = grid.getPageSize();
+    const start = typeof size === 'number' ? (grid.getPage() - 1) * size : 0;
+    const page = typeof size === 'number' ? active.slice(start, start + size) : active;
+    const sort = grid.getSorters()[0];
+    const keys = [...new Set([...visibleKeys, sort?.field].filter(Boolean))];
+    $('touch-sort').replaceChildren(...keys.map(key => new Option(titles[key] ?? columnByKey.get(key).label, key)));
+    $('touch-sort').value = sort?.field ?? 'date';
+    $('touch-direction').textContent = sort?.dir === 'asc' ? 'Ascending ↑' : 'Descending ↓';
+    $('touch-cards').innerHTML = page.length ? page.map(row => {
+      const fields = [...visibleKeys].filter(key => !['model', 'suite', 'akm_version'].includes(key));
+      return `<article class="run-card" data-run-id="${escapeHTML(row.id)}">
+        <h2>${escapeHTML(modelName(row.model))}</h2>
+        <p class="run-identity">${escapeHTML(row.suite)} · AKM ${escapeHTML(row.akm_version)}</p>
+        <dl>${fields.map(key => `<div><dt>${escapeHTML(titles[key] ?? columnByKey.get(key).label)}</dt><dd>${key === 'label'
+          ? `<a href="${escapeHTML(row.summary_url)}" target="_blank" rel="noopener">${escapeHTML(row.label)}</a>`
+          : formatCell(row[key], columnByKey.get(key))}</dd></div>`).join('')}</dl>
+        <div class="run-reports"><a href="${escapeHTML(row.summary_url)}" target="_blank" rel="noopener">Summary ↗</a><a href="${escapeHTML(row.samples_url)}" target="_blank" rel="noopener">Cases ↗</a></div>
+      </article>`;
+    }).join('') : '<p class="empty">No runs match these filters. Reset filters to show all runs.</p>';
+  }
+  function updateTouchLayout() {
+    document.body.classList.toggle('touch-layout', touchLayout.matches);
+    $('touch-results').hidden = !touchLayout.matches;
+    if (ready) { grid.redraw(true); updateCount(); }
+  }
+  touchLayout.addEventListener('change', updateTouchLayout);
+  $('touch-sort').onchange = () => grid.setSort($('touch-sort').value, grid.getSorters()[0]?.dir ?? 'desc');
+  $('touch-direction').onclick = () => grid.setSort($('touch-sort').value, grid.getSorters()[0]?.dir === 'asc' ? 'desc' : 'asc');
+  const frozen = window.matchMedia('(min-width: 900px)').matches && !touchLayout.matches;
   grid = new Tabulator('#grid', {
     data: rows, index: 'id', maxHeight: 'min(62vh, 620px)', layout: 'fitData', rowHeight: 38,
     movableColumns: true, columnHeaderSortMulti: true,
@@ -316,7 +347,7 @@ async function startLedger() {
       }, tooltip: 'Original published summary and sample output for this run.' }],
   });
   grid.on('tableBuilt', () => {
-    ready = true; visibleKeys = new Set(compareKeys); layoutSignature = JSON.stringify(['compare', compareKeys]); renderColumnChooser(); updateCount();
+    ready = true; visibleKeys = new Set(compareKeys); layoutSignature = JSON.stringify(['compare', compareKeys]); renderColumnChooser(); updateTouchLayout();
     for (const input of document.querySelectorAll('.tabulator-header-filter input')) {
       const field = input.closest('[tabulator-field]')?.getAttribute('tabulator-field');
       input.setAttribute('aria-label', 'Filter ' + (columnByKey.get(field)?.label ?? field));

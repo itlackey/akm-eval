@@ -28,6 +28,9 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   }));
   expect(layout.width).toBe(1440); expect(layout.top).toBeLessThan(430); expect(layout.rowHeight).toBeLessThan(45);
   expect(layout.p95Right).toBeLessThan(1420);
+  const order = await page.locator('.tabulator-header [tabulator-field]').evaluateAll(elements => elements.filter(element => element.offsetWidth).map(element => element.getAttribute('tabulator-field')));
+  expect(order.slice(0, 3)).toEqual(['model', 'suite', 'akm_version']);
+  expect(order.indexOf('label')).toBe(18);
   const runLabels = await cells(page, 'label').allTextContents();
   expect(runLabels.every(label => label.trim())).toBe(true);
   const visibleRuns = await exportRows(page);
@@ -46,14 +49,14 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   await header(page, 'latency_p50_s').click({modifiers:['Shift']});
   await expect(page.locator('#sort-status')).toContainText('Quality %');
   await expect(page.locator('#sort-status')).toContainText('Latency p50');
-  const before = await header(page, 'label').boundingBox();
-  const handle = page.locator('.tabulator-header [tabulator-field="label"] + .tabulator-col-resize-handle');
+  const before = await header(page, 'akm_version').boundingBox();
+  const handle = page.locator('.tabulator-header [tabulator-field="akm_version"] + .tabulator-col-resize-handle');
   const box = await handle.boundingBox();
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2); await page.mouse.down();
   await page.mouse.move(box.x+box.width/2+60,box.y+box.height/2,{steps:8}); await page.mouse.up();
-  expect((await header(page, 'label').boundingBox()).width).toBeGreaterThan(before.width+30);
+  expect((await header(page, 'akm_version').boundingBox()).width).toBeGreaterThan(before.width+30);
   await page.locator('#search').fill('reflect');
-  expect((await header(page, 'label').boundingBox()).width).toBeGreaterThan(before.width+30);
+  expect((await header(page, 'akm_version').boundingBox()).width).toBeGreaterThan(before.width+30);
   await page.locator('#search').fill('');
   await page.locator('#columns-toggle').click(); await page.locator('#column-search').fill('temperature');
   await page.locator('[data-column="temperature"]').check();
@@ -261,4 +264,79 @@ test('AKM versions support one or several selections, other filters, removal and
   await option(versions[0]).uncheck(); await option(versions[1]).uncheck();
   await expect(page.locator('#version-summary')).toHaveText('All AKM versions');
   await expect(page.locator('#count')).toHaveText(`${data.runs.length} of ${data.runs.length} runs`);
+});
+
+
+test('small touch screens show complete run cards with native scrolling, sorting, filters and pagination', async ({ browser }, info) => {
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  const issues = []; page.on('pageerror', error => issues.push(error.message));
+  try {
+    const data = await open(page);
+    const cards = page.locator('.run-card');
+    const cardIds = () => cards.evaluateAll(elements => elements.map(element => element.dataset.runId));
+    await expect(page.locator('#touch-results')).toBeVisible();
+    await expect(page.locator('.tabulator-header')).not.toBeVisible();
+    await expect(cards).toHaveCount(25);
+    expect(await cardIds()).toEqual((await exportRows(page)).slice(0, 25).map(row => row.id));
+    await expect(cards.first()).toContainText('AKM 0.10.261005-beta');
+    await expect(cards.first()).toContainText('Quality metric');
+    await expect(cards.first()).toContainText((await exportRows(page))[0].label);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 740 }] });
+    for (let y = 700; y >= 300; y -= 50) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 180, y }] });
+      await page.waitForTimeout(20);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+    await page.locator('#suite').selectOption('reflect');
+    await page.locator('#version-summary').tap();
+    await page.getByRole('checkbox', { name: '0.9.32', exact: true }).tap();
+    expect((await exportRows(page)).every(row => row.suite === 'reflect' && row.akm_version === '0.9.32')).toBe(true);
+    await page.locator('#view').selectOption('performance');
+    await expect(cards.first()).toContainText('Latency p50');
+    await page.locator('#touch-sort').selectOption('quality_percent');
+    const sorted = await exportRows(page);
+    expect(await cardIds()).toEqual(sorted.map(row => row.id));
+    await page.locator('#touch-direction').tap();
+    expect(await cardIds()).toEqual((await exportRows(page)).map(row => row.id));
+    await page.locator('#columns-toggle').tap();
+    await page.locator('#column-search').fill('temperature');
+    await page.locator('[data-column="temperature"]').tap();
+    await page.locator('#columns-close').tap();
+    await expect(cards.first()).toContainText('Temperature');
+    await page.locator('#columns-toggle').tap();
+    await page.locator('#reset-columns').tap();
+    await page.locator('#columns-close').tap();
+    await page.locator('#reset').tap();
+    const exported = await exportRows(page);
+    await page.locator('.tabulator-page[data-page="next"]').tap();
+    expect(await cardIds()).toEqual(exported.slice(25, 50).map(row => row.id));
+    await page.locator('.tabulator-page[data-page="first"]').tap();
+    await page.locator('#touch-sort').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('touch-mobile.png') });
+    await cards.first().screenshot({ path: info.outputPath('touch-run.png') });
+    expect(await page.locator('#touch-direction').evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await expect(page.locator('#touch-results')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(820);
+    await page.setViewportSize({ width: 320, height: 740 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+    for (const button of await page.locator('.tabulator-page').all()) {
+      const box = await button.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(320);
+    }
+    await page.locator('.tabulator-page-size').selectOption('true');
+    await expect(cards).toHaveCount(data.runs.length);
+    await page.locator('#search').fill('no-such-published-run');
+    await expect(cards).toHaveCount(0);
+    await expect(page.locator('#touch-cards')).toContainText('No runs match');
+    await page.locator('#search').fill('');
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await expect(page.locator('#touch-results')).not.toBeVisible();
+    await expect(page.locator('.tabulator-header')).toBeVisible();
+    expect(issues).toEqual([]);
+  } finally { await context.close(); }
 });
