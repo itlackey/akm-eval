@@ -40,7 +40,7 @@ function col(key: string, label: string, kind: Column["kind"], group: string, de
   coreColumns.push({ key, label, kind, group, description, decimals, unit });
 }
 col("model", "Model / route", "text", "Run", "Recorded model identifier, including the serving route. Retrieval runs have no answer model.");
-col("label", "Run", "text", "Run", "Published run label. Every artifact is a separate row, including repeats and pilots.");
+col("label", "Run", "text", "Run", "Published run label. Each active artifact is a separate row, including repeats and pilots.");
 col("suite", "Test", "text", "Run", "Evaluation suite. Compare quality within the same test and collection.");
 col("collection", "Collection", "text", "Run", "Test collection, such as books or library.");
 col("date", "Collected (UTC)", "date", "Run", "Recorded collection timestamp.");

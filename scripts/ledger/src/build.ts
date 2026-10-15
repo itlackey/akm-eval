@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { type LedgerRun, object, presentRun } from "./data";
 import { comparisonColumns } from "./comparison";
@@ -21,9 +21,17 @@ function* summaries(folder: string): Generator<string> {
     else if (entry.isFile() && entry.name === "summary.json") yield join(folder, entry.name);
   }
 }
+// Explicit publication choices only; the original reports remain available for inspection and CLI comparison.
+const retirementFile = join(reports, "retired-results.json");
+const retired = existsSync(retirementFile) ? object(JSON.parse(readFileSync(retirementFile, "utf8"))) : {};
 const runs: LedgerRun[] = [];
-let excluded = 0;
+let excluded = 0, retiredCount = 0;
 for (const file of summaries(reports)) {
+  const path = relative(reports, dirname(file)).split("\\").join("/");
+  if (typeof retired[path] === "string") {
+    retiredCount++;
+    continue;
+  }
   const summary: unknown = JSON.parse(readFileSync(file, "utf8"));
   if (object(summary).corpus !== "public") {
     excluded++;
@@ -38,7 +46,6 @@ for (const file of summaries(reports)) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  const path = relative(reports, dirname(file)).split("\\").join("/");
   const run = presentRun({ summary, samples, path, sourceRevision });
   if (!run) {
     excluded++;
@@ -54,6 +61,7 @@ const dataset = {
   source_repository: "itlackey/akm-eval",
   latest_collection_date: runs[0]!.date,
   excluded_reports: excluded,
+  retired_reports: retiredCount,
   runs,
   columns: comparisonColumns(runs),
 };
@@ -86,5 +94,6 @@ console.log(
     latest_collection: dataset.latest_collection_date,
     source_revision: sourceRevision,
     excluded,
+    retired: retiredCount,
   }),
 );

@@ -32,11 +32,12 @@ Retired evals are summarised in [`reports/retired-evals.md`](reports/retired-eva
 
 ## Layout
 
-The [public results ledger](https://itlackey.github.io/akm-eval/) presents the
-every committed run in `reports/`, with sortable quality, performance and settings
+The [public results ledger](https://itlackey.github.io/akm-eval/) presents active
+published runs in `reports/`, with sortable quality, performance and settings
 columns, full filtering, row comparison and artifact links. Run `eval_docker scripts/ledger/run` to build it locally. `.github/workflows/ledger-pages.yml`
 builds pull requests and publishes main changes to the reports or site.
-See [site/README.md](site/README.md) for publishing and refreshes.
+See [site/README.md](site/README.md) for publishing and refreshes, and
+[retired results](reports/retired-results.md) for preserved historical evidence.
 
 ```
 evals/, benchmarks/   one folder per eval: run, generate, src/, assets/, results/ (gitignored)

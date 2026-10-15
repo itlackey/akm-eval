@@ -39,10 +39,10 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   await header(page, 'quality_percent').click();
   let rows = await exportRows(page);
   expect(rows.filter(row => row.quality_percent != null).map(row => row.quality_percent)).toEqual(rows.filter(row => row.quality_percent != null).map(row => row.quality_percent).sort((a,b) => a-b));
-  expect(rows.at(-1).quality_percent).toBeNull();
+  expect(rows.slice(0,rows.filter(row=>row.quality_percent!=null).length).every(row=>row.quality_percent!=null)).toBe(true);
   await header(page, 'quality_percent').click(); rows = await exportRows(page);
   expect(rows.filter(row => row.quality_percent != null).map(row => row.quality_percent)).toEqual(rows.filter(row => row.quality_percent != null).map(row => row.quality_percent).sort((a,b) => b-a));
-  expect(rows.at(-1).quality_percent).toBeNull();
+  expect(rows.slice(0,rows.filter(row=>row.quality_percent!=null).length).every(row=>row.quality_percent!=null)).toBe(true);
   await header(page, 'latency_p50_s').click({modifiers:['Shift']});
   await expect(page.locator('#sort-status')).toContainText('Quality %');
   await expect(page.locator('#sort-status')).toContainText('Latency p50');
@@ -62,7 +62,7 @@ test('desktop gives useful comparisons, distinct run labels, sorting, resizing a
   expect(await page.locator('.tabulator-header [tabulator-field]').evaluateAll(elements => elements.filter(element => element.offsetWidth).length)).toBeGreaterThan(data.columns.length);
   await page.locator('#view').selectOption('compare');
   await page.locator('.tabulator-page[data-page="next"]').click();
-  await expect(page.locator('.tabulator-page-counter')).toContainText('26-50');
+  await expect(page.locator('.tabulator-page-counter')).toContainText(`26-${Math.min(50, data.runs.length)}`);
   expect(issues).toEqual([]);
 });
 
@@ -72,25 +72,27 @@ test('quality question ranks one benchmark and exposes the lack of a head-to-hea
   await page.locator('#view').selectOption('quality');
   const rows = await exportRows(page);
   const expected = data.runs.filter(row => row.suite === 'reflect' && row.role === 'Full suite');
+  const threshold = rows[0].quality_percent.toFixed(2);
   expect(rows.length).toBe(expected.length);
   expect(rows[0].quality_percent).toBe(Math.max(...expected.map(row=>row.comparison.quality_percent)));
   await expect(cells(page,'quality_percent').first()).toContainText(rows[0].quality_percent.toFixed(2));
   if (new Set(expected.map(row=>row.model.split('/').at(-1))).size === 1) await expect(page.locator('#view-context')).toContainText('there is no model winner');
   await page.locator('#advanced-toggle').click();
   await page.locator('#filter-column').selectOption('quality_percent'); await page.locator('#filter-operator').selectOption('gte');
-  await page.locator('#filter-value').fill('92.59'); await page.locator('#add-filter button').click();
+  await page.locator('#filter-value').fill(threshold); await page.locator('#add-filter button').click();
   const filtered = await exportRows(page);
-  expect(filtered.length).toBeGreaterThan(0); expect(filtered.every(row=>Number(row.quality_percent.toFixed(2))>=92.59)).toBe(true);
+  expect(filtered.length).toBeGreaterThan(0); expect(filtered.every(row=>Number(row.quality_percent.toFixed(2))>=Number(threshold))).toBe(true);
   await page.locator('#active-filters button').filter({hasText:'Quality %'}).click();
   expect((await exportRows(page)).length).toBe(expected.length);
   await page.locator('#header-filters').check();
-  await header(page,'quality_percent').locator('input').fill('92.59..92.59');
-  await expect(page.locator('#count')).not.toHaveText(`${expected.length} of ${data.runs.length} runs`);
-  expect((await exportRows(page)).every(row=>Number(row.quality_percent.toFixed(2))===92.59)).toBe(true);
+  await header(page,'quality_percent').locator('input').fill(`${threshold}..${threshold}`);
+  const exact = expected.filter(row=>row.comparison.quality_percent.toFixed(2)===threshold);
+  await expect(page.locator('#count')).toHaveText(`${exact.length} of ${data.runs.length} runs`);
+  expect((await exportRows(page)).every(row=>Number(row.quality_percent.toFixed(2))===Number(threshold))).toBe(true);
   await page.locator('#view').selectOption('performance');
-  expect((await exportRows(page)).every(row=>Number(row.quality_percent.toFixed(2))===92.59)).toBe(true);
-  await expect(page.locator('#active-filters button').filter({hasText:'92.59..92.59'})).toBeVisible();
-  await page.locator('#active-filters button').filter({hasText:'92.59..92.59'}).click();
+  expect((await exportRows(page)).every(row=>Number(row.quality_percent.toFixed(2))===Number(threshold))).toBe(true);
+  await expect(page.locator('#active-filters button').filter({hasText:`${threshold}..${threshold}`})).toBeVisible();
+  await page.locator('#active-filters button').filter({hasText:`${threshold}..${threshold}`}).click();
   expect((await exportRows(page)).length).toBe(expected.length);
   await page.locator('#reset').click();
   await expect(page.locator('#count')).toHaveText(`${data.runs.length} of ${data.runs.length} runs`);
@@ -115,12 +117,13 @@ test('AKM impact question preserves paired gains, timing direction and pilot sco
   await open(page); await page.locator('#view').selectOption('impact');
   const rows = await exportRows(page);
   expect(rows.every(row=>row.paired_cases>0 && row.control_quality_percent!=null && row.akm_quality_percent!=null)).toBe(true);
-  const memory = rows.find(row=>row.suite==='longmemeval' && row.label==='bifrost-gpt120-pilot');
-  expect(memory.control_quality_percent).toBe(60); expect(memory.akm_quality_percent).toBe(75);
-  expect(memory.akm_delta_pp).toBe(25); expect(memory.median_time_change_percent).toBeCloseTo(-69.61,2);
-  const agent = rows.find(row=>row.suite==='agent-ab' && row.label==='bifrost-gpt120-compatible-pilot');
-  expect(agent.akm_delta_pp).toBe(100); expect(agent.median_time_change_percent).toBeGreaterThan(0);
-  const terminal = rows.find(row=>row.suite==='terminal-bench' && row.label==='bifrost-gpt120-pilot'); expect(terminal.akm_delta_pp).toBe(0);
+  const memory = rows.find(row=>row.suite==='longmemeval' && row.label==='luna-semantic-fresh-20261014-full');
+  expect(memory.control_quality_percent).toBeCloseTo(84.8,2); expect(memory.akm_quality_percent).toBeCloseTo(80.36,2);
+  expect(memory.paired_cases).toBe(499); expect(memory.akm_delta_pp).toBeCloseTo(-4.41,2);
+  expect(memory.median_time_change_percent).toBeCloseTo((memory.akm_p50_s/memory.control_p50_s-1)*100,8);
+  const agent = rows.find(row=>row.suite==='agent-ab' && row.label==='b35-semantic-20261014-pilot');
+  expect(agent.akm_delta_pp).toBe(50); expect(agent.role).toBe("Pilot");
+  const terminal = rows.find(row=>row.suite==='terminal-bench' && row.label==='luna-semantic-20261014-pilot'); expect(terminal.akm_delta_pp).toBe(0);
   if (rows.every(row=>row.role!=='Full suite')) await expect(page.locator('#view-context')).toContainText('pilots');
   await expect(cells(page,'role').first()).toHaveText(rows[0].role);
   await expect(cells(page,'akm_delta_pp').first()).toContainText(rows[0].akm_delta_pp.toFixed(2));
@@ -145,10 +148,10 @@ test('mobile keeps filters and metrics reachable without page overflow or frozen
 
 test('facets, date bounds, missing-value conditions, CSV and reordering work through the UI', async ({ page }) => {
   const data = await open(page);
-  await page.locator('#model').selectOption('Qwen3.8-27b');
-  expect((await exportRows(page)).every(row=>row.model==='chat/qwen3.8-27b')).toBe(true);
+  await page.locator('#model').selectOption('Qwen3.6-35b-a3b');
+  expect((await exportRows(page)).every(row=>row.model.endsWith('qwen3.6-35b-a3b'))).toBe(true);
   await page.locator('#suite').selectOption('reflect'); await page.locator('#advanced-toggle').click();
-  const candidates=data.runs.filter(row=>row.suite==='reflect' && row.model==='chat/qwen3.8-27b');
+  const candidates=data.runs.filter(row=>row.suite==='reflect' && row.model==='fast/qwen3.6-35b-a3b');
   const collection=candidates[0].collection; await page.locator('#collection').selectOption(collection);
   const date=candidates[0].date.slice(0,10);
   await page.locator('#dateFrom').fill(date); await page.locator('#dateFrom').dispatchEvent('change');
@@ -161,7 +164,9 @@ test('facets, date bounds, missing-value conditions, CSV and reordering work thr
   await page.locator('#reset').click(); await page.locator('#advanced-toggle').click();
   const download=page.waitForEvent('download'); await page.locator('#csv').click();
   const stream=await (await download).createReadStream(); let csv='';for await(const chunk of stream)csv+=chunk.toString();
-  expect(csv).toContain('"Summary URL"'); expect(csv).toContain('"Median time change (%)"'); expect(csv).toContain('"-69.6078431372549');
+  expect(csv).toContain('"Summary URL"'); expect(csv).toContain('"Median time change (%)"');
+  const paired=data.runs.find(row=>row.label==='luna-semantic-fresh-20261014-full').comparison;
+  expect(csv).toContain(String((paired.akm_p50_s/paired.control_p50_s-1)*100));
   // Drag a metric ahead of quality to exercise the native movable-column behavior.
   const from=await header(page,'quality_metric').boundingBox(), to=await header(page,'quality_percent').boundingBox();
   await page.mouse.move(from.x+from.width/2,from.y+15); await page.mouse.down();

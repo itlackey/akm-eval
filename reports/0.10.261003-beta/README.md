@@ -1,5 +1,7 @@
 # Bifrost runs on AKM 0.10.261003-beta
 
+> Historical report: rejected non-semantic model runs, setup/broken-plugin pilots and matrix demonstrations are [retired from active comparisons](../retired-results.md). Artifacts remain unchanged. Use [native-semantic collections](semantic-2026-10-14/README.md), [full Luna LongMemEval](longmemeval/luna-semantic-fresh-20261014-full/README.md), and [corrected rescores](../validation-2026-10-14/README.md) for current quality reporting.
+
 These are public cases collected by the real AKM CLI and real models, on 2026-10-12–13 (UTC). The 50 published runs contain 6,820 sample rows. `summary.json` and `samples.jsonl` are copied unchanged from completed runs. The [index](../README.md) lists every published folder. Aborted runs are kept locally and are described below rather than presented as baselines.
 
 The model-driven evals use the existing Bifrost alias `chat/qwen3.8-27b`. It is a gateway pool; these results do not claim one fixed quantization or inference host. Larger model pilots use `freellm/gpt-oss:120b` through the same gateway. The existing Qwen judge is reused. Retrieval and SkillRet use AKM's pinned built-in embedding model locally; their runs call no model service. Consolidate and nightly use their default deterministic word-hash embedder to select candidates, with Qwen making the model judgments.
