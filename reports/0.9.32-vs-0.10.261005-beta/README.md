@@ -1,6 +1,6 @@
 # AKM 0.9.32 vs 0.10.261005-beta
 
-Collected incrementally on 2026-10-15 UTC. Both releases use the same public cases and runner source `acbafc2`. Docker images layer the exact published `akm-cli` version onto the prebuilt runner; dependencies are installed at image build time. Separate working folders keep each release's indexes independent. Cold indexing starts from a new index with the native embedding model already baked into the image; it does not include a model download.
+Collected incrementally on 2026-10-15–16 UTC. Both releases use the same public cases and runner source `acbafc2`. Docker images layer the exact published `akm-cli` version onto the prebuilt runner; dependencies are installed at image build time. Separate working folders keep each release's indexes independent. Cold indexing starts from a new index with the native embedding model already baked into the image; it does not include a model download.
 
 ## Retrieval
 
@@ -89,17 +89,21 @@ The selected 35B endpoint is the local LAN llama.cpp server serving `qwen3.6-35b
 
 ### Reflect with retrieval-query context
 
-Twelve cases per build cover all ten Reflect classes (seven defect cases, five controls). Both enable native semantic configuration, the existing `judge-on.json` patch and `--retrieval-queries`; all 12 notes have labeled query context. AKM 0.10 intentionally removed the relevance guard ([policy decision 9](https://github.com/itlackey/akm/blob/9a61c0ffb5412f6fde567583ba91b8745f62077e/docs/architecture/0.10-process-rules.md#policy-decisions)); its context remains seeded but is not graded. This bounded mode is distinct from the full standard Reflect run.
+The full 80-case collections completed for both builds on October 16 UTC using the local 35B model in Docker, native semantic configuration, `judge-on.json` and `--retrieval-queries`. All 80 notes were embedded; 77 have labeled query context. These replace the earlier 12-case pilot as the current coverage measurement. Standard Reflect above remains a separate full run with the quality judge off.
 
 | Metric | 0.9.32 | Beta |
 |---|---:|---:|
-| Defect cases correct | 6/7 | 7/7 |
-| Controls correct | 5/5 | 5/5 |
-| Quality-judge / retrieval-check refusals | 1 / 1 | 1 / 0 |
-| Model calls / failed calls | 64 / 0 | 20 / 0 |
-| Wall seconds | 89.54 | 60.465 |
+| Cases scored / request errors | 80 / 0 | 80 / 0 |
+| Defect cases correct | 34/40 | 38/40 |
+| Controls correct | 39/40 | 39/40 |
+| Quality-judge / retrieval-check refusals | 8 / 3 | 7 / 0 |
+| Model calls / failed calls | 328 / 0 | 126 / 0 |
+| Proposals that changed a body | 0 | 0 |
+| Wall seconds | 541.545 | 390.212 |
 
-Both scored all 12 and embedded every note without request errors. On 0.9.32, `description-quote-01` was refused because its relevance grade changed from 2.50 to 2.25 across four queries; this confirms the check actually graded the query context. The legacy check compares LLM relevance grades of the old and new note; it is distinct from the native search-ranking measurement above. Beta made only 20 calls (12 generations plus eight quality judgments), versus 64 on 0.9.32. The missing relevance calls are the intended feature removal, not a faster grader. The harness README was corrected; collection and scoring code were unchanged. The results remain bounded validation, with single-run model variation.
+AKM 0.10 intentionally removed the relevance guard ([policy decision 9](https://github.com/itlackey/akm/blob/9a61c0ffb5412f6fde567583ba91b8745f62077e/docs/architecture/0.10-process-rules.md#policy-decisions)); its query context remains seeded but is not graded. Stable refused three proposed edits after relevance grades fell, while beta made no relevance-grading calls. This is an intended behavior difference, distinct from native search-ranking quality. Stable's quality judge refused two defect repairs and beta's refused one. Both left one truncated description unchanged. Both incorrectly edited one unsupported-ask control. These are recorded quality outcomes, with no request failures. Single-run model variation and the different checks limit release-level conclusions. Stable's early collection overlapped CPU retrieval checks before the user requested serialization; beta ran alone, so elapsed times are not matched performance evidence.
+
+Artifacts: [0.9.32](../0.9.32/reflect/2026-10-16-compare-0.9.32-35b-retrieval-context-full-20261015/summary.json), [beta](../0.10.261005-beta/reflect/2026-10-16-compare-0.10.261005-beta-35b-retrieval-context-full-20261015/summary.json).
 
 ### Native consolidation pool
 
@@ -171,6 +175,10 @@ Agent A/B uses the documented Docker socket and same-absolute-path mounts, `--mo
 
 ## Validation and remaining coverage
 
-The 34 new public collections contain 10,570 saved rows. JSON, case counts, duplicate IDs, credential redaction and local report links were checked. The ledger builds with all 35 existing plus 34 new rows (69 collections and 22,377 saved case rows) and excludes none. Saved-result comparison succeeded for the eight process pairs, library/books retrieval, native pool, Reflect context, Luna pilots, fresh full SkillRet and Agent A/B. The affected ledger suites now pass 32 tests, including full-coverage classification and latest-result selection. The ledger's generic partial-test warning was removed because a requested limit can still include every task; recorded coverage and settings remain visible. Collection and scoring code are unchanged. Repository, pinned-smoke and ledger/browser checks passed in [PR #112](https://github.com/itlackey/akm-eval/pull/112) and [PR #115](https://github.com/itlackey/akm-eval/pull/115). The ledger now distinguishes complete run coverage from metric subsets: the full consolidation pool is 47/47 clusters, while its safe-retirement metric covers 19 eligible clusters. Full suite excludes incomplete scoring; Latest only selects the newest matching collection per AKM version, eval and settings after the other filters.
+The 36 public collections in this comparison contain 10,730 saved rows. JSON, case counts, duplicate IDs, credential redaction and local report links were checked. The ledger builds with all 35 existing plus 36 comparison rows (71 collections and 22,537 saved case rows) and excludes none. Saved-result comparison succeeded for the eight process pairs, library/books retrieval, native pool, Reflect context, Luna pilots, fresh full SkillRet and Agent A/B. The affected ledger suites now pass 32 tests, including full-coverage classification and latest-result selection. The ledger's generic partial-test warning was removed because a requested limit can still include every task; recorded coverage and settings remain visible. Collection and scoring code are unchanged. Repository, pinned-smoke and ledger/browser checks passed in [PR #112](https://github.com/itlackey/akm-eval/pull/112) and [PR #115](https://github.com/itlackey/akm-eval/pull/115). The ledger now distinguishes complete run coverage from metric subsets: the full consolidation pool is 47/47 clusters, while its safe-retirement metric covers 19 eligible clusters. Full suite excludes incomplete scoring; Latest only selects the newest matching collection per AKM version, eval and settings after the other filters.
 
-The current-build larger LongMemEval and Terminal-Bench comparisons remain held. The current Luna evidence is seven questions per build; Reflect query-context evidence is 12 cases, and Agent A/B uses one attempt per task. These bounds, the scored control timeout, shared-server timing conditions and unreported billing remain limits on interpretation.
+The October 16 local gap-filling sequence is serialized, including individual Harbor trials. Full Reflect query-context coverage is complete. The local 35B Agent A/B collection is in progress on 0.9.32, with beta next: six tasks, three attempts per arm, `--concurrency 1`. Its new results are not included in the published metrics until collection and validation finish.
+
+After Agent A/B, the user authorized full Terminal-Bench and then full LongMemEval for both builds using `chat/qwen-27b-q2` through Bifrost, pinned to Rocksteady with no load-balanced fallback. The server exposes 131,072 context per slot. Terminal-Bench uses an 8,192-token output budget; LongMemEval uses a 2,048-token reader budget and the local 35B judge with 64 tokens. Semantic search remains enabled throughout. These collections have not started. No new cloud-model runs are authorized; the seven-question Luna pilots remain the current Luna evidence.
+
+Two standalone offline LongMemEval retrieval-only collections were stopped at 21 and seven questions when the user requested one run at a time. Their checkpoints remain local, with zero errors, and are excluded from the published quality rows. The subsequently authorized full local answer collections will also measure retrieval, so the partial retrieval-only runs need no separate restart. Shared-server timing conditions, model variation, the earlier scored Agent A/B control timeout and unreported billing remain limits on interpretation.
