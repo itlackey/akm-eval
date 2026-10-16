@@ -3,15 +3,21 @@ import shlex
 from pathlib import Path
 from typing import override
 from setup_cache import SetupCache, runtime_id
-from harbor.agents.installed.opencode import OpenCode
+from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
 from harbor.environments.base import BaseEnvironment
+
+class EvalOpenCodeOptions(OpenCodeOptions):
+    setup_cache_dir: str | None = None
+
 
 class EvalOpenCode(OpenCode):
     """Use Harbor's nvm Node on glibc; only musl needs distro Node packages."""
 
-    def __init__(self, *args, setup_cache_dir: str | None = None, **kwargs):
+    options_model = EvalOpenCodeOptions
+
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._setup_cache_dir = Path(setup_cache_dir) if setup_cache_dir else None
+        self._setup_cache_dir = Path(self.options.setup_cache_dir) if self.options.setup_cache_dir else None
         self._setup_cache = None
 
     @override

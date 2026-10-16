@@ -103,3 +103,18 @@ def test_checkout_builds_keep_separate_prepared_dependencies(tmp_path, monkeypat
         assert akm_opencode.AkmOpenCode._install_dependencies.await_count == 2
         assert akm_opencode.AkmOpenCode._link_cli.await_count == 1
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("import_path,extra", [
+    ("eval_opencode:EvalOpenCode", {}),
+    ("akm_opencode:AkmOpenCode", {"akm_cli_version": "0.9.32", "akm_plugin_version": "0.10.261002-beta", "libraries_dir": "/libraries"}),
+])
+def test_harbor_preflight_and_factory_accept_the_cache_option(tmp_path, import_path, extra):
+    from harbor.agents.factory import AgentFactory
+    from harbor.models.trial.config import AgentConfig
+    cache = str(tmp_path / "cache")
+    config = AgentConfig(import_path=import_path, kwargs={"version": "1.18.34", "setup_cache_dir": cache, **extra})
+    AgentFactory.run_preflight(config)
+    agent = AgentFactory.create_agent_from_config(config, logs_dir=tmp_path / "logs")
+    assert agent._setup_cache_dir == Path(cache)
+    assert agent.options.setup_cache_dir == cache

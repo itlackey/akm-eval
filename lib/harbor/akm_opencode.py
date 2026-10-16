@@ -44,8 +44,8 @@ from typing import override
 
 from pydantic import Field, field_validator, model_validator
 
-from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
-from eval_opencode import EvalOpenCode
+from harbor.agents.installed.opencode import OpenCode
+from eval_opencode import EvalOpenCode, EvalOpenCodeOptions
 from setup_cache import SetupCache
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
@@ -116,7 +116,7 @@ def check_akm_env(env: dict[str, str]) -> dict[str, str]:
     return env
 
 
-class AkmOpenCodeOptions(OpenCodeOptions):
+class AkmOpenCodeOptions(EvalOpenCodeOptions):
     akm_cli_version: str
     akm_plugin_version: str
     libraries_dir: str  # one folder per library, each laid out as an akm bundle
