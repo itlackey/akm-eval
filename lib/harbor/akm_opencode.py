@@ -46,6 +46,7 @@ from pydantic import Field, field_validator, model_validator
 
 from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
 from eval_opencode import EvalOpenCode
+from setup_cache import SetupCache
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
@@ -255,14 +256,7 @@ class AkmOpenCode(EvalOpenCode):
         if self.options.packages_dir:
             await environment.upload_dir(Path(self.options.packages_dir), PACKAGES)
             await self.exec_as_root(environment, command=f"chown -R {owner} {PACKAGES}")
-        for lock, prefix in ((self._akm_lock, CLI_PREFIX), (self._plugin_lock, PLUGIN_PREFIX)):
-            if lock:
-                await environment.upload_dir(lock, prefix)
-                await self.exec_as_root(environment, command=f"chown -R {owner} {prefix}")
-        await self.exec_as_agent(environment, command=self._install_akm_command())
-        found = await self.exec_as_agent(environment, command=f"{NVM}readlink -f {CLI_BIN}")
-        await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
-        await self.exec_as_agent(environment, command=self._install_plugin_command())
+        await self._prepare_dependencies(environment)
         # Before the tarballs go: `npm ls` reads a package installed from one against the file it names.
         trees = await self.exec_as_agent(environment, command=self._trees_command())
         await self.exec_as_agent(environment, command=f"rm -rf {PACKAGES}")
@@ -280,6 +274,42 @@ class AkmOpenCode(EvalOpenCode):
         locks = {"akm_cli": lock_sha256(self._akm_lock), "plugin": lock_sha256(self._plugin_lock)}
         self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks)
         self._record(INSTALL_FILE, self._installed)
+
+    async def _install_dependencies(self, environment):
+        for lock, prefix in ((self._akm_lock, CLI_PREFIX), (self._plugin_lock, PLUGIN_PREFIX)):
+            if lock:
+                await environment.upload_dir(lock, prefix)
+                await self.exec_as_root(environment, command=f"chown -R {shlex.quote(str(environment.default_user or 'root'))} {prefix}")
+        await self.exec_as_agent(environment, command=self._install_akm_command())
+        await self._link_cli(environment)
+        await self.exec_as_agent(environment, command=self._install_plugin_command())
+
+    async def _link_cli(self, environment):
+        found = await self.exec_as_agent(environment, command=f"{NVM}readlink -f {CLI_BIN}")
+        await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
+
+    async def _prepare_dependencies(self, environment):
+        cache = self._setup_cache
+        if cache is None:
+            await self._install_dependencies(environment)
+            return
+        # Checkout tarballs are staged per build; their prepared files stay with that build.
+        if self.options.packages_dir:
+            packages = Path(self.options.packages_dir)
+            cache = SetupCache(packages.with_name(packages.name + "-prepared") / cache.root.name)
+        abi = await self.exec_as_agent(environment, command=f"{NVM}node -p process.versions.modules")
+        name = "--".join(["akm", self.options.akm_cli_version, self.options.akm_plugin_version, abi.stdout.strip(),
+                          lock_sha256(self._akm_lock) or "unlocked", lock_sha256(self._plugin_lock) or "unlocked"])
+        async with cache.lock(name):
+            if not await cache.restore(name, self, environment, AKM_ROOT, root=True):
+                await self._setup_cache.restore_npm(self, environment)
+                await self._install_dependencies(environment)
+                await cache.save(name, self, environment, AKM_ROOT, "cli plugin", root=True)
+                await self._setup_cache.save_npm(self, environment)
+            else:
+                await self._link_cli(environment)
+            owner = shlex.quote(str(environment.default_user or "root"))
+            await self.exec_as_root(environment, command=f"chown -R {owner} {CLI_PREFIX} {PLUGIN_PREFIX}")
 
     def _akm_target(self) -> str:
         """What `npm install` puts in as akm-cli when there is no lockfile: the tarball of a checkout, or the release the job names."""

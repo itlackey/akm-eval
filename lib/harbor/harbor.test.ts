@@ -514,7 +514,10 @@ describe("jobConfig", () => {
     const cfg = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
     expect(cfg.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(cfg.agents[0]).toEqual(control);
-    expect(JSON.stringify(cfg.agents[0])).not.toContain("akm");
+    expect(cfg.agents[0].kwargs.akm_cli_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_plugin_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_env).toBeUndefined();
+    expect(cfg.agents[0].kwargs.setup_cache_dir).toBe(cfg.agents[1].kwargs.setup_cache_dir);
     expect(() => jobConfig({ ...base, arm })).toThrow("names no folder");
   });
 

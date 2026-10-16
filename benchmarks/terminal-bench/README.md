@@ -48,7 +48,7 @@ Before Harbor starts, the run indexes the library with the akm on this machine a
 
 ## The two arms
 
-As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles (see "Dependencies" in `evals/agent-ab/README.md`).
+As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles and their prepared dependencies are reused across compatible trials (see "Dependencies" in `evals/agent-ab/README.md`). Keep the mounted working folder to retain the tool and package-download caches; trial workspaces and AKM indexes remain separate.
 
 ## How a task is scored
 

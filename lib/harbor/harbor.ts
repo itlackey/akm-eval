@@ -187,7 +187,7 @@ export const lockFolder = (pkg: "akm-cli" | "akm-opencode", version: string): st
 };
 
 /** What to say of a run whose akm-cli has no lockfile: a checkout, or a release other than the pinned one. */
-const UNLOCKED = "Its dependencies are not locked: each container resolves them when it installs, and akm_install records a digest of the tree each one got. A run whose containers got different trees is aborted.";
+const UNLOCKED = "Its dependencies are not locked: the first preparation for each runtime resolves them, and akm_install records the tree each trial uses. A run whose containers got different trees is aborted.";
 
 /** The value of `--akm`: an npm release (akm-cli@x.y.z) or the folder of a checkout. */
 export type AkmSource = { kind: "release"; version: string } | { kind: "checkout"; path: string };
@@ -382,7 +382,7 @@ export function jobConfig(o: {
     n_concurrent_trials: o.concurrency ?? CONCURRENT_TRIALS,
     environment: { type: "docker", delete: true },
     agents: [
-      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig } },
+      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig, setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup") } },
       {
         import_path: "akm_opencode:AkmOpenCode",
         ...both,
@@ -390,6 +390,7 @@ export function jobConfig(o: {
         kwargs: {
           version: PINS.opencode,
           opencode_config: opencodeConfig,
+          setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup"),
           akm_cli_version: arm.cli.version,
           akm_plugin_version: arm.plugin.version,
           libraries_dir: o.librariesDir,

@@ -123,7 +123,9 @@ describe("jobConfig", () => {
   test("tells the akm arm which library to seed, for every task, and how many assets akm should index in it", () => {
     expect(akm.env).toEqual({ AKM_TASK_STASH: "library" });
     expect(akm.kwargs).toMatchObject({ libraries_dir: "/l", library_assets: 259 });
-    expect(JSON.stringify(control)).not.toContain("akm");
+    expect(control.kwargs.akm_cli_version).toBeUndefined();
+    expect(control.kwargs.akm_plugin_version).toBeUndefined();
+    expect(control.kwargs.akm_env).toBeUndefined();
     expect(control.env).toBeUndefined();
   });
 

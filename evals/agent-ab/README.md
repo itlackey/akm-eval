@@ -67,7 +67,11 @@ Both arms get the same model, opencode 1.18.34 and config. The akm arm adds the 
 
 ## Dependencies
 
-The pinned akm-cli 0.10.261003-beta and plugin 0.10.261002-beta are installed with `npm ci` from lockfiles in `lib/harbor/locks/`, so every container runs the same dependency tree. Each trial records the digest of what was installed, `summary.json` keeps it in `akm_install.dependency_tree_sha256` and folds it into `akm_build_fingerprint`, and a run whose containers installed more than one tree is aborted. A checkout or another release has no lockfile and resolves in each container (`akm_install.locked: false`). To lock a new pin: change it in `lib/harbor/harbor.ts`, make `lib/harbor/locks/<package>-<version>/` with a `package.json` depending on exactly that version, run `npm install --package-lock-only --ignore-scripts` there, and commit both files.
+The pinned akm-cli 0.10.261003-beta and plugin 0.10.261002-beta are installed with `npm ci` from lockfiles in `lib/harbor/locks/`, so every container runs the same dependency tree. Each trial records the digest of what was installed, `summary.json` keeps it in `akm_install.dependency_tree_sha256` and folds it into `akm_build_fingerprint`, and a run whose containers installed more than one tree is aborted. A checkout or another release without a committed lockfile resolves during its first preparation (`akm_install.locked: false`). To lock a new pin: change it in `lib/harbor/harbor.ts`, make `lib/harbor/locks/<package>-<version>/` with a `package.json` depending on exactly that version, run `npm install --package-lock-only --ignore-scripts` there, and commit both files.
+
+Node/OpenCode and the AKM/plugin dependencies are prepared on the first trial and copied into later trials from `.cache/harbor-setup/` in the mounted working folder. Archives are separated by architecture, distro/libc, OpenCode version, AKM/plugin versions, Node ABI and committed lockfiles. Checkout preparations stay beside that run's staged tarballs, separate from other checkouts. Unknown runtimes keep the normal installer. npm downloads and Alpine package downloads are also reused. Delete the relevant cache directory to prepare again.
+
+Only installed tools and package downloads are shared. Every trial still gets its own workspace, AKM configuration, bundle, index and plugin session, with the existing version, semantic-search and plugin checks. The first preparation for a different build or runtime still installs dependencies; this does not prebuild benchmark task images.
 
 ## How a task is scored
 
