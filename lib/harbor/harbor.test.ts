@@ -514,7 +514,10 @@ describe("jobConfig", () => {
     const cfg = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
     expect(cfg.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(cfg.agents[0]).toEqual(control);
-    expect(JSON.stringify(cfg.agents[0])).not.toContain("akm");
+    expect(cfg.agents[0].kwargs.akm_cli_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_plugin_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_env).toBeUndefined();
+    expect(cfg.agents[0].kwargs.setup_cache_dir).toBe(cfg.agents[1].kwargs.setup_cache_dir);
     expect(() => jobConfig({ ...base, arm })).toThrow("names no folder");
   });
 
@@ -973,4 +976,12 @@ test("custom model limits reach both Harbor arms while model aliases and credent
   expect(job.agents[0].kwargs.opencode_config).toEqual(job.agents[1].kwargs.opencode_config);
   expect(settings.env.OPENAI_API_KEY).toBe("synthetic-model-key");
   expect(JSON.stringify(job)).not.toContain("synthetic-model-key");
+});
+
+
+test("forwards explicitly selected model reasoning effort to both Harbor arms", () => {
+  const settings = modelSettings("local", { KEY: "test" }, { local: { base_url: "https://gateway.example/v1", model: "shredder-eval/qwen", api_key_env: "KEY", chat: { reasoning_effort: "none" } } });
+  expect(settings.modelReasoningEffort).toBe("none");
+  const cfg = jobConfig({ name: "no-thinking", model: settings.model, modelReasoningEffort: settings.modelReasoningEffort, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["shredder-eval/qwen"].options).toEqual({ reasoningEffort: "none" });
 });

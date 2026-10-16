@@ -92,7 +92,9 @@ describe("jobConfig", () => {
 
   test("gives the akm arm what it needs and the control arm nothing of akm's", () => {
     expect(akm.kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, akm_plugin_version: PINS.akm_plugin, libraries_dir: "/l" });
-    expect(JSON.stringify(control)).not.toContain("akm");
+    expect(control.kwargs.akm_cli_version).toBeUndefined();
+    expect(control.kwargs.akm_plugin_version).toBeUndefined();
+    expect(control.kwargs.akm_env).toBeUndefined();
     // The plugin is added by the agent, so the two configs differ in nothing but that.
     expect(JSON.stringify(akm.kwargs.opencode_config)).not.toContain("plugin");
   });
@@ -157,7 +159,9 @@ describe("jobConfig with an akm under test", () => {
     const arm: AkmArm = { bin: "~/akm", build: "abc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/pack" };
     const cfg = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
     expect(cfg.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
-    expect(JSON.stringify(cfg.agents[0])).not.toContain("akm");
+    expect(cfg.agents[0].kwargs.akm_cli_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_plugin_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_env).toBeUndefined();
     expect(JSON.stringify(cfg)).not.toMatch(/api_?key|token|secret/i);
   });
 });
@@ -206,6 +210,14 @@ describe("runCorpus", () => {
     expect(JSON.stringify(stored.job)).not.toContain(root);
     expect(s.report.control).toMatchObject({ trials: 3, passed: 0 });
     expect(s.report.akm).toMatchObject({ trials: 3, passed: 3 });
+  });
+
+  test("forwards single-trial concurrency to Harbor and retains it in saved settings", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "serial", limit: 1, concurrency: 1, env }, join(root, "results")));
+    expect(readJson(join(s.results_dir, "job.json")).n_concurrent_trials).toBe(1);
+    expect(readJson(join(s.results_dir, "summary.json")).job.n_concurrent_trials).toBe(1);
+    expect(s.completion.expected).toBe(2);
   });
 
   test("records that the run finished: its status, the grid of trials, the model's endpoint without a key, the job config and the digest of the cases", async () => {

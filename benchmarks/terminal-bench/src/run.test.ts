@@ -123,7 +123,9 @@ describe("jobConfig", () => {
   test("tells the akm arm which library to seed, for every task, and how many assets akm should index in it", () => {
     expect(akm.env).toEqual({ AKM_TASK_STASH: "library" });
     expect(akm.kwargs).toMatchObject({ libraries_dir: "/l", library_assets: 259 });
-    expect(JSON.stringify(control)).not.toContain("akm");
+    expect(control.kwargs.akm_cli_version).toBeUndefined();
+    expect(control.kwargs.akm_plugin_version).toBeUndefined();
+    expect(control.kwargs.akm_env).toBeUndefined();
     expect(control.env).toBeUndefined();
   });
 
@@ -1065,8 +1067,8 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
 
 test("Terminal-Bench forwards custom model limits to the saved configuration of both arms", () => {
   const limits = { context: 32768, output: 4096 };
-  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
-  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
+  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, modelReasoningEffort: "none", lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"]).toEqual({ limit: limits, options: { reasoningEffort: "none" } });
 });
 
 

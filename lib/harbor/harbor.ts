@@ -101,7 +101,7 @@ const hostnameOf = (url: string): string | null => {
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
  * Only what Harbor needs goes into the environment (hostEnv), and the model's variables.
  */
-export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; modelLimits?: ModelLimits } {
+export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; modelLimits?: ModelLimits; modelReasoningEffort?: string } {
   const id = (flag ?? host.MODEL_NAME)?.trim();
   if (flag !== undefined && !id) fail("--model needs a model name");
   if (!id) fail("name the model: pass --model NAME, or set MODEL_NAME in .env, as opencode names it, such as openai/gpt-6-luna. See .env.example.");
@@ -131,7 +131,7 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
     const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
     if (!m.apiKey) fail(`no model key for ${model}: set MODEL_API_KEY (or the models.json line's api_key_env) in .env. Every trial would fail at the model call, after its setup.`);
-    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}) };
+    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}), ...(m.chat?.reasoning_effort !== undefined ? { modelReasoningEffort: m.chat.reasoning_effort } : {}) };
   }
 
   const model = modelName(id);
@@ -187,7 +187,7 @@ export const lockFolder = (pkg: "akm-cli" | "akm-opencode", version: string): st
 };
 
 /** What to say of a run whose akm-cli has no lockfile: a checkout, or a release other than the pinned one. */
-const UNLOCKED = "Its dependencies are not locked: each container resolves them when it installs, and akm_install records a digest of the tree each one got. A run whose containers got different trees is aborted.";
+const UNLOCKED = "Its dependencies are not locked: the first preparation for each runtime resolves them, and akm_install records the tree each trial uses. A run whose containers got different trees is aborted.";
 
 /** The value of `--akm`: an npm release (akm-cli@x.y.z) or the folder of a checkout. */
 export type AkmSource = { kind: "release"; version: string } | { kind: "checkout"; path: string };
@@ -353,6 +353,7 @@ export function jobConfig(o: {
   name: string;
   model: string;
   modelLimits?: ModelLimits;
+  modelReasoningEffort?: string;
   concurrency?: number;
   jobsDir: string;
   attempts: number;
@@ -366,10 +367,10 @@ export function jobConfig(o: {
   const arm = o.arm ?? releaseArm();
   // The same model does opencode's side jobs, such as titling a session, so the run calls one model only.
   const opencodeConfig: Record<string, unknown> = { $schema: "https://opencode.ai/config.json", autoupdate: false, small_model: o.model };
-  if (o.modelLimits) {
+  if (o.modelLimits || o.modelReasoningEffort !== undefined) {
     const slash = o.model.indexOf("/");
     const provider = o.model.slice(0, slash), id = o.model.slice(slash + 1);
-    opencodeConfig.provider = { [provider]: { models: { [id]: { limit: o.modelLimits } } } };
+    opencodeConfig.provider = { [provider]: { models: { [id]: { ...(o.modelLimits ? { limit: o.modelLimits } : {}), ...(o.modelReasoningEffort !== undefined ? { options: { reasoningEffort: o.modelReasoningEffort } } : {}) } } } };
   }
   const both = { model_name: o.model, override_setup_timeout_sec: SETUP_TIMEOUT_SEC };
   const tarballs = arm.cli.tarball !== null || arm.plugin.tarball !== null;
@@ -381,7 +382,7 @@ export function jobConfig(o: {
     n_concurrent_trials: o.concurrency ?? CONCURRENT_TRIALS,
     environment: { type: "docker", delete: true },
     agents: [
-      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig } },
+      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig, setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup") } },
       {
         import_path: "akm_opencode:AkmOpenCode",
         ...both,
@@ -389,6 +390,7 @@ export function jobConfig(o: {
         kwargs: {
           version: PINS.opencode,
           opencode_config: opencodeConfig,
+          setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup"),
           akm_cli_version: arm.cli.version,
           akm_plugin_version: arm.plugin.version,
           libraries_dir: o.librariesDir,

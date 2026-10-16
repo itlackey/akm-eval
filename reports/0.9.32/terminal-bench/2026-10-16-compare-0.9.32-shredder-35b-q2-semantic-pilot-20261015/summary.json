@@ -1,0 +1,595 @@
+{
+  "eval": "terminal-bench",
+  "corpus": "public",
+  "corpus_folder": null,
+  "label": "compare-0.9.32-shredder-35b-q2-semantic-pilot-20261015",
+  "date": "2026-10-16T05:20:37.824Z",
+  "git_commit": "e2477a0",
+  "model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+  "akm_version": "0.9.32",
+  "akm_bin": "akm-cli@0.9.32",
+  "akm_build": null,
+  "akm_build_fingerprint": "501a7fa0df80032eae2cafff7c6b46f585048874bd632351a8994ebc8bb659b2",
+  "akm_env": {
+    "AKM_EVAL_SEMANTIC_SEARCH": "1"
+  },
+  "akm_install": {
+    "from": "release",
+    "plugin_from": "release",
+    "plugin_version": "0.10.261002-beta",
+    "packages": [],
+    "dependency_tree_sha256": "a56e4b4cda3b287929341a96976f761f8fbf96b2ea9c35785c77f6046e351843",
+    "locked": false,
+    "observed": {
+      "akm_version": [
+        "0.9.32"
+      ],
+      "plugin_akm_cli": [
+        "0.10.261003-beta"
+      ],
+      "assets_indexed": [
+        251
+      ],
+      "env": {
+        "AKM_BUNDLE_DIR": "/opt/akm/bundle",
+        "AKM_CONFIG_DIR": "/opt/akm/config",
+        "AKM_DATA_DIR": "/opt/akm/data",
+        "AKM_CACHE_DIR": "/opt/akm/cache",
+        "AKM_STATE_DIR": "/opt/akm/state",
+        "AKM_OPENCODE_CLI": "/usr/local/bin/akm",
+        "AKM_AUTO_FEEDBACK": "0",
+        "AKM_AUTO_LEARNING": "0",
+        "AKM_AUTO_MEMORY": "0",
+        "AKM_INDEX_ON_SESSION_END": "0",
+        "AKM_CURATE_TIMEOUT": "15",
+        "AKM_PENDING_PROPOSAL_TIMEOUT": "5",
+        "AKM_EVAL_SEMANTIC_SEARCH": "1"
+      },
+      "dependency_trees": [
+        "a56e4b4cda3b287929341a96976f761f8fbf96b2ea9c35785c77f6046e351843"
+      ],
+      "lockfiles": {
+        "akm_cli": null,
+        "plugin": "d31a9c30dd8111661a16796d4f06e1fcb0cd5fa44338fb1fa58baca7d28f9ab1"
+      },
+      "search_mode": [
+        "semantic"
+      ],
+      "embeddings_indexed": [
+        263
+      ]
+    }
+  },
+  "pins": {
+    "akm_cli": "0.9.32",
+    "akm_plugin": "0.10.261002-beta",
+    "opencode": "1.18.34",
+    "harbor": "0.24.0"
+  },
+  "dataset": {
+    "name": "terminal-bench/terminal-bench-2-1",
+    "ref": "sha256:7d7bdc1cbedad549fc1140404bd4dc45e5fd0ea7c4186773687d177ad3a0699a",
+    "source": "https://github.com/harbor-framework/terminal-bench-2-1",
+    "licence": "Apache-2.0",
+    "tasks_in_dataset": 89,
+    "tasks_run_with_another_digest": []
+  },
+  "library": {
+    "path": "corpus/library",
+    "assets": 251,
+    "measured_with": {
+      "akm_version": "0.9.32",
+      "akm_bin": "akm",
+      "akm_build": null,
+      "akm_build_fingerprint": null
+    },
+    "sha256": "8813ba794a3d327c4d58927ef75edf8c080e8b5814c8e523e620774b5980a227"
+  },
+  "limit": 2,
+  "seed": null,
+  "n_tasks": 2,
+  "attempts": 1,
+  "harbor_exit": 0,
+  "status": "complete",
+  "aborted_reason": null,
+  "harbor_config_sha256": "becfd512c0ed4e68f6d1a8a24d3faf4896026d55339c4d8f8637f27a992084c4",
+  "completion": {
+    "expected": 4,
+    "completed": 3,
+    "failed": 1,
+    "missing": 0,
+    "unexpected": 0,
+    "control": {
+      "expected": 2,
+      "completed": 2,
+      "failed": 0,
+      "missing": 0,
+      "unexpected": 0
+    },
+    "akm": {
+      "expected": 2,
+      "completed": 1,
+      "failed": 1,
+      "missing": 0,
+      "unexpected": 0
+    }
+  },
+  "assets_sha256": "9ee744bf9dbbf582540cfb86180b03869b42450639ba792843f36a8c058a17de",
+  "engine": {
+    "model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+    "endpoint": "https://ai.lab.fwdslsh.dev"
+  },
+  "config": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 1,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "eval_opencode:EvalOpenCode",
+        "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "provider": {
+              "openai": {
+                "models": {
+                  "shredder-eval/akm-eval-qwen35b-q2": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+        "override_setup_timeout_sec": 2700,
+        "env": {
+          "AKM_TASK_STASH": "library"
+        },
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "provider": {
+              "openai": {
+                "models": {
+                  "shredder-eval/akm-eval-qwen35b-q2": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "akm_cli_version": "0.9.32",
+          "akm_plugin_version": "0.10.261002-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "name": "terminal-bench/terminal-bench-2-1",
+        "ref": "sha256:7d7bdc1cbedad549fc1140404bd4dc45e5fd0ea7c4186773687d177ad3a0699a",
+        "task_names": [
+          "terminal-bench/build-cython-ext",
+          "terminal-bench/chess-best-move"
+        ]
+      }
+    ]
+  },
+  "timeouts": {
+    "control": 0,
+    "akm": 1
+  },
+  "n_errored": 0,
+  "metrics": {
+    "control": {
+      "pass_rate": 0,
+      "passed": 0,
+      "scored": 2,
+      "errored": 0,
+      "timeouts": 0,
+      "minutes": 7.9,
+      "agent_minutes": 7.4,
+      "cost_usd": null
+    },
+    "akm": {
+      "pass_rate": 0,
+      "passed": 0,
+      "scored": 2,
+      "errored": 0,
+      "timeouts": 1,
+      "minutes": 12,
+      "agent_minutes": 8.5,
+      "cost_usd": null
+    },
+    "delta": {
+      "value": 0,
+      "lo": 0,
+      "hi": 0,
+      "n": 2
+    },
+    "better": {
+      "akm": 0,
+      "control": 0,
+      "same": 2
+    },
+    "engagement": {
+      "rate": 0,
+      "called": 0,
+      "trials": 2,
+      "curated_read": 0,
+      "control_calls": 0
+    }
+  },
+  "job": {
+    "n_attempts": 1,
+    "n_concurrent_trials": 1,
+    "environment": {
+      "type": "docker",
+      "delete": true
+    },
+    "agents": [
+      {
+        "import_path": "eval_opencode:EvalOpenCode",
+        "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+        "override_setup_timeout_sec": 2700,
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "provider": {
+              "openai": {
+                "models": {
+                  "shredder-eval/akm-eval-qwen35b-q2": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "import_path": "akm_opencode:AkmOpenCode",
+        "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+        "override_setup_timeout_sec": 2700,
+        "env": {
+          "AKM_TASK_STASH": "library"
+        },
+        "kwargs": {
+          "version": "1.18.34",
+          "opencode_config": {
+            "$schema": "https://opencode.ai/config.json",
+            "autoupdate": false,
+            "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "provider": {
+              "openai": {
+                "models": {
+                  "shredder-eval/akm-eval-qwen35b-q2": {
+                    "limit": {
+                      "context": 131072,
+                      "output": 8192
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "akm_cli_version": "0.9.32",
+          "akm_plugin_version": "0.10.261002-beta",
+          "libraries_dir": "libraries",
+          "akm_env": {
+            "AKM_EVAL_SEMANTIC_SEARCH": "1"
+          }
+        }
+      }
+    ],
+    "datasets": [
+      {
+        "name": "terminal-bench/terminal-bench-2-1",
+        "ref": "sha256:7d7bdc1cbedad549fc1140404bd4dc45e5fd0ea7c4186773687d177ad3a0699a",
+        "task_names": [
+          "terminal-bench/build-cython-ext",
+          "terminal-bench/chess-best-move"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "control": {
+      "trials": 2,
+      "scored": 2,
+      "errored": 0,
+      "passed": 0,
+      "tasks": 2,
+      "pass_rate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0,
+        "n": 2
+      },
+      "exceptions": {},
+      "timeouts": 0,
+      "per_trial": {
+        "minutes": 7.9,
+        "agent_minutes": 7.4,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 939389,
+        "cache": 890458,
+        "output": 685,
+        "cost_usd": null
+      }
+    },
+    "akm": {
+      "trials": 2,
+      "scored": 2,
+      "errored": 0,
+      "passed": 0,
+      "tasks": 2,
+      "pass_rate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0,
+        "n": 2
+      },
+      "exceptions": {
+        "AgentTimeoutError": 1
+      },
+      "timeouts": 1,
+      "per_trial": {
+        "minutes": 12,
+        "agent_minutes": 8.5,
+        "cost_usd": null
+      },
+      "tokens": {
+        "input": 464549,
+        "cache": 432884,
+        "output": 82,
+        "cost_usd": null
+      }
+    },
+    "delta": {
+      "value": 0,
+      "lo": 0,
+      "hi": 0,
+      "n": 2,
+      "ci": [
+        0,
+        0
+      ],
+      "resampled": "tasks"
+    },
+    "better": {
+      "akm": 0,
+      "control": 0,
+      "same": 2
+    },
+    "sign_test": {
+      "akm": 0,
+      "control": 0,
+      "n": 0,
+      "p": 1
+    },
+    "flips": {
+      "control": {
+        "tasks": 0,
+        "of": 0
+      },
+      "akm": {
+        "tasks": 0,
+        "of": 0
+      }
+    },
+    "engagement": {
+      "trials": 2,
+      "called": 0,
+      "rate": 0,
+      "calls": {},
+      "curated_read": 0,
+      "called_split": {
+        "trials": 0,
+        "passed": 0,
+        "delta": null
+      },
+      "not_called_split": {
+        "trials": 2,
+        "passed": 0,
+        "delta": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0,
+          "n": 2,
+          "ci": [
+            0,
+            0
+          ],
+          "resampled": "tasks"
+        }
+      },
+      "control_calls": 0
+    },
+    "tasks": [
+      {
+        "task": "build-cython-ext",
+        "control": "0/1",
+        "akm": "0/1",
+        "called": "0/1",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      },
+      {
+        "task": "chess-best-move",
+        "control": "0/1",
+        "akm": "0/1 T",
+        "called": "0/1",
+        "disagree": false,
+        "flips": {
+          "control": 0,
+          "akm": 0
+        }
+      }
+    ]
+  },
+  "manifest": {
+    "manifest_version": 1,
+    "eval": "terminal-bench",
+    "corpus": "public",
+    "collection": null,
+    "mode": null,
+    "harness_version": 3,
+    "collector": {
+      "version": "0.4"
+    },
+    "scorer": {
+      "version": "0.4"
+    },
+    "cases": {
+      "build-cython-ext": {
+        "input_sha256": "23bb6f675cc7b9aa8ff125c36165f06f3886d57011512b57c098e283b41d651d",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "chess-best-move": {
+        "input_sha256": "e2925e6a02d68bb2d2565e93c6803d568f6afdb258ae06d3c9577eb47173dae1",
+        "label_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      }
+    },
+    "akm": {
+      "version": "0.9.32",
+      "bin": "akm-cli@0.9.32",
+      "build": null,
+      "build_fingerprint": "501a7fa0df80032eae2cafff7c6b46f585048874bd632351a8994ebc8bb659b2"
+    },
+    "config": {
+      "redacted": {
+        "n_concurrent_trials": 1,
+        "environment": {
+          "type": "docker",
+          "delete": true
+        },
+        "agents": [
+          {
+            "import_path": "eval_opencode:EvalOpenCode",
+            "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "override_setup_timeout_sec": 2700,
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "shredder-eval/akm-eval-qwen35b-q2": {
+                        "limit": {
+                          "context": 131072,
+                          "output": 8192
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "import_path": "akm_opencode:AkmOpenCode",
+            "model_name": "openai/shredder-eval/akm-eval-qwen35b-q2",
+            "override_setup_timeout_sec": 2700,
+            "env": {
+              "AKM_TASK_STASH": "library"
+            },
+            "kwargs": {
+              "version": "1.18.34",
+              "opencode_config": {
+                "$schema": "https://opencode.ai/config.json",
+                "autoupdate": false,
+                "small_model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+                "provider": {
+                  "openai": {
+                    "models": {
+                      "shredder-eval/akm-eval-qwen35b-q2": {
+                        "limit": {
+                          "context": 131072,
+                          "output": 8192
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "akm_cli_version": "0.9.32",
+              "akm_plugin_version": "0.10.261002-beta",
+              "libraries_dir": "libraries",
+              "akm_env": {
+                "AKM_EVAL_SEMANTIC_SEARCH": "1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "settings": {
+      "strategy": null,
+      "config_patch_sha256": null,
+      "timeout_ms": null,
+      "seed": null
+    },
+    "engines": {
+      "opencode": {
+        "model": "openai/shredder-eval/akm-eval-qwen35b-q2",
+        "endpoint": "https://ai.lab.fwdslsh.dev",
+        "temperature": null,
+        "enableThinking": null,
+        "timeoutMs": null
+      }
+    },
+    "treatment_hints": {
+      "attempts": 1
+    },
+    "completion": {
+      "selected": [
+        "build-cython-ext",
+        "chess-best-move"
+      ],
+      "scored": [
+        "build-cython-ext",
+        "chess-best-move"
+      ],
+      "errored": []
+    }
+  },
+  "wall_seconds": 2404.439
+}
