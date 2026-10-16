@@ -21,6 +21,7 @@ evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 ```
 
 - `--limit N` runs N tasks across the families, once per arm. Without it every task runs 3 times per arm (36 trials, about 30 minutes, four at a time).
+- `--concurrency N` selects simultaneous trials (default 4). Use `--concurrency 1` to run one trial at a time; the selected width is saved in the job and summary.
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model NAME` is the model, resolved as in the other evals (a `models.json` line, or the gateway in `MODEL_BASE_URL` with `MODEL_API_KEY`) and given to opencode as `openai/<id>`. `OPENAI_BASE_URL` and `OPENAI_API_KEY` stand in for empty `MODEL_*` values.
 - `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.10.261003-beta`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. The default CLI comes with plugin `0.10.261002-beta`, and `akm-cli@0.9.26` with plugin `0.9.26202610051302`; each plugin depends on its exact CLI, and all four have committed dependency locks. `AKM_BIN` is not read.

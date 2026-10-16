@@ -18,7 +18,7 @@ Every folder below has a `run` script. Every `run` takes `--corpus`, `--limit` a
 | `evals/extract` | Does extraction pull durable insights from session logs, and leave routine sessions empty? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
 | `evals/nightly` | Does a full nightly improve run give good results unattended? | `--cases` `--yes` `--repeat` `--embedder` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
 | `evals/promotion` | Of the promotions consolidate proposes, does the drain's judgment tier accept the good ones? | `--cases` `--yes` `--repeat` `--strategy` `--config-patch` `--model` `--akm` `--semantic` |
-| `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` |
+| `evals/agent-ab` | Does the akm plugin change how often an agent completes tasks where retrieval is the only way in? | `--cases` `--yes` `--repeat` `--concurrency` `--model` `--akm` `--akm-env` `--semantic` |
 | `evals/bakeoff` | Does the model do what akm asks in the jobs no other eval measures? | `--cases` `--yes` `--process` `--repeat` `--config-patch` `--model` `--akm` `--semantic` |
 | `benchmarks/longmemeval` | How does akm do as a memory backend on LongMemEval, next to a full-context baseline? | `--cases` `--yes` `--repeat` `--sample-seed` `--retrieval-only` `--semantic` `--resume` `--model` `--judge-model` `--akm` |
 | `benchmarks/terminal-bench` | Does akm change pass rates on Terminal-Bench tasks? | `--attempts` `--cases` `--yes` `--repeat` `--model` `--akm` `--akm-env` `--semantic` `--resume` `--concurrency` |

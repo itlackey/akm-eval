@@ -208,6 +208,14 @@ describe("runCorpus", () => {
     expect(s.report.akm).toMatchObject({ trials: 3, passed: 3 });
   });
 
+  test("forwards single-trial concurrency to Harbor and retains it in saved settings", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "serial", limit: 1, concurrency: 1, env }, join(root, "results")));
+    expect(readJson(join(s.results_dir, "job.json")).n_concurrent_trials).toBe(1);
+    expect(readJson(join(s.results_dir, "summary.json")).job.n_concurrent_trials).toBe(1);
+    expect(s.completion.expected).toBe(2);
+  });
+
   test("records that the run finished: its status, the grid of trials, the model's endpoint without a key, the job config and the digest of the cases", async () => {
     const { root, env } = fakeUv();
     const withKey = { ...env, OPENAI_API_KEY: "sk-model-key", OPENAI_BASE_URL: "http://user:hunter2@192.0.2.5:8080/v1" };
