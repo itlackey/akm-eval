@@ -264,7 +264,7 @@ class AkmOpenCode(EvalOpenCode):
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
         seeded = await self.exec_as_agent(environment, command=self._seed_command())
         # Boot opencode once with the real config and model, so the plugin is fetched now, not in the measured run.
-        # No provider key is passed, so the model call fails and costs nothing: only the start-up is wanted.
+        # No real provider key is passed: only the start-up is wanted, without a paid model call.
         await self.exec_as_agent(
             environment,
             command=self._warm_command(),
@@ -389,9 +389,11 @@ class AkmOpenCode(EvalOpenCode):
 
     def _warm_command(self) -> str:
         config = self._build_register_config_command()
+        # Zen hides paid models without a key, before plugins load. A fake key lets startup reach the plugin; inference fails free.
+        key = "OPENCODE_API_KEY=akm-eval-warmup " if (self.model_name or "").startswith("opencode/") else ""
         return (
             f"set -euo pipefail; {NVM}{config} && mkdir -p /tmp/akm-warm && cd /tmp/akm-warm && "
-            f"timeout 600 opencode --model={shlex.quote(self.model_name or '')} run --format=json "
+            f"{key}timeout 600 opencode --model={shlex.quote(self.model_name or '')} run --format=json "
             "--dangerously-skip-permissions -- warmup >/dev/null 2>&1 || true"
         )
 
