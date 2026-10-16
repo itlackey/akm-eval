@@ -280,7 +280,7 @@ test('small touch screens show complete run cards with native scrolling, sorting
     await expect(page.locator('.tabulator-header')).not.toBeVisible();
     await expect(cards).toHaveCount(25);
     expect(await cardIds()).toEqual((await exportRows(page)).slice(0, 25).map(row => row.id));
-    await expect(cards.first()).toContainText('AKM 0.10.261005-beta');
+    await expect(cards.first()).toContainText(`AKM ${(await exportRows(page))[0].akm_version}`);
     await expect(cards.first()).toContainText('Quality metric');
     await expect(cards.first()).toContainText((await exportRows(page))[0].label);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
