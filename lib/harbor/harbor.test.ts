@@ -974,3 +974,11 @@ test("custom model limits reach both Harbor arms while model aliases and credent
   expect(settings.env.OPENAI_API_KEY).toBe("synthetic-model-key");
   expect(JSON.stringify(job)).not.toContain("synthetic-model-key");
 });
+
+
+test("forwards explicitly selected model reasoning effort to both Harbor arms", () => {
+  const settings = modelSettings("local", { KEY: "test" }, { local: { base_url: "https://gateway.example/v1", model: "shredder-eval/qwen", api_key_env: "KEY", chat: { reasoning_effort: "none" } } });
+  expect(settings.modelReasoningEffort).toBe("none");
+  const cfg = jobConfig({ name: "no-thinking", model: settings.model, modelReasoningEffort: settings.modelReasoningEffort, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["shredder-eval/qwen"].options).toEqual({ reasoningEffort: "none" });
+});

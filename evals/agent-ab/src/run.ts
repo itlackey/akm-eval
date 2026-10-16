@@ -155,7 +155,7 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(EVA
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; modelLimits?: ModelLimits; concurrency?: number; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const all = taskNames(join(c.folder, "tasks"));
@@ -164,7 +164,7 @@ export async function runCorpus(
   const dir = makeResultsDir(results, ctx.label);
   const arm = ctx.arm ?? releaseArm();
   const akmEnv = ctx.akmEnv ?? {};
-  const got = await collect({ corpus: c.name, assets: c.folder, tasks, of: all.length, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv });
+  const got = await collect({ corpus: c.name, assets: c.folder, tasks, of: all.length, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv });
   const { trials, observed } = got; // none when Harbor made no job: every cell is then missing, and the run is aborted
   const completion = completionOf(trials, tasks, attempts);
   const { status, aborted_reason } = statusOf(got.exit, completion, existsSync(got.jobDir), observed);
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env, modelLimits } = preflight(values);
+  const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { model, modelLimits, concurrency, label: runLabel, limit, env, arm, akmEnv }))));
+    for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { model, modelLimits, modelReasoningEffort, concurrency, label: runLabel, limit, env, arm, akmEnv }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);
   } finally {
     rmSync(packs, { recursive: true, force: true });

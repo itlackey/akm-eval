@@ -261,7 +261,7 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(BEN
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; modelLimits?: ModelLimits; concurrency?: number; resume?: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; resume?: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const lock = readLock();
@@ -276,7 +276,7 @@ export async function runCorpus(
   if (prior) {
     const cfg = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
     const jobDir = join(dir, "jobs", jobName(c.name));
-    const wanted = jobConfig({ name: jobName(c.name), model: ctx.model, modelLimits: ctx.modelLimits,
+    const wanted = jobConfig({ name: jobName(c.name), model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort,
       concurrency: ctx.concurrency ?? cfg.n_concurrent_trials, lock, tasks, attempts, jobsDir: join(dir, "jobs"),
       librariesDir: join(dir, "libraries"), arm, akmEnv, libraryAssets: cfg.agents[1].kwargs.library_assets,
       packagesDir: arm.cli.tarball || arm.plugin.tarball ? join(dir, "akm-packages") : null });
@@ -294,7 +294,7 @@ export async function runCorpus(
     save(got, true);
     got.exit = await runHarbor(join(dir, "job.json"), join(dir, "harbor.log"), ctx.env, { resume: jobDir });
   } else {
-    got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv, onReady: prepared => { save(prepared, true); } });
+    got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv, onReady: prepared => { save(prepared, true); } });
   }
   const summary = save(got);
   clearRunning(dir);
@@ -342,7 +342,7 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env, modelLimits } = preflight(values);
+  const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
@@ -351,7 +351,7 @@ async function main(): Promise<void> {
   try {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
-    const ctx = { model, modelLimits, env, limit, attempts: values.attempts === undefined ? undefined : attempts, arm, akmEnv, concurrency, resume: values.resume };
+    const ctx = { model, modelLimits, modelReasoningEffort, env, limit, attempts: values.attempts === undefined ? undefined : attempts, arm, akmEnv, concurrency, resume: values.resume };
     const summaries: Summary[] = [];
     for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);

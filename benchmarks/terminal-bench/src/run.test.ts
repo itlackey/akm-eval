@@ -1065,8 +1065,8 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
 
 test("Terminal-Bench forwards custom model limits to the saved configuration of both arms", () => {
   const limits = { context: 32768, output: 4096 };
-  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
-  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
+  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, modelReasoningEffort: "none", lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"]).toEqual({ limit: limits, options: { reasoningEffort: "none" } });
 });
 
 
