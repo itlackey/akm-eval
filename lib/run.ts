@@ -105,7 +105,8 @@ export interface Summary {
   /** The run's model calls, from akm's own record of them (lib/akm/usage.ts). */
   model_calls: ModelCalls | null;
   semantic_verification: SemanticVerification | null;
-  concurrency: number;
+  /** How many cases ran at once. Absent for an eval that runs its cases as one batch (collectAll). */
+  concurrency?: number;
   /** How long one akm command could run, in milliseconds. */
   timeout_ms: number;
   /** What the run was made of (see lib/manifest.ts). */
@@ -147,8 +148,13 @@ export interface EvalSpec<Case = any, Row extends Obj = Obj, Extra extends Obj =
    * corpus and nothing that `openRun` opens.
    */
   configFor(ctx: RunCtx & Extra): Record<string, any>;
-  /** One case: what akm is asked, and the scored row. An error of the case is a row that the measurement calls errored, not a throw. */
-  runCase(c: Case, ctx: RunCtx & Extra): Promise<Row>;
+  /** One case: what akm is asked, and the scored row. An error of the case is a row that the measurement calls errored, not a throw. Not needed with `collectAll`. */
+  runCase?(c: Case, ctx: RunCtx & Extra): Promise<Row>;
+  /**
+   * Why a row counts toward the give-up rule, or null when it does not: five such rows in a row stop the run. Default: an errored row, with its
+   * `error`. judge-gate counts a reply with no verdict too, so a dead endpoint whose replies akm routes to review does not pass for a complete run.
+   */
+  giveUpOn?(row: Row): string | null;
   /** The progress line of a finished case, after its `[n/N]` counter. */
   progress(c: Case, row: Row): string;
   /**
@@ -207,6 +213,8 @@ function asFatal<T>(run: () => T): T {
 
 /** The cases through `ctx.concurrency` workers. `record` is given each row as its case finishes; the rows returned are in the order of the cases. */
 async function collect<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Case, Row, Extra>, cases: Case[], ctx: RunCtx & Extra, record: (row: Row, c: Case) => void): Promise<{ rows: Row[]; aborted?: string }> {
+  const runCase = spec.runCase;
+  if (!runCase) throw new Error(`${spec.measurement.eval}: the spec has neither runCase nor collectAll`);
   const finished: { at: number; row: Row }[] = [];
   let next = 0;
   let errors = 0;
@@ -215,15 +223,16 @@ async function collect<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<
     while (next < cases.length && lastError === undefined) {
       const at = next++;
       const c = cases[at] as Case;
-      const row = await spec.runCase(c, ctx);
+      const row = await runCase(c, ctx);
       finished.push({ at, row });
       record(row, c);
-      if (!spec.measurement.errored(row)) errors = 0;
-      else if (++errors >= GIVE_UP_AFTER) lastError ??= String(row.error ?? "") || "no message";
+      const why = spec.giveUpOn ? spec.giveUpOn(row) : spec.measurement.errored(row) ? String(row.error ?? "") || "no message" : null;
+      if (why === null) errors = 0;
+      else if (++errors >= GIVE_UP_AFTER) lastError ??= why;
     }
   };
   await Promise.all(Array.from({ length: Math.min(ctx.concurrency, cases.length) }, worker));
-  const aborted = lastError === undefined ? undefined : `${GIVE_UP_AFTER} cases in a row errored, so the run stopped after ${finished.length} of ${cases.length}. Last error: ${lastError}`;
+  const aborted = lastError === undefined ? undefined : `${GIVE_UP_AFTER} cases in a row ${spec.giveUpOn ? "gave no result" : "errored"}, so the run stopped after ${finished.length} of ${cases.length}. Last error: ${lastError}`;
   return { rows: finished.sort((a, b) => a.at - b.at).map((f) => f.row), aborted };
 }
 
@@ -310,7 +319,7 @@ export async function runCorpus<Case, Row extends Obj, Extra extends Obj>(
     ...done.extras,
     model_calls: takeModelCalls(),
     semantic_verification: takeSemanticVerification(),
-    concurrency: ctx.concurrency,
+    ...(spec.collectAll ? {} : { concurrency: ctx.concurrency }), // a batch has no pool
     timeout_ms: ctx.timeoutMs,
     manifest,
     results_dir: dir,
@@ -336,7 +345,7 @@ function usageOf(spec: EvalSpec): string {
     modelUsage,
     akmUsage,
     `  --label   names the results folder: <UTC date>-<label>. Default: the model name.`,
-    ...(spec.collectAll ? [] : [`  --concurrency  run N cases at a time, each in a sandbox of its own. Default: ${spec.defaultConcurrency ?? 1}.`]),
+    ...(spec.collectAll ? [] : [`  --concurrency  run N cases at a time. Default: ${spec.defaultConcurrency ?? 1}.`]),
     `  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: ${spec.defaultTimeoutMs}.`,
   ];
   const synopsis = `[--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N]${flags ? ` ${flags}` : ""}${spec.strategy === undefined ? "" : " [--strategy NAME]"} [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND]${spec.collectAll ? "" : " [--concurrency N]"} [--timeout-ms N]`;

@@ -106,7 +106,7 @@ describe("what a run writes holds no endpoint credential", () => {
     console.log = () => {};
     let summary;
     try {
-      summary = await runCorpus({ name: "public", folder: folders.assets, rewrite: false, seed: null, flag: "--corpus public" }, { config, baseUrl: settings.baseUrl, version: "0.9.99-test", model: settings.name, label: "e2e" }, folders.results);
+      summary = await runCorpus({ name: "public", folder: folders.assets, rewrite: false, seed: null, flag: "--corpus public" }, { baseUrl: settings.baseUrl, model: settings.name, hasKey: settings.hasKey, version: "0.9.99-test", label: "e2e" }, folders.results);
     } finally {
       console.log = quiet;
     }

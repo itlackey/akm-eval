@@ -331,7 +331,7 @@ describe("the flags and the usage", () => {
         "  --model         the model, as the gateway names it",
         "  --akm           the command that runs akm",
         "  --label   names the results folder: <UTC date>-<label>. Default: the model name.",
-        "  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 1.",
+        "  --concurrency  run N cases at a time. Default: 1.",
         "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
       ]) expect(r.out).toContain(line);
       expect(r.out).toEndWith(`\n\nTested with akm 0.9.25 or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
@@ -779,7 +779,7 @@ describe("what a spec can set", () => {
     setCases(ok(4));
     const spec = { FAKE_SPEC: JSON.stringify({ defaultConcurrency: 2, defaultTimeoutMs: 20_000 }) };
     const help = run(["--help"], spec).out;
-    expect(help).toContain("  --concurrency  run N cases at a time, each in a sandbox of its own. Default: 2.\n");
+    expect(help).toContain("  --concurrency  run N cases at a time. Default: 2.\n");
     expect(help).toContain("  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 20000.\n");
     const plain = run(["--label", "spec-defaults"], spec);
     expect(plain.contexts.map((c) => [c.concurrency, c.timeoutMs])).toEqual(Array(4).fill([2, 20_000]));

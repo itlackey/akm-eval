@@ -25,8 +25,8 @@ export const STRATEGY = "extract-only";
  * and ask for no thinking. Session assets are off, so a session takes one model call and not two. The heuristic
  * triage gate is off too, which akm's default strategy turns on, so every session reaches the model.
  */
-export function extractConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey);
+export function extractConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "model", provider);
   config.engines.model.temperature = 0;
   config.engines.model.enableThinking = false;
   config.improve = { strategies: { [STRATEGY]: { engine: "model", processes: { extract: { enabled: true, indexSessions: false, triage: { enabled: false } } } } } };
@@ -106,13 +106,15 @@ export interface CaseContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
   overrides?: Overrides;
   /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it EXTRACT_TIMEOUT_MS applies. */
   timeoutMs?: number;
 }
 
 /** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
-export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "overrides">): Record<string, any> => patchedConfig(extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "provider" | "overrides">): Record<string, any> => patchedConfig(extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /**
  * One case: a new sandbox with the session where akm reads Claude Code sessions, extract run on that session alone,

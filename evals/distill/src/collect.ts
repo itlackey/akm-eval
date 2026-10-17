@@ -24,8 +24,8 @@ export const IMPROVE_TIMEOUT_MS = 15 * 60_000;
 export const STATES = ["pending", "accepted", "rejected", "reverted"];
 
 /** One LLM engine, the model under test, and a strategy that runs distill alone. Requests use temperature 0 and ask for no thinking. */
-export function distillConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey);
+export function distillConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "model", provider);
   config.engines.model.temperature = 0;
   config.engines.model.enableThinking = false;
   config.defaults.improveStrategy = STRATEGY;
@@ -43,8 +43,8 @@ export function distillConfig(baseUrl: string, model: string, hasKey: boolean): 
 }
 
 /** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
-export const configFor = (ctx: { baseUrl: string; model: string; hasKey: boolean; overrides?: Overrides }): Record<string, unknown> =>
-  patchedConfig(distillConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const configFor = (ctx: { baseUrl: string; model: string; hasKey: boolean; provider?: string; overrides?: Overrides }): Record<string, unknown> =>
+  patchedConfig(distillConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /** The ref of a memory in a case, which `akm improve` takes as its scope. */
 export const memoryRef = (c: Pick<LoadedCase, "name">): string => `memories/${c.name}`;
