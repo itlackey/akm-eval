@@ -44,8 +44,9 @@ from typing import override
 
 from pydantic import Field, field_validator, model_validator
 
-from harbor.agents.installed.opencode import OpenCode, OpenCodeOptions
-from eval_opencode import EvalOpenCode
+from harbor.agents.installed.opencode import OpenCode
+from eval_opencode import EvalOpenCode, EvalOpenCodeOptions
+from setup_cache import SetupCache
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
@@ -115,7 +116,7 @@ def check_akm_env(env: dict[str, str]) -> dict[str, str]:
     return env
 
 
-class AkmOpenCodeOptions(OpenCodeOptions):
+class AkmOpenCodeOptions(EvalOpenCodeOptions):
     akm_cli_version: str
     akm_plugin_version: str
     libraries_dir: str  # one folder per library, each laid out as an akm bundle
@@ -255,14 +256,7 @@ class AkmOpenCode(EvalOpenCode):
         if self.options.packages_dir:
             await environment.upload_dir(Path(self.options.packages_dir), PACKAGES)
             await self.exec_as_root(environment, command=f"chown -R {owner} {PACKAGES}")
-        for lock, prefix in ((self._akm_lock, CLI_PREFIX), (self._plugin_lock, PLUGIN_PREFIX)):
-            if lock:
-                await environment.upload_dir(lock, prefix)
-                await self.exec_as_root(environment, command=f"chown -R {owner} {prefix}")
-        await self.exec_as_agent(environment, command=self._install_akm_command())
-        found = await self.exec_as_agent(environment, command=f"{NVM}readlink -f {CLI_BIN}")
-        await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
-        await self.exec_as_agent(environment, command=self._install_plugin_command())
+        await self._prepare_dependencies(environment)
         # Before the tarballs go: `npm ls` reads a package installed from one against the file it names.
         trees = await self.exec_as_agent(environment, command=self._trees_command())
         await self.exec_as_agent(environment, command=f"rm -rf {PACKAGES}")
@@ -270,7 +264,7 @@ class AkmOpenCode(EvalOpenCode):
         await self.exec_as_root(environment, command=f"chown -R {owner} {LIBRARIES}")
         seeded = await self.exec_as_agent(environment, command=self._seed_command())
         # Boot opencode once with the real config and model, so the plugin is fetched now, not in the measured run.
-        # No provider key is passed, so the model call fails and costs nothing: only the start-up is wanted.
+        # No real provider key is passed: only the start-up is wanted, without a paid model call.
         await self.exec_as_agent(
             environment,
             command=self._warm_command(),
@@ -280,6 +274,42 @@ class AkmOpenCode(EvalOpenCode):
         locks = {"akm_cli": lock_sha256(self._akm_lock), "plugin": lock_sha256(self._plugin_lock)}
         self._installed = install_record(seeded.stdout or "", checked.stdout or "", {**AKM_ENV, **self.options.akm_env}, trees.stdout or "", locks)
         self._record(INSTALL_FILE, self._installed)
+
+    async def _install_dependencies(self, environment):
+        for lock, prefix in ((self._akm_lock, CLI_PREFIX), (self._plugin_lock, PLUGIN_PREFIX)):
+            if lock:
+                await environment.upload_dir(lock, prefix)
+                await self.exec_as_root(environment, command=f"chown -R {shlex.quote(str(environment.default_user or 'root'))} {prefix}")
+        await self.exec_as_agent(environment, command=self._install_akm_command())
+        await self._link_cli(environment)
+        await self.exec_as_agent(environment, command=self._install_plugin_command())
+
+    async def _link_cli(self, environment):
+        found = await self.exec_as_agent(environment, command=f"{NVM}readlink -f {CLI_BIN}")
+        await self.exec_as_root(environment, command=f"ln -sf {shlex.quote(found.stdout.strip().splitlines()[-1])} {AKM_CLI}")
+
+    async def _prepare_dependencies(self, environment):
+        cache = self._setup_cache
+        if cache is None:
+            await self._install_dependencies(environment)
+            return
+        # Checkout tarballs are staged per build; their prepared files stay with that build.
+        if self.options.packages_dir:
+            packages = Path(self.options.packages_dir)
+            cache = SetupCache(packages.with_name(packages.name + "-prepared") / cache.root.name)
+        abi = await self.exec_as_agent(environment, command=f"{NVM}node -p process.versions.modules")
+        name = "--".join(["akm", self.options.akm_cli_version, self.options.akm_plugin_version, abi.stdout.strip(),
+                          lock_sha256(self._akm_lock) or "unlocked", lock_sha256(self._plugin_lock) or "unlocked"])
+        async with cache.lock(name):
+            if not await cache.restore(name, self, environment, AKM_ROOT, root=True):
+                await self._setup_cache.restore_npm(self, environment)
+                await self._install_dependencies(environment)
+                await cache.save(name, self, environment, AKM_ROOT, "cli plugin", root=True)
+                await self._setup_cache.save_npm(self, environment)
+            else:
+                await self._link_cli(environment)
+            owner = shlex.quote(str(environment.default_user or "root"))
+            await self.exec_as_root(environment, command=f"chown -R {owner} {CLI_PREFIX} {PLUGIN_PREFIX}")
 
     def _akm_target(self) -> str:
         """What `npm install` puts in as akm-cli when there is no lockfile: the tarball of a checkout, or the release the job names."""
@@ -359,9 +389,11 @@ class AkmOpenCode(EvalOpenCode):
 
     def _warm_command(self) -> str:
         config = self._build_register_config_command()
+        # Zen hides paid models without a key, before plugins load. A fake key lets startup reach the plugin; inference fails free.
+        key = "OPENCODE_API_KEY=akm-eval-warmup " if (self.model_name or "").startswith("opencode/") else ""
         return (
             f"set -euo pipefail; {NVM}{config} && mkdir -p /tmp/akm-warm && cd /tmp/akm-warm && "
-            f"timeout 600 opencode --model={shlex.quote(self.model_name or '')} run --format=json "
+            f"{key}timeout 600 opencode --model={shlex.quote(self.model_name or '')} run --format=json "
             "--dangerously-skip-permissions -- warmup >/dev/null 2>&1 || true"
         )
 

@@ -20,6 +20,7 @@ evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 ```
 
 - `--limit N` runs N tasks across the families, once per arm. Without it every task runs 3 times per arm (36 trials, about 30 minutes, four at a time).
+- `--concurrency N` selects simultaneous trials (default 4). Use `--concurrency 1` to run one trial at a time; the selected width is saved in the job and summary. Pick it before the full run, and see "Concurrency and Docker networks" for more than 8.
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model NAME` is the model, resolved as in the other evals (a `models.json` line, or the gateway in `MODEL_BASE_URL` with `MODEL_API_KEY`) and given to opencode as `openai/<id>`. `OPENAI_BASE_URL` and `OPENAI_API_KEY` stand in for empty `MODEL_*` values.
 - `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.10.261003-beta`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. The default CLI comes with plugin `0.10.261002-beta`, and `akm-cli@0.9.26` with plugin `0.9.26202610051302`; each plugin depends on its exact CLI, and all four have committed dependency locks. `AKM_BIN` is not read.
@@ -44,6 +45,16 @@ The model is reached through opencode's `openai` provider. With `MODEL_BASE_URL`
 
 Harbor gets only the model's variables and what it, uv and Docker read.
 
+## Concurrency and Docker networks
+
+Every trial creates a Docker network, and the daemon's default address pools allow about 30 in all, shared with every other network on the host. Sixteen trials at once used them up in a real run, and the trials that got no network failed in setup, before the agent started; a run with `--concurrency` above 8 prints a warning. To run more at once, give the daemon a larger pool in `/etc/docker/daemon.json`, a range none of your networks uses (this one holds 256 networks), and restart Docker:
+
+```json
+{ "default-address-pools": [{ "base": "10.200.0.0/16", "size": 24 }] }
+```
+
+Pick `--concurrency` before the full run. The width is part of the job: Agent A/B has no `--resume`, and Terminal-Bench's `--resume` refuses a different `--concurrency`, so changing it later means stopping and starting over.
+
 ## Run your own set
 
 `--cases DIR`: a folder with `tasks/` and `libraries/`, laid out as the public ones (Harbor's task format; each `task.toml` names its library as `AKM_TASK_STASH`).
@@ -67,7 +78,11 @@ Both arms get the same model, opencode 1.18.34 and config. The akm arm adds the 
 
 ## Dependencies
 
-The pinned akm-cli 0.10.261003-beta and plugin 0.10.261002-beta are installed with `npm ci` from lockfiles in `lib/harbor/locks/`, so every container runs the same dependency tree. Each trial records the digest of what was installed, `summary.json` keeps it in `akm_install.dependency_tree_sha256` and folds it into `akm_build_fingerprint`, and a run whose containers installed more than one tree is aborted. A checkout or another release has no lockfile and resolves in each container (`akm_install.locked: false`). To lock a new pin: change it in `lib/harbor/harbor.ts`, make `lib/harbor/locks/<package>-<version>/` with a `package.json` depending on exactly that version, run `npm install --package-lock-only --ignore-scripts` there, and commit both files.
+The pinned akm-cli 0.10.261003-beta and plugin 0.10.261002-beta are installed with `npm ci` from lockfiles in `lib/harbor/locks/`, so every container runs the same dependency tree. Each trial records the digest of what was installed, `summary.json` keeps it in `akm_install.dependency_tree_sha256` and folds it into `akm_build_fingerprint`, and a run whose containers installed more than one tree is aborted. A checkout or another release without a committed lockfile resolves during its first preparation (`akm_install.locked: false`). To lock a new pin: change it in `lib/harbor/harbor.ts`, make `lib/harbor/locks/<package>-<version>/` with a `package.json` depending on exactly that version, run `npm install --package-lock-only --ignore-scripts` there, and commit both files.
+
+Node/OpenCode and the AKM/plugin dependencies are prepared on the first trial and copied into later trials from `.cache/harbor-setup/` in the mounted working folder. Archives are separated by architecture, distro/libc, OpenCode version, AKM/plugin versions, Node ABI and committed lockfiles. Checkout preparations stay beside that run's staged tarballs, separate from other checkouts. Unknown runtimes keep the normal installer. npm downloads and Alpine package downloads are also reused. Delete the relevant cache directory to prepare again.
+
+Only installed tools and package downloads are shared. Every trial still gets its own workspace, AKM configuration, bundle, index and plugin session, with the existing version, semantic-search and plugin checks. The first preparation for a different build or runtime still installs dependencies; this does not prebuild benchmark task images.
 
 ## How a task is scored
 

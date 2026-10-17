@@ -21,8 +21,8 @@ benchmarks/terminal-bench/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 
 - The corpus is the library the akm arm gets; the tasks are always the same. `public` is `corpus/library`; `custom` is `evals/retrieval`'s rewritten library in `private/retrieval/assets/library`, or the `library/` of `--cases DIR` (a folder in the format `evals/retrieval` reads).
 - `--limit N` runs the first N of a fixed order whose first ten are Harbor's `terminal-bench-sample`.
-- `--concurrency N` selects simultaneous trials (default 4), recorded in the job.
-- `--resume DIR` continues a gracefully interrupted run using the same harness, inputs, model limits, AKM settings and unmodified Harbor configuration. Completed trials are reused through Harbor; the run is marked resumed. Trials that were in flight at an interrupt are recorded as errored by Harbor and are not rerun by `--resume`; they count as failed in the resumed summary. Changed protocols require a fresh run. SIGINT/SIGTERM forwards to Harbor and writes a partial summary.
+- `--concurrency N` selects simultaneous trials (default 4), recorded in the job. Above 8 the run warns about Docker's address pools: see "Concurrency and Docker networks" in `evals/agent-ab/README.md`, and pick N before the full run.
+- `--resume DIR` continues a gracefully interrupted run using the same harness, inputs, model limits, AKM settings and unmodified Harbor configuration. Completed trials are reused through Harbor; the run is marked resumed. Trials that were in flight at an interrupt are recorded as errored by Harbor and are not rerun by `--resume`; they count as failed in the resumed summary. Changed protocols require a fresh run, concurrency included: a resumed run keeps the width it started with, so leave `--concurrency` off or give the same number; another is refused. SIGINT/SIGTERM forwards to Harbor and writes a partial summary.
 - `--attempts N` runs each task N times per arm (default 1); a task's pass rate is then its share of passed attempts.
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model`, `--akm` and `--akm-env` work as in `evals/agent-ab` (see its README). The default akm is `akm-cli@0.10.261003-beta`; `AKM_BIN` is not read for the arm.
@@ -50,7 +50,7 @@ Before Harbor starts, the run indexes the library with the akm on this machine a
 
 ## The two arms
 
-As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles (see "Dependencies" in `evals/agent-ab/README.md`).
+As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles and their prepared dependencies are reused across compatible trials (see "Dependencies" in `evals/agent-ab/README.md`). Keep the mounted working folder to retain the tool and package-download caches; trial workspaces and AKM indexes remain separate.
 
 ## How a task is scored
 

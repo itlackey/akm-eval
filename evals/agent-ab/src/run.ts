@@ -2,7 +2,7 @@
 // agent-ab: runs the same tasks with opencode alone and with opencode plus the akm plugin, in Harbor, and reports
 // how often each passes and whether the agent called akm. See ../README.md.
 //
-//   evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+//   evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +12,7 @@ import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
+  CONCURRENT_TRIALS,
   type AkmArm,
   type Completion,
   type Pins,
@@ -20,6 +21,7 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
+  dockerNetworkWarning,
   jobRecord,
   parseAkm,
   parseAkmEnv,
@@ -45,7 +47,7 @@ export { jobConfig, taskNames };
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
 
-const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
+const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--concurrency N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
 Runs each task with opencode alone and with opencode plus the akm plugin, in Harbor, on the model in MODEL_NAME.
 Settings come from .env at the repository root.
@@ -54,6 +56,7 @@ ${corpusUsage}
             public reads tasks/ and libraries/ of this folder. custom reads private/agent-ab/assets/, made by ./generate-assets (the six
             tasks with made-up tools, rewritten from a seed), or the tasks/ and libraries/ of --cases DIR.
   --limit   run N tasks, once per arm, spread over the task families. Without it every task runs 3 times per arm.
+  --concurrency  simultaneous trials (default 4); use 1 to run one at a time.
   --repeat  run the eval N times, into <label>-r1 to <label>-rN, and write the min, max and mean of each metric to
             <UTC date>-<label>-repeat-summary.json beside them
   --model   the model: a line of models.json, or a model as the gateway names it, as opencode takes it (openai/gpt-6-luna;
@@ -152,7 +155,7 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(EVA
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; modelLimits?: ModelLimits; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; label: string; limit?: number; env: Record<string, string>; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const all = taskNames(join(c.folder, "tasks"));
@@ -161,7 +164,7 @@ export async function runCorpus(
   const dir = makeResultsDir(results, ctx.label);
   const arm = ctx.arm ?? releaseArm();
   const akmEnv = ctx.akmEnv ?? {};
-  const got = await collect({ corpus: c.name, assets: c.folder, tasks, of: all.length, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, env: ctx.env, arm, akmEnv });
+  const got = await collect({ corpus: c.name, assets: c.folder, tasks, of: all.length, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv });
   const { trials, observed } = got; // none when Harbor made no job: every cell is then missing, and the run is aborted
   const completion = completionOf(trials, tasks, attempts);
   const { status, aborted_reason } = statusOf(got.exit, completion, existsSync(got.jobDir), observed);
@@ -241,9 +244,9 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; concurrency?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, concurrency: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`agent-ab: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -255,23 +258,26 @@ async function main(): Promise<void> {
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: EVAL_DIR, fail });
   const limit = positive("--limit", values.limit);
   const repeat = positive("--repeat", values.repeat);
+  const concurrency = positive("--concurrency", values.concurrency);
   const akmEnv = parseAkmEnv(values["akm-env"], values.semantic);
   parseAkm(values.akm); // a bad --akm stops the run now, before Docker is asked about and a checkout is packed
   for (const c of corpora) {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env, modelLimits } = preflight(values);
+  const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
+  const wide = dockerNetworkWarning(NAME, concurrency ?? CONCURRENT_TRIALS);
+  if (wide) console.warn(wide);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-")); // where a checkout is packed. Each run keeps a copy of the tarballs
   try {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
     const summaries: Summary[] = [];
-    for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { model, modelLimits, label: runLabel, limit, env, arm, akmEnv }))));
+    for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { model, modelLimits, modelReasoningEffort, concurrency, label: runLabel, limit, env, arm, akmEnv }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);
   } finally {
     rmSync(packs, { recursive: true, force: true });

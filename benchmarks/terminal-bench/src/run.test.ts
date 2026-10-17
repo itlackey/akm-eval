@@ -124,7 +124,9 @@ describe("jobConfig", () => {
   test("tells the akm arm which library to seed, for every task, and how many assets akm should index in it", () => {
     expect(akm.env).toEqual({ AKM_TASK_STASH: "library" });
     expect(akm.kwargs).toMatchObject({ libraries_dir: "/l", library_assets: 259 });
-    expect(JSON.stringify(control)).not.toContain("akm");
+    expect(control.kwargs.akm_cli_version).toBeUndefined();
+    expect(control.kwargs.akm_plugin_version).toBeUndefined();
+    expect(control.kwargs.akm_env).toBeUndefined();
     expect(control.env).toBeUndefined();
   });
 
@@ -1003,6 +1005,27 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
+  test("warns once on stderr above eight concurrent trials that each needs a Docker network, by the width a resumed run started with, and says nothing at eight or by default", () => {
+    const { run, summary, folder } = repo();
+    const said = (n: number) => `terminal-bench: ${n} concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).`;
+    const lines = (done: { err: string }) => done.err.split("\n").filter((line) => line.includes("Docker network"));
+    const wide = run(["--limit", "2", "--concurrency", "16", "--label", "wide"], { UV_FAKE_MISSING: "1" }); // stops one trial short
+    expect(wide.code).toBe(1);
+    expect(lines(wide)).toEqual([said(16)]);
+    expect(wide.out).not.toContain("Docker network");
+    expect(summary("wide").job.n_concurrent_trials).toBe(16);
+    // The resumed run keeps the 16 it started with, so it says the same without being told.
+    const resumed = run(["--resume", folder("wide")]);
+    expect(resumed.code, resumed.err).toBe(0);
+    expect(lines(resumed)).toEqual([said(16)]);
+    expect(summary("wide")).toMatchObject({ status: "complete", resumed: true, job: { n_concurrent_trials: 16 } });
+    for (const [label, args] of [["eight", ["--concurrency", "8"]], ["default", []]] as [string, string[]][]) {
+      const done = run(["--limit", "1", ...args, "--label", label]);
+      expect(done.code, done.err).toBe(0);
+      expect(done.err + done.out, label).not.toContain("Docker network");
+    }
+  }, 120_000);
+
   test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
     const { root, run, summary, folder } = repo();
     const ownLibrary = (to: string) => {
@@ -1016,7 +1039,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the library there
     const mine = join(root, "notes", "mine");
     ownLibrary(mine);
-    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
     const stored = summary("in", "custom");
     expect(stored).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
@@ -1034,7 +1057,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownLibrary(outside);
-    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
     const away = summary("out", "custom");
     expect(away).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
@@ -1052,7 +1075,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const { root, run, summary } = repo();
     const mine = join(root, "mine");
     cpSync(join(root, "corpus", "library"), join(mine, "library"), { recursive: true });
-    const ran = run(["--cases", "mine", "-y", "--limit", "1", "--label", "own"]);
+    const ran = run(["--cases", "mine", "--limit", "1", "--label", "own"]);
     expect(ran.code, ran.err).toBe(0);
     expect(summary("own", "custom")).toMatchObject({ corpus: "custom", seed: null, library: { path: "mine/library" }, status: "complete" });
     expect(summary("own", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: null } });
@@ -1062,16 +1085,16 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(empty.err).toContain("the custom library is missing (mine/library)");
   }, 60_000);
 
-  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, own and own-feedback need an explicit folder, and a value that is none of them is refused", () => {
+  test("resolves --corpus as evals/retrieval does: custom is its rewritten library, and a value that is not a corpus is refused, own and own-feedback (the names of before 0.2) included", () => {
     const { run } = repo();
     const missing = run(["--corpus", "custom"]);
     expect(missing.code).toBe(2);
     expect(missing.err).toContain("the custom library is missing (private/retrieval/assets/library). Make it with: ./generate-assets --only retrieval");
     for (const old of ["own", "own-feedback"]) {
-      const renamed = run(["--corpus", old]);
-      expect(renamed.code, old).toBe(2);
-      expect(renamed.err, old).toContain(`terminal-bench: --corpus ${old} was renamed in 0.2: use `);
-      expect(renamed.err, old).not.toContain("library is missing");
+      const refused = run(["--corpus", old]);
+      expect(refused.code, old).toBe(2);
+      expect(refused.err, old).toContain(`terminal-bench: --corpus must be public, custom or all, not "${old}"`);
+      expect(refused.err, old).not.toContain("library is missing");
     }
     const bad = run(["--corpus", "elsewhere"]);
     expect(bad.code).toBe(2);
@@ -1083,8 +1106,8 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
 
 test("Terminal-Bench forwards custom model limits to the saved configuration of both arms", () => {
   const limits = { context: 32768, output: 4096 };
-  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
-  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"].limit).toEqual(limits);
+  const cfg = jobConfig({ name: "limits", model: "openai/fast/local", modelLimits: limits, modelReasoningEffort: "none", lock, tasks: [Object.keys(lock.tasks)[0]!], librariesDir: "/libraries", jobsDir: "/jobs" }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["fast/local"]).toEqual({ limit: limits, options: { reasoningEffort: "none" } });
 });
 
 

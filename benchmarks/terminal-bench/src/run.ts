@@ -12,6 +12,7 @@ import { Fatal, fail, gitCommit, slug } from "../../../lib/cli.ts";
 import { CORPUS_OPTIONS, type ResolvedCorpus, confirmCases, corpusUsage, resolveCorpora } from "../../../lib/corpus.ts";
 import {
   AKM_ARM_OPTIONS,
+  CONCURRENT_TRIALS,
   type AkmArm,
   type Completion,
   type Pins,
@@ -20,6 +21,7 @@ import {
   akmSummary,
   assetsSha256,
   completionOf,
+  dockerNetworkWarning,
   jobRecord,
   loadRunTrials,
   parseAkm,
@@ -256,7 +258,7 @@ const resultsOf = (c: ResolvedCorpus): string => (c.name === "public" ? join(BEN
 
 export async function runCorpus(
   c: ResolvedCorpus,
-  ctx: { model: string; modelLimits?: ModelLimits; concurrency?: number; resume?: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
+  ctx: { model: string; modelLimits?: ModelLimits; modelReasoningEffort?: string; concurrency?: number; resume?: string; label: string; limit?: number; env: Record<string, string>; attempts?: number; arm?: AkmArm; akmEnv?: Record<string, string> },
   results = resultsOf(c),
 ): Promise<Summary> {
   const lock = readLock();
@@ -271,7 +273,7 @@ export async function runCorpus(
   if (prior) {
     const cfg = JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
     const jobDir = join(dir, "jobs", jobName(c.name));
-    const wanted = jobConfig({ name: jobName(c.name), model: ctx.model, modelLimits: ctx.modelLimits,
+    const wanted = jobConfig({ name: jobName(c.name), model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort,
       concurrency: ctx.concurrency ?? cfg.n_concurrent_trials, lock, tasks, attempts, jobsDir: join(dir, "jobs"),
       librariesDir: join(dir, "libraries"), arm, akmEnv, libraryAssets: cfg.agents[1].kwargs.library_assets,
       packagesDir: arm.cli.tarball || arm.plugin.tarball ? join(dir, "akm-packages") : null });
@@ -289,7 +291,7 @@ export async function runCorpus(
     save(got, true);
     got.exit = await runHarbor(join(dir, "job.json"), join(dir, "harbor.log"), ctx.env, { resume: jobDir });
   } else {
-    got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv, onReady: prepared => { save(prepared, true); } });
+    got = await collect({ corpus: c.name, library: libraryOf(c), lock, tasks, attempts, dir, model: ctx.model, modelLimits: ctx.modelLimits, modelReasoningEffort: ctx.modelReasoningEffort, concurrency: ctx.concurrency, env: ctx.env, arm, akmEnv, onReady: prepared => { save(prepared, true); } });
   }
   const summary = save(got);
   clearRunning(dir);
@@ -302,6 +304,17 @@ export async function runCorpus(
 function corpusProblem(c: ResolvedCorpus): string | undefined {
   const where = relative(ROOT, libraryOf(c));
   return existsSync(libraryOf(c)) ? undefined : `the ${c.name} library is missing (${where}).${c.rewrite ? " Make it with: ./generate-assets --only retrieval" : ""}`;
+}
+
+/** The concurrency of the run `--resume` carries on, from its job.json, or undefined when there is none to read (runCorpus then says what is wrong). */
+function savedConcurrency(resume: string | undefined): number | undefined {
+  if (resume === undefined) return undefined;
+  try {
+    const n = JSON.parse(readFileSync(join(resolve(resume), "job.json"), "utf8")).n_concurrent_trials;
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function main(): Promise<void> {
@@ -333,16 +346,19 @@ async function main(): Promise<void> {
     const problem = corpusProblem(c);
     if (problem) fail(problem);
   }
-  const { model, env, modelLimits } = preflight(values);
+  const { model, env, modelLimits, modelReasoningEffort } = preflight(values);
   const label = values.label ?? slug(model);
   if (!/^[A-Za-z0-9._-]+$/.test(label)) fail("--label may use letters, digits, dot, dash and underscore");
   await confirmCases(values, [{ role: "model", name: model, baseUrl: env.OPENAI_BASE_URL }]);
+  // A resumed run keeps the concurrency it started with (runCorpus refuses another), so that is the width to warn about.
+  const wide = dockerNetworkWarning(NAME, concurrency ?? savedConcurrency(values.resume) ?? CONCURRENT_TRIALS);
+  if (wide) console.warn(wide);
 
   const packs = mkdtempSync(join(tmpdir(), "akm-eval-akm-pack-")); // where a checkout is packed. Each run keeps a copy of the tarballs
   try {
     const { arm, note } = akmArm(values.akm, packs);
     if (note) console.log(`${NAME}: ${note}`);
-    const ctx = { model, modelLimits, env, limit, attempts: values.attempts === undefined ? undefined : attempts, arm, akmEnv, concurrency, resume: values.resume };
+    const ctx = { model, modelLimits, modelReasoningEffort, env, limit, attempts: values.attempts === undefined ? undefined : attempts, arm, akmEnv, concurrency, resume: values.resume };
     const summaries: Summary[] = [];
     for (const c of corpora) summaries.push(...(await repeatRuns(repeat, label, (runLabel) => runCorpus(c, { ...ctx, label: runLabel }))));
     if (summaries.length === 2 && repeat === undefined) for (const line of ["", ...sideBySide(summaries[0] as Summary, summaries[1] as Summary)]) console.log(line);

@@ -92,7 +92,9 @@ describe("jobConfig", () => {
 
   test("gives the akm arm what it needs and the control arm nothing of akm's", () => {
     expect(akm.kwargs).toMatchObject({ akm_cli_version: PINS.akm_cli, akm_plugin_version: PINS.akm_plugin, libraries_dir: "/l" });
-    expect(JSON.stringify(control)).not.toContain("akm");
+    expect(control.kwargs.akm_cli_version).toBeUndefined();
+    expect(control.kwargs.akm_plugin_version).toBeUndefined();
+    expect(control.kwargs.akm_env).toBeUndefined();
     // The plugin is added by the agent, so the two configs differ in nothing but that.
     expect(JSON.stringify(akm.kwargs.opencode_config)).not.toContain("plugin");
   });
@@ -157,7 +159,9 @@ describe("jobConfig with an akm under test", () => {
     const arm: AkmArm = { bin: "~/akm", build: "abc", cli: { version: "0.9.27", tarball: "akm-cli-0.9.27.tgz" }, plugin: { version: "0.9.27", tarball: "akm-opencode-0.9.27.tgz" }, packages: "/pack" };
     const cfg = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
     expect(cfg.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
-    expect(JSON.stringify(cfg.agents[0])).not.toContain("akm");
+    expect(cfg.agents[0].kwargs.akm_cli_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_plugin_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_env).toBeUndefined();
     expect(JSON.stringify(cfg)).not.toMatch(/api_?key|token|secret/i);
   });
 });
@@ -206,6 +210,14 @@ describe("runCorpus", () => {
     expect(JSON.stringify(stored.job)).not.toContain(root);
     expect(s.report.control).toMatchObject({ trials: 3, passed: 0 });
     expect(s.report.akm).toMatchObject({ trials: 3, passed: 3 });
+  });
+
+  test("forwards single-trial concurrency to Harbor and retains it in saved settings", async () => {
+    const { root, env } = fakeUv();
+    const s = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "serial", limit: 1, concurrency: 1, env }, join(root, "results")));
+    expect(readJson(join(s.results_dir, "job.json")).n_concurrent_trials).toBe(1);
+    expect(readJson(join(s.results_dir, "summary.json")).job.n_concurrent_trials).toBe(1);
+    expect(s.completion.expected).toBe(2);
   });
 
   test("records that the run finished: its status, the grid of trials, the model's endpoint without a key, the job config and the digest of the cases", async () => {
@@ -561,6 +573,21 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
+  test("warns once on stderr above eight concurrent trials that each needs a Docker network, and says nothing at eight or by default", () => {
+    const { run, summary } = repo();
+    const wide = run(["--limit", "1", "--concurrency", "16", "--label", "wide"]);
+    expect(wide.code, wide.err).toBe(0);
+    const said = "agent-ab: 16 concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).";
+    expect(wide.err.split("\n").filter((line) => line.includes("Docker network"))).toEqual([said]);
+    expect(wide.out).not.toContain("Docker network");
+    expect(summary("wide").job.n_concurrent_trials).toBe(16);
+    for (const [label, args] of [["eight", ["--concurrency", "8"]], ["default", []]] as [string, string[]][]) {
+      const done = run(["--limit", "1", ...args, "--label", label]);
+      expect(done.code, done.err).toBe(0);
+      expect(done.err + done.out, label).not.toContain("Docker network");
+    }
+  }, 60_000);
+
   test("a change to the library, to a selected task, to the tasks selected or to the attempts changes assets_sha256, and a rerun does not", () => {
     const { root, run, summary } = repo();
     const library = join(root, "evals", "agent-ab", "libraries", "drillbit", "skills", "drillbit", "SKILL.md");
@@ -652,11 +679,11 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     expect(summary("p", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "private/agent-ab/assets", seed: "7", status: "complete", completion: { expected: 2, completed: 2 } });
     expect(summary("p", "custom").manifest).toMatchObject({ corpus: "custom", settings: { seed: "7" } });
 
-    // The historical spelling uses the same generated cases and the same fake collector.
+    // The corpus name of before 0.2 is refused like any other value, and no run starts.
     const old = run(["--corpus", "private", "--limit", "1", "--label", "old"]);
-    expect(old.code).toBe(0);
-    expect(summary("old", "custom")).toMatchObject({ corpus: "custom", seed: "7", status: "complete" });
-    expect(readdirSync(join(root, "private", "agent-ab", "results")).some(d => d.endsWith("-old"))).toBe(true);
+    expect(old.code).toBe(2);
+    expect(old.err).toContain('agent-ab: --corpus must be public, custom or all, not "private"');
+    expect(readdirSync(join(root, "private", "agent-ab", "results")).some(d => d.endsWith("-old"))).toBe(false);
   }, 60_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the cases there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
@@ -673,7 +700,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder inside the repository: recorded, and rescore reads the cases from it
     const mine = join(root, "notes", "mine");
     ownTasks(mine);
-    expect(run(["--cases", "notes/mine", "-y", "--limit", "2", "--label", "in"]).code).toBe(0);
+    expect(run(["--cases", "notes/mine", "--limit", "2", "--label", "in"]).code).toBe(0);
     expect(summary("in", "custom")).toMatchObject({ corpus: "custom", corpus_folder: "notes/mine" });
     const inside = rescoreFolder(folder("in", "custom"), { root });
     expect(inside.result.changed).toEqual([]);
@@ -689,7 +716,7 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     // a folder outside the repository: its path is not in the summary, and rescore needs --cases DIR
     const outside = tmp();
     ownTasks(outside);
-    expect(run(["--cases", outside, "-y", "--limit", "2", "--label", "out"]).code).toBe(0);
+    expect(run(["--cases", outside, "--limit", "2", "--label", "out"]).code).toBe(0);
     const stored = summary("out", "custom");
     expect(stored).toMatchObject({ corpus: "custom", corpus_folder: null });
     for (const file of ["summary.json", "samples.jsonl", "job.json"]) expect(readFileSync(join(folder("out", "custom"), file), "utf8"), file).not.toContain(outside);
