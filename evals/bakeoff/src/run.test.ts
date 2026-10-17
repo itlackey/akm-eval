@@ -12,6 +12,9 @@ import { type Case, assetsSha256, configFor, loadCases, selectCases } from "./li
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
 
+/** The last line of every usage text: the driver's note on the request the model gets before the first case. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
 const dirs: string[] = [];
 const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, MODEL_API_KEY: process.env.MODEL_API_KEY };
 const sandboxes = (): string[] => readdirSync(tmpdir()).filter((n) => n.startsWith("akm-eval-bakeoff-"));
@@ -338,6 +341,7 @@ describe("the command", () => {
     expect(help).toContain("  --config-patch ");
     expect(help).not.toContain("--strategy");
     expect(help).not.toMatch(/--yes|--embedder/);
+    expect(help).toEndWith(`\n\nTested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
     const refused = run(["--strategy", "other"]);
     expect(refused.code).toBe(2);
     expect(refused.err).toContain("Unknown option '--strategy'");
@@ -354,7 +358,7 @@ describe("the command", () => {
     const script = join(tree, "fake-akm.ts");
     writeFileSync(script, FAKE_AKM);
     const log = join(tree, "calls.jsonl");
-    const env = { ...process.env, ...model, AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" };
+    const env = { ...process.env, ...model, AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" }; // nothing listens on port 9, and the run is not to ask it
     const p = Bun.spawnSync(["bun", join(tree, "evals", "bakeoff", "src", "run.ts"), "--corpus", "public", "--limit", "5", "--concurrency", "3", "--timeout-ms", "20000", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
     expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
     const results = join(tree, "evals", "bakeoff", "results");

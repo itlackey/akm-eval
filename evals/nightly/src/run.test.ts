@@ -18,14 +18,16 @@ import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
+/** The last line of every usage text: the driver's note on the request the model gets before the first case. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 
 /**
  * The keys of the summary.json that nightly wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts (with those of RunInputs and
  * CorpusFields it extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go.
  */
 const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "model_calls", "semantic_verification", "manifest"];
-/** What a run adds: timeout_ms, which is new, and two keys that the driver writes for every spec and the night never had: concurrency (a night has no --concurrency) and n_cases (the night has n_items). */
-const ADDED_KEYS = ["timeout_ms", "concurrency", "n_cases"];
+/** What a run adds: timeout_ms, which is new, and n_cases, which the driver writes for every spec and the night never had (the night has n_items). A night has no --concurrency, and the driver writes no `concurrency` for a spec that runs its cases itself. */
+const ADDED_KEYS = ["timeout_ms", "n_cases"];
 
 /** The public corpus, with its items in `folder`. */
 const publicCorpus = (folder: string): ResolvedCorpus => ({ name: "public", folder, rewrite: false, seed: null, flag: "--corpus public" });
@@ -450,6 +452,7 @@ describe("runCorpus", () => {
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
       expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(resultsOf(folders).summary.manifest.treatment_hints).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
       expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
       expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
     } finally {
@@ -524,7 +527,7 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
-    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
+    expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
     expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: 2_700_000, seed: null }); // the budget akm is given: it used to be recorded as null
     expect(Object.keys(m.cases)).toEqual(IDS);
     expect(m.completion.selected).toEqual(IDS);
@@ -589,13 +592,14 @@ describe("runCorpus", () => {
     expect([summary.timeout_ms, summary.manifest.settings.timeout_ms]).toEqual([123_000, 123_000]);
   });
 
-  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and timeout_ms and the two keys the driver writes for every spec besides", async () => {
+  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and timeout_ms and n_cases besides, but no concurrency: a night is one run", async () => {
     const { ctx, folders } = setup(IDS, good());
     const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
     const stored = resultsOf(folders).summary;
     expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS].sort());
     expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
-    expect(stored).toMatchObject({ timeout_ms: 2_700_000, concurrency: 1, n_cases: 6, n_items: 6, n_planted: 6, status: "complete" });
+    expect(stored).toMatchObject({ timeout_ms: 2_700_000, n_cases: 6, n_items: 6, n_planted: 6, status: "complete" });
+    expect(stored).not.toHaveProperty("concurrency");
   });
 
   test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
@@ -633,8 +637,10 @@ describe("the command", () => {
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
     expect(run([]).err).toContain("name the model: pass --model ID, or set MODEL_NAME in .env");
-    expect(run(["--help"]).out).toContain("Tested with akm 0.9.26 or later");
-    expect(run(["--help"]).out).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
+    const help = run(["--help"]).out;
+    expect(help).toContain("Tested with akm 0.9.26 or later");
+    expect(help).toEndWith(`\n${PROBE_NOTE}\n`);
+    expect(help).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
   });
 
   test("takes the model from --model with no MODEL_NAME, and the akm from --akm over AKM_BIN", () => {
@@ -698,7 +704,7 @@ describe("the command with an akm that answers", () => {
     const keep = (path: string) => !path.includes("node_modules");
     cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
     for (const name of ["nightly", "consolidate", "reflect", "distill"]) cpSync(join(REPO, "evals", name, "src"), join(tree, "evals", name, "src"), { recursive: true, filter: keep });
-    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: akm ?? commandLine(["bun", join(root, "fake-akm.ts")]) };
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: akm ?? commandLine(["bun", join(root, "fake-akm.ts")]) }; // nothing listens on port 9, and the run is not to ask it
     const exec = (args: string[]) => {
       const p = Bun.spawnSync(["bun", join(tree, "evals", "nightly", "src", "run.ts"), "--cases", folders.assets, ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
       return { code: p.exitCode, err: p.stderr.toString(), out: p.stdout.toString() };
@@ -719,6 +725,7 @@ describe("the command with an akm that answers", () => {
     expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS, "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     expect(summary).toMatchObject({ timeout_ms: 123_000, n_planted: 6, status: "complete", corpus: "custom", improve_ok: true });
     expect(summary.manifest.settings.timeout_ms).toBe(123_000);
+    expect(summary.manifest).toMatchObject({ mode: null, treatment_hints: { embedder: "deterministic" } });
     expect(rows.map((r) => r.id).sort()).toEqual([...IDS].sort());
     expect(commands().find((l) => l.startsWith("improve "))).toContain("--timeout-ms 123000 ");
     expect(done.out).toMatch(/\[ ?1\/6\] duplicate-01 +ok/); // each item has its progress line, which says what the night did to it

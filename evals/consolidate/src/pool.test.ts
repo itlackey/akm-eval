@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSandbox } from "../../../lib/akm/akm.ts";
-import { manifestProblems } from "../../../lib/manifest.ts";
+import { manifestProblems, readManifest } from "../../../lib/manifest.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { rescoreFolder } from "../../../scripts/rescore/src/lib.ts";
 import { endpointHost } from "../../../lib/provenance.ts";
@@ -377,7 +377,9 @@ describe("the raw output of a pool run, and the rows scored from it", () => {
   });
 });
 
-// An akm that records how it was run: the improve arguments and the config patch key, in a warning, and retires the first note of duplicate-01.
+// An akm that records how it was run: the improve arguments and the config patch key, in a warning, and retires the first note of duplicate-01. Its improve result also
+// names the endpoint it was configured with (`note`), as akm does in some of its messages, so a test can see that improve.json hides it, and the provider kind of the
+// engine it read (`provider`).
 const FAKE_AKM = `
 import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -393,15 +395,15 @@ if (args[0] === "index") {
   if (process.env.FAKE_SLEEP) await Bun.sleep(30000);
   if (process.env.FAKE_CRASH) { console.error("boom"); process.exit(70); }
   writeFileSync(proposals, JSON.stringify([{ id: "p1", ref: "bundle//memories/halbrook-deploy-freeze", source: "consolidate-pair", retirement: { retiredRef: "memories/halbrook-deploy-freeze", successorRef: "memories/halbrook-freeze-rules", judgeLabel: "duplicate", judgeReason: "same" } }]));
-  console.log(JSON.stringify({ ok: true, consolidation: { totalChunks: 7, warnings: ["fake: probe=" + config.probe + " args=" + args.join(" ")], pairPass: { initiators: 80, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 } } }, usageReport: { byProcessEngineModel: [{ model: "fake-served", calls: 3, failures: 0 }] } }));
+  console.log(JSON.stringify({ ok: true, note: "reached " + config.engines.consolidate.endpoint, provider: config.engines.consolidate.provider, consolidation: { totalChunks: 7, warnings: ["fake: probe=" + config.probe + " args=" + args.join(" ")], pairPass: { initiators: 80, pairsConsidered: 1, pairsJudged: 1, failedJudgments: 0, labelCounts: { duplicate: 1 } } }, usageReport: { byProcessEngineModel: [{ model: "fake-served", calls: 3, failures: 0 }] } }));
 } else if (args[0] === "proposal") console.log(JSON.stringify({ totalCount: 1, proposals: JSON.parse(readFileSync(proposals, "utf8")) }));
 else process.exit(1);
 `;
 
 /**
  * The keys of the summary.json that `consolidate --pool` wrote before it was a spec of lib/run.ts: the PoolSummary interface in the committed run.ts (with those of RunInputs it
- * extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go. A run adds concurrency to them
- * (timeout_ms it had), and `error` is there only when the run failed.
+ * extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go. The pool is one run, so
+ * there is no concurrency to add: the driver writes none for a spec that runs its cases itself. `error` is there only when the run failed.
  */
 const POOL_KEYS = ["eval", "mode", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "strategy", "config_patch", "timeout_ms", "limit", "n_notes", "n_clusters", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "seconds", "served_models", "metrics", "model_calls", "semantic_verification", "manifest", "config", "engine", "assets_sha256", "seed"];
 
@@ -434,12 +436,16 @@ describe("runPool", () => {
       expect(summary.metrics?.precision).toEqual({ value: 1, safe: 1, retired: 1 });
       expect(summary.served_models).toEqual({ "fake-served": 3 });
       const dir = join(root, "results", readdirSync(join(root, "results"))[0]);
-      expect(readdirSync(dir).filter((f) => f !== ".running").sort()).toEqual(["samples.jsonl", "summary.json"]);
+      expect(readdirSync(dir).filter((f) => f !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]);
       expect(readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n")).toHaveLength(47);
       const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
       expect(stored.results_dir).toBeUndefined();
-
-
+      // improve.json is akm's result of the improve run as it printed it, indented, and with the endpoint that the fake names in it written as <MODEL_BASE_URL>
+      const improveText = readFileSync(join(dir, "improve.json"), "utf8");
+      const improve = JSON.parse(improveText);
+      expect(improve).toMatchObject({ ok: true, note: "reached <MODEL_BASE_URL>/chat/completions", consolidation: { totalChunks: 7, pairPass: { pairsJudged: 1 } }, usageReport: { byProcessEngineModel: [{ model: "fake-served", calls: 3 }] } });
+      expect(improveText).toBe(`${JSON.stringify(improve, null, 2)}\n`);
+      expect(improveText).not.toContain("localhost:1");
       expect(stored.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
     } finally {
@@ -447,18 +453,19 @@ describe("runPool", () => {
     }
   });
 
-  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and concurrency besides, and a failed run adds its error", async () => {
+  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and no concurrency: the pool is one run; a failed run adds its error", async () => {
     const { root, ctx } = setup();
     try {
       const ok = await quiet(() => runPool({ ...ctx }, join(root, "results")));
       const stored = JSON.parse(readFileSync(join(ok.results_dir, "summary.json"), "utf8"));
-      expect(Object.keys(stored).sort()).toEqual([...POOL_KEYS, "concurrency"].sort());
+      expect(Object.keys(stored).sort()).toEqual([...POOL_KEYS].sort());
       expect(Object.keys(ok).sort()).toEqual([...Object.keys(stored), "results_dir"].sort());
-      expect(stored).toMatchObject({ mode: "pool", n_cases: 1, n_notes: 80, n_clusters: 47, limit: null, corpus: "public", corpus_folder: null, concurrency: 1 });
+      expect(stored).toMatchObject({ mode: "pool", n_cases: 1, n_notes: 80, n_clusters: 47, limit: null, corpus: "public", corpus_folder: null });
+      expect(stored).not.toHaveProperty("concurrency");
       process.env.FAKE_CRASH = "1";
       await expect(quiet(() => runPool({ ...ctx, label: "failed" }, join(root, "results")))).rejects.toThrow("the pool run failed: akm improve failed (exit 70)");
       const failed = JSON.parse(readFileSync(join(root, "results", readdirSync(join(root, "results")).find((n) => n.endsWith("-failed")) as string, "summary.json"), "utf8"));
-      expect(Object.keys(failed).sort()).toEqual([...POOL_KEYS, "concurrency", "error"].sort());
+      expect(Object.keys(failed).sort()).toEqual([...POOL_KEYS, "error"].sort());
     } finally {
       delete process.env.FAKE_CRASH;
       rmSync(root, { recursive: true, force: true });
@@ -491,6 +498,7 @@ describe("runPool", () => {
       expect(stored).toMatchObject({ status: "aborted" });
       expect(stored.aborted_reason).toContain("akm improve failed (exit 70)");
       expect(stored.aborted_reason).toBe(stored.error);
+      expect(readdirSync(dir).filter((f) => f !== ".running").sort()).toEqual(["samples.jsonl", "summary.json"]); // akm printed no result of its run, so there is no improve.json
     } finally {
       delete process.env.FAKE_CRASH;
       rmSync(root, { recursive: true, force: true });
@@ -526,14 +534,16 @@ describe("runPool", () => {
     }
   });
 
-  test("writes a sound manifest, and its rows hold the raw output, so scripts/rescore scores the run again without akm", async () => {
+  test("writes a sound manifest of the pool mode, and its rows hold the raw output, so scripts/rescore scores the run again without akm", async () => {
     const { root, ctx } = setup();
     try {
       const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null }, timeoutMs: 90_000 }, join(root, "results")));
       const dir = summary.results_dir;
       const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
       expect(manifestProblems(stored.manifest)).toEqual([]);
-      expect(stored.manifest).toMatchObject({ eval: "consolidate", corpus: "public", settings: { strategy: "consolidate", timeout_ms: 90_000, seed: null } });
+      expect(stored.mode).toBe("pool");
+      expect(readManifest(stored).kind).toBe("manifest"); // it is "invalid" when the summary says a mode that the manifest does not
+      expect(stored.manifest).toMatchObject({ eval: "consolidate", corpus: "public", mode: "pool", treatment_hints: { embedder: "deterministic" }, settings: { strategy: "consolidate", timeout_ms: 90_000, seed: null } });
       expect(Object.keys(stored.manifest.cases)).toEqual(pool.clusters.map((c) => c.id));
       expect(stored.manifest.completion).toMatchObject({ selected: pool.clusters.map((c) => c.id), errored: [] });
       // every cluster is run beside every other note, so a change to any note changes the input digest of every cluster
@@ -561,6 +571,7 @@ describe("runPool", () => {
       const summary = await quiet(() => runPool({ ...ctx, newSandbox, embedder: "real", overrides: { strategy: "consolidate", configPatch: null } }, join(root, "results")));
       expect(summary).toMatchObject({ embedder: "real", status: "complete", n_errored: 0 });
       expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
+      expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "real" } });
     } finally {
       delete process.env.FAKE_EMBEDDER;
       rmSync(root, { recursive: true, force: true });
@@ -574,8 +585,24 @@ describe("runPool", () => {
       const summary = await quiet(() => runPool({ ...ctx, overrides: { strategy: "consolidate", configPatch: null } }, join(root, "results")));
       expect(summary).toMatchObject({ embedder: "deterministic", n_errored: 0 });
       expect(summary.config.embedding).toBeUndefined();
+      expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "deterministic" } });
     } finally {
       delete process.env.FAKE_EMBEDDER;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+    const { root, ctx } = setup();
+    try {
+      const seenByAkm = (summary: { results_dir: string }) => JSON.parse(readFileSync(join(summary.results_dir, "improve.json"), "utf8")).provider;
+      const other = await quiet(() => runPool({ ...ctx, provider: "groq", label: "groq" }, join(root, "results")));
+      expect((other.config as any).engines.consolidate.provider).toBe("groq");
+      expect(seenByAkm(other)).toBe("groq");
+      const plain = await quiet(() => runPool({ ...ctx, label: "plain" }, join(root, "results")));
+      expect((plain.config as any).engines.consolidate.provider).toBe("openai");
+      expect(seenByAkm(plain)).toBe("openai");
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });

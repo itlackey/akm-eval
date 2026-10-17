@@ -116,9 +116,6 @@ const SPEC: EvalSpec<Planted, Row, Extra> = {
   selectCases: selectItems,
   assetsSha256: (folder) => assetsDigest(folder, nightFiles(folder)),
   configFor: effectiveConfig,
-  runCase: async () => {
-    throw new Error("a night is one run of every item, and collectAll makes it");
-  },
   progress: (c, row) => {
     if (row.ok) return `${c.id.padEnd(28)} ok    ${row.state}`;
     const failed = Object.entries(row.checks).filter(([, pass]) => !pass).map(([name]) => name).join(", ");
@@ -168,6 +165,8 @@ const SPEC: EvalSpec<Planted, Row, Extra> = {
       calls_by: callStats(done?.improve).by.map((r) => ({ ...r, model: hideEndpoint(r.model, ctx.baseUrl) })),
     };
   },
+  // How akm embedded the notes is a setting of the night that scripts/compare shows beside the strategy, so the manifest says it as a treatment hint.
+  manifestExtras: (ctx) => ({ treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary,
   sideBySide,
   usage: {

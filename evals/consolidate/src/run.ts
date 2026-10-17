@@ -8,9 +8,14 @@
 // The flags, the setup, the pool of workers and the summary are lib/run.ts. This file is what is consolidate's: the spec of the run on pairs, and
 // the spec of `--pool`, which is a run of its own: one sandbox with the whole pool of notes and a single `akm improve`, scored a cluster at a time.
 // `--pool` is not a flag of either spec: it picks the spec, and is taken out of the flags before they are read.
+//
+// What a run says of how akm embedded the notes goes to its manifest as a treatment hint, which scripts/compare shows. The pool run keeps its own marks:
+// the manifest's mode is "pool", its folder is named <model>-pool without --label, and akm's result of the one improve run is written to improve.json
+// beside samples.jsonl and summary.json.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { hideEndpoint, slug } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { type CtxInput, type EvalSpec, type Summary, runCorpus as runIn, runEval } from "../../../lib/run.ts";
 import { type Case, INPUT_FILES, RELATIONS, parseCases, selectCases } from "./cases.ts";
@@ -129,6 +134,7 @@ const SPEC: EvalSpec<Case, Row, Extra> = {
     return counts.n_scored > 0 && counts.n_paired === 0 ? `akm paired none of the notes, so its judge never ran. ${NONE_PAIRED[ctx.embedder ?? "deterministic"]}` : null;
   },
   summaryExtras: (_cases, _rows, ctx) => ({ embedder: ctx.embedder ?? "deterministic" }),
+  manifestExtras: (ctx) => ({ treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary,
   sideBySide,
   usage: {
@@ -192,10 +198,9 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
   selectCases: (all) => all,
   assetsSha256: (folder) => assetsDigest(join(folder, "pool"), poolFiles(join(folder, "pool"))),
   configFor: effectiveConfig,
-  runCase: async () => {
-    throw new Error("the pool is one akm run for every cluster, and collectAll makes it");
-  },
   progress: (c, row) => `${c.kind.padEnd(10)} ${c.id.padEnd(14)} ${row.outcome}`,
+  // A pool run is named apart from a run on pairs of the same model.
+  defaultLabel: (model) => `${slug(model)}-pool`,
   prepare: (values, corpora) => {
     if (corpora.length !== 1 || corpora[0]?.name !== "public" || values.limit !== undefined) throw new Error(POOL_ONLY);
     const own = embedding(values);
@@ -205,12 +210,15 @@ const POOL_SPEC: EvalSpec<PoolCase, PoolRow, PoolExtra> = {
   openRun: async (_ctx, corpus) => ({ pool: loadPool(join(corpus.folder, "pool")) }),
   collectAll: async (cases, ctx, record) => {
     const collected = await collectPool(ctx.pool as Pool, ctx);
+    // akm's result of the improve run as it printed it, with the endpoint hidden, beside the rows that were scored from it. A run that failed before akm printed one has none.
+    if (collected.improve) writeFileSync(join(ctx.resultsDir as string, "improve.json"), `${hideEndpoint(JSON.stringify(collected.improve, null, 2), ctx.baseUrl)}\n`);
     const rows = cases.map((c) => makePoolRow(c, collected.raw.get(c.id) as PoolRaw));
     for (const row of rows) record(row);
     const failed = rows.find(poolErrored);
     return { rows, aborted: failed ? `the pool run failed: ${failed.error}` : undefined };
   },
   summaryExtras: (cases, _rows, ctx) => ({ mode: "pool", embedder: ctx.embedder ?? "deterministic", n_notes: cases.reduce((n, c) => n + c.notes.length, 0), n_clusters: cases.length, n_cases: 1 }), // the one pool run is the one case
+  manifestExtras: (ctx) => ({ mode: "pool", treatment_hints: { embedder: ctx.embedder ?? "deterministic" } }),
   printSummary: printPool,
   usage: {
     about: `Runs akm's consolidate on the whole public pool, as a real night does: the 80 memories of assets/pool in one sandbox and a single
@@ -220,7 +228,8 @@ Settings come from .env at the repository root. Written for akm 0.9.26. It reads
     limit: "not used with --pool",
     flags: "--pool",
     extra: `  --pool    selects this run. --timeout-ms is akm's own wall-clock budget for the improve run (akm's default is 2 hours): a short one makes
-            akm cut the pool to what the budget covers (its "cold-start budget" warning). The eval kills akm 10 minutes after the budget.`,
+            akm cut the pool to what the budget covers (its "cold-start budget" warning). The eval kills akm 10 minutes after the budget.
+            Without --label the results folder is named <UTC date>-<model name>-pool.`,
   },
 };
 

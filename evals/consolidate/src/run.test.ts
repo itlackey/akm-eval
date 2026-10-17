@@ -16,6 +16,8 @@ import { MEASUREMENT } from "./measurement.ts";
 import { runCorpus } from "./run.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
+/** The last line of every usage text: the driver's note on the request the model gets before the first case. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -140,7 +142,7 @@ const resultsOf = (folders: { results: string }) => {
  */
 const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "served_models", "metrics", "model_calls", "semantic_verification", "manifest"];
 
-/** The same for `--pool`: the PoolSummary interface in the committed run.ts (with RunInputs), without results_dir. `error` is there only when the run failed. */
+/** The same for `--pool`: the PoolSummary interface in the committed run.ts (with RunInputs), without results_dir. `error` is there only when the run failed. The pool is one run, so it has no `concurrency`. */
 const POOL_KEYS = ["eval", "mode", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "strategy", "config_patch", "timeout_ms", "limit", "n_notes", "n_clusters", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "n_paired", "seconds", "served_models", "metrics", "model_calls", "semantic_verification", "manifest", "config", "engine", "assets_sha256", "seed"];
 
 describe("writeNotes", () => {
@@ -349,7 +351,7 @@ describe("runCorpus", () => {
     expect(readManifest(stored).kind).toBe("manifest");
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
-    expect(m).toMatchObject({ eval: "consolidate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector });
+    expect(m).toMatchObject({ eval: "consolidate", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
     expect(m.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
     expect(m.settings).toEqual({ strategy: "consolidate", config_patch_sha256: null, timeout_ms: 1_800_000, seed: null }); // the effective timeout of improve: it used to be recorded as null
     expect(Object.keys(m.cases)).toEqual(["d1", "e1", "o1"]);
@@ -373,6 +375,7 @@ describe("runCorpus", () => {
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary.embedder).toBe("real");
       expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(resultsOf(folders).summary.manifest.treatment_hints).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
     } finally {
       delete process.env.FAKE_EMBEDDER;
     }
@@ -560,8 +563,10 @@ describe("the command", () => {
     expect(pool).toContain("Runs akm's consolidate on the whole public pool");
     expect(pool).toMatch(/--timeout-ms is akm's own wall-clock budget/);
     expect(pool).toContain("Default: 7200000.");
+    expect(pool).toContain("Without --label the results folder is named <UTC date>-<model name>-pool.");
     expect(pool).not.toContain("--concurrency");
     expect(pool).not.toMatch(/--embedder|--yes/);
+    for (const help of [pairs, pool]) expect(help).toEndWith(`\n${PROBE_NOTE}\n`);
   });
 
   test("--pool runs the public pool: it refuses a custom corpus of your own and --limit, before akm is asked anything", () => {
@@ -600,7 +605,7 @@ describe("the command with an akm that answers", () => {
     writeFileSync(script, FAKE_AKM);
     const exec = (args: string[]) => {
       const log = join(tree, `calls-${args.join("-").replace(/[^a-z0-9]+/gi, "_")}.jsonl`);
-      const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_BIN: commandLine(["bun", script]), FAKE_COMMANDS_LOG: log, FAKE_COUNTER_DIR: tree };
+      const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_COMMANDS_LOG: log, FAKE_COUNTER_DIR: tree }; // nothing listens on port 9, and the run is not to ask it
       const p = Bun.spawnSync(["bun", join(tree, "evals", "consolidate", "src", "run.ts"), ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
       const calls = existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : [];
       return { code: p.exitCode, err: p.stderr.toString(), out: p.stdout.toString(), calls };
@@ -608,7 +613,7 @@ describe("the command with an akm that answers", () => {
     const stored = (parent: string, label: string) => {
       const results = join(tree, parent);
       const folder = join(results, readdirSync(results).find((name) => name.endsWith(`-${label}`)) as string);
-      return { summary: JSON.parse(readFileSync(join(folder, "summary.json"), "utf8")), rows: readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) };
+      return { folder, summary: JSON.parse(readFileSync(join(folder, "summary.json"), "utf8")), rows: readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) };
     };
     return { tree, exec, stored };
   }
@@ -624,6 +629,7 @@ describe("the command with an akm that answers", () => {
     expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
     expect(summary).toMatchObject({ concurrency: 3, timeout_ms: 20_000, n_run: 4, status: "complete", embedder: "deterministic", corpus: "custom" });
     expect(summary.manifest.settings.timeout_ms).toBe(20_000);
+    expect(summary.manifest).toMatchObject({ mode: null, treatment_hints: { embedder: "deterministic" } });
     expect(rows.map((r) => r.id).sort()).toEqual(["d1", "d2", "o1", "s1"]);
     expect(done.calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
     expect(done.calls.filter((c) => c.args[0] === "improve")).toHaveLength(4);
@@ -635,14 +641,31 @@ describe("the command with an akm that answers", () => {
     const plain = exec(["--pool", "--label", "plain"]);
     expect([plain.code, plain.err]).toEqual([0, ""]);
     expect(plain.calls.find((c) => c.args[0] === "improve")?.args).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json"]);
-    const { summary, rows } = stored(join("evals", "consolidate", "results"), "plain");
-    expect(Object.keys(summary).sort()).toEqual([...POOL_KEYS, "concurrency", "wall_seconds"].sort());
+    const { folder, summary, rows } = stored(join("evals", "consolidate", "results"), "plain");
+    expect(Object.keys(summary).sort()).toEqual([...POOL_KEYS, "wall_seconds"].sort());
     expect(summary).toMatchObject({ mode: "pool", corpus: "public", corpus_folder: null, n_cases: 1, n_run: 1, n_scored: 1, n_notes: 80, n_clusters: 47, strategy: "consolidate", embedder: "deterministic", limit: null, timeout_ms: 7_200_000, status: "complete" });
+    expect(summary.manifest).toMatchObject({ mode: "pool", treatment_hints: { embedder: "deterministic" } });
     expect(rows).toHaveLength(47);
+    expect(readdirSync(folder).filter((name) => name !== ".running").sort()).toEqual(["improve.json", "samples.jsonl", "summary.json"]); // akm's result of the improve run is kept beside the rows
+    expect(JSON.parse(readFileSync(join(folder, "improve.json"), "utf8"))).toMatchObject({ ok: true, strategy: "consolidate" });
 
     const budget = exec(["--pool", "--timeout-ms", "123000", "--label", "budget"]);
     expect(budget.code).toBe(0);
     expect(budget.calls.find((c) => c.args[0] === "improve")?.args).toEqual(["improve", "--strategy", "consolidate", "--no-sync", "--json-to-stdout", "--format", "json", "--timeout-ms", "123000"]);
     expect(stored(join("evals", "consolidate", "results"), "budget").summary).toMatchObject({ timeout_ms: 123_000, manifest: { settings: { timeout_ms: 123_000 } } });
+  }, 60_000);
+
+  test("--pool without --label names its folder for the model and -pool, the run on pairs for the model alone, and --label names either", () => {
+    const { tree, exec, stored } = copyOfRepo();
+    const notes = join(tree, "notes");
+    mkdirSync(notes);
+    writeFileSync(join(notes, "cases.jsonl"), `${JSON.stringify(mk("d1", "duplicate", "retire-older"))}\n`);
+    for (const args of [["--pool"], ["--pool", "--label", "mine"], ["--cases", notes], ["--cases", notes, "--label", "mine"]]) expect([args, exec(args).code]).toEqual([args, 0]); // the model is m
+    const day = new Date().toISOString().slice(0, 10);
+    expect(readdirSync(join(tree, "evals", "consolidate", "results")).sort()).toEqual([`${day}-m-pool`, `${day}-mine`]);
+    expect(readdirSync(join(tree, "private", "consolidate", "results")).sort()).toEqual([`${day}-m`, `${day}-mine`]);
+    expect(stored(join("evals", "consolidate", "results"), "m-pool").summary).toMatchObject({ mode: "pool", label: "m-pool" });
+    expect(stored(join("evals", "consolidate", "results"), "mine").summary.label).toBe("mine");
+    expect(stored(join("private", "consolidate", "results"), "m").summary.label).toBe("m");
   }, 60_000);
 });
