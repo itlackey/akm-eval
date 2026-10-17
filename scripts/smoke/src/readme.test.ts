@@ -24,11 +24,12 @@ const HAS_UV = Bun.which("uv") !== null;
 const helpTest = (folder: string) => (needsUv(folder) && !HAS_UV ? test.skip : test);
 
 /**
- * What the seven evals that run a model through akm all record in summary.json, as the README says under its table. Each is found in
- * the source of each of them as a key, or, for the three that arrive in a spread, as that spread.
+ * The evals that run on the shared driver, lib/run.ts, which writes their summary.json. What the README says under its table that they all
+ * record is written there, except the counts and the metrics, which the driver takes from the `summarize` of each eval.
  */
-const MODEL_EVALS = ["evals/judge-gate", "evals/reflect", "evals/distill", "evals/consolidate", "evals/extract", "evals/nightly", "evals/promotion"];
-const COMMON_RECORDED = ["model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_errored", "metrics"];
+const DRIVER_EVALS = ["evals/judge-gate", "evals/reflect", "evals/distill", "evals/consolidate", "evals/extract", "evals/nightly", "evals/promotion", "evals/bakeoff"];
+const DRIVER_RECORDED = ["model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "timeout_ms", "concurrency", "model_calls", "manifest"];
+const FROM_SUMMARIZE = ["n_errored", "metrics"];
 
 interface Row {
   folder: string;
@@ -99,12 +100,17 @@ const helps = new Map(
     }),
 );
 
-/** Where else the summary of an eval is written from: the Harbor evals' report is in lib/harbor, and nightly takes the fields about its inputs from consolidate. */
-const ALSO_FROM: Record<string, string[]> = { "evals/agent-ab": ["lib/harbor"], "benchmarks/terminal-bench": ["lib/harbor"], "evals/nightly": ["evals/consolidate/src"] };
+/** Does the driver's summary hold `key`? akm_bin, akm_build and akm_build_fingerprint (`...build`), and strategy and config_patch (`patch`), are spread into it, so they are found where those objects are made. */
+function driverWrites(key: string): boolean {
+  const literal = summaryLiteral();
+  if (["akm_bin", "akm_build", "akm_build_fingerprint"].includes(key)) return /\.\.\.build\b/.test(literal) && writes(read("lib/akm/akm.ts"), key);
+  if (key === "strategy" || key === "config_patch") return /\bpatch\b/.test(literal) && writes(read("lib/akm/overrides.ts"), key);
+  return writes(literal, key);
+}
 
-/** The source of an eval, without its tests and fakes: what its summary.json is written from. */
+/** The source of an eval, without its tests and fakes: what its `summarize` is written in. */
 function sourceOf(folder: string): string {
-  const roots = [join(ROOT, folder, "src"), ...(ALSO_FROM[folder] ?? []).map((r) => join(ROOT, r))];
+  const roots = [join(ROOT, folder, "src")];
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
@@ -118,10 +124,15 @@ function sourceOf(folder: string): string {
   return files.map((f) => readFileSync(f, "utf8")).join("\n");
 }
 
-/** Does the source write `key` into an object, as a property or a shorthand? akm_bin, akm_build, strategy and config_patch come in a spread. */
+/** The object that lib/run.ts writes to the summary.json of every eval on the driver, without the types above it, which name every key too. */
+function summaryLiteral(): string {
+  const src = read("lib/run.ts");
+  const start = src.indexOf("const summary = {");
+  return start < 0 ? "" : src.slice(start, src.indexOf("} as Summary", start));
+}
+
+/** Does the source write `key` into an object, as a property or a shorthand? */
 export function writes(src: string, key: string): boolean {
-  if ((key === "akm_bin" || key === "akm_build") && src.includes("akmBuild(")) return true;
-  if ((key === "strategy" || key === "config_patch") && src.includes("overrideSummary(")) return true;
   return new RegExp(`(?:^|[\\s{,"'])${key}["']?\\s*[:,}]`, "m").test(src);
 }
 
@@ -157,16 +168,23 @@ describe("the table in the root README", () => {
     });
   }
 
-  test("says under the table what the seven evals that run a model through akm all record, and each of them writes it", () => {
+  test("says under the table what the evals on the shared driver all record, and the driver writes it", () => {
     const line = README.split("\n").find((l) => l.startsWith("- **What a summary records.**")) ?? "";
     expect(line).not.toBe("");
-    for (const key of COMMON_RECORDED) expect(line).toContain(`\`${key}\``);
-    for (const folder of MODEL_EVALS) {
-      const src = sourceOf(folder);
-      const missing = COMMON_RECORDED.filter((k) => !writes(src, k));
-      expect({ folder, missing }).toEqual({ folder, missing: [] });
-    }
+    for (const key of [...DRIVER_RECORDED, ...FROM_SUMMARIZE]) expect(line).toContain(`\`${key}\``);
+    expect(summaryLiteral()).not.toBe("");
+    expect({ missing: DRIVER_RECORDED.filter((k) => !driverWrites(k)) }).toEqual({ missing: [] });
   });
+
+  for (const folder of DRIVER_EVALS) {
+    test(`${folder} runs on the driver and gives it the counts and the metrics`, () => {
+      const run = read(`${folder}/src/run.ts`);
+      expect(run).toContain("lib/run.ts");
+      expect(run).toContain("runEval(");
+      const src = sourceOf(folder);
+      expect({ folder, missing: FROM_SUMMARIZE.filter((k) => !writes(src, k)) }).toEqual({ folder, missing: [] });
+    });
+  }
 
   test("keeps the flags of the run scripts and of Harbor apart: --akm there is not a command", () => {
     const harbor = rows.filter((r) => r.folder.endsWith("agent-ab") || r.folder.endsWith("terminal-bench"));
@@ -222,6 +240,15 @@ describe("the documents that point at each other", () => {
       .filter((l) => /^\| `(evals|benchmarks)\//.test(l))
       .map((l) => ticks(l.split("|")[1])[0]);
     expect(folders.sort()).toEqual(rows.map((r) => r.folder).sort());
+  });
+
+  test("the settings the driver reads are named in the README and in .env.example", () => {
+    const code = read("lib/run.ts") + read("lib/models.ts");
+    for (const name of ["AKM_EVAL_NO_PROBE", "MODEL_PROVIDER"]) {
+      expect(code).toContain(name);
+      expect(README).toContain(name);
+      expect(read(".env.example")).toContain(name);
+    }
   });
 
   test("the README names every workflow file, and the workflows run what the README says", () => {

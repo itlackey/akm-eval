@@ -7,7 +7,7 @@
 # `MODEL_NAME="small" # the local one` is `small`.
 # An unquoted value ends at a # that has a space before it, so `MODEL_NAME=small # the local one` is `small`.
 # A value in .env wins over the same variable already set in the shell. An empty one (`KEY=`) leaves a variable that is set alone.
-# .env is read once: a script that another starts, as the matrix and the smoke start runs, keeps the environment the first one made.
+# .env is read once: a script that another starts, as the smoke starts runs and generate-assets starts generate scripts, keeps the environment the first one made.
 # AKM_EVAL_ENV_LOADED marks it, and a caller that sets it keeps .env out altogether.
 
 # Exports the settings of the file `$1`, if it exists. Its locals start with _env_, so a setting never hides behind one.

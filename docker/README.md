@@ -3,7 +3,9 @@
 Use the [root setup](../README.md#set-up-with-docker) to choose `AKM_EVAL_IMAGE`
 and create `AKM_EVAL_WORK`. Docker is the only host runtime required. The image
 contains the eval source, Bun, Node/npm, Python, uv, pinned Harbor, locked AKM
-and TypeScript dependencies, and the native bge-small embedding model.
+and TypeScript dependencies, and the native bge-small embedding model. Before a full
+run, read the README's [Before an expensive run](../README.md#before-an-expensive-run):
+the banner to check, concurrency to pick, and how to stop a run.
 
 Run any eval by appending its command and flags:
 
@@ -60,7 +62,7 @@ docker run --rm --init --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$AKM_EVAL_WORK,dst=$AKM_EVAL_WORK" \
   --mount "type=bind,src=$AKM_CHECKOUT,dst=/opt/akm-cli/node_modules/akm-cli,readonly" \
   --workdir "$AKM_EVAL_WORK" "$AKM_EVAL_IMAGE" \
-  evals/retrieval/run --semantic on --limit 12 --label build-a \
+  evals/retrieval/run --semantic --limit 12 --label build-a \
   --akm "bun /opt/akm-cli/node_modules/akm-cli/src/cli.ts"
 ```
 

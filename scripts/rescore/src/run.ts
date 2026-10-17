@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // rescore: scores stored results folders again with the current scorer and the current labels of their eval, from the raw output in
-// samples.jsonl, and writes each result to a new folder beside the original. It runs no akm and no model. See the README's "Compare two runs".
+// samples.jsonl, and writes each result to a new folder beside the original. It runs no akm and no model. See the README's "Run, save, compare".
 
 import { parseArgs } from "node:util";
 import { RescoreError, rescoreFolder } from "./lib.ts";

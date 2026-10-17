@@ -7,7 +7,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 cd "$root"
 
-# Settings come from .env at the repository root: KEY=value lines. A variable that is already set wins. See lib/env.sh.
+# Settings come from .env at the repository root: KEY=value lines. A nonempty value in .env wins over the shell; see lib/env.sh.
 source lib/env.sh
 
 command -v bun > /dev/null || { echo "distill: bun is needed. See https://bun.sh" >&2; exit 2; }

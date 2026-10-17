@@ -51,7 +51,7 @@ export function meanScores(rows: Scores[]): Scores {
 
 // --- The rows -----------------------------------------------------------------------------------------------------
 
-/** The lines of a run: akm search, asked of the keyword index and, in a run without --limit, of the semantic one. */
+/** The lines of a run: akm search, asked of the keyword index and, with --semantic, of the semantic one. */
 export const SYSTEMS = ["search", "semantic_search"] as const;
 export type System = (typeof SYSTEMS)[number];
 export type Mode = "keyword" | "semantic";
