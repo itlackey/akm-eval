@@ -214,7 +214,7 @@ export function manifestDifferences(prior: RunManifest, now: RunManifest): strin
   return out;
 }
 
-/** Is a process with this pid running? One that has exited and is not reaped yet is a zombie: signal 0 still reaches it, and it is not running. */
+/** Is a process with this pid running? One that has exited and is not reaped yet is a zombie, and one being reaped is dead for an instant: signal 0 still reaches both, and neither is running. */
 export function isRunning(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -222,9 +222,10 @@ export function isRunning(pid: number): boolean {
     return (e as NodeJS.ErrnoException).code === "EPERM"; // it is there, and another user's
   }
   try {
-    return !/^State:\s*Z/m.test(readFileSync(`/proc/${pid}/status`, "utf8"));
+    return !/^State:\s*[ZX]/m.test(readFileSync(`/proc/${pid}/status`, "utf8"));
   } catch {
-    return true; // no /proc (macOS): signal 0 is all there is to ask
+    // Gone between the signal and the read: reaped, so not running. Without /proc (macOS) signal 0 is all there is to ask, and it answered.
+    return !existsSync("/proc/self/status");
   }
 }
 
