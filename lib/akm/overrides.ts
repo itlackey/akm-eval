@@ -29,11 +29,13 @@ export interface Overrides {
 /** Shared strategy, config and semantic options, for parseArgs. */
 export const OVERRIDE_OPTIONS = { strategy: { type: "string" }, "config-patch": { type: "string" }, semantic: { type: "boolean" } } as const;
 
-/** The shared lines of an eval's usage text. `def` is the strategy the eval runs without --strategy. */
-export const overridesUsage = (def: string): string =>
-  `  --strategy      the akm improve strategy to run in place of ${def}. A strategy of the config patch works, or one akm ships.
-  --semantic      enable native bge-small-en-v1.5 semantic search; merge with any config patch
-  --config-patch  FILE: a JSON file deep-merged into the config the eval writes, after it. A relative FILE is from the repository root.`;
+/** The shared lines of an eval's usage text. `def` is the strategy the eval runs without --strategy. An eval with no strategy leaves it out, and the --strategy line with it. */
+export const overridesUsage = (def?: string): string =>
+  [
+    ...(def === undefined ? [] : [`  --strategy      the akm improve strategy to run in place of ${def}. A strategy of the config patch works, or one akm ships.`]),
+    "  --semantic      enable native bge-small-en-v1.5 semantic search; merge with any config patch",
+    "  --config-patch  FILE: a JSON file deep-merged into the config the eval writes, after it. A relative FILE is from the repository root.",
+  ].join("\n");
 
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 

@@ -12,7 +12,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { AKM_OPTIONS, SEMANTIC_MODEL, akmBuild, akmUsage, akmVersion, createSandbox, removeSandbox, useAkm } from "../../../lib/akm/akm.ts";
 import { Fatal, fail, gitCommit } from "../../../lib/cli.ts";
-import { CORPUS_OPTIONS, renamed } from "../../../lib/corpus.ts";
+import { CORPUS_OPTIONS } from "../../../lib/corpus.ts";
 import { type CachedIndex } from "../../../lib/akm/index-cache.ts";
 import { buildManifest, caseDigests, completionOf, type RunManifest } from "../../../lib/manifest.ts";
 import { redactConfig, sha256Json } from "../../../lib/provenance.ts";
@@ -291,9 +291,7 @@ async function main(): Promise<void> {
   useAkm(values, fail);
   const assets = join(EVAL_DIR, "assets");
   // The custom corpus is a split of the dataset: it has no folder, so it takes no --cases.
-  const choice = values.corpus === "private" ? "custom" : values.corpus ?? "public";
-  const old = renamed(choice, "--corpus custom");
-  if (old) fail(old);
+  const choice = values.corpus ?? "public";
   if (!["public", "custom", "all"].includes(choice)) fail(`--corpus must be public, custom or all, not "${choice}"`);
   const corpora = choice === "all" ? ["public", "custom"] : [choice];
   const limit = values.limit === undefined ? undefined : Number(values.limit);

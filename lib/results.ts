@@ -4,7 +4,7 @@
 // poll for the file to be gone. A folder without `.running` and without summary.json is a run that died without cleaning up
 // (SIGKILL, power cut): `kill -0 $(cat <dir>/.running)` tells a stale file from a live run.
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const RUNNING = ".running";
@@ -47,12 +47,22 @@ export function markRunning(dir: string): void {
   arm();
 }
 
-/** A new folder `<UTC date>-<label>` under `parent`, with `-2`, `-3` and so on when the name is taken, holding the `.running` marker. */
+/**
+ * A new folder `<UTC date>-<label>` under `parent`, with `-2`, `-3` and so on when the name is taken, holding the `.running` marker. The
+ * folder is made by the call that claims the name, so two runs that start together never share one.
+ */
 export function makeResultsDir(parent: string, label: string): string {
   const base = join(parent, `${new Date().toISOString().slice(0, 10)}-${label}`);
-  let dir = base;
-  for (let n = 2; existsSync(dir); n++) dir = `${base}-${n}`;
-  mkdirSync(dir, { recursive: true });
-  markRunning(dir);
-  return dir;
+  mkdirSync(parent, { recursive: true });
+  for (let n = 1; ; n++) {
+    const dir = n === 1 ? base : `${base}-${n}`;
+    try {
+      mkdirSync(dir);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw e;
+    }
+    markRunning(dir);
+    return dir;
+  }
 }

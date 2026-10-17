@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("resolveModel", () => {
   test("the id is the flag, else MODEL_NAME, and goes to the gateway of .env with its key", () => {
-    expect(resolveModel("model", "cloud/some-model", ENV, NONE)).toEqual({ name: "cloud/some-model", baseUrl: GATEWAY, apiKey: "gw-key" });
+    expect(resolveModel("model", "cloud/some-model", ENV, NONE)).toEqual({ name: "cloud/some-model", baseUrl: GATEWAY, apiKey: "gw-key", provider: "openai" });
     expect(resolveModel("model", undefined, ENV, NONE).name).toBe("my-model");
     expect(resolveModel("model", " my-small-model ", ENV, NONE).name).toBe("my-small-model");
   });
@@ -30,8 +30,8 @@ describe("resolveModel", () => {
 
   test("a line of models.json goes to its own URL with the key its api_key_env names, and has no gateway id", () => {
     const m = resolveModel("model", "gpt-5.6-terra", { ...ENV, OPENAI_API_KEY: "oa-key" }, TERRA);
-    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" });
-    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "" });
+    expect(m).toEqual({ name: "gpt-5.6-terra", baseUrl: "https://api.openai.com/v1", apiKey: "oa-key", provider: "openai" });
+    expect(resolveModel("model", "local", {}, { local: { model: "Org/Model-1", base_url: "http://192.168.0.203:8102/v1" } })).toEqual({ name: "Org/Model-1", baseUrl: "http://192.168.0.203:8102/v1", apiKey: "", provider: "openai" });
   });
 
   test("says what to set when the id, the endpoint or an entry's key is missing, and never prints a key", () => {
@@ -47,10 +47,38 @@ describe("resolveModel", () => {
   });
 
   test("the judge uses its own endpoint and key when set, and otherwise the model's", () => {
-    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "my-j", baseUrl: "http://judge/v1", apiKey: "jk" });
-    expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key" });
+    expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_BASE_URL: "http://judge/v1", JUDGE_API_KEY: "jk" }, NONE)).toEqual({ name: "my-j", baseUrl: "http://judge/v1", apiKey: "jk", provider: "openai" });
+    expect(resolveModel("judge", "my-j", ENV, NONE)).toEqual({ name: "my-j", baseUrl: GATEWAY, apiKey: "gw-key", provider: "openai" });
     expect(resolveModel("judge", undefined, { ...ENV, JUDGE_MODEL: "my-j2" }, NONE).name).toBe("my-j2");
     expect(() => resolveModel("judge", undefined, ENV, NONE)).toThrow("pass --judge-model ID, or set JUDGE_MODEL");
+  });
+});
+
+describe("the provider kind of akm's engine", () => {
+  const LINES: Record<string, ModelEntry> = { claude: { base_url: "https://proxy.example/v1", provider: "anthropic" }, plain: { base_url: "https://proxy.example/v1" } };
+
+  test("is the line's provider, else MODEL_PROVIDER, else openai, and a line wins over the environment", () => {
+    expect(resolveModel("model", "my-x", ENV, NONE).provider).toBe("openai");
+    expect(resolveModel("model", "my-x", { ...ENV, MODEL_PROVIDER: "groq" }, NONE).provider).toBe("groq");
+    expect(resolveModel("model", "my-x", { ...ENV, MODEL_PROVIDER: "  " }, NONE).provider).toBe("openai"); // `MODEL_PROVIDER=` in .env is not a provider
+    expect(resolveModel("model", "claude", ENV, LINES).provider).toBe("anthropic");
+    expect(resolveModel("model", "claude", { ...ENV, MODEL_PROVIDER: "groq" }, LINES).provider).toBe("anthropic");
+    expect(resolveModel("model", "plain", { ...ENV, MODEL_PROVIDER: "groq" }, LINES).provider).toBe("groq"); // a line with none takes the environment's
+  });
+
+  test("the judge reads it the same way, wherever its endpoint comes from", () => {
+    expect(resolveModel("judge", "my-j", { ...ENV, MODEL_PROVIDER: "gemini" }, NONE).provider).toBe("gemini");
+    expect(resolveModel("judge", "my-j", ENV, NONE, { baseUrl: "http://m/v1", apiKey: "k" }).provider).toBe("openai");
+    expect(resolveModel("judge", "claude", ENV, LINES).provider).toBe("anthropic");
+  });
+
+  test("useModel writes it to MODEL_PROVIDER with the rest of the model's settings", () => {
+    const env: Record<string, string | undefined> = { ...ENV };
+    expect(useModel({ model: "claude" }, stop, env, LINES)).toMatchObject({ name: "claude", provider: "anthropic" });
+    expect(env.MODEL_PROVIDER).toBe("anthropic");
+    const plain: Record<string, string | undefined> = { ...ENV };
+    expect(useModel({}, stop, plain, NONE).provider).toBe("openai");
+    expect(plain.MODEL_PROVIDER).toBe("openai");
   });
 });
 
@@ -58,7 +86,7 @@ describe("the judge's fallback endpoint", () => {
   const MODEL: Endpoint = { baseUrl: "https://api.openai.com/v1", apiKey: "oa-key" };
 
   test("a judge with no endpoint of its own goes to the fallback, and not to the gateway of .env", () => {
-    expect(resolveModel("judge", "my-j", ENV, NONE, MODEL)).toEqual({ name: "my-j", baseUrl: MODEL.baseUrl, apiKey: "oa-key" });
+    expect(resolveModel("judge", "my-j", ENV, NONE, MODEL)).toEqual({ name: "my-j", baseUrl: MODEL.baseUrl, apiKey: "oa-key", provider: "openai" });
     expect(resolveModel("judge", "my-j", { ...ENV, JUDGE_API_KEY: "jk" }, NONE, MODEL).apiKey).toBe("oa-key"); // the key goes with the endpoint
     expect(resolveModel("judge", "my-j", {}, NONE, MODEL).baseUrl).toBe(MODEL.baseUrl); // no MODEL_* needed
   });
@@ -138,6 +166,27 @@ describe("loadModels", () => {
     expect(loadModels(write('{"a":{"base_url":"http://h/v1","model":"m","api_key_env":"A_KEY"}}'))).toEqual({ a: { base_url: "http://h/v1", model: "m", api_key_env: "A_KEY" } });
   });
 
+  test("takes a provider that is a nonempty string, without a warning, and refuses any other", () => {
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (line: string) => void warned.push(line);
+    try {
+      expect(loadModels(write('{"a":{"base_url":"http://h/v1","provider":"ollama"}}')).a.provider).toBe("ollama");
+    } finally {
+      console.warn = warn;
+    }
+    expect(warned).toEqual([]);
+    for (const bad of ['""', '"  "', "3", "null", "true"]) expect(() => loadModels(write(`{"a":{"base_url":"http://h/v1","provider":${bad}}}`))).toThrow('"a": provider must be a nonempty string');
+  });
+
+  test("takes a chat temperature that is a finite number, and refuses any other", () => {
+    const entries = loadModels(write('{"cold":{"base_url":"http://h/v1","chat":{"temperature":0}},"warm":{"base_url":"http://h/v1","chat":{"temperature":0.7,"reasoning_effort":"low"}}}'));
+    expect(resolveModel("model", "cold", {}, entries).chat).toEqual({ temperature: 0 }); // zero is a temperature
+    expect(resolveModel("model", "warm", {}, entries).chat).toEqual({ reasoning_effort: "low", temperature: 0.7 });
+    for (const bad of ['"hot"', "null", "true", "[]", "{}"]) expect(() => loadModels(write(`{"a":{"base_url":"http://h/v1","chat":{"temperature":${bad}}}}`))).toThrow('"a": temperature must be a finite number');
+    expect(() => loadModels(write('{"a":{"base_url":"http://h/v1","chat":{"temperature":1e999}}}'))).toThrow("temperature must be a finite number"); // JSON that reads as Infinity
+  });
+
   test("reads explicit model limits and rejects malformed budgets before collection", () => {
     const limits = { context: 32768, output: 4096 };
     const entries = loadModels(write(JSON.stringify({ local: { base_url: "http://192.0.2.5/v1", limits } })));
@@ -153,7 +202,7 @@ describe("loadModels", () => {
   test('obsolete "private" metadata does not prevent selecting a model', () => {
     for (const value of [true, false]) {
       const entries = loadModels(write(JSON.stringify({ mine: { base_url: "http://localhost:8080/v1", private: value } })));
-      expect(resolveModel("model", "mine", {}, entries)).toEqual({ name: "mine", baseUrl: "http://localhost:8080/v1", apiKey: "" });
+      expect(resolveModel("model", "mine", {}, entries)).toEqual({ name: "mine", baseUrl: "http://localhost:8080/v1", apiKey: "", provider: "openai" });
     }
   });
 

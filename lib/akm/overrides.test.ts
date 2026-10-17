@@ -100,6 +100,13 @@ describe("parseOverrides", () => {
     expect(() => parse(["--strategy"])).toThrow();
     expect(overridesUsage("reflect-only")).toContain("in place of reflect-only");
   });
+
+  test("the usage text of an eval with no strategy has no --strategy line, and is otherwise the same", () => {
+    const [with_, without] = [overridesUsage("reflect-only").split("\n"), overridesUsage().split("\n")];
+    expect(with_[0]).toStartWith("  --strategy      ");
+    expect(without).toEqual(with_.slice(1));
+    expect(without.map((line) => line.trim().split(/\s+/)[0])).toEqual(["--semantic", "--config-patch"]);
+  });
 });
 
 describe("patchedConfig and overrideSummary", () => {
