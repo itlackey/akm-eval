@@ -85,7 +85,7 @@ function run(spec: Spec = {}): string {
     akm_build: null,
     akm_build_fingerprint: null,
     search_mode: { keyword: "keyword" },
-    semantic_flag: "auto",
+    semantic_flag: "off",
     depth: 10,
     relevant_from_grade: 2,
     limit: null,

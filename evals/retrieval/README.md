@@ -2,7 +2,7 @@
 
 Does akm search put the assets an agent needs at the top?
 
-The eval indexes a library in an akm sandbox, asks `akm search` and `akm curate` for the first 10 results of each query, and scores them against graded judgments of which assets answer the query. It does this with akm's keyword search and, in a full run, with its semantic search too. Two public collections, each scored on its own:
+The eval indexes a library in an akm sandbox, asks `akm search` and `akm curate` for the first 10 results of each query, and scores them against graded judgments of which assets answer the query. It does this with akm's keyword search and, with `--semantic`, with its semantic search too. Two public collections, each scored on its own:
 
 - `library`: 111 task queries and 25 non-task inputs over the library in `corpus/library`.
 - `books`: 51 task queries over 93 assets on cooking, law and tax, and first aid, with judgments that also name assets that must never outrank a relevant one.
@@ -16,16 +16,18 @@ installation is needed. The examples below are commands to append after the
 image name in `docker run` (see the root setup).
 
 ```
-evals/retrieval/run                          # public: the library and the books
+evals/retrieval/run                          # public: the library and the books, keyword search
+evals/retrieval/run --semantic               # the same, with semantic search scored too
 evals/retrieval/run --corpus custom          # the rewrite in private/retrieval/assets (./generate-assets --only retrieval)
 evals/retrieval/run --cases ~/notes/retrieval
 evals/retrieval/run --limit 20               # a quick check, keyword search only
+evals/retrieval/run --limit 20 --semantic    # 20 queries of each collection, both searches
 ```
 
-- `--semantic on|off|auto`: whether semantic search is scored. `auto` (default) scores it in a full run of the public or rewrite corpus, not with `--limit` or `--cases`. On a large library of your own, `on` embeds every asset, which can take most of an hour the first time.
-- `--repeat N`, `--akm COMMAND`, `--label NAME` as for every eval. `-y` is accepted and not needed.
+- `--semantic`: also score akm's semantic search; without it only keyword search is scored. A `--limit` run with `--semantic` scores semantic search too, and so does a run on your own corpus (`--cases`). On a large library of your own it embeds every asset, which can take most of an hour the first time; the run says so before it starts.
+- `--repeat N`, `--akm COMMAND`, `--label NAME` as for every eval.
 
-Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`private/retrieval/results/` for a custom corpus). The default label is `akm-<version>`. A full public run takes about 6 minutes.
+Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`private/retrieval/results/` for a custom corpus). The default label is `akm-<version>`. A full public run with `--semantic` takes about 6 minutes.
 
 ## Run your own set
 
@@ -39,7 +41,7 @@ Results go to `evals/retrieval/results/<UTC date>-<label>-<collection>/` (`priva
 
 Each judgment grades an asset 0 to 3 for a query: 3 is exactly the asset to load, 2 relevant and useful, 1 same topic but no help, 0 unrelated. Grade 2 or 3 is relevant. A task query with no relevant asset is not scored, and is counted with the abstentions. A result naming a section (`ref#section`) counts as the asset.
 
-Metrics, for each of four columns (`search` and `curate` on the keyword index, `semantic_search` and `semantic_curate`):
+Metrics, for each of four columns (`search` and `curate` on the keyword index, `semantic_search` and `semantic_curate` in a run with `--semantic`):
 
 | Metric | Meaning |
 |---|---|
