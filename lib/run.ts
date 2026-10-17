@@ -362,7 +362,7 @@ function banner<Case, Row extends Obj, Extra extends Obj>(spec: EvalSpec<Case, R
   const thinking = engine.enableThinking === true ? "on" : engine.enableThinking === false ? "off" : "unset";
   return [
     `${spec.measurement.eval}: model ${ctx.model} at ${endpointHost(ctx.baseUrl) ?? "an endpoint that is not a URL"} (provider ${ctx.provider}${probe ? served : ", not probed"})`,
-    `  search ${(config.semanticSearchMode ?? "off") === "off" ? "keyword" : "semantic"}`,
+    `  search ${(config.semanticSearchMode ?? "off") === "off" ? "keyword" : `semantic${typeof config.embedding?.localModel === "string" ? ` (${config.embedding.localModel})` : ""}`}`,
     `  temperature ${engine.temperature ?? "unset"}, thinking ${thinking}`,
     ...(spec.strategy === undefined ? [] : [`  strategy ${ctx.overrides.strategy}`]),
     ...(ctx.overrides.configPatch ? [`  config patch ${ctx.overrides.configPatch.path}`] : []),

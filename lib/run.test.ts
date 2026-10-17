@@ -508,12 +508,12 @@ describe("the model endpoint and the startup banner", () => {
     const banner = (flags: string[]): string[] => bannerOf(run(["--label", "banner-config", ...flags], { MODEL_BASE_URL: echo() }).out).slice(1); // after the model line
     const tail = ["  concurrency 1, timeout 900s per akm command", "  akm 0.9.99-test"];
 
-    expect(banner(["--semantic"])).toEqual(["  search semantic", "  temperature unset, thinking unset", "  strategy fake-only", "  config patch --semantic", ...tail]);
+    expect(banner(["--semantic"])).toEqual(["  search semantic (Xenova/bge-small-en-v1.5)", "  temperature unset, thinking unset", "  strategy fake-only", "  config patch --semantic", ...tail]);
     writeFileSync(patch, JSON.stringify({ semanticSearchMode: "auto", engines: { fake: { temperature: 0, enableThinking: false } } }));
     expect(banner(["--config-patch", patch])).toEqual(["  search semantic", "  temperature 0, thinking off", "  strategy fake-only", "  config patch banner-patch.json", ...tail]);
     writeFileSync(patch, JSON.stringify({ semanticSearchMode: "off", engines: { fake: { temperature: 0.3, enableThinking: true } } }));
     expect(banner(["--config-patch", patch])).toEqual(["  search keyword", "  temperature 0.3, thinking on", "  strategy fake-only", "  config patch banner-patch.json", ...tail]);
-    expect(banner(["--semantic", "--config-patch", patch]).slice(0, 4)).toEqual(["  search semantic", "  temperature 0.3, thinking on", "  strategy fake-only", "  config patch banner-patch.json + --semantic"]); // the flag wins over the patch
+    expect(banner(["--semantic", "--config-patch", patch]).slice(0, 4)).toEqual(["  search semantic (Xenova/bge-small-en-v1.5)", "  temperature 0.3, thinking on", "  strategy fake-only", "  config patch banner-patch.json + --semantic"]); // the flag wins over the patch
   });
 
   test("the banner's strategy is --strategy's, and the concurrency and the timeout are those of the run and in seconds; a spec with no strategy has no line for one, and one that runs its own cases none for concurrency", () => {
