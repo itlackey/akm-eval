@@ -12,8 +12,8 @@
 // The banner says what the run is set to, read from the akm config the cases are given and from the flags, so that a setting that is not what
 // the person believes (keyword search for semantic, thinking left on) shows before the run has cost anything.
 //
-// A run gives up when 5 rows in a row, in the order they finish, are errored: no new case starts, those running finish, the summary is written
-// with status "aborted" and the reason, and the run fails with exit code 1.
+// A run gives up when 5 rows in a row, in the order they finish, are errored (or, where the spec's giveUpOn says so, got no result): no new
+// case starts, those running finish, the summary is written with status "aborted" and the reason, and the run fails with exit code 1.
 //
 // An eval that is not one case after another says so in its spec: `openRun` opens what the cases of a run share, `collectAll` runs them itself
 // in place of the pool, and `abortReason` gives up on what only all the rows show.
