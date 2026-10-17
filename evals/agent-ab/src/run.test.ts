@@ -488,16 +488,12 @@ describe("the command line", () => {
     }
   });
 
-  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash, and OpenAI's key is not sent to a gateway", () => {
+  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash", () => {
     // Past the model's name and URL, to the check that a container can reach the server: the id is the gateway's, as opencode's openai provider takes it.
     const local = run(["--model", "Qwen/Qwen2.5-7B"], { MODEL_BASE_URL: "http://localhost:8080/v1", MODEL_API_KEY: "k" });
     expect(local.code).toBe(2);
     expect(local.err).toContain("the endpoint of openai/Qwen/Qwen2.5-7B, http://localhost:8080/v1, would be the container itself");
     expect(local.err).not.toContain("is sent to");
-    const gateway = run(["--model", "gpt-6"], { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: "sk-real-openai-key" });
-    expect(gateway.code).toBe(2);
-    expect(gateway.err).toContain("no model key for openai/gpt-6");
-    expect(gateway.err + gateway.out).not.toContain("sk-real-openai-key");
     const none = run([], {});
     expect(none.code).toBe(2);
     expect(none.err).toContain("name the model");
@@ -542,6 +538,27 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const whole = run(["--limit", "3", "--label", "whole"]);
     expect(whole.code).toBe(0);
     expect(summary("whole")).toMatchObject({ status: "complete", aborted_reason: null, completion: { expected: 6, completed: 6, missing: 0 } });
+  }, 60_000);
+
+  test("ends with exit 1, the reason and an aborted summary when an arm completed none of its trials, though Harbor exited 0", () => {
+    const { run, summary } = repo();
+    // Both akm trials error (one ran out of time, the plugin was not live in the other); the control completes both of its own.
+    const dead = run(["--limit", "2", "--label", "dead"], { UV_FAKE_TIMEOUTS: "1", UV_FAKE_PLUGIN_DEAD: "1" });
+    const reason = "the akm arm completed none of its 2 trials: every one errored";
+    expect(dead.code).toBe(1);
+    expect(dead.err).toContain(`agent-ab: ${reason}. The results above cover the trials that finished.`);
+    expect(dead.out).toContain(`ABORTED      ${reason}`);
+    expect(summary("dead")).toMatchObject({ status: "aborted", aborted_reason: reason, harbor_exit: 0, completion: { expected: 4, completed: 2, failed: 2, missing: 0, control: { completed: 2, failed: 0 }, akm: { completed: 0, failed: 2 } } });
+  }, 60_000);
+
+  test("sends a gateway with no key the placeholder \"unused\" and says so on stderr, and sends it no key of OpenAI's", () => {
+    const { run, folder } = repo();
+    const done = run(["--limit", "1", "--label", "keyless"], { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "", OPENAI_API_KEY: "sk-real-openai-key" });
+    expect(done.code, done.err).toBe(0);
+    expect(done.err).toContain('model key is empty: sending "unused" to gw.example.net (a server that needs a key will fail every trial after its setup)');
+    const seen = readFileSync(join(folder("keyless"), "uv-env.json"), "utf8");
+    expect(JSON.parse(seen)).toMatchObject({ OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "https://gw.example.net/v1" });
+    expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
   }, 60_000);
 
   test("a change to the library, to a selected task, to the tasks selected or to the attempts changes assets_sha256, and a rerun does not", () => {

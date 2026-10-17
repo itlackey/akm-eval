@@ -14,7 +14,6 @@ image name in `docker run` (see the root setup).
 
 ```
 evals/agent-ab/run
-evals/agent-ab/run
 evals/agent-ab/run --corpus custom                       # the rewrite: ./generate-assets --only agent-ab
 evals/agent-ab/run --cases ~/tasks/agent-ab
 evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
@@ -26,12 +25,12 @@ evals/agent-ab/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 - `--akm` is the akm of the akm arm: an exact npm release (`akm-cli@0.10.261003-beta`, the default) or the folder of an akm checkout, packed with `npm pack` and installed from the tarball. A checkout that holds the plugin (a `package.json` named `akm-opencode`) has it packed too; otherwise the pinned plugin is used. The default CLI comes with plugin `0.10.261002-beta`, and `akm-cli@0.9.26` with plugin `0.9.26202610051302`; each plugin depends on its exact CLI, and all four have committed dependency locks. `AKM_BIN` is not read.
 - `--akm-env KEY=VALUE`, repeatable, adds an `AKM_*` setting to the akm arm; this is how a config is swept. The directories, `AKM_OPENCODE_CLI` and credential names are refused.
 
-A run that did not finish everything (Harbor failed, or a task, arm and attempt has no trial) writes its summary with `status: "aborted"`, exits 1, and is no result.
+A run that did not finish everything (Harbor failed, a task, arm and attempt has no trial, or an arm completed none of its trials) writes its summary with `status: "aborted"`, exits 1, and is no result.
 
 ## What it needs
 
 - Docker on the host. The runner includes uv, Bun, npm and the pinned Harbor dependencies; native source-checkout runs need those tools installed separately.
-- A model with tool calling, at an endpoint that serves the Responses API (`/v1/responses`) and that a container can reach: not `localhost`. A local server needs a non-empty `MODEL_API_KEY` (any value) and the machine's network address:
+- A model with tool calling, at an endpoint that serves the Responses API (`/v1/responses`) and that a container can reach: not `localhost`. A local server needs the machine's network address, and `MODEL_API_KEY` may be empty or any value:
 
   ```
   MODEL_NAME=my-local-model
@@ -40,6 +39,8 @@ A run that did not finish everything (Harbor failed, or a task, arm and attempt 
   ```
 
 - Internet from the containers: apt, GitHub, nodejs.org, npm, models.dev and the model; Docker Hub and PyPI for the first image build.
+
+The model is reached through opencode's `openai` provider. With `MODEL_BASE_URL` or `OPENAI_BASE_URL` set, every `--model` name that is not a `models.json` line is sent to that gateway as `openai/<name>`, even one that names another provider; another provider's own path, with its key under its own name, is used only when neither URL is set. The `MODEL_BASE_URL=http://localhost:8080/v1` that `.env.example` starts with is the task container itself, which the run refuses: set an address the task containers reach. An empty `MODEL_API_KEY` is sent to a gateway as `unused`, and the run says so.
 
 Harbor gets only the model's variables and what it, uv and Docker read.
 

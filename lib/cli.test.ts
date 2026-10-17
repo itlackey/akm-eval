@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Fatal, exitMessage, fail, failureMessage, gitCommit, hideEndpoint, slug } from "./cli.ts";
-import * as harbor from "./harbor/harbor.ts";
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -36,13 +35,6 @@ describe("Fatal and fail", () => {
 
   test("an error that is not a Fatal is not one", () => {
     expect(new Error("x") instanceof Fatal).toBe(false);
-  });
-
-  test("the Harbor module exports the same ones", () => {
-    expect(harbor.Fatal).toBe(Fatal);
-    expect(harbor.fail).toBe(fail);
-    expect(harbor.gitCommit).toBe(gitCommit);
-    expect(harbor.slug).toBe(slug);
   });
 });
 

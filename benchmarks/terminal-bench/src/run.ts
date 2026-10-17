@@ -43,13 +43,8 @@ import { makeResultsDir, markRunning, clearRunning } from "../../../lib/results.
 import { DEFAULT_ATTEMPTS, type LibraryCount, type Lock, NAME, type Collected, collect, jobConfig, jobName, readLock } from "./collect.ts";
 import { MEASUREMENT, caseOf } from "./measurement.ts";
 
-// These live in ./collect.ts, the collector. They are exported from here too, for what imported them from here.
-export { enforcedAssets, jobConfig, measureLibrary, readLock } from "./collect.ts";
-export type { LibraryCount, Lock } from "./collect.ts";
-
 const BENCH_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 
 const USAGE = `Usage: benchmarks/terminal-bench/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--attempts N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
@@ -310,7 +305,7 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; resume?: string; concurrency?: string; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; limit?: string; attempts?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; resume?: string; concurrency?: string; help?: boolean };
   try {
     values = parseArgs({
       args: Bun.argv.slice(2),
@@ -324,10 +319,6 @@ async function main(): Promise<void> {
   if (values.help) {
     console.log(USAGE);
     return;
-  }
-  try {
-  } catch (e) {
-    fail((e as Error).message);
   }
   // The custom library is the retrieval eval's, so it is resolved as retrieval's corpus is: private/retrieval/assets, or --cases DIR.
   const corpora = resolveCorpora({ eval: "retrieval", values, publicFolder: join(ROOT, "corpus"), fail });

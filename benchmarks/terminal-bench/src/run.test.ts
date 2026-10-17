@@ -13,9 +13,10 @@ import { clearRunning } from "../../../lib/results.ts";
 import { comparePair, loadRun } from "../../../scripts/compare/src/lib.ts";
 import { RescoreError, readStored, rescoreFolder, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
+import { enforcedAssets, jobConfig, measureLibrary, readLock } from "./collect.ts";
 import { sandboxRepo, writeFakeHarbor } from "./fakes.ts";
 import { MEASUREMENT, caseOf } from "./measurement.ts";
-import { enforcedAssets, jobConfig, libraryOf, measureLibrary, otherDigests, readLock, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
+import { libraryOf, otherDigests, runCorpus, selectTasks, sideBySide, summarize } from "./run.ts";
 
 const BENCH_DIR = join(import.meta.dir, "..");
 const ROOT = resolve(BENCH_DIR, "..", "..");
@@ -766,7 +767,7 @@ describe("runCorpus", () => {
     expect([timeouts.metrics.control.timeouts, timeouts.metrics.akm.timeouts]).toEqual([1, 1]);
     expect(timeouts.n_errored).toBe(1); // the slow install got no reward. The control's time-out was still verified
     expect(rowsOf(timeouts.results_dir).flatMap((r) => r.trials).filter((t) => t.timed_out)).toHaveLength(2);
-    const dead = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "d", limit: 1, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results")));
+    const dead = await quiet(() => runCorpus(PUBLIC, { model: "openai/x", label: "d", limit: 2, env: { ...env, UV_FAKE_PLUGIN_DEAD: "1" } }, join(root, "results"))); // two tasks: with one, that trial is the whole akm arm, and the run is aborted
     expect(dead.report.akm.exceptions).toEqual({ AkmPluginNotLoadedError: 1 });
     expect(dead.timeouts.akm).toBe(1);
     expect(dead.report.akm.timeouts).toBe(1); // the one trial that timed out and then failed the plugin check
@@ -918,16 +919,12 @@ describe("the command line", () => {
     }
   });
 
-  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash, and OpenAI's key is not sent to a gateway", () => {
+  test("sends --model through models.json and the gateway as every eval does: a gateway's model id may have a slash", () => {
     // Past the model's name and URL, to the check that a container can reach the server: the id is the gateway's, as opencode's openai provider takes it.
     const local = run(["--model", "Qwen/Qwen2.5-7B"], { MODEL_BASE_URL: "http://localhost:8080/v1", MODEL_API_KEY: "k" });
     expect(local.code).toBe(2);
     expect(local.err).toContain("the endpoint of openai/Qwen/Qwen2.5-7B, http://localhost:8080/v1, would be the container itself");
     expect(local.err).not.toContain("is sent to");
-    const gateway = run(["--model", "gpt-6"], { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: "sk-real-openai-key" });
-    expect(gateway.code).toBe(2);
-    expect(gateway.err).toContain("no model key for openai/gpt-6");
-    expect(gateway.err + gateway.out).not.toContain("sk-real-openai-key");
     const none = run([], {});
     expect(none.code).toBe(2);
     expect(none.err).toContain("name the model");
@@ -984,6 +981,27 @@ describe("the command line with a fake Harbor, in a copy of the repository", () 
     const summary = (label: string, corpus: "public" | "custom" = "public") => JSON.parse(readFileSync(join(folder(label, corpus), "summary.json"), "utf8"));
     return { root, run, summary, folder };
   }
+
+  test("ends with exit 1, the reason and an aborted summary when an arm completed none of its trials, though Harbor exited 0", () => {
+    const { run, summary } = repo();
+    // Both akm trials error (the plugin was not live in one, the install ran out of time in the other); the control keeps one that completed.
+    const dead = run(["--limit", "2", "--label", "dead"], { UV_FAKE_PLUGIN_DEAD: "1", UV_FAKE_TIMEOUTS: "1" });
+    const reason = "the akm arm completed none of its 2 trials: every one errored";
+    expect(dead.code).toBe(1);
+    expect(dead.err).toContain(`terminal-bench: ${reason}. The results above cover the trials that finished.`);
+    expect(dead.out).toContain(`ABORTED      ${reason}`);
+    expect(summary("dead")).toMatchObject({ status: "aborted", aborted_reason: reason, harbor_exit: 0, completion: { expected: 4, completed: 1, failed: 3, missing: 0, control: { completed: 1, failed: 1 }, akm: { completed: 0, failed: 2 } } });
+  }, 60_000);
+
+  test("sends a gateway with no key the placeholder \"unused\" and says so on stderr, and sends it no key of OpenAI's", () => {
+    const { run, folder } = repo();
+    const done = run(["--limit", "1", "--label", "keyless"], { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "", OPENAI_API_KEY: "sk-real-openai-key" });
+    expect(done.code, done.err).toBe(0);
+    expect(done.err).toContain('model key is empty: sending "unused" to gw.example.net (a server that needs a key will fail every trial after its setup)');
+    const seen = readFileSync(join(folder("keyless"), "uv-env.json"), "utf8");
+    expect(JSON.parse(seen)).toMatchObject({ OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "https://gw.example.net/v1" });
+    expect(done.err + done.out + seen).not.toContain("sk-real-openai-key");
+  }, 60_000);
 
   test("a run on a custom corpus records its folder from the repository root and rescore reads the library there; a folder outside the repository is not written down, and --cases DIR gives it to rescore", () => {
     const { root, run, summary, folder } = repo();

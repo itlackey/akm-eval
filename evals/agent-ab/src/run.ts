@@ -44,7 +44,6 @@ export { jobConfig, taskNames };
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
 
 const USAGE = `Usage: evals/agent-ab/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--model NAME] [--akm akm-cli@x.y.z|CHECKOUT] [--akm-env KEY=VALUE]
 
@@ -70,7 +69,6 @@ interface Summary {
   eval: string;
   /** `public` or `custom`. */
   corpus: string;
-  /** For a custom corpus, `rewrite` (the public tasks rewritten from a seed) or `own`; `public` for the public one. */
   /** The folder of a custom corpus from the repository root (corpusFolderOf in lib/manifest.ts), which scripts/rescore reads the cases from. Null for a public run, and for a folder outside the repository, whose path is not written down: rescore then takes --cases DIR. */
   corpus_folder: string | null;
   label: string;
@@ -243,7 +241,7 @@ function corpusProblem(c: ResolvedCorpus): string | undefined {
 }
 
 async function main(): Promise<void> {
-  let values: { model?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
+  let values: { model?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; akm?: string; "akm-env"?: string[]; semantic?: boolean; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...MODEL_OPTIONS, ...AKM_ARM_OPTIONS, label: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
@@ -253,10 +251,6 @@ async function main(): Promise<void> {
   if (values.help) {
     console.log(USAGE);
     return;
-  }
-  try {
-  } catch (e) {
-    fail((e as Error).message);
   }
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: EVAL_DIR, fail });
   const limit = positive("--limit", values.limit);
