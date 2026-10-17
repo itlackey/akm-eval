@@ -8,10 +8,10 @@ Does consolidate retire only notes whose every claim the replacement keeps?
 
 For each note, akm takes the nearest neighbours by embedding (at most 5) with a cosine of 0.93 or more (0.95 for an older note it has not judged). Only those pairs reach the judge, which labels a pair `duplicate`, `subsumed`, `supersedes`, `contradicts`, `overlap` or `unrelated`. akm retires a note only for the first three, and only when the judge listed nothing that note holds alone. It stages a duplicate with no claim of its own on either side, which a triage run then accepts unattended. A pair never paired is kept.
 
-`--embedder` picks the embedding:
+akm embeds the notes in one of two ways:
 
-- `deterministic` (default): akm's word-hash embedder (`AKM_EMBED_DETERMINISTIC=1`). No model, the same pairs on every run. The cases were made to pair in this space.
-- `real`: akm's built-in model, bge-small-en-v1.5 (133 MB, downloaded once into `.cache/`), as a real bundle runs it. It can pair other notes, so a `real` run is not comparable with a `deterministic` one.
+- By default with its deterministic word-hash embedder (`AKM_EMBED_DETERMINISTIC=1`). No model, the same pairs on every run. The cases were made to pair in this space.
+- With `--semantic` with its real embedder, its built-in model bge-small-en-v1.5 (133 MB, downloaded once into `.cache/`), as a real bundle runs it. It can pair other notes, so a `--semantic` run is not comparable with a default one.
 
 ## Run
 
@@ -24,10 +24,11 @@ evals/consolidate/run
 evals/consolidate/run --model qwen3-27b
 evals/consolidate/run --corpus custom          # the rewrite: ./generate-assets --only consolidate
 evals/consolidate/run --cases ~/notes/consolidate
+evals/consolidate/run --semantic               # akm's real embedder, not the deterministic one
 evals/consolidate/run --pool                   # the whole pool in one run, below
 ```
 
-`--limit N` takes the first case of each relation in turn. `--strategy` and `--config-patch` change the akm config. Each case is up to three calls of about 1k tokens; the 80 cases take about 20 minutes on a local 27B, one at a time. On a 429 the eval retries a case with a growing wait, up to four times. The eval sets temperature 0 and thinking off. akm is given 30 minutes for `improve`, 2 for `index` and `proposal list`.
+`--limit N` takes the first case of each relation in turn. `--strategy` and `--config-patch` change the akm config. `--concurrency N` runs N cases at a time, each in a sandbox of its own (default 1). `--timeout-ms N` stops an akm command that is still running after N milliseconds (default 1800000, which `improve` gets; `index` and `proposal list` keep their shorter limits, 2 minutes and 30 for the first `--semantic` index, and never get longer than N). Each case is up to three calls of about 1k tokens; the 80 cases take about 20 minutes on a local 27B, one at a time. On a 429 the eval retries a case with a growing wait, up to four times; a case the endpoint still turns away is an error like any other, so an endpoint that keeps rate limiting ends the run through the rule below and not, as it once did, at the first case it turns away. The eval sets temperature 0 and thinking off. The run gives up when five cases in a row end in an error: it starts no new case, writes the summary with `status: "aborted"` and the reason, and exits 1. It gives up too when akm paired none of the notes, since its judge then never ran.
 
 ## Run your own set
 
@@ -53,7 +54,7 @@ For scale: retiring the older note of every paired pair gives 40 unsafe of 80, p
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored, errored and paired, `timeouts`, `status` and `aborted_reason` (it aborts on persistent rate limiting, 5 cases in a row without a verdict, or no pairs at all), `embedder`, `served_models`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl`: one row per case with the relation, the safe sides, whether akm paired the notes, the judge's label and reason, the side retired and whether it was safe and staged, the claim lists (`only_in_retired`, `only_in_successor`; null for a kept pair), the seconds, and the raw output it was scored from.
+`summary.json`: `metrics`, the counts run, scored, errored and paired, `timeouts`, `status` and `aborted_reason` (it aborts after five errored cases in a row, or when akm paired none of the notes), `embedder`, `served_models`, the model, akm version and build, `strategy`, `config_patch`, `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder`, `concurrency`, `timeout_ms` and the `manifest`. `samples.jsonl`: one row per case with the relation, the safe sides, whether akm paired the notes, the judge's label and reason, the side retired and whether it was safe and staged, the claim lists (`only_in_retired`, `only_in_successor`; null for a kept pair), the seconds, and the raw output it was scored from.
 
 ## Run on a whole pool (`--pool`)
 
@@ -65,7 +66,7 @@ evals/consolidate/run --pool --timeout-ms 600000 --label short-budget
 evals/consolidate/run --pool --config-patch private/patches/anti-collapse-off.json
 ```
 
-For the last, save `{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }` as that file. `--timeout-ms N` is akm's own budget (default 2 hours); a short one makes akm cut the pool for the promote pass. `--pool` reads the public pool only, so it refuses `--corpus custom`, `--cases` and `--limit`.
+For the last, save `{ "improve": { "strategies": { "consolidate": { "processes": { "consolidate": { "antiCollapse": { "enabled": false } } } } } } }` as that file. With `--pool`, `--timeout-ms N` is akm's own wall-clock budget for the run (default 7200000, 2 hours, which akm uses when it is given none); a short one makes akm cut the pool for the promote pass, and the eval kills akm 10 minutes after the budget. The pool is one run, so there is no `--concurrency`, and the run fails when its `improve` does. `--pool` reads the public pool only, so it refuses `--corpus custom`, `--corpus all`, `--cases` and `--limit`; `--semantic` and `--label` work as above, and without `--label` the folder is named for the model and `-pool`. The folder holds `summary.json` (its `mode` is `pool`, as its manifest's is), `samples.jsonl` (one row per cluster) and `improve.json`, akm's own result of the improve run with the endpoint written `<MODEL_BASE_URL>`.
 
 The pool has 47 clusters with known outcomes (`assets/pool/README.md`). A retirement is safe (allowed, for an allowed successor), wrong-successor, or unsafe (the note holds a claim no other has). Metrics: `unsafe`, `staged`, `precision`, `recall` (clusters with a note to retire, 19 of 47, where one safe retirement was proposed), `wrong_successor`, `classes`, `pairs`, `calls`, `chunks`, `anti_collapse_injected`, `cold_start_budget` and `warnings`. akm retires one note per chain in a run, so a triple of duplicates ends with one retirement and two failed judgments. One cluster is 5 points of recall. One pool run took about 4.5 minutes and 56 calls on akm 0.9.30.
 

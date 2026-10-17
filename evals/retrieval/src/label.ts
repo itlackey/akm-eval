@@ -469,7 +469,7 @@ export function stampLegacy(qrelsPath: string, library: string): Stamped {
 }
 
 async function main(): Promise<number> {
-  let values: { corpus?: string; cases?: string; yes?: boolean; limit?: string; from?: string; "stamp-legacy"?: boolean; "judge-model"?: string; akm?: string; help?: boolean };
+  let values: { corpus?: string; cases?: string; limit?: string; from?: string; "stamp-legacy"?: boolean; "judge-model"?: string; akm?: string; help?: boolean };
   try {
     values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, from: { type: "string" }, "stamp-legacy": { type: "boolean" }, ...JUDGE_OPTIONS, ...AKM_OPTIONS, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {

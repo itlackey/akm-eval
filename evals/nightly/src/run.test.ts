@@ -3,7 +3,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { commandLine, createSandbox, removeSandbox } from "../../../lib/akm/akm.ts";
-import { defaultOverrides, loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { defaultOverrides, loadConfigPatch, parseOverrides } from "../../../lib/akm/overrides.ts";
+import { fail } from "../../../lib/cli.ts";
 import { endpointHost } from "../../../lib/provenance.ts";
 import { repeatRuns } from "../../../lib/repeat.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
@@ -14,9 +15,19 @@ import { assetsDigest } from "../../consolidate/src/inputs.ts";
 import { type Embedder, sandboxOptions } from "../../consolidate/src/lib.ts";
 import { type Item, applyFix, feedbackArgs, loadNight, nightFiles, nightlyConfig, plant, rawOf, refOf } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { corpusFields, runCorpus } from "./run.ts";
+import { runCorpus } from "./run.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
+/** The last line of every usage text: the driver's note on the request the model gets before the first case. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
+
+/**
+ * The keys of the summary.json that nightly wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts (with those of RunInputs and
+ * CorpusFields it extended), without results_dir, which is returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go.
+ */
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "status", "aborted_reason", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "embedder", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "model_calls", "semantic_verification", "manifest"];
+/** What a run adds: timeout_ms, which is new, and n_cases, which the driver writes for every spec and the night never had (the night has n_items). A night has no --concurrency, and the driver writes no `concurrency` for a spec that runs its cases itself. */
+const ADDED_KEYS = ["timeout_ms", "n_cases"];
 
 /** The public corpus, with its items in `folder`. */
 const publicCorpus = (folder: string): ResolvedCorpus => ({ name: "public", folder, rewrite: false, seed: null, flag: "--corpus public" });
@@ -150,7 +161,7 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
 
 const resultsOf = (folders: { results: string }) => {
   const dir = join(folders.results, readdirSync(folders.results)[0] as string);
-  const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const rows = readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)); // a night that failed has no rows
   return { dir, rows, summary: JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")) };
 };
 
@@ -399,19 +410,28 @@ describe("runCorpus", () => {
     expect(commands().filter((l) => l.startsWith("feedback ")).map((l) => l.split(" ")[1])).toEqual([refOf(period.path), "memories/playwright-networkidle-chat-widget"]);
   });
 
-  test("ends with akm's own message when improve fails, with the endpoint hidden, and leaves nothing behind", async () => {
+  test("ends with akm's own message when improve fails, with the endpoint hidden, and leaves nothing behind but an aborted summary that says why", async () => {
     const { ctx, folders, made } = setup(IDS, { improveFails: "unreachable: http://localhost:1/v1/chat/completions refused" });
     await expect(quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results))).rejects.toThrow("akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused");
     expectAllRemoved(made);
+    const { rows, summary } = resultsOf(folders);
+    expect(rows).toEqual([]); // there is no night to score
+    expect(summary).toMatchObject({ status: "aborted", aborted_reason: "akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused", n_items: 6, n_planted: 6, n_errored: 0, improve_ok: false, skipped_processes: [], pair_pass: null, calls_by: [], drain: { promoted: 0, rejected: 0, deferred: 0, failed: 0 } });
+    expect(summary.seconds.total).toBeNumber();
+    expect(manifestProblems(summary.manifest)).toEqual([]);
+    expect(summary.manifest.completion).toEqual({ selected: IDS, scored: [], errored: [] }); // every item was selected, none was run
+    expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS].sort()); // the same keys as a night that ended: readers of the summary need no other case
   });
 
   test("ends with akm's message when a step before improve fails, and says when akm reports the run as not ok", async () => {
     const { ctx, folders } = setup(IDS, { indexFails: "no index" });
     await expect(quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results))).rejects.toThrow('akm index failed (exit 70): {"ok":false,"error":"no index"}');
+    expect(resultsOf(folders).summary).toMatchObject({ status: "aborted", aborted_reason: 'akm index failed (exit 70): {"ok":false,"error":"no index"}' });
     const notOk = good();
     (notOk.improve as { ok: boolean }).ok = false;
     const second = setup(IDS, notOk);
-    expect((await quiet(() => runCorpus(publicCorpus(second.folders.assets), second.ctx, second.folders.results))).improve_ok).toBe(false);
+    const summary = await quiet(() => runCorpus(publicCorpus(second.folders.assets), second.ctx, second.folders.results));
+    expect(summary).toMatchObject({ improve_ok: false, status: "complete" });
   });
 
   test("removes every sandbox it makes", async () => {
@@ -432,6 +452,7 @@ describe("runCorpus", () => {
       const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
       expect(summary).toMatchObject({ embedder: "real", n_planted: 6 });
       expect(resultsOf(folders).summary.embedder).toBe("real");
+      expect(resultsOf(folders).summary.manifest.treatment_hints).toEqual({ embedder: "real" }); // scripts/compare shows it beside the strategy
       expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8"))).toEqual(nightlyConfig(ctx.baseUrl, ctx.model, ctx.hasKey, "real"));
       expect(summary.config).toMatchObject({ embedding: { localModel: "Xenova/bge-small-en-v1.5" } });
     } finally {
@@ -468,11 +489,6 @@ describe("runCorpus", () => {
     expect(summary.config.engines.nightly).toMatchObject({ kind: "llm", model: "the-model", endpoint: "<MODEL_BASE_URL>/chat/completions", apiKey: "$MODEL_API_KEY", temperature: 0, enableThinking: false });
     expect(summary.config).toMatchObject({ semanticSearchMode: "auto", defaults: { llmEngine: "nightly" } });
     expect(JSON.stringify(summary.config)).not.toContain("localhost:1/v1"); // the config hides the endpoint; engine records its host
-    // every key it wrote before is still there
-    for (const key of ["eval", "corpus", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "limit", "strategy", "config_patch", "n_items", "n_planted", "n_errored", "seconds", "improve_ok", "skipped_processes", "drain", "outside_changed", "pair_pass", "calls_by", "metrics", "akm_build_fingerprint"]) expect(summary).toHaveProperty(key);
-    // the digest of the code covers the night's own src folder, the consolidate, distill and reflect code it imports, and lib/
-
-
     expect(summary.akm_build_fingerprint).toBeNull(); // the fake akm is not a checkout with changes
   });
 
@@ -503,7 +519,7 @@ describe("runCorpus", () => {
     expect(own.assets_sha256).toBe(assetsDigest(folders.assets, nightFiles(folders.assets)));
   });
 
-  test("writes a sound manifest: the parts it ran with, the digests of its items, the embedder as a treatment hint, and which items were scored", async () => {
+  test("writes a sound manifest: the parts it ran with, the digests of its items, and which items were scored", async () => {
     const { ctx, folders } = setup(IDS, good());
     const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, hasKey: true }, folders.results));
     const stored = resultsOf(folders).summary;
@@ -512,7 +528,7 @@ describe("runCorpus", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     const m = summary.manifest;
     expect(m).toMatchObject({ eval: "nightly", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: { embedder: "deterministic" } });
-    expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(m.settings).toEqual({ strategy: "default", config_patch_sha256: null, timeout_ms: 2_700_000, seed: null }); // the budget akm is given: it used to be recorded as null
     expect(Object.keys(m.cases)).toEqual(IDS);
     expect(m.completion.selected).toEqual(IDS);
     expect(m.completion.scored.length + m.completion.errored.length).toBe(IDS.length);
@@ -524,12 +540,18 @@ describe("runCorpus", () => {
     expect(JSON.stringify(MEASUREMENT.input({ ...dup, texts: { ...texts, [dup.a]: "other" } } as never))).not.toBe(JSON.stringify(MEASUREMENT.input({ ...dup, texts } as never)));
   });
 
-  test("the embedder is a treatment hint of the manifest, and so is the real one", async () => {
+  test("--semantic, as the driver parses it, runs the real embedder with the config patch recorded, and the config it wrote is the one --embedder real wrote", async () => {
     process.env.FAKE_EMBEDDER = "real";
     try {
-      const { ctx, folders } = setup(IDS, good(), "real");
-      const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
-      expect(summary.manifest.treatment_hints).toEqual({ embedder: "real" });
+      const overrides = parseOverrides({ semantic: true }, "default", fail);
+      const a = setup(IDS, good(), "real"); // setup points the fake at its own scenario and log, so each run follows its setup
+      const plain = await quiet(() => runCorpus(publicCorpus(a.folders.assets), a.ctx, a.folders.results));
+      const b = setup(IDS, good(), "real");
+      const semantic = await quiet(() => runCorpus(publicCorpus(b.folders.assets), { ...b.ctx, overrides }, b.folders.results));
+      expect(JSON.stringify(semantic.config)).toBe(JSON.stringify(plain.config)); // the same keys, in the same order
+      expect(readFileSync(`${join(b.root, "commands.log")}.config`, "utf8")).toBe(readFileSync(`${join(a.root, "commands.log")}.config`, "utf8")); // and the config akm read is the same text
+      expect(semantic).toMatchObject({ embedder: "real", config_patch: { path: "--semantic" } });
+      expect(plain.config_patch).toBeNull();
     } finally {
       delete process.env.FAKE_EMBEDDER;
     }
@@ -556,18 +578,37 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(out, "summary.json"), "utf8")).metrics).toEqual(JSON.parse(readFileSync(join(dir, "summary.json"), "utf8")).metrics);
   });
 
-  test("records the folder of a custom corpus only when it is inside the repository, and never an absolute path", () => {
-    const folder = (name: string): ResolvedCorpus => ({ name: "custom", folder: name, rewrite: false, seed: null, flag: "--cases x" });
-    expect(corpusFields(folder(join(ROOT, "private", "nightly", "assets"))).corpus_folder).toBe("private/nightly/assets");
-    expect(corpusFields(folder(join(tmpdir(), "my notes"))).corpus_folder).toBeNull();
-    // the public corpus is the committed night: there is no folder to record
-    expect(corpusFields(publicCorpus(join(ROOT, "evals", "nightly", "assets")))).toEqual({ corpus: "public", corpus_folder: null });
-  });
-
-  test("an improve run the eval kills for running too long ends the night with a message that says so, and leaves nothing behind", async () => {
+  test("an improve run the eval kills for running too long ends the night with a message that says so, an aborted summary and nothing else behind", async () => {
     const { ctx, folders, made } = setup(IDS, { ...good(), improveSleeps: true });
     await expect(quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, improveTimeoutMs: 1500 }, folders.results))).rejects.toThrow("akm improve timed out after 1.5s");
     expectAllRemoved(made);
+    expect(resultsOf(folders).summary).toMatchObject({ status: "aborted", aborted_reason: "akm improve timed out after 1.5s", n_planted: 6, improve_ok: false });
+  });
+
+  test("the budget is akm's own and the eval ends akm ten minutes after it: --timeout-ms is what akm is given, and what the summary and the manifest record", async () => {
+    const { ctx, folders, commands } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, timeoutMs: 123_000 }, folders.results));
+    expect(commands().find((l) => l.startsWith("improve "))).toBe("improve --strategy default --require-engines --no-sync --timeout-ms 123000 --json-to-stdout --format json");
+    expect([summary.timeout_ms, summary.manifest.settings.timeout_ms]).toEqual([123_000, 123_000]);
+  });
+
+  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and timeout_ms and n_cases besides, but no concurrency: a night is one run", async () => {
+    const { ctx, folders } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), ctx, folders.results));
+    const stored = resultsOf(folders).summary;
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS].sort());
+    expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
+    expect(stored).toMatchObject({ timeout_ms: 2_700_000, n_cases: 6, n_items: 6, n_planted: 6, status: "complete" });
+    expect(stored).not.toHaveProperty("concurrency");
+  });
+
+  test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+    const { ctx, folders, root } = setup(IDS, good());
+    const summary = await quiet(() => runCorpus(publicCorpus(folders.assets), { ...ctx, provider: "groq" }, folders.results));
+    expect((summary.config as any).engines.nightly.provider).toBe("groq");
+    expect(JSON.parse(readFileSync(`${join(root, "commands.log")}.config`, "utf8")).engines.nightly.provider).toBe("groq");
+    const plain = setup(IDS, good());
+    expect(((await quiet(() => runCorpus(publicCorpus(plain.folders.assets), plain.ctx, plain.folders.results))).config as any).engines.nightly.provider).toBe("openai");
   });
 });
 
@@ -582,24 +623,24 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
   const model = { MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" };
+  const noAkm = "could not run `no-such-akm-in-this-test --version`";
 
   test("says what is wrong with its arguments and its settings, and exits 2", () => {
-    expect(run(["--corpus", "public"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--corpus", "public"], model).err).toContain(noAkm);
     expect(run(["--limit", "0"], model)).toMatchObject({ code: 2 });
     expect(run(["--limit", "0"], model).err).toContain("--limit must be a positive integer");
     expect(run(["--corpus", "some"], model).err).toContain('--corpus must be public, custom or all, not "some"');
     expect(run(["--label", "a b"], model).err).toContain("--label may use letters");
     expect(run(["--nope"], model).err).toContain("Usage: evals/nightly/run");
     expect(run(["--repeat", "0"], model).err).toContain("--repeat must be a positive integer");
-    expect(run(["--embedder", "fake"], model)).toMatchObject({ code: 2 });
-    expect(run(["--embedder", "fake"], model).err).toContain('--embedder must be deterministic or real, not "fake"');
-    expect(run(["--help"]).out).toMatch(/--embedder[\s\S]*deterministic[\s\S]*real[\s\S]*--strategy/);
     expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
     expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
     expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
     expect(run([]).err).toContain("name the model: pass --model ID, or set MODEL_NAME in .env");
-    expect(run(["--help"]).out).toContain("Tested with akm 0.9.26 or later");
-    expect(run(["--help"]).out).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
+    const help = run(["--help"]).out;
+    expect(help).toContain("Tested with akm 0.9.26 or later");
+    expect(help).toEndWith(`\n${PROBE_NOTE}\n`);
+    expect(help).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of default[\s\S]*--config-patch/);
   });
 
   test("takes the model from --model with no MODEL_NAME, and the akm from --akm over AKM_BIN", () => {
@@ -617,50 +658,99 @@ describe("the command", () => {
     dirs.push(root);
     writeFileSync(join(root, "patch.json"), "{}");
     const done = run(["--strategy", "thorough", "--config-patch", join(root, "patch.json"), "--repeat", "2"], model);
-    expect(done.err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(done.err).toContain(noAkm);
   });
 
-  test("takes --embedder real or deterministic, and goes on to the akm check", () => {
-    expect(run(["--embedder", "real"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
-    expect(run(["--embedder", "deterministic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
-  });
-
-  test("--semantic selects the native embedder and refuses the deterministic selector", () => {
-    expect(run(["--semantic"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
-    expect(run(["--semantic", "--embedder", "deterministic"], model).err).toContain("--semantic uses the real embedder");
-  });
-
-  test("lists the corpora public and custom, and --cases", () => {
+  test("--embedder is gone: --semantic selects akm's real embedder, and without it the notes are embedded by the deterministic one", () => {
+    const refused = run(["--embedder", "real"], model);
+    expect([refused.code, refused.err]).toEqual([2, expect.stringContaining("Unknown option '--embedder'")]);
+    expect(run(["--semantic"], model).err).toContain(noAkm);
     const help = run(["--help"]).out;
-    expect(help).toContain("[--corpus public|custom|all] [--cases DIR]");
-    expect(help).toMatch(/--cases +the folder of a custom corpus/);
+    expect(help).not.toMatch(/--embedder|--yes/);
+    expect(help).toContain("Without --semantic that is akm's deterministic word-hash embedder");
+    expect(help).toMatch(/--semantic +enable native/);
   });
 
-  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
-    for (const old of ["own", "own-feedback"]) {
-      const done = run(["--corpus", old], model);
-      expect(done.code, old).toBe(2);
-      expect(done.err, old).toContain(`nightly: --corpus ${old} was renamed in 0.2: use `);
-      expect(done.err, old).not.toContain("could not run");
-    }
+  test("--timeout-ms is a flag, and a night runs as one: it has no --concurrency", () => {
+    expect(run(["--timeout-ms", "60000"], model).err).toContain(noAkm);
+    for (const bad of ["0", "x"]) expect(run(["--timeout-ms", bad], model).err).toContain("--timeout-ms must be a positive integer");
+    const refused = run(["--concurrency", "2"], model);
+    expect([refused.code, refused.err]).toEqual([2, expect.stringContaining("Unknown option '--concurrency'")]);
+    const help = run(["--help"]).out;
+    expect(help).not.toContain("--concurrency");
+    expect(help).toContain("--timeout-ms is akm's own wall-clock budget for the improve run");
+    expect(help).toContain("Default: 2700000.");
   });
 
-  test("a custom folder says what is missing from it, and one that has the files goes on to the akm check", () => {
+  test("a custom folder of your own goes on to the akm check, and it holds items.jsonl and library/, not cases.jsonl", () => {
     const empty = mkdtempSync(join(tmpdir(), "nightly-notes-"));
     dirs.push(empty);
     const missing = run(["--cases", empty], model);
     expect(missing.code).toBe(2);
-    expect(missing.err).toContain(`${join(empty, "items.jsonl")} is missing`);
+    expect(missing.err).toContain(`${empty}/items.jsonl does not exist`);
     cpSync(join(import.meta.dir, "..", "assets"), empty, { recursive: true });
-    expect(run(["--cases", empty, "-y"], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
+    expect(run(["--cases", empty], model).err).toContain(noAkm);
   });
+});
 
-  test("warns about an older build and records actual command failures", () => {
-    const root = mkdtempSync(join(tmpdir(), "nightly-run-"));
-    dirs.push(root);
-    writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
-    const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
+describe("the command with an akm that answers", () => {
+  const REPO = join(import.meta.dir, "..", "..", "..");
+
+  /** A copy of the code in a temp folder, so that a custom run writes its results to its private/ and never to the repository's. */
+  function copyOfRepo(scenario: Scenario, akm?: string) {
+    const { root, folders } = setup(IDS, scenario);
+    const tree = mkdtempSync(join(tmpdir(), "nightly tree-"));
+    dirs.push(tree);
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    for (const name of ["nightly", "consolidate", "reflect", "distill"]) cpSync(join(REPO, "evals", name, "src"), join(tree, "evals", name, "src"), { recursive: true, filter: keep });
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: akm ?? commandLine(["bun", join(root, "fake-akm.ts")]) }; // nothing listens on port 9, and the run is not to ask it
+    const exec = (args: string[]) => {
+      const p = Bun.spawnSync(["bun", join(tree, "evals", "nightly", "src", "run.ts"), "--cases", folders.assets, ...args], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+      return { code: p.exitCode, err: p.stderr.toString(), out: p.stdout.toString() };
+    };
+    const stored = (label: string) => {
+      const results = join(tree, "private", "nightly", "results");
+      const folder = join(results, readdirSync(results).find((name) => name.endsWith(`-${label}`)) as string);
+      return { summary: JSON.parse(readFileSync(join(folder, "summary.json"), "utf8")), rows: readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)), folder };
+    };
+    return { exec, stored, commands: () => readFileSync(join(root, "commands.log"), "utf8").trim().split("\n") };
+  }
+
+  test("--timeout-ms reaches the night through nightly's flags: every item has its row, akm is given the budget, and it is recorded", () => {
+    const { exec, stored, commands } = copyOfRepo(good());
+    const done = exec(["--timeout-ms", "123000", "--label", "flags"]);
+    expect([done.code, done.err]).toEqual([0, ""]);
+    const { summary, rows } = stored("flags");
+    expect(Object.keys(summary).sort()).toEqual([...SUMMARY_KEYS, ...ADDED_KEYS, "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+    expect(summary).toMatchObject({ timeout_ms: 123_000, n_planted: 6, status: "complete", corpus: "custom", improve_ok: true });
+    expect(summary.manifest.settings.timeout_ms).toBe(123_000);
+    expect(summary.manifest).toMatchObject({ mode: null, treatment_hints: { embedder: "deterministic" } });
+    expect(rows.map((r) => r.id).sort()).toEqual([...IDS].sort());
+    expect(commands().find((l) => l.startsWith("improve "))).toContain("--timeout-ms 123000 ");
+    expect(done.out).toMatch(/\[ ?1\/6\] duplicate-01 +ok/); // each item has its progress line, which says what the night did to it
+  }, 60_000);
+
+  test("warns about an older build, and records the failure of an akm that cannot run the night", () => {
+    const old = mkdtempSync(join(tmpdir(), "nightly-old-akm-"));
+    dirs.push(old);
+    writeFileSync(join(old, "old-akm.ts"), 'console.log("akm 0.9.25");');
+    const { exec, stored } = copyOfRepo({}, commandLine(["bun", join(old, "old-akm.ts")]));
+    const done = exec(["--label", "old"]);
     expect(done.code).toBe(1);
-    expect(done.err).toContain("predates the tested release");
-  });
+    expect(done.err).toContain("predates the tested release 0.9.26");
+    expect(done.err).toContain("nightly: JSON Parse error"); // the old akm prints its version for every command, which the night cannot read: one line, not a stack
+    expect(done.err).not.toMatch(/\n\s+at /);
+    expect(stored("old").summary).toMatchObject({ status: "aborted", akm_version: "0.9.25", n_planted: 6 });
+  }, 60_000);
+
+  test("a night that fails ends the run with exit code 1, akm's message and what to check, and leaves the aborted summary where a night that ended would have its", () => {
+    const { exec, stored } = copyOfRepo({ improveFails: "unreachable: http://127.0.0.1:9/v1/chat/completions refused" });
+    const done = exec(["--label", "failed"]);
+    expect(done.code).toBe(1);
+    expect(done.err.trim().split("\n")).toEqual(["nightly: akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused", "Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm can reach the model."]);
+    const { summary, rows } = stored("failed");
+    expect(rows).toEqual([]);
+    expect(summary).toMatchObject({ status: "aborted", aborted_reason: "akm improve failed (exit 78): unreachable: <MODEL_BASE_URL>/chat/completions refused", n_planted: 6 });
+  }, 60_000);
 });

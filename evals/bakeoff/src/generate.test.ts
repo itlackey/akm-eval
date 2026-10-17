@@ -2,10 +2,8 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { generate, install, rewriteProblems } from "./generate.ts";
 import { CASES_FILE, GENERATED, assetsSha256, loadCases } from "./inputs.ts";
-import { corpusProblem } from "./run.ts";
 
 const PUBLIC = join(import.meta.dir, "..", "assets");
 const dirs: string[] = [];
@@ -87,24 +85,5 @@ describe("generate", () => {
     install(staged, out);
     expect(readFileSync(join(out, GENERATED), "utf8")).toBe("{}");
     expect(existsSync(join(staged, "assets"))).toBe(false);
-  });
-});
-
-/** The custom corpus of a rewrite at `out`, as lib/corpus.ts resolves it. */
-const corpusOf = (out: string): ResolvedCorpus => ({ name: "custom", folder: join(out, "assets"), rewrite: true, seed: "42", flag: "--corpus custom" });
-
-describe("corpusProblem", () => {
-  test("a rewrite just made passes, and one with no assets is told how to make them", () => {
-    expect(corpusProblem(corpusOf(rewrite()))).toBeUndefined();
-    expect(corpusProblem(corpusOf(temp()))).toContain("has no cases.json");
-    expect(corpusProblem(corpusOf(temp()))).toContain("Make it with: ./generate-assets --only bakeoff");
-  });
-
-  test("a corpus of your own needs only its cases.json, and the public corpus nothing", () => {
-    const own = temp();
-    expect(corpusProblem({ name: "custom", folder: own, rewrite: false, seed: null, flag: "--cases mine" })).toContain("the --cases mine corpus has no cases.json in ");
-    cpSync(PUBLIC, own, { recursive: true });
-    expect(corpusProblem({ name: "custom", folder: own, rewrite: false, seed: null, flag: "--cases mine" })).toBeUndefined();
-    expect(corpusProblem({ name: "public", folder: PUBLIC, rewrite: false, seed: null, flag: "--corpus public" })).toBeUndefined();
   });
 });

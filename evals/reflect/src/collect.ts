@@ -27,8 +27,8 @@ export const STRATEGY = "reflect-only";
  * The akm config for a run: the model under test as the one engine, at temperature 0 and with thinking off, and a strategy
  * that runs reflect on its own, with its quality judge off. judge-gate scores the judge, so here every proposal reaches the checks.
  */
-export function reflectConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "reflect");
+export function reflectConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "reflect", provider);
   config.engines.reflect.temperature = 0;
   config.engines.reflect.enableThinking = false;
   const off = { enabled: false };
@@ -120,20 +120,22 @@ export function servedModel(improve: unknown): string | undefined {
   return usage?.byProcessEngineModel?.find((p) => p.process === "reflect")?.model;
 }
 
-/** What one case needs of the run: the model, its endpoint, the strategy and patch, the time limit of an akm command, and the searches to record by ref. */
+/** What one case needs of the run: the model, its endpoint and provider kind, the strategy and patch, the time limit of an akm command, and the searches to record by ref. */
 export interface CaseContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
   overrides?: Overrides;
-  /** How long one akm command may run, in milliseconds. The default is runAkm's. */
+  /** How long one akm command may run, in milliseconds. A run always sets it (--timeout-ms); without it runAkm's default applies. */
   timeoutMs?: number;
   /** Searches to record for a note, by ref (see `labelledQueries`). Without it none are recorded. */
   queries?: Map<string, string[]>;
 }
 
 /** The akm config of a run: the engine at temperature 0 with thinking off, and the strategy, with the config patch merged in. */
-export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "overrides">): Record<string, unknown> => patchedConfig(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const configFor = (ctx: Pick<CaseContext, "baseUrl" | "model" | "hasKey" | "provider" | "overrides">): Record<string, unknown> => patchedConfig(reflectConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /**
  * One case in a bundle of its own: the note, the negative feedback recorded, reflect run on that asset alone, and the

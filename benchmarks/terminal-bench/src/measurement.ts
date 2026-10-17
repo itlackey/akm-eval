@@ -1,5 +1,5 @@
 // What the terminal-bench benchmark declares about its own measurement: its version, and how a stored task is
-// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "Compare two runs" the story.
+// scored again. lib/manifest.ts has the contract (`Measurement`) and the README's "Run, save, compare" the story.
 //
 // This file only wires the parts together. What it digests per case (`input` and `labels`) shows in the case
 // digests of a run, and the scoring itself is lib/harbor/score.ts, which terminal-bench shares with evals/agent-ab.

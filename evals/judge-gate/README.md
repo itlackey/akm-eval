@@ -17,7 +17,7 @@ evals/judge-gate/run --corpus custom          # the rewrite: ./generate-assets -
 evals/judge-gate/run --cases ~/notes/judge-gate
 ```
 
-`--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. Two cases run at a time; akm gets 15 minutes a case.
+`--limit N` keeps the good/bad proportion, with at least one of each from 2 cases on. `--strategy` and `--config-patch` change the akm config the eval writes. `--concurrency N` sets how many cases run at a time (default 2, all through one akm sandbox) and `--timeout-ms N` how many milliseconds akm gets for one (default 900000, 15 minutes).
 
 The model must return one JSON object when asked. A case is up to about 7k tokens, so 16k of context is safe. The eval sets temperature 0 and thinking off; a model that thinks anyway is slow (about a minute a case on a 27B). Cloud endpoints that reject unknown request fields may refuse the thinking switches: run them through a local gateway.
 
@@ -33,7 +33,7 @@ The custom rewrite changes names, numbers and the like across each case's source
 
 ## How a case is scored
 
-akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enough to pass alone), `reject` or `error`. Only `pass` counts as passed. A verdict of score -1 routed to review (the judge gave no readable verdict) counts as `review` with a null `score`. `error` is akm failing, timing out, or printing no verdict; errored cases are left out of the counts. The run stops, `aborted`, after 5 cases in a row with no verdict.
+akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enough to pass alone), `reject` or `error`. Only `pass` counts as passed. A verdict of score -1 routed to review (the judge gave no readable verdict) counts as `review` with a null `score`. `error` is akm failing, timing out, or printing no verdict; errored cases are left out of the counts. The run stops, `aborted`, after 5 cases in a row that errored or got no verdict.
 
 | Metric | Meaning |
 |---|---|
@@ -47,7 +47,7 @@ akm's verdict becomes an outcome: `pass`, `review` (not rejected, not good enoug
 
 ## What the summary reports
 
-`summary.json`: `metrics`, the counts run, scored and errored, `timeouts`, `status` and `aborted_reason`, `rubric_version`, the model, akm version and build, `strategy`, `config_patch`, the akm `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl` has one row per case: the label and severity, akm's verdict as printed (or its error), the outcome, the criterion scores, the reason and the seconds.
+`summary.json`: `metrics`, the counts run, scored and errored, `timeouts`, `status` and `aborted_reason`, `rubric_version`, the model, akm version and build, `strategy`, `config_patch`, `concurrency`, `timeout_ms`, the akm `config` (endpoint written `<MODEL_BASE_URL>`), `engine`, `assets_sha256`, `seed`, `corpus_folder` and the `manifest`. `samples.jsonl` has one row per case: the label and severity, akm's verdict as printed (or its error), the outcome, the criterion scores, the reason and the seconds.
 
 ## Notes
 

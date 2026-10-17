@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
+import { fail } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { loadConfigPatch } from "../../../lib/akm/overrides.ts";
+import { loadConfigPatch, parseOverrides } from "../../../lib/akm/overrides.ts";
 import { FAKE_AKM } from "./fakes.ts";
-import { type Case, assetsSha256, loadCases, selectCases } from "./lib.ts";
+import { type Case, assetsSha256, configFor, loadCases, selectCases } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
 import { MIN_AKM, runCorpus } from "./run.ts";
+
+/** The last line of every usage text: the driver's note on the request the model gets before the first case. */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 
 const dirs: string[] = [];
 const saved = { AKM_BIN: process.env.AKM_BIN, FAKE_PLAN: process.env.FAKE_PLAN, FAKE_LOG: process.env.FAKE_LOG, MODEL_API_KEY: process.env.MODEL_API_KEY };
@@ -94,6 +98,13 @@ const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
 
 const samplesOf = (summary: { results_dir: string }): any[] => readFileSync(join(summary.results_dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
+/**
+ * The keys of the summary.json that bakeoff wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts, without results_dir, which is
+ * returned and not written. The website, scripts/ledger and scripts/compare read them, so none may go. A run adds concurrency and timeout_ms to them. Bakeoff has no
+ * strategy, so it never had a `strategy`.
+ */
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "process", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
+
 describe("runCorpus", () => {
   test("runs the akm command of each process, scores what akm wrote, and records the raw output of every case", async () => {
     const { corpus, ctx, calls, results } = setup(SPECS, PLAN);
@@ -154,7 +165,7 @@ describe("runCorpus", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(manifestProblems(summary.manifest)).toEqual([]);
     expect(readManifest(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).kind).toBe("manifest");
-    expect(summary.manifest).toMatchObject({ eval: "bakeoff", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, settings: { strategy: null, config_patch_sha256: null, timeout_ms: null, seed: null } });
+    expect(summary.manifest).toMatchObject({ eval: "bakeoff", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, settings: { strategy: null, config_patch_sha256: null, timeout_ms: 900_000, seed: null } }); // the effective timeout: it used to be recorded as null
     expect(Object.keys(summary.manifest.cases)).toEqual(SPECS.map((s) => s.id));
     expect(summary.manifest.completion).toEqual({ selected: SPECS.map((s) => s.id), scored: SPECS.map((s) => s.id), errored: [] });
     expect(summary.manifest.akm).toMatchObject({ version: "0.9.99-test" });
@@ -224,18 +235,6 @@ describe("runCorpus", () => {
     expect(summary.manifest.settings.timeout_ms).toBe(1500);
   });
 
-  test("stops, and says so in the summary, when the first five cases get no outcome", async () => {
-    const many = Array.from({ length: 6 }, (_, i): Spec => ({ id: `e${i}`, process: "remember-enrich", files: { [`memories/m${i}.md`]: MEMORY }, expected: { observed_at: null, keywords: ["retries"] } }));
-    const { corpus, ctx, results } = setup(many, { enrich: Object.fromEntries(many.map((_, i) => [`m${i}`, { crash: true }])) });
-    await expect(quiet(() => runCorpus(corpus, ctx, results))).rejects.toThrow(/the first 5 cases got no outcome/);
-    const folder = readdirSync(results)[0] as string;
-    const summary = JSON.parse(readFileSync(join(results, folder, "summary.json"), "utf8"));
-    expect(summary).toMatchObject({ status: "aborted", n_run: 5, n_errored: 5 });
-    expect(summary.aborted_reason).toContain("the first 5 cases got no outcome");
-    expect(manifestProblems(summary.manifest)).toEqual([]);
-    expect(summary.manifest.completion.selected).toHaveLength(6);
-  });
-
   test("--process and --limit pick the cases, and the summary says which", async () => {
     const { corpus, ctx, results } = setup(SPECS, PLAN);
     const one = await quiet(() => runCorpus(corpus, { ...ctx, process: "schema-repair" }, results));
@@ -251,11 +250,43 @@ describe("runCorpus", () => {
     const file = join(root, "patch.json");
     writeFileSync(file, JSON.stringify({ engines: { bakeoff: { temperature: 0.3 } } }));
     const configPatch = loadConfigPatch(file, root);
-    const summary = await quiet(() => runCorpus(corpus, { ...ctx, configPatch }, results));
+    const summary = await quiet(() => runCorpus(corpus, { ...ctx, overrides: { strategy: "", configPatch } }, results));
     expect(calls().find((c) => c.args[0] === "improve")?.temperature).toBe(0.3);
     expect(summary.config_patch).toEqual({ path: configPatch.path, sha256: configPatch.sha256 });
     expect(summary.manifest.settings.config_patch_sha256).toBe(configPatch.sha256);
     expect(summary.engine.temperature).toBe(0.3);
+  });
+
+  test("--semantic merges akm's native embedder into the config, with the config patch, and the run records no strategy of any kind", () => {
+    const { ctx } = setup([SPECS[0]] as Spec[], PLAN);
+    const overrides = parseOverrides({ semantic: true }, "", fail);
+    const config = configFor({ ...ctx, overrides });
+    expect(config).toMatchObject({ semanticSearchMode: "auto", embedding: { localModel: "Xenova/bge-small-en-v1.5" }, defaults: { llmEngine: "bakeoff" } });
+    expect(configFor(ctx).semanticSearchMode).toBe("off"); // without it semantic search is off, so consolidate's pair pass finds no pairs
+    expect(overrides).toMatchObject({ strategy: "", configPatch: { path: "--semantic" } });
+  });
+
+  test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+    const { corpus, ctx, results } = setup([SPECS[1]] as Spec[], PLAN);
+    const other = await quiet(() => runCorpus(corpus, { ...ctx, provider: "groq", label: "groq" }, results));
+    expect((other.config as any).engines.bakeoff.provider).toBe("groq");
+    expect((await quiet(() => runCorpus(corpus, ctx, results))).config).toMatchObject({ engines: { bakeoff: { provider: "openai" } } });
+  });
+
+  test("a corpus with no case for the process is refused before anything is made, with the process in the message", async () => {
+    const { corpus, ctx, results } = setup([SPECS[0], SPECS[1]] as Spec[], PLAN);
+    await expect(quiet(() => runCorpus(corpus, { ...ctx, process: "session-summary" }, results))).rejects.toThrow("no case to run: the corpus has none for session-summary");
+    expect(existsSync(results)).toBe(false); // no results folder, no akm call
+  });
+
+  test("the summary has every key it has always had, which the website, scripts/ledger and scripts/compare read, and concurrency and timeout_ms besides: and no strategy", async () => {
+    const { corpus, ctx, results } = setup(SPECS, PLAN);
+    const summary = await quiet(() => runCorpus(corpus, ctx, results));
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
+    expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
+    expect(stored).toMatchObject({ process: null, concurrency: 1, timeout_ms: 900_000, timeouts: 0 });
+    expect("strategy" in stored).toBe(false);
   });
 });
 
@@ -280,4 +311,66 @@ describe("the public corpus", () => {
     expect(cases.length).toBe(40);
     expect(new Set(cases.map((c) => c.process))).toEqual(new Set(["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"]));
   });
+});
+
+describe("the command", () => {
+  const EVAL = join(import.meta.dir, "..");
+  const REPO = join(EVAL, "..", "..");
+  const model = { MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "" };
+
+  /** The run, started in a folder of its own, since Bun loads the .env of its working folder. akm is not there, so a run that gets past its checks stops at the version probe. */
+  function run(args: string[]) {
+    const cwd = mkdtempSync(join(tmpdir(), "bakeoff cmd-"));
+    dirs.push(cwd);
+    const p = Bun.spawnSync(["bun", join(EVAL, "src", "run.ts"), ...args], { cwd, env: { ...process.env, ...model, AKM_BIN: commandLine([join(cwd, "no-akm")]) }, stdout: "pipe", stderr: "pipe" });
+    return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
+  }
+
+  test("--process takes one of the five processes, and says which are there when it is given another, before akm is asked anything", () => {
+    for (const process of ["memory-inference", "remember-enrich", "schema-repair", "session-summary", "consolidate-promote"]) expect(run(["--process", process]).err).toContain("could not run");
+    const done = run(["--process", "nope"]);
+    expect(done.code).toBe(2);
+    expect(done.err.trim()).toBe('bakeoff: --process must be one of memory-inference, remember-enrich, schema-repair, session-summary, consolidate-promote, not "nope"');
+  });
+
+  test("lists --process, --semantic and --config-patch and has no --strategy: each process has its own, so the flag is refused", () => {
+    const help = run(["--help"]).out;
+    expect(help).toContain("[--process NAME]");
+    expect(help).toMatch(/--process NAME +the process to run, one of memory-inference/);
+    expect(help).toContain("  --semantic ");
+    expect(help).toContain("  --config-patch ");
+    expect(help).not.toContain("--strategy");
+    expect(help).not.toMatch(/--yes|--embedder/);
+    expect(help).toEndWith(`\n\nTested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
+    const refused = run(["--strategy", "other"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("Unknown option '--strategy'");
+    expect(run(["--semantic", "--config-patch", join(EVAL, "assets", "cases.json")]).err).not.toContain("Unknown option"); // both are taken, and the run goes on to its checks
+  });
+
+  test("--concurrency and --timeout-ms reach the run through bakeoff's flags: every case has its row, akm is probed once, and both are recorded", () => {
+    const tree = mkdtempSync(join(tmpdir(), "bakeoff tree-"));
+    dirs.push(tree);
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "src"), join(tree, "evals", "bakeoff", "src"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "assets"), join(tree, "evals", "bakeoff", "assets"), { recursive: true }); // so that the run writes its results here and never in the repository
+    const script = join(tree, "fake-akm.ts");
+    writeFileSync(script, FAKE_AKM);
+    const log = join(tree, "calls.jsonl");
+    const env = { ...process.env, ...model, AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" }; // nothing listens on port 9, and the run is not to ask it
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "bakeoff", "src", "run.ts"), "--corpus", "public", "--limit", "5", "--concurrency", "3", "--timeout-ms", "20000", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+    expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
+    const results = join(tree, "evals", "bakeoff", "results");
+    const folder = join(results, readdirSync(results).find((name) => name.endsWith("-flags")) as string);
+    const stored = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
+    const rows = readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+    expect(stored).toMatchObject({ concurrency: 3, timeout_ms: 20_000, n_run: 5, status: "complete", process: null });
+    expect(stored.manifest.settings.timeout_ms).toBe(20_000);
+    expect(rows.map((r) => r.process).sort()).toEqual(["consolidate-promote", "memory-inference", "remember-enrich", "schema-repair", "session-summary"]); // the first case of each process, every one with a row
+    expect(rows.map((r) => r.id).sort()).toEqual([...stored.manifest.completion.selected].sort());
+    const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
+  }, 60_000);
 });

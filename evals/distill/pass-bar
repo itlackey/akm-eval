@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Replays distill's judge routing, with and without grounding in the pass bar, on the results of distill runs. A run is read only
-# against the cases and the scorer it was scored by (the manifest in its summary.json), unless --rescore says to use the ones here now.
-# See README.md.
+# Replays distill's judge routing, with and without grounding in the pass bar, on the results of distill runs. The checks use the
+# cases and the scorer here now: a run with a case that no longer exists is refused, unless --rescore omits its rows. See README.md.
 #
-#   evals/distill/pass-bar [--rescore] [--cases DIR] RESULTS_DIR...
+#   evals/distill/pass-bar --help
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

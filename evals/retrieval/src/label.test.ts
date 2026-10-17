@@ -846,27 +846,27 @@ describe("the command", () => {
     return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
   };
 
-  test("--corpus own and own-feedback need an explicit folder: it stops with the new form, before it reads or runs anything", () => {
+  test("--cases reports the judge and proceeds without a terminal or a confirmation", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" };
-    for (const old of ["own", "own-feedback"]) {
-      const done = run(["--corpus", old], judge);
-      expect(done.code, old).toBe(2);
-      expect(done.err, old).toContain(`retrieval label: --corpus ${old} was renamed in 0.2: use `);
-      expect(done.err, old).not.toContain("secret");
-      expect(done.out, old).toBe("");
-    }
+    const done = run(["--cases", "notes"], judge);
+    expect(done.out).toContain("The cases in notes will be sent to:");
+    expect(done.out).toContain("  judge  m at http://localhost:1/v1");
+    expect(done.out).not.toContain("Continue?");
+    expect(done.err).toContain("is missing"); // no cases to read, so no judge call
+    expect(done.err + done.out).not.toContain("secret");
   });
 
-  test("--cases reports the judge and proceeds without a terminal or --yes", () => {
+  test("-y and --yes are not flags: it stops with the usage, which does not list them, before it reads or runs anything", () => {
     const judge = { JUDGE_BASE_URL: "http://localhost:1/v1", JUDGE_MODEL: "m", JUDGE_API_KEY: "secret" };
-    for (const flags of [[], ["-y"], ["--yes"]]) {
-      const done = run(["--cases", "notes", ...flags], judge);
-      expect(done.out).toContain("The cases in notes will be sent to:");
-      expect(done.out).toContain("  judge  m at http://localhost:1/v1");
-      expect(done.out).not.toContain("Continue?");
-      expect(done.err).toContain("is missing"); // no cases to read, so no judge call
-      expect(done.err + done.out).not.toContain("secret");
+    for (const flag of ["-y", "--yes"]) {
+      const done = run(["--cases", "notes", flag], judge);
+      expect(done.code, flag).toBe(2);
+      expect(done.err, flag).toContain(`retrieval label: Unknown option '${flag}'`);
+      expect(done.err, flag).toContain("Usage: evals/retrieval/label");
+      expect(done.err + done.out, flag).not.toContain("secret");
+      expect(done.out, flag).toBe("");
     }
+    expect(run(["--help"]).out).not.toMatch(/(^|\s)(-y|--yes)\b/);
   });
 
   test("grades the public library or a set of your own, and says so for the rewrite and for all", () => {

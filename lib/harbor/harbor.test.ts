@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { slug } from "../cli.ts";
 import { credentialField, sha256Text } from "../provenance.ts";
 import { spreadOf } from "../repeat.ts";
 import {
@@ -13,20 +14,18 @@ import {
   type Pack,
   PLUGIN_ERROR,
   akmArm,
-  type RunTrial,
   akmSummary,
   assetsSha256,
   buildFingerprint,
   checkoutBuild,
   completionOf,
-  erroredOf,
+  dockerNetworkWarning,
   findPlugin,
   hostEnv,
   jobConfig,
   jobRecord,
   loadRunTrials,
   lockFolder,
-  metricsOf,
   modelName,
   modelSettings,
   npmPack,
@@ -38,13 +37,12 @@ import {
   relativePaths,
   releaseArm,
   sha256Dir,
-  slug,
   stagePackages,
   statusOf,
-  timeoutsOf,
   withHome,
 } from "./harbor.ts";
 import { buildReport, formatReport, sideBySide } from "./report.ts";
+import { type RunTrial, erroredOf, metricsOf, timeoutsOf } from "./score.ts";
 import { loadTrials } from "./trials.ts";
 
 const dirs: string[] = [];
@@ -71,6 +69,20 @@ describe("modelName", () => {
 
 describe("modelSettings", () => {
   const none = {}; // no models.json
+
+  /** What `f` returned, and the lines it printed with console.warn (stderr). */
+  const warned = <T>(f: () => T): { result: T; lines: string[] } => {
+    const lines: string[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => void lines.push(a.join(" "));
+    try {
+      return { result: f(), lines };
+    } finally {
+      console.warn = warn;
+    }
+  };
+  /** The line a run prints when the gateway at `host` has no key. */
+  const said = (host: string): string => `model key is empty: sending "unused" to ${host} (a server that needs a key will fail every trial after its setup)`;
 
   test("sends an openai model to the gateway in MODEL_BASE_URL, with MODEL_API_KEY, as opencode's openai provider reads them", () => {
     const r = modelSettings(undefined, { MODEL_NAME: "gpt-6-luna", MODEL_API_KEY: "k1", MODEL_BASE_URL: "http://192.0.2.5:8080/v1", PATH: "/bin" }, none);
@@ -139,27 +151,26 @@ describe("modelSettings", () => {
     // A model with a line in models.json still takes the key of the line, and never the older name of the gateway's.
     const lines = { cloud: { base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
     expect(() => modelSettings("cloud", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_API_KEY: "a" }, lines)).toThrow("takes its key from CLOUD_KEY");
-    // And with no key under either name the run still stops.
-    expect(() => modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_BASE_URL: "http://o/v1" }, none)).toThrow("no model key");
+    // And with no key under either name the gateway is sent the placeholder.
+    const keyless = warned(() => modelSettings("gpt-6", { MODEL_BASE_URL: "http://192.0.2.5/v1", OPENAI_BASE_URL: "http://o/v1" }, none));
+    expect(keyless.result.env.OPENAI_API_KEY).toBe("unused");
+    expect(keyless.lines).toEqual([said("192.0.2.5")]);
   });
 
   test("never sends OPENAI_API_KEY to a gateway that is not OpenAI's and not the one OPENAI_BASE_URL names (#72)", () => {
     const key = "sk-real-openai-key";
-    // The probe: MODEL_API_KEY is empty, and MODEL_BASE_URL is another host. The run stops, as the other evals' do, and says nothing of the key.
+    // The probe: MODEL_API_KEY is empty, and MODEL_BASE_URL is another host. That gateway is sent the placeholder, and neither what the run
+    // sends nor the line it prints holds the key.
     for (const host of [
       { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_API_KEY: key },
       { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "  ", OPENAI_API_KEY: key },
       { MODEL_BASE_URL: "https://gw.example.net/v1", OPENAI_BASE_URL: "https://other.example.net/v1", OPENAI_API_KEY: key },
       { MODEL_BASE_URL: "https://api.openai.com.evil.example/v1", OPENAI_API_KEY: key },
     ]) {
-      let said = "";
-      try {
-        modelSettings("gpt-6", host, none);
-      } catch (e) {
-        said = (e as Error).message;
-      }
-      expect(said).toContain("no model key for openai/gpt-6");
-      expect(said).not.toContain(key);
+      const { result, lines } = warned(() => modelSettings("gpt-6", host, none));
+      expect(result.env.OPENAI_API_KEY).toBe("unused");
+      expect(lines).toEqual([said(new URL(host.MODEL_BASE_URL).hostname)]);
+      expect(JSON.stringify(result) + lines.join("\n")).not.toContain(key);
     }
     // With a key of its own, the gateway gets that key and never OpenAI's.
     const own = modelSettings("gpt-6", { MODEL_BASE_URL: "https://gw.example.net/v1", MODEL_API_KEY: "gateway-key", OPENAI_API_KEY: key }, none);
@@ -218,20 +229,33 @@ describe("modelSettings", () => {
     expect(modelSettings(undefined, { MODEL_NAME: "amazon-bedrock/x", AWS_REGION: "r" }, none).env).toEqual({ AWS_REGION: "r" });
   });
 
-  test("stops without a model name, without a key, or with an endpoint a container cannot reach", () => {
+  test("stops without a model name, without a key for OpenAI itself, or with an endpoint a container cannot reach", () => {
     expect(() => modelSettings(undefined, { MODEL_API_KEY: "k" }, none)).toThrow("name the model");
     expect(() => modelSettings(undefined, { MODEL_NAME: "x" }, none)).toThrow("no model key");
-    expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_BASE_URL: "http://192.0.2.5/v1" }, none)).toThrow("no model key");
     expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("container");
     expect(() => modelSettings(undefined, { MODEL_NAME: "x", MODEL_API_KEY: "k", MODEL_BASE_URL: "http://127.0.0.1:1/v1" }, none)).toThrow("container");
   });
 
-  test("a keyless local server is run as the READMEs say: any non-empty MODEL_API_KEY, and an address a container can reach", () => {
+  test("a gateway with no key is sent \"unused\" and the run says so on stderr; a key that is given goes as it is, in silence", () => {
     const server = { MODEL_NAME: "my-local-model", MODEL_BASE_URL: "http://192.168.1.20:8080/v1" };
-    expect(modelSettings(undefined, { ...server, MODEL_API_KEY: "unused" }, none)).toEqual({ model: "openai/my-local-model", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" } });
-    expect(() => modelSettings(undefined, server, none)).toThrow("no model key"); // the rule is not relaxed for a server that wants none
-    expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "" }, none)).toThrow("no model key");
-    expect(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "unused", MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("the container itself");
+    const want = { model: "openai/my-local-model", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" } };
+    // What the READMEs had people set by hand is what an empty key becomes, so these runs are the same and only the empty ones speak.
+    expect(warned(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "unused" }, none))).toEqual({ result: want, lines: [] });
+    for (const empty of [{}, { MODEL_API_KEY: "" }, { MODEL_API_KEY: "  " }]) expect(warned(() => modelSettings(undefined, { ...server, ...empty }, none))).toEqual({ result: want, lines: [said("192.168.1.20")] });
+    expect(warned(() => modelSettings(undefined, { ...server, MODEL_API_KEY: "k" }, none))).toEqual({ result: { ...want, env: { ...want.env, OPENAI_API_KEY: "k" } }, lines: [] });
+    // An address a container cannot reach is still refused, and nothing is said of the key.
+    const local = warned(() => expect(() => modelSettings(undefined, { ...server, MODEL_BASE_URL: "http://localhost:8080/v1" }, none)).toThrow("the container itself"));
+    expect(local.lines).toEqual([]);
+  });
+
+  test("a models.json line with no api_key_env is a server that needs no key: it is sent \"unused\" too, and never the gateway's key", () => {
+    const lines = { local: { base_url: "http://192.168.1.20:8080/v1" }, cloud: { base_url: "https://api.example.com/v1", api_key_env: "CLOUD_KEY" } };
+    const keyless = warned(() => modelSettings("local", { MODEL_API_KEY: "gateway-key" }, lines));
+    expect(keyless.result).toEqual({ model: "openai/local", env: { OPENAI_API_KEY: "unused", OPENAI_BASE_URL: "http://192.168.1.20:8080/v1" } });
+    expect(keyless.lines).toEqual([said("192.168.1.20")]);
+    // A line that names a key variable keeps needing it.
+    expect(warned(() => modelSettings("cloud", { CLOUD_KEY: "c" }, lines)).lines).toEqual([]);
+    expect(() => modelSettings("cloud", {}, lines)).toThrow("takes its key from CLOUD_KEY");
   });
 });
 
@@ -514,7 +538,10 @@ describe("jobConfig", () => {
     const cfg = jobConfig({ ...base, arm, packagesDir: "/run/akm-packages", akmEnv: { AKM_CURATE_TIMEOUT: "30" } }) as any;
     expect(cfg.agents[1].kwargs).toMatchObject({ akm_cli_version: "0.9.27", akm_plugin_version: "0.9.27", packages_dir: "/run/akm-packages", akm_package: "akm-cli-0.9.27.tgz", plugin_package: "akm-opencode-0.9.27.tgz", akm_env: { AKM_CURATE_TIMEOUT: "30" } });
     expect(cfg.agents[0]).toEqual(control);
-    expect(JSON.stringify(cfg.agents[0])).not.toContain("akm");
+    expect(cfg.agents[0].kwargs.akm_cli_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_plugin_version).toBeUndefined();
+    expect(cfg.agents[0].kwargs.akm_env).toBeUndefined();
+    expect(cfg.agents[0].kwargs.setup_cache_dir).toBe(cfg.agents[1].kwargs.setup_cache_dir);
     expect(() => jobConfig({ ...base, arm })).toThrow("names no folder");
   });
 
@@ -901,16 +928,38 @@ describe("completionOf and statusOf", () => {
     expect(statusOf(0, c)).toEqual({ status: "aborted", aborted_reason: "3 of 8 expected trials have no result (control 1, akm 2)" });
   });
 
-  test("a trial with an exception or no reward is failed, not missing: the run is still complete when Harbor exited 0", () => {
-    const trials = grid(["a", "b"], 1);
+  test("a trial with an exception or no reward is failed, not missing: the run is still complete when Harbor exited 0 and each arm completed one", () => {
+    const trials = grid(["a", "b", "c"], 1);
     trials[0] = trial("a", "control", { error: "AgentTimeoutError", timed_out: true }); // verified all the same, but it raised
     trials[3] = trial("b", "akm", { reward: null, error: "RuntimeError" });
     trials[2] = trial("b", "control", { reward: null }); // no exception recorded, and no reward
-    const c = completionOf(trials, ["a", "b"], 1);
-    expect(c).toMatchObject({ expected: 4, completed: 1, failed: 3, missing: 0 });
-    expect(c.control).toMatchObject({ completed: 0, failed: 2 });
-    expect(c.akm).toMatchObject({ completed: 1, failed: 1 });
+    const c = completionOf(trials, ["a", "b", "c"], 1);
+    expect(c).toMatchObject({ expected: 6, completed: 3, failed: 3, missing: 0 });
+    expect(c.control).toMatchObject({ completed: 1, failed: 2 });
+    expect(c.akm).toMatchObject({ completed: 2, failed: 1 });
     expect(statusOf(0, c)).toEqual({ status: "complete", aborted_reason: null });
+  });
+
+  test("an arm that completed none of its trials, every one errored, aborts the run though Harbor exited 0 and every cell has a trial", () => {
+    const tasks = ["a", "b", "c", "d", "e", "f"];
+    const dead = (arm: "control" | "akm") => grid(tasks, 3).map((t) => (t.arm === arm ? { ...t, reward: null, error: "RuntimeError" } : t));
+    const c = completionOf(dead("akm"), tasks, 3);
+    expect(c).toMatchObject({ expected: 36, completed: 18, failed: 18, missing: 0 });
+    expect(c.akm).toMatchObject({ expected: 18, completed: 0, failed: 18 });
+    expect(statusOf(0, c)).toEqual({ status: "aborted", aborted_reason: "the akm arm completed none of its 18 trials: every one errored" });
+    expect(statusOf(0, completionOf(dead("control"), tasks, 3))).toEqual({ status: "aborted", aborted_reason: "the control arm completed none of its 18 trials: every one errored" });
+    // Both arms, and Harbor's own exit, are each said, in that order.
+    const both = completionOf(grid(tasks, 3).map((t) => ({ ...t, reward: null, error: "RuntimeError" })), tasks, 3);
+    expect(statusOf(1, both).aborted_reason).toBe("Harbor exited 1; the control arm completed none of its 18 trials: every one errored; the akm arm completed none of its 18 trials: every one errored");
+  });
+
+  test("an arm that is not errored throughout is not dead: one trial completed, one missing rather than errored, or nothing expected", () => {
+    const ok = (task: string, arm: "control" | "akm") => trial(task, arm);
+    const bad = (task: string, arm: "control" | "akm") => trial(task, arm, { reward: null, error: "RuntimeError" });
+    expect(statusOf(0, completionOf([ok("a", "control"), ok("b", "control"), bad("a", "akm"), ok("b", "akm")], ["a", "b"], 1))).toEqual({ status: "complete", aborted_reason: null });
+    // The akm arm has one errored trial and one with no result: the run is aborted for what is missing, and not said to have errored throughout.
+    expect(statusOf(0, completionOf([ok("a", "control"), ok("b", "control"), bad("a", "akm")], ["a", "b"], 1)).aborted_reason).toBe("1 of 4 expected trials have no result (control 0, akm 1)");
+    expect(statusOf(0, completionOf([], [], 3))).toEqual({ status: "complete", aborted_reason: null });
   });
 
   test("a nonzero exit aborts the run even when every cell has a trial, and the reason says both when both hold", () => {
@@ -973,4 +1022,19 @@ test("custom model limits reach both Harbor arms while model aliases and credent
   expect(job.agents[0].kwargs.opencode_config).toEqual(job.agents[1].kwargs.opencode_config);
   expect(settings.env.OPENAI_API_KEY).toBe("synthetic-model-key");
   expect(JSON.stringify(job)).not.toContain("synthetic-model-key");
+});
+
+
+test("forwards explicitly selected model reasoning effort to both Harbor arms", () => {
+  const settings = modelSettings("local", { KEY: "test" }, { local: { base_url: "https://gateway.example/v1", model: "shredder-eval/qwen", api_key_env: "KEY", chat: { reasoning_effort: "none" } } });
+  expect(settings.modelReasoningEffort).toBe("none");
+  const cfg = jobConfig({ name: "no-thinking", model: settings.model, modelReasoningEffort: settings.modelReasoningEffort, jobsDir: "/jobs", attempts: 1, librariesDir: "/libraries", datasets: [] }) as any;
+  for (const agent of cfg.agents) expect(agent.kwargs.opencode_config.provider.openai.models["shredder-eval/qwen"].options).toEqual({ reasoningEffort: "none" });
+});
+
+
+test("a run of more than eight simultaneous trials is warned that each needs a Docker network, and one of eight or fewer is not", () => {
+  for (const n of [1, 4, 8]) expect(dockerNetworkWarning("agent-ab", n), String(n)).toBeUndefined();
+  expect(dockerNetworkWarning("agent-ab", 9)).toBe("agent-ab: 9 concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).");
+  expect(dockerNetworkWarning("terminal-bench", 16)).toStartWith("terminal-bench: 16 concurrent trials each need a Docker network;");
 });

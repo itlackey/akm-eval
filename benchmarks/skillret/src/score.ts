@@ -51,7 +51,7 @@ export function meanScores(rows: Scores[]): Scores {
 
 // --- The rows -----------------------------------------------------------------------------------------------------
 
-/** The lines of a run: akm search, asked of the keyword index and, in a run without --limit, of the semantic one. */
+/** The lines of a run: akm search, asked of the keyword index and, with --semantic, of the semantic one. */
 export const SYSTEMS = ["search", "semantic_search"] as const;
 export type System = (typeof SYSTEMS)[number];
 export type Mode = "keyword" | "semantic";
@@ -155,15 +155,15 @@ export const failedCalls = (s: { errored: Lines<number>; timeouts: Lines<number>
   timedOut: SYSTEMS.reduce((n, sys) => n + (s.timeouts[sys] ?? 0), 0) + MODES.reduce((n, mode) => n + (s.curate_check[mode]?.timeouts ?? 0), 0),
 });
 
-/** What a run that had calls fail says, and exits with: those queries are missing from its numbers. */
-export const callsFailure = ({ errored, timedOut }: { errored: number; timedOut: number }): string =>
-  `${errored} akm calls failed${timedOut > 0 ? `, ${timedOut} of them by timing out` : ""}. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.`;
-
 /** A query that had a search call fail has no verdict on that line, and is an error of the run. The curate check has its own counts. */
 export const errored = (row: Row): boolean => SYSTEMS.some((sys) => Boolean(row[sys]?.error));
 
-/** The fields of the summary that come from the rows: the counts, the metrics (over all queries and by how many skills a query needs), the curate check, and whether any call failed. */
-export function summarize(rows: Row[]) {
+/**
+ * The fields of the summary that come from the rows: the counts, the metrics (over all queries and by how many skills a query needs), the curate check, and whether
+ * the run is complete. It is when it asked every query (`selected` of them, by default as many as there are rows), whether or not some calls failed: those are
+ * counted in `errored`, and their queries are left out of the numbers. It is aborted only when it stopped before the last query.
+ */
+export function summarize(rows: Row[], selected = rows.length) {
   const semantic = rows.some((r) => r.semantic_search !== undefined);
   /** What a summary has for each line the run has. */
   const lines = <T>(f: (sys: System) => T): Lines<T> => ({ search: f("search"), ...(semantic ? { semantic_search: f("semantic_search") } : {}) });
@@ -172,10 +172,10 @@ export function summarize(rows: Row[]) {
   const timeouts = lines((sys) => rows.filter((r) => r[sys]?.timed_out).length);
   const checked = rows.filter((r) => r.curate !== undefined);
   const curate_check: CurateCheck = { seed: CURATE_SEED, queries: checked.map((r) => r.id), keyword: agreement(checked, "keyword"), ...(semantic ? { semantic: agreement(checked, "semantic") } : {}) };
-  const failed = failedCalls({ errored: errors, timeouts, curate_check });
+  const stopped = rows.length < selected;
   return {
-    status: (failed.errored > 0 ? "aborted" : "complete") as "aborted" | "complete",
-    aborted_reason: failed.errored > 0 ? callsFailure(failed) : null,
+    status: (stopped ? "aborted" : "complete") as "aborted" | "complete",
+    aborted_reason: stopped ? `the run asked ${rows.length} of ${selected} queries before it stopped` : null,
     n_queries: rows.length,
     errored: errors,
     timeouts,

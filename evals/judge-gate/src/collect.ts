@@ -12,9 +12,8 @@ import { type Case, type Row, makeRow } from "./score.ts";
 
 export const NAME = "judge-gate";
 
-/** How many cases run at a time. */
-export const CONCURRENCY = 2;
-const JUDGE_TIMEOUT_MS = 15 * 60_000; // one case, on a slow local model
+/** How long akm gets for one case unless --timeout-ms says otherwise: a slow local model takes minutes. */
+export const JUDGE_TIMEOUT_MS = 15 * 60_000;
 
 /**
  * `akm improve judge` reads the feedback as one string and judges it as negative feedback only when the
@@ -34,10 +33,10 @@ export const STRATEGY = "default";
 /**
  * The akm config the judge runs under: one LLM engine, named as reflect's quality gate engine. Requests use temperature 0 and ask for
  * no thinking, as distill and extract do, so that two runs differ by the model and not by the sampling. `strategy` is the improve
- * strategy the config makes the default; akm's judge takes its gate from it.
+ * strategy the config makes the default; akm's judge takes its gate from it. `provider` is the provider kind of the engine (openai, anthropic, ...).
  */
-export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, strategy = STRATEGY): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "judge");
+export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, strategy = STRATEGY, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "judge", provider);
   config.engines.judge.temperature = 0;
   config.engines.judge.enableThinking = false;
   config.defaults.improveStrategy = strategy;
@@ -46,12 +45,12 @@ export function judgeConfig(baseUrl: string, model: string, hasKey: boolean, str
 }
 
 /** The config the eval writes: the judge config with the strategy of the overrides as the default, and the config patch, if any, merged into it after. */
-export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy), overrides);
+export const configFor = (baseUrl: string, model: string, hasKey: boolean, overrides: Overrides, provider = "openai"): Record<string, any> => patchedConfig(judgeConfig(baseUrl, model, hasKey, overrides.strategy, provider), overrides);
 
 /** A sandbox for the run, with the config written: every case of the run goes through it. The config names the model key as $MODEL_API_KEY. */
-export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY)): Sandbox {
+export function openSandbox(baseUrl: string, model: string, hasKey: boolean, overrides: Overrides = defaultOverrides(STRATEGY), provider = "openai"): Sandbox {
   const sandbox = createSandbox(NAME, { keepModelKey: true });
-  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides));
+  writeConfig(sandbox, configFor(baseUrl, model, hasKey, overrides, provider));
   return sandbox;
 }
 
@@ -66,10 +65,10 @@ export function verdictOf(parsed: unknown, baseUrl: string): unknown {
 }
 
 /** What one case needs of the run: the sandbox with the config written, the model endpoint (masked in the row), and the time limit of one case. */
-export interface CaseContext {
+interface CaseContext {
   sandbox: Sandbox;
   baseUrl: string;
-  /** The time limit of one case, in milliseconds. Tests shorten it. */
+  /** The time limit of one case, in milliseconds. A run always sets it (--timeout-ms); without it JUDGE_TIMEOUT_MS applies. */
   timeoutMs?: number;
 }
 

@@ -125,6 +125,22 @@ def test_the_warm_up_boots_opencode_with_the_plugin_in_the_config(tmp_path):
     assert "--model=openai/gpt-6-luna" in command
 
 
+def test_zen_warm_up_uses_a_fake_key_without_exposing_the_real_one(tmp_path, monkeypatch):
+    agent = make(tmp_path, model_name="opencode/qwen3.8-flash")
+    monkeypatch.setattr(agent, "_build_register_config_command", lambda: "true")
+    monkeypatch.setattr(m, "NVM", "")
+    executable = tmp_path / "opencode"
+    executable.write_text('#!/bin/sh\nprintf "%s" "$OPENCODE_API_KEY" > "$CAPTURE"\n')
+    executable.chmod(0o755)
+    capture = tmp_path / "key.txt"
+    command = agent._warm_command().replace("/tmp/akm-warm", str(tmp_path / "warm"))
+    done = subprocess.run(["bash", "-c", command], env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}",
+                          "OPENCODE_API_KEY": "real-key-must-not-be-used", "CAPTURE": str(capture)}, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert capture.read_text() == "akm-eval-warmup"
+    assert "OPENCODE_API_KEY=" not in make(tmp_path)._warm_command()
+
+
 def test_the_failure_pattern_reads_the_same_in_grep_and_in_python():
     failed = [
         "AKM synchronous helper failed",

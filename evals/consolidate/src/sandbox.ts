@@ -1,7 +1,7 @@
 // What the consolidate and nightly collectors share about the sandbox akm runs in: how old the notes of a pair are, and how akm embeds
 // them. It is collector code (see measurement.ts): a change here changes what akm is given. Neither eval's scorer imports it.
 
-import { semanticConfig } from "../../../lib/akm/akm.ts";
+import { type Sandbox, createSandbox, semanticConfig } from "../../../lib/akm/akm.ts";
 
 type Side = "a" | "b";
 
@@ -21,8 +21,8 @@ export function noteAges(older: Side | null): Record<Side, number> {
  */
 export const EMBEDDER_ENV = { AKM_EMBED_DETERMINISTIC: "1" };
 
-/** The embedders a run can use: akm's word-hash one (the default), or its built-in model, which is what a real bundle runs. */
-export const EMBEDDERS = ["deterministic", "real"] as const;
+/** The embedders a run can use: akm's word-hash one (the default), or its built-in model, which --semantic selects and which is what a real bundle runs. */
+const EMBEDDERS = ["deterministic", "real"] as const;
 export type Embedder = (typeof EMBEDDERS)[number];
 
 /** What the embedder needs in akm's environment: the deterministic one is a switch, and the real one needs nothing. */
@@ -30,6 +30,9 @@ export const embedderEnv = (embedder: Embedder): Record<string, string> => (embe
 
 /** What a run gives createSandbox. A semantic sandbox points akm at the repository's .cache/ for the real embedder's model. */
 export const sandboxOptions = (embedder: Embedder): { keepModelKey: true; semantic: boolean } => ({ keepModelKey: true, semantic: embedder === "real" });
+
+/** How a run makes the sandbox of a case, or of a night: a function of the eval's name and its embedder, with the options above. */
+export const sandboxMaker = (name: string, embedder: Embedder) => (): Sandbox => createSandbox(name, sandboxOptions(embedder));
 
 /**
  * Turns semantic search on in the config, as the pair pass needs. The real embedder is set as semanticConfig of lib/akm sets it:

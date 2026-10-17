@@ -236,8 +236,8 @@ describe("runCorpus", () => {
 
     // what the run sent, and where: the temperature and the token limits, as the benchmark's evaluate_qa.py has them for the judge
     const host = `http://127.0.0.1:${server.port}`; // what a summary shows of an endpoint: the host, never the path (#65)
-    expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
-    expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
+    expect(summary).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, judge_temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", reader_order: "haystack", seed: null, sample_seed: null, timeouts: 0, sessions_loaded: 11, sessions_over_projection_limit: 0 });
+    expect(stored).toMatchObject({ model_endpoint: host, judge_endpoint: host, temperature: 0, judge_temperature: 0, max_tokens: { model: 512, judge: 10 }, search_mode: "keyword", seed: null });
     const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
     expect(graded).toHaveLength(4);
     expect(graded.every((b) => b.max_tokens === 10 && b.temperature === 0)).toBe(true);
@@ -248,6 +248,27 @@ describe("runCorpus", () => {
     // the akm config the eval wrote for the sandbox: keyword search, no registries
     expect(summary.config).toEqual({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
     expect(stored.config).toEqual(summary.config);
+  });
+
+  test("the chat.temperature of a role is what it is sent and what the summary and the manifest record, the reader's and the judge's apart", async () => {
+    const { akm, folders } = setup();
+    const bodies: Parameters<typeof fakeEndpoint>[2] = [];
+    server = fakeEndpoint({ requests: 0 }, "fake-model", bodies);
+    const endpoint = { baseUrl: `http://127.0.0.1:${server.port}/v1`, apiKey: "", model: "fake-model" };
+    const judge = { ...endpoint, model: "fake-judge", chat: { temperature: 0.2 } };
+    const context = { akm, model: { ...endpoint, chat: { temperature: 1 } }, judge, version: "v" };
+    const summary = await quiet(() => runCorpus(publicOf(folders), { label: "temp", sampleSeed: 1 }, context, folders));
+    const graded = bodies.filter((b) => b.messages[0].content.includes("Model Response:"));
+    expect(graded.length).toBeGreaterThan(0);
+    expect(graded.every((b) => b.temperature === 0.2)).toBe(true);
+    expect(bodies.filter((b) => !graded.includes(b)).every((b) => b.temperature === 1)).toBe(true);
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
+    for (const s of [summary, stored]) expect(s).toMatchObject({ temperature: 1, judge_temperature: 0.2 });
+    expect(stored.manifest.engines.model).toMatchObject({ temperature: 1, chat: { temperature: 1 } });
+    expect(stored.manifest.engines.judge).toMatchObject({ temperature: 0.2, chat: { temperature: 0.2 } });
+    // the settings are part of the run, so a resume with another temperature is refused
+    await expect(quiet(() => runCorpus(publicOf(folders), { label: "temp", sampleSeed: 1, resume: dir }, { ...context, judge: { ...judge, chat: { temperature: 0 } } }, folders))).rejects.toThrow("different judge settings");
   });
 
   test("the summary holds a manifest that says what the run was made of, and a record of the corpus that names no folder", async () => {
@@ -474,6 +495,34 @@ describe("runCorpus", () => {
     }
   });
 
+  test("resume refuses a folder whose run is still going, and takes a marker that no run holds for a stale one", async () => {
+    const { akm, folders } = setup();
+    const context = { akm, model: null, judge: null, version: "v" };
+    await quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1 }, context, folders));
+    const dir = join(folders.results, readdirSync(folders.results)[0]);
+    const marker = join(dir, ".running");
+    const resume = () => quiet(() => runCorpus(publicOf(folders), { label: "t", sampleSeed: 1, resume: dir }, context, folders));
+    const run = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30_000)"], { stdout: "ignore", stderr: "ignore" });
+    try {
+      writeFileSync(marker, `${run.pid}\n`);
+      const rows = readFileSync(join(dir, "samples.jsonl"), "utf8");
+      await expect(resume()).rejects.toThrow(`is being written by a run that is still going (pid ${run.pid}). Stop it first`);
+      expect(readFileSync(marker, "utf8").trim()).toBe(String(run.pid)); // a refused resume leaves the folder as it was
+      expect(readFileSync(join(dir, "samples.jsonl"), "utf8")).toBe(rows);
+    } finally {
+      run.kill();
+      await run.exited;
+    }
+    // that process is gone, so its marker is stale: the resume goes ahead, marks the folder as its own and clears it at the end
+    expect(await resume()).toMatchObject({ n_run: 3, complete: true, resumed: true });
+    expect(existsSync(marker)).toBe(false);
+    // a marker that names this process (a container starts every run as the same pid, so one that a killed run left does) or no pid at all is stale too
+    for (const text of [`${process.pid}\n`, "not a pid"]) {
+      writeFileSync(marker, text);
+      expect((await resume()).complete).toBe(true);
+    }
+  });
+
   test("resume takes two edits of one akm commit for two builds, and a summary from before the fingerprint for a clean one", async () => {
     const { akm, folders } = setup();
     const dirOf = (label: string) => join(folders.results, readdirSync(folders.results).find((d) => d.endsWith(`-${label}`)) as string);
@@ -580,7 +629,7 @@ describe("runCorpus", () => {
       expect(summary).toMatchObject({ retrieval_only: true, n_run: 3, n_scored: 3, model: null });
       expect(summary.metrics.retrieval).toMatchObject({ n: 2, hit_rate: 0.5 });
       expect(summary.metrics.retrieval_abstention).toEqual({ n: 1 });
-      expect(summary).toMatchObject({ model_endpoint: null, judge_endpoint: null, temperature: null, max_tokens: null });
+      expect(summary).toMatchObject({ model_endpoint: null, judge_endpoint: null, temperature: null, judge_temperature: null, max_tokens: null });
       const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
       expect(stored).toMatchObject({ status: "complete", aborted_reason: null });
 
@@ -808,32 +857,26 @@ describe("the command", () => {
     expect(run.err).toContain(`longmemeval: --cases ${notes} needs ${DATA_FILE} in its folder, in the dataset's format`);
   });
 
-  test("--cases reports both destinations and proceeds without a terminal or --yes", () => {
+  test("--cases reports both destinations and proceeds without a terminal", () => {
     const notes = tmp();
     writeFileSync(join(notes, DATA_FILE), JSON.stringify(tinyDataset()));
-    for (const flags of [[], ["--yes"]]) {
-      const run = command(["--cases", notes, "--limit", "1", ...flags]);
-      expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
-      expect(run.out).toContain("  model  synthetic-model at http://127.0.0.1:9/v1");
-      expect(run.out).toContain("  judge  synthetic-judge at http://127.0.0.1:9/v1");
-      expect(run.out).not.toContain("Continue?");
-      expect(run.err).toContain("consent-test-akm reached"); // stub stops before any model call
-    }
+    const run = command(["--cases", notes, "--limit", "1"]);
+    expect(run.out).toContain(`The cases in ${notes} will be sent to:`);
+    expect(run.out).toContain("  model  synthetic-model at http://127.0.0.1:9/v1");
+    expect(run.out).toContain("  judge  synthetic-judge at http://127.0.0.1:9/v1");
+    expect(run.out).not.toContain("Continue?");
+    expect(run.err).toContain("consent-test-akm reached"); // stub stops before any model call
     const retrieval = command(["--cases", notes, "--retrieval-only"]);
     expect(retrieval.out).not.toContain("will be sent to");
     expect(retrieval.err).toContain("consent-test-akm reached");
   });
 
-  test("--corpus own and own-feedback need an explicit folder, and --help names --cases", () => {
-    for (const old of ["own", "own-feedback"]) {
-      const refused = command(["--corpus", old]);
-      expect(refused.code, old).toBe(2);
-      expect(refused.err, old).toContain(`longmemeval: --corpus ${old} was renamed in 0.2: use `);
-    }
+  test("--help names --corpus and --cases, and promises no harness_sha256, which nothing writes", () => {
     const help = command(["--help"]);
     expect(help.code).toBe(0);
     expect(help.out).toContain("--corpus public|custom|all");
     expect(help.out).toContain("--cases DIR");
+    expect(help.out).not.toContain("harness_sha256");
   });
 });
 

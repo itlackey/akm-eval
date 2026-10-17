@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-// retrieval: indexes the library in two sandboxes, for keyword search and for semantic search, runs `akm search`
-// and `akm curate` on both for every query, and scores them against the graded assets. The semantic search is akm's
-// built-in embedder, a small model that runs in the akm process. A run with --limit, and an own corpus, leave it out
-// unless --semantic on asks for it. See ../README.md.
+// retrieval: indexes the library in a sandbox for keyword search and, with --semantic, in a second one for semantic search, runs
+// `akm search` and `akm curate` on each for every query, and scores them against the graded assets. The semantic search is
+// akm's built-in embedder, a small model that runs in the akm process. Without --semantic only keyword search is scored; with
+// it the semantic search is scored too, whatever --limit or corpus is given. See ../README.md.
 //
-//   evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]
+//   evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic]
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -26,23 +26,18 @@ import { type Abstention, type Columns, DEPTH, RELEVANT, type Row, type System, 
 
 const EVAL_DIR = resolve(import.meta.dir, "..");
 const ROOT = resolve(EVAL_DIR, "..", "..");
-// The code this process loaded, digested once at the start: an edit made while a run goes is not what it ran.
-export { SYSTEMS };
 const labelOf = (sys: System): string => `${sys.startsWith("semantic_") ? "semantic " : ""}${sys.endsWith("curate") ? "curate" : "search"}`;
-/** What --semantic says: score the semantic search (on), never (off), or only in a full run of the public and rewrite corpora (auto). */
-const SEMANTIC_FLAGS = ["on", "off", "auto"] as const;
-export type SemanticFlag = (typeof SEMANTIC_FLAGS)[number];
 
 const OWN_HELP = `Your own set is a folder with queries.jsonl and qrels.jsonl in the format that evals/${NAME}/assets/README.md describes, and library/, the folder akm should index (a link to it works). A library of several bundles needs bundles.json too. Run it with: evals/${NAME}/run --cases DIR`;
 
-const USAGE = `Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]
+const USAGE = `Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic]
 
-For each collection of queries, indexes its library in two sandboxes, for keyword search and for semantic search, asks
-akm search and akm curate of both for the first ${DEPTH} results of every query, and scores them against the collection's
-qrels. Each collection is scored on its own. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL}, which runs
-in the akm process and is downloaded once into .cache/ (133 MB). The semantic index is kept in .cache/akm-index/ and reused
-by the next run, unless a file of the library changed or akm is not the same. A corpus of your own and a run with --limit are
-scored with keyword search only, unless --semantic on says otherwise. Needs akm on PATH, or in AKM_BIN.
+For each collection of queries, indexes its library in a sandbox for keyword search and, with --semantic, in a second one for
+semantic search, asks akm search and akm curate of each for the first ${DEPTH} results of every query, and scores them against
+the collection's qrels. Each collection is scored on its own. The semantic search is akm's built-in embedder, ${SEMANTIC_MODEL},
+which runs in the akm process and is downloaded once into .cache/ (133 MB). The semantic index is kept in .cache/akm-index/ and
+reused by the next run, unless a file of the library changed or akm is not the same. Without --semantic only keyword search is
+scored. Needs akm on PATH, or in AKM_BIN.
 
   --corpus  public (default) runs the collections in assets/: the library in corpus/library and the books.
             custom runs a corpus of your own (--cases DIR), else the default one: the rewrite of the public collections in
@@ -50,11 +45,9 @@ scored with keyword search only, unless --semantic on says otherwise. Needs akm 
             all runs public and the default custom corpus.
   --cases   the folder of a custom corpus of your own: queries.jsonl, qrels.jsonl and library/, and bundles.json for a library
             of bundles. It is --corpus custom. See "Run your own set" in evals/retrieval/README.md.
-  -y, --yes  accepted and not needed: this eval sends your set to no model.
-  --limit   run N queries of each collection, in the task and non-task proportion of the whole set. Keyword search only,
-            unless --semantic on.
-  --semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora (not with
-            --limit, not for a corpus of your own), off never. On a large own library it embeds every asset: tens of minutes.
+  --limit   run N queries of each collection, in the task and non-task proportion of the whole set.
+  --semantic  also score the semantic search, whatever --limit or corpus is given. Without it only keyword search is scored. The
+            semantic index of a large library of your own embeds every asset: tens of minutes the first time.
   --repeat  run each collection N times, into <label>-r1-<collection> to <label>-rN-<collection>, and write the min, max and mean of each metric to
             <UTC date>-<label>-<collection>-repeat-summary.json beside them
 ${akmUsage}
@@ -86,8 +79,8 @@ interface Summary {
   semantic_index?: CachedIndex["state"];
   /** Which akm built the semantic index (the version, `akm_bin`, `akm_build` and when akm says it built it). For a kept index it is this run's akm, since the cache keeps an index for one build. */
   semantic_index_built_by?: BuiltBy;
-  /** What --semantic said: on, off, or auto, which scores the semantic search only in a full run of the public and rewrite corpora. */
-  semantic_flag: SemanticFlag;
+  /** What --semantic said: `on` scores the semantic search too, `off` (no flag) is keyword search alone. A run from before --semantic was a plain flag can also say `auto`. */
+  semantic_flag: "on" | "off";
   depth: number;
   relevant_from_grade: number;
   limit: number | null;
@@ -197,12 +190,6 @@ function printSideBySide(columns: Summary[]): void {
   for (const r of rows) console.log(`  ${r.map((cell, i) => cell.padEnd(w[i])).join("  ")}`.trimEnd());
 }
 
-/**
- * Whether a run scores the semantic search as well. With --semantic on it does, and with off it does not. With auto, the default, a run
- * with --limit is for checking a setup, and a corpus of your own may be a library of tens of thousands of assets: both are scored with keyword search alone.
- */
-export const withSemantic = (own: boolean, limit?: number, flag: SemanticFlag = "auto"): boolean => (flag === "auto" ? limit === undefined && !own : flag === "on");
-
 export interface Folders {
   /** The library to index. */
   library: string;
@@ -236,7 +223,7 @@ const warnedQrels = new Set<string>();
 export async function runCollection(
   corpus: ResolvedCorpus,
   collection: string,
-  ctx: { label?: string; limit?: number; semantic: boolean; semanticFlag?: SemanticFlag; callTimeoutMs?: number; newSandbox?: () => Sandbox; cache?: IndexInput["cache"] },
+  ctx: { label?: string; limit?: number; semantic: boolean; callTimeoutMs?: number; newSandbox?: () => Sandbox; cache?: IndexInput["cache"] },
   folders: Folders,
 ): Promise<Summary> {
   let all: Query[];
@@ -263,6 +250,8 @@ export async function runCollection(
   }
 
   const systems = systemsFor(ctx.semantic);
+  // --semantic asks for the semantic index whatever the corpus is. The kept index costs nothing, and a new one embeds every asset, which for a library of your own can be tens of minutes.
+  if (ctx.semantic && isOwn(corpus)) console.log(`${NAME} (${where(corpus.name, collection)}): --semantic embeds every asset of the library unless an index kept in .cache/akm-index/ from an earlier run still fits: tens of minutes for a large library.`);
   const indexes = await openIndexes({ title: where(corpus.name, collection), name: indexName(corpus, collection), library: folders.library, bundles: folders.bundles, contents: library, semantic: ctx.semantic, probe: cases[0].query, newSandbox: ctx.newSandbox, cache: ctx.cache });
   try {
     const { version, nAssets } = indexes;
@@ -309,7 +298,7 @@ export async function runCollection(
       ...build,
       search_mode: { keyword: [...seen.keyword].sort().join(", ") || "unknown", ...(ctx.semantic ? { semantic: [...seen.semantic].sort().join(", ") || "unknown" } : {}) },
       ...(ctx.semantic ? { semantic_model: SEMANTIC_MODEL, semantic_index: indexes.semanticIndex, semantic_index_built_by: indexes.builtBy } : {}),
-      semantic_flag: ctx.semanticFlag ?? "auto",
+      semantic_flag: ctx.semantic ? "on" : "off",
       depth: DEPTH,
       relevant_from_grade: RELEVANT,
       limit: ctx.limit ?? null,
@@ -334,9 +323,9 @@ export async function runCollection(
 }
 
 async function main(): Promise<void> {
-  let values: { akm?: string; corpus?: string; cases?: string; yes?: boolean; limit?: string; repeat?: string; label?: string; semantic?: string; help?: boolean };
+  let values: { akm?: string; corpus?: string; cases?: string; limit?: string; repeat?: string; label?: string; semantic?: boolean; help?: boolean };
   try {
-    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, semantic: { type: "string" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
+    values = parseArgs({ args: Bun.argv.slice(2), options: { ...CORPUS_OPTIONS, limit: { type: "string" }, repeat: { type: "string" }, ...AKM_OPTIONS, label: { type: "string" }, semantic: { type: "boolean" }, help: { type: "boolean", short: "h" } }, strict: true }).values;
   } catch (e) {
     console.error(`retrieval: ${(e as Error).message}\n\n${USAGE}`);
     process.exit(2);
@@ -345,10 +334,6 @@ async function main(): Promise<void> {
     console.log(USAGE);
     return;
   }
-  try {
-  } catch (e) {
-    fail((e as Error).message);
-  }
   useAkm(values, fail);
   const corpora = resolveCorpora({ eval: NAME, values, publicFolder: join(EVAL_DIR, "assets"), fail });
   const limit = values.limit === undefined ? undefined : Number(values.limit);
@@ -356,8 +341,7 @@ async function main(): Promise<void> {
   const repeat = values.repeat === undefined ? undefined : Number(values.repeat);
   if (repeat !== undefined && !(Number.isInteger(repeat) && repeat > 0)) fail("--repeat must be a positive integer");
   if (values.label !== undefined && !/^[A-Za-z0-9._-]+$/.test(values.label)) fail("--label may use letters, digits, dot, dash and underscore");
-  const flag = values.semantic ?? "auto";
-  if (!(SEMANTIC_FLAGS as readonly string[]).includes(flag)) fail(`--semantic must be on, off or auto, not "${flag}"`);
+  const semantic = values.semantic === true;
 
   const sets = corpora.flatMap((c) => collectionsFor(c).map((s) => ({ corpus: c, ...s })));
   for (const { corpus: c, folders: f } of sets) {
@@ -375,7 +359,7 @@ async function main(): Promise<void> {
     }
   }
   for (const s of sets) {
-    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic: withSemantic(isOwn(s.corpus), limit, flag as SemanticFlag), semanticFlag: flag as SemanticFlag }, s.folders);
+    const run = (runLabel: string | undefined) => runCollection(s.corpus, s.name, { label: runLabel, limit, semantic }, s.folders);
     // A run's folder is <label>-rN-<collection>, so the repeat summary is named <label>-<collection>, and the collections' do not collide.
     if (repeat === undefined) summaries.push(...await repeatRuns(undefined, label ?? "", () => run(label)));
     else summaries.push(...(await repeatRuns(repeat, `${label}-${s.name}`, (runLabel) => run(`${label}-r${runLabel.slice(runLabel.lastIndexOf("-r") + 2)}`))));

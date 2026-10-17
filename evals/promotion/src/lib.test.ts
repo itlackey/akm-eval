@@ -83,6 +83,14 @@ describe("promotionConfig", () => {
     expect(engine.temperature).toBe(0);
     expect(engine.enableThinking).toBe(false);
   });
+
+  test("gives the engine the provider kind it is asked for, and openai without one: the rest of the config does not change with it", () => {
+    const plain = promotionConfig("http://localhost:8080/v1/", "m", true) as any;
+    expect(plain.engines.judge.provider).toBe("openai");
+    const other = promotionConfig("http://localhost:8080/v1/", "m", true, "anthropic") as any;
+    expect(other.engines.judge.provider).toBe("anthropic");
+    expect({ ...other, engines: { judge: { ...other.engines.judge, provider: "openai" } } }).toEqual(plain);
+  });
 });
 
 describe("akm's tables", () => {

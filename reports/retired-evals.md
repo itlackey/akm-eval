@@ -1,6 +1,6 @@
 # Retired evals
 
-Twelve older evals and experiments were retired instead of moved into this repository, and bakeoff gave up most of its jobs when it was rebuilt to drive akm. The numbers are those the runs recorded, on the date given: they describe akm and the models of that day. The old harness stays under the tag `legacy-2026-10`. The toolkit that lived in akm as `scripts/akm-eval` is kept, to read and not to run, in [`retired/akm-scripts-akm-eval/`](../retired/akm-scripts-akm-eval/README.md).
+Twelve older evals and experiments were retired instead of moved into this repository, and bakeoff gave up most of its jobs when it was rebuilt to drive akm. The numbers are those the runs recorded, on the date given: they describe akm and the models of that day. The old harness stays under the tag `legacy-2026-10`. The toolkit that lived in akm as `scripts/akm-eval` is kept, to read and not to run, in akm at the tag `v0.9.27-alpha.1` (commit `f57a7fd44b37bbee4c18d5ae7f79efdba880ca57`).
 
 | Retired | Headline result | Covered now by |
 |---|---|---|

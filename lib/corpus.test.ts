@@ -3,7 +3,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { CORPUS_OPTIONS, type Recipient, confirmCases, renamed, resolveCorpora } from "./corpus.ts";
+import { CORPUS_OPTIONS, type Recipient, confirmCases, corpusUsage, resolveCorpora } from "./corpus.ts";
 
 const LIB = import.meta.dir;
 const REPO = resolve(LIB, "..");
@@ -94,17 +94,13 @@ describe("resolveCorpora", () => {
     expect(resolveIn({}, promotion)[0].name).toBe("public");
   });
 
-  test("legacy corpus names accept unambiguous aliases and ask for a folder when needed", () => {
+  test("the names of the corpora before 0.2 are not corpora: private, own and own-feedback are refused like any other value, with or without --cases", () => {
     const { root, resolveIn } = setup();
-    const own = "--corpus own was renamed in 0.2: use --cases DIR for a folder of your own";
-    expect(resolveIn({ corpus: "private" })).toEqual(resolveIn({ corpus: "custom" }));
-    expect(messageOf(() => resolveIn({ corpus: "own" }))).toBe(own);
-    expect(messageOf(() => resolveIn({ corpus: "own-feedback" }))).toBe("--corpus own-feedback was renamed in 0.2: use --cases DIR for a folder of your own");
-    expect(resolveIn({ corpus: "own", cases: "night" })).toEqual(resolveIn({ cases: "night" }));
-    // an eval with no rewrite does not offer one
-    expect(messageOf(() => resolveIn({ corpus: "private" }, { rewrite: false }))).toContain("Use --cases DIR");
-    expect(renamed("private", "--corpus custom")).toBe("--corpus private was renamed in 0.2: use --corpus custom");
-    for (const value of ["public", "custom", "all", "bogus", undefined]) expect(renamed(value, "x")).toBeUndefined();
+    for (const old of ["private", "own", "own-feedback"]) {
+      expect(messageOf(() => resolveIn({ corpus: old }))).toBe(`--corpus must be public, custom or all, not "${old}"`);
+      expect(messageOf(() => resolveIn({ corpus: old, cases: "night" }))).toBe(`--corpus must be public, custom or all, not "${old}"`);
+      expect(messageOf(() => resolveIn({ corpus: old }, { rewrite: false }))).toBe(`--corpus must be public, custom or all, not "${old}"`);
+    }
     expect(existsSync(join(root, "private"))).toBe(false);
   });
 
@@ -130,7 +126,7 @@ describe("resolveCorpora", () => {
         },
       });
     expect(messageOf(run)).toBe("stopped");
-    expect(stopped).toEqual(["--corpus own was renamed in 0.2: use --cases DIR for a folder of your own"]);
+    expect(stopped).toEqual(['--corpus must be public, custom or all, not "own"']);
   });
 });
 
@@ -205,12 +201,14 @@ describe("custom-case destinations", () => {
     expect(await at("not a url SYNTH-secret")).toBe("  model  m at an endpoint that is not a URL");
   });
 
-  test("-y and --yes remain accepted and preserve destination reporting", async () => {
-    for (const flag of ["-y", "--yes"]) {
-      const { values } = parseArgs({ args: ["--cases", "notes", flag], options: CORPUS_OPTIONS, strict: true });
-      expect(values).toEqual({ cases: "notes", yes: true });
-      expect(await report([model], values)).toEqual(await report([model], { cases: "notes" }));
-    }
+  test("-y and --yes are not flags any more, and the usage does not list them", () => {
+    for (const flag of ["-y", "--yes"]) expect(() => parseArgs({ args: ["--cases", "notes", flag], options: CORPUS_OPTIONS, strict: true })).toThrow();
+    expect(parseArgs({ args: ["--corpus", "all", "--cases", "notes"], options: CORPUS_OPTIONS, strict: true }).values).toEqual({ corpus: "all", cases: "notes" });
+    expect(corpusUsage).not.toMatch(/--yes|-y\b/);
+  });
+
+  test("a caller that still passes yes gets the same report: nothing is asked", async () => {
+    expect(await report([model], { cases: "notes", yes: true })).toEqual(await report([model], { cases: "notes" }));
   });
 
   test("public/rewrite runs and calls with no recipients have no destination report", async () => {
@@ -233,7 +231,7 @@ describe("every eval and benchmark that takes --corpus", () => {
     expect(runs.length).toBeGreaterThanOrEqual(14);
   });
 
-  test("old corpus names never launch a model while setup is missing", async () => {
+  test("a corpus name that is not one is refused before anything is set up, and no model is launched", async () => {
     const cwd = temp(); // a folder with no .env in it
     const env = { ...process.env, AKM_BIN: "/nonexistent/akm-for-this-test" };
     const stop = async (file: string, old: string) => {
@@ -241,11 +239,12 @@ describe("every eval and benchmark that takes --corpus", () => {
       const [err, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       return { file, old, code, err };
     };
-    const tries = runs.flatMap((file) => ["own", "own-feedback"].map((old) => [file, old] as const));
+    const tries = runs.flatMap((file) => ["own", "private"].map((old) => [file, old] as const));
     for (let i = 0; i < tries.length; i += 8) {
       for (const done of await Promise.all(tries.slice(i, i + 8).map(([file, old]) => stop(file, old)))) {
         expect([done.file, done.old, done.code]).toEqual([done.file, done.old, 2]);
-        expect(done.err, `${done.file} ${done.old}`).toContain(`--corpus ${done.old} was renamed in 0.2: use `);
+        expect(done.err, `${done.file} ${done.old}`).toContain(`--corpus must be public, custom or all, not "${done.old}"`);
+        expect(done.err, `${done.file} ${done.old}`).not.toContain("could not run");
       }
     }
   }, 120_000);
@@ -260,14 +259,15 @@ describe("every run that sends --cases reports its destinations before setup", (
         .filter((file) => existsSync(file)),
     ),
     join(REPO, "evals", "retrieval", "src", "label.ts"),
+    join(REPO, "lib", "run.ts"), // the run that the evals which are specs share
   ].map((file) => ({ file: file.slice(REPO.length + 1), source: sourceOf(file) }));
   // The runs that take --cases and send it to no model.
   const SENDS_NONE = ["evals/retrieval/src/run.ts"];
   const takesCases = (source: string) => /\.\.\.CORPUS_OPTIONS/.test(source);
 
-  test("the scan finds the runs that take --cases", () => {
-    expect(runs.filter((r) => takesCases(r.source)).length).toBeGreaterThanOrEqual(13);
-    expect(runs.find((r) => r.file === "benchmarks/skillret/src/run.ts")?.source).not.toMatch(/confirmCases|\.\.\.CORPUS_OPTIONS/); // skillret takes no --cases
+  test("the scan finds the shared run, which takes --cases, and not skillret, which takes none", () => {
+    expect(runs.find((r) => r.file === "lib/run.ts")?.source).toMatch(/\.\.\.CORPUS_OPTIONS/); // so the check below has at least this one to make, however many evals are specs of it
+    expect(runs.find((r) => r.file === "benchmarks/skillret/src/run.ts")?.source).not.toMatch(/confirmCases|\.\.\.CORPUS_OPTIONS/);
   });
 
   test("each calls confirmCases once, in main, before it makes a sandbox or asks akm for its version", () => {

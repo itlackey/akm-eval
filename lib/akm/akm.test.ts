@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
+import { SEMANTIC_MODEL, type Sandbox, agentDetailArgs, agentDetailFrom, akmBuild, akmVersion, atLeast, commandLine, createSandbox, engineConfig, parseCommand, removeSandbox, runAkm, runAkmJson, sandboxIn, useAkm, writeConfig } from "./akm.ts";
 
 const sandboxes: Sandbox[] = [];
 const dirs: string[] = [];
@@ -445,6 +445,17 @@ describe("engineConfig", () => {
     expect("apiKey" in engineConfig("http://h/v1", "m", false).engines.model).toBe(false);
   });
 
+  test("takes the provider kind of the engine, openai unless told otherwise, and the endpoint is the same for every kind", () => {
+    expect(engineConfig("http://h/v1", "m", false).engines.model.provider).toBe("openai");
+    const kinds = ["anthropic", "gemini", "groq", "ollama", "lmstudio"].map((provider) => engineConfig("http://h/v1", "m", true, "judge", provider));
+    expect(kinds.map((c) => c.engines.judge.provider)).toEqual(["anthropic", "gemini", "groq", "ollama", "lmstudio"]);
+    for (const c of kinds) expect(c.engines.judge).toMatchObject({ kind: "llm", endpoint: "http://h/v1/chat/completions", model: "m", apiKey: "$MODEL_API_KEY", timeoutMs: 600_000 });
+    // only the provider differs from the default config, in the same place, so a run that sets none compares with the runs before it
+    const [plain, other] = [engineConfig("http://h/v1", "m", true), engineConfig("http://h/v1", "m", true, "model", "groq")];
+    expect(Object.keys(other.engines.model)).toEqual(Object.keys(plain.engines.model));
+    expect({ ...other, engines: { model: { ...other.engines.model, provider: "openai" } } }).toEqual(plain);
+  });
+
   test("names the engine as asked, and a caller adds per-process routing to the object it gets", () => {
     const c = engineConfig("http://h/v1", "m", false, "judge");
     expect(Object.keys(c.engines)).toEqual(["judge"]);
@@ -452,6 +463,20 @@ describe("engineConfig", () => {
     c.improve = { strategies: { default: { processes: { reflect: { qualityGate: { engine: "judge" } } } } } };
     expect(Object.keys(c)).toEqual(["configVersion", "semanticSearchMode", "registries", "engines", "defaults", "improve"]);
     expect(engineConfig("http://h/v1", "m", false).improve).toBeUndefined();
+  });
+});
+
+describe("atLeast", () => {
+  const min = "0.9.25-alpha.2";
+  test("puts a prerelease below its release and orders prereleases by their tag", () => {
+    for (const v of ["0.9.25-alpha.2", "0.9.25-alpha.3", "0.9.25-alpha.10", "0.9.25-beta.1", "0.9.25-rc.1", "0.9.25", "0.9.26", "0.10.0", "1.0.0-alpha.1"]) expect(atLeast(v, min)).toBe(true);
+    for (const v of ["0.9.25-alpha.1", "0.9.25-alpha", "0.9.24", "0.9.24-rc.1", "0.8.99"]) expect(atLeast(v, min)).toBe(false);
+    expect(atLeast("0.9.25-alpha.2", "0.9.25")).toBe(false);
+    expect(atLeast("0.9.25", "0.9.25")).toBe(true);
+  });
+
+  test("refuses a string that is not a version", () => {
+    expect(() => atLeast("latest", min)).toThrow("not a version");
   });
 });
 

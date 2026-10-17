@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, relative, sep } from "node:path";
+import { basename, join } from "node:path";
 import { commandLine } from "../../../lib/akm/akm.ts";
 import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
@@ -47,7 +47,7 @@ const note = (ref) => {
 const config = JSON.parse(readFileSync(process.env.AKM_CONFIG_DIR + "/config.json", "utf8"));
 const dbFile = process.env.AKM_DATA_DIR + "/state.db";
 const searches = (ref) => { if (!ref || !existsSync(dbFile)) return []; const db = new Database(dbFile, { readonly: true }); try { return db.prepare("SELECT query FROM usage_events WHERE event_type = 'search' AND source = 'user' AND entry_ref = ?").all("bundle//" + ref).map((r) => r.query); } finally { db.close(); } };
-appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
+appendFileSync(process.env.FAKE_LOG, JSON.stringify({ args, searches: searches(rest[0]), bundle: process.env.AKM_BUNDLE_DIR, cwd: process.cwd(), model: config.engines?.reflect?.model, provider: config.engines?.reflect?.provider ?? null, temperature: config.engines?.reflect?.temperature ?? null, thinking: config.engines?.reflect?.enableThinking ?? null, key: process.env.MODEL_API_KEY ?? null, note: rest[0] && note(rest[0]) ? readFileSync(note(rest[0]), "utf8") : null }) + "\\n");
 if (cmd === "--version") console.log("akm 0.9.99-test");
 else if (cmd === "index") {
   const db = new Database(join(process.env.AKM_DATA_DIR, "index.db"));
@@ -123,6 +123,12 @@ const corpusOf = (folder: string, name: "public" | "custom" = "public", custom: 
 
 /** runCorpus on the public corpus: `folders` holds its cases (assets) and the folder the results go to. */
 const runPublic = (ctx: Parameters<typeof runCorpus>[1], folders: { assets: string; results: string }) => runCorpus(corpusOf(folders.assets), ctx, folders.results);
+
+/**
+ * The keys of the summary.json that reflect wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts, without results_dir, which is
+ * returned and not written. scripts/ledger, scripts/compare and scripts/rescore read them, so none may go. A run adds concurrency and timeout_ms to them.
+ */
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "retrieval_queries", "served", "metrics", "model_calls", "semantic_verification", "manifest"];
 
 const quiet = async <T>(f: () => Promise<T>): Promise<T> => {
   const log = console.log;
@@ -332,10 +338,10 @@ describe("runCorpus", () => {
     expect(JSON.parse(readFileSync(join(dir, "samples.jsonl"), "utf8")).error).toBe("reflect made a proposal but the queue holds 2");
   });
 
-  test("stops early when no case gets an outcome, and says what to check", async () => {
+  test("gives up after five errored cases in a row, and says what to check", async () => {
     const many = Array.from({ length: 12 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
     const { ctx, folders } = setup(many, Object.fromEntries(many.map((c) => [refOf(c.path), { outcome: "provider" }])));
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("the first 5 cases got no outcome");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 cases in a row errored, so the run stopped after 5 of 12");
     const dir = join(folders.results, readdirSync(folders.results)[0] as string);
     const summary = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
     expect(summary.n_run).toBe(5);
@@ -345,10 +351,40 @@ describe("runCorpus", () => {
   test("a run that stops early says so in the summary it writes before it fails", async () => {
     const many = Array.from({ length: 12 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
     const { ctx, folders } = setup(many, Object.fromEntries(many.map((c) => [refOf(c.path), { outcome: "provider" }])));
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("the first 5 cases got no outcome");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("Check MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in .env, and that akm can reach the model.");
     const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0] as string, "summary.json"), "utf8"));
     expect(stored).toMatchObject({ status: "aborted", n_run: 5, n_cases: 12 });
-    expect(stored.aborted_reason).toBe("the first 5 cases got no outcome, so the run stopped. Last error: non_zero_exit: HTTP 500 from <MODEL_BASE_URL>/chat/completions");
+    expect(stored.aborted_reason).toBe("5 cases in a row errored, so the run stopped after 5 of 12. Last error: non_zero_exit: HTTP 500 from <MODEL_BASE_URL>/chat/completions");
+  });
+
+  test("a good case between the errors starts the count again, so eight errors with a verdict in the middle do not give up", async () => {
+    const mixed = Array.from({ length: 9 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
+    const { ctx, folders } = setup(mixed, Object.fromEntries(mixed.map((c, i) => [refOf(c.path), { outcome: i === 4 ? "none" : "provider" }])));
+    const summary = await quiet(() => runPublic(ctx, folders));
+    expect(summary).toMatchObject({ status: "complete", aborted_reason: null, n_run: 9, n_scored: 1, n_errored: 8 });
+  });
+
+  test("the summary has every key it has always had, which scripts/ledger, compare and rescore read, and concurrency and timeout_ms besides", async () => {
+    const { ctx, folders } = setup(cases.slice(0, 2), plan);
+    const summary = await quiet(() => runPublic(ctx, folders));
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
+    expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
+    expect(stored).toMatchObject({ concurrency: 1, timeout_ms: 900_000, timeouts: 0, retrieval_queries: null });
+    expect(stored.served).toEqual({ "served-model": 1, "other-name": 1 });
+  });
+
+  test("gives the engine the provider kind of the context, in the config akm reads and in the summary, and openai without one", async () => {
+    const { ctx, calls, folders } = setup(cases.slice(0, 1), plan);
+    const summary = await quiet(() => runPublic({ ...ctx, provider: "groq" }, folders));
+    const log = calls().filter((c) => c.args[0] !== "--version");
+    expect(log.length).toBeGreaterThan(0);
+    expect(log.every((c) => c.provider === "groq")).toBe(true);
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).config.engines.reflect.provider).toBe("groq");
+    const plain = setup(cases.slice(0, 1), plan);
+    const again = await quiet(() => runPublic(plain.ctx, plain.folders));
+    expect(plain.calls().filter((c) => c.args[0] !== "--version").every((c) => c.provider === "openai")).toBe(true);
+    expect(JSON.parse(readFileSync(join(again.results_dir, "summary.json"), "utf8")).config.engines.reflect.provider).toBe("openai");
   });
 
   test("an akm that runs past its timeout is an errored case marked timed_out, and the summary counts the timeouts apart from the other errors", async () => {
@@ -360,8 +396,10 @@ describe("runCorpus", () => {
     expect(rows[1].outcome).toBe("error");
     expect("timed_out" in rows[1]).toBe(false);
     expect("timed_out" in rows[2]).toBe(false);
-    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1 });
-    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).timeouts).toBe(1);
+    expect(summary).toMatchObject({ n_run: 3, n_scored: 1, n_errored: 2, timeouts: 1, timeout_ms: 1500 });
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(stored.timeouts).toBe(1);
+    expect([stored.timeout_ms, stored.manifest.settings.timeout_ms]).toEqual([1500, 1500]); // the timeout the run had, not null
   });
 });
 
@@ -392,7 +430,7 @@ describe("the manifest of a run", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(manifest).toMatchObject({ manifest_version: 1, eval: "reflect", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: summary.akm_bin, build: null, build_fingerprint: null });
-    expect(manifest.settings).toEqual({ strategy: "reflect-only", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(manifest.settings).toEqual({ strategy: "reflect-only", config_patch_sha256: null, timeout_ms: 900_000, seed: null }); // the effective timeout, runAkm's default here; it used to be recorded as null
     expect(Object.keys(manifest.cases)).toEqual(cases.map((c) => c.id));
     const first = cases[0] as Case;
     expect(manifest.cases["fix-ok"]).toEqual({
@@ -459,7 +497,7 @@ describe("the manifest of a run", () => {
   test("a run that stops early keeps every selected case in the manifest, with those it never ran in neither list", async () => {
     const many = Array.from({ length: 12 }, (_, i) => make(`c${i}`, "retrieval-miss", `knowledge/n${i}.md`));
     const { ctx, folders } = setup(many, Object.fromEntries(many.map((c) => [refOf(c.path), { outcome: "provider" }])));
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("the first 5 cases got no outcome");
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 cases in a row errored, so the run stopped after 5 of 12");
     const { manifest } = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0] as string, "summary.json"), "utf8"));
     expect(manifestProblems(manifest)).toEqual([]);
     expect(manifest.completion).toEqual({ selected: many.map((c) => c.id), scored: [], errored: many.slice(0, 5).map((c) => c.id) });
@@ -500,12 +538,13 @@ describe("run --corpus custom", () => {
     const tree = copyOfRepo();
     const none = bun(tree, "run.ts", ["--corpus", "custom"]);
     expect(none.code).toBe(2);
-    expect(none.err).toContain("the private assets are missing (private/reflect/assets/cases.jsonl). Make them with: ./generate-assets --only reflect");
+    expect(none.err).toContain("--corpus custom: private/reflect/assets/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl, as assets/ does. Make the rewrite with: ./generate-assets --only reflect");
     const empty = mkdtempSync(join(tmpdir(), "reflect empty notes-"));
     dirs.push(empty);
     const mine = bun(tree, "run.ts", ["--cases", empty]);
     expect(mine.code).toBe(2);
-    expect(mine.err).toContain(`--cases ${empty}: ${relative(tree, empty).split(sep).join("/")}/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl`);
+    expect(mine.err).toContain(`--cases ${empty}: ${empty}/cases.jsonl does not exist. The folder of a custom corpus holds cases.jsonl, as assets/ does.`);
+    expect(mine.err).not.toContain("generate-assets"); // a folder of your own is not made by it
     expect(mine.err).not.toContain("could not run");
   }, 60_000);
 
@@ -531,25 +570,51 @@ describe("run --corpus custom", () => {
     expect(noQrels.err).not.toContain("could not run");
   }, 60_000);
 
-  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
+  test("the corpus names of before 0.2 and the flags --yes and -y are refused: the run stops before it reaches akm", () => {
     const tree = copyOfRepo();
-    expect(bun(tree, "generate.ts", ["--seed", "5", "--out", join(tree, "private", "reflect")]).code).toBe(0);
-    for (const old of ["own", "own-feedback"]) {
+    for (const old of ["own", "own-feedback", "private", "everything"]) {
       const done = bun(tree, "run.ts", ["--corpus", old]);
       expect(done.code, old).toBe(2);
-      expect(done.err, old).toContain(`reflect: --corpus ${old} was renamed in 0.2: use `);
+      expect(done.err, old).toContain(`reflect: --corpus must be public, custom or all, not "${old}"`);
       expect(done.err, old).not.toContain("could not run");
     }
-    expect(bun(tree, "run.ts", ["--corpus", "everything"]).err).toContain('--corpus must be public, custom or all, not "everything"');
+    for (const flag of ["-y", "--yes"]) {
+      const done = bun(tree, "run.ts", ["--corpus", "public", flag]);
+      expect(done.code, flag).toBe(2);
+      expect(done.err, flag).toStartWith("reflect: ");
+      expect(done.err, flag).toContain("Usage: evals/reflect/run");
+      expect(done.err, flag).not.toContain("could not run");
+    }
   }, 60_000);
 
   test("a folder of your own goes on to the akm check, and takes no --retrieval-queries", () => {
     const tree = copyOfRepo();
     const notes = ownNotes();
-    expect(bun(tree, "run.ts", ["--cases", notes, "-y"]).err).toContain("could not run"); // stopped for want of akm
+    expect(bun(tree, "run.ts", ["--cases", notes]).err).toContain("could not run"); // stopped for want of akm
     const queried = bun(tree, "run.ts", ["--cases", notes, "--retrieval-queries"]);
     expect(queried.code).toBe(2);
     expect(queried.err).toContain(`--retrieval-queries does not apply to --cases ${notes}`); // the queries are those of the public notes: they are matched by public ref
+  }, 60_000);
+
+  test("--concurrency and --timeout-ms reach the run through reflect's flags: every case has its row, akm is probed once, and both are recorded", () => {
+    const tree = copyOfRepo();
+    const script = join(tree, "fake-akm.ts");
+    writeFileSync(script, FAKE_AKM);
+    const log = join(tree, "calls.jsonl");
+    const env = { ...process.env, MODEL_BASE_URL: "http://127.0.0.1:9/v1", MODEL_NAME: "m", MODEL_API_KEY: "", AKM_EVAL_NO_PROBE: "1", AKM_BIN: commandLine(["bun", script]), FAKE_LOG: log, FAKE_PLAN: "{}" }; // nothing listens on port 9, and the run is not to ask it
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "reflect", "src", "run.ts"), "--corpus", "public", "--limit", "4", "--concurrency", "3", "--timeout-ms", "20000", "--label", "flags"], { cwd: tree, env, stdout: "pipe", stderr: "pipe" });
+    expect([p.exitCode, p.stderr.toString()]).toEqual([0, ""]);
+    const results = join(tree, "evals", "reflect", "results");
+    const folder = join(results, readdirSync(results).find((name) => name.endsWith("-flags")) as string);
+    const stored = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
+    const rows = readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+    expect(stored).toMatchObject({ concurrency: 3, timeout_ms: 20_000, n_run: 4, status: "complete" });
+    expect(stored.manifest.settings.timeout_ms).toBe(20_000);
+    expect(rows.map((r) => r.id).sort()).toEqual([...stored.manifest.completion.selected].sort());
+    const calls = readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(calls.filter((c) => c.args[0] === "--version")).toHaveLength(1);
+    expect(calls.filter((c) => c.args[0] === "improve")).toHaveLength(4);
   }, 60_000);
 });
 

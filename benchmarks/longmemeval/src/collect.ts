@@ -10,7 +10,7 @@
 import { type Sandbox, createSandbox } from "../../../lib/akm/akm.ts";
 import { Akm, type SearchMode, isAkmTimeout, overProjectionLimit } from "./akm.ts";
 import type { Question } from "./dataset.ts";
-import { type ChatResult, type Endpoint, TEMPERATURE, ChatError, chat, tokenLimit } from "./llm.ts";
+import { type ChatResult, type Endpoint, ChatError, chat, temperatureOf, tokenLimit } from "./llm.ts";
 import { type SessionView, isAbstentionQuestion, judgePrompt, readerPrompt, stripReasoning } from "./prompts.ts";
 import { type Raw, type RawArm, type Row, makeRow, isDecidable } from "./score.ts";
 
@@ -24,8 +24,12 @@ export const MAX_JUDGE_TOKENS = 10; // the benchmark's own: evaluate_qa.py asks 
 /** The sessions go to the reader in the order of the haystack, as the baseline reads them, and not in akm's rank order. */
 export const READER_ORDER = "haystack";
 
-/** The temperature and token limits a run sends, as summary.json holds them. A run with no model sends nothing. */
-export const sampling = (retrievalOnly: boolean, model: Endpoint | null = null, judge: Endpoint | null = null) => ({ temperature: retrievalOnly ? null : TEMPERATURE, max_tokens: retrievalOnly ? null : { model: tokenLimit(model, MAX_ANSWER_TOKENS), judge: tokenLimit(judge, MAX_JUDGE_TOKENS) } });
+/** The temperature of the reader and of the judge, and their token limits, as a run sends them and summary.json holds them. A run with no model sends nothing. */
+export const sampling = (retrievalOnly: boolean, model: Endpoint | null = null, judge: Endpoint | null = null) => ({
+  temperature: retrievalOnly ? null : temperatureOf(model),
+  judge_temperature: retrievalOnly ? null : temperatureOf(judge),
+  max_tokens: retrievalOnly ? null : { model: tokenLimit(model, MAX_ANSWER_TOKENS), judge: tokenLimit(judge, MAX_JUDGE_TOKENS) },
+});
 
 /** The sandbox a run asks its questions in: akm's own config and folders, with its built-in embedder when the search is semantic. */
 export const openSandbox = (mode: SearchMode): Sandbox => createSandbox(NAME, mode === "semantic" ? { semantic: true } : {});
@@ -51,8 +55,10 @@ async function answer(prompt: string, q: Question, model: Endpoint, judge: Endpo
     const cached = cache.get(key);
     const verdictReply = cached ?? await chat(judge, prompt, { maxTokens: MAX_JUDGE_TOKENS });
     cache.set(key, verdictReply);
-    const verdict = verdictReply.text.trim().slice(0, 200);
-    return { ...failedArm(""), ...got, error: isDecidable(verdict) ? null : `judge: undecidable verdict: ${verdict}`,
+    // A judge that thinks first is read as the reader is: by what follows its reasoning. A reply that is only reasoning has no verdict, and the error shows how it began.
+    const verdict = stripReasoning(verdictReply.text).slice(0, 200);
+    const said = verdict || verdictReply.text.trim().slice(0, 200);
+    return { ...failedArm(""), ...got, error: isDecidable(verdict) ? null : `judge: undecidable verdict: ${said}${verdictReply.finishReason === "length" ? " (cut off at the token limit)" : ""}`,
       verdict, judge_model: verdictReply.model, judge_usage: cached ? null : verdictReply.usage, judge_cached: !!cached };
   } catch (e) {
     return failedArm(`judge: ${(e as Error).message}`, { ...got, ...(e instanceof ChatError ? { judge_usage: e.usage } : {}) });

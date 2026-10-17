@@ -13,12 +13,11 @@ import { endpointIdentity } from "./provenance.ts";
 const ROOT = resolve(import.meta.dir, "..");
 
 /** The options of the flags, for parseArgs, and their lines of the usage text. */
-export const CORPUS_OPTIONS = { corpus: { type: "string" }, cases: { type: "string" }, yes: { type: "boolean", short: "y" } } as const;
+export const CORPUS_OPTIONS = { corpus: { type: "string" }, cases: { type: "string" } } as const;
 export const corpusUsage = `  --corpus  public (default) is the committed cases. custom is the rewrite in private/<eval>/assets that ./generate-assets makes.
             all runs public and custom and prints them side by side. See "Corpora" in README.md.
   --cases   the folder of a custom corpus of your own, in the eval's format. It is --corpus custom. The run says which model it sends the
-            cases to before starting.
-  -y, --yes  accepted for compatibility; no confirmation is required.`;
+            cases to before starting.`;
 
 /** One corpus of a run. */
 export interface ResolvedCorpus {
@@ -33,10 +32,6 @@ export interface ResolvedCorpus {
   /** How the run named it, for messages: `--corpus public`, `--corpus custom`, `--cases DIR`. */
   flag: string;
 }
-
-/** The stop for an old `--corpus` value, or undefined for any other. `use` says what to say instead. */
-export const renamed = (value: string | undefined, use: string): string | undefined =>
-  value !== undefined && ["private", "own", "own-feedback"].includes(value) ? `--corpus ${value} was renamed in 0.2: use ${use}` : undefined;
 
 /** The seed in a generated.json, or null when the file is missing, is not JSON or holds none. */
 function seedOf(file: string): string | null {
@@ -74,10 +69,7 @@ export function resolveCorpora(o: ResolveOptions): ResolvedCorpus[] {
   const root = o.root ?? ROOT;
   const rewrite = o.rewrite !== false;
   const { corpus, cases } = o.values;
-  const requested = corpus ?? (cases === undefined ? "public" : "custom");
-  const choice = requested === "private" || (cases !== undefined && ["own", "own-feedback"].includes(requested)) ? "custom" : requested;
-  const old = renamed(choice, `${choice === "private" && rewrite ? "--corpus custom (the rewrite in private/<eval>/assets), or " : ""}--cases DIR for a folder of your own`);
-  if (old) return fail(old);
+  const choice = corpus ?? (cases === undefined ? "public" : "custom");
   if (choice !== "public" && choice !== "custom" && choice !== "all") return fail(`--corpus must be public, custom or all, not "${choice}"`);
   if (cases !== undefined && cases.trim() === "") return fail("--cases needs a folder");
   const publicCorpus: ResolvedCorpus = { name: "public", folder: o.publicFolder, rewrite: false, seed: null, flag: "--corpus public" };
@@ -101,7 +93,10 @@ export interface Recipient {
 /** The endpoint as scheme://host[:port]/path, with no credentials and no query. */
 const shown = (baseUrl: string | undefined): string => (baseUrl === undefined ? "its provider's own endpoint" : (endpointIdentity(baseUrl)?.split("?")[0] ?? "an endpoint that is not a URL"));
 
-/** Report the destination of explicitly selected custom cases; no second confirmation is required. */
+/**
+ * Says where explicitly selected custom cases are sent: the folder, and each model or judge with its endpoint. It asks nothing, and `yes`
+ * is only here so that a caller that passes its parsed flags still compiles.
+ */
 export async function confirmCases(
   values: { cases?: string; yes?: boolean },
   to: Recipient[],

@@ -80,9 +80,11 @@ export function startStub(answerer: Answerer = () => EMPTY_ANSWER): Stub {
     async fetch(req) {
       const { pathname } = new URL(req.url);
       if (req.method === "POST" && pathname === "/v1/chat/completions") {
-        calls++;
         const parsed: unknown = await req.json().catch(() => ({}));
-        const body = (typeof parsed === "object" && parsed !== null ? parsed : {}) as ChatRequest;
+        const body = (typeof parsed === "object" && parsed !== null ? parsed : {}) as ChatRequest & { max_tokens?: unknown; max_completion_tokens?: unknown };
+        // The run's own one-token probe (lib/probe.ts) is answered and not counted: it is not the eval reaching the model.
+        if (body.messages?.length === 1 && body.messages[0]?.content === "ping" && (body.max_tokens === 1 || body.max_completion_tokens === 1)) return Response.json(completion(typeof body.model === "string" ? body.model : "smoke-model", ""));
+        calls++;
         const reply = answerWith(body);
         seen.push({ keys: schemaOf(body)?.required ?? (schemaOf(body) ? [] : null), prompt: promptOf(body).slice(0, 120), reply });
         return Response.json(completion(typeof body.model === "string" ? body.model : "smoke-model", reply));

@@ -6,13 +6,25 @@ or label-only change sets `scoringVersion` (default: `version`) without changing
 Model/AKM/configuration experiments remain recorded settings within that version.
 Documentation, ledger and reporting changes alone do not require a new version.
 
-Compare saved runs only when eval/scoring versions and exact selected inputs and
-labels match. A comparison never rescores or silently intersects cases. Explicit
-rescoring can apply current scoring rules to unchanged inputs: it records the
-current scoring version while retaining the original collector version. New
-inputs require collection. Add a release entry here when a version changes.
+Comparison has no gates (since #108): `scripts/compare` shows each run's eval and
+scoring versions, settings and coverage beside the differences between them, and
+the reader decides whether two runs are comparable. Runs with different versions
+or inputs measure different things, so read the entries below before comparing
+them. A comparison never rescores or collects. Explicit rescoring can apply
+current scoring rules to unchanged inputs: it records the current scoring version
+while retaining the original collector version. New inputs require collection.
+Add a release entry here when a version changes.
 
 ## Unreleased
+
+- Shared driver, no version changes: reflect, distill, extract, judge-gate, promotion, bakeoff, consolidate and nightly run on one driver, `lib/run.ts`. What each asks akm, its cases and its scoring are unchanged (the akm invocations were diffed old against new), and so are the eval and scoring versions: saved runs compare as before.
+- Those evals gain `--concurrency` (not nightly, promotion or `consolidate --pool`, which run as one batch) and `--timeout-ms`. Summaries record `concurrency` and `timeout_ms`, and `manifest.settings.timeout_ms` is the effective timeout.
+- consolidate, nightly: `--embedder deterministic|real` is replaced by `--semantic`, which selects the same real embedder and writes the same config, so saved runs keep their identity.
+- retrieval, skillret: semantic search is scored only with `--semantic`. Before, retrieval's `auto` scored it in a full run of the public or rewritten corpus, and skillret in every run without `--limit`. Saved runs keep the semantic columns they have.
+- nightly: a night that fails writes a summary with `status: "aborted"` and the reason; it used to write none.
+- longmemeval: a judge's reasoning is removed before its verdict is read, and `judge_temperature` is recorded beside `temperature` (`chat.temperature` of a `models.json` line sets either).
+- skillret: a run that asked every query is `complete` and exits 0. A query whose call failed twice is counted in `errored` and left out of that line's numbers; it used to abort the run.
+- Every run on the driver prints a banner of its effective settings and sends one one-token request to the model endpoint before its first case (`AKM_EVAL_NO_PROBE=1` skips it), so a wrong URL, key or model name ends the run before it has cost anything.
 
 - reflect: collection version 0.4 records the expanded retrieval-label inputs used by optional `--retrieval-queries` (77 planted notes now have labeled queries, previously 75). Standard Reflect inputs and scoring 0.4 are unchanged; saved collector 0.3 runs retain their identities.
 - retrieval: scoring version 0.3 expands the frozen judgments by 374 library and 492 books pairs from all four columns of six saved semantic runs. Inputs and collection version 0.2 are unchanged. Explicit same-file label aliases prevent duplicate relevance credit across AKM ref classifications; ranking formulas are unchanged. Explicit rescoring retains collector 0.2 and records scorer 0.3 plus the expanded label digests; originals remain intact.
@@ -38,8 +50,8 @@ removed. Repeats are optional. See [migration notes](releases/v0.6.md).
 The entries below describe behavior at those releases. Historical references to
 matrix stages, implicit rescoring, input intersection or baseline reruns do not
 apply to 0.6. In particular, the expanded 0.5 sets cannot be directly compared to
-the smaller full sets from 0.4; input identity checks enforce that even though
-0.5 retained the same measurement versions.
+the smaller full sets from 0.4; at 0.6 input identity checks enforced that even
+though 0.5 retained the same measurement versions, and #108 removed those checks.
 
 ## 0.5
 

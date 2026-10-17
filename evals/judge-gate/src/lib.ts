@@ -1,5 +1,5 @@
-// Helpers for the judge-gate eval that are neither its scorer nor its collector: reading and selecting the cases, hiding the endpoint in the
-// config of a summary, and the akm version check. run.ts uses them to run the eval and generate.ts to make the private cases.
+// Helpers for the judge-gate eval that are neither its scorer nor its collector: reading and selecting the cases. run.ts uses them to run the
+// eval and generate.ts to make the private cases.
 //
 // The scorer is score.ts and the collector is collect.ts (see measurement.ts); this file re-exports both, so the eval and its tests import
 // from one place.
@@ -45,40 +45,6 @@ export function selectCases(cases: Case[], limit?: number): Case[] {
   const badQuota = Math.min(bad.length, limit - goodQuota);
   const picked = new Set([...good.slice(0, goodQuota), ...bad.slice(0, badQuota)]);
   return cases.filter((c) => picked.has(c));
-}
-
-/**
- * A deep copy of the akm config with every `endpoint` written as <MODEL_BASE_URL>. The URL can carry a key in its query or credentials before
- * the host, which redactConfig, going by key name, does not see, and results get shared. The host is in the summary's `engine.endpoint`.
- */
-export function hideEndpoints(config: any): any {
-  if (Array.isArray(config)) return config.map(hideEndpoints);
-  if (typeof config !== "object" || config === null) return config;
-  return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, key === "endpoint" && typeof value === "string" ? "<MODEL_BASE_URL>" : hideEndpoints(value)]));
-}
-
-/** Is `version` at least `minimum`? Both are semver. A prerelease is below its release and ordered by its tag. */
-export function atLeast(version: string, minimum: string): boolean {
-  const parse = (v: string) => {
-    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(v);
-    if (!m) throw new Error(`not a version: ${v}`);
-    return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4]?.split(".") ?? [] };
-  };
-  const a = parse(version);
-  const b = parse(minimum);
-  for (let i = 0; i < 3; i++) if (a.nums[i] !== b.nums[i]) return a.nums[i] > b.nums[i];
-  if (a.pre.length === 0 || b.pre.length === 0) return a.pre.length === 0; // a release is above any of its prereleases
-  for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
-    const [x, y] = [a.pre[i], b.pre[i]];
-    if (x === undefined) return false;
-    if (y === undefined) return true;
-    if (x === y) continue;
-    const [nx, ny] = [/^\d+$/.test(x), /^\d+$/.test(y)];
-    if (nx && ny) return Number(x) > Number(y);
-    if (nx !== ny) return ny; // a number is below a word
-    return x > y;
-  }
-  return true;
 }
 
 export const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);

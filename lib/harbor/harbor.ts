@@ -14,10 +14,6 @@ import type { Arm, Trial } from "./report.ts";
 import type { RunTrial } from "./score.ts";
 import { TIMEOUT_ERRORS, loadTrials } from "./trials.ts";
 
-// What the scorer (score.ts) makes of the trials was in here: the summary of a run still imports it from here.
-export { erroredOf, metricsOf, timeoutsOf } from "./score.ts";
-export type { RunTrial } from "./score.ts";
-
 /** What a run is made of. Change one at a time: a difference between two runs that moved two of them has no single cause. */
 export const PINS = { akm_cli: "0.10.261003-beta", akm_plugin: "0.10.261002-beta", opencode: "1.18.34", harbor: "0.24.0" } as const;
 
@@ -29,9 +25,16 @@ export const RELEASE_PLUGINS: Record<string, string> = { [PINS.akm_cli]: PINS.ak
 
 export const CONCURRENT_TRIALS = 4;
 const SETUP_TIMEOUT_SEC = 2700; // the akm arm installs akm and the plugin first. Both arms get the same.
+const WIDE_RUN = 8; // more trials at once than this get the warning of dockerNetworkWarning
 
-// These live in ../cli.ts, which every run.ts imports. They are exported from here too, for what imported them from here.
-export { Fatal, fail, gitCommit, slug } from "../cli.ts";
+/**
+ * The warning for a run of `concurrency` simultaneous trials, or undefined when it needs none. Every Harbor trial creates a Docker network,
+ * and the daemon's default address pools hold about thirty in all: a run of sixteen reached that limit. `name` is the eval's, as its messages start.
+ */
+export function dockerNetworkWarning(name: string, concurrency: number): string | undefined {
+  if (concurrency <= WIDE_RUN) return undefined;
+  return `${name}: ${concurrency} concurrent trials each need a Docker network; the daemon's default address pools allow about 30 in all. Raise default-address-pools in /etc/docker/daemon.json for more (see evals/agent-ab/README.md).`;
+}
 
 /** A positive integer flag, or undefined when the flag is not given. */
 export function positive(flag: string, value: string | undefined): number | undefined {
@@ -95,13 +98,14 @@ const hostnameOf = (url: string): string | null => {
  * `openai/`. A `--model openai/<line>` finds the models.json line `<line>`.
  * OPENAI_BASE_URL and OPENAI_API_KEY, which this took before models.json, still stand in for an empty MODEL_BASE_URL and an empty
  * MODEL_API_KEY. The key stands in only for the URL it goes with (OPENAI_BASE_URL) or for api.openai.com: it is OpenAI's key, and
- * a gateway of another host is sent none (so the run stops, for want of a key, as the other evals do).
+ * a gateway of another host is sent none. A gateway left with no key, by that rule or by a models.json line with no api_key_env, is
+ * sent the placeholder `unused` and a line on stderr says so: a server that needs no key ignores it.
  *
  * With no line and no MODEL_BASE_URL (or OPENAI_BASE_URL), an openai model goes to openai with the key
  * in OPENAI_API_KEY or MODEL_API_KEY, and another provider's model is left to Harbor, which reads its key under the provider's own name.
  * Only what Harbor needs goes into the environment (hostEnv), and the model's variables.
  */
-export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; modelLimits?: ModelLimits } {
+export function modelSettings(flag: string | undefined, host: Env, entries?: Record<string, ModelEntry>): { model: string; env: Record<string, string>; modelLimits?: ModelLimits; modelReasoningEffort?: string } {
   const id = (flag ?? host.MODEL_NAME)?.trim();
   if (flag !== undefined && !id) fail("--model needs a model name");
   if (!id) fail("name the model: pass --model NAME, or set MODEL_NAME in .env, as opencode names it, such as openai/gpt-6-luna. See .env.example.");
@@ -130,8 +134,8 @@ export function modelSettings(flag: string | undefined, host: Env, entries?: Rec
     }
     const model = m.name.startsWith("openai/") ? m.name : `openai/${m.name}`; // the endpoint's own id, as opencode's openai provider takes it
     if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(m.baseUrl)) fail(`the endpoint of ${model}, ${m.baseUrl}, would be the container itself, not the model server. Use the address a container reaches it at.`);
-    if (!m.apiKey) fail(`no model key for ${model}: set MODEL_API_KEY (or the models.json line's api_key_env) in .env. Every trial would fail at the model call, after its setup.`);
-    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey, OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}) };
+    if (!m.apiKey) console.warn(`model key is empty: sending "unused" to ${hostnameOf(m.baseUrl) || "the endpoint"} (a server that needs a key will fail every trial after its setup)`);
+    return { model, env: { ...env, OPENAI_API_KEY: m.apiKey || "unused", OPENAI_BASE_URL: m.baseUrl }, ...(m.limits ? { modelLimits: m.limits } : {}), ...(m.chat?.reasoning_effort !== undefined ? { modelReasoningEffort: m.chat.reasoning_effort } : {}) };
   }
 
   const model = modelName(id);
@@ -187,7 +191,7 @@ export const lockFolder = (pkg: "akm-cli" | "akm-opencode", version: string): st
 };
 
 /** What to say of a run whose akm-cli has no lockfile: a checkout, or a release other than the pinned one. */
-const UNLOCKED = "Its dependencies are not locked: each container resolves them when it installs, and akm_install records a digest of the tree each one got. A run whose containers got different trees is aborted.";
+const UNLOCKED = "Its dependencies are not locked: the first preparation for each runtime resolves them, and akm_install records the tree each trial uses. A run whose containers got different trees is aborted.";
 
 /** The value of `--akm`: an npm release (akm-cli@x.y.z) or the folder of a checkout. */
 export type AkmSource = { kind: "release"; version: string } | { kind: "checkout"; path: string };
@@ -353,6 +357,7 @@ export function jobConfig(o: {
   name: string;
   model: string;
   modelLimits?: ModelLimits;
+  modelReasoningEffort?: string;
   concurrency?: number;
   jobsDir: string;
   attempts: number;
@@ -366,10 +371,10 @@ export function jobConfig(o: {
   const arm = o.arm ?? releaseArm();
   // The same model does opencode's side jobs, such as titling a session, so the run calls one model only.
   const opencodeConfig: Record<string, unknown> = { $schema: "https://opencode.ai/config.json", autoupdate: false, small_model: o.model };
-  if (o.modelLimits) {
+  if (o.modelLimits || o.modelReasoningEffort !== undefined) {
     const slash = o.model.indexOf("/");
     const provider = o.model.slice(0, slash), id = o.model.slice(slash + 1);
-    opencodeConfig.provider = { [provider]: { models: { [id]: { limit: o.modelLimits } } } };
+    opencodeConfig.provider = { [provider]: { models: { [id]: { ...(o.modelLimits ? { limit: o.modelLimits } : {}), ...(o.modelReasoningEffort !== undefined ? { options: { reasoningEffort: o.modelReasoningEffort } } : {}) } } } };
   }
   const both = { model_name: o.model, override_setup_timeout_sec: SETUP_TIMEOUT_SEC };
   const tarballs = arm.cli.tarball !== null || arm.plugin.tarball !== null;
@@ -381,7 +386,7 @@ export function jobConfig(o: {
     n_concurrent_trials: o.concurrency ?? CONCURRENT_TRIALS,
     environment: { type: "docker", delete: true },
     agents: [
-      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig } },
+      { import_path: "eval_opencode:EvalOpenCode", ...both, kwargs: { version: PINS.opencode, opencode_config: opencodeConfig, setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup") } },
       {
         import_path: "akm_opencode:AkmOpenCode",
         ...both,
@@ -389,6 +394,7 @@ export function jobConfig(o: {
         kwargs: {
           version: PINS.opencode,
           opencode_config: opencodeConfig,
+          setup_cache_dir: resolve(import.meta.dir, "../../.cache/harbor-setup"),
           akm_cli_version: arm.cli.version,
           akm_plugin_version: arm.plugin.version,
           libraries_dir: o.librariesDir,
@@ -587,8 +593,9 @@ export function completionOf(trials: Trial[], tasks: string[], attempts: number)
 
 /**
  * Whether the run finished: `complete` only when Harbor exited 0 and every cell of the grid has a trial, a trial that errored or timed
- * out included (those are counted, not missing), and the akm arm's containers all installed the same dependency tree. Anything else is
- * `aborted`, and the reason says what was not done. `jobWritten` is false when Harbor left no job folder at all.
+ * out included (those are counted, not missing), no arm's trials all errored (it measured nothing), and the akm arm's containers all
+ * installed the same dependency tree. Anything else is `aborted`, and the reason says what was not done. `jobWritten` is false when
+ * Harbor left no job folder at all.
  */
 export function statusOf(exit: number, completion: Completion, jobWritten = true, observed?: Pick<Observed, "dependency_trees">): { status: "complete" | "aborted"; aborted_reason: string | null } {
   const reasons: string[] = [];
@@ -598,6 +605,10 @@ export function statusOf(exit: number, completion: Completion, jobWritten = true
   if (trees > 1) reasons.push(`the akm arm's containers installed ${trees} different dependency trees (akm_install.observed.dependency_trees), so its trials did not all run the same code`);
   if (completion.missing > 0) reasons.push(`${completion.missing} of ${completion.expected} expected trials have no result (control ${completion.control.missing}, akm ${completion.akm.missing})`);
   if (completion.unexpected > 0) reasons.push(`${completion.unexpected} trials fall outside the grid of tasks, arms and attempts the job asked for`);
+  for (const arm of ["control", "akm"] as const) {
+    const { expected, failed } = completion[arm];
+    if (expected > 0 && failed === expected) reasons.push(`the ${arm} arm completed none of its ${expected} trials: every one errored`);
+  }
   return reasons.length === 0 ? { status: "complete", aborted_reason: null } : { status: "aborted", aborted_reason: reasons.join("; ") };
 }
 

@@ -8,12 +8,13 @@ import { sha256Json } from "../../../lib/provenance.ts";
 import { clearRunning } from "../../../lib/results.ts";
 import { readStored, rescoreRun } from "../../../scripts/rescore/src/lib.ts";
 import * as akm from "./akm.ts";
-import { BUILDER, withSemantic } from "./collect.ts";
+import { BUILDER } from "./collect.ts";
 import { type Corpus, assetsDigest, privateCorpus, publicCorpus } from "./dataset.ts";
 import { type Split, fakeAkmScript, sandboxRunning, writeAssets } from "./fakes.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { CURATE_CHECK, curateSample } from "./sample.ts";
+import { CURATE_CHECK, SEED, curateSample } from "./sample.ts";
 import { failureOf, runCorpus } from "./run.ts";
+import { CURATE_SEED, makeRow, summarize } from "./score.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -239,6 +240,7 @@ describe("runCorpus", () => {
 
     const table = lines.join("\n");
     expect(table).toContain("akm search, semantic");
+    expect(table).toContain("the semantic index embeds every skill: about 16 minutes the first time, then it is kept in .cache/akm-index/ and reused");
     expect(table).not.toMatch(/^ +akm curate/m);
     expect(table).toContain("curate check: on 4 queries (seed 42) akm curate returned search's ranking on the keyword index and on the semantic index");
     expect(table).not.toContain("DIFFERS");
@@ -340,6 +342,7 @@ describe("runCorpus", () => {
     for (const r of rows) expect(Object.keys(r).sort()).toEqual(["curate", "id", "query", "relevant", "search"]);
     const table = lines.join("\n");
     expect(table).not.toContain("semantic");
+    expect(table).not.toContain("embeds every skill");
     expect(table).toContain("curate check: on 4 queries (seed 42) akm curate returned search's ranking on the keyword index");
     expect(table).not.toContain("indexed for semantic search");
     for (const dirName of s.sandboxes) expect(existsSync(dirName)).toBe(false);
@@ -426,12 +429,6 @@ describe("runCorpus", () => {
     });
   });
 
-  test("scores the semantic search in a full run, and not with --limit", () => {
-    expect(withSemantic()).toBe(true);
-    expect(withSemantic(200)).toBe(false);
-    expect(withSemantic(1)).toBe(false);
-  });
-
   test("the curate check asks about 200 of the queries, drawn under the seed, and all of them when there are fewer", () => {
     const queries = Array.from({ length: 300 }, (_, i) => ({ id: `q${i}`, query: `query ${i}`, relevant: ["t1"] }));
     const sample = curateSample(queries);
@@ -443,6 +440,7 @@ describe("runCorpus", () => {
     const order = sample.map((q) => queries.indexOf(q));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(curateSample(queries.slice(0, 50))).toEqual(queries.slice(0, 50));
+    expect(CURATE_SEED).toBe(SEED); // score.ts keeps its own copy, so that it reads nothing of the collector
   });
 
   test("counts a failed call and leaves its query out, and counts an empty answer as a query that scored 0", async () => {
@@ -473,12 +471,28 @@ describe("runCorpus", () => {
     expect(lines.join("\n")).toContain("errored calls: akm search 2");
     expect(lines.join("\n")).toContain("errored calls: akm search, semantic 2");
     expect(lines.join("\n")).toContain("curate check: 2 curate calls on the semantic index failed");
-    // a run with calls that failed is aborted: the summary says so, with the same reason the run fails with, the 8 calls of search and of the curate check
-    const reason = "8 akm calls failed. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
-    expect(summary).toMatchObject({ status: "aborted", aborted_reason: reason });
-    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "aborted", aborted_reason: reason });
-    expect(failureOf([summary])).toBe(reason);
-    expect(failureOf([summary, summary])).toStartWith("16 akm calls failed.");
+    // a run that asked every query is complete though calls failed: they are counted above, and the run does not fail
+    expect(summary).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null });
+    expect(failureOf([summary])).toBeUndefined();
+    expect(failureOf([summary, summary])).toBeUndefined();
+  });
+
+  test("a run is aborted, and fails, only when it stopped before it asked every query", () => {
+    const query = (id: string) => ({ id, query: `query ${id}`, relevant: ["t1"] });
+    const answered = (id: string) => makeRow(query(id), { search: { ranked: ["t1"], seconds: 0.1 } });
+    const failed = (id: string) => makeRow(query(id), { search: { ranked: [], seconds: 0.2, error: "akm search exited 70: boom" }, curate: { ranked: [], seconds: 0.2, error: "akm curate exited 70: boom" } });
+    // every query asked: complete, with the failed call counted and left out of the numbers
+    const all = summarize([answered("a"), failed("b")], 2);
+    expect(all).toMatchObject({ status: "complete", aborted_reason: null, n_queries: 2, errored: { search: 1 } });
+    expect(all.metrics.search["Recall@5"]).toBe(1);
+    expect(summarize([answered("a"), failed("b")])).toMatchObject({ status: "complete", aborted_reason: null }); // a stored run is scored as the queries it holds
+    // stopped after the first of three
+    const stopped = summarize([answered("a")], 3);
+    expect(stopped).toMatchObject({ status: "aborted", aborted_reason: "the run asked 1 of 3 queries before it stopped", n_queries: 1 });
+    expect(failureOf([all, stopped])).toBe("the run asked 1 of 3 queries before it stopped");
+    expect(failureOf([all])).toBeUndefined();
+    expect(failureOf([{ status: "aborted", aborted_reason: null }])).toBe("the run stopped before it asked every query");
   });
 
   test("stops when akm indexes fewer assets than there are skills", async () => {
@@ -547,9 +561,8 @@ describe("runCorpus", () => {
     const table = lines.join("\n");
     expect(table).toContain("errored calls: akm search 2 (left out of its numbers; 1 of them timed out)");
     expect(table).toContain("curate check: 2 curate calls on the keyword index failed (1 of them timed out)");
-    const reason = "4 akm calls failed, 2 of them by timing out. Their queries are left out of the numbers, or of the curate check: see the errors in samples.jsonl.";
-    expect(stored).toMatchObject({ status: "aborted", aborted_reason: reason });
-    expect(failureOf([summary])).toBe(reason);
+    expect(stored).toMatchObject({ status: "complete", aborted_reason: null }); // the three queries were asked
+    expect(failureOf([summary])).toBeUndefined();
   });
 
   test("stops with a message when akm cannot be run", async () => {
@@ -672,7 +685,7 @@ describe("rescore", () => {
     expect(again.dropped).toEqual([]);
     expect(again.rows).toEqual(was.rows);
     for (const field of ["metrics", "by_size", "errored", "timeouts", "no_results", "curate_check", "status", "aborted_reason", "n_queries", "call_seconds"]) expect([field, again.summary[field]]).toEqual([field, was.summary[field]]);
-    expect(again.summary.status).toBe("aborted"); // a call failed, and it still says so
+    expect(again.summary.status).toBe("complete"); // a call failed, and every query was asked
     expect(manifestProblems(again.summary.manifest)).toEqual([]);
     expect(again.summary.manifest.collector).toEqual(was.summary.manifest.collector);
 
@@ -738,6 +751,8 @@ describe("the command line", () => {
     const r = run("--help");
     expect(r.code).toBe(0);
     expect(r.out).toContain("--corpus  public (default)");
+    expect(r.out).toContain("--semantic  score akm's semantic search too, with or without --limit");
+    expect(r.out).toContain("[--semantic]");
   });
 
   test("refuses a corpus, a limit and a label it does not know", () => {
@@ -749,19 +764,19 @@ describe("the command line", () => {
   });
 });
 
-describe("--repeat", () => {
+describe("--repeat and --semantic", () => {
   /**
    * The benchmark in a repository root of its own, as a checkout holds it: its code, lib/ and the lock of this checkout around the tiny dataset in assets/.
    * run.ts reads its assets and writes its results beside itself, so a run of it touches nothing of this checkout. Its akm is the fake one.
    */
-  function benchmark() {
+  function benchmark(split: Split = TEST) {
     const here = join(import.meta.dir, "..", "..", "..");
     const root = tmp();
     cpSync(join(here, "lib"), join(root, "lib"), { recursive: true, filter: (src) => basename(src) !== "node_modules" });
     const code = join(root, "benchmarks", "skillret", "src");
     mkdirSync(code, { recursive: true });
     for (const file of readdirSync(import.meta.dir)) if (file.endsWith(".ts") && !file.endsWith(".test.ts")) cpSync(join(import.meta.dir, file), join(code, file));
-    writeAssets(join(root, "benchmarks", "skillret", "assets"), TEST, TRAIN);
+    writeAssets(join(root, "benchmarks", "skillret", "assets"), split, TRAIN);
     const script = fakeAkmScript(root);
     const results = join(root, "benchmarks", "skillret", "results");
     const run = (...args: string[]) => {
@@ -771,7 +786,7 @@ describe("--repeat", () => {
     /** What the run left in results/, without the date the folders start with. */
     const names = () => (existsSync(results) ? readdirSync(results).sort().map((n) => n.replace(/^\d{4}-\d{2}-\d{2}-/, "")) : []);
     const read = (name: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${name}`)) as string, "summary.json"), "utf8"));
-    return { results, run, names, read, spread: (label: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${label}-repeat-summary.json`)) as string), "utf8")) };
+    return { root, results, run, names, read, spread: (label: string) => JSON.parse(readFileSync(join(results, readdirSync(results).find((n) => n.endsWith(`-${label}-repeat-summary.json`)) as string), "utf8")) };
   }
 
   test("--repeat 2 writes two runs, each a whole run, and the spread of their metrics beside them", () => {
@@ -804,6 +819,41 @@ describe("--repeat", () => {
     expect(single.run("--limit", "3", "--label", "once").code).toBe(0);
     expect(single.names()).toEqual(["once"]);
   }, 120_000);
+
+  test("--semantic scores the semantic search too, with --limit as well, and a run without it scores keyword search alone, a full one too", () => {
+    const b = benchmark();
+    // no --semantic: keyword only, whether or not --limit is there
+    for (const [label, limit] of [["keyword", []], ["limited", ["--limit", "3"]]] as const) {
+      const r = b.run(...limit, "--label", label);
+      expect(r.code, r.err).toBe(0);
+      expect(r.out).not.toContain("semantic index");
+      expect(b.read(label)).toMatchObject({ search_mode: { keyword: "keyword" }, status: "complete" });
+      expect(Object.keys(b.read(label).metrics)).toEqual(["search"]);
+      expect(b.read(label).semantic_model).toBeUndefined();
+    }
+    expect(existsSync(join(b.root, ".cache", "akm-index"))).toBe(false); // nothing was embedded or kept
+    // --semantic: both lines, with --limit too. The first run builds the index and says that it embeds every skill, and the next one keeps it
+    const cold = b.run("--semantic", "--limit", "3", "--label", "cold");
+    expect(cold.code, cold.err).toBe(0);
+    expect(cold.out).toContain("the semantic index embeds every skill: about 16 minutes the first time, then it is kept in .cache/akm-index/ and reused");
+    expect(b.read("cold")).toMatchObject({ search_mode: { keyword: "keyword", semantic: "semantic" }, semantic_index: "cold", n_queries: 3, status: "complete" });
+    expect(Object.keys(b.read("cold").metrics)).toEqual(["search", "semantic_search"]);
+    const warm = b.run("--semantic", "--limit", "3", "--label", "warm");
+    expect(warm.code, warm.err).toBe(0);
+    expect(b.read("warm")).toMatchObject({ semantic_index: "warm" });
+    expect(b.run("--semantic", "--label", "full").code).toBe(0); // and a full run takes it as well
+    expect(Object.keys(b.read("full").metrics)).toEqual(["search", "semantic_search"]);
+    expect(b.read("full").n_queries).toBe(4);
+  }, 120_000);
+
+  test("a run that asked every query is complete and exits 0 though some calls failed, and says how many", () => {
+    const b = benchmark({ ...TEST, queries: [...TEST.queries, ["broken", "BROKEN docker networking", ["t2"]]] });
+    const r = b.run("--label", "calls");
+    expect(r.code, r.err).toBe(0);
+    expect(b.read("calls")).toMatchObject({ status: "complete", aborted_reason: null, n_queries: 5, errored: { search: 1 } });
+    expect(r.out).toContain("errored calls: akm search 1 (left out of its numbers)");
+    expect(r.err).toBe("");
+  }, 60_000);
 
   test("--repeat must be a positive integer, and a refused value runs nothing", () => {
     const b = benchmark();

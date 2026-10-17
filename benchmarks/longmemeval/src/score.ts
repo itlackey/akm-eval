@@ -30,14 +30,14 @@ export const isAbstention = (questionId: string): boolean => questionId.includes
 /** The benchmark's label rule: the judge's reply holds "yes". */
 export const isYes = (verdict: string): boolean => verdict.toLowerCase().includes("yes");
 
-/** A verdict that is exactly yes or no. Anything else is scored by the rule above but counted as undecidable. */
+/** A verdict that is exactly yes or no. The collector records any other as a grading error, and the arm is not scored. */
 export const isDecidable = (verdict: string): boolean => ["yes", "no"].includes(verdict.trim().toLowerCase().replace(/^['".\s]+|['".\s]+$/g, ""));
 
 /** What the collector got back for one arm of a question: the reader's answer, the judge's verdict on it, and what the calls cost. */
 export interface RawArm {
   /** The answer the judge was shown, without the reader's reasoning. Empty when the reader gave no answer. Null when the reader failed. */
   hypothesis: string | null;
-  /** The judge's reply, cut at 200 characters. Null when the judge was not reached, and when it was not asked: the answer was empty. */
+  /** The judge's reply without its reasoning, cut at 200 characters. Empty when the reply was only reasoning. Null when the judge was not reached, and when it was not asked: the answer was empty. */
   verdict: string | null;
   /** Why the arm has no verdict: the reader or the judge failed, or akm did (the with-akm arm of a question akm could not search). */
   error: string | null;

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUNNING, clearRunning, makeResultsDir, markRunning } from "./results.ts";
@@ -23,6 +23,38 @@ describe("makeResultsDir", () => {
     expect(second).toBe(`${first}-2`);
     for (const dir of [first, second]) expect(readFileSync(join(dir, RUNNING), "utf8").trim()).toBe(String(process.pid));
   });
+
+  test("makes the parent folder, and skips a name that a file or a folder already holds", () => {
+    const parent = join(tmp(), "not", "yet");
+    const first = makeResultsDir(parent, "run");
+    expect(existsSync(first)).toBe(true);
+    writeFileSync(`${first}-2`, "a file"); // -2 is taken by a file, -3 by a folder
+    mkdirSync(`${first}-3`);
+    expect(makeResultsDir(parent, "run")).toBe(`${first}-4`);
+  });
+
+  test("an error that is not a taken name is thrown, not retried", () => {
+    const blocked = join(tmp(), "a file");
+    writeFileSync(blocked, "");
+    expect(() => makeResultsDir(blocked, "run")).toThrow();
+  });
+
+  test("runs that start together get a folder each: the folder is made by the call that claims the name", async () => {
+    const parent = tmp();
+    const script = join(parent, "claim.ts");
+    writeFileSync(script, `import { makeResultsDir } from ${JSON.stringify(join(import.meta.dir, "results.ts"))};\nconsole.log(makeResultsDir(${JSON.stringify(join(parent, "results"))}, "x"));\n`);
+    const claims = await Promise.all(
+      Array.from({ length: 8 }, async () => {
+        const proc = Bun.spawn(["bun", script], { stdout: "pipe", stderr: "pipe" });
+        const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+        return { dir: out.trim(), err, code };
+      }),
+    );
+    expect(claims.map((c) => [c.code, c.err])).toEqual(claims.map(() => [0, ""]));
+    const dirs = claims.map((c) => c.dir);
+    expect(new Set(dirs).size).toBe(8);
+    for (const dir of dirs) expect(existsSync(dir)).toBe(true);
+  }, 60_000);
 });
 
 describe("clearRunning", () => {

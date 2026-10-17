@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Replays akm's reflect defect filter on labelled edits. A --reflect run is replayed only against the cases and the code it ran on
-# (assets_sha256 and harness_sha256 in its summary.json), unless --rescore says to use the ones here now. See README.md.
+# Replays akm's reflect defect filter on labelled edits. The source of each edit of a --reflect run is read from the cases here now:
+# a run with a case that no longer exists is refused, unless --rescore omits its proposals. See README.md.
 #
-#   evals/reflect/defect-filter --akm-src DIR [--reflect RESULTS_DIR]... [--judge-gate public|private]... [--rescore]
+#   evals/reflect/defect-filter --help
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

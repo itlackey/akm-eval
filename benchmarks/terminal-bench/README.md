@@ -21,8 +21,8 @@ benchmarks/terminal-bench/run --akm ~/code/akm --akm-env AKM_CURATE_TIMEOUT=30
 
 - The corpus is the library the akm arm gets; the tasks are always the same. `public` is `corpus/library`; `custom` is `evals/retrieval`'s rewritten library in `private/retrieval/assets/library`, or the `library/` of `--cases DIR` (a folder in the format `evals/retrieval` reads).
 - `--limit N` runs the first N of a fixed order whose first ten are Harbor's `terminal-bench-sample`.
-- `--concurrency N` selects simultaneous trials (default 4), recorded in the job.
-- `--resume DIR` continues a gracefully interrupted run using the same harness, inputs, model limits, AKM settings and unmodified Harbor configuration. Completed trials are reused through Harbor; the run is marked resumed. Changed protocols require a fresh run. SIGINT/SIGTERM forwards to Harbor and writes a partial summary.
+- `--concurrency N` selects simultaneous trials (default 4), recorded in the job. Above 8 the run warns about Docker's address pools: see "Concurrency and Docker networks" in `evals/agent-ab/README.md`, and pick N before the full run.
+- `--resume DIR` continues a gracefully interrupted run using the same harness, inputs, model limits, AKM settings and unmodified Harbor configuration. Completed trials are reused through Harbor; the run is marked resumed. Trials that were in flight at an interrupt are recorded as errored by Harbor and are not rerun by `--resume`; they count as failed in the resumed summary. Changed protocols require a fresh run, concurrency included: a resumed run keeps the width it started with, so leave `--concurrency` off or give the same number; another is refused. SIGINT/SIGTERM forwards to Harbor and writes a partial summary.
 - `--attempts N` runs each task N times per arm (default 1); a task's pass rate is then its share of passed attempts.
 - `--semantic` enables AKM hybrid search with its pinned bge-small-en-v1.5 embedder. Setup checks every asset has an embedding and verifies a query reports `searchMode: "semantic"`. The choice and setup proof are saved in the run artifacts.
 - `--model`, `--akm` and `--akm-env` work as in `evals/agent-ab` (see its README). The default akm is `akm-cli@0.10.261003-beta`; `AKM_BIN` is not read for the arm.
@@ -31,10 +31,12 @@ A run that did not finish everything writes its summary with `status: "aborted"`
 
 ## What it needs
 
-- Docker on the host (the runner includes uv, Bun and Harbor), and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a non-empty `MODEL_API_KEY`.
+- Docker on the host (the runner includes uv, Bun and Harbor), and a model set as for `evals/agent-ab`: tool calling, the Responses API, an endpoint a container can reach, a `MODEL_API_KEY` if the server checks one.
 - Internet from the containers, and Docker Hub pulls of up to 89 images (run `docker login` if you pull more than 100 an hour). The images are 75 GB and Harbor leaves them behind: `docker images --format '{{.Repository}}:{{.Tag}}' | grep '^alexgshaw/' | xargs -r docker image rm` removes them. A full run's results are about 5 GB.
 - AKM (preinstalled in the runner) to count the library's assets before the run; without it the setup checks less.
 - CPU and memory for four containers at a time (up to 4 CPUs and 8 GB each).
+
+The model is reached through opencode's `openai` provider. With `MODEL_BASE_URL` or `OPENAI_BASE_URL` set, every `--model` name that is not a `models.json` line is sent to that gateway as `openai/<name>`, even one that names another provider; another provider's own path, with its key under its own name, is used only when neither URL is set. The `MODEL_BASE_URL=http://localhost:8080/v1` that `.env.example` starts with is the task container itself, which the run refuses: set an address the task containers reach. An empty `MODEL_API_KEY` is sent to a gateway as `unused`, and the run says so.
 
 A full run with `openai/gpt-6-luna` on 2026-10-06 took 7 hours 6 minutes and cost $3.97; the ten-task sample took 28 minutes and $0.16.
 
@@ -48,7 +50,7 @@ Before Harbor starts, the run indexes the library with the akm on this machine a
 
 ## The two arms
 
-As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles (see "Dependencies" in `evals/agent-ab/README.md`).
+As in `evals/agent-ab`: the same model, opencode 1.18.34, task, container and time limits. The akm arm adds the plugin, akm-cli with the library seeded and indexed, and the plugin's settings. At session start the plugin curates the five best matches to the task into a file and tells the agent to read it, and it adds the akm tools to the prompt. A trial whose plugin was not shown to be live is an error with no reward. The pinned akm-cli and plugin are installed from lockfiles and their prepared dependencies are reused across compatible trials (see "Dependencies" in `evals/agent-ab/README.md`). Keep the mounted working folder to retain the tool and package-download caches; trial workspaces and AKM indexes remain separate.
 
 ## How a task is scored
 

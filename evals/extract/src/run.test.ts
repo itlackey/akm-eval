@@ -1,19 +1,23 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { commandLine, completionsUrl } from "../../../lib/akm/akm.ts";
+import { basename, join } from "node:path";
+import { commandLine } from "../../../lib/akm/akm.ts";
+import { hideEndpoint } from "../../../lib/cli.ts";
 import type { ResolvedCorpus } from "../../../lib/corpus.ts";
 import { caseDigests, manifestProblems, readManifest, HARNESS_VERSION } from "../../../lib/manifest.ts";
-import { endpointHost, sha256Json, withoutEngineSettings } from "../../../lib/provenance.ts";
+import { endpointHost, redactConfig, withoutEngineSettings } from "../../../lib/provenance.ts";
 import { type LoadedCase, type Raw, assetsDigest, extractConfig, loadCases, similarity } from "./lib.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { MIN_AKM, runCorpus } from "./run.ts";
+import { MIN_AKM, defaultResults, runCorpus } from "./run.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
+
+/** The last line of every usage text: what the driver says of its one request to the model (lib/run.ts). */
+const PROBE_NOTE = "The model gets one one-token request before the first case. AKM_EVAL_NO_PROBE=1 skips it, for an endpoint that does not serve chat completions.";
 
 /**
  * An akm that does what $FAKE_SCENARIOS says for the session it is asked about. `proposal extract` prints an
@@ -34,7 +38,7 @@ if (args[0] === "proposal" && args[1] === "extract") {
   const fake = JSON.parse(readFileSync(env.FAKE_SCENARIOS, "utf8"))[id];
   const config = JSON.parse(readFileSync(join(env.AKM_CONFIG_DIR, "config.json"), "utf8"));
   const sessionFile = join(env.AKM_CLAUDE_PROJECTS_DIR, fake.project, id + ".jsonl");
-  log({ ...seen, file: existsSync(sessionFile) ? readFileSync(sessionFile, "utf8") : null, files: readdirSync(env.AKM_CLAUDE_PROJECTS_DIR, { recursive: true }).map(String).sort(), strategies: Object.keys(config.improve.strategies), engine: config.engines.model.model, temperature: config.engines.model.temperature, thinking: config.engines.model.enableThinking });
+  log({ ...seen, file: existsSync(sessionFile) ? readFileSync(sessionFile, "utf8") : null, files: readdirSync(env.AKM_CLAUDE_PROJECTS_DIR, { recursive: true }).map(String).sort(), strategies: Object.keys(config.improve.strategies), engine: config.engines.model.model, temperature: config.engines.model.temperature, thinking: config.engines.model.enableThinking, config });
   if (fake.sleepMs) await new Promise((r) => setTimeout(r, fake.sleepMs));
   if (fake.listSleepMs) writeFileSync(join(state, "list-sleep"), String(fake.listSleepMs));
   if (fake.exit) { console.error(JSON.stringify({ ok: false, error: fake.error, code: "FAKE" })); process.exit(fake.exit); }
@@ -135,6 +139,13 @@ afterAll(() => {
   }
 });
 
+/**
+ * The keys of the summary.json that extract wrote before it was a spec of lib/run.ts: its Summary interface in the committed run.ts (0d89604), without
+ * results_dir, which is returned and not written. scripts/ledger, scripts/compare and scripts/rescore read them, so none may go. A run adds
+ * concurrency and timeout_ms to them.
+ */
+const SUMMARY_KEYS = ["eval", "corpus", "corpus_folder", "label", "date", "git_commit", "model", "akm_version", "akm_bin", "akm_build", "akm_build_fingerprint", "limit", "strategy", "config_patch", "config", "engine", "assets_sha256", "seed", "status", "aborted_reason", "n_cases", "n_run", "n_scored", "n_errored", "timeouts", "metrics", "model_calls", "semantic_verification", "manifest"];
+
 const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
 const samplesIn = (dir: string) => readFileSync(join(dir, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
@@ -188,8 +199,8 @@ describe("runCorpus", () => {
     expect(stored.metrics.classes.insight).toMatchObject({ n: 3, correct: 1, outcomes: { saved: 2, empty: 0, unusable: 1 }, memories: 2 });
   });
 
-  test("akm gets the session where it reads Claude Code sessions, its own folders, the strategy, and none of the caller's settings", async () => {
-    await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))));
+  test("akm gets the session where it reads Claude Code sessions, its own folders, the strategy, and none of the caller's settings, and the summary's config is the one it read", async () => {
+    const summary = await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 1))));
     const extract = calls().find((c) => c.args[0] === "proposal" && c.args[1] === "extract");
     expect(extract.args).toEqual(["proposal", "extract", "--type", "claude", "--location", extract.projects, "--session-id", "a-good", "--strategy", "extract-only", "--format", "json"]);
     expect(extract.projects).toContain("akm-eval-extract-");
@@ -203,6 +214,9 @@ describe("runCorpus", () => {
     expect(extract.strategies).toEqual(["extract-only"]);
     expect(extract.engine).toBe("the-model");
     expect(existsSync(extract.projects.replace(/\/projects$/, ""))).toBe(false); // the sandbox is removed
+    // the config the sandbox held is extract's, and it is what the summary records
+    expect(extract.config).toEqual(extractConfig(ctx.baseUrl, ctx.model, ctx.hasKey));
+    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8")).config).toEqual(redactConfig(hideEndpoint(extract.config, ctx.baseUrl)));
   });
 
   test("each case has a sandbox of its own, and the queue is read back only when extract queued something", async () => {
@@ -249,37 +263,18 @@ describe("runCorpus", () => {
     expect(shown.join("\n")).not.toContain("localhost:8080");
   });
 
-  test("stops after five cases in a row that errored, and keeps what it has", async () => {
-    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
+  test("stops after five sessions in a row that errored, keeps what it has, and says why in the summary it writes before it fails; a scattering of errors does not stop it", async () => {
+    const ok = (id: string) => ({ id, class: "routine", fake: empty() });
+    const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
+    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => bad(`e${i}`)));
+    const why = "5 cases in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)"; // the last error is the one of the eval's row
+    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow(why);
     const dir = join(folders.results, readdirSync(folders.results)[0]);
     expect(samplesIn(dir)).toHaveLength(5);
     const stored = JSON.parse(readFileSync(join(dir, "summary.json"), "utf8"));
-    expect(stored).toMatchObject({ n_run: 5, n_errored: 5, n_cases: 7 });
-  });
-
-  test("the summary it writes before it fails says the run was aborted, and why", async () => {
-    const folders = assetsFor(Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, class: "routine", fake: { exit: 78, error: "engine unreachable" } })));
-    await expect(quiet(() => runPublic(ctx, folders))).rejects.toThrow("5 sessions in a row errored, so the run stopped after 5 of 7");
-    const stored = JSON.parse(readFileSync(join(folders.results, readdirSync(folders.results)[0], "summary.json"), "utf8"));
-    expect(stored.status).toBe("aborted");
-    expect(stored.aborted_reason).toBe("5 sessions in a row errored, so the run stopped after 5 of 7. Last error: akm exited 78: engine unreachable (FAKE)");
-
-    // and a run that went through every session, with errors that were not in a row, is complete
-    const ok = (id: string) => ({ id, class: "routine", fake: empty() });
-    const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
-    const whole = await quiet(() => runPublic({ ...ctx, label: "whole" }, assetsFor([bad("a"), ok("b"), bad("c"), ok("d")])));
-    expect(JSON.parse(readFileSync(join(whole.results_dir, "summary.json"), "utf8"))).toMatchObject({ status: "complete", aborted_reason: null, n_run: 4, n_errored: 2 });
-  });
-
-  test("also stops when the errors start after cases that were scored, but not for errors that are not in a row", async () => {
-    const ok = (id: string) => ({ id, class: "routine", fake: empty() });
-    const bad = (id: string) => ({ id, class: "routine", fake: { exit: 78, error: "engine unreachable" } });
-    const late = assetsFor([ok("a"), ...Array.from({ length: 6 }, (_, i) => bad(`e${i}`))]);
-    await expect(quiet(() => runPublic(ctx, late))).rejects.toThrow("stopped after 6 of 7");
-    const scattered = assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")]);
-    const summary = await quiet(() => runPublic(ctx, scattered));
-    expect(summary).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6 });
+    expect(stored).toMatchObject({ status: "aborted", aborted_reason: why, n_run: 5, n_errored: 5, n_cases: 7 });
+    const scattered = await quiet(() => runPublic({ ...ctx, label: "scattered" }, assetsFor([bad("a"), bad("b"), ok("c"), bad("d"), bad("e"), bad("f"), bad("g"), ok("h")])));
+    expect(scattered).toMatchObject({ n_run: 8, n_scored: 2, n_errored: 6, status: "complete", aborted_reason: null });
   });
 });
 
@@ -359,6 +354,22 @@ describe("what summary.json says about the run", () => {
     expect(JSON.stringify(stored)).not.toContain(inside); // never an absolute path
     expect(storedIn((await quiet(() => runPublic({ ...ctx, label: "public" }, folders))).results_dir).corpus_folder).toBeNull();
   });
+
+  test("every key it has always had, which scripts/ledger, compare and rescore read, and concurrency and timeout_ms besides", async () => {
+    const summary = await quiet(() => runPublic(ctx, assetsFor(scenarios.slice(0, 2))));
+    const stored = storedIn(summary.results_dir);
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms"].sort());
+    expect(Object.keys(summary).sort()).toEqual([...Object.keys(stored), "results_dir"].sort()); // what runCorpus returns also names the folder, which the file does not
+    expect(stored).toMatchObject({ concurrency: 1, timeout_ms: 900_000, timeouts: 0 });
+    expect("served_models" in stored).toBe(false); // akm proposal extract reports no usage, so there is nothing to name
+  });
+
+  test("a custom corpus puts its results in private/extract/results, and the public one in the eval's own folder", () => {
+    const REPO = join(import.meta.dir, "..", "..", "..");
+    const corpus = (name: "public" | "custom"): ResolvedCorpus => ({ name, folder: "x", rewrite: false, seed: null, flag: `--corpus ${name}` });
+    expect(defaultResults(corpus("custom"), REPO)).toBe(join(REPO, "private", "extract", "results"));
+    expect(defaultResults(corpus("public"), REPO)).toBe(join(REPO, "evals", "extract", "results"));
+  });
 });
 
 describe("the manifest of a run", () => {
@@ -373,7 +384,7 @@ describe("the manifest of a run", () => {
     const parts = { harness_version: HARNESS_VERSION, collector: { version: MEASUREMENT.version } };
     expect(manifest).toMatchObject({ manifest_version: 1, eval: "extract", corpus: "public", collection: null, mode: null, harness_version: parts.harness_version, collector: parts.collector, treatment_hints: {} });
     expect(manifest.akm).toEqual({ version: "0.9.99-test", bin: stored.akm_bin, build: null, build_fingerprint: null });
-    expect(manifest.settings).toEqual({ strategy: "extract-only", config_patch_sha256: null, timeout_ms: null, seed: null });
+    expect(manifest.settings).toEqual({ strategy: "extract-only", config_patch_sha256: null, timeout_ms: 900_000, seed: null }); // the timeout the run had, which it used to record as null
     const loaded = loadCases(folders.assets);
     expect(Object.keys(manifest.cases)).toEqual(scenarios.map((s) => s.id));
     expect(manifest.cases).toEqual(caseDigests(MEASUREMENT, loaded));
@@ -463,8 +474,10 @@ describe("the queue and timeouts", () => {
     expect("timed_out" in rows[1]).toBe(false);
     expect("timed_out" in rows[2]).toBe(false);
     expect(rows[2].error).toBe("akm exited 78: engine unreachable (FAKE)");
-    expect(summary).toMatchObject({ n_run: 3, n_errored: 2, timeouts: 1 });
-    expect(JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"))).toMatchObject({ n_errored: 2, timeouts: 1 });
+    expect(summary).toMatchObject({ n_run: 3, n_errored: 2, timeouts: 1, timeout_ms: 3000 });
+    const stored = JSON.parse(readFileSync(join(summary.results_dir, "summary.json"), "utf8"));
+    expect(stored).toMatchObject({ n_errored: 2, timeouts: 1 });
+    expect([stored.timeout_ms, stored.manifest.settings.timeout_ms]).toEqual([3000, 3000]); // the timeout the run had
   });
 
   test("a queue that akm does not list in time is a timeout too", async () => {
@@ -476,63 +489,96 @@ describe("the queue and timeouts", () => {
 });
 
 describe("the command", () => {
-  // Bun loads the .env of its working folder, and the repository's holds the model settings. So the command runs in a folder of its own
-  // and with an akm that does not exist, and never reaches a model, whatever .env says.
-  const run = (args: string[], env: Record<string, string> = {}) => {
-    const { MODEL_BASE_URL: _u, MODEL_NAME: _m, AKM_BIN: _a, ...rest } = process.env;
-    const cwd = mkdtempSync(join(tmpdir(), "extract-cmd-"));
-    dirs.push(cwd);
-    const done = Bun.spawnSync(["bun", join(import.meta.dir, "run.ts"), ...args], { cwd, env: { ...rest, AKM_BIN: "no-such-akm-in-this-test", ...env }, stdout: "pipe", stderr: "pipe" });
-    return { code: done.exitCode, out: done.stdout.toString(), err: done.stderr.toString() };
+  const EVAL = join(import.meta.dir, "..");
+  const REPO = join(EVAL, "..", "..");
+
+  /** A copy of the code and the public assets in a temp folder, so that the run finds no .env and no private/ there and writes its results there, never in the repository. */
+  function copyOfRepo(): string {
+    const tree = mkdtempSync(join(tmpdir(), "extract-tree-"));
+    dirs.push(tree);
+    const keep = (path: string) => !path.includes("node_modules");
+    cpSync(join(REPO, "lib"), join(tree, "lib"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "src"), join(tree, "evals", "extract", "src"), { recursive: true, filter: keep });
+    cpSync(join(EVAL, "assets"), join(tree, "evals", "extract", "assets"), { recursive: true });
+    return tree;
+  }
+  /** The command in a tree, with a model and, unless `env` names one, an akm that does not exist: a run that gets past its checks stops at the version probe, before it calls a model. */
+  const bun = (tree: string, args: string[], env: Record<string, string> = {}) => {
+    const base = { ...process.env, MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model", MODEL_API_KEY: "", AKM_BIN: commandLine([join(tree, "no-akm")]) };
+    const p = Bun.spawnSync(["bun", join(tree, "evals", "extract", "src", "run.ts"), ...args], { cwd: tree, env: { ...base, ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
   };
-  const model = { MODEL_BASE_URL: "http://localhost:1/v1", MODEL_NAME: "the-model" };
 
-  test("says what the strategy and the config patch are for, and what akm it needs", () => {
-    const help = run(["--help"]).out;
-    expect(help).toContain(`Tested with akm ${MIN_AKM} or later`);
-    expect(help).toMatch(/--repeat[\s\S]*--strategy[\s\S]*in place of extract-only[\s\S]*--config-patch[\s\S]*--model[\s\S]*--akm/);
-    expect(help).toContain("[--strategy NAME] [--config-patch FILE]");
-  });
+  test("--help says what the eval does, what its flags default to, and what akm it needs", () => {
+    const run = bun(copyOfRepo(), ["--help"]);
+    expect(run.code).toBe(0);
+    expect(run.out).toStartWith("Usage: evals/extract/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--strategy NAME] [--config-patch FILE] [--label NAME] [--model ID] [--akm COMMAND] [--concurrency N] [--timeout-ms N]\n\nRuns akm's extract on each session, with the model in MODEL_BASE_URL, MODEL_API_KEY and MODEL_NAME as\nakm's engine, and scores the memories it saves. Settings come from .env at the repository root.\n");
+    for (const line of [
+      "            The default custom corpus is private/extract/assets, made by ./generate-assets.",
+      "  --limit   run N sessions, taken from each class in turn",
+      "  --strategy      the akm improve strategy to run in place of extract-only.",
+      "  --concurrency  run N cases at a time. Default: 1.",
+      "  --timeout-ms   stop an akm command that is still running after N milliseconds. Default: 900000.",
+    ]) expect(run.out).toContain(line);
+    expect(run.out).toEndWith(`\n\nTested with akm ${MIN_AKM} or later on PATH, or in AKM_BIN.\n${PROBE_NOTE}\n`);
+    expect(run.out).not.toMatch(/--yes|-y\b/);
+  }, 60_000);
 
-  test("says what is wrong with its flags, and goes on to the akm check with good ones", () => {
-    expect(run(["--strategy", " "], model).err).toContain("--strategy needs a strategy name");
-    expect(run(["--config-patch", "no-such-patch.json"], model)).toMatchObject({ code: 2 });
-    expect(run(["--config-patch", "no-such-patch.json"], model).err).toContain("--config-patch: cannot read");
-    const root = mkdtempSync(join(tmpdir(), "extract-cmd-"));
-    dirs.push(root);
-    writeFileSync(join(root, "patch.json"), "{}");
-    expect(run(["--strategy", "thorough", "--config-patch", join(root, "patch.json")], model).err).toContain("could not run `no-such-akm-in-this-test --version`");
-  });
-
-  test("a folder of your own cases that has none is missing, and the run stops before it asks for akm", () => {
-    const notes = mkdtempSync(join(tmpdir(), "extract-notes-"));
+  test("a custom corpus with no cases.json stops the run before it asks for akm, and sends to ./generate-assets only for the rewrite", () => {
+    const tree = copyOfRepo();
+    const rewrite = bun(tree, ["--corpus", "custom"]);
+    expect(rewrite.code).toBe(2);
+    expect(rewrite.err.trim()).toBe("extract: --corpus custom: private/extract/assets/cases.json does not exist. The folder of a custom corpus holds cases.json, as assets/ does. Make the rewrite with: ./generate-assets --only extract");
+    const notes = mkdtempSync(join(tmpdir(), "extract notes-")); // outside the tree, so the message names it as it was given
     dirs.push(notes);
-    const done = run(["--cases", notes], model);
-    expect(done.code).toBe(2);
-    expect(done.err).toContain("the custom corpus is missing");
-    expect(done.err).not.toContain("no-such-akm-in-this-test"); // the akm was never asked for
-  });
+    const own = bun(tree, ["--cases", notes]);
+    expect(own.code).toBe(2);
+    expect(own.err.trim()).toBe(`extract: --cases ${notes}: ${notes}/cases.json does not exist. The folder of a custom corpus holds cases.json, as assets/ does.`);
+    expect(own.err).not.toContain("generate-assets"); // a folder of your own is not made by it
+    expect(own.err).not.toContain("could not run"); // the akm was never asked for
+  }, 60_000);
 
-  test("--corpus own and own-feedback need an explicit folder: the run stops before it reaches akm", () => {
-    for (const old of ["own", "own-feedback"]) {
-      const done = run(["--corpus", old], model);
-      expect(done.code, old).toBe(2);
-      expect(done.err, old).toContain(`extract: --corpus ${old} was renamed in 0.2: use `);
-      expect(done.err, old).not.toContain("no-such-akm-in-this-test");
-    }
-  });
+  test("a folder of your own laid out like assets/, and the assets generate wrote, go on to the akm check", () => {
+    const tree = copyOfRepo();
+    const notes = join(tree, "my notes");
+    cpSync(join(EVAL, "assets"), notes, { recursive: true });
+    const own = bun(tree, ["--cases", notes]);
+    expect(own.out).toContain(`The cases in ${notes} will be sent to:`);
+    expect(own.err).toContain("could not run `" + join(tree, "no-akm") + " --version`");
+    expect(bun(tree, ["--corpus", "custom"]).code).toBe(2); // none made yet
+    expect(Bun.spawnSync(["bun", join(tree, "evals", "extract", "src", "generate.ts"), "--seed", "5", "--out", join(tree, "private", "extract")], { cwd: tree, stdout: "pipe", stderr: "pipe" }).exitCode).toBe(0);
+    for (const flags of [["--corpus", "custom"], ["--corpus", "all"]]) expect(bun(tree, flags).err, flags.join(" ")).toContain("could not run"); // past the checks, stopped for want of akm
+  }, 120_000);
 
-  test("--corpus takes public, custom or all, and refuses another value", () => {
-    expect(run(["--corpus", "everything"], model).err).toContain('--corpus must be public, custom or all, not "everything"');
-    expect(run(["--help"]).out).toContain("[--corpus public|custom|all] [--cases DIR]");
-  });
+  test("warns about an akm older than the tested release, and goes on", () => {
+    const tree = copyOfRepo();
+    writeFileSync(join(tree, "old-akm.ts"), 'console.log("akm 0.9.25");');
+    const done = bun(tree, [], { AKM_BIN: commandLine(["bun", join(tree, "old-akm.ts")]), AKM_EVAL_NO_PROBE: "1" }); // the subject is the akm, and nothing listens on port 1: the run is not to ask it
+    expect(done.code).toBe(1); // that akm answers every command with its version, so every session errors and the run gives up
+    expect(done.err).toContain(`akm 0.9.25 predates the tested release ${MIN_AKM}; continuing with the requested build.`);
+    expect(done.err).toMatch(/5 cases in a row errored, so the run stopped after 5 of \d+\./);
+  }, 60_000);
 
-  test("warns about an older build and records actual command failures", () => {
-    const root = mkdtempSync(join(tmpdir(), "extract-cmd-"));
-    dirs.push(root);
-    writeFileSync(join(root, "old-akm.ts"), 'console.log("akm 0.9.25");');
-    const done = run([], { ...model, AKM_BIN: commandLine(["bun", join(root, "old-akm.ts")]) });
-    expect(done.code).toBe(1);
-    expect(done.err).toContain("predates the tested release");
-  });
+  test("--concurrency and --timeout-ms reach the run through extract's flags: every session has its row, the slow one is killed, and both are recorded", () => {
+    const tree = copyOfRepo();
+    const script = join(tree, "fake-akm.ts");
+    writeFileSync(script, FAKE_AKM);
+    const notes = assetsFor([
+      { id: "s-slow", class: "insight", fake: { sleepMs: 30_000 } },
+      { id: "s-ok", class: "routine", fake: empty() },
+      { id: "s-good", class: "insight", fake: saves(proposal("p1", "Exit 75: a stale pid file.")) },
+    ]).assets;
+    const run = bun(tree, ["--cases", notes, "--concurrency", "2", "--timeout-ms", "3000", "--label", "flags"], { AKM_BIN: commandLine(["bun", script]), AKM_EVAL_NO_PROBE: "1" }); // nothing listens on port 1, and the run is not to ask it
+    expect([run.code, run.err]).toEqual([0, ""]);
+    const results = join(tree, "private", "extract", "results"); // a custom corpus of your own, in the one folder every eval has
+    const folder = join(results, readdirSync(results).find((name) => name.endsWith("-flags")) as string);
+    const stored = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
+    const rows = readFileSync(join(folder, "samples.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(Object.keys(stored).sort()).toEqual([...SUMMARY_KEYS, "concurrency", "timeout_ms", "wall_seconds"].sort()); // wall_seconds is added by --repeat's runner, as it always was
+    expect(stored).toMatchObject({ corpus: "custom", concurrency: 2, timeout_ms: 3000, n_run: 3, n_errored: 1, timeouts: 1, status: "complete" });
+    expect(stored.manifest.settings.timeout_ms).toBe(3000);
+    expect(rows.map((r) => r.id).sort()).toEqual(["s-good", "s-ok", "s-slow"]);
+    expect(rows.find((r) => r.id === "s-slow")).toMatchObject({ outcome: "error", timed_out: true, error: "akm proposal extract timed out after 3s" });
+    expect(rows.find((r) => r.id === "s-good")).toMatchObject({ outcome: "saved", correct: true });
+  }, 60_000);
 });

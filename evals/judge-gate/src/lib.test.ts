@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultOverrides } from "../../../lib/akm/overrides.ts";
 import { assemble, explode } from "./generate.ts";
-import { type Case, type Row, STRATEGY, atLeast, configFor, errorRow, hasVerdict, hideEndpoints, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
+import { type Case, type Row, STRATEGY, configFor, errorRow, hasVerdict, judgeConfig, metrics, orderFeedback, parseCases, rowFromVerdict, selectCases, verdictOf } from "./lib.ts";
 
 const make = (n: number, label: "good" | "bad", extra: Partial<Case> = {}): Case => ({
   id: `id-${label}-${n}`,
@@ -178,6 +178,14 @@ describe("judgeConfig", () => {
     expect(c.defaults.improveStrategy).toBe("tight");
     expect(Object.keys(c.improve.strategies)).toEqual([STRATEGY]);
   });
+
+  test("gives the engine the provider kind it is asked for, and openai without one: the rest of the config does not change with it", () => {
+    const plain = judgeConfig("http://localhost:8080/v1/", "m", true) as any;
+    expect(plain.engines.judge.provider).toBe("openai");
+    const other = judgeConfig("http://localhost:8080/v1/", "m", true, STRATEGY, "anthropic") as any;
+    expect(other.engines.judge.provider).toBe("anthropic");
+    expect({ ...other, engines: { judge: { ...other.engines.judge, provider: "openai" } } }).toEqual(plain);
+  });
 });
 
 describe("configFor", () => {
@@ -188,6 +196,12 @@ describe("configFor", () => {
   test("--strategy makes that strategy the default of the config", () => {
     const c = configFor("http://localhost:8080/v1/", "m", true, { strategy: "tight", configPatch: null });
     expect(c.defaults.improveStrategy).toBe("tight");
+  });
+
+  test("takes the provider kind of the engine last, and the config patch can still change it", () => {
+    expect(configFor("http://localhost:8080/v1/", "m", true, defaultOverrides(STRATEGY), "groq").engines.judge.provider).toBe("groq");
+    const patch = { path: "patches/p.json", sha256: "abc", patch: { engines: { judge: { provider: "ollama" } } } };
+    expect(configFor("http://localhost:8080/v1/", "m", true, { strategy: STRATEGY, configPatch: patch }, "groq").engines.judge.provider).toBe("ollama");
   });
 
   test("--config-patch merges into the config after it, and can define the strategy that --strategy names", () => {
@@ -246,50 +260,12 @@ describe("errorRow", () => {
   });
 });
 
-describe("hideEndpoints and verdictOf", () => {
-  test("hideEndpoints writes every endpoint of a config as <MODEL_BASE_URL>, and changes nothing else or the config it was given", () => {
-    const config = {
-      defaults: { llmEngine: "judge" },
-      engines: { judge: { kind: "llm", model: "m", endpoint: "https://user:pass@host.example/v1?key=SECRET/chat/completions", temperature: 0 }, other: { endpoint: "http://other:1/v1/chat/completions" } },
-      embedding: { endpoint: "http://embed:2/v1" },
-      list: [{ endpoint: "http://in-a-list/v1" }],
-    };
-    const before = JSON.stringify(config);
-    const hidden = hideEndpoints(config);
-    expect(hidden).toEqual({
-      defaults: { llmEngine: "judge" },
-      engines: { judge: { kind: "llm", model: "m", endpoint: "<MODEL_BASE_URL>", temperature: 0 }, other: { endpoint: "<MODEL_BASE_URL>" } },
-      embedding: { endpoint: "<MODEL_BASE_URL>" },
-      list: [{ endpoint: "<MODEL_BASE_URL>" }],
-    });
-    expect(JSON.stringify(hidden)).not.toContain("SECRET");
-    expect(JSON.stringify(config)).toBe(before);
-  });
-
-  test("hideEndpoints leaves a config with no endpoint, and a value that is not a string, as it is", () => {
-    expect(hideEndpoints({ engines: { a: { model: "m" } }, n: null, endpoint: 3 })).toEqual({ engines: { a: { model: "m" } }, n: null, endpoint: 3 });
-    expect(hideEndpoints(null)).toBeNull();
-  });
-
-  test("verdictOf keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
+describe("verdictOf", () => {
+  test("keeps the fields the scorer reads, masks the endpoint in the reason, and leaves a reply that is not an object as it is", () => {
     const parsed = { ok: true, pass: false, score: 2, reviewNeeded: true, reason: "tried http://host/v1 and failed", criteria: { need: 2 }, engine: "judge", usage: { note: "http://host/v1" } };
     expect(verdictOf(parsed, "http://host/v1")).toEqual({ pass: false, score: 2, reviewNeeded: true, reason: "tried <MODEL_BASE_URL> and failed", criteria: { need: 2 }, engine: "judge" });
     expect(verdictOf({ pass: true, score: 4 }, "http://host/v1")).toEqual({ pass: true, score: 4, reviewNeeded: undefined, reason: undefined, criteria: undefined, engine: undefined });
     for (const reply of [null, 7, "text", [1, 2]]) expect(verdictOf(reply, "http://host/v1")).toBe(reply);
-  });
-});
-
-describe("atLeast", () => {
-  const min = "0.9.25-alpha.2";
-  test("puts a prerelease below its release and orders prereleases by their tag", () => {
-    for (const v of ["0.9.25-alpha.2", "0.9.25-alpha.3", "0.9.25-alpha.10", "0.9.25-beta.1", "0.9.25-rc.1", "0.9.25", "0.9.26", "0.10.0", "1.0.0-alpha.1"]) expect(atLeast(v, min)).toBe(true);
-    for (const v of ["0.9.25-alpha.1", "0.9.25-alpha", "0.9.24", "0.9.24-rc.1", "0.8.99"]) expect(atLeast(v, min)).toBe(false);
-    expect(atLeast("0.9.25-alpha.2", "0.9.25")).toBe(false);
-    expect(atLeast("0.9.25", "0.9.25")).toBe(true);
-  });
-
-  test("refuses a string that is not a version", () => {
-    expect(() => atLeast("latest", min)).toThrow("not a version");
   });
 });
 

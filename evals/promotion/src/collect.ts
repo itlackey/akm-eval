@@ -18,10 +18,11 @@ import { type Case, type Raw, type Row, makeRow } from "./score.ts";
 export const NAME = "promotion";
 
 /** The name akm gives the sandbox's one bundle, which its refs carry: `bundle//knowledge/<name>`. */
-export const BUNDLE = "bundle";
+const BUNDLE = "bundle";
 export const STRATEGY = "promotion";
 
-const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000; // one call per proposal, one at a time, on a slow local model
+/** How long the drain may run unless --timeout-ms says otherwise: one call per proposal, one at a time, on a slow local model. */
+export const DRAIN_TIMEOUT_MS = 2 * 60 * 60_000;
 const STEP_TIMEOUT_MS = 30 * 60_000;
 
 /** A UUID made from the case id, so a planted proposal has the id shape akm gives its own, and the same id on every run. */
@@ -36,9 +37,10 @@ export function uuidOf(id: string): string {
  * judgment tier only judges, and promotion lint does not block (akm 0.9.26 prints its findings as non-blocking).
  * The bundle is indexed with akm's built-in embedder, as retrieval and skillret do, because a judge that is shown the nearest
  * notes of a promotion's source memory finds them by their stored vectors. The engine runs at temperature 0 with thinking off, as distill's does.
+ * `provider` is the provider kind of the engine (openai, anthropic, ...).
  */
-export function promotionConfig(baseUrl: string, model: string, hasKey: boolean): Record<string, any> {
-  const config = engineConfig(baseUrl, model, hasKey, "judge");
+export function promotionConfig(baseUrl: string, model: string, hasKey: boolean, provider = "openai"): Record<string, any> {
+  const config = engineConfig(baseUrl, model, hasKey, "judge", provider);
   config.engines.judge.temperature = 0;
   config.engines.judge.enableThinking = false;
   const { semanticSearchMode, embedding } = semanticConfig();
@@ -49,15 +51,17 @@ export function promotionConfig(baseUrl: string, model: string, hasKey: boolean)
 }
 
 /** What a run needs of the model and the strategy to write the akm config. */
-export interface ConfigContext {
+interface ConfigContext {
   baseUrl: string;
   model: string;
   hasKey: boolean;
+  /** The provider kind of akm's engine. Default: openai. */
+  provider?: string;
   overrides?: Overrides;
 }
 
 /** The akm config of a run: the promotion config with the strategy and the config patch merged in. */
-export const configFor = (ctx: ConfigContext): Record<string, any> => patchedConfig(promotionConfig(ctx.baseUrl, ctx.model, ctx.hasKey), ctx.overrides ?? defaultOverrides(STRATEGY));
+export const configFor = (ctx: ConfigContext): Record<string, any> => patchedConfig(promotionConfig(ctx.baseUrl, ctx.model, ctx.hasKey, ctx.provider), ctx.overrides ?? defaultOverrides(STRATEGY));
 
 /** A sandbox for one run, with the config written. The config names the model key as $MODEL_API_KEY; semantic: the embedder's model is kept in .cache/. */
 export function openSandbox(ctx: ConfigContext): Sandbox {
@@ -79,7 +83,7 @@ export const PROPOSAL_COLUMNS = ["id", "stash_dir", "ref", "status", "source", "
 export const EVENT_COLUMNS = ["event_type", "metadata_json"] as const;
 
 /** The minimum of a SQLite handle that `schemaProblem` needs, which bun:sqlite's Database has. */
-export interface SchemaDb {
+interface SchemaDb {
   query(sql: string): { all(): unknown[] };
 }
 
@@ -209,10 +213,12 @@ export function callStats(sandbox: Sandbox): Calls | null {
   }
 }
 
-/** What the collection needs of the run: the model's endpoint, to keep it out of the rows, and the strategy the drain runs. */
-export interface CollectContext {
+/** What the collection needs of the run: the model's endpoint, to keep it out of the rows, the strategy the drain runs, and how long the drain may take. */
+interface CollectContext {
   baseUrl: string;
   overrides?: Overrides;
+  /** How long the drain may run, in milliseconds (--timeout-ms). The steps around it keep STEP_TIMEOUT_MS. Without it DRAIN_TIMEOUT_MS applies. */
+  timeoutMs?: number;
 }
 
 /**
@@ -224,7 +230,7 @@ export async function collect(sandbox: Sandbox, cases: Case[], libraryDir: strin
   await plant(sandbox, cases, libraryDir);
   console.log("  planted; the judge reads them one at a time");
   const args = ["proposal", "drain", "--judgment", "--strategy", (ctx.overrides ?? defaultOverrides(STRATEGY)).strategy, "--yes"];
-  const drain = await runAkm(sandbox, [...args, "--format", "json"], { timeoutMs: DRAIN_TIMEOUT_MS });
+  const drain = await runAkm(sandbox, [...args, "--format", "json"], { timeoutMs: ctx.timeoutMs ?? DRAIN_TIMEOUT_MS });
   if (drain.code !== 0) fail(hideEndpoint(failureMessage("akm proposal drain", drain.code, drain.stderr), ctx.baseUrl), 1);
   let drained: Drained;
   try {

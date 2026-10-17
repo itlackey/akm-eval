@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# The image's tree and embedding model. The variables only let docker/entrypoint.test.ts run this script without an image.
+image="${AKM_EVAL_IMAGE_ROOT:-/opt/akm-eval}"
+models="${AKM_EVAL_MODEL_ROOT:-/opt/akm-models}"
 if [ "${1:-}" = --help ] || [ "$#" = 0 ]; then
-  cat /opt/akm-eval/docker/usage.txt
+  cat "$image/docker/usage.txt"
   exit 0
 fi
 # This directory is managed by the image. Never overwrite an unrelated checkout.
@@ -9,9 +12,17 @@ if [ ! -f .akm-eval-revision ] && [ -n "$(find . -mindepth 1 -maxdepth 1 ! -name
   echo "akm-eval: mount an empty working folder (configuration files .env and models.json are allowed); see docker/README.md" >&2
   exit 2
 fi
-# Refresh shipped code/dependencies, preserving results, custom corpora and configuration.
-cp -R /opt/akm-eval/. .
+# Copy the shipped code/dependencies on first use and when the image revision changes, preserving results, custom corpora and
+# configuration. Edits made in this folder survive until then. The revision goes last, so a copy that stops halfway is never
+# taken for a complete one.
+if ! cmp -s "$image/.akm-eval-revision" .akm-eval-revision; then
+  shopt -s dotglob
+  for entry in "$image"/*; do
+    [ "${entry##*/}" = .akm-eval-revision ] || cp -R "$entry" .
+  done
+  cp "$image/.akm-eval-revision" .
+fi
 mkdir -p .cache/models .home
-cp -Rn /opt/akm-models/. .cache/models/
+cp -Rn "$models/." .cache/models/
 export HOME="$PWD/.home"
 exec "$@"

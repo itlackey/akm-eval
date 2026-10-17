@@ -12,6 +12,7 @@ import { CLASSES, type Case, type CaseClass, type Defect, type Field, HANGING, a
 
 export * from "./score.ts";
 export * from "./collect.ts";
+export { atLeast } from "../../../lib/akm/akm.ts"; // the evals that borrow reflect's checks borrow this too
 
 // --- Injecting a defect ------------------------------------------------------------------------------------------
 
@@ -174,30 +175,6 @@ export function caseProblems(c: Case): string[] {
   if (c.class === "unsupported-ask" && !(c.forbid ?? []).length) problems.push("no forbidden term");
   if (c.class === "historical" && !(c.anchors ?? []).length) problems.push("no anchor");
   return problems;
-}
-
-/** Is `version` at least `minimum`? Both are semver. A prerelease is below its release and ordered by its tag. */
-export function atLeast(version: string, minimum: string): boolean {
-  const parse = (v: string) => {
-    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(v);
-    if (!m) throw new Error(`not a version: ${v}`);
-    return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4]?.split(".") ?? [] };
-  };
-  const a = parse(version);
-  const b = parse(minimum);
-  for (let i = 0; i < 3; i++) if (a.nums[i] !== b.nums[i]) return (a.nums[i] ?? 0) > (b.nums[i] ?? 0);
-  if (a.pre.length === 0 || b.pre.length === 0) return a.pre.length === 0; // a release is above any of its prereleases
-  for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
-    const [x, y] = [a.pre[i], b.pre[i]];
-    if (x === undefined) return false;
-    if (y === undefined) return true;
-    if (x === y) continue;
-    const [nx, ny] = [/^\d+$/.test(x), /^\d+$/.test(y)];
-    if (nx && ny) return Number(x) > Number(y);
-    if (nx !== ny) return ny; // a number is below a word
-    return x > y;
-  }
-  return true;
 }
 
 // --- What a run read ----------------------------------------------------------------------------------------------

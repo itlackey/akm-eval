@@ -11,7 +11,7 @@ import * as akm from "./akm.ts";
 import { assetsSha256 } from "./inputs.ts";
 import { INDEX_BUILDER, indexSpec } from "./collect.ts";
 import { MEASUREMENT } from "./measurement.ts";
-import { collectionsFor, failureOf, runCollection, withSemantic } from "./run.ts";
+import { collectionsFor, failureOf, runCollection } from "./run.ts";
 
 /** The corpora of a run, as lib/corpus.ts resolves them: the committed cases, the public cases rewritten from a seed, and a folder of your own. */
 const corpusOf = (name: "public" | "custom", kind: "public" | "rewrite" | "own", config: { seed?: string } = {}, folder = "/nowhere"): ResolvedCorpus => ({ name, folder, rewrite: kind === "rewrite", seed: config.seed ?? null, flag: name === "public" ? "--corpus public" : "--corpus custom" });
@@ -443,11 +443,12 @@ describe("runCollection", () => {
       expect(Object.hasOwn(keyword, "semantic_index_built_by")).toBe(false);
     });
 
-    test("records what --semantic said", async () => {
+    test("records whether --semantic was given: on when the semantic search is scored, off when it is not", async () => {
       const { ctx, folders } = setup();
-      expect((await quiet(() => runCollection(PUBLIC, "library", ctx, folders))).semantic_flag).toBe("auto");
-      expect((await quiet(() => runCollection(PUBLIC, "library", { ...ctx, semanticFlag: "on" }, folders))).semantic_flag).toBe("on");
-      const off = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, semantic: false, semanticFlag: "off" }, folders));
+      const on = await quiet(() => runCollection(PUBLIC, "library", ctx, folders));
+      expect(on.semantic_flag).toBe("on");
+      expect(JSON.parse(readFileSync(join(on.results_dir, "summary.json"), "utf8")).semantic_flag).toBe("on");
+      const off = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, semantic: false }, folders));
       expect(off.semantic_flag).toBe("off");
       expect(JSON.parse(readFileSync(join(off.results_dir, "summary.json"), "utf8")).semantic_flag).toBe("off");
     });
@@ -772,27 +773,42 @@ describe("runCollection", () => {
     expect(s.metrics.search.n).toBe(3);
   });
 
-  test("scores the semantic search in a full run of the public and rewrite corpora, and not with --limit or in the own corpus", () => {
-    expect(withSemantic(false)).toBe(true); // the public and the rewrite corpora
-    expect(withSemantic(false, 20)).toBe(false);
-    expect(withSemantic(false, 1)).toBe(false);
-    expect(withSemantic(true)).toBe(false); // your own
-    expect(withSemantic(true, 20)).toBe(false);
+  test("with --semantic, a run with --limit builds the semantic index and has the four columns", async () => {
+    const { ctx, folders } = setup();
+    const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, limit: 3 }, folders));
+    expect(s).toMatchObject({ limit: 3, n_queries: 3, semantic_flag: "on", semantic_index: "cold" });
+    expect(Object.keys(s.metrics)).toEqual(["search", "curate", "semantic_search", "semantic_curate"]);
   });
 
-  test("--semantic on scores it for any corpus and with --limit, off never, and auto is the rule above", () => {
-    for (const [own, limit] of [[false, undefined], [false, 20], [false, 1], [true, undefined], [true, 20]] as const) {
-      expect(withSemantic(own, limit, "on")).toBe(true);
-      expect(withSemantic(own, limit, "off")).toBe(false);
-      expect(withSemantic(own, limit, "auto")).toBe(withSemantic(own, limit));
+  test("with --semantic, a corpus of your own is scored with the semantic search too, with --limit or without", async () => {
+    const { ctx, folders } = setup();
+    for (const limit of [undefined, 3]) {
+      const s = await quiet(() => runCollection(OWN, "own", { ...ctx, limit }, folders));
+      expect(s, `limit ${limit}`).toMatchObject({ corpus: "custom", collection: "own", limit: limit ?? null, semantic_flag: "on", semantic_index: limit === undefined ? "cold" : "warm" });
+      expect(Object.keys(s.metrics), `limit ${limit}`).toEqual(["search", "curate", "semantic_search", "semantic_curate"]);
     }
   });
 
-  test("with --semantic on, a run with --limit builds the semantic index and has the four columns", async () => {
+  test("without --semantic, a full run, a run with --limit and a corpus of your own are scored with keyword search alone, and no semantic index is made", async () => {
+    const { ctx, folders, cacheRoot } = setup();
+    for (const [corpus, collection, limit] of [[PUBLIC, "library", undefined], [PUBLIC, "library", 3], [REWRITE, "library", undefined], [OWN, "own", undefined]] as const) {
+      const s = await quiet(() => runCollection(corpus, collection, { ...ctx, limit, semantic: false }, folders));
+      expect(s, corpus.flag).toMatchObject({ semantic_flag: "off", limit: limit ?? null });
+      expect(Object.keys(s.metrics), corpus.flag).toEqual(["search", "curate"]);
+    }
+    expect(existsSync(cacheRoot)).toBe(false);
+  });
+
+  test("with --semantic on a corpus of your own it says that the semantic index embeds every asset and can take long, once; the other corpora, and a run without --semantic, say nothing", async () => {
     const { ctx, folders } = setup();
-    const s = await quiet(() => runCollection(PUBLIC, "library", { ...ctx, limit: 3, semantic: withSemantic(false, 3, "on"), semanticFlag: "on" }, folders));
-    expect(s).toMatchObject({ limit: 3, n_queries: 3, semantic_flag: "on", semantic_index: "cold" });
-    expect(Object.keys(s.metrics)).toEqual(["search", "curate", "semantic_search", "semantic_curate"]);
+    const said = async (corpus: ResolvedCorpus, collection: string, over: { semantic?: boolean } = {}) => (await printed(() => runCollection(corpus, collection, { ...ctx, limit: 1, ...over }, folders))).lines.filter((l) => l.includes("embeds every asset"));
+    const own = await said(OWN, "own");
+    expect(own).toHaveLength(1);
+    expect(own[0]).toStartWith("retrieval (custom own): --semantic embeds every asset of the library");
+    expect(own[0]).toContain("tens of minutes for a large library");
+    expect(await said(OWN, "own", { semantic: false })).toEqual([]);
+    expect(await said(PUBLIC, "library")).toEqual([]);
+    expect(await said(REWRITE, "library")).toEqual([]);
   });
 
   test("runs N queries, in the task and non-task proportion, with --limit", async () => {
@@ -1084,19 +1100,52 @@ describe("the command", () => {
     const day = new Date().toISOString().slice(0, 10);
     const folders = ["library", "books"].map(name => join(results, `${day}-${label}-${name}`));
     dirs.push(...folders);
-    const done = run(["--corpus", "public", "--limit", "1", "--semantic", "off", "--label", label, "--akm", akmBin]);
+    const done = run(["--corpus", "public", "--limit", "1", "--label", label, "--akm", akmBin]);
     expect(done.code, done.err || done.out).toBe(0);
     for (const folder of folders) {
       const summary = JSON.parse(readFileSync(join(folder, "summary.json"), "utf8"));
-      expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0, akm_version: "0.9.99-test" });
+      expect(summary).toMatchObject({ status: "complete", n_queries: 1, n_errored: 0, akm_version: "0.9.99-test", semantic_flag: "off" });
+      expect(Object.keys(summary.metrics)).toEqual(["search", "curate"]); // no --semantic: keyword search alone
       expect(summary.wall_seconds).toBeGreaterThan(0);
       expect(existsSync(join(folder, ".running"))).toBe(false);
     }
   });
 
-  test("takes --semantic on, off or auto, and says what else is wrong with it", () => {
-    expect(run(["--semantic", "maybe"])).toMatchObject({ code: 2, err: 'retrieval: --semantic must be on, off or auto, not "maybe"\n' });
-    expect(run(["--semantic"]).err).toContain("Usage: evals/retrieval/run");
+  test("--semantic is a flag with no value, so that --semantic off cannot turn the semantic search on: a value is refused with the usage", () => {
+    for (const args of [["--semantic", "on"], ["--semantic", "off"], ["--semantic", "auto"], ["--semantic=on"]]) {
+      const done = run(args);
+      expect(done.code, args.join(" ")).toBe(2);
+      expect(done.err, args.join(" ")).toMatch(/^retrieval: (Unexpected argument|Option '--semantic' does not take an argument)/);
+      expect(done.err, args.join(" ")).toContain("Usage: evals/retrieval/run");
+      expect(done.out, args.join(" ")).toBe("");
+    }
+  });
+
+  test("-y and --yes are not flags: the run stops with the usage, which does not list them", () => {
+    for (const flag of ["-y", "--yes"]) {
+      const done = run([flag]);
+      expect(done.code, flag).toBe(2);
+      expect(done.err, flag).toContain(`retrieval: Unknown option '${flag}'`);
+      expect(done.err, flag).toContain("Usage: evals/retrieval/run");
+    }
+    expect(run(["--help"]).out).not.toMatch(/(^|\s)(-y|--yes)\b/);
+  });
+
+  test("--semantic is not dropped for a corpus of your own, with --limit or without: the run says what the semantic index costs, and says nothing without the flag", () => {
+    const own = mkdtempSync(join(tmpdir(), "retrieval-own-"));
+    dirs.push(own);
+    mkdirSync(join(own, "library"));
+    writeFileSync(join(own, "library", "README.md"), "a library of one file\n");
+    writeFileSync(join(own, "queries.jsonl"), `${JSON.stringify({ id: "q1", query: "alpha", kind: "name" })}\n`);
+    writeFileSync(join(own, "qrels.jsonl"), `${JSON.stringify(grade("q1", "a/x", 3))}\n`);
+    // An akm that is not there ends the run at its first call: after the line this test looks for, and before anything is indexed or written.
+    const gone = ["--akm", "/nonexistent/akm-for-this-test"];
+    for (const limit of [[], ["--limit", "1"]]) {
+      const flagged = run(["--cases", own, "--semantic", ...limit, ...gone]);
+      expect(flagged.out, `--semantic ${limit.join(" ")}`).toContain("retrieval (custom own): --semantic embeds every asset of the library");
+      expect(flagged.err, `--semantic ${limit.join(" ")}`).toContain("could not run `/nonexistent/akm-for-this-test --version`");
+      expect(run(["--cases", own, ...limit, ...gone]).out, limit.join(" ")).not.toContain("embeds every asset");
+    }
   });
 
   test("takes --corpus public, custom or all with --cases, and says what is wrong with them", () => {
@@ -1111,19 +1160,11 @@ describe("the command", () => {
     expect(done.err).toContain("Run it with: evals/retrieval/run --cases DIR");
   });
 
-  test("--corpus own and own-feedback need an explicit folder: the run stops with the new form", () => {
-    for (const old of ["own", "own-feedback"]) {
-      const done = run(["--corpus", old, "--semantic", "maybe"]);
-      expect(done.code, old).toBe(2);
-      expect(done.err, old).toContain(`retrieval: --corpus ${old} was renamed in 0.2: use `);
-    }
-    expect(run(["--corpus", "custom", "--semantic", "maybe"]).err).not.toContain("renamed");
-  });
-
-  test("lists --semantic, --akm and the own corpus in its usage, and says that a stale private set is refused", () => {
+  test("lists --semantic, --akm and the own corpus in its usage, and says that --semantic is not dropped by --limit or a corpus of your own", () => {
     const help = run(["--help"]).out;
-    expect(help).toContain("Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic on|off|auto]");
-    expect(help).toContain("--semantic  on scores the semantic search too, auto (default) only in a full run of the public and rewrite corpora");
+    expect(help).toContain("Usage: evals/retrieval/run [--corpus public|custom|all] [--cases DIR] [--limit N] [--repeat N] [--label NAME] [--akm COMMAND] [--semantic]");
+    expect(help).toContain("--semantic  also score the semantic search, whatever --limit or corpus is given. Without it only keyword search is scored.");
+    expect(help).not.toMatch(/\bauto\b/);
     expect(help).toContain("--akm");
     expect(help).toContain("made by ./generate-assets --only retrieval.\n            all runs public and the default custom corpus.");
   });

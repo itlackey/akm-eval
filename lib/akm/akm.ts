@@ -55,11 +55,13 @@ export interface AkmResult {
 type RunOptions = { stdin?: string; timeoutMs?: number };
 
 const FOLDERS = ["bundle", "config", "data", "cache", "state", "xdg-config", "xdg-data", "xdg-state"];
-const DEFAULT_TIMEOUT_MS = 15 * 60_000; // a command that calls a model can take minutes
+/** How long runAkm lets a command run when the caller sets no timeout: a command that calls a model can take minutes. */
+export const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 
 // Keyword search only and no registries: akm needs no model download and never goes to the network.
-// `configVersion` here and the provider kind of the engine in engineConfig are pinned on purpose, not taken from the akm under test: a
-// pinned config is what lets a run on one akm release compare with a run on another (#52). A --config-patch can set another.
+// `configVersion` here and the provider kind of the engine in engineConfig (openai unless the model's line or MODEL_PROVIDER names another)
+// are pinned on purpose, not taken from the akm under test: a pinned config is what lets a run on one akm release compare with a run on
+// another (#52). A --config-patch can set another.
 const plainConfig = () => ({ configVersion: "0.9.0", semanticSearchMode: "off", registries: [] });
 
 /** The model of akm's built-in embedder, bge-small-en-v1.5, which runs in the akm process: no model service. It is akm 0.9.26's default. */
@@ -366,6 +368,30 @@ export async function akmVersion(sandbox: Sandbox): Promise<string> {
   return version;
 }
 
+/** Is `version` at least `minimum`? Both are semver. A prerelease is below its release and ordered by its tag. */
+export function atLeast(version: string, minimum: string): boolean {
+  const parse = (v: string) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(v);
+    if (!m) throw new Error(`not a version: ${v}`);
+    return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4]?.split(".") ?? [] };
+  };
+  const a = parse(version);
+  const b = parse(minimum);
+  for (let i = 0; i < 3; i++) if (a.nums[i] !== b.nums[i]) return (a.nums[i] ?? 0) > (b.nums[i] ?? 0);
+  if (a.pre.length === 0 || b.pre.length === 0) return a.pre.length === 0; // a release is above any of its prereleases
+  for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
+    const [x, y] = [a.pre[i], b.pre[i]];
+    if (x === undefined) return false;
+    if (y === undefined) return true;
+    if (x === y) continue;
+    const [nx, ny] = [/^\d+$/.test(x), /^\d+$/.test(y)];
+    if (nx && ny) return Number(x) > Number(y);
+    if (nx !== ny) return ny; // a number is below a word
+    return x > y;
+  }
+  return true;
+}
+
 /** The flag words that ask search for its agent projection, from the text of `akm search --help`: 0.9.x has `--shape agent`, 0.10 folds it into `--detail agent`. Null when the text names neither. */
 export function agentDetailFrom(help: string): string[] | null {
   if (/--shape[= ]/.test(help)) return ["--shape", "agent"];
@@ -486,12 +512,13 @@ export function completionsUrl(baseUrl: string): string {
  * The akm config for an eval with a model: one LLM engine, the model under test, as the default engine, and
  * plain config otherwise. The key is named by variable and never held. To send one process to the engine, add
  * its routing to the returned object. `name` is the engine's name in the config, and what akm reports for it.
+ * `provider` is the engine's provider kind in akm (openai, anthropic, gemini, groq, ollama, lmstudio): the endpoint is the same whichever it is.
  */
-export function engineConfig(baseUrl: string, model: string, hasKey: boolean, name = "model"): Record<string, any> {
+export function engineConfig(baseUrl: string, model: string, hasKey: boolean, name = "model", provider = "openai"): Record<string, any> {
   const endpoint = completionsUrl(baseUrl);
   return {
     ...plainConfig(),
-    engines: { [name]: { kind: "llm", provider: "openai", endpoint, model, ...(hasKey ? { apiKey: "$MODEL_API_KEY" } : {}), timeoutMs: 600_000 } },
+    engines: { [name]: { kind: "llm", provider, endpoint, model, ...(hasKey ? { apiKey: "$MODEL_API_KEY" } : {}), timeoutMs: 600_000 } },
     defaults: { llmEngine: name },
   };
 }

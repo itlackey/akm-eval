@@ -12,6 +12,7 @@
 // `--model gpt-5.6-terra` then goes to that URL with the key held in OPENAI_API_KEY (set it in .env), and the id names a line, not a gateway model.
 // An eval calls useModel once, after it parses its flags. It writes the resolved settings back to MODEL_BASE_URL, MODEL_NAME and
 // MODEL_API_KEY, which is where the akm sandbox reads the key ($MODEL_API_KEY in the config) and where the harbor evals read theirs.
+// The provider kind akm gives the engine (`provider` in the config it writes) is the line's `provider`, else MODEL_PROVIDER, else openai.
 //
 // The judge takes the first of these that names an endpoint, and its key goes with it:
 //   1. a models.json line named by the judge id;
@@ -44,6 +45,8 @@ export interface ChatSettings {
   max_tokens?: number;
   max_completion_tokens?: number;
   reasoning_effort?: string;
+  /** A finite number. A request that sets none keeps the temperature its caller chose. */
+  temperature?: number;
 }
 
 /** One line of models.json: a model that is not behind the gateway. */
@@ -53,19 +56,23 @@ export interface ModelEntry {
   base_url: string;
   /** The name of the environment variable that holds the key (set it in .env). Leave it out for a server that needs none. Never put a key in models.json. */
   api_key_env?: string;
+  /** The provider kind akm gives the engine: openai (the default), anthropic, gemini, groq, ollama or lmstudio. The endpoint stays base_url + /chat/completions. */
+  provider?: string;
   /** Optional OpenCode context and output limits, applied equally to both Harbor arms. */
   limits?: ModelLimits;
   chat?: ChatSettings;
 }
 
 /** Supported fields. Unknown metadata is reported; literal credentials need an explicit correction. */
-const LINE_KEYS = ["model", "base_url", "api_key_env", "limits", "chat"];
+const LINE_KEYS = ["model", "base_url", "api_key_env", "provider", "limits", "chat"];
 
 export interface ModelSettings {
   /** The name sent to the endpoint. */
   name: string;
   baseUrl: string;
   apiKey: string;
+  /** The provider kind of akm's engine: the line's `provider`, else MODEL_PROVIDER, else openai. */
+  provider: string;
   limits?: ModelLimits;
   chat?: ChatSettings;
 }
@@ -101,16 +108,18 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     if (e.chat !== undefined) {
       const chat = e.chat;
       if (!chat || typeof chat !== "object" || Array.isArray(chat))
-        throw new Error(`models.json: "${id}": chat accepts max_tokens, max_completion_tokens and reasoning_effort`);
+        throw new Error(`models.json: "${id}": chat accepts max_tokens, max_completion_tokens, reasoning_effort and temperature`);
       if (Object.hasOwn(chat, "api_key")) throw new Error(`models.json: "${id}": put credentials in the environment and name the variable in api_key_env`);
       for (const key of Object.keys(chat))
-        if (!["max_tokens", "max_completion_tokens", "reasoning_effort"].includes(key)) console.warn(`models.json: "${id}" has an unknown chat key "${key}"; ignored`);
+        if (!["max_tokens", "max_completion_tokens", "reasoning_effort", "temperature"].includes(key)) console.warn(`models.json: "${id}" has an unknown chat key "${key}"; ignored`);
       if (chat.max_tokens !== undefined && chat.max_completion_tokens !== undefined)
         throw new Error(`models.json: "${id}": choose one chat token-limit field`);
       for (const limit of [chat.max_tokens, chat.max_completion_tokens])
         if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) throw new Error(`models.json: "${id}": chat token limits must be positive integers`);
       if (chat.reasoning_effort !== undefined && (typeof chat.reasoning_effort !== "string" || !chat.reasoning_effort.trim()))
         throw new Error(`models.json: "${id}": reasoning_effort must be a nonempty string supported by the model`);
+      if (chat.temperature !== undefined && !(typeof chat.temperature === "number" && Number.isFinite(chat.temperature)))
+        throw new Error(`models.json: "${id}": temperature must be a finite number`);
     }
     if (e.limits !== undefined) {
       const limits = e.limits;
@@ -122,6 +131,7 @@ export function loadModels(file = join(ROOT, "models.json")): Record<string, Mod
     for (const key of Object.keys(e.limits ?? {}))
       if (key !== "context" && key !== "output") console.warn(`models.json: "${id}" has an unknown limits key "${key}"; ignored`);
     if (e.model !== undefined && typeof e.model !== "string") throw new Error(`models.json: "${id}": model must be a string`);
+    if (e.provider !== undefined && (typeof e.provider !== "string" || !e.provider.trim())) throw new Error(`models.json: "${id}": provider must be a nonempty string, the provider kind akm gives the engine`);
     if (e.api_key_env !== undefined && (typeof e.api_key_env !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(e.api_key_env))) throw new Error(`models.json: "${id}": api_key_env must be the name of an environment variable, not a key`);
   }
   return json as Record<string, ModelEntry>;
@@ -139,6 +149,7 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
   if (flag !== undefined && !id) throw new Error(`${flagName} needs a model id`);
   if (!id) throw new Error(`name the ${role}: pass ${flagName} ID, or set ${idVar} in .env. See .env.example.`);
   const entry = Object.hasOwn(entries, id) ? entries[id] : undefined;
+  const provider = (line?: ModelEntry): string => line?.provider?.trim() || env.MODEL_PROVIDER?.trim() || "openai";
   if (entry) {
     const key = entry.api_key_env ? env[entry.api_key_env]?.trim() : "";
     if (entry.api_key_env && !key) throw new Error(`models.json: "${id}" takes its key from ${entry.api_key_env}, which is not set. Set it in .env.`);
@@ -147,22 +158,23 @@ export function resolveModel(role: "model" | "judge", flag: string | undefined, 
       ...(entry.chat.max_tokens !== undefined ? { max_tokens: entry.chat.max_tokens } : {}),
       ...(entry.chat.max_completion_tokens !== undefined ? { max_completion_tokens: entry.chat.max_completion_tokens } : {}),
       ...(entry.chat.reasoning_effort !== undefined ? { reasoning_effort: entry.chat.reasoning_effort } : {}),
+      ...(entry.chat.temperature !== undefined ? { temperature: entry.chat.temperature } : {}),
     } : undefined;
-    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", ...(limits ? { limits } : {}), ...(chat ? { chat } : {}) };
+    return { name: entry.model ?? id, baseUrl: entry.base_url.trim(), apiKey: key ?? "", provider: provider(entry), ...(limits ? { limits } : {}), ...(chat ? { chat } : {}) };
   }
   // The judge falls back to the model's endpoint and key when it names none of its own: the explicit fallback, else MODEL_* in env.
   const judgeOwnsNone = role === "judge" && !env.JUDGE_BASE_URL?.trim();
   const fallbackUrl = fallback?.baseUrl.trim();
-  if (judgeOwnsNone && fallback && fallbackUrl) return { name: id, baseUrl: fallbackUrl, apiKey: fallback.apiKey.trim() };
+  if (judgeOwnsNone && fallback && fallbackUrl) return { name: id, baseUrl: fallbackUrl, apiKey: fallback.apiKey.trim(), provider: provider() };
   const [urlName, keyName] = judgeOwnsNone ? (["MODEL_BASE_URL", "MODEL_API_KEY"] as const) : ([urlVar, keyVar] as const);
   const baseUrl = env[urlName]?.trim();
   if (!baseUrl) throw new Error(`${id} is sent to the gateway: set ${urlName} in .env (and ${keyName} if it needs a key). See .env.example.`);
-  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim() };
+  return { name: id, baseUrl, apiKey: (env[keyName] ?? "").trim(), provider: provider() };
 }
 
 /**
- * The model under test for this run, from the parsed flags. It writes the settings to MODEL_BASE_URL, MODEL_NAME and MODEL_API_KEY in `env`
- * (process.env), so the akm sandbox and the harbor evals read the same ones, and returns them. `fail` ends the run with a message.
+ * The model under test for this run, from the parsed flags. It writes the settings to MODEL_BASE_URL, MODEL_NAME, MODEL_API_KEY and
+ * MODEL_PROVIDER in `env` (process.env), so the akm sandbox and the harbor evals read the same ones, and returns them. `fail` ends the run with a message.
  */
 export function useModel(values: { model?: string }, fail: (message: string) => never, env: Env = process.env, entries?: Record<string, ModelEntry>): ModelSettings & { hasKey: boolean } {
   let m: ModelSettings;
@@ -174,6 +186,7 @@ export function useModel(values: { model?: string }, fail: (message: string) => 
   env.MODEL_BASE_URL = m.baseUrl;
   env.MODEL_NAME = m.name;
   env.MODEL_API_KEY = m.apiKey;
+  env.MODEL_PROVIDER = m.provider;
   return { ...m, hasKey: m.apiKey !== "" };
 }
 

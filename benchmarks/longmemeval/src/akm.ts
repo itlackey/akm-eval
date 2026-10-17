@@ -34,9 +34,9 @@ export const overProjectionLimit = (sessions: SessionView[]): number => sessions
 export const isAkmTimeout = (message: string): boolean => /^akm \S+ timed out after [\d.]+s$/.test(message);
 
 export class Akm {
-  /** `mode` is how the sandbox's config makes akm search. In semantic mode every search has to say it searched that way. */
+  /** `mode` is how the sandbox's config makes akm search. In semantic mode every search has to say it searched that way. `sandbox` is public for run.ts, which removes it when Ctrl-C ends the run. */
   constructor(
-    private readonly sandbox: Sandbox,
+    readonly sandbox: Sandbox,
     readonly mode: SearchMode = "keyword",
     private readonly timeoutMs = AKM_TIMEOUT_MS,
   ) {}
